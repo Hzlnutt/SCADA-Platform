@@ -1,0 +1,69 @@
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { AppLayout } from "./layout";
+import { RequireAuth } from "./RequireAuth";
+import Alarms from "../pages/Alarms";
+import Analytics from "../pages/Analytics";
+import Dashboard from "../pages/Dashboard";
+import Devices from "../pages/Devices";
+import Historian from "../pages/Historian";
+import PlantLayout from "../pages/PlantLayout";
+import Reports from "../pages/Reports";
+import Settings from "../pages/Settings";
+import Profile from "../pages/Profile";
+import AdminPanel from "../pages/AdminPanel";
+import AuthLayout from "../pages/auth/AuthLayout";
+import Login from "../pages/auth/Login";
+import Register from "../pages/auth/Register";
+import { MachineLayout } from "../pages/machines/MachineLayout";
+import MachineOverview from "../pages/machines/MachineOverview";
+import MachineStatistics from "../pages/machines/MachineStatistics";
+import MachineMaintenance from "../pages/machines/MachineMaintenance";
+import MachineShiftReport from "../pages/machines/MachineShiftReport";
+import MachinesOverview from "../pages/machines/MachinesOverview";
+import MachineGroupOverview from "../pages/machines/MachineGroupOverview";
+import Approvals from "../pages/Approvals";
+import Thresholds from "../pages/Thresholds";
+import MachineHealth from "../pages/MachineHealth";
+import UtilityStatus from "../pages/UtilityStatus";
+
+export const AppRouter = () => {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route element={<RequireAuth />}>
+          <Route element={<AppLayout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="alarms" element={<Alarms />} />
+            <Route path="historian" element={<Historian />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="plant-layout" element={<PlantLayout />} />
+            <Route path="machines">
+              <Route index element={<MachinesOverview />} />
+              <Route path=":groupId" element={<MachineGroupOverview />} />
+              <Route path=":groupId/:unitId" element={<MachineLayout />}>
+                <Route index element={<MachineOverview />} />
+                <Route path="statistics" element={<MachineStatistics />} />
+                <Route path="maintenance" element={<MachineMaintenance />} />
+                <Route path="shift-report" element={<MachineShiftReport />} />
+              </Route>
+            </Route>
+            <Route path="devices" element={<Devices />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="utility-status" element={<UtilityStatus />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="approvals" element={<Approvals />} />
+            <Route path="thresholds" element={<Thresholds />} />
+            <Route path="machine-health" element={<MachineHealth />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="admin" element={<AdminPanel />} />
+          </Route>
+        </Route>
+        <Route element={<AuthLayout />}>
+          <Route path="login" element={<Login />} />
+          <Route path="register" element={<Register />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+};

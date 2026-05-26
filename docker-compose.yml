@@ -1,0 +1,73 @@
+version: "3.9"
+
+services:
+  gateway-proxy:
+    build:
+      context: .
+      dockerfile: apps/gateway-proxy/Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - scada_net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    networks:
+      - scada_net
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - MONGODB_URI=mongodb://scada:scada@mongo:27017/scada?authSource=admin
+      - MONGODB_DB=scada
+      - TELEMETRY_RETENTION_DAYS=30
+      - HISTORIAN_RETENTION_DAYS=365
+      - HISTORIAN_HOURLY_RETENTION_DAYS=1095
+      - ROLLUP_INTERVAL_MS=60000
+      - ROLLUP_LAG_SECONDS=10
+      - ROLLUP_HOURLY_INTERVAL_MS=300000
+      - ROLLUP_HOURLY_LAG_MINUTES=5
+      - DUMMY_MODE=false
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mongo
+      - redis
+    networks:
+      - scada_net
+
+  mongo:
+    image: mongo:7
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=scada
+      - MONGO_INITDB_ROOT_PASSWORD=scada
+    volumes:
+      - scada_mongo:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - scada_net
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - scada_redis:/data
+    networks:
+      - scada_net
+
+volumes:
+  scada_mongo:
+  scada_redis:
+
+networks:
+  scada_net:
+    driver: bridge

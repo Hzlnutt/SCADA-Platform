@@ -1,0 +1,16 @@
+# Google OAuth Secret
+client_secret*.json
+
+# Environment variables
+node_modules/
+.pnpm-store/
+.DS_Store
+.env
+.env.*
+!.env.example
+*.log
+coverage/
+dist/
+build/
+.vscode/
+.idea/

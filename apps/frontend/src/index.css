@@ -1,0 +1,225 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --scada-bg: #eaf4ff;
+  --scada-sidebar: #07365f;
+  --scada-sidebar-deep: #052f54;
+  --scada-card: #ffffff;
+  --scada-panel: #f7fbff;
+  --scada-border: #acd3ff;
+  --scada-border-soft: #d6e9fb;
+  --scada-blue: #1f6fb5;
+  --scada-blue-dark: #003b75;
+  --scada-text: #002b5c;
+  --scada-muted: #47729f;
+  --scada-green: #087f5b;
+  --scada-amber: #bd7a12;
+  --scada-brown: #a44925;
+  --scada-danger: #b42318;
+  font-family:
+    "Space Grotesk",
+    "Plus Jakarta Sans",
+    "IBM Plex Sans",
+    sans-serif;
+  background-color: var(--scada-bg);
+  color: var(--scada-text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--scada-bg);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+::selection {
+  background: rgba(31, 111, 181, 0.22);
+}
+
+.auth-font {
+  font-family: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #dcecff;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #8fb7df;
+  border: 3px solid #dcecff;
+  border-radius: 999px;
+}
+
+.scada-content {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(234, 244, 255, 0)),
+    var(--scada-bg);
+  color: var(--scada-text);
+}
+
+.scada-content .bg-slate-950,
+.scada-content .bg-slate-950\/50,
+.scada-content .bg-slate-950\/60,
+.scada-content .bg-slate-950\/70,
+.scada-content .bg-slate-950\/80 {
+  background-color: var(--scada-card);
+}
+
+.scada-content .bg-slate-900,
+.scada-content .bg-slate-900\/40,
+.scada-content .bg-slate-900\/60,
+.scada-content .bg-slate-900\/70,
+.scada-content .bg-slate-900\/80 {
+  background-color: #e8f3ff;
+}
+
+.scada-content .bg-gradient-to-br {
+  background-image: none;
+  background-color: var(--scada-card);
+}
+
+.scada-content .border-slate-900,
+.scada-content .border-slate-800,
+.scada-content .border-slate-700 {
+  border-color: var(--scada-border);
+}
+
+.scada-content .border-dashed {
+  border-color: #b8d9f8;
+}
+
+.scada-content .divide-slate-900 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--scada-border-soft);
+}
+
+.scada-content .text-slate-100 {
+  color: var(--scada-text);
+}
+
+.scada-content .text-slate-200 {
+  color: var(--scada-blue-dark);
+}
+
+.scada-content .text-slate-300 {
+  color: #164d86;
+}
+
+.scada-content .text-slate-400 {
+  color: var(--scada-muted);
+}
+
+.scada-content .text-slate-500 {
+  color: #1f6feb;
+}
+
+.scada-content .text-slate-600 {
+  color: #86a9cc;
+}
+
+.scada-content .bg-slate-600 {
+  background-color: #9dbbdb;
+}
+
+.scada-content .shadow-\[0_0_40px_rgba\(15\,23\,42\,0\.25\)\] {
+  box-shadow: 0 10px 28px rgba(31, 111, 181, 0.08);
+}
+
+.scada-content .rounded-2xl,
+.scada-content .rounded-xl {
+  border-radius: 0.5rem;
+}
+
+.scada-content select,
+.scada-content input,
+.scada-content textarea {
+  color: var(--scada-text);
+  background-color: #ffffff;
+}
+
+.scada-content table tbody tr:hover {
+  background-color: #f2f8ff;
+}
+
+.scada-content .bg-emerald-500\/10 {
+  background-color: #dff4ea;
+}
+
+.scada-content .border-emerald-500\/30 {
+  border-color: #9ed9c1;
+}
+
+.scada-content .text-emerald-300 {
+  color: var(--scada-green);
+}
+
+.scada-content .bg-amber-500\/10 {
+  background-color: #fff1d6;
+}
+
+.scada-content .border-amber-500\/30 {
+  border-color: #f1c77c;
+}
+
+.scada-content .text-amber-300 {
+  color: var(--scada-amber);
+}
+
+.scada-content .bg-orange-500\/10 {
+  background-color: #fde7d9;
+}
+
+.scada-content .border-orange-500\/30 {
+  border-color: #efb18e;
+}
+
+.scada-content .text-orange-300 {
+  color: var(--scada-brown);
+}
+
+.scada-content .bg-rose-500\/10 {
+  background-color: #ffe6df;
+}
+
+.scada-content .border-rose-500\/30 {
+  border-color: #f5aa99;
+}
+
+.scada-content .text-rose-300 {
+  color: var(--scada-danger);
+}
+
+.scada-content .bg-cyan-500\/10,
+.scada-content .bg-cyan-500\/20,
+.scada-content .bg-teal-500\/20 {
+  background-color: #dcecff;
+}
+
+.scada-content .border-cyan-500\/30 {
+  border-color: #9dcaff;
+}
+
+.scada-content .text-cyan-200,
+.scada-content .text-teal-200 {
+  color: var(--scada-blue);
+}
