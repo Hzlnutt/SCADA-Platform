@@ -19,6 +19,7 @@ import MachineOverview from "../pages/machines/MachineOverview";
 import MachineStatistics from "../pages/machines/MachineStatistics";
 import MachineMaintenance from "../pages/machines/MachineMaintenance";
 import MachineShiftReport from "../pages/machines/MachineShiftReport";
+import MachinePidDiagram from "../pages/machines/MachinePidDiagram";
 import MachinesOverview from "../pages/machines/MachinesOverview";
 import MachineGroupOverview from "../pages/machines/MachineGroupOverview";
 import Approvals from "../pages/Approvals";
@@ -42,6 +43,7 @@ export const AppRouter = () => {
               <Route path=":groupId" element={<MachineGroupOverview />} />
               <Route path=":groupId/:unitId" element={<MachineLayout />}>
                 <Route index element={<MachineOverview />} />
+                <Route path="pid-diagram" element={<MachinePidDiagram />} />
                 <Route path="statistics" element={<MachineStatistics />} />
                 <Route path="maintenance" element={<MachineMaintenance />} />
                 <Route path="shift-report" element={<MachineShiftReport />} />

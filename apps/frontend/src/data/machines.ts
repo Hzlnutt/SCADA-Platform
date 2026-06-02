@@ -418,7 +418,7 @@ export const machineGroups: MachineGroup[] = [
     units: [
       buildUnit({
         id: "cooling-water-1",
-        unitLabel: "Unit 1",
+        unitLabel: "WF1U3",
         groupId: "cooling-water-system",
         groupName: "Cooling Water System",
         area: "Utilities",
