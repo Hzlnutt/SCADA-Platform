@@ -4,6 +4,10 @@ import { getUnitById } from "../../data/machines";
 import pidBaseImage from "../../assets/pid-base2.png";
 import type { MachineOutletContext } from "./MachineLayout";
 
+const PID_CANVAS_WIDTH = 1836;
+const PID_CANVAS_HEIGHT = 789;
+const PID_CANVAS_ASPECT_RATIO = `${PID_CANVAS_WIDTH} / ${PID_CANVAS_HEIGHT}`;
+
 export default function MachinePidDiagram() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
@@ -48,19 +52,28 @@ export default function MachinePidDiagram() {
       </div>
 
       {/* P&ID Canvas Area */}
-      <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-5">
+      <section className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 p-3 sm:p-5">
         <div className="mb-4 text-xs uppercase tracking-[0.2em] text-slate-500">
           P&ID Diagram Canvas - {machine.name}
         </div>
-        <div 
-          className="relative min-h-[500px] rounded-lg border border-dashed border-slate-700 bg-cover bg-center"
-          style={{ backgroundImage: `url(${pidBaseImage})` }}
-        >
-          <canvas
-            id="pid-canvas"
-            className="absolute inset-0 w-full rounded-lg"
-            style={{ minHeight: "500px" }}
-          />
+        <div className="overflow-x-auto pb-2">
+          <div
+            className="relative mx-auto w-full min-w-[720px] max-w-[1836px] overflow-hidden rounded-lg border border-dashed border-slate-700 bg-slate-900"
+            style={{ aspectRatio: PID_CANVAS_ASPECT_RATIO }}
+          >
+            <img
+              src={pidBaseImage}
+              alt=""
+              className="pointer-events-none absolute inset-0 h-full w-full select-none object-fill"
+              draggable={false}
+            />
+            <canvas
+              id="pid-canvas"
+              width={PID_CANVAS_WIDTH}
+              height={PID_CANVAS_HEIGHT}
+              className="absolute inset-0 h-full w-full"
+            />
+          </div>
         </div>
       </section>
     </div>
