@@ -1,4 +1,5 @@
 import { Bar } from "react-chartjs-2";
+import type { ChartOptions, TooltipItem } from "chart.js";
 import "./chartjs";
 
 type EnergyTrendStackedChartProps = {
@@ -50,7 +51,8 @@ export const EnergyTrendStackedChart = ({
       },
       tooltip: {
         callbacks: {
-          label: (context: any) => `${context.dataset.label}: ${context.parsed.y.toFixed(1)}`
+          label: (context: TooltipItem<"bar">) =>
+            `${context.dataset.label}: ${Number(context.parsed.y).toFixed(1)}`
         }
       }
     },
@@ -68,9 +70,11 @@ export const EnergyTrendStackedChart = ({
     }
   };
 
+  const typedOptions = options as unknown as ChartOptions<"bar">;
+
   return (
     <div style={{ height }}>
-      <Bar data={data} options={options as any} />
+      <Bar data={data} options={typedOptions} />
     </div>
   );
 };

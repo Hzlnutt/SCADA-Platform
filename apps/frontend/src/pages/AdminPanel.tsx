@@ -81,7 +81,6 @@ export default function AdminPanel() {
     }
 
     let active = true;
-    setUsersLoading(true);
     getJson<{ data: UserItem[] }>("/users?limit=200")
       .then((result) => {
         if (active) {
@@ -105,7 +104,6 @@ export default function AdminPanel() {
     }
 
     let active = true;
-    setMaintenanceLoading(true);
     getJson<{ data: MaintenanceItem[] }>("/maintenance?limit=20&status=all")
       .then((result) => {
         if (active) {
@@ -129,7 +127,6 @@ export default function AdminPanel() {
     }
 
     let active = true;
-    setShiftLoading(true);
     getJson<{ data: ShiftReportItem[] }>("/shift-reports?limit=20&status=all")
       .then((result) => {
         if (active) {

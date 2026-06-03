@@ -48,7 +48,6 @@ export default function Approvals() {
       : "all";
 
     let active = true;
-    setLoading(true);
     Promise.all([
       getJson<ApprovalListResponse>(
         `/approvals/maintenance?limit=50&status=${statusParam}`

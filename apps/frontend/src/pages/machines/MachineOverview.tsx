@@ -12,7 +12,7 @@ const formatValue = (value: number, unit: string) =>
 const buildFallbackPoints = (values: number[]) => {
   const now = Date.now();
   const stepMs = 60 * 1000;
-  return values.map((value, index) => ({
+  return values.map<{ ts: Date | string; value: number }>((value, index) => ({
     ts: new Date(now - (values.length - index) * stepMs),
     value
   }));

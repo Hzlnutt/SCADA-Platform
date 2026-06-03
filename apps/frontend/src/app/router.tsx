@@ -26,6 +26,12 @@ import Approvals from "../pages/Approvals";
 import Thresholds from "../pages/Thresholds";
 import MachineHealth from "../pages/MachineHealth";
 import UtilityStatus from "../pages/UtilityStatus";
+import Electricity from "../pages/utilities/Electricity";
+import Gas from "../pages/utilities/Gas";
+import Water from "../pages/utilities/Water";
+import Hvac from "../pages/utilities/Hvac";
+import Wwtp from "../pages/utilities/Wwtp";
+import UtilityOverview from "../pages/utilities/UtilityOverview";
 
 export const AppRouter = () => {
   return (
@@ -52,6 +58,12 @@ export const AppRouter = () => {
             <Route path="devices" element={<Devices />} />
             <Route path="reports" element={<Reports />} />
             <Route path="utility-status" element={<UtilityStatus />} />
+            <Route path="utility" element={<UtilityOverview />} />
+            <Route path="listrik" element={<Electricity />} />
+            <Route path="air" element={<Water />} />
+            <Route path="gas" element={<Gas />} />
+            <Route path="hvac" element={<Hvac />} />
+            <Route path="wwtp" element={<Wwtp />} />
             <Route path="settings" element={<Settings />} />
             <Route path="approvals" element={<Approvals />} />
             <Route path="thresholds" element={<Thresholds />} />

@@ -1,4 +1,11 @@
 import { Bar } from "react-chartjs-2";
+import type {
+  Chart,
+  ChartOptions,
+  Plugin,
+  ScriptableContext,
+  TooltipItem
+} from "chart.js";
 import "./chartjs";
 
 type Thresholds = {
@@ -15,9 +22,9 @@ type UtilityBarChartProps = {
   thresholds?: Thresholds;
 };
 
-const thresholdPlugin = {
+const thresholdPlugin: Plugin<"bar", Thresholds> = {
   id: "thresholdLines",
-  afterDatasetsDraw: (chart: any, _args: unknown, options: Thresholds) => {
+  afterDatasetsDraw: (chart: Chart<"bar">, _args: unknown, options: Thresholds) => {
     const { ctx, chartArea, scales } = chart;
     if (!chartArea) return;
 
@@ -57,7 +64,7 @@ export const UtilityBarChart = ({
       {
         label: unit,
         data: values,
-        backgroundColor: (ctx: any) => {
+        backgroundColor: (ctx: ScriptableContext<"bar">) => {
           const { chart } = ctx;
           const { ctx: canvas } = chart;
           const gradient = canvas.createLinearGradient(0, 0, 0, chart.height);
@@ -78,7 +85,8 @@ export const UtilityBarChart = ({
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (context: any) => `${context.parsed.y.toFixed(2)} ${unit}`
+          label: (context: TooltipItem<"bar">) =>
+            `${Number(context.parsed.y).toFixed(2)} ${unit}`
         }
       },
       thresholdLines: thresholds
@@ -98,9 +106,11 @@ export const UtilityBarChart = ({
     }
   };
 
+  const typedOptions = options as unknown as ChartOptions<"bar">;
+
   return (
     <div style={{ height }}>
-      <Bar data={data} options={options as any} plugins={[thresholdPlugin]} />
+      <Bar data={data} options={typedOptions} plugins={[thresholdPlugin]} />
     </div>
   );
 };

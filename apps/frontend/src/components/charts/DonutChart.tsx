@@ -20,7 +20,18 @@ export const DonutChart = ({
   const radius = (size - thickness) / 2;
   const circumference = 2 * Math.PI * radius;
   const total = segments.reduce((sum, segment) => sum + segment.value, 0) || 1;
-  let offset = 0;
+  const segmentsWithOffsets = segments.map((segment, index) => {
+    const previousValue = segments
+      .slice(0, index)
+      .reduce((sum, item) => sum + item.value, 0);
+    const dash = (segment.value / total) * circumference;
+
+    return {
+      ...segment,
+      dash,
+      dashOffset: -(previousValue / total) * circumference
+    };
+  });
 
   return (
     <div className="relative inline-flex items-center justify-center">
@@ -33,12 +44,8 @@ export const DonutChart = ({
           strokeWidth={thickness}
           fill="none"
         />
-        {segments.map((segment) => {
-          const dash = (segment.value / total) * circumference;
-          const dashArray = `${dash} ${circumference - dash}`;
-          const dashOffset = -offset;
-          offset += dash;
-
+        {segmentsWithOffsets.map((segment) => {
+          const dashArray = `${segment.dash} ${circumference - segment.dash}`;
           return (
             <circle
               key={segment.label}
@@ -48,7 +55,7 @@ export const DonutChart = ({
               stroke={segment.color}
               strokeWidth={thickness}
               strokeDasharray={dashArray}
-              strokeDashoffset={dashOffset}
+              strokeDashoffset={segment.dashOffset}
               fill="none"
               strokeLinecap="round"
               transform={`rotate(-90 ${size / 2} ${size / 2})`}

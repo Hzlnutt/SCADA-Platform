@@ -262,6 +262,12 @@ export const Sidebar = () => {
         Operasional
       </div>
       <nav className="flex flex-col gap-1.5">
+        <NavItem to="/listrik" label="Listrik" icon={<IconDevice />} />
+        <NavItem to="/gas" label="Gas" icon={<IconDevice />} />
+        <NavItem to="/air" label="Air" icon={<IconDevice />} />
+        <NavItem to="/hvac" label="HVAC" icon={<IconDevice />} />
+        <NavItem to="/wwtp" label="WWTP" icon={<IconDevice />} />
+        <NavItem to="/utility" label="Utility" icon={<IconDevice />} />
         <NavItem to="/reports" label="Reports" icon={<IconReport />} />
         <NavItem to="/machine-health" label="Machine Health" icon={<IconAlarm />} />
         <NavItem to="/utility-status" label="Utility & HVAC" icon={<IconDevice />} />

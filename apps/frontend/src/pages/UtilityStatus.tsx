@@ -1,141 +1,212 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { PageHeader } from "../components/ui/PageHeader";
-import { machineGroups } from "../data/machines";
-import { getJson } from "../services/api.client";
+import { allEquipment } from "../data/equipment";
 import { useTelemetryStore } from "../store/telemetry.store";
 
-type ThresholdItem = {
-  groupId: string;
-  groupName: string;
-  unit: string;
-  lower: number | null;
-  upper: number | null;
-};
+type EquipmentStatus = "Running" | "Standby" | "Stopped";
+type OverrideStatus = EquipmentStatus | "Auto";
 
-type ThresholdListResponse = {
-  data: ThresholdItem[];
-};
-
-type UnitStatus = {
+type EquipmentRow = {
   id: string;
   name: string;
-  tagId: string;
-  status: "Running" | "Standby" | "Stopped";
+  code: string;
+  category: string;
+  segment: "Utility" | "HVAC" | "WWTP";
+  tagId?: string;
   value?: number;
   unit?: string;
-  category: string;
-  groupName: string;
+  status: EquipmentStatus;
+  autoStatus: EquipmentStatus;
+  override: OverrideStatus;
 };
 
-const statusStyle: Record<UnitStatus["status"], string> = {
-  Running: "bg-emerald-500/15 text-emerald-200 border-emerald-500/40",
-  Standby: "bg-amber-500/15 text-amber-200 border-amber-500/40",
-  Stopped: "bg-red-500/15 text-red-200 border-red-500/40"
+const statusStyle: Record<EquipmentStatus, string> = {
+  Running: "border-[#2f9e7f] bg-[#e7f7f1] text-[#1c7f63]",
+  Standby: "border-[#e4b424] bg-[#fff6da] text-[#b98700]",
+  Stopped: "border-[#e16767] bg-[#ffe4e4] text-[#b03a3a]"
+};
+
+const overrideOptions: { value: OverrideStatus; label: string }[] = [
+  { value: "Auto", label: "Auto" },
+  { value: "Running", label: "Running" },
+  { value: "Standby", label: "Standby" },
+  { value: "Stopped", label: "Stopped" }
+];
+
+const getAutoStatus = (value: number | undefined): EquipmentStatus => {
+  if (value === undefined) {
+    return "Standby";
+  }
+  if (value <= 0) {
+    return "Stopped";
+  }
+  return "Running";
 };
 
 export default function UtilityStatus() {
   const latest = useTelemetryStore((state) => state.latest);
-  const [thresholds, setThresholds] = useState<ThresholdItem[]>([]);
+  const [overrides, setOverrides] = useState<Record<string, OverrideStatus>>({});
 
-  useEffect(() => {
-    getJson<ThresholdListResponse>("/thresholds")
-      .then((result) => setThresholds(result.data))
-      .catch(() => setThresholds([]));
-  }, []);
+  const rows = useMemo(() => {
+    return allEquipment.map((item) => {
+      const rawValue = item.tagId ? latest[item.tagId]?.value : undefined;
+      const numericValue = typeof rawValue === "number" ? rawValue : undefined;
+      const autoStatus = getAutoStatus(numericValue);
+      const override = overrides[item.id] ?? "Auto";
+      const status = override === "Auto" ? autoStatus : override;
 
-  const units = useMemo(() => {
-    return machineGroups.flatMap((group) => {
-      const threshold = thresholds.find((item) => item.groupId === group.id);
-      return group.units.map((unit) => {
-        const value = latest[unit.tagId]?.value;
-        const numericValue = typeof value === "number" ? value : undefined;
-        let status: UnitStatus["status"] = numericValue === undefined ? "Standby" : "Running";
-
-        if (numericValue !== undefined && threshold) {
-          const upper = threshold.upper ?? null;
-          const lower = threshold.lower ?? null;
-          if ((upper !== null && numericValue >= upper) || (lower !== null && numericValue <= lower)) {
-            status = "Stopped";
-          }
-        }
-
-        return {
-          id: unit.id,
-          name: unit.unitLabel,
-          tagId: unit.tagId,
-          status,
-          value: numericValue,
-          unit: threshold?.unit ?? unit.unit,
-          category: group.category,
-          groupName: group.name
-        } satisfies UnitStatus;
-      });
+      return {
+        id: item.id,
+        name: item.name,
+        code: item.code,
+        category: item.category,
+        segment: item.segment,
+        tagId: item.tagId,
+        value: numericValue,
+        unit: item.unit,
+        status,
+        autoStatus,
+        override
+      } satisfies EquipmentRow;
     });
-  }, [latest, thresholds]);
+  }, [latest, overrides]);
 
   const grouped = useMemo(() => {
-    return units.reduce<Record<string, UnitStatus[]>>((acc, unit) => {
-      acc[unit.category] = acc[unit.category] ?? [];
-      acc[unit.category].push(unit);
+    return rows.reduce<Record<string, EquipmentRow[]>>((acc, row) => {
+      acc[row.segment] = acc[row.segment] ?? [];
+      acc[row.segment].push(row);
       return acc;
     }, {});
-  }, [units]);
+  }, [rows]);
+
+  const summary = useMemo(() => {
+    return rows.reduce(
+      (acc, row) => {
+        acc.total += 1;
+        acc[row.status] += 1;
+        if (row.override !== "Auto") {
+          acc.manual += 1;
+        }
+        return acc;
+      },
+      { total: 0, Running: 0, Standby: 0, Stopped: 0, manual: 0 }
+    );
+  }, [rows]);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Utility & HVAC Status"
-        description="Status Running, Standby, dan Stopped untuk seluruh peralatan." 
+        description="Status otomatis dari sistem dan override manual untuk peralatan utama."
       />
 
+      <section className="rounded-2xl border border-[#bcd7f1] bg-white/80 p-4 shadow-[0_12px_32px_rgba(20,93,170,0.12)]">
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="rounded-xl border border-[#cde4ff] bg-[#f6fbff] px-4 py-3">
+            <div className="text-xs uppercase tracking-[0.22em] text-[#2a5b91]">Running</div>
+            <div className="mt-2 text-2xl font-semibold text-[#0b3a68]">
+              {summary.Running}
+            </div>
+          </div>
+          <div className="rounded-xl border border-[#cde4ff] bg-[#f6fbff] px-4 py-3">
+            <div className="text-xs uppercase tracking-[0.22em] text-[#2a5b91]">Standby</div>
+            <div className="mt-2 text-2xl font-semibold text-[#0b3a68]">
+              {summary.Standby}
+            </div>
+          </div>
+          <div className="rounded-xl border border-[#cde4ff] bg-[#f6fbff] px-4 py-3">
+            <div className="text-xs uppercase tracking-[0.22em] text-[#2a5b91]">Stopped</div>
+            <div className="mt-2 text-2xl font-semibold text-[#0b3a68]">
+              {summary.Stopped}
+            </div>
+          </div>
+          <div className="rounded-xl border border-[#cde4ff] bg-[#f6fbff] px-4 py-3">
+            <div className="text-xs uppercase tracking-[0.22em] text-[#2a5b91]">Manual Override</div>
+            <div className="mt-2 text-2xl font-semibold text-[#0b3a68]">
+              {summary.manual}
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="grid gap-4">
-        {Object.entries(grouped).map(([category, items]) => (
+        {Object.entries(grouped).map(([segment, items]) => (
           <section
-            key={category}
-            className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5"
+            key={segment}
+            className="rounded-2xl border border-[#bcd7f1] bg-white/90 p-5 shadow-[0_16px_40px_rgba(20,93,170,0.12)]"
           >
             <div className="mb-4 flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-slate-100">
-                {category}
+              <div className="text-sm font-semibold text-[#0b3a68]">
+                {segment}
               </div>
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-[#4c78a6]">
                 {items.length} peralatan
               </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                <thead className="text-xs uppercase tracking-[0.2em] text-[#4c78a6]">
                   <tr>
                     <th className="px-3 py-2">Equipment</th>
-                    <th className="px-3 py-2">Group</th>
+                    <th className="px-3 py-2">Category</th>
+                    <th className="px-3 py-2">Code</th>
                     <th className="px-3 py-2">Tag</th>
                     <th className="px-3 py-2">Value</th>
                     <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Override</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-900">
+                <tbody className="divide-y divide-[#d7e8fb]">
                   {items.map((item) => (
-                    <tr key={item.id} className="text-slate-300">
-                      <td className="px-3 py-3 text-sm text-slate-200">
+                    <tr key={item.id} className="text-[#1b3f63]">
+                      <td className="px-3 py-3 text-sm font-medium text-[#0b3a68]">
                         {item.name}
                       </td>
-                      <td className="px-3 py-3 text-xs text-slate-500">
-                        {item.groupName}
+                      <td className="px-3 py-3 text-xs text-[#4c78a6]">
+                        {item.category}
                       </td>
-                      <td className="px-3 py-3 text-xs text-slate-500">
-                        {item.tagId}
+                      <td className="px-3 py-3 text-xs text-[#4c78a6]">
+                        {item.code}
                       </td>
-                      <td className="px-3 py-3 text-xs text-slate-400">
+                      <td className="px-3 py-3 text-xs text-[#4c78a6]">
+                        {item.tagId ?? "-"}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-[#4c78a6]">
                         {item.value !== undefined
                           ? `${item.value.toFixed(2)} ${item.unit ?? ""}`
                           : "-"}
                       </td>
                       <td className="px-3 py-3 text-xs">
-                        <span
-                          className={`rounded-full border px-2 py-1 ${statusStyle[item.status]}`}
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded-full border px-2 py-1 ${statusStyle[item.status]}`}
+                          >
+                            {item.status}
+                          </span>
+                          {item.override !== "Auto" ? (
+                            <span className="rounded-full bg-[#e0f0ff] px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-[#2a5b91]">
+                              Manual
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-xs">
+                        <select
+                          value={item.override}
+                          onChange={(event) =>
+                            setOverrides((prev) => ({
+                              ...prev,
+                              [item.id]: event.target.value as OverrideStatus
+                            }))
+                          }
+                          className="w-full rounded-lg border border-[#cde4ff] bg-white px-2 py-1 text-xs text-[#0b3a68]"
                         >
-                          {item.status}
-                        </span>
+                          {overrideOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                     </tr>
                   ))}

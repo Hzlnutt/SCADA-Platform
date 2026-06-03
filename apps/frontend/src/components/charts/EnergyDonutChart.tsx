@@ -1,4 +1,5 @@
 import { Doughnut } from "react-chartjs-2";
+import type { Chart, ChartOptions, Plugin, TooltipItem } from "chart.js";
 import "./chartjs";
 
 type EnergyDonutChartProps = {
@@ -10,9 +11,13 @@ type EnergyDonutChartProps = {
   height?: number;
 };
 
-const centerTextPlugin = {
+const centerTextPlugin: Plugin<"doughnut", { label: string; value: string }> = {
   id: "centerText",
-  afterDraw: (chart: any, _args: unknown, options: { label: string; value: string }) => {
+  afterDraw: (
+    chart: Chart<"doughnut">,
+    _args: unknown,
+    options: { label: string; value: string }
+  ) => {
     const { ctx, chartArea } = chart;
     if (!chartArea) return;
 
@@ -20,9 +25,9 @@ const centerTextPlugin = {
     ctx.fillStyle = "rgba(226, 232, 240, 0.85)";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = "600 12px Space Grotesk";
+    ctx.font = "600 12px Segoe UI";
     ctx.fillText(options.label, (chartArea.left + chartArea.right) / 2, chartArea.top + chartArea.height / 2 - 8);
-    ctx.font = "700 16px Space Grotesk";
+    ctx.font = "700 16px Segoe UI";
     ctx.fillText(options.value, (chartArea.left + chartArea.right) / 2, chartArea.top + chartArea.height / 2 + 10);
     ctx.restore();
   }
@@ -56,16 +61,19 @@ export const EnergyDonutChart = ({
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (context: any) => `${context.label}: ${context.parsed.toFixed(1)}`
+          label: (context: TooltipItem<"doughnut">) =>
+            `${context.label}: ${Number(context.parsed).toFixed(1)}`
         }
       },
       centerText: { label: centerLabel, value: centerValue }
     }
   };
 
+  const typedOptions = options as unknown as ChartOptions<"doughnut">;
+
   return (
     <div style={{ height }}>
-      <Doughnut data={data} options={options as any} plugins={[centerTextPlugin]} />
+      <Doughnut data={data} options={typedOptions} plugins={[centerTextPlugin]} />
     </div>
   );
 };
