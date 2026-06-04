@@ -11,15 +11,20 @@ import { DeviceLabel } from "../../components/pid/DeviceLabel";
 import { SensorIndicator } from "../../components/pid/SensorIndicator";
 import LabelComponent from "../../components/pid/TextLabel";
 import { LevelIndicator } from "../../components/pid/LevelIndicator";
+import { TankFrame } from "../../components/pid/TankFrame";
+import PipeBend from "../../components/pid/PipeBend";
+import {HeaderPipe} from "../../components/pid/HeaderPipe";
+import { YStrainer } from "../../components/pid/YStrainerPipe";
+import ChemicalDosingTank from "../../components/pid/ChemicalDosingTank";
+import PipeGauge from "../../components/pid/PipeGauge";
+import VerticalValve from "../../components/pid/VerticalValve";
+import PumpMotor from "../../components/pid/PumpMotor";
+import CoolingTower from "../../components/pid/CoolingTower";
 
 const PID_CANVAS_WIDTH  = 1836;
 const PID_CANVAS_HEIGHT = 789;
-const PID_CANVAS_ASPECT_RATIO = `${PID_CANVAS_WIDTH} / ${PID_CANVAS_HEIGHT}`;
 
 // ── Mode kalibrasi ─────────────────────────────────────────────────────────────
-// Ubah ke true untuk mencari koordinat posisi pipe.
-// Klik di atas canvas → console akan print x, y dalam koordinat SVG (0–1836 / 0–789).
-// Setelah dapat koordinatnya, ubah kembali ke false.
 const DEV_MODE = true;
 
 export default function MachinePidDiagram() {
@@ -27,14 +32,11 @@ export default function MachinePidDiagram() {
   const machine    = getUnitById(unitId);
   const svgRef     = useRef<SVGSVGElement>(null);
 
-  // ── Toggle sementara untuk demo (ganti dengan data API sesungguhnya) ────────
   const [allOn, setAllOn] = useState(false);
   const [selectedTaskFilter, setSelectedTaskFilter] = useState<"all" | "open_month" | "open" | "close">("all");
 
   if (!machine) return null;
 
-  // ── Status mesin (ganti dengan data dari PLC/API) ────────────────────────────
-  // Contoh struktur: true = mesin ON (flow animasi aktif), false = OFF
   const motorStatus = {
     "FAN-1": allOn,
     "FAN-2": allOn,
@@ -50,7 +52,6 @@ export default function MachinePidDiagram() {
     "MTR-9": allOn,
   };
 
-  // ── Kalibrasi: klik di SVG canvas → print koordinat ─────────────────────────
   const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!DEV_MODE || !svgRef.current) return;
     const rect = svgRef.current.getBoundingClientRect();
@@ -61,9 +62,7 @@ export default function MachinePidDiagram() {
     console.log(`Clicked: x=${x}, y=${y}  (SVG coords)`);
   };
 
-  // ── Sample data untuk Task dan Alarm ────────────────────────────────────
   const allTasks = [
-    // Tasks opened this month
     { id: 1, title: "Inspeksi Motor MTR-1", status: "open", openedMonth: true, createdDate: "2026-06-01" },
     { id: 2, title: "Calibration PT-01", status: "open", openedMonth: true, createdDate: "2026-06-02" },
     { id: 3, title: "Cleaning Heat Exchanger", status: "open", openedMonth: true, createdDate: "2026-06-03" },
@@ -76,13 +75,11 @@ export default function MachinePidDiagram() {
     { id: 10, title: "Flow Meter Calibration", status: "open", openedMonth: true, createdDate: "2026-06-18" },
     { id: 11, title: "Pipe Insulation Repair", status: "open", openedMonth: true, createdDate: "2026-06-20" },
     { id: 12, title: "Blowdown System Check", status: "open", openedMonth: true, createdDate: "2026-06-22" },
-    // Additional open tasks
     { id: 13, title: "Pump Seal Replacement", status: "open", openedMonth: false, createdDate: "2026-05-15" },
     { id: 14, title: "Water Treatment Analysis", status: "open", openedMonth: false, createdDate: "2026-05-10" },
     { id: 15, title: "Equipment Alignment", status: "open", openedMonth: false, createdDate: "2026-04-20" },
     { id: 16, title: "Safety Valve Testing", status: "open", openedMonth: false, createdDate: "2026-04-05" },
     { id: 17, title: "Bearing Lubrication", status: "open", openedMonth: false, createdDate: "2026-03-28" },
-    // Closed tasks
     { id: 18, title: "Daily Inspection Report", status: "close", openedMonth: false, createdDate: "2026-06-20" },
     { id: 19, title: "Temperature Log Check", status: "close", openedMonth: false, createdDate: "2026-06-19" },
     { id: 20, title: "Vibration Analysis", status: "close", openedMonth: false, createdDate: "2026-06-18" },
@@ -115,20 +112,16 @@ export default function MachinePidDiagram() {
   ];
 
   return (
-    <div className="h-[calc(100vh-100px)] flex flex-col">
+    <div className="h-[calc(100vh-100px)] flex flex-col overflow-hidden">
 
-      {/* P&ID Canvas + Right Side Cards */}
       <div className="flex-1 flex gap-4 flex-col lg:flex-row overflow-hidden">
         
-        {/* P&ID Canvas - Left Side */}
         <section className="flex-1 flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 p-3 sm:p-5">
 
-        {/* Header + toggle sementara */}
         <div className="mb-4 flex items-center justify-between">
           <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
             P&ID Diagram Canvas — {machine.name}
           </div>
-          {/* Tombol demo — hapus setelah pakai data API sesungguhnya */}
           <button
             onClick={() => setAllOn(v => !v)}
             className={`rounded px-3 py-1 text-xs font-mono transition-colors ${
@@ -141,235 +134,357 @@ export default function MachinePidDiagram() {
           </button>
         </div>
 
-        <div className="overflow-x-auto pb-2 flex-1">
+        <div className="overflow-x-auto overflow-y-hidden pb-0 flex-1">
           <div
             className="relative mx-auto w-full min-w-[720px] max-w-[1836px] h-full overflow-hidden rounded-lg border border-dashed border-slate-700 bg-slate-900"
-            style={{ aspectRatio: PID_CANVAS_ASPECT_RATIO }}
+            // style={{ aspectRatio: "1836 / 789" }}
           >
-            {/* Background statis */}
-            <img
-              src={pidBaseImage}
-              alt=""
-              className="pointer-events-none absolute inset-0 h-full w-full select-none object-fill"
-              draggable={false}
-            />
-
-            <canvas
-              id="pid-canvas"
-              width={PID_CANVAS_WIDTH}
-              height={PID_CANVAS_HEIGHT}
-              className="absolute inset-0 h-full w-full"
-            />
-
-            {/* ── SVG Overlay ─────────────────────────────────────────────── */}
+            {/* ── SVG UTAMA (mengandung gambar background + komponen) ── */}
             <svg
               ref={svgRef}
               className="absolute inset-0 h-full w-full"
-              viewBox={`0 0 ${PID_CANVAS_WIDTH} ${PID_CANVAS_HEIGHT}`}
-              preserveAspectRatio="none"
+              viewBox="0 0 1836 789"
+              preserveAspectRatio="xMidYMid meet" 
               style={{ pointerEvents: DEV_MODE ? "auto" : "none" }}
               onClick={handleSvgClick}
             >
-              {/* ── STEP 1: Defs (wajib, harus pertama) ─────────────────── */}
+              {/* ── GAMBAR LATAR (sebagai elemen image di dalam SVG) ── */}
+              <image
+                href={pidBaseImage}
+                x="0"
+                y="-145"
+                width="1836"
+                height="1080"
+                preserveAspectRatio="none" // <-- KUNCI: gambar diregangkan pas dengan viewBox
+                style={{ pointerEvents: "none" }}
+              />
+
+              {/* ── DEFINISI KOMPONEN ────────────────────────────────── */}
               <PipeDefs />
-            
-              {/* PIPE DARI TANK KE MOTOR 3 */}
-              <PipeH x={588} y={596} w={133} h={8} on={motorStatus["MTR-3"]} dir="left" />
 
-              {/* PIPE DARI TANK KE MOTOR 1 dan 2 */}
-              <PipeH 
-              x={467} y={616} w={254} h={8} 
-              on={motorStatus["MTR-1"] || motorStatus["MTR-2"]} dir="left" />
+              {/* ── PIPE ─────────────────────────────────────────────────── */}
 
-              {/* PIPE DARI TANK KE HEADER KANAN*/}
-              <PipeH 
-              x={1003} y={616} w={153} h={8} 
-              on={motorStatus["MTR-4"] || motorStatus["MTR-5"] || motorStatus["MTR-6"] || motorStatus["MTR-7"] || motorStatus["MTR-8"] || motorStatus["MTR-9"]} />
+              {/* Pipe Tank to Right Header */}
+              <PipeH x={961} y={544} w={205} h={6} 
+                on={motorStatus["MTR-4"] || motorStatus["MTR-5"] || motorStatus["MTR-6"] || motorStatus["MTR-7"] || motorStatus["MTR-8"] || motorStatus["MTR-9"]} />
 
-              {/* ── BRANCH VERTIKAL — MTR-1 (Cooling Tower 1) ─────────────── */}
-              <PipeV x={233.5} y={42} w={9} h={560} on={motorStatus["MTR-1"]} dir="up" />
+              {/* Pipe Tank to Left Header */}
+              <PipeH x={443} y={544} w={260} h={6} 
+                on={motorStatus["MTR-1"] || motorStatus["MTR-2"]} dir="left" type="warm" />
 
-              {/* ── BRANCH HORIZONTAL — MTR-1 (Cooling Tower 1) ─────────────── */}
-              <PipeH x={254} y={20} w={144} h={9} on={motorStatus["MTR-1"]} />
+              {/* Pipe Tank to CT-3 */}
+              <PipeH x={590} y={529} w={114} h={6} 
+                on={motorStatus["MTR-3"]} dir="left" type="warm" />
+              <PipeV x={583} y={146} w={7} h={370} 
+                on={motorStatus["MTR-3"]} dir="up" type="warm" />
+              <PipeBend x={581.5} y={514} size={25} angle={0} />
 
-              {/* ── BRANCH VERTIKAL — MTR-2 (Cooling Tower 2) ─────────────── */}
-              <PipeV x={403.3} y={41} w={9} h={561} on={motorStatus["MTR-2"]} dir="up" />
+              {/* Pipe Left Header to CT-1 and CT-2 */}
+              <PipeV x={364} y={146} w={7} h={382} 
+                on={motorStatus["MTR-2"]} dir="up" type="warm" />
+              <PipeV x={151} y={146} w={7} h={382} 
+                on={motorStatus["MTR-1"]} dir="up" type="warm" />
 
-              {/* ── BRANCH HORIZONTAL — MTR-2 (Cooling Tower 2) ─────────────── */}
-              <PipeH 
-              x={419} y={20} 
-              w={147} h={9} 
-              on={motorStatus["MTR-1"] || motorStatus["MTR-2"]}  />
+              {/* Pipe  Right Header to Area */}
+              <PipeV x={1210} y={249} w={7} h={280} 
+                on={motorStatus["MTR-4"]} dir="up" />
+              <PipeV x={1316} y={249} w={7} h={280} 
+                on={motorStatus["MTR-5"]} dir="up" />
+              <PipeV x={1422} y={249} w={7} h={280} 
+                on={motorStatus["MTR-6"]} dir="up" />
+              <PipeV x={1527} y={249} w={7} h={280} 
+                on={motorStatus["MTR-7"]} dir="up" />
+              <PipeV x={1632} y={249} w={7} h={280} 
+                on={motorStatus["MTR-8"]} dir="up" />
+              <PipeV x={1738} y={249} w={7} h={280} 
+                on={motorStatus["MTR-9"]} dir="up" />
 
-              {/* ── BRANCH VERTIKAL — MTR-3 (Cooling Tower 3) ─────────────── */}
-              <PipeV x={572} y={41} w={9} h={545} on={motorStatus["MTR-3"]} dir="up" />
+              {/* Pipe Makeup Water to Tank */}
+              <PipeH x={935} y={336} w={76} h={6} 
+                on={motorStatus["MTR-3"]} dir="left" type="cold" />
+              <PipeV x={923} y={346} w={7} h={59} 
+                on={motorStatus["MTR-9"]} dir="down" />
+              <PipeBend x={921} y={334} size={25} angle={90} />
 
-              {/* ── BRANCH HORIZONTAL — MTR-3 (Cooling Tower 3) ─────────────── */}
-              <PipeH 
-              x={587} y={20} 
-              w={329} h={9} 
-              on={motorStatus["MTR-1"] || motorStatus["MTR-2"] || motorStatus["MTR-3"]}  />
+              {/* Pipe Area to Tank*/}
+              <PipeV x={1210} y={166} w={7} h={30} 
+                on={true} dir="up" type="return" />
+              <PipeH x={820} y={145} w={377} h={6} 
+                on={true} dir="left" type="return" />
+              <PipeV x={800} y={168} w={7} h={238} 
+                on={true} dir="down" type="return" />
+              <PipeBend x={1195} y={143} size={25} angle={180} />
+              <PipeBend x={798} y={143} size={25} angle={90} />
 
-              {/* ── BRANCH VERTIKAL — CT KE TANK ─────────────── */}
-              <PipeV 
-              x={928} y={36} 
-              w={9} h={411} 
-              on={motorStatus["MTR-1"] || motorStatus["MTR-2"] || motorStatus["MTR-3"]}  />
+              <PipeV x={1314} y={153} w={7} h={45} 
+                on={true} dir="up" type="return" />
+              <PipeH x={810} y={133} w={488} h={6} 
+                on={true} dir="left" type="return" />
+              <PipeV x={788} y={156} w={7} h={250} 
+                on={true} dir="down" type="return" />
+              <PipeBend x={1298} y={130} size={25} angle={180} />
+              <PipeBend x={786} y={131} size={25} angle={90} />
 
-              {/* ── BRANCH VERTIKAL — MTR-4 (DU-03) ──────────────────────── */}
-              <PipeV x={1209} y={267} w={9} h={330} on={motorStatus["MTR-4"]} dir="up" />
+              <PipeV x={1422} y={141} w={7} h={57} 
+                on={true} dir="up" type="return" />
+              <PipeH x={795} y={121} w={615} h={6} 
+                on={true} dir="left" type="return" />
+              <PipeV x={776} y={144} w={7} h={262} 
+                on={true} dir="down" type="return" />
+              <PipeBend x={1406} y={118} size={25} angle={180} />
+              <PipeBend x={774} y={119} size={25} angle={90} />
 
-              {/* ── BRANCH VERTIKAL — MTR-5 (BP-03) ──────────────────────── */}
-              <PipeV x={1319} y={267} w={9} h={330} on={motorStatus["MTR-5"]} dir="up" />
+              <PipeV x={1527} y={129} w={7} h={69} 
+                on={true} dir="up" type="return" />
+              <PipeH x={783} y={109} w={730} h={6} 
+                on={true} dir="left" type="return" />
+              <PipeV x={764} y={132} w={7} h={274} 
+                on={true} dir="down" type="return" />
+              <PipeBend x={1511} y={106} size={25} angle={180} />
+              <PipeBend x={762} y={107} size={25} angle={90} />
 
-              {/* ── BRANCH VERTIKAL — MTR-6 (SP-03) ──────────────────────── */}
-              <PipeV x={1430} y={267} w={9} h={330} on={motorStatus["MTR-6"]} dir="up" />
+              <PipeV x={1632} y={117} w={7} h={81} 
+                on={true} dir="up" type="return" />
+              <PipeH x={771} y={97} w={850} h={6} 
+                on={true} dir="left" type="return" />
+              <PipeV x={752} y={120} w={7} h={286} 
+                on={true} dir="down" type="return" />
+              <PipeBend x={1616} y={94} size={25} angle={180} />
+              <PipeBend x={750} y={95} size={25} angle={90} />
 
-              {/* ── BRANCH VERTIKAL — MTR-7 (ST-03) ──────────────────────── */}
-              <PipeV x={1541} y={267} w={9} h={330} on={motorStatus["MTR-7"]} dir="up" />
-
-              {/* ── BRANCH VERTIKAL — MTR-8 (WASHING) ────────────────────── */}
-              <PipeV x={1651} y={267} w={9} h={330} on={motorStatus["MTR-8"]} dir="up" />
-
-              {/* ── BRANCH VERTIKAL — MTR-9 (MINI LAB) ───────────────────── */}
-              <PipeV x={1762} y={267} w={9} h={330} on={motorStatus["MTR-9"]} dir="up" />
-
-              {/* ── BRANCH HORIZONTAL — DOSING ───────────────────── */}
-              <PipeH x={969} y={426} w={62} h={9} on={motorStatus["MTR-9"]} dir="left" />
-
-              {/* ── BRANCH HORIZONTAL — RAW WATER ───────────────────── */}
-              <PipeH x={832} y={369} w={30} h={8} on={motorStatus["MTR-9"]} dir="left" />
-
-              {/* ── BRANCH VERTIKAL — RAW WATER ───────────────────── */}
-              <PipeV x={769} y={389} w={8} h={58} on={motorStatus["MTR-9"]} />
-
-              {/* ── BRANCH HORIZONTAL — BLOWDOWN ───────────────────── */}
-              <PipeH x={656} y={630} w={65} h={8} on={motorStatus["MTR-9"]} dir="left" />
-
-              {/* ── BRANCH VERTIKAL — BLOWDOWN ───────────────────── */}
-              <PipeV x={637} y={651} w={9} h={21} on={motorStatus["MTR-9"]} />
-
-              {/* ── BRANCH HORIZONTAL — BLOWDOWN ───────────────────── */}
-              <PipeH x={543} y={683} w={40} h={7} on={motorStatus["MTR-9"]} dir="left" />
-
-
-              {/* ── LABEL SVG ───── */}
-
-            <DeviceLabel x={183} y={105} w={110} h={80} name="FAN-1" on={motorStatus["FAN-1"]} />
-            <DeviceLabel x={353} y={105} w={110} h={80} name="FAN-2" on={motorStatus["FAN-2"]} />
-            <DeviceLabel x={523} y={105} w={110} h={80} name="FAN-3" on={motorStatus["FAN-3"]} />
-
-            <DeviceLabel x={200} y={430} w={80} h={70} name="MTR-1" on={motorStatus["MTR-1"]} />
-            <DeviceLabel x={368} y={430} w={80} h={70} name="MTR-2" on={motorStatus["MTR-2"]} />
-            <DeviceLabel x={537} y={430} w={80} h={70} name="MTR-3" on={motorStatus["MTR-3"]} />
-            <DeviceLabel x={1177} y={430} w={80} h={70} name="MTR-4" on={motorStatus["MTR-4"]} />
-            <DeviceLabel x={1287} y={430} w={80} h={70} name="MTR-5" on={motorStatus["MTR-5"]} />
-            <DeviceLabel x={1397} y={430} w={80} h={70} name="MTR-6" on={motorStatus["MTR-6"]} />
-            <DeviceLabel x={1509} y={430} w={80} h={70} name="MTR-7" on={motorStatus["MTR-7"]} />
-            <DeviceLabel x={1619} y={430} w={80} h={70} name="MTR-8" on={motorStatus["MTR-8"]} />
-            <DeviceLabel x={1729} y={430} w={80} h={70} name="MTR-9" on={motorStatus["MTR-9"]} />
-
-
-            {/* SENSOR INDICATOR SVG */}
-
-            {/* INDOCATOR CT */}
-            <SensorIndicator x={190} y={275} value={1.9} unit=" Bar" decimalPlaces={1}
-            warningThreshold={1.5} alarmThreshold={2} w={100} h={45} />
-            <SensorIndicator x={360} y={275} value={0.8} unit=" Bar" decimalPlaces={1}
-            warningThreshold={1.5} alarmThreshold={2} w={100} h={45} />
-            <SensorIndicator x={530} y={275} value={2} unit=" Bar" decimalPlaces={1}
-            warningThreshold={1.5} alarmThreshold={2} w={100} h={45} />
-
-            {/* INDOCATOR MTR KANAN */}
-            <LabelComponent text="DU-03" x={1165} y={222} w={100} h={35} hasBorder={false} />
-            <SensorIndicator x={1165} y={275} value={1.9} unit=" Bar" decimalPlaces={1}
-            warningThreshold={1.5} alarmThreshold={2} w={100} h={45} />
-
-            <LabelComponent text="BP-03" x={1278} y={222} w={100} h={35} hasBorder={false} />
-            <SensorIndicator x={1278} y={275} value={1.5} unit=" Bar" decimalPlaces={1}
-            warningThreshold={1.5} alarmThreshold={2} w={100} h={45} />
-
-            <LabelComponent text="SP-03" x={1388} y={222} w={100} h={35} hasBorder={false} />
-            <SensorIndicator x={1388} y={275} value={1.1} unit=" Bar" decimalPlaces={1}
-            warningThreshold={1.5} alarmThreshold={2} w={100} h={45} />
-
-            <LabelComponent text="ST-03" x={1500} y={222} w={100} h={35} hasBorder={false} />
-            <SensorIndicator x={1500} y={275} value={1.9} unit=" Bar" decimalPlaces={1}
-            warningThreshold={1.5} alarmThreshold={2} w={100} h={45} />
-
-            <LabelComponent text="WASHING" x={1600} y={222} w={110} h={35} hasBorder={false} />
-            <SensorIndicator x={1612} y={275} value={1.5} unit=" Bar" decimalPlaces={1}
-            warningThreshold={1.5} alarmThreshold={2} w={100} h={45} />
-
-            <LabelComponent text="MINI LAB" x={1710} y={222} w={120} h={35} hasBorder={false} />
-            <SensorIndicator x={1721} y={275} value={2} unit=" Bar" decimalPlaces={1}
-            warningThreshold={1.5} alarmThreshold={2} w={100} h={45} />
-
-            {/* INDICATOR RETURN */}
-            <SensorIndicator x={1165} y={155} value={31.2} unit=" °C" decimalPlaces={1}
-            warningThreshold={35} alarmThreshold={40} w={100} h={45} />
-            <SensorIndicator x={1278} y={155} value={36.2} unit=" °C" decimalPlaces={1}
-            warningThreshold={35} alarmThreshold={40} w={100} h={45} />
-            <SensorIndicator x={1388} y={155} value={40.1} unit=" °C" decimalPlaces={1}
-            warningThreshold={35} alarmThreshold={40} w={100} h={45} />
-            <SensorIndicator x={1500} y={155} value={28.8} unit=" °C" decimalPlaces={1}
-            warningThreshold={35} alarmThreshold={40} w={100} h={45} />
-            <SensorIndicator x={1612} y={155} value={29.4} unit=" °C" decimalPlaces={1}
-            warningThreshold={35} alarmThreshold={40} w={100} h={45} />
-            <SensorIndicator x={1721} y={155} value={32.5} unit=" °C" decimalPlaces={1}
-            warningThreshold={35} alarmThreshold={40} w={100} h={45} />
-
-            {/* INDICATOR DOSING */}
-            <LabelComponent text="DOSING" x={1010} y={135} w={100} h={35} hasBorder={true} />
-            <LabelComponent text="VOLUME" x={950} y={192} w={100} h={35} hasBorder={false} />
-            <LabelComponent text="LEVEL" x={958} y={245} w={85} h={35} hasBorder={false} />
-            <SensorIndicator x={1055} y={185} value={70} unit="%"
-            warningThreshold={70} alarmThreshold={60} w={100} h={45} />
-            <SensorIndicator x={1055} y={240} value={7.2} unit="" decimalPlaces={1}
-            warningThreshold={7.5} alarmThreshold={7.6} w={100} h={45} />
-
-            {/* FLOW RATE INDICATOR */}
-            <LabelComponent text="RAW WATER" x={760} y={280} w={120} h={40} hasBorder={false} />
-            <SensorIndicator x={785} y={385} value={20.2} unit=" m³/s" decimalPlaces={1}
-             w={100} h={45} />
-
-             {/* MAKE UP WATER INDICATOR */}
-             <LabelComponent text="MAKEUP WTR" x={765} y={80} w={150} h={40} hasBorder={true} />
-             <LabelComponent text="TDS" x={755} y={145} w={60} h={35} hasBorder={false} />
-            <LabelComponent text="PH" x={760} y={200} w={50} h={35} hasBorder={false} />
-             <SensorIndicator x={820} y={140} value={320} unit=" ppm"
-            warningThreshold={300} alarmThreshold={350} w={100} h={45} />
-             <SensorIndicator x={820} y={195} value={7.2} unit=" pH" decimalPlaces={1}
-            warningThreshold={7.5} alarmThreshold={7.6} w={100} h={45} />
-
-            {/* BLOWDOWN INDICATOR */}
-            <LabelComponent text="BLOWDOWN" x={536} y={745} w={130} h={35} hasBorder={true} />
-            <SensorIndicator x={550} y={700} value={18.3} unit=" m³/s" decimalPlaces={1}
-             w={100} h={40} />
-
-            {/* TANK INDICATOR */}
-
-            <LevelIndicator x={742} y={250} value={92} w={70} h={150} />
-            <LevelIndicator x={280} y={250} value={92} w={70} h={150} />
+              <PipeV x={1738} y={105} w={7} h={93} 
+                on={true} dir="up" type="return" />
+              <PipeH x={759} y={85} w={965} h={6} 
+                on={true} dir="left" type="return" />
+              <PipeV x={740} y={108} w={7} h={298} 
+                on={true} dir="down" type="return" />
+              <PipeBend x={1722} y={82} size={25} angle={180} />
+              <PipeBend x={738} y={83} size={25} angle={90} />
 
 
-            <SensorIndicator x={742} y={585} value={0} unit="%"
-            warningThreshold={7.5} alarmThreshold={7.6} w={100} h={45} />
-            <SensorIndicator x={881} y={585} value={0} unit="%"
-            warningThreshold={7.5} alarmThreshold={7.6} w={100} h={45} />
+              {/* Pipe FAN-1 to Tank */}
+              <PipeV x={180} y={146} w={7} h={65} 
+                on={motorStatus["FAN-1"]} dir="down" />
+              <PipeH x={203} y={225} w={631} h={6} 
+                on={motorStatus["FAN-1"]} dir="right" type="cold" />
+              <PipeV x={849} y={245} w={7} h={162} 
+                on={motorStatus["FAN-1"]} dir="down" />
+              <PipeBend x={179} y={210} size={25} angle={0} />
+              <PipeBend x={833} y={222} size={25} angle={180} />
 
-            <LabelComponent text="TDS" x={760} y={710} w={60} h={35} hasBorder={false} />
-            <LabelComponent text="PH" x={905} y={710} w={50} h={35} hasBorder={false} />
-            <SensorIndicator x={742} y={660} value={320} unit=" ppm"
-            warningThreshold={300} alarmThreshold={350} w={100} h={45} />
-            <SensorIndicator x={881} y={660} value={7.2} unit=" pH" decimalPlaces={1}
-            warningThreshold={7.5} alarmThreshold={7.6} w={100} h={45} />
+              {/* Pipe FAN-2 to Tank */}
+              <PipeV x={395} y={146} w={7} h={53} 
+                on={motorStatus["FAN-2"]} dir="down" />
+              <PipeH x={418} y={212} w={432} h={6} 
+                on={motorStatus["FAN-2"]} dir="right" type="cold" />
+              <PipeV x={865} y={232} w={7} h={175} 
+                on={motorStatus["FAN-2"]} dir="down" />
+              <PipeBend x={394} y={197} size={25} angle={0} />
+              <PipeBend x={849} y={209} size={25} angle={180} />
 
-            {/* AMBIENT TEMP */}
-            <LabelComponent text="AMBIENT TEMP" x={10} y={40} w={150} h={50} hasBorder={true} />
-            <SensorIndicator x={30} y={100} value={32.5} unit=" °C" decimalPlaces={1}
-            warningThreshold={35} alarmThreshold={40} w={100} h={45} />
+              {/* Pipe FAN-3 to Tank */}
+              <PipeV x={617} y={146} w={7} h={40} 
+                on={motorStatus["FAN-3"]} dir="down" />
+              <PipeH x={640} y={199} w={225} h={6} 
+                on={motorStatus["FAN-3"]} dir="right" type="cold" />
+              <PipeV x={880} y={220} w={7} h={186} 
+                on={motorStatus["FAN-3"]} dir="down" />
+              <PipeBend x={616} y={184} size={25} angle={0} />
+              <PipeBend x={865} y={197} size={25} angle={180} />
 
+              {/* Pipe Tank to Blowdown */}
+              <PipeV x={767} y={578} w={7} h={42.5} 
+                on={motorStatus["FAN-3"]} dir="down" type="warm" />
+              <PipeH x={435} y={636} w={320} h={6} 
+                on={motorStatus["FAN-3"]} dir="left" type="warm" />
+              <PipeBend x={752} y={620} size={25} angle={270} />
+
+              {/* Pipe Dosing to Tank */}
+              <PipeV x={892} y={575} w={7} h={33} 
+                on={motorStatus["FAN-3"]} dir="up" />
+              <PipeV x={961} y={640} w={7} h={24} 
+                on={motorStatus["FAN-3"]} dir="up" />
+              <PipeH x={916} y={621} w={32} h={7} 
+                on={motorStatus["FAN-3"]} dir="left" />
+              <PipeBend x={892} y={607} size={25} angle={0} />
+              <PipeBend x={946} y={619} size={25} angle={180} />
+
+              <PipeV x={912} y={575} w={7} h={20} 
+                on={motorStatus["FAN-3"]} dir="up" />
+              <PipeV x={1123} y={630} w={7} h={34} 
+                on={motorStatus["FAN-3"]} dir="up" />
+              <PipeH x={935} y={609} w={175} h={7} 
+                on={motorStatus["FAN-3"]} dir="left" />
+              <PipeBend x={911} y={594} size={25} angle={0} />
+              <PipeBend x={1107} y={607} size={25} angle={180} />
+
+              {/* Header Pipe */}
+              <HeaderPipe x={89} y={525} w={350} h={45} /> 
+              <HeaderPipe x={1167} y={525} w={620} h={45} /> 
+
+              {/* ── TANK ────────────────────────────────────────────────── */}
+              <TankFrame x={708} y={410} w={120} h={163} label="" />
+              <TankFrame x={837} y={410} w={120} h={163} label="" />
+
+              <LevelIndicator x={714} y={416} value={76} w={108} h={151} type="warm" />
+              <LevelIndicator x={843} y={416} value={76} w={108} h={151} type="cold" />
+
+              <SensorIndicator 
+                x={860} y={492} 
+                w={75} h={30}
+                value={76} unit=" %" 
+                warningThreshold={75} alarmThreshold={70} 
+                thresholdDirection="below" 
+              />
+              <SensorIndicator 
+                x={860} y={530} 
+                w={75} h={30}
+                value={28.5} unit=" °C" 
+                warningThreshold={28} alarmThreshold={30}
+                decimalPlaces={1}
+                thresholdDirection="above" 
+              />
+              <SensorIndicator 
+                x={731} y={530} 
+                w={75} h={30}
+                value={32.8} unit=" °C" 
+                warningThreshold={38} alarmThreshold={40}
+                decimalPlaces={1}
+                thresholdDirection="above" 
+              />
+
+              {/* Sensor Indicator Pipe MTR-1 to MTR-9 */}
+              <SensorIndicator 
+                x={118} y={273} 
+                w={75} h={30}
+                value={1.8} unit=" BAR" 
+                warningThreshold={1.5} alarmThreshold={2.0}
+                decimalPlaces={1}
+                thresholdDirection="above" 
+              />
+              <SensorIndicator 
+                x={333} y={273} 
+                w={75} h={30}
+                value={2} unit=" BAR" 
+                warningThreshold={1.5} alarmThreshold={2.0}
+                decimalPlaces={1}
+                thresholdDirection="above" 
+              />
+              <SensorIndicator 
+                x={552} y={273} 
+                w={75} h={30}
+                value={1.2} unit=" BAR" 
+                warningThreshold={1.5} alarmThreshold={2.0}
+                decimalPlaces={1}
+                thresholdDirection="above" 
+              />
+              <SensorIndicator 
+                x={1177} y={273} 
+                w={75} h={30}
+                value={1.5} unit=" BAR" 
+                warningThreshold={1.5} alarmThreshold={2.0}
+                decimalPlaces={1}
+                thresholdDirection="above" 
+              />
+              <SensorIndicator 
+                x={1282} y={273} 
+                w={75} h={30}
+                value={1.4} unit=" BAR" 
+                warningThreshold={1.5} alarmThreshold={2.0}
+                decimalPlaces={1}
+                thresholdDirection="above" 
+              />
+              <SensorIndicator 
+                x={1390} y={273} 
+                w={75} h={30}
+                value={0.8} unit=" BAR" 
+                warningThreshold={1.5} alarmThreshold={2.0}
+                decimalPlaces={1}
+                thresholdDirection="above" 
+              />
+              <SensorIndicator 
+                x={1495} y={273} 
+                w={75} h={30}
+                value={2.4} unit=" BAR" 
+                warningThreshold={1.5} alarmThreshold={2.0}
+                decimalPlaces={1}
+                thresholdDirection="above" 
+              />
+              <SensorIndicator 
+                x={1599} y={273} 
+                w={75} h={30}
+                value={1.3} unit=" BAR" 
+                warningThreshold={1.5} alarmThreshold={2.0}
+                decimalPlaces={1}
+                thresholdDirection="above" 
+              />
+              <SensorIndicator 
+                x={1705} y={273} 
+                w={75} h={30}
+                value={0.8} unit=" BAR" 
+                warningThreshold={1.5} alarmThreshold={2.0}
+                decimalPlaces={1}
+                thresholdDirection="above" 
+              />
+
+              <SensorIndicator 
+                x={1496} y={147} 
+                w={75} h={30}
+                value={34.6} unit=" °C" 
+                warningThreshold={35} alarmThreshold={40}
+                decimalPlaces={1}
+                thresholdDirection="above" 
+              />
+
+              {/* Chemical Dosing Tank */}
+              <ChemicalDosingTank x={932}  y={685} width={67} height={65} id="tankA" />
+              <ChemicalDosingTank x={1094}  y={685} width={67} height={65} id="tankB" />
+
+              <LevelIndicator x={940} y={700} value={50} w={51} h={51} type="cold" />
+              <LevelIndicator x={1102} y={700} value={80} w={51} h={51} type="cold" />
+
+              {/* Gauge */}
+              <PipeGauge x={946} y={287} size={60} />
+              <PipeGauge x={608} y={587} size={60} />
+
+              {/* Valve */}
+              <VerticalValve x={130} y={319} size={50} angle={0} />
+              <VerticalValve x={343} y={319} size={50} angle={0} />
+              <VerticalValve x={562} y={319} size={50} angle={0} />
+              <VerticalValve x={1189} y={319} size={50} angle={0} />
+              <VerticalValve x={1295} y={319} size={50} angle={0} />
+              <VerticalValve x={1401} y={319} size={50} angle={0} />
+              <VerticalValve x={1506} y={319} size={50} angle={0} />
+              <VerticalValve x={1611} y={319} size={50} angle={0} />
+              <VerticalValve x={1717} y={319} size={50} angle={0} />
+
+              {/* Y-Strainer Pipe */}
+              <YStrainer x={148} y={478} size={15} />
+              <YStrainer x={361} y={478} size={15} />
+              <YStrainer x={580} y={478} size={15} />
+              <YStrainer x={1207} y={478} size={15} />
+              <YStrainer x={1313} y={478} size={15} />
+              <YStrainer x={1419} y={478} size={15} />
+              <YStrainer x={1524} y={478} size={15} />
+              <YStrainer x={1629} y={478} size={15} />
+              <YStrainer x={1735} y={478} size={15} />
+
+              {/* Pump MTR */}
+              <PumpMotor x={105} y={370} size={100} on={motorStatus["MTR-1"]} />
+              <PumpMotor x={318} y={370} size={100} on={motorStatus["MTR-2"]} />
+              <PumpMotor x={537} y={370} size={100} on={motorStatus["MTR-3"]} />
+              <PumpMotor x={1164} y={370} size={100} on={motorStatus["MTR-4"]} />
+              <PumpMotor x={1270} y={370} size={100} on={motorStatus["MTR-5"]} />
+              <PumpMotor x={1376} y={370} size={100} on={motorStatus["MTR-6"]} />
+              <PumpMotor x={1481} y={370} size={100} on={motorStatus["MTR-7"]} />
+              <PumpMotor x={1586} y={370} size={100} on={motorStatus["MTR-8"]} />
+              <PumpMotor x={1692} y={370} size={100} on={motorStatus["MTR-9"]} />
+
+              {/* Cooling Tower */}
+              <CoolingTower x={55} y={-12} size={200} on={motorStatus["FAN-1"]} />
+              <CoolingTower x={269} y={-12} size={200} on={motorStatus["FAN-1"]} />
+              <CoolingTower x={487} y={-12} size={200} on={motorStatus["FAN-1"]} />
+              
 
 
             </svg>
@@ -383,60 +498,57 @@ export default function MachinePidDiagram() {
         )}
         </section>
 
-        {/* Right Side Cards - Task Info & Alarms */}
+        {/* ── Right Side ──────────────────────────────── */}
         <div className="flex flex-col gap-4 lg:w-96 overflow-hidden">
           
-          {/* Task Information Card */}
           <div className="flex-1 flex flex-col rounded-lg border border-slate-800 bg-slate-950/70 p-4 overflow-hidden min-h-0">
             <h3 className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold mb-3">Task Information</h3>
             
-            {/* Task Metrics - Clickable */}
-            <div className="space-y-3 mb-4">
+            <div className="space-y-1.5 mb-2">
               <button
                 onClick={() => setSelectedTaskFilter("open_month")}
-                className={`w-full text-left flex justify-between items-center p-3 rounded border-2 transition-colors ${
+                className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
                   selectedTaskFilter === "open_month"
                     ? "bg-white border-cyan-500 text-slate-900"
                     : "bg-white border-slate-300 text-slate-900 hover:border-cyan-400"
                 }`}
               >
                 <span className="text-xs font-medium">Task Open (Bulan Ini)</span>
-                <span className={`text-lg font-semibold ${selectedTaskFilter === "open_month" ? "text-cyan-600" : "text-cyan-500"}`}>
+                <span className={`text-base font-semibold ${selectedTaskFilter === "open_month" ? "text-cyan-600" : "text-cyan-500"}`}>
                   {taskInfo.openThisMonth}
                 </span>
               </button>
               
               <button
                 onClick={() => setSelectedTaskFilter("open")}
-                className={`w-full text-left flex justify-between items-center p-3 rounded border-2 transition-colors ${
+                className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
                   selectedTaskFilter === "open"
                     ? "bg-white border-yellow-500 text-slate-900"
                     : "bg-white border-slate-300 text-slate-900 hover:border-yellow-400"
                 }`}
               >
                 <span className="text-xs font-medium">Task Open</span>
-                <span className={`text-lg font-semibold ${selectedTaskFilter === "open" ? "text-yellow-600" : "text-yellow-500"}`}>
+                <span className={`text-base font-semibold ${selectedTaskFilter === "open" ? "text-yellow-600" : "text-yellow-500"}`}>
                   {taskInfo.taskOpen}
                 </span>
               </button>
               
               <button
                 onClick={() => setSelectedTaskFilter("close")}
-                className={`w-full text-left flex justify-between items-center p-3 rounded border-2 transition-colors ${
+                className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
                   selectedTaskFilter === "close"
                     ? "bg-white border-green-500 text-slate-900"
                     : "bg-white border-slate-300 text-slate-900 hover:border-green-400"
                 }`}
               >
                 <span className="text-xs font-medium">Task Close</span>
-                <span className={`text-lg font-semibold ${selectedTaskFilter === "close" ? "text-green-600" : "text-green-500"}`}>
+                <span className={`text-base font-semibold ${selectedTaskFilter === "close" ? "text-green-600" : "text-green-500"}`}>
                   {taskInfo.taskClose}
                 </span>
               </button>
             </div>
 
-            {/* Task List - Scrollable */}
-            <div className="text-xs text-slate-600 font-medium mb-2">Keterangan ({filteredTasks.length})</div>
+            <div className="text-xs text-slate-600 font-medium mb-1">Keterangan ({filteredTasks.length})</div>
             <div className="flex-1 overflow-y-auto space-y-2 pr-2">
               {filteredTasks.length > 0 ? (
                 filteredTasks.map((task) => (
@@ -460,7 +572,6 @@ export default function MachinePidDiagram() {
             </div>
           </div>
 
-          {/* Alarm Information Card */}
           <div className="flex-1 flex flex-col rounded-lg border border-slate-300 bg-white p-4 overflow-hidden min-h-0">
             <h3 className="text-xs uppercase tracking-[0.2em] text-slate-700 font-semibold mb-3">Alarms</h3>
             
