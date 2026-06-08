@@ -1,4 +1,3 @@
-// LabelComponent.tsx
 import React from 'react';
 
 type Props = {
@@ -8,6 +7,7 @@ type Props = {
   w?: number;
   h?: number;
   hasBorder?: boolean;
+  fontSize?: number; // <-- Tambahan baru
 };
 
 const LabelComponent: React.FC<Props> = ({ 
@@ -16,35 +16,32 @@ const LabelComponent: React.FC<Props> = ({
   y = 0, 
   w = 200, 
   h = 60, 
-  hasBorder = false 
+  hasBorder = false,
+  fontSize: customFontSize, // <-- Bisa diatur dari luar
 }) => {
-  // PADDING LEBIH KECIL (6px) agar teks lebih mengisi kotak
-  const padding = 6; 
+  const padding = 8; 
 
   if (w < 20 || h < 20 || !text) return null;
 
-  // Lebar dan tinggi yang tersedia untuk teks setelah dikurangi padding
   const availableWidth = w - (padding * 2);
   const availableHeight = h - (padding * 2);
 
-  // Hitung ukuran font agar pas di availableWidth
-  // Faktor 1.2 lebih besar dari sebelumnya karena padding kecil
+  // Hitung ukuran font otomatis jika customFontSize tidak diberikan
   const fontSizeByWidth = (availableWidth / text.length) * 1.2;
-  
-  // Hitung ukuran font agar pas di availableHeight
   const fontSizeByHeight = availableHeight * 0.9;
+  let autoFontSize = Math.min(fontSizeByWidth, fontSizeByHeight);
+  autoFontSize = Math.min(autoFontSize, 80);
+  autoFontSize = Math.max(autoFontSize, 8);
 
-  // Pilih ukuran terkecil agar muat di kedua sumbu
-  let fontSize = Math.min(fontSizeByWidth, fontSizeByHeight);
-
-  // Batasi ukuran agar tidak terlalu besar atau terlalu kecil
-  fontSize = Math.min(fontSize, 80); // Batas maksimal font
-  fontSize = Math.max(fontSize, 8);  // Batas minimal font
+  // Gunakan customFontSize jika ada, fallback ke autoFontSize
+  const fontSize = customFontSize ?? autoFontSize;
 
   return (
     <g>
-      {/* Background putih */}
-      <rect x={x} y={y} width={w} height={h} fill="white" rx={2} />
+      {/* Background putih hanya jika ada border */}
+      {hasBorder && (
+        <rect x={x} y={y} width={w} height={h} fill="white" rx={2} />
+      )}
 
       {/* Border Biru */}
       {hasBorder && (
@@ -54,7 +51,7 @@ const LabelComponent: React.FC<Props> = ({
           width={w} 
           height={h} 
           fill="none" 
-          stroke="#0000FF" 
+          stroke="#0B3B60" 
           strokeWidth="3" 
           rx={2}
         />

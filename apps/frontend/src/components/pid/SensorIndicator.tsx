@@ -1,16 +1,20 @@
+import React from "react";
+
+type StatusType = 'on' | 'off' | 'standby' | 'maintenance';
+
 interface SensorIndicatorProps {
   x: number;
   y: number;
-  value: number | null;
+  value: boolean | StatusType | number | null;
   w?: number;
   h?: number;
   unit?: string;
-  warningThreshold?: number;
-  alarmThreshold?: number;
+  warningThreshold?: number; // Tidak ada nilai default
+  alarmThreshold?: number;   // Tidak ada nilai default
   decimalPlaces?: number;
   padding?: number;
-  // Tambahan parameter baru
-  thresholdDirection?: 'above' | 'below'; 
+  thresholdDirection?: 'above' | 'below';
+  mode?: 'numeric' | 'onoff';
 }
 
 export function SensorIndicator({
@@ -20,45 +24,77 @@ export function SensorIndicator({
   w = 100,
   h = 60,
   unit = "",
-  warningThreshold = 70,
-  alarmThreshold = 90,
+  warningThreshold,
+  alarmThreshold,
   decimalPlaces = 0,
   padding = 5,
-  thresholdDirection = 'above', // default: batas atas
+  thresholdDirection = 'above',
+  mode = 'numeric',
 }: SensorIndicatorProps) {
   const cx = x + w / 2;
   const cy = y + h / 2;
 
-  const getColor = () => {
-    if (value === null) return "#444444";
-
-    if (thresholdDirection === 'above') {
-      // Logika batas atas (High Warning / High Alarm)
-      if (value >= alarmThreshold)   return "#ff2222"; // RED (Alarm)
-      if (value >= warningThreshold) return "#ffaa00"; // YELLOW (Warning)
-    } else {
-      // Logika batas bawah (Low Warning / Low Alarm)
-      if (value <= alarmThreshold)   return "#ff2222"; // RED (Alarm)
-      if (value <= warningThreshold) return "#ffaa00"; // YELLOW (Warning)
+  const getColorAndText = (): { color: string; display: string } => {
+    // ── Jika value null ────────────────────────────────────────────────
+    if (value === null) {
+      return { color: "#444444", display: "--" };
     }
+
+    // ── Mode ON/OFF dengan status khusus ──────────────────────────────
+    if (mode === 'onoff') {
+      if (typeof value === 'string') {
+        switch (value) {
+          case 'on':  return { color: "#00cc00", display: "ON" };
+          case 'off': return { color: "#ff2222", display: "OFF" };
+          case 'standby': return { color: "#ffaa00", display: "STANDBY" };
+          case 'maintenance': return { color: "#888888", display: "MAINTENANCE" };
+          default: return { color: "#444444", display: "??" };
+        }
+      }
+      if (typeof value === 'boolean') {
+        return value 
+          ? { color: "#00cc00", display: "ON" }
+          : { color: "#ff2222", display: "OFF" };
+      }
+      if (typeof value === 'number') {
+        return value === 1
+          ? { color: "#00cc00", display: "ON" }
+          : { color: "#ff2222", display: "OFF" };
+      }
+    }
+
+    // ── Mode NUMERIC ──────────────────────────────────────────────────
+    const numValue = typeof value === 'number' ? value : 0;
     
-    return "#00cc00"; // GREEN (Normal)
+    // Jika warningThreshold dan alarmThreshold TIDAK diberikan, warna tetap hijau
+    if (warningThreshold === undefined || alarmThreshold === undefined) {
+      const baseValue = numValue.toFixed(decimalPlaces);
+      const display = unit ? `${baseValue}${unit}` : baseValue;
+      return { color: "#00cc00", display };
+    }
+
+    // Jika threshold diberikan, jalankan logika
+    let color = "#00cc00"; // default green
+    if (thresholdDirection === 'above') {
+      if (numValue >= alarmThreshold)   color = "#ff2222";
+      else if (numValue >= warningThreshold) color = "#ffaa00";
+    } else {
+      if (numValue <= alarmThreshold)   color = "#ff2222";
+      else if (numValue <= warningThreshold) color = "#ffaa00";
+    }
+
+    const baseValue = numValue.toFixed(decimalPlaces);
+    const display = unit ? `${baseValue}${unit}` : baseValue;
+    return { color, display };
   };
 
-  const color = getColor();
-
-  const displayValue =
-    value === null
-      ? "--"
-      : unit
-      ? `${value.toFixed(decimalPlaces)}${unit}`
-      : value.toFixed(decimalPlaces);
+  const { color, display } = getColorAndText();
 
   const availableW = w - padding * 2;
   const availableH = h - padding * 2;
   const fontSize = Math.max(10, Math.min(
     availableH * 0.75,
-    availableW / (displayValue.length * 0.6)
+    availableW / (display.length * 0.6)
   ));
 
   return (
@@ -75,12 +111,12 @@ export function SensorIndicator({
         x={cx} y={cy}
         textAnchor="middle"
         dominantBaseline="middle"
-        fontFamily="'Arial Black, sans-serif"
+        fontFamily="'Arial Black', sans-serif"
         fontWeight="900"
         fontSize={fontSize}
         fill={color}
       >
-        {displayValue}
+        {display}
       </text>
     </g>
   );

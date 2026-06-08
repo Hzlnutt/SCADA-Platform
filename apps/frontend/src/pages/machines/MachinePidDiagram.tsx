@@ -1,13 +1,11 @@
 import { useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
-import pidBaseImage from "../../assets/pid-base2.png";
 import type { MachineOutletContext } from "./MachineLayout";
 
 // ── Import komponen svg ──────────────────────────────────────────────────────
 import { PipeDefs } from "../../components/pid/PipeDefs";
 import { PipeH, PipeV } from "../../components/pid/Pipe";
-import { DeviceLabel } from "../../components/pid/DeviceLabel";
 import { SensorIndicator } from "../../components/pid/SensorIndicator";
 import LabelComponent from "../../components/pid/TextLabel";
 import { LevelIndicator } from "../../components/pid/LevelIndicator";
@@ -20,6 +18,9 @@ import PipeGauge from "../../components/pid/PipeGauge";
 import VerticalValve from "../../components/pid/VerticalValve";
 import PumpMotor from "../../components/pid/PumpMotor";
 import CoolingTower from "../../components/pid/CoolingTower";
+import InfoCard from "../../components/pid/InfoCard";
+import SensorCard from "../../components/pid/SensorCard";
+import DashedLine from "../../components/pid/DashedLine";
 
 const PID_CANVAS_WIDTH  = 1836;
 const PID_CANVAS_HEIGHT = 789;
@@ -148,19 +149,56 @@ export default function MachinePidDiagram() {
               style={{ pointerEvents: DEV_MODE ? "auto" : "none" }}
               onClick={handleSvgClick}
             >
-              {/* ── GAMBAR LATAR (sebagai elemen image di dalam SVG) ── */}
-              <image
-                href={pidBaseImage}
-                x="0"
-                y="-145"
-                width="1836"
-                height="1080"
-                preserveAspectRatio="none" // <-- KUNCI: gambar diregangkan pas dengan viewBox
-                style={{ pointerEvents: "none" }}
-              />
 
               {/* ── DEFINISI KOMPONEN ────────────────────────────────── */}
               <PipeDefs />
+
+              {/* Dashed Line */}
+              <DashedLine x={95} y={430} w={0} h={300} />
+              <DashedLine x={95} y={430} w={50} h={0} />
+
+              <DashedLine x={260} y={430} w={0} h={300} />
+              <DashedLine x={260} y={430} w={100} h={0} />
+
+              <DashedLine x={430} y={430} w={0} h={300} />
+              <DashedLine x={430} y={430} w={140} h={0} />
+
+              <DashedLine x={637} y={650} w={0} h={30} />
+
+              <DashedLine x={782} y={650} w={0} h={30} />
+              <DashedLine x={782} y={650} w={100} h={0} />
+              <DashedLine x={882} y={580} w={0} h={70} />
+
+              <DashedLine x={965} y={760} w={0} h={30} />
+              <DashedLine x={1126} y={760} w={0} h={30} />
+
+              <DashedLine x={1265} y={428} w={0} h={153} />
+              <DashedLine x={1240} y={428} w={30} h={0} />
+
+              <DashedLine x={1438} y={500} w={0} h={80} />
+              <DashedLine x={1370} y={500} w={70} h={0} />
+              <DashedLine x={1370} y={428} w={0} h={73} />
+              <DashedLine x={1340} y={428} w={30} h={0} />
+
+              <DashedLine x={1613} y={500} w={0} h={80} />
+              <DashedLine x={1480} y={500} w={134} h={0} />
+              <DashedLine x={1480} y={428} w={0} h={73} />
+              <DashedLine x={1450} y={428} w={30} h={0} />
+
+              <DashedLine x={1387} y={745} w={0} h={30} />
+              <DashedLine x={1387} y={745} w={200} h={0} />
+              <DashedLine x={1582} y={428} w={0} h={320} />
+              <DashedLine x={1555} y={428} w={30} h={0} />
+
+              <DashedLine x={1600} y={745} w={0} h={30} />
+              <DashedLine x={1600} y={745} w={130} h={0} />
+              <DashedLine x={1725} y={500} w={0} h={245} />
+              <DashedLine x={1660} y={428} w={30} h={0} />
+              <DashedLine x={1690} y={500} w={35} h={0} />
+              <DashedLine x={1687} y={430} w={0} h={70} />
+
+              <DashedLine x={1800} y={430} w={0} h={340} />
+              <DashedLine x={1770} y={430} w={30} h={0} />
 
               {/* ── PIPE ─────────────────────────────────────────────────── */}
 
@@ -200,9 +238,9 @@ export default function MachinePidDiagram() {
                 on={motorStatus["MTR-9"]} dir="up" />
 
               {/* Pipe Makeup Water to Tank */}
-              <PipeH x={935} y={336} w={76} h={6} 
+              <PipeH x={940} y={336} w={70} h={6} 
                 on={motorStatus["MTR-3"]} dir="left" type="cold" />
-              <PipeV x={923} y={346} w={7} h={59} 
+              <PipeV x={923} y={358} w={7} h={48} 
                 on={motorStatus["MTR-9"]} dir="down" />
               <PipeBend x={921} y={334} size={25} angle={90} />
 
@@ -298,6 +336,7 @@ export default function MachinePidDiagram() {
               <PipeH x={435} y={636} w={320} h={6} 
                 on={motorStatus["FAN-3"]} dir="left" type="warm" />
               <PipeBend x={752} y={620} size={25} angle={270} />
+              <LabelComponent text="Jalur Limbah Industri" x={270} y={615} w={165} h={50} hasBorder={true} fontSize={13}/>
 
               {/* Pipe Dosing to Tank */}
               <PipeV x={892} y={575} w={7} h={33} 
@@ -484,18 +523,769 @@ export default function MachinePidDiagram() {
               <CoolingTower x={55} y={-12} size={200} on={motorStatus["FAN-1"]} />
               <CoolingTower x={269} y={-12} size={200} on={motorStatus["FAN-1"]} />
               <CoolingTower x={487} y={-12} size={200} on={motorStatus["FAN-1"]} />
+
+              {/* Info Card */}
+
+              {/* MTR 1 */}
+              <InfoCard
+              x={12}
+              y={730}
+              width={165}
+              height={180}
+              title="MTR-1"
+              lines={["STATUS :", "RH :", "HZ :", "KW :"]}
+                />
+              <SensorIndicator
+              x={108}
+              y={784}
+              w={63.75}
+              h={25.5}
+              value={motorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
+              mode="onoff"
+              />
+              <SensorIndicator
+              x={70}
+              y={812}
+              w={63.75}
+              h={25.5}
+              value={23000}
+              unit=" H"
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              />
+              <SensorIndicator
+              x={70}
+              y={840}
+              w={63.75}
+              h={25.5}
+              value={50}
+              unit=" Hz"
+              />
+              <SensorIndicator
+              x={70}
+              y={868}
+              w={63.75}
+              h={25.5}
+              value={100}
+              unit=" KW"
+              />
+
+              {/* MTR 2 */}
+              <InfoCard
+              x={180}
+              y={730}
+              width={165}
+              height={180}
+              title="MTR-2"
+              lines={["STATUS :", "RH :", "HZ :", "KW :"]}
+                />
+              <SensorIndicator
+              x={276}
+              y={784}
+              w={63.75}
+              h={25.5}
+              value={motorStatus["MTR-2"]} // true = ON (hijau), false = OFF (merah)
+              mode="onoff"
+              />
+              <SensorIndicator
+              x={238}
+              y={812}
+              w={63.75}
+              h={25.5}
+              value={23000}
+              unit=" H"
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              />
+              <SensorIndicator
+              x={238}
+              y={840}
+              w={63.75}
+              h={25.5}
+              value={50}
+              unit=" Hz"
+              />
+              <SensorIndicator
+              x={238}
+              y={868}
+              w={63.75}
+              h={25.5}
+              value={100}
+              unit=" KW"
+              />
+
+              {/* MTR 3 */}
+              <InfoCard
+              x={348}
+              y={730}
+              width={165}
+              height={180}
+              title="MTR-3"
+              lines={["STATUS :", "RH :", "HZ :", "KW :"]}
+                />
+              <SensorIndicator
+              x={444}
+              y={784}
+              w={63.75}
+              h={25.5}
+              value={motorStatus["MTR-3"]} // true = ON (hijau), false = OFF (merah)
+              mode="onoff"
+              />
+              <SensorIndicator
+              x={406}
+              y={812}
+              w={63.75}
+              h={25.5}
+              value={23000}
+              unit=" H"
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              />
+              <SensorIndicator
+              x={406}
+              y={840}
+              w={63.75}
+              h={25.5}
+              value={50}
+              unit=" Hz"
+              />
+              <SensorIndicator
+              x={406}
+              y={868}
+              w={63.75}
+              h={25.5}
+              value={100}
+              unit=" KW"
+              />
+
+              {/* BLOWDOWN */}
+              <InfoCard
+              x={525}
+              y={680}
+              width={170}
+              height={150}
+              title="BLOWDOWN WATER"
+              lines={["STATUS :", "VOL :"]}
+              />
+              <SensorIndicator
+              x={625}
+              y={756}
+              w={63.75}
+              h={25.5}
+              value={motorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
+              mode="onoff"
+              />
+              <SensorIndicator
+              x={593}
+              y={784}
+              w={63.75}
+              h={25.5}
+              value={0}
+              unit=""
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              />
+
+              {/* COOLING TANK */}
+              <InfoCard
+              x={698}
+              y={680}
+              width={170}
+              height={170}
+              title="COOLING  TANK"
+              lines={["TDS :", "PH :", "LEVEL :"]}
+              />
+              <SensorIndicator
+              x={765}
+              y={752}
+              w={63.75}
+              h={25.5}
+              value={0}
+              unit=""
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              decimalPlaces={1}
+              />
+              <SensorIndicator
+              x={755}
+              y={780}
+              w={63.75}
+              h={25.5}
+              value={7.4}
+              unit=" PH"
+              warningThreshold={7.5}
+              alarmThreshold={8}
+              thresholdDirection="above"
+              decimalPlaces={1}
+              />
+              <SensorIndicator
+              x={785}
+              y={808}
+              w={63.75}
+              h={25.5}
+              value={74}
+              unit=" %"
+              warningThreshold={75}
+              alarmThreshold={70}
+              thresholdDirection="below"
+              decimalPlaces={1}
+              />
+
+              {/* CHEMICAL 357 */}
+              <InfoCard
+              x={888}
+              y={790}
+              width={155}
+              height={130}
+              title="CHEMICAL 357"
+              lines={["LEVEL :", "PUMP :"]}
+              />
+              <SensorIndicator
+              x={968}
+              y={854}
+              w={63.75}
+              h={25.5}
+              value={74}
+              unit=" %"
+              warningThreshold={75}
+              alarmThreshold={70}
+              thresholdDirection="below"
+              decimalPlaces={1}
+              />
+               <SensorIndicator
+              x={968}
+              y={882}
+              w={63.75}
+              h={25.5}
+              value={motorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
+              mode="onoff"
+              />
+
+              {/* CHEMICAL 327 */}
+              <InfoCard
+              x={1049}
+              y={790}
+              width={155}
+              height={130}
+              title="CHEMICAL  327 / 317"
+              lines={["LEVEL :", "PUMP :"]}
+              />
+              <SensorIndicator
+              x={1128}
+              y={854}
+              w={63.75}
+              h={25.5}
+              value={74}
+              unit=" %"
+              warningThreshold={75}
+              alarmThreshold={70}
+              thresholdDirection="below"
+              decimalPlaces={1}
+              />
+               <SensorIndicator
+              x={1128}
+              y={882}
+              w={63.75}
+              h={25.5}
+              value={motorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
+              mode="onoff"
+              />
+
+              {/* MTR 4 */}
+              <InfoCard
+              x={1180}
+              y={580}
+              width={175}
+              height={150}
+              title="MTR-4"
+              lines={["RH :", "AMPERE :", "KW :"]}
+                />
+              <SensorIndicator
+              x={1237}
+              y={632}
+              w={63.75}
+              h={25.5}
+              value={23000}
+              unit=" H"
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              />
+              <SensorIndicator
+              x={1285}
+              y={660}
+              w={63.75}
+              h={25.5}
+              value={50}
+              unit=" A"
+              />
+              <SensorIndicator
+              x={1240}
+              y={688}
+              w={63.75}
+              h={25.5}
+              value={100}
+              unit=" KW"
+              />
+
+              {/* MTR 5 */}
+              <InfoCard
+              x={1355}
+              y={580}
+              width={175}
+              height={150}
+              title="MTR-5"
+              lines={["RH :", "AMPERE :", "KW :"]}
+                />
+              <SensorIndicator
+              x={1412}
+              y={632}
+              w={63.75}
+              h={25.5}
+              value={23000}
+              unit=" H"
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              />
+              <SensorIndicator
+              x={1460}
+              y={660}
+              w={63.75}
+              h={25.5}
+              value={50}
+              unit=" A"
+              />
+              <SensorIndicator
+              x={1415}
+              y={688}
+              w={63.75}
+              h={25.5}
+              value={100}
+              unit=" KW"
+              />
+
+              {/* MTR 6 */}
+              <InfoCard
+              x={1530}
+              y={580}
+              width={175}
+              height={150}
+              title="MTR-6"
+              lines={["RH :", "AMPERE :", "KW :"]}
+                />
+              <SensorIndicator
+              x={1587}
+              y={632}
+              w={63.75}
+              h={25.5}
+              value={23000}
+              unit=" H"
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              />
+              <SensorIndicator
+              x={1635}
+              y={660}
+              w={63.75}
+              h={25.5}
+              value={50}
+              unit=" A"
+              />
+              <SensorIndicator
+              x={1590}
+              y={688}
+              w={63.75}
+              h={25.5}
+              value={100}
+              unit=" KW"
+              />
+
+              {/* MTR 7 */}
+              <InfoCard
+              x={1300}
+              y={770}
+              width={175}
+              height={150}
+              title="MTR-7"
+              lines={["RH :", "AMPERE :", "KW :"]}
+                />
+              <SensorIndicator
+              x={1358}
+              y={822}
+              w={63.75}
+              h={25.5}
+              value={23000}
+              unit=" H"
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              />
+              <SensorIndicator
+              x={1405}
+              y={850}
+              w={63.75}
+              h={25.5}
+              value={50}
+              unit=" A"
+              />
+              <SensorIndicator
+              x={1362}
+              y={878}
+              w={63.75}
+              h={25.5}
+              value={100}
+              unit=" KW"
+              />
+
+              {/* MTR 8 */}
+              <InfoCard
+              x={1475}
+              y={770}
+              width={175}
+              height={150}
+              title="MTR-8"
+              lines={["RH :", "AMPERE :", "KW :"]}
+                />
+              <SensorIndicator
+              x={1533}
+              y={822}
+              w={63.75}
+              h={25.5}
+              value={23000}
+              unit=" H"
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              />
+              <SensorIndicator
+              x={1580}
+              y={850}
+              w={63.75}
+              h={25.5}
+              value={50}
+              unit=" A"
+              />
+              <SensorIndicator
+              x={1537}
+              y={878}
+              w={63.75}
+              h={25.5}
+              value={100}
+              unit=" KW"
+              />
+
+              {/* MTR 9 */}
+              <InfoCard
+              x={1650}
+              y={770}
+              width={175}
+              height={150}
+              title="MTR-9"
+              lines={["RH :", "AMPERE :", "KW :"]}
+                />
+              <SensorIndicator
+              x={1708}
+              y={822}
+              w={63.75}
+              h={25.5}
+              value={23000}
+              unit=" H"
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              />
+              <SensorIndicator
+              x={1755}
+              y={850}
+              w={63.75}
+              h={25.5}
+              value={50}
+              unit=" A"
+              />
+              <SensorIndicator
+              x={1712}
+              y={878}
+              w={63.75}
+              h={25.5}
+              value={100}
+              unit=" KW"
+              />
+
+              {/* MAKEUP WATER */}
+              <InfoCard
+              x={1009}
+              y={250}
+              width={140}
+              height={170}
+              title="MAKEUP WATER"
+              lines={["TDS :", "PH :", "VOL :"]}
+              />
+              <SensorIndicator
+              x={1075}
+              y={322}
+              w={63.75}
+              h={25.5}
+              value={0}
+              unit=""
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              decimalPlaces={1}
+              />
+              <SensorIndicator
+              x={1068}
+              y={350}
+              w={63.75}
+              h={25.5}
+              value={7.4}
+              unit=" PH"
+              warningThreshold={7.5}
+              alarmThreshold={8}
+              thresholdDirection="above"
+              decimalPlaces={1}
+              />
+              <SensorIndicator
+              x={1075}
+              y={378}
+              w={63.75}
+              h={25.5}
+              value={0}
+              unit=""
+              />
+
+              {/* FAN 1 */}
+              <InfoCard
+              x={73}
+              y={-160}
+              width={165}
+              height={180}
+              title="FAN-1"
+              lines={["STATUS :", "RH :", "HZ :", "KW :"]}
+                />
+              <SensorIndicator
+              x={169}
+              y={-108}
+              w={63.75}
+              h={25.5}
+              value={motorStatus["FAN-1"]} // true = ON (hijau), false = OFF (merah)
+              mode="onoff"
+              />
+              <SensorIndicator
+              x={130}
+              y={-79}
+              w={63.75}
+              h={25.5}
+              value={23000}
+              unit=" H"
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              />
+              <SensorIndicator
+              x={130}
+              y={-50}
+              w={63.75}
+              h={25.5}
+              value={50}
+              unit=" Hz"
+              />
+              <SensorIndicator
+              x={135}
+              y={-22}
+              w={63.75}
+              h={25.5}
+              value={100}
+              unit=" KW"
+              />
+
+              {/* FAN 2 */}
+               <InfoCard
+              x={287}
+              y={-160}
+              width={165}
+              height={180}
+              title="FAN-2"
+              lines={["STATUS :", "RH :", "HZ :", "KW :"]}
+                />
+              <SensorIndicator
+              x={383}
+              y={-108}
+              w={63.75}
+              h={25.5}
+              value={motorStatus["FAN-2"]} // true = ON (hijau), false = OFF (merah)
+              mode="onoff"
+              />
+              <SensorIndicator
+              x={344}
+              y={-79}
+              w={63.75}
+              h={25.5}
+              value={23000}
+              unit=" H"
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              />
+              <SensorIndicator
+              x={344}
+              y={-50}
+              w={63.75}
+              h={25.5}
+              value={50}
+              unit=" Hz"
+              />
+              <SensorIndicator
+              x={349}
+              y={-22}
+              w={63.75}
+              h={25.5}
+              value={100}
+              unit=" KW"
+              />
+
+              {/* FAN 3 */}
+              <InfoCard
+              x={506}
+              y={-160}
+              width={165}
+              height={180}
+              title="FAN-3"
+              lines={["STATUS :", "RH :", "HZ :", "KW :"]}
+                />
+              <SensorIndicator
+              x={602}
+              y={-108}
+              w={63.75}
+              h={25.5}
+              value={motorStatus["FAN-3"]} // true = ON (hijau), false = OFF (merah)
+              mode="onoff"
+              />
+              <SensorIndicator
+              x={563}
+              y={-79}
+              w={63.75}
+              h={25.5}
+              value={23000}
+              unit=" H"
+              warningThreshold={23000}
+              alarmThreshold={25000}
+              thresholdDirection="above"
+              />
+              <SensorIndicator
+              x={563}
+              y={-50}
+              w={63.75}
+              h={25.5}
+              value={50}
+              unit=" Hz"
+              />
+              <SensorIndicator
+              x={568}
+              y={-22}
+              w={63.75}
+              h={25.5}
+              value={100}
+              unit=" KW"
+              />
+
+              {/* Text Label Area */}
+              <LabelComponent text="DU-3" x={1203} y={212} w={20} h={20} hasBorder={false} fontSize={18}/>
+              <LabelComponent text="BP-3" x={1308} y={212} w={20} h={20} hasBorder={false} fontSize={18} />
+              <LabelComponent text="SP-3" x={1416} y={212} w={20} h={20} hasBorder={false} fontSize={18}/>
+              <LabelComponent text="ST-3" x={1522} y={212} w={20} h={20} hasBorder={false} fontSize={18}/>
+              <LabelComponent text="WASHING" x={1625} y={212} w={20} h={20} hasBorder={false} fontSize={16}/>
+              <LabelComponent text="MINI LAB" x={1732} y={212} w={20} h={20} hasBorder={false} fontSize={16}/>
+
+              <LabelComponent text="HEADER" x={250} y={540} w={20} h={20} hasBorder={false} fontSize={16}/>
+              <LabelComponent text="HEADER" x={1465} y={540} w={20} h={20} hasBorder={false} fontSize={16}/>
+              
+              {/* Sensor Card */}
+              <SensorCard
+              x={829}
+              y={-145}
+              width={175}
+              title="SUPPLY TEMP"
+              value={29.5}
+              unit={"°C"}
+              colorType="green"
+              />
+              <SensorCard
+              x={1038}
+              y={-145}
+              width={175}
+              title="Δ TEMP"
+              value={5.5}
+              unit={"°C"}
+              colorType="green"
+              />
+              <SensorCard
+              x={829}
+              y={-35}
+              width={175}
+              title="RETURN TEMP"
+              value={34.5}
+              unit={"°C"}
+              colorType="green"
+              />
+              <SensorCard
+              x={1038}
+              y={-35}
+              width={175}
+              title="AMBIENT"
+              values={[
+              { value: 5.5, unit: "°C" },
+              { value: 75, unit: "%" }
+              ]}
+              colorType="green"
+              />
+              <SensorCard
+              x={1495}
+              y={-145}
+              width={175}
+              title="HEATING"
+              value={45}
+              colorType="blue"
+              />
+              <SensorCard
+              x={1280}
+              y={-145}
+              width={175}
+              title="PROSES ST"
+              value={"STANDBY"}
+              colorType="blue"
+              />
+              <SensorCard
+              x={1495}
+              y={-35}
+              width={175}
+              title="COOLING"
+              value={90}
+              colorType="blue"
+              />
+              <SensorCard
+              x={1280}
+              y={-35}
+              width={175}
+              title="LOT"
+              value={"A"}
+              colorType="blue"
+              />
+
               
 
+              
 
             </svg>
           </div>
         </div>
 
-        {DEV_MODE && (
-          <p className="mt-2 text-center text-xs text-amber-400">
-            🔧 DEV MODE AKTIF — klik di atas canvas untuk dapat koordinat SVG
-          </p>
-        )}
         </section>
 
         {/* ── Right Side ──────────────────────────────── */}
