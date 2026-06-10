@@ -101,7 +101,7 @@ export default function Dashboard() {
   const [consumptionRange, setConsumptionRange] = useState<(typeof consumptionRanges)[number]["id"]>("hour");
   const [usdToIdr, setUsdToIdr] = useState(16200);
   const [thresholds, setThresholds] = useState<ThresholdItem[]>([]);
-  const [ytdChecks, setYtdChecks] = useState({ electricity: true, gas: true, water: true });
+  const [ytdChecks, setYtdChecks] = useState({ electricity: true, gas: true, water: true, solar: true });
   const { range, compare } = useTimeRangeStore();
   const latest = useTelemetryStore((state) => state.latest);
   const activeAlarms = useAlarmStore((state) => state.activeList);
@@ -183,6 +183,10 @@ export default function Dashboard() {
     return buildTimeAwareSeries(consumptionConfig.points, base, base * 0.25, 3, maxIndex);
   }, [consumptionConfig, maxIndex]);
 
+  const solarSeries = useMemo(() => {
+    return electricitySeries.map((v) => (v !== null ? Number((v * solarShare).toFixed(1)) : null as unknown as number));
+  }, [electricitySeries]);
+
   const consumptionLabels = useMemo(
     () => buildTimeLabels(consumptionConfig.points, consumptionConfig.type),
     [consumptionConfig]
@@ -220,6 +224,16 @@ export default function Dashboard() {
     [ytdWaterSeries]
   );
 
+  const ytdSolarSeries = useMemo(
+    () => ytdElectricitySeries.map((v) => (v !== null ? Number((v * solarShare).toFixed(1)) : null as unknown as number)),
+    [ytdElectricitySeries]
+  );
+
+  const ytdSolarTotal = useMemo(
+    () => ytdSolarSeries.reduce((sum, v) => sum + (v ?? 0), 0),
+    [ytdSolarSeries]
+  );
+
   const ytdLabels = useMemo(() => buildTimeLabels(12, "month"), []);
 
   const ytdTotalSeries = useMemo(() => {
@@ -229,9 +243,10 @@ export default function Dashboard() {
       if (ytdChecks.electricity) total += (ytdElectricitySeries[i] ?? 0);
       if (ytdChecks.gas) total += (ytdGasSeries[i] ?? 0) * gasEnergyFactor;
       if (ytdChecks.water) total += (ytdWaterSeries[i] ?? 0) * waterEnergyFactor;
+      if (ytdChecks.solar) total += (ytdSolarSeries[i] ?? 0);
       return Number(total.toFixed(2));
     });
-  }, [ytdElectricitySeries, ytdGasSeries, ytdWaterSeries, ytdChecks, ytdMonthIndex]);
+  }, [ytdElectricitySeries, ytdGasSeries, ytdWaterSeries, ytdSolarSeries, ytdChecks, ytdMonthIndex]);
 
   const compareConfig = compareRanges[range];
   const compareLabels = buildLabels(compareConfig.points, compareConfig.stepMs, compareConfig.label);
@@ -315,11 +330,13 @@ export default function Dashboard() {
       const electricityValue = ytdElectricitySeries[index] ?? 0;
       const gasValue = ytdGasSeries[index] ?? 0;
       const waterValue = ytdWaterSeries[index] ?? 0;
+      const solarValue = ytdSolarSeries[index] ?? 0;
       return {
         month: label,
         electricity_kwh: Number(electricityValue.toFixed(2)),
         gas_sm3: Number(gasValue.toFixed(2)),
         water_m3: Number(waterValue.toFixed(2)),
+        solar_kwh: Number(solarValue.toFixed(2)),
         total_kwh_equiv: Number(ytdTotalSeries[index]?.toFixed(2) ?? 0)
       };
     });
@@ -396,6 +413,22 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* CO2 Emission */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
+              CO₂ Emission
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-[#002b5c] dark:text-slate-100">
+              {co2Emission.toFixed(1)} Ton
+            </div>
+            <div className="mt-1 text-xs text-[#47729f] dark:text-slate-400">
+              Estimasi bulan berjalan
+            </div>
+            <div className="mt-3 text-xs text-[#47729f]/80 dark:text-slate-500">
+              Rasio distribusi energi dihitung berdasarkan emisi setara batu bara dan gas alam cair.
+            </div>
+          </div>
+
           {/* Solar Panel */}
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
@@ -415,22 +448,6 @@ export default function Dashboard() {
             </div>
             <div className="mt-2 text-xs text-[#47729f] dark:text-slate-400">
               Coverage {solarCoverage.toFixed(1)}% listrik
-            </div>
-          </div>
-
-          {/* CO2 Emission */}
-          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
-              CO₂ Emission
-            </div>
-            <div className="mt-2 text-2xl font-semibold text-[#002b5c] dark:text-slate-100">
-              {co2Emission.toFixed(1)} Ton
-            </div>
-            <div className="mt-1 text-xs text-[#47729f] dark:text-slate-400">
-              Estimasi bulan berjalan
-            </div>
-            <div className="mt-3 text-xs text-[#47729f]/80 dark:text-slate-500">
-              Rasio distribusi energi dihitung berdasarkan emisi setara batu bara dan gas alam cair.
             </div>
           </div>
 
@@ -488,7 +505,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-4">
+        <div className="mt-4 grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-5">
           {/* Listrik */}
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <div className="flex items-center justify-between">
@@ -565,6 +582,31 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Solar Panel */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Solar Panel</div>
+                <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
+                  {formatCurrency(solarSavings, "IDR")}
+                </div>
+                <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
+                  {solarSeries.reduce((sum, v) => sum + (v ?? 0), 0).toFixed(1)} kWh
+                </div>
+              </div>
+              <div className="h-2 w-2 rounded-full bg-[#f59e0b]" />
+            </div>
+            <div className="mt-3">
+              <UtilityBarChart
+                labels={consumptionLabels}
+                values={solarSeries}
+                unit="kWh"
+                color="#f59e0b"
+                height={160}
+              />
+            </div>
+          </div>
+
           {/* Distribusi Energi */}
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <div className="flex items-center justify-between">
@@ -606,7 +648,8 @@ export default function Dashboard() {
               {([
                 { key: "electricity" as const, label: "Listrik", color: "#2f8ae5" },
                 { key: "gas" as const, label: "Gas", color: "#f4c542" },
-                { key: "water" as const, label: "Air", color: "#3bb77e" }
+                { key: "water" as const, label: "Air", color: "#3bb77e" },
+                { key: "solar" as const, label: "Solar Panel", color: "#f59e0b" }
               ]).map((item) => (
                 <label
                   key={item.key}
@@ -635,8 +678,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* 3 YTD cards */}
-        <div className="grid gap-4 sm:grid-cols-3">
+        {/* 4 YTD cards */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Listrik YTD</div>
             <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
@@ -693,6 +736,25 @@ export default function Dashboard() {
               />
             </div>
           </div>
+
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Solar YTD</div>
+            <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
+              {formatCurrency(ytdSolarTotal * utilityRates.electricityIdr, "IDR")}
+            </div>
+            <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
+              {ytdSolarTotal.toFixed(0)} kWh
+            </div>
+            <div className="mt-3">
+              <UtilityBarChart
+                labels={ytdLabels}
+                values={ytdSolarSeries}
+                unit="kWh"
+                color="#f59e0b"
+                height={140}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Total YTD Stacked Chart */}
@@ -709,6 +771,7 @@ export default function Dashboard() {
               electricity={ytdChecks.electricity ? ytdElectricitySeries : ytdElectricitySeries.map(() => 0)}
               gas={ytdChecks.gas ? ytdGasSeries.map((v) => (v ?? 0) * gasEnergyFactor) : ytdGasSeries.map(() => 0)}
               water={ytdChecks.water ? ytdWaterSeries.map((v) => (v ?? 0) * waterEnergyFactor) : ytdWaterSeries.map(() => 0)}
+              solar={ytdChecks.solar ? ytdSolarSeries : ytdSolarSeries.map(() => 0)}
             />
           </div>
         </div>
