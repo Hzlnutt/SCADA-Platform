@@ -50,7 +50,28 @@ const CoolingTower: React.FC<CoolingTowerProps> = ({
 
       {/* ─── MAIN BODY ────────────────────────────────────────────────────── */}
       <rect x={s(20)} y={s(20)} width={s(60)} height={s(60)} fill={`url(#${gPipe})`} rx={s(4)} />
-      <rect x={s(20)} y={s(20)} width={s(60)} height={s(60)} fill="none" stroke="#3a3b3c" strokeWidth={s(1)} rx={s(4)} />
+      
+      {/* Outline dengan animasi blink saat ON */}
+      <rect
+        x={s(20)}
+        y={s(20)}
+        width={s(60)}
+        height={s(60)}
+        fill="none"
+        stroke="#3a3b3c"
+        strokeWidth={s(2)}
+        rx={s(4)}
+      >
+        {/* Animasi outline ketika on: berkedip antara hijau gelap dan hijau terang */}
+        {on && (
+          <animate
+            attributeName="stroke"
+            values="#3a3b3c;#00E676;#3a3b3c"
+            dur="2.5s"
+            repeatCount="indefinite"
+          />
+        )}
+      </rect>
 
       {/* ─── VERTICAL RIBS ────────────────────────────────────────────────── */}
       <rect x={s(26)} y={s(20)} width={s(2)} height={s(60)} fill="#3a3b3c" opacity={0.4} />

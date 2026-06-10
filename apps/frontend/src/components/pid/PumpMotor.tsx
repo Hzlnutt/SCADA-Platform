@@ -61,10 +61,19 @@ const PumpMotor: React.FC<PumpMotorProps> = ({
       <path
         d={`M${s(25)},${s(85)} L${s(35)},${s(95)} L${s(65)},${s(95)} L${s(75)},${s(85)} Z`}
         fill="none"
-        stroke="#2a2b2c"
-        strokeWidth={s(0.5)}
+        stroke="#3a3b3c"
+        strokeWidth={s(2)}
         opacity={0.5}
-      />
+      >
+        {on && (
+          <animate
+            attributeName="stroke"
+            values="#3a3b3c;#00E676;#3a3b3c"
+            dur="2.5s"
+            repeatCount="indefinite"
+          />
+        )}
+      </path>
 
       {/* ─── BODY UTAMA (Gaya Pipa) ──────────────────────────────────────── */}
       <rect
@@ -74,6 +83,8 @@ const PumpMotor: React.FC<PumpMotorProps> = ({
         height={s(55)}
         fill={`url(#${gPipe})`}
       />
+      
+      {/* ─── OUTLINE TERLUAR BODY ────────────────────────────────────────── */}
       <rect
         x={s(25)}
         y={s(30)}
@@ -81,8 +92,17 @@ const PumpMotor: React.FC<PumpMotorProps> = ({
         height={s(55)}
         fill="none"
         stroke="#3a3b3c"
-        strokeWidth={s(0.5)}
-      />
+        strokeWidth={s(2)}
+      >
+        {on && (
+          <animate
+            attributeName="stroke"
+            values="#3a3b3c;#00E676;#3a3b3c"
+            dur="2.5s"
+            repeatCount="indefinite"
+          />
+        )}
+      </rect>
 
       {/* ─── SIRIP PENDINGIN (Warna Solid seperti edge) ──────────────────── */}
       {/* Sirip kiri */}
@@ -126,6 +146,26 @@ const PumpMotor: React.FC<PumpMotorProps> = ({
         opacity={0.15}
         rx={s(1)}
       />
+      {/* Outline flange atas */}
+      <rect
+        x={s(22)}
+        y={s(26)}
+        width={s(56)}
+        height={s(5)}
+        fill="none"
+        stroke="#3a3b3c"
+        strokeWidth={s(2)}
+        rx={s(1)}
+      >
+        {on && (
+          <animate
+            attributeName="stroke"
+            values="#3a3b3c;#00E676;#3a3b3c"
+            dur="2.5s"
+            repeatCount="indefinite"
+          />
+        )}
+      </rect>
 
       {/* ─── SHAFT ATAS (Gaya Pipa) ──────────────────────────────────────── */}
       <rect
@@ -153,6 +193,26 @@ const PumpMotor: React.FC<PumpMotorProps> = ({
         stroke="#3a3b3c"
         strokeWidth={s(0.5)}
       />
+      {/* Outline shaft atas */}
+      <rect
+        x={s(42)}
+        y={s(10)}
+        width={s(16)}
+        height={s(16)}
+        fill="none"
+        stroke="#3a3b3c"
+        strokeWidth={s(1)}
+        rx={s(1)}
+      >
+        {on && (
+          <animate
+            attributeName="stroke"
+            values="#3a3b3c;#00E676;#3a3b3c"
+            dur="2.5s"
+            repeatCount="indefinite"
+          />
+        )}
+      </rect>
 
       {/* ─── MOTOR DI TENGAH (Gaya Hub) ────────────────────────────────────── */}
       <g>
