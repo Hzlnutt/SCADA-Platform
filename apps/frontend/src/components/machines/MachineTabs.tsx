@@ -11,22 +11,37 @@ export const MachineTabs = ({ basePath }: MachineTabsProps) => {
         <NavItem to={basePath} label="Dashboard" tone="tabs" end />
         <NavItem
           to={`${basePath}/pid-diagram`}
-          label="P&ID Diagram"
+          label="P&ID"
           tone="tabs"
         />
         <NavItem
           to={`${basePath}/statistics`}
-          label="Data Statistik"
+          label="Trend Analysis"
+          tone="tabs"
+        />
+        <NavItem
+          to={`${basePath}/alarm`}
+          label="Alarms"
           tone="tabs"
         />
         <NavItem
           to={`${basePath}/maintenance`}
-          label="History Perbaikan"
+          label="Maintenance"
           tone="tabs"
         />
         <NavItem
           to={`${basePath}/shift-report`}
           label="Shift Report"
+          tone="tabs"
+        />
+        <NavItem
+          to={`${basePath}/energy`}
+          label="Energy"
+          tone="tabs"
+        />
+        <NavItem
+          to={`${basePath}/configuration`}
+          label="Configuration"
           tone="tabs"
         />
       </nav>

@@ -3,7 +3,6 @@ import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
 import type { MachineOutletContext } from "./MachineLayout";
 
-// ── Import komponen svg ──────────────────────────────────────────────────────
 import { PipeDefs } from "../../components/pid/PipeDefs";
 import { PipeH, PipeV } from "../../components/pid/Pipe";
 import { SensorIndicator } from "../../components/pid/SensorIndicator";
@@ -11,7 +10,7 @@ import LabelComponent from "../../components/pid/TextLabel";
 import { LevelIndicator } from "../../components/pid/LevelIndicator";
 import { TankFrame } from "../../components/pid/TankFrame";
 import PipeBend from "../../components/pid/PipeBend";
-import {HeaderPipe} from "../../components/pid/HeaderPipe";
+import { HeaderPipe } from "../../components/pid/HeaderPipe";
 import { YStrainer } from "../../components/pid/YStrainerPipe";
 import ChemicalDosingTank from "../../components/pid/ChemicalDosingTank";
 import PipeGauge from "../../components/pid/PipeGauge";
@@ -23,9 +22,7 @@ import SensorCard from "../../components/pid/SensorCard";
 import DashedLine from "../../components/pid/DashedLine";
 
 const PID_CANVAS_WIDTH  = 1836;
-const PID_CANVAS_HEIGHT = 789;
-
-// ── Mode kalibrasi ─────────────────────────────────────────────────────────────
+const PID_CANVAS_HEIGHT = 1110;
 const DEV_MODE = true;
 
 export default function MachinePidDiagram() {
@@ -39,18 +36,10 @@ export default function MachinePidDiagram() {
   if (!machine) return null;
 
   const motorStatus = {
-    "FAN-1": allOn,
-    "FAN-2": allOn,
-    "FAN-3": allOn,
-    "MTR-1": allOn,
-    "MTR-2": allOn,
-    "MTR-3": allOn,
-    "MTR-4": allOn,
-    "MTR-5": allOn,
-    "MTR-6": allOn,
-    "MTR-7": allOn,
-    "MTR-8": allOn,
-    "MTR-9": allOn,
+    "FAN-1": allOn, "FAN-2": allOn, "FAN-3": allOn,
+    "MTR-1": allOn, "MTR-2": allOn, "MTR-3": allOn,
+    "MTR-4": allOn, "MTR-5": allOn, "MTR-6": allOn,
+    "MTR-7": allOn, "MTR-8": allOn, "MTR-9": allOn,
   };
 
   const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -58,94 +47,90 @@ export default function MachinePidDiagram() {
     const rect = svgRef.current.getBoundingClientRect();
     const scaleX = PID_CANVAS_WIDTH  / rect.width;
     const scaleY = PID_CANVAS_HEIGHT / rect.height;
-    const x = Math.round((e.clientX - rect.left)  * scaleX);
-    const y = Math.round((e.clientY - rect.top)   * scaleY);
+    const x = Math.round((e.clientX - rect.left) * scaleX);
+    const y = Math.round((e.clientY - rect.top)  * scaleY);
     console.log(`Clicked: x=${x}, y=${y}  (SVG coords)`);
   };
 
   const allTasks = [
-    { id: 1, title: "Inspeksi Motor MTR-1", status: "open", openedMonth: true, createdDate: "2026-06-01" },
-    { id: 2, title: "Calibration PT-01", status: "open", openedMonth: true, createdDate: "2026-06-02" },
-    { id: 3, title: "Cleaning Heat Exchanger", status: "open", openedMonth: true, createdDate: "2026-06-03" },
-    { id: 4, title: "Check Pump Vibration", status: "open", openedMonth: true, createdDate: "2026-06-05" },
-    { id: 5, title: "Valve Maintenance CT-03", status: "open", openedMonth: true, createdDate: "2026-06-07" },
-    { id: 6, title: "Replace Filter Element", status: "open", openedMonth: true, createdDate: "2026-06-08" },
-    { id: 7, title: "Pressure Relief Valve Test", status: "open", openedMonth: true, createdDate: "2026-06-10" },
-    { id: 8, title: "Cooling Tower Inspection", status: "open", openedMonth: true, createdDate: "2026-06-12" },
-    { id: 9, title: "Temperature Sensor Check", status: "open", openedMonth: true, createdDate: "2026-06-15" },
-    { id: 10, title: "Flow Meter Calibration", status: "open", openedMonth: true, createdDate: "2026-06-18" },
-    { id: 11, title: "Pipe Insulation Repair", status: "open", openedMonth: true, createdDate: "2026-06-20" },
-    { id: 12, title: "Blowdown System Check", status: "open", openedMonth: true, createdDate: "2026-06-22" },
-    { id: 13, title: "Pump Seal Replacement", status: "open", openedMonth: false, createdDate: "2026-05-15" },
-    { id: 14, title: "Water Treatment Analysis", status: "open", openedMonth: false, createdDate: "2026-05-10" },
-    { id: 15, title: "Equipment Alignment", status: "open", openedMonth: false, createdDate: "2026-04-20" },
-    { id: 16, title: "Safety Valve Testing", status: "open", openedMonth: false, createdDate: "2026-04-05" },
-    { id: 17, title: "Bearing Lubrication", status: "open", openedMonth: false, createdDate: "2026-03-28" },
-    { id: 18, title: "Daily Inspection Report", status: "close", openedMonth: false, createdDate: "2026-06-20" },
-    { id: 19, title: "Temperature Log Check", status: "close", openedMonth: false, createdDate: "2026-06-19" },
-    { id: 20, title: "Vibration Analysis", status: "close", openedMonth: false, createdDate: "2026-06-18" },
-    { id: 21, title: "Drain Plug Inspection", status: "close", openedMonth: false, createdDate: "2026-06-17" },
-    { id: 22, title: "Filter Replacement", status: "close", openedMonth: false, createdDate: "2026-06-16" },
-    { id: 23, title: "Flow Rate Verification", status: "close", openedMonth: false, createdDate: "2026-06-15" },
-    { id: 24, title: "Electrical Connection Check", status: "close", openedMonth: false, createdDate: "2026-06-14" },
+    { id: 1,  title: "Inspeksi Motor MTR-1",        status: "open",  openedMonth: true,  createdDate: "2026-06-01" },
+    { id: 2,  title: "Calibration PT-01",            status: "open",  openedMonth: true,  createdDate: "2026-06-02" },
+    { id: 3,  title: "Cleaning Heat Exchanger",      status: "open",  openedMonth: true,  createdDate: "2026-06-03" },
+    { id: 4,  title: "Check Pump Vibration",         status: "open",  openedMonth: true,  createdDate: "2026-06-05" },
+    { id: 5,  title: "Valve Maintenance CT-03",      status: "open",  openedMonth: true,  createdDate: "2026-06-07" },
+    { id: 6,  title: "Replace Filter Element",       status: "open",  openedMonth: true,  createdDate: "2026-06-08" },
+    { id: 7,  title: "Pressure Relief Valve Test",   status: "open",  openedMonth: true,  createdDate: "2026-06-10" },
+    { id: 8,  title: "Cooling Tower Inspection",     status: "open",  openedMonth: true,  createdDate: "2026-06-12" },
+    { id: 9,  title: "Temperature Sensor Check",     status: "open",  openedMonth: true,  createdDate: "2026-06-15" },
+    { id: 10, title: "Flow Meter Calibration",       status: "open",  openedMonth: true,  createdDate: "2026-06-18" },
+    { id: 11, title: "Pipe Insulation Repair",       status: "open",  openedMonth: true,  createdDate: "2026-06-20" },
+    { id: 12, title: "Blowdown System Check",        status: "open",  openedMonth: true,  createdDate: "2026-06-22" },
+    { id: 13, title: "Pump Seal Replacement",        status: "open",  openedMonth: false, createdDate: "2026-05-15" },
+    { id: 14, title: "Water Treatment Analysis",     status: "open",  openedMonth: false, createdDate: "2026-05-10" },
+    { id: 15, title: "Equipment Alignment",          status: "open",  openedMonth: false, createdDate: "2026-04-20" },
+    { id: 16, title: "Safety Valve Testing",         status: "open",  openedMonth: false, createdDate: "2026-04-05" },
+    { id: 17, title: "Bearing Lubrication",          status: "open",  openedMonth: false, createdDate: "2026-03-28" },
+    { id: 18, title: "Daily Inspection Report",      status: "close", openedMonth: false, createdDate: "2026-06-20" },
+    { id: 19, title: "Temperature Log Check",        status: "close", openedMonth: false, createdDate: "2026-06-19" },
+    { id: 20, title: "Vibration Analysis",           status: "close", openedMonth: false, createdDate: "2026-06-18" },
+    { id: 21, title: "Drain Plug Inspection",        status: "close", openedMonth: false, createdDate: "2026-06-17" },
+    { id: 22, title: "Filter Replacement",           status: "close", openedMonth: false, createdDate: "2026-06-16" },
+    { id: 23, title: "Flow Rate Verification",       status: "close", openedMonth: false, createdDate: "2026-06-15" },
+    { id: 24, title: "Electrical Connection Check",  status: "close", openedMonth: false, createdDate: "2026-06-14" },
   ];
 
-  const filteredTasks = selectedTaskFilter === "all" 
-    ? allTasks 
-    : selectedTaskFilter === "open_month"
-    ? allTasks.filter(t => t.openedMonth && t.status === "open")
-    : selectedTaskFilter === "open"
-    ? allTasks.filter(t => t.status === "open")
-    : allTasks.filter(t => t.status === "close");
+  const filteredTasks =
+    selectedTaskFilter === "all"        ? allTasks :
+    selectedTaskFilter === "open_month" ? allTasks.filter(t => t.openedMonth && t.status === "open") :
+    selectedTaskFilter === "open"       ? allTasks.filter(t => t.status === "open") :
+                                          allTasks.filter(t => t.status === "close");
 
   const taskInfo = {
     openThisMonth: allTasks.filter(t => t.openedMonth && t.status === "open").length,
-    taskOpen: allTasks.filter(t => t.status === "open").length,
-    taskClose: allTasks.filter(t => t.status === "close").length,
+    taskOpen:      allTasks.filter(t => t.status === "open").length,
+    taskClose:     allTasks.filter(t => t.status === "close").length,
   };
 
   const alarmInfo = [
-    { id: 1, code: "ALM-001", message: "High temperature detected at CT-01", severity: "warning" },
-    { id: 2, code: "ALM-002", message: "Low pressure at MTR-4", severity: "critical" },
-    { id: 3, code: "ALM-004", message: "Pump vibration exceeds threshold", severity: "critical" },
-    { id: 4, code: "ALM-005", message: "Cooling tower fan bearing temperature high", severity: "warning" },
-    { id: 5, code: "ALM-007", message: "Water TDS level abnormal", severity: "warning" }
+    { id: 1, code: "ALM-001", message: "High temperature detected at CT-01",        severity: "warning"  },
+    { id: 2, code: "ALM-002", message: "Low pressure at MTR-4",                     severity: "critical" },
+    { id: 3, code: "ALM-004", message: "Pump vibration exceeds threshold",           severity: "critical" },
+    { id: 4, code: "ALM-005", message: "Cooling tower fan bearing temperature high", severity: "warning"  },
+    { id: 5, code: "ALM-007", message: "Water TDS level abnormal",                  severity: "warning"  },
   ];
 
   return (
-    <div className="h-[calc(100vh-100px)] flex flex-col overflow-hidden">
+    <div className="relative flex gap-4">
+      {/* Container relative — tinggi ditentukan oleh canvas */}
 
-      <div className="flex-1 flex gap-4 flex-col lg:flex-row overflow-hidden">
-        
-        <section className="flex-1 flex flex-col overflow-hidden rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-3 sm:p-5 transition-colors duration-300">
-
-        <div className="mb-4 flex items-center justify-between">
-          <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
-            P&ID Diagram Canvas — {machine.name}
-          </div>
-          <button
-            onClick={() => setAllOn(v => !v)}
-            className={`rounded px-3 py-1 text-xs font-mono transition-colors ${
-              allOn
-                ? "bg-[#1f6fb5]/10 text-[#1f6fb5] dark:text-cyan-400 dark:bg-cyan-900/60 border border-[#1f6fb5]/30 dark:border-cyan-700"
-                : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
-            }`}
-          >
-            {allOn ? "● FLOW ON" : "○ FLOW OFF"} (demo)
-          </button>
+    {/* ── Canvas: beri margin kanan untuk ruang right column ── */}
+    <section className="flex-1 flex flex-col rounded-lg border border-slate-800 bg-slate-950/70 p-3 sm:p-5 mr-[400px]">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+          P&ID Diagram Canvas — {machine.name}
         </div>
+        <button
+          onClick={() => setAllOn(v => !v)}
+          className={`rounded px-3 py-1 text-xs font-mono transition-colors ${
+            allOn
+              ? "bg-cyan-900/60 text-cyan-400 border border-cyan-700"
+              : "bg-slate-800 text-slate-400 border border-slate-700"
+          }`}
+        >
+          {allOn ? "● FLOW ON" : "○ FLOW OFF"} (demo)
+        </button>
+      </div>
 
-        <div className="overflow-x-auto overflow-y-hidden pb-0 flex-1">
+        <div className="overflow-x-auto scrollbar-hide">
           <div
-            className="relative mx-auto w-full min-w-[720px] max-w-[1836px] h-full overflow-hidden rounded-lg border border-dashed border-[#acd3ff] dark:border-slate-700 bg-[#eef6ff] dark:bg-slate-900 transition-colors duration-300"
-            // style={{ aspectRatio: "1836 / 789" }}
+            className="relative w-full min-w-[720px] rounded-lg border border-dashed border-slate-700 bg-slate-900"
+            style={{ aspectRatio: "1836 / 1110" }}
           >
-            {/* ── SVG UTAMA (mengandung gambar background + komponen) ── */}
             <svg
               ref={svgRef}
               className="absolute inset-0 h-full w-full"
-              viewBox="0 0 1836 789"
-              preserveAspectRatio="xMidYMid meet" 
+              viewBox="0 -160 1836 1110"
+              preserveAspectRatio="xMidYMid meet"
               style={{ pointerEvents: DEV_MODE ? "auto" : "none" }}
               onClick={handleSvgClick}
             >
@@ -738,16 +723,16 @@ export default function MachinePidDiagram() {
 
               {/* CHEMICAL 357 */}
               <InfoCard
-              x={888}
-              y={790}
-              width={155}
-              height={130}
-              title="CHEMICAL 357"
-              lines={["LEVEL :", "PUMP :"]}
+              x={875}
+              y={780}
+              width={170}
+              height={170}
+              title="CHEMICAL  357"
+              lines={["LEVEL :", "PUMP :", "VOL :"]}
               />
               <SensorIndicator
-              x={968}
-              y={854}
+              x={965}
+              y={851}
               w={63.75}
               h={25.5}
               value={74}
@@ -758,26 +743,34 @@ export default function MachinePidDiagram() {
               decimalPlaces={1}
               />
                <SensorIndicator
-              x={968}
-              y={882}
+              x={960}
+              y={879}
               w={63.75}
               h={25.5}
               value={motorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
               mode="onoff"
+              />
+               <SensorIndicator
+              x={945}
+              y={907}
+              w={63.75}
+              h={25.5}
+              value={0}
+              unit=""
               />
 
               {/* CHEMICAL 327 */}
               <InfoCard
-              x={1049}
-              y={790}
-              width={155}
-              height={130}
+              x={1045}
+              y={780}
+              width={170}
+              height={170}
               title="CHEMICAL  327 / 317"
-              lines={["LEVEL :", "PUMP :"]}
+              lines={["LEVEL :", "PUMP :", "VOL :"]}
               />
               <SensorIndicator
-              x={1128}
-              y={854}
+              x={1133}
+              y={851}
               w={63.75}
               h={25.5}
               value={74}
@@ -789,11 +782,19 @@ export default function MachinePidDiagram() {
               />
                <SensorIndicator
               x={1128}
-              y={882}
+              y={879}
               w={63.75}
               h={25.5}
               value={motorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
               mode="onoff"
+              />
+               <SensorIndicator
+              x={1115}
+              y={907}
+              w={63.75}
+              h={25.5}
+              value={0}
+              unit=""
               />
 
               {/* MTR 4 */}
@@ -1288,117 +1289,129 @@ export default function MachinePidDiagram() {
 
         </section>
 
-        {/* ── Right Side ──────────────────────────────── */}
-        <div className="flex flex-col gap-4 lg:w-96 overflow-hidden">
-          
-          <div className="flex-1 flex flex-col rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-4 overflow-hidden min-h-0 transition-colors duration-300">
-            <h3 className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold mb-3">Task Information</h3>
-            
-            <div className="space-y-1.5 mb-2">
-              <button
-                onClick={() => setSelectedTaskFilter("open_month")}
-                className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
-                  selectedTaskFilter === "open_month"
-                    ? "bg-[#eef6ff] dark:bg-slate-800 border-cyan-500 text-[#002b5c] dark:text-white"
-                    : "bg-white dark:bg-slate-900 border-[#acd3ff] dark:border-slate-700 text-[#002b5c] dark:text-slate-300 hover:border-cyan-400"
-                }`}
-              >
-                <span className="text-xs font-medium">Task Open (Bulan Ini)</span>
-                <span className={`text-base font-semibold ${selectedTaskFilter === "open_month" ? "text-cyan-600 dark:text-cyan-400" : "text-cyan-500"}`}>
-                  {taskInfo.openThisMonth}
-                </span>
-              </button>
-              
-              <button
-                onClick={() => setSelectedTaskFilter("open")}
-                className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
-                  selectedTaskFilter === "open"
-                    ? "bg-[#eef6ff] dark:bg-slate-800 border-yellow-500 text-[#002b5c] dark:text-white"
-                    : "bg-white dark:bg-slate-900 border-[#acd3ff] dark:border-slate-700 text-[#002b5c] dark:text-slate-300 hover:border-yellow-400"
-                }`}
-              >
-                <span className="text-xs font-medium">Task Open</span>
-                <span className={`text-base font-semibold ${selectedTaskFilter === "open" ? "text-yellow-600 dark:text-yellow-400" : "text-yellow-500"}`}>
-                  {taskInfo.taskOpen}
-                </span>
-              </button>
-              
-              <button
-                onClick={() => setSelectedTaskFilter("close")}
-                className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
-                  selectedTaskFilter === "close"
-                    ? "bg-[#eef6ff] dark:bg-slate-800 border-green-500 text-[#002b5c] dark:text-white"
-                    : "bg-white dark:bg-slate-900 border-[#acd3ff] dark:border-slate-700 text-[#002b5c] dark:text-slate-300 hover:border-green-400"
-                }`}
-              >
-                <span className="text-xs font-medium">Task Close</span>
-                <span className={`text-base font-semibold ${selectedTaskFilter === "close" ? "text-green-600 dark:text-green-400" : "text-green-500"}`}>
-                  {taskInfo.taskClose}
-                </span>
-              </button>
-            </div>
+      {/* ── Right Side: sticky, tinggi independen dari canvas ───────── */}
+      <div className="absolute top-0 right-0 w-96 h-full flex flex-col gap-4">
 
-            <div className="text-xs text-[#47729f] dark:text-slate-500 font-medium mb-1">Keterangan ({filteredTasks.length})</div>
-            <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-              {filteredTasks.length > 0 ? (
-                filteredTasks.map((task) => (
-                  <div key={task.id} className={`bg-white dark:bg-slate-900 rounded border-2 p-2 text-xs transition-colors duration-300 ${
-                    task.status === "open" ? "border-yellow-400" : "border-green-400"
+        {/* Task card — 60% */}
+      <div
+        className="flex flex-col rounded-lg border border-slate-800 bg-slate-950/70 p-4 overflow-hidden"
+        style={{ flex: "3 1 0", minHeight: 0 }}
+      >
+        <h3 className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold mb-3">
+          Task Information
+        </h3>
+        <div className="space-y-1.5 mb-2">
+          <button
+            onClick={() => setSelectedTaskFilter("open_month")}
+            className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
+              selectedTaskFilter === "open_month"
+                ? "bg-white border-cyan-500 text-slate-900"
+                : "bg-white border-slate-300 text-slate-900 hover:border-cyan-400"
+            }`}
+          >
+            <span className="text-xs font-medium">Task Open (Bulan Ini)</span>
+            <span className={`text-base font-semibold ${selectedTaskFilter === "open_month" ? "text-cyan-600" : "text-cyan-500"}`}>
+              {taskInfo.openThisMonth}
+            </span>
+          </button>
+          <button
+            onClick={() => setSelectedTaskFilter("open")}
+            className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
+              selectedTaskFilter === "open"
+                ? "bg-white border-yellow-500 text-slate-900"
+                : "bg-white border-slate-300 text-slate-900 hover:border-yellow-400"
+            }`}
+          >
+            <span className="text-xs font-medium">Task Open</span>
+            <span className={`text-base font-semibold ${selectedTaskFilter === "open" ? "text-yellow-600" : "text-yellow-500"}`}>
+              {taskInfo.taskOpen}
+            </span>
+          </button>
+          <button
+            onClick={() => setSelectedTaskFilter("close")}
+            className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
+              selectedTaskFilter === "close"
+                ? "bg-white border-green-500 text-slate-900"
+                : "bg-white border-slate-300 text-slate-900 hover:border-green-400"
+            }`}
+          >
+            <span className="text-xs font-medium">Task Close</span>
+            <span className={`text-base font-semibold ${selectedTaskFilter === "close" ? "text-green-600" : "text-green-500"}`}>
+              {taskInfo.taskClose}
+            </span>
+          </button>
+        </div>
+        <div className="text-xs text-slate-600 font-medium mb-1">
+          Keterangan ({filteredTasks.length})
+        </div>
+        <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
+          {filteredTasks.length > 0 ? (
+            filteredTasks.map((task) => (
+              <div
+                key={task.id}
+                className={`bg-white rounded border-2 p-2 text-xs ${
+                  task.status === "open" ? "border-yellow-400" : "border-green-400"
+                }`}
+              >
+                <div className="font-medium text-slate-900">{task.title}</div>
+                <div className="text-slate-600 mt-1">
+                  <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                    task.status === "open" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"
                   }`}>
-                    <div className="font-medium text-[#002b5c] dark:text-slate-200">{task.title}</div>
-                    <div className="text-slate-600 mt-1">
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
-                        task.status === "open" ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300" : "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300"
-                      }`}>
-                        {task.status === "open" ? "OPEN" : "CLOSE"}
-                      </span>
-                      <span className="text-slate-500 dark:text-slate-400 ml-2 text-xs">{task.createdDate}</span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center text-slate-400 py-4 font-medium">Tidak ada task</div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex-1 flex flex-col rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-4 overflow-hidden min-h-0 transition-colors duration-300">
-            <h3 className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold mb-3">Alarms</h3>
-            
-            <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-              {alarmInfo.map((alarm) => (
-                <div key={alarm.id} className={`border-2 rounded p-3 bg-white dark:bg-slate-900 transition-colors duration-300 ${
-                  alarm.severity === "critical"
-                    ? "border-red-500"
-                    : alarm.severity === "warning"
-                    ? "border-yellow-500"
-                    : "border-[#acd3ff] dark:border-slate-700"
-                }`}>
-                  <div className="flex items-start gap-2">
-                    <div className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${
-                      alarm.severity === "critical" ? "bg-red-500" :
-                      alarm.severity === "warning" ? "bg-yellow-500" :
-                      "bg-blue-500"
-                    }`} />
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-xs font-mono font-semibold ${
-                        alarm.severity === "critical" ? "text-red-600 dark:text-red-400" : "text-yellow-600 dark:text-yellow-400"
-                      }`}>
-                        {alarm.code}
-                      </div>
-                      <p className={`text-xs leading-snug mt-1 text-[#002b5c] dark:text-slate-300`}>
-                        {alarm.message}
-                      </p>
-                    </div>
-                  </div>
+                    {task.status === "open" ? "OPEN" : "CLOSE"}
+                  </span>
+                  <span className="text-slate-500 ml-2 text-xs">{task.createdDate}</span>
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center text-slate-400 py-4">Tidak ada task</div>
+          )}
+        </div>
+      </div>
 
+              {/* Alarm card — 40% */}
+      <div
+        className="flex flex-col rounded-lg border border-slate-300 bg-white p-4 overflow-hidden"
+        style={{ flex: "2 1 0", minHeight: 0 }}
+      >
+        <h3 className="text-xs uppercase tracking-[0.2em] text-slate-700 font-semibold mb-3">
+          Alarms
+        </h3>
+        <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
+          {alarmInfo.map((alarm) => (
+            <div
+              key={alarm.id}
+              className={`border-2 rounded p-3 bg-white ${
+                alarm.severity === "critical" ? "border-red-500" :
+                alarm.severity === "warning"  ? "border-yellow-500" :
+                                                "border-slate-300"
+              }`}
+            >
+              <div className="flex items-start gap-2">
+                <div className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${
+                  alarm.severity === "critical" ? "bg-red-500" :
+                  alarm.severity === "warning"  ? "bg-yellow-500" :
+                                                  "bg-blue-500"
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <div className={`text-xs font-mono font-semibold ${
+                    alarm.severity === "critical" ? "text-red-600" : "text-yellow-600"
+                  }`}>
+                    {alarm.code}
+                  </div>
+                  <p className="text-xs leading-snug mt-1 text-slate-700">
+                    {alarm.message}
+                  </p>
+                </div>
+              </div>
+            </div>
+            ))}
+          </div>
         </div>
 
       </div>
+
     </div>
   );
 }

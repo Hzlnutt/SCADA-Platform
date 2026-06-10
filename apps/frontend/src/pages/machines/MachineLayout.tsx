@@ -30,15 +30,17 @@ export const MachineLayout = () => {
   }
 
   return (
-    <div>
+  <div className="h-full flex flex-col">
+    <div className="flex-1 min-h-0 overflow-y-auto">
       <PageHeader
-        title={machine.name}
-        description={`${group.name} | ${machine.area}`}
-      />
+      title={machine.name}
+      description={`${group.name} | ${machine.area}`}
+    />
       <MachineTabs basePath={`/machines/${group.id}/${machine.id}`} />
       <Outlet
         context={{ groupId: group.id, unitId: machine.id } satisfies MachineOutletContext}
       />
     </div>
-  );
-};
+  </div>
+);
+}
