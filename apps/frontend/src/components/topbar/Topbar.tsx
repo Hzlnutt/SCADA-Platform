@@ -27,7 +27,7 @@ export const Topbar = () => {
           WIDATRA EMS | Industrial SCADA Dashboard
         </div>
         <div className="mt-0.5 text-xs text-[#47729f]">
-          Utilities, Water System, Boiler, Compressor | Local Plant Network
+          Plant Operations & Utilities | Local Network
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-3 text-xs">

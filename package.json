@@ -11,5 +11,8 @@
   },
   "devDependencies": {
     "turbo": "^2.0.14"
+  },
+  "dependencies": {
+    "rechart": "^0.0.1"
   }
 }

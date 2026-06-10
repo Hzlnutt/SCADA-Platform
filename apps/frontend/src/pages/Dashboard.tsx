@@ -14,6 +14,13 @@ import { getJson } from "../services/api.client";
 import { useTimeRangeStore } from "../store/timeRange.store";
 import { useTelemetryStore } from "../store/telemetry.store";
 import { useAlarmStore } from "../store/alarm.store";
+import {
+  buildSeries,
+  buildLabels,
+  buildTimeAwareSeries,
+  buildTimeLabels,
+  getElapsedIndex
+} from "../utils/series";
 
 const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
   const energy = group.summaryCards.find((card) => card.label === "Total Energy")?.value ?? 0;
@@ -44,10 +51,9 @@ const periods = [
 ] as const;
 
 const consumptionRanges = [
-  { id: "hour", label: "Per Jam", points: 24, stepMs: 60 * 60 * 1000, type: "time", scale: 1 / 24 },
-  { id: "day", label: "Per Hari", points: 30, stepMs: 24 * 60 * 60 * 1000, type: "day", scale: 1 },
-  { id: "month", label: "Per Bulan", points: 12, stepMs: 30 * 24 * 60 * 60 * 1000, type: "month", scale: 30 },
-  { id: "year", label: "Per Tahun", points: 5, stepMs: 365 * 24 * 60 * 60 * 1000, type: "year", scale: 365 }
+  { id: "hour", label: "Per Jam", points: 24, stepMs: 60 * 60 * 1000, type: "time" as const, scale: 1 / 24 },
+  { id: "day", label: "Per Hari", points: 30, stepMs: 24 * 60 * 60 * 1000, type: "day" as const, scale: 1 },
+  { id: "month", label: "Per Bulan", points: 12, stepMs: 30 * 24 * 60 * 60 * 1000, type: "month" as const, scale: 30 }
 ] as const;
 
 const compareRanges = {
@@ -58,33 +64,6 @@ const compareRanges = {
   "1m": { points: 30, stepMs: 24 * 60 * 60 * 1000, label: "day" },
   "1y": { points: 12, stepMs: 30 * 24 * 60 * 60 * 1000, label: "month" }
 } as const;
-
-const buildSeries = (length: number, base: number, variance: number, phase = 0) =>
-  Array.from({ length }, (_, i) => {
-    const wave = Math.sin((i + phase) / 3) + Math.cos((i + phase) / 7);
-    return Number((base + wave * variance * 0.6).toFixed(2));
-  });
-
-const buildLabels = (
-  points: number,
-  stepMs: number,
-  type: "time" | "day" | "month" | "year"
-) => {
-  const now = new Date();
-  return Array.from({ length: points }, (_, index) => {
-    const date = new Date(now.getTime() - (points - 1 - index) * stepMs);
-    if (type === "time") {
-      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    }
-    if (type === "month") {
-      return date.toLocaleDateString([], { month: "short" });
-    }
-    if (type === "year") {
-      return date.getFullYear().toString();
-    }
-    return date.toLocaleDateString([], { month: "short", day: "numeric" });
-  });
-};
 
 const formatCurrency = (value: number, currency: "IDR" | "USD") =>
   new Intl.NumberFormat(currency === "IDR" ? "id-ID" : "en-US", {
@@ -112,9 +91,9 @@ type StatusPreview = {
 };
 
 const statusTone: Record<StatusPreview["status"], string> = {
-  Running: "text-[#1c7f63]",
-  Standby: "text-[#b98700]",
-  Stopped: "text-[#b03a3a]"
+  Running: "text-emerald-300",
+  Standby: "text-amber-300",
+  Stopped: "text-rose-300"
 };
 
 export default function Dashboard() {
@@ -122,6 +101,7 @@ export default function Dashboard() {
   const [consumptionRange, setConsumptionRange] = useState<(typeof consumptionRanges)[number]["id"]>("hour");
   const [usdToIdr, setUsdToIdr] = useState(16200);
   const [thresholds, setThresholds] = useState<ThresholdItem[]>([]);
+  const [ytdChecks, setYtdChecks] = useState({ electricity: true, gas: true, water: true });
   const { range, compare } = useTimeRangeStore();
   const latest = useTelemetryStore((state) => state.latest);
   const activeAlarms = useAlarmStore((state) => state.activeList);
@@ -173,38 +153,88 @@ export default function Dashboard() {
   const solarSavings = solarKwh * utilityRates.electricityIdr;
   const solarCoverage = Math.min(100, (solarKwh / Math.max(electricityKwh, 1)) * 100);
 
-  const consumptionConfig = consumptionRanges.find((item) => item.id === consumptionRange) ?? consumptionRanges[0];
-
-  const electricitySeries = useMemo(() => {
-    const base = utilityBase.electricityKwh * consumptionConfig.scale;
-    return buildSeries(consumptionConfig.points, base, base * 0.35, 1);
-  }, [consumptionConfig]);
-
-  const gasSeries = useMemo(() => {
-    const base = utilityBase.gasSm3 * consumptionConfig.scale;
-    return buildSeries(consumptionConfig.points, base, base * 0.3, 2);
-  }, [consumptionConfig]);
-
-  const waterSeries = useMemo(() => {
-    const base = utilityBase.waterM3 * consumptionConfig.scale;
-    return buildSeries(consumptionConfig.points, base, base * 0.25, 3);
-  }, [consumptionConfig]);
-
-  const consumptionLabels = useMemo(
-    () => buildLabels(consumptionConfig.points, consumptionConfig.stepMs, consumptionConfig.type),
-    [consumptionConfig]
-  );
-
-  const compareConfig = compareRanges[range];
-  const compareLabels = buildLabels(compareConfig.points, compareConfig.stepMs, compareConfig.label);
-  const compareCurrent = buildSeries(compareConfig.points, utilityBase.electricityKwh / 24, utilityBase.electricityKwh / 60, 2);
-  const comparePrevious = compareCurrent.map((value) => Number((value * 0.92).toFixed(2)));
-
   const monthlyElectric = utilityBase.electricityKwh * 30;
   const monthlyGasEnergy = utilityBase.gasSm3 * 30 * gasEnergyFactor;
   const monthlyWaterEnergy = utilityBase.waterM3 * 30 * waterEnergyFactor;
   const totalMonthlyEnergy = monthlyElectric + monthlyGasEnergy + monthlyWaterEnergy;
   const co2Emission = totalMonthlyEnergy * emissionFactor;
+
+  const consumptionConfig = consumptionRanges.find((item) => item.id === consumptionRange) ?? consumptionRanges[0];
+
+  const maxIndex = useMemo(
+    () => getElapsedIndex(consumptionConfig.type),
+    [consumptionConfig.type]
+  );
+
+  const electricitySeries = useMemo(() => {
+    const base = utilityBase.electricityKwh * consumptionConfig.scale;
+    return buildTimeAwareSeries(consumptionConfig.points, base, base * 0.35, 1, maxIndex);
+  }, [consumptionConfig, maxIndex]);
+
+  const gasSeries = useMemo(() => {
+    const base = utilityBase.gasSm3 * consumptionConfig.scale;
+    return buildTimeAwareSeries(consumptionConfig.points, base, base * 0.3, 2, maxIndex);
+  }, [consumptionConfig, maxIndex]);
+
+  const waterSeries = useMemo(() => {
+    const base = utilityBase.waterM3 * consumptionConfig.scale;
+    return buildTimeAwareSeries(consumptionConfig.points, base, base * 0.25, 3, maxIndex);
+  }, [consumptionConfig, maxIndex]);
+
+  const consumptionLabels = useMemo(
+    () => buildTimeLabels(consumptionConfig.points, consumptionConfig.type),
+    [consumptionConfig]
+  );
+
+  const ytdMonthIndex = useMemo(() => getElapsedIndex("month"), [periodIndex]);
+
+  const ytdElectricitySeries = useMemo(
+    () => buildTimeAwareSeries(12, utilityBase.electricityKwh * 30, utilityBase.electricityKwh * 12, 1, ytdMonthIndex),
+    [ytdMonthIndex]
+  );
+
+  const ytdGasSeries = useMemo(
+    () => buildTimeAwareSeries(12, utilityBase.gasSm3 * 30, utilityBase.gasSm3 * 12, 2, ytdMonthIndex),
+    [ytdMonthIndex]
+  );
+
+  const ytdWaterSeries = useMemo(
+    () => buildTimeAwareSeries(12, utilityBase.waterM3 * 30, utilityBase.waterM3 * 8, 3, ytdMonthIndex),
+    [ytdMonthIndex]
+  );
+
+  const ytdElectricityTotal = useMemo(
+    () => ytdElectricitySeries.reduce((sum, v) => sum + (v ?? 0), 0),
+    [ytdElectricitySeries]
+  );
+
+  const ytdGasTotal = useMemo(
+    () => ytdGasSeries.reduce((sum, v) => sum + (v ?? 0), 0),
+    [ytdGasSeries]
+  );
+
+  const ytdWaterTotal = useMemo(
+    () => ytdWaterSeries.reduce((sum, v) => sum + (v ?? 0), 0),
+    [ytdWaterSeries]
+  );
+
+  const ytdLabels = useMemo(() => buildTimeLabels(12, "month"), []);
+
+  const ytdTotalSeries = useMemo(() => {
+    return Array.from({ length: 12 }, (_, i) => {
+      if (i > ytdMonthIndex) return null as unknown as number;
+      let total = 0;
+      if (ytdChecks.electricity) total += (ytdElectricitySeries[i] ?? 0);
+      if (ytdChecks.gas) total += (ytdGasSeries[i] ?? 0) * gasEnergyFactor;
+      if (ytdChecks.water) total += (ytdWaterSeries[i] ?? 0) * waterEnergyFactor;
+      return Number(total.toFixed(2));
+    });
+  }, [ytdElectricitySeries, ytdGasSeries, ytdWaterSeries, ytdChecks, ytdMonthIndex]);
+
+  const compareConfig = compareRanges[range];
+  const compareLabels = buildLabels(compareConfig.points, compareConfig.stepMs, compareConfig.label);
+  const compareCurrent = buildSeries(compareConfig.points, utilityBase.electricityKwh / 24, utilityBase.electricityKwh / 60, 2);
+  const comparePrevious = compareCurrent.map((value) => Number((value * 0.92).toFixed(2)));
 
   const thresholdKwh = thresholds.find((item) => item.metric === "kwh");
 
@@ -278,163 +308,55 @@ export default function Dashboard() {
           }
         ];
 
-  const handleExportTrend = () => {
-    const rows = consumptionLabels.map((label, index) => {
-      const electricityValue = electricitySeries[index] ?? 0;
-      const gasValue = (gasSeries[index] ?? 0) * gasEnergyFactor;
-      const waterValue = (waterSeries[index] ?? 0) * waterEnergyFactor;
+  const handleExportYtd = () => {
+    const rows = ytdLabels.map((label, index) => {
+      const electricityValue = ytdElectricitySeries[index] ?? 0;
+      const gasValue = ytdGasSeries[index] ?? 0;
+      const waterValue = ytdWaterSeries[index] ?? 0;
       return {
-        period: label,
+        month: label,
         electricity_kwh: Number(electricityValue.toFixed(2)),
-        gas_kwh_equiv: Number(gasValue.toFixed(2)),
-        water_kwh_equiv: Number(waterValue.toFixed(2)),
-        total_kwh: Number((electricityValue + gasValue + waterValue).toFixed(2))
+        gas_sm3: Number(gasValue.toFixed(2)),
+        water_m3: Number(waterValue.toFixed(2)),
+        total_kwh_equiv: Number(ytdTotalSeries[index]?.toFixed(2) ?? 0)
       };
     });
 
     const worksheet = utils.json_to_sheet(rows);
     const workbook = utils.book_new();
-    utils.book_append_sheet(workbook, worksheet, "Trend Energi");
-    writeFile(workbook, `trend-konsumsi-${consumptionRange}.xlsx`);
+    utils.book_append_sheet(workbook, worksheet, "YTD Energi");
+    writeFile(workbook, `ytd-energi.xlsx`);
   };
 
   return (
-    <div className="energy-dashboard -m-5 space-y-5 p-5 lg:-m-6 lg:p-6">
+    <div className="space-y-5">
       <PageHeader
         title="Utility & Energy Monitoring Dashboard"
         description="Ringkasan konsumsi energi, biaya, dan status utilitas utama."
       />
 
-      <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
-        <section className="relative overflow-hidden rounded-2xl border border-[#bcd7f1] bg-white/90 p-5 shadow-[0_20px_45px_rgba(20,93,170,0.12)]">
-          <div
-            className="pointer-events-none absolute inset-0 opacity-30"
-            style={{
-              background: "radial-gradient(circle at top left, rgba(80,155,255,0.35), transparent 55%)"
-            }}
-          />
-          <div className="relative flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-xs uppercase tracking-[0.22em] text-[#4c78a6]">
-                Total Energi & Biaya
-              </div>
-              <div className="mt-1 text-sm text-[#2a5b91]">
-                Ringkasan periode {period.label.toLowerCase()}.
-              </div>
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-[#c7dbf2] bg-white px-1 text-xs">
-              {periods.map((item, index) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setPeriodIndex(index)}
-                  className={[
-                    "rounded-full px-3 py-1 font-semibold",
-                    periodIndex === index
-                      ? "bg-[#0f5aa3] text-white"
-                      : "text-[#4c78a6]"
-                  ].join(" ")}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="relative mt-5 grid gap-4 lg:grid-cols-3">
-            <div className="rounded-xl border border-[#cde4ff] bg-[#f5faff] p-4">
-              <ProgressRing
-                value={totalEnergyKwh}
-                target={energyTarget}
-                label={`Total Energi ${period.label}`}
-                unit="kWh"
-                tone="cyan"
-              />
-              <div className="mt-3 text-xs text-[#4c78a6]">
-                Gas & air dikonversi ke kWh setara.
-              </div>
-            </div>
-            <div className="rounded-xl border border-[#cde4ff] bg-[#f5faff] p-4">
-              <ProgressRing
-                value={totalCostIdr}
-                target={costTarget}
-                label={`Total Biaya ${period.label}`}
-                unit="IDR"
-                tone="amber"
-              />
-              <div className="mt-3 text-xs text-[#4c78a6]">
-                Kurs USD/IDR: {usdToIdr.toLocaleString()}
-              </div>
-            </div>
-            <div className="rounded-xl border border-[#cde4ff] bg-[#f5faff] p-4">
-              <div className="text-xs uppercase tracking-[0.22em] text-[#4c78a6]">
-                Konsumsi Solar Panel
-              </div>
-              <div className="mt-2 text-2xl font-semibold text-[#0b3a68]">
-                {solarKwh.toFixed(0)} kWh
-              </div>
-              <div className="mt-1 text-xs text-[#4c78a6]">
-                Estimasi hemat {formatCurrency(solarSavings, "IDR")}
-              </div>
-              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[#d8e9ff]">
-                <div
-                  className="h-full rounded-full bg-[#2f8ae5]"
-                  style={{ width: `${solarCoverage.toFixed(0)}%` }}
-                />
-              </div>
-              <div className="mt-2 text-xs text-[#4c78a6]">
-                Coverage {solarCoverage.toFixed(1)}% listrik.
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-[#bcd7f1] bg-white/90 p-5 shadow-[0_20px_45px_rgba(20,93,170,0.12)]">
-          <div className="text-xs uppercase tracking-[0.22em] text-[#4c78a6]">
-            Ringkasan Distribusi Energi Bulan Ini
-          </div>
-          <div className="mt-4">
-            <EnergyDonutChart
-              labels={["Listrik", "Gas", "Air"]}
-              values={[monthlyElectric, monthlyGasEnergy, monthlyWaterEnergy]}
-              colors={["rgba(56, 189, 248, 0.9)", "rgba(250, 204, 21, 0.85)", "rgba(74, 222, 128, 0.85)"]}
-              centerLabel="Total"
-              centerValue={`${totalMonthlyEnergy.toFixed(0)} kWh`}
-            />
-          </div>
-          <div className="mt-4 rounded-xl border border-[#cde4ff] bg-[#f5faff] p-3">
-            <div className="text-xs uppercase tracking-[0.2em] text-[#4c78a6]">
-              Estimasi CO2 Emission
-            </div>
-            <div className="mt-2 text-lg font-semibold text-[#0b3a68]">
-              {co2Emission.toFixed(1)} Ton CO2
-            </div>
-            <div className="text-xs text-[#4c78a6]">Perkiraan bulan berjalan.</div>
-          </div>
-        </section>
-      </div>
-
-      <section className="rounded-2xl border border-[#bcd7f1] bg-white/90 p-5 shadow-[0_20px_45px_rgba(20,93,170,0.12)]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Executive Summary — 4 equal cards */}
+      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-xs uppercase tracking-[0.2em] text-[#4c78a6]">
-              Konsumsi Utilitas
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              Executive Summary
             </div>
-            <div className="mt-1 text-sm text-[#2a5b91]">
-              Pilih rentang untuk listrik, gas, dan air.
+            <div className="mt-1 text-sm text-slate-400">
+              Ringkasan periode {period.label.toLowerCase()}.
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            {consumptionRanges.map((item) => (
+          <div className="flex items-center gap-1 rounded-full border border-slate-800 bg-slate-950/80 px-1 text-xs">
+            {periods.map((item, index) => (
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setConsumptionRange(item.id)}
+                onClick={() => setPeriodIndex(index)}
                 className={[
-                  "rounded-full border px-3 py-1 font-semibold",
-                  consumptionRange === item.id
-                    ? "border-[#2f8ae5] bg-[#e6f2ff] text-[#0b3a68]"
-                    : "border-[#c7dbf2] text-[#4c78a6]"
+                  "rounded-full px-3 py-1.5 font-semibold transition",
+                  periodIndex === index
+                    ? "bg-slate-500 text-white"
+                    : "text-slate-400 hover:text-slate-300"
                 ].join(" ")}
               >
                 {item.label}
@@ -442,18 +364,133 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Total Energy */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <ProgressRing
+              value={totalEnergyKwh}
+              target={energyTarget}
+              label="Total Energi"
+              unit="kWh"
+              tone="cyan"
+            />
+            <div className="mt-2 text-xs text-slate-400">
+              Gas & air dikonversi ke kWh setara.
+            </div>
+          </div>
+
+          {/* Total Cost */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <ProgressRing
+              value={totalCostIdr}
+              target={costTarget}
+              label="Total Biaya"
+              unit="IDR"
+              tone="amber"
+            />
+            <div className="mt-2 text-xs text-slate-400">
+              Kurs USD/IDR: {usdToIdr.toLocaleString()}
+            </div>
+          </div>
+
+          {/* Solar Panel */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              Solar Panel
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-slate-100">
+              {solarKwh.toFixed(0)} kWh
+            </div>
+            <div className="mt-1 text-xs text-slate-400">
+              Hemat {formatCurrency(solarSavings, "IDR")}
+            </div>
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-900">
+              <div
+                className="h-full rounded-full bg-slate-500"
+                style={{ width: `${solarCoverage.toFixed(0)}%` }}
+              />
+            </div>
+            <div className="mt-2 text-xs text-slate-400">
+              Coverage {solarCoverage.toFixed(1)}% listrik
+            </div>
+          </div>
+
+          {/* CO2 Emission */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              CO₂ Emission
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-slate-100">
+              {co2Emission.toFixed(1)} Ton
+            </div>
+            <div className="mt-1 text-xs text-slate-400">
+              Estimasi bulan berjalan
+            </div>
+            <div className="mt-3 rounded-lg border border-slate-800 bg-slate-900/60 p-2">
+              <div className="text-xs text-slate-500">
+                Distribusi Energi Bulan Ini
+              </div>
+              <div className="mt-2">
+                <EnergyDonutChart
+                  labels={["Listrik", "Gas", "Air"]}
+                  values={[monthlyElectric, monthlyGasEnergy, monthlyWaterEnergy]}
+                  colors={["rgba(56, 189, 248, 0.9)", "rgba(250, 204, 21, 0.85)", "rgba(74, 222, 128, 0.85)"]}
+                  centerLabel="Total"
+                  centerValue={`${totalMonthlyEnergy.toFixed(0)}`}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Konsumsi Utilitas — Per Jam / Hari / Bulan */}
+      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              Konsumsi Utilitas
+            </div>
+            <div className="mt-1 text-sm text-slate-400">
+              Pilih rentang untuk listrik, gas, dan air.
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-1 rounded-full border border-slate-800 bg-slate-950/80 px-1 text-xs">
+            {consumptionRanges.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setConsumptionRange(item.id)}
+                className={[
+                  "rounded-full px-3 py-1.5 font-semibold transition",
+                  consumptionRange === item.id
+                    ? "bg-slate-500 text-white"
+                    : "text-slate-400 hover:text-slate-300"
+                ].join(" ")}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
-          <div className="rounded-xl border border-[#cde4ff] bg-[#f5faff] p-4">
-            <div className="text-xs uppercase tracking-[0.2em] text-[#4c78a6]">
-              Listrik
+          {/* Listrik */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Listrik</div>
+                <div className="mt-1 text-lg font-semibold text-slate-100">
+                  {formatCurrency(electricityCost, "IDR")}
+                </div>
+                <div className="mt-0.5 text-xs text-slate-400">
+                  {electricitySeries.reduce((sum, v) => sum + v, 0).toFixed(1)} kWh
+                </div>
+              </div>
+              <div className="h-2 w-2 rounded-full bg-[#2f8ae5]" />
             </div>
-            <div className="mt-1 text-lg font-semibold text-[#0b3a68]">
-              {electricitySeries.reduce((sum, value) => sum + value, 0).toFixed(1)} kWh
-            </div>
-            <div className="mt-1 text-xs text-[#4c78a6]">
-              {formatCurrency(electricityCost, "IDR")}
-            </div>
-            <div className="mt-4">
+            <div className="mt-3">
               <UtilityBarChart
                 labels={consumptionLabels}
                 values={electricitySeries}
@@ -464,41 +501,51 @@ export default function Dashboard() {
               />
             </div>
           </div>
-          <div className="rounded-xl border border-[#cde4ff] bg-[#f5faff] p-4">
-            <div className="text-xs uppercase tracking-[0.2em] text-[#4c78a6]">
-              Gas
+
+          {/* Gas */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Gas</div>
+                <div className="mt-1 text-lg font-semibold text-slate-100">
+                  {formatCurrency(gasCostUsd, "USD")}
+                </div>
+                <div className="mt-0.5 text-xs text-slate-400">
+                  {formatCurrency(gasCostIdr, "IDR")} &middot; {gasSeries.reduce((sum, v) => sum + v, 0).toFixed(1)} Sm³
+                </div>
+              </div>
+              <div className="h-2 w-2 rounded-full bg-[#f4c542]" />
             </div>
-            <div className="mt-1 text-lg font-semibold text-[#0b3a68]">
-              {gasSeries.reduce((sum, value) => sum + value, 0).toFixed(1)} Sm3
-            </div>
-            <div className="mt-1 text-xs text-[#4c78a6]">
-              {formatCurrency(gasCostUsd, "USD")} ({formatCurrency(gasCostIdr, "IDR")})
-            </div>
-            <div className="mt-4">
+            <div className="mt-3">
               <UtilityBarChart
                 labels={consumptionLabels}
                 values={gasSeries}
-                unit="Sm3"
+                unit="Sm³"
                 color="#f4c542"
                 height={160}
               />
             </div>
           </div>
-          <div className="rounded-xl border border-[#cde4ff] bg-[#f5faff] p-4">
-            <div className="text-xs uppercase tracking-[0.2em] text-[#4c78a6]">
-              Air
+
+          {/* Air */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Air</div>
+                <div className="mt-1 text-lg font-semibold text-slate-100">
+                  {formatCurrency(waterCost, "IDR")}
+                </div>
+                <div className="mt-0.5 text-xs text-slate-400">
+                  {waterSeries.reduce((sum, v) => sum + v, 0).toFixed(1)} m³
+                </div>
+              </div>
+              <div className="h-2 w-2 rounded-full bg-[#3bb77e]" />
             </div>
-            <div className="mt-1 text-lg font-semibold text-[#0b3a68]">
-              {waterSeries.reduce((sum, value) => sum + value, 0).toFixed(1)} m3
-            </div>
-            <div className="mt-1 text-xs text-[#4c78a6]">
-              {formatCurrency(waterCost, "IDR")}
-            </div>
-            <div className="mt-4">
+            <div className="mt-3">
               <UtilityBarChart
                 labels={consumptionLabels}
                 values={waterSeries}
-                unit="m3"
+                unit="m³"
                 color="#3bb77e"
                 height={160}
               />
@@ -507,123 +554,247 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[2fr_0.9fr]">
-        <section className="rounded-2xl border border-[#bcd7f1] bg-white/90 p-5 shadow-[0_20px_45px_rgba(20,93,170,0.12)]">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-[#4c78a6]">
-                Trend Konsumsi Energi
-              </div>
-              <div className="text-sm text-[#2a5b91]">
-                Total listrik, gas, dan air (kWh setara).
-              </div>
+      {/* Actual Year to Date */}
+      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              Actual Year to Date (YTD)
+            </div>
+            <div className="text-sm text-slate-400">
+              Akumulasi bulanan per kategori. Centang untuk tampilkan di grafik total.
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-3 rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1.5 text-xs">
+              {([
+                { key: "electricity" as const, label: "Listrik", color: "#2f8ae5" },
+                { key: "gas" as const, label: "Gas", color: "#f4c542" },
+                { key: "water" as const, label: "Air", color: "#3bb77e" }
+              ]).map((item) => (
+                <label
+                  key={item.key}
+                  className="flex cursor-pointer items-center gap-1.5 font-semibold text-slate-300"
+                >
+                  <input
+                    type="checkbox"
+                    checked={ytdChecks[item.key]}
+                    onChange={() =>
+                      setYtdChecks((prev) => ({ ...prev, [item.key]: !prev[item.key] }))
+                    }
+                    className="accent-current"
+                    style={{ accentColor: item.color }}
+                  />
+                  {item.label}
+                </label>
+              ))}
             </div>
             <button
               type="button"
-              onClick={handleExportTrend}
-              className="rounded-full border border-[#2f8ae5] bg-[#e6f2ff] px-4 py-1 text-xs font-semibold text-[#0b3a68]"
+              onClick={handleExportYtd}
+              className="rounded-full border border-slate-700 bg-slate-900/60 px-4 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-slate-500"
             >
               Export Excel
             </button>
           </div>
-          <EnergyTrendStackedChart
-            labels={consumptionLabels}
-            electricity={electricitySeries}
-            gas={gasSeries.map((value) => value * gasEnergyFactor)}
-            water={waterSeries.map((value) => value * waterEnergyFactor)}
-          />
+        </div>
+
+        {/* 3 YTD cards */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Listrik YTD</div>
+            <div className="mt-1 text-lg font-semibold text-slate-100">
+              {formatCurrency(ytdElectricityTotal * utilityRates.electricityIdr, "IDR")}
+            </div>
+            <div className="mt-0.5 text-xs text-slate-400">
+              {ytdElectricityTotal.toFixed(0)} kWh
+            </div>
+            <div className="mt-3">
+              <UtilityBarChart
+                labels={ytdLabels}
+                values={ytdElectricitySeries}
+                unit="kWh"
+                color="#2f8ae5"
+                height={140}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Gas YTD</div>
+            <div className="mt-1 text-lg font-semibold text-slate-100">
+              {formatCurrency(ytdGasTotal * utilityRates.gasUsd, "USD")}
+            </div>
+            <div className="mt-0.5 text-xs text-slate-400">
+              {ytdGasTotal.toFixed(0)} Sm³
+            </div>
+            <div className="mt-3">
+              <UtilityBarChart
+                labels={ytdLabels}
+                values={ytdGasSeries}
+                unit="Sm³"
+                color="#f4c542"
+                height={140}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Air YTD</div>
+            <div className="mt-1 text-lg font-semibold text-slate-100">
+              {formatCurrency(ytdWaterTotal * utilityRates.waterIdr, "IDR")}
+            </div>
+            <div className="mt-0.5 text-xs text-slate-400">
+              {ytdWaterTotal.toFixed(0)} m³
+            </div>
+            <div className="mt-3">
+              <UtilityBarChart
+                labels={ytdLabels}
+                values={ytdWaterSeries}
+                unit="m³"
+                color="#3bb77e"
+                height={140}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Total YTD Stacked Chart */}
+        <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+          <div className="mb-1 text-xs uppercase tracking-[0.2em] text-slate-500">
+            Grafik Total YTD (kWh Setara)
+          </div>
+          <div className="text-xs text-slate-400">
+            Hanya kategori yang dicentang. Gas & air dikonversi ke kWh.
+          </div>
+          <div className="mt-3">
+            <EnergyTrendStackedChart
+              labels={ytdLabels}
+              electricity={ytdChecks.electricity ? ytdElectricitySeries : ytdElectricitySeries.map(() => 0)}
+              gas={ytdChecks.gas ? ytdGasSeries.map((v) => (v ?? 0) * gasEnergyFactor) : ytdGasSeries.map(() => 0)}
+              water={ytdChecks.water ? ytdWaterSeries.map((v) => (v ?? 0) * waterEnergyFactor) : ytdWaterSeries.map(() => 0)}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Status & Alarms */}
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr_1fr]">
+        {/* Utility Status */}
+        <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                Status Utility
+              </div>
+              <div className="text-xs text-slate-400">
+                Snapshot otomatis & manual override
+              </div>
+            </div>
+            <Link to="/utility-status" className="text-xs font-semibold text-slate-500 hover:text-slate-300">
+              Lihat
+            </Link>
+          </div>
+          <div className="mt-3 space-y-2">
+            {utilityStatusPreview.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2"
+              >
+                <div className="truncate pr-3 text-xs font-semibold text-slate-200">
+                  {item.name}
+                </div>
+                <div className={`shrink-0 text-xs font-semibold ${statusTone[item.status]}`}>
+                  {item.status}
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
 
-        <div className="space-y-4">
-          {[
-            { title: "Status Peralatan Utility", items: utilityStatusPreview },
-            { title: "Status Peralatan HVAC", items: hvacStatusPreview }
-          ].map((panel) => (
-            <section
-              key={panel.title}
-              className="rounded-2xl border border-[#bcd7f1] bg-white/90 p-4 shadow-[0_20px_45px_rgba(20,93,170,0.12)]"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[#4c78a6]">
-                    {panel.title}
-                  </div>
-                  <div className="text-xs text-[#2a5b91]">
-                    Snapshot otomatis dan manual override.
-                  </div>
-                </div>
-                <Link
-                  to="/utility-status"
-                  className="text-xs font-semibold text-[#0f5aa3]"
-                >
-                  Lihat
-                </Link>
+        {/* HVAC Status */}
+        <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                Status HVAC
               </div>
-              <div className="mt-3 space-y-2">
-                {panel.items.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between rounded-lg border border-[#d7e8fb] bg-[#f6fbff] px-3 py-2"
-                  >
-                    <div className="truncate pr-3 text-xs font-semibold text-[#0b3a68]">
-                      {item.name}
-                    </div>
-                    <div className={`shrink-0 text-xs font-semibold ${statusTone[item.status]}`}>
-                      {item.status}
-                    </div>
-                  </div>
-                ))}
+              <div className="text-xs text-slate-400">
+                Snapshot otomatis & manual override
               </div>
-            </section>
-          ))}
-        </div>
-      </div>
-
-      <section className="rounded-2xl border border-[#bcd7f1] bg-white/90 p-4 shadow-[0_20px_45px_rgba(20,93,170,0.12)]">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="text-xs uppercase tracking-[0.2em] text-[#ff7777]">
-            Alarm Teraktif
+            </div>
+            <Link to="/utility-status" className="text-xs font-semibold text-slate-500 hover:text-slate-300">
+              Lihat
+            </Link>
           </div>
-          <Link to="/alarms" className="text-xs font-semibold text-[#0f5aa3]">
-            Lihat Semua Alarm
-          </Link>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {alarmPreview.map((alarm) => (
-            <div
-              key={alarm.id}
-              className="rounded-xl border border-[#d7e8fb] bg-[#f6fbff] px-4 py-3"
-            >
-              <div className="flex items-start gap-3">
+          <div className="mt-3 space-y-2">
+            {hvacStatusPreview.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2"
+              >
+                <div className="truncate pr-3 text-xs font-semibold text-slate-200">
+                  {item.name}
+                </div>
+                <div className={`shrink-0 text-xs font-semibold ${statusTone[item.status]}`}>
+                  {item.status}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Alarm Strip */}
+        <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-[0.2em] text-rose-300">
+                Alarm Teraktif
+              </div>
+              <div className="text-xs text-slate-400">
+                {activeAlarms.length > 0 ? `${activeAlarms.length} alarm aktif` : "Demo alarm"}
+              </div>
+            </div>
+            <Link to="/alarms" className="text-xs font-semibold text-slate-500 hover:text-slate-300">
+              Lihat Semua
+            </Link>
+          </div>
+          <div className="mt-3 space-y-2">
+            {alarmPreview.map((alarm) => (
+              <div
+                key={alarm.id}
+                className="flex items-start gap-3 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2.5"
+              >
                 <div
                   className={[
-                    "mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black",
+                    "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-black",
                     alarm.severity === "critical" || alarm.severity === "high"
-                      ? "bg-[#ffdddd] text-[#d84d4d]"
-                      : "bg-[#fff0c7] text-[#d69a00]"
+                      ? "bg-rose-500/10 text-rose-300"
+                      : "bg-amber-500/10 text-amber-300"
                   ].join(" ")}
                 >
                   !
                 </div>
-                <div>
-                  <div className="text-xs font-semibold text-[#0b3a68]">
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-semibold text-slate-200">
                     {alarm.title}
                   </div>
-                  <div className="mt-1 text-xs text-[#4c78a6]">
+                  <div className="mt-0.5 truncate text-xs text-slate-400">
                     {alarm.detail}
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      </div>
 
-      <section className="rounded-2xl border border-[#bcd7f1] bg-white/90 p-5 shadow-[0_20px_45px_rgba(20,93,170,0.12)]">
-        <div className="text-xs uppercase tracking-[0.2em] text-[#4c78a6]">
+      {/* Perbandingan */}
+      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+        <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
           Perbandingan Range Sebelumnya
         </div>
-        <div className="mt-2 text-sm text-[#2a5b91]">
+        <div className="mt-1 text-sm text-slate-400">
           Range dibandingkan dengan periode sebelumnya.
         </div>
         <div className="mt-4">

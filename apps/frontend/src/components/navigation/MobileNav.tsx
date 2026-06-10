@@ -8,25 +8,21 @@ export const MobileNav = () => {
     { to: "/", label: "Dashboard" },
     { to: "/plant-layout", label: "Plant" },
     { to: "/machines", label: "Machines" },
+    { to: "/devices", label: "Devices" },
     { to: "/alarms", label: "Alarms" },
     { to: "/historian", label: "Historian" },
     { to: "/analytics", label: "Analytics" },
-    { to: "/devices", label: "Devices" },
     { to: "/listrik", label: "Listrik" },
     { to: "/gas", label: "Gas" },
     { to: "/air", label: "Air" },
     { to: "/hvac", label: "HVAC" },
     { to: "/wwtp", label: "WWTP" },
-    { to: "/utility", label: "Utility" },
     { to: "/reports", label: "Reports" },
-    { to: "/machine-health", label: "Health" },
-    { to: "/utility-status", label: "Utility" },
     { to: "/settings", label: "Settings" }
   ];
 
   if (canApprove) {
-    items.push({ to: "/approvals", label: "Approvals" });
-    items.push({ to: "/thresholds", label: "Thresholds" });
+    items.push({ to: "/approvals", label: "Approvals" }, { to: "/thresholds", label: "Thresholds" });
   }
 
   if (role === "admin") {
@@ -44,4 +40,4 @@ export const MobileNav = () => {
       </nav>
     </div>
   );
-};
+}

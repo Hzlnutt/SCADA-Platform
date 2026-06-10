@@ -100,26 +100,26 @@ export default function MachinePidDiagram() {
   ];
 
   return (
-    // ── items-start: kolom kanan TIDAK stretch mengikuti tinggi canvas ──
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+    <div className="relative flex gap-4">
+      {/* Container relative — tinggi ditentukan oleh canvas */}
 
-      {/* ── P&ID Canvas ─────────────────────────────────────────────── */}
-      <section className="flex-1 flex flex-col rounded-lg border border-slate-800 bg-slate-950/70 p-3 sm:p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
-            P&ID Diagram Canvas — {machine.name}
-          </div>
-          <button
-            onClick={() => setAllOn(v => !v)}
-            className={`rounded px-3 py-1 text-xs font-mono transition-colors ${
-              allOn
-                ? "bg-cyan-900/60 text-cyan-400 border border-cyan-700"
-                : "bg-slate-800 text-slate-400 border border-slate-700"
-            }`}
-          >
-            {allOn ? "● FLOW ON" : "○ FLOW OFF"} (demo)
-          </button>
+    {/* ── Canvas: beri margin kanan untuk ruang right column ── */}
+    <section className="flex-1 flex flex-col rounded-lg border border-slate-800 bg-slate-950/70 p-3 sm:p-5 mr-[400px]">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+          P&ID Diagram Canvas — {machine.name}
         </div>
+        <button
+          onClick={() => setAllOn(v => !v)}
+          className={`rounded px-3 py-1 text-xs font-mono transition-colors ${
+            allOn
+              ? "bg-cyan-900/60 text-cyan-400 border border-cyan-700"
+              : "bg-slate-800 text-slate-400 border border-slate-700"
+          }`}
+        >
+          {allOn ? "● FLOW ON" : "○ FLOW OFF"} (demo)
+        </button>
+      </div>
 
         <div className="overflow-x-auto scrollbar-hide">
           <div
@@ -1290,121 +1290,122 @@ export default function MachinePidDiagram() {
         </section>
 
       {/* ── Right Side: sticky, tinggi independen dari canvas ───────── */}
+      <div className="absolute top-0 right-0 w-96 h-full flex flex-col gap-4">
+
+        {/* Task card — 60% */}
       <div
-  className="lg:w-96 lg:sticky lg:top-4 grid grid-rows-[3fr_2fr] gap-4"
-  style={{ height: "calc(100vh - 290px)" }}
->
-
-        {/* Task card — 60% dari max-height kolom kanan */}
-        <div className="flex flex-col rounded-lg border border-slate-800 bg-slate-950/70 p-4 overflow-hidden min-h-0">
-      <h3 className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold mb-3">
-        Task Information
-      </h3>
-
-          <div className="space-y-1.5 mb-2">
-            <button
-              onClick={() => setSelectedTaskFilter("open_month")}
-              className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
-                selectedTaskFilter === "open_month"
-                  ? "bg-white border-cyan-500 text-slate-900"
-                  : "bg-white border-slate-300 text-slate-900 hover:border-cyan-400"
-              }`}
-            >
-              <span className="text-xs font-medium">Task Open (Bulan Ini)</span>
-              <span className={`text-base font-semibold ${selectedTaskFilter === "open_month" ? "text-cyan-600" : "text-cyan-500"}`}>
-                {taskInfo.openThisMonth}
-              </span>
-            </button>
-            <button
-              onClick={() => setSelectedTaskFilter("open")}
-              className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
-                selectedTaskFilter === "open"
-                  ? "bg-white border-yellow-500 text-slate-900"
-                  : "bg-white border-slate-300 text-slate-900 hover:border-yellow-400"
-              }`}
-            >
-              <span className="text-xs font-medium">Task Open</span>
-              <span className={`text-base font-semibold ${selectedTaskFilter === "open" ? "text-yellow-600" : "text-yellow-500"}`}>
-                {taskInfo.taskOpen}
-              </span>
-            </button>
-            <button
-              onClick={() => setSelectedTaskFilter("close")}
-              className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
-                selectedTaskFilter === "close"
-                  ? "bg-white border-green-500 text-slate-900"
-                  : "bg-white border-slate-300 text-slate-900 hover:border-green-400"
-              }`}
-            >
-              <span className="text-xs font-medium">Task Close</span>
-              <span className={`text-base font-semibold ${selectedTaskFilter === "close" ? "text-green-600" : "text-green-500"}`}>
-                {taskInfo.taskClose}
-              </span>
-            </button>
-          </div>
-
-          <div className="text-xs text-slate-600 font-medium mb-1">
-            Keterangan ({filteredTasks.length})
-          </div>
-          <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
-            {filteredTasks.length > 0 ? (
-              filteredTasks.map((task) => (
-                <div
-                  key={task.id}
-                  className={`bg-white rounded border-2 p-2 text-xs ${
-                    task.status === "open" ? "border-yellow-400" : "border-green-400"
-                  }`}
-                >
-                  <div className="font-medium text-slate-900">{task.title}</div>
-                  <div className="text-slate-600 mt-1">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
-                      task.status === "open" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"
-                    }`}>
-                      {task.status === "open" ? "OPEN" : "CLOSE"}
-                    </span>
-                    <span className="text-slate-500 ml-2 text-xs">{task.createdDate}</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center text-slate-400 py-4">Tidak ada task</div>
-            )}
-          </div>
+        className="flex flex-col rounded-lg border border-slate-800 bg-slate-950/70 p-4 overflow-hidden"
+        style={{ flex: "3 1 0", minHeight: 0 }}
+      >
+        <h3 className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold mb-3">
+          Task Information
+        </h3>
+        <div className="space-y-1.5 mb-2">
+          <button
+            onClick={() => setSelectedTaskFilter("open_month")}
+            className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
+              selectedTaskFilter === "open_month"
+                ? "bg-white border-cyan-500 text-slate-900"
+                : "bg-white border-slate-300 text-slate-900 hover:border-cyan-400"
+            }`}
+          >
+            <span className="text-xs font-medium">Task Open (Bulan Ini)</span>
+            <span className={`text-base font-semibold ${selectedTaskFilter === "open_month" ? "text-cyan-600" : "text-cyan-500"}`}>
+              {taskInfo.openThisMonth}
+            </span>
+          </button>
+          <button
+            onClick={() => setSelectedTaskFilter("open")}
+            className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
+              selectedTaskFilter === "open"
+                ? "bg-white border-yellow-500 text-slate-900"
+                : "bg-white border-slate-300 text-slate-900 hover:border-yellow-400"
+            }`}
+          >
+            <span className="text-xs font-medium">Task Open</span>
+            <span className={`text-base font-semibold ${selectedTaskFilter === "open" ? "text-yellow-600" : "text-yellow-500"}`}>
+              {taskInfo.taskOpen}
+            </span>
+          </button>
+          <button
+            onClick={() => setSelectedTaskFilter("close")}
+            className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
+              selectedTaskFilter === "close"
+                ? "bg-white border-green-500 text-slate-900"
+                : "bg-white border-slate-300 text-slate-900 hover:border-green-400"
+            }`}
+          >
+            <span className="text-xs font-medium">Task Close</span>
+            <span className={`text-base font-semibold ${selectedTaskFilter === "close" ? "text-green-600" : "text-green-500"}`}>
+              {taskInfo.taskClose}
+            </span>
+          </button>
         </div>
-
-        {/* Alarm card — 40% dari max-height kolom kanan */}
-        <div className="flex flex-col rounded-lg border border-slate-300 bg-white p-4 overflow-hidden min-h-0">
-      <h3 className="text-xs uppercase tracking-[0.2em] text-slate-700 font-semibold mb-3">
-        Alarms
-      </h3>
-          <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
-            {alarmInfo.map((alarm) => (
+        <div className="text-xs text-slate-600 font-medium mb-1">
+          Keterangan ({filteredTasks.length})
+        </div>
+        <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
+          {filteredTasks.length > 0 ? (
+            filteredTasks.map((task) => (
               <div
-                key={alarm.id}
-                className={`border-2 rounded p-3 bg-white ${
-                  alarm.severity === "critical" ? "border-red-500" :
-                  alarm.severity === "warning"  ? "border-yellow-500" :
-                                                  "border-slate-300"
+                key={task.id}
+                className={`bg-white rounded border-2 p-2 text-xs ${
+                  task.status === "open" ? "border-yellow-400" : "border-green-400"
                 }`}
               >
-                <div className="flex items-start gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${
-                    alarm.severity === "critical" ? "bg-red-500" :
-                    alarm.severity === "warning"  ? "bg-yellow-500" :
-                                                    "bg-blue-500"
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <div className={`text-xs font-mono font-semibold ${
-                      alarm.severity === "critical" ? "text-red-600" : "text-yellow-600"
-                    }`}>
-                      {alarm.code}
-                    </div>
-                    <p className="text-xs leading-snug mt-1 text-slate-700">
-                      {alarm.message}
-                    </p>
-                  </div>
+                <div className="font-medium text-slate-900">{task.title}</div>
+                <div className="text-slate-600 mt-1">
+                  <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                    task.status === "open" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"
+                  }`}>
+                    {task.status === "open" ? "OPEN" : "CLOSE"}
+                  </span>
+                  <span className="text-slate-500 ml-2 text-xs">{task.createdDate}</span>
                 </div>
               </div>
+            ))
+          ) : (
+            <div className="text-center text-slate-400 py-4">Tidak ada task</div>
+          )}
+        </div>
+      </div>
+
+              {/* Alarm card — 40% */}
+      <div
+        className="flex flex-col rounded-lg border border-slate-300 bg-white p-4 overflow-hidden"
+        style={{ flex: "2 1 0", minHeight: 0 }}
+      >
+        <h3 className="text-xs uppercase tracking-[0.2em] text-slate-700 font-semibold mb-3">
+          Alarms
+        </h3>
+        <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
+          {alarmInfo.map((alarm) => (
+            <div
+              key={alarm.id}
+              className={`border-2 rounded p-3 bg-white ${
+                alarm.severity === "critical" ? "border-red-500" :
+                alarm.severity === "warning"  ? "border-yellow-500" :
+                                                "border-slate-300"
+              }`}
+            >
+              <div className="flex items-start gap-2">
+                <div className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${
+                  alarm.severity === "critical" ? "bg-red-500" :
+                  alarm.severity === "warning"  ? "bg-yellow-500" :
+                                                  "bg-blue-500"
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <div className={`text-xs font-mono font-semibold ${
+                    alarm.severity === "critical" ? "text-red-600" : "text-yellow-600"
+                  }`}>
+                    {alarm.code}
+                  </div>
+                  <p className="text-xs leading-snug mt-1 text-slate-700">
+                    {alarm.message}
+                  </p>
+                </div>
+              </div>
+            </div>
             ))}
           </div>
         </div>
