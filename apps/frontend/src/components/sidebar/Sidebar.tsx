@@ -69,101 +69,208 @@ const IconBolt = () => (
   </svg>
 );
 
-const utilityLinks = [
-  { to: "/listrik", label: "Listrik" },
-  { to: "/gas", label: "Gas" },
-  { to: "/air", label: "Air" },
-  { to: "/hvac", label: "HVAC" },
-  { to: "/wwtp", label: "WWTP" },
-  { to: "/utility", label: "Utility Overview" }
-];
+const IconChevron = ({ open }: { open: boolean }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={`h-3 w-3 transform transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+);
 
 export const Sidebar = () => {
   const role = useAuthStore((state) => state.user?.role ?? "user");
   const isAdmin = role === "admin";
   const canApprove = role === "team_head" || role === "leader" || role === "admin";
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(machineGroups.map((group) => [group.id, group.id === machineGroups[0]?.id]))
-  );
-  const [utilOpen, setUtilOpen] = useState(false);
 
-  const toggleGroup = (groupId: string) => setOpenGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem("scada.sidebar.open");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // use default
+      }
+    }
+    return {
+      utility: true,
+      hvac: false,
+      penggunaanUtility: true,
+      operasional: true
+    };
+  });
+
+  const toggleSection = (section: string) => {
+    setOpenSections((prev) => {
+      const next = { ...prev, [section]: !prev[section] };
+      localStorage.setItem("scada.sidebar.open", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const hvacGroup = machineGroups.find((g) => g.id === "hvac");
+  const hvacUnits = hvacGroup?.units ?? [];
 
   return (
-    <aside className="hidden min-h-screen w-[250px] shrink-0 border-r border-[#052946] bg-[#07365f] px-4 py-5 text-white lg:block">
+    <aside className="sticky top-0 hidden h-screen w-[260px] shrink-0 flex-col border-r border-[#acd3ff] dark:border-slate-800 bg-[#eaf4ff] dark:bg-slate-900 px-4 py-5 text-[#002b5c] dark:text-slate-100 lg:flex overflow-y-auto scrollbar-thin transition-colors duration-300">
+      {/* Brand logo */}
       <div className="mb-7 flex items-center gap-3">
         <div className="flex h-9 items-center justify-center rounded-lg bg-white px-2 shadow-[0_6px_16px_rgba(31,111,181,0.18)]">
           <img src="https://www.widatra.com/asset/logotext.png" alt="Widatra" className="h-5 w-auto" loading="lazy" />
         </div>
         <div>
-          <div className="text-base font-semibold leading-5 text-white">WidatraOne</div>
-          <div className="text-xs text-[#79b6eb]">Industrial SCADA Platform</div>
+          <div className="text-base font-semibold leading-5 text-[#002b5c] dark:text-white">WidatraOne</div>
+          <div className="text-xs text-[#47729f] dark:text-sky-400">Industrial SCADA Platform</div>
         </div>
       </div>
 
-      <div className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-[#79b6eb]">Utama</div>
-      <nav className="flex flex-col gap-1.5">
-        <NavItem to="/" label="Dashboard" icon={<IconDashboard />} />
-        <NavItem to="/plant-layout" label="Plant Layout" icon={<IconPlant />} />
-        <NavItem to="/machines" label="Machines" icon={<IconMachine />} />
-        <NavItem to="/alarms" label="Alarms" icon={<IconAlarm />} />
-        <NavItem to="/historian" label="Historian" icon={<IconHistorian />} />
-        <NavItem to="/analytics" label="Analytics" icon={<IconAnalytics />} />
-        <NavItem to="/devices" label="Devices" icon={<IconDevice />} />
+      {/* UTAMA */}
+      <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400">UTAMA</div>
+      <nav className="flex flex-col gap-0.5 mb-5">
+        <NavItem to="/dashboard" label="Dashboard" icon={<IconDashboard />} tone="scada" />
+        <NavItem to="/plant" label="Plant Layout" icon={<IconPlant />} tone="scada" />
+        <NavItem to="/machines" label="Machines" icon={<IconMachine />} tone="scada" />
+        <NavItem to="/alarms" label="Alarms" icon={<IconAlarm />} tone="scada" />
+        <NavItem to="/historian" label="Historian" icon={<IconHistorian />} tone="scada" />
+        <NavItem to="/analytics" label="Analytics" icon={<IconAnalytics />} tone="scada" />
+        <NavItem to="/devices" label="Devices" icon={<IconDevice />} tone="scada" />
       </nav>
 
-      <div className="mb-3 mt-7 text-sm font-semibold uppercase tracking-[0.18em] text-[#79b6eb]">Machine Pages</div>
-      <nav className="flex flex-col gap-2">
-        {machineGroups.map((group) => (
-          <div key={group.id} className="rounded-lg border border-white/10">
-            <button type="button" onClick={() => toggleGroup(group.id)} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-white">
-              <span className="flex items-center gap-2"><span className="text-[#9dccf5]"><IconMachine /></span>{group.name}</span>
-              <span className="text-xs text-[#9dccf5]">{openGroups[group.id] ? "−" : "+"}</span>
-            </button>
-            {openGroups[group.id] ? (
-              <div className="flex flex-col gap-1 border-t border-white/10 pb-2 pt-1">
-                <NavItem to={`/machines/${group.id}`} label="Overview" icon={<IconPlant />} tone="subtle" />
-                {group.units.map((unit) => (
-                  <NavItem key={unit.id} to={`/machines/${group.id}/${unit.id}`} label={unit.unitLabel} icon={<IconMachine />} tone="subtle" />
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ))}
-      </nav>
-
-      <div className="mb-3 mt-7 text-sm font-semibold uppercase tracking-[0.18em] text-[#79b6eb]">Utilities</div>
-      <nav className="mb-2 flex flex-col gap-1">
-        <div className="rounded-lg border border-white/10">
-          <button type="button" onClick={() => setUtilOpen((prev) => !prev)} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-white">
-            <span className="flex items-center gap-2"><span className="text-[#9dccf5]"><IconBolt /></span>Utilities</span>
-            <span className="text-xs text-[#9dccf5]">{utilOpen ? "−" : "+"}</span>
+      {/* MACHINE PAGES */}
+      <div className="mb-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400">
+        MACHINE PAGES
+      </div>
+      <div className="flex flex-col gap-2 mb-5 pl-2">
+        {/* UTILITY SUB-ACCORDION */}
+        <div>
+          <button
+            type="button"
+            onClick={() => toggleSection("utility")}
+            className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white"
+          >
+            <span className="flex items-center gap-1.5">
+              <IconMachine />
+              <span>Utility</span>
+            </span>
+            <IconChevron open={openSections.utility} />
           </button>
-          {utilOpen ? (
-            <div className="flex flex-col gap-1 border-t border-white/10 pb-2 pt-1">
-              {utilityLinks.map((link) => (
-                <NavItem key={link.to} to={link.to} label={link.label} icon={<IconDevice />} tone="subtle" />
+          {openSections.utility && (
+            <div className="flex flex-col gap-0.5 mt-1 border-l border-[#acd3ff] dark:border-slate-800 ml-2">
+              <NavItem to="/machines/cooling-water-system/cooling-water-1" label="Cooling Tower WF1-U3" tone="scada" />
+              <NavItem to="/machines/cooling-water-system/cooling-water-2" label="Cooling Tower WF2" tone="scada" />
+              <NavItem to="/machines/boiler-plant/boiler-3" label="Boiler-3 WF1" tone="scada" />
+              <NavItem to="/machines/boiler-plant/boiler-4" label="Boiler-4" tone="scada" />
+              <NavItem to="/machines/boiler-plant/boiler-5" label="Boiler-5" tone="scada" />
+              
+              {/* Compressed Air Group */}
+              <div className="pl-6 py-1 text-[10px] uppercase font-bold text-[#47729f] dark:text-[#79b6eb]/70 tracking-wider">Compressed Air</div>
+              <NavItem to="/machines/compressed-air/ale-30" label="ALE-30" tone="scada" />
+              <NavItem to="/machines/compressed-air/zt-30.1" label="ZT-30.1" tone="scada" />
+              <NavItem to="/machines/compressed-air/zt-30-2" label="ZT-30.2" tone="scada" />
+              <NavItem to="/machines/compressed-air/zt-55" label="ZT-55" tone="scada" />
+              <NavItem to="/machines/compressed-air/ingersoll-55" label="Ingersoll-55" tone="scada" />
+              <NavItem to="/machines/compressed-air/ale-250" label="ALE-250" tone="scada" />
+              <NavItem to="/machines/compressed-air/zt-110" label="ZT-110" tone="scada" />
+
+              {/* Chiller Group */}
+              <div className="pl-6 py-1 text-[10px] uppercase font-bold text-[#47729f] dark:text-[#79b6eb]/70 tracking-wider">Chiller System</div>
+              <NavItem to="/machines/chiller-system/trane-cgam-40" label="Trane CGAM-40" tone="scada" />
+              <NavItem to="/machines/chiller-system/daikin-wf1u3" label="Daikin WF1U3" tone="scada" />
+              <NavItem to="/machines/chiller-system/rtac-100" label="RTAC-100" tone="scada" />
+              <NavItem to="/machines/chiller-system/rtac-275" label="RTAC-275" tone="scada" />
+            </div>
+          )}
+        </div>
+
+        {/* HVAC SUB-ACCORDION */}
+        <div>
+          <button
+            type="button"
+            onClick={() => toggleSection("hvac")}
+            className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white"
+          >
+            <span className="flex items-center gap-1.5">
+              <IconBolt />
+              <span>HVAC</span>
+            </span>
+            <IconChevron open={openSections.hvac} />
+          </button>
+          {openSections.hvac && (
+            <div className="flex flex-col gap-0.5 mt-1 border-l border-[#acd3ff] dark:border-slate-800 ml-2 max-h-60 overflow-y-auto scrollbar-thin">
+              {hvacUnits.map((unit) => (
+                <NavItem
+                  key={unit.id}
+                  to={`/machines/hvac/${unit.id}`}
+                  label={unit.unitLabel}
+                  tone="scada"
+                />
               ))}
             </div>
-          ) : null}
+          )}
         </div>
-      </nav>
 
-      <div className="mb-3 mt-5 text-sm font-semibold uppercase tracking-[0.18em] text-[#79b6eb]">Operasional</div>
-      <nav className="flex flex-col gap-1.5">
-        <NavItem to="/utility-status" label="Equipment Status" icon={<IconDevice />} />
-        <NavItem to="/reports" label="Reports" icon={<IconReport />} />
-        <NavItem to="/machine-health" label="Machine Health" icon={<IconAlarm />} />
-        {canApprove ? <NavItem to="/approvals" label="Approvals" icon={<IconReport />} /> : null}
-        {canApprove ? <NavItem to="/thresholds" label="Thresholds" icon={<IconSettings />} /> : null}
-        <NavItem to="/settings" label="Settings" icon={<IconSettings />} />
-        {isAdmin ? <NavItem to="/admin" label="Admin Panel" icon={<IconAdmin />} /> : null}
-      </nav>
+        {/* WWTP SECTION */}
+        <div className="py-1">
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#47729f]/50 dark:text-[#8bbce9]/50 cursor-not-allowed select-none">
+            <IconPlant />
+            <span>WWTP (Coming soon)</span>
+          </span>
+        </div>
+      </div>
 
-      <div className="mt-9 rounded-lg border border-white/10 bg-[#052f54] p-4 text-xs text-[#9dccf5]">
+      {/* PENGGUNAAN UTILITY */}
+      <div className="mb-1">
+        <button
+          type="button"
+          onClick={() => toggleSection("penggunaanUtility")}
+          className="flex w-full items-center justify-between py-1 text-left text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400 hover:text-[#002b5c] dark:hover:text-white"
+        >
+          <span>PENGGUNAAN UTILITY</span>
+          <IconChevron open={openSections.penggunaanUtility} />
+        </button>
+      </div>
+
+      {openSections.penggunaanUtility && (
+        <nav className="flex flex-col gap-0.5 mb-5 pl-2">
+          <NavItem to="/listrik" label="Listrik" icon={<IconDevice />} tone="scada" />
+          <NavItem to="/gas" label="Gas" icon={<IconDevice />} tone="scada" />
+          <NavItem to="/air" label="Air" icon={<IconDevice />} tone="scada" />
+          <NavItem to="/wwtp" label="WWTP" icon={<IconDevice />} tone="scada" />
+        </nav>
+      )}
+
+      {/* OPERASIONAL */}
+      <div className="mb-1">
+        <button
+          type="button"
+          onClick={() => toggleSection("operasional")}
+          className="flex w-full items-center justify-between py-1 text-left text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400 hover:text-[#002b5c] dark:hover:text-white"
+        >
+          <span>OPERASIONAL</span>
+          <IconChevron open={openSections.operasional} />
+        </button>
+      </div>
+
+      {openSections.operasional && (
+        <nav className="flex flex-col gap-0.5 mb-5 pl-2">
+          <NavItem to="/tasks" label="Tasks" icon={<IconReport />} tone="scada" />
+          <NavItem to="/reports" label="Reports" icon={<IconReport />} tone="scada" />
+          <NavItem to="/settings" label="Settings" icon={<IconSettings />} tone="scada" />
+          {canApprove && <NavItem to="/approvals" label="Approvals" icon={<IconReport />} tone="scada" />}
+          {canApprove && <NavItem to="/thresholds" label="Thresholds" icon={<IconSettings />} tone="scada" />}
+          {isAdmin && <NavItem to="/admin" label="Admin Panel" icon={<IconAdmin />} tone="scada" />}
+        </nav>
+      )}
+
+      <div className="mt-auto rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-[#eef6ff] dark:bg-slate-950 p-4 text-xs text-[#47729f] dark:text-[#9dccf5] transition-colors duration-300">
         Local server
-        <div className="mt-1 font-medium text-white">192.168.20.81</div>
+        <div className="mt-1 font-medium text-[#002b5c] dark:text-white">192.168.20.81</div>
       </div>
     </aside>
   );
-}
+};

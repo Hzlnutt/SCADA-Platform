@@ -5,19 +5,20 @@ import { Topbar } from "../components/topbar/Topbar";
 
 export const AppLayout = () => {
   return (
-    <div className="h-screen flex overflow-hidden bg-[#eaf4ff] text-[#002b5c]">
-      {/* Sidebar bisa scroll sendiri, tidak pengaruhi content */}
-      <div className="h-full overflow-y-auto flex-shrink-0">
+    <div className="min-h-screen bg-[#eaf4ff] dark:bg-slate-950 text-[#002b5c] dark:text-slate-100 transition-colors duration-300">
+      <div className="flex">
         <Sidebar />
+        <main className="scada-content min-h-screen flex-1">
+          <Topbar />
+          <div className="lg:hidden">
+            <MobileNav />
+          </div>
+          <div className="px-5 py-5 lg:px-6">
+            <Outlet />
+          </div>
+        </main>
       </div>
-      <main className="scada-content flex-1 flex flex-col overflow-hidden">
-        <Topbar />
-        <MobileNav />
-        {/* Content area scroll sendiri, warna background dijaga */}
-        <div className="flex-1 min-h-0 overflow-y-auto bg-[#eaf4ff] px-5 py-5 lg:px-6">
-          <Outlet />
-        </div>
-      </main>
     </div>
   );
 };
+

@@ -275,37 +275,22 @@ export default function MachineOverview() {
       allSeries[filter.id] = series;
     }
 
-    // Combine into array of objects with timestamp and values per metric
-    const combined = [];
-    for (let i = 0; i < pointsCount; i++) {
-      const dataPoint: any = {
-        timeLabel: new Date(allSeries[chartFilters[0].id][i].ts).toLocaleTimeString("id-ID", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        fullTimestamp: allSeries[chartFilters[0].id][i].ts,
-      };
-      for (const filter of chartFilters) {
-        dataPoint[filter.id] = allSeries[filter.id][i].value;
-      }
-      combined.push(dataPoint);
-    }
-    return combined;
+    return base;
+  }, [latest, machine]);
+
+
+
+  const minThreshold = useMemo(() => {
+    return machine?.trend.series.find((s) => s.name === "Min" || s.name === "min")?.values[0];
   }, [machine]);
 
-  const toggleFilter = (filterId: typeof selectedFilters[number]) => {
-    setSelectedFilters((prev) =>
-      prev.includes(filterId) ? prev.filter((f) => f !== filterId) : [...prev, filterId]
-    );
-  };
+  const maxThreshold = useMemo(() => {
+    return machine?.trend.series.find((s) => s.name === "Max" || s.name === "max")?.values[0];
+  }, [machine]);
 
-  // ── Alarm helpers ─────────────────────────────────────────────────────────
-  const alarmIcon = (s: "warning" | "alert" | "info") =>
-    s === "alert" ? "ti-alert-octagon" : s === "warning" ? "ti-alert-triangle" : "ti-info-circle";
-  const alarmIconColor = (s: "warning" | "alert" | "info") =>
-    s === "alert" ? "text-red-500" : s === "warning" ? "text-amber-500" : "text-blue-500";
-  const alarmBadge = (s: "warning" | "alert" | "info"): BadgeVariant =>
-    s === "alert" ? "red" : s === "warning" ? "amber" : "blue";
+  if (!machine) {
+    return null;
+  }
 
   return (
     <div className="space-y-4 pb-8 bg-gray-50">
@@ -613,11 +598,14 @@ export default function MachineOverview() {
               <span className="text-gray-500">Tank Level</span>
               <span className="font-medium text-amber-600">58%</span>
             </div>
-            <ProgressBar value={58} colorClass="bg-amber-600" />
-            <div className="space-y-1 mt-1">
-              <div className="flex justify-between text-xs"><span className="text-gray-500">Flow Rate</span><span className="text-gray-800 font-medium">1.8 L/h</span></div>
-              <div className="flex justify-between text-xs"><span className="text-gray-500">Jam Operasi</span><span className="text-gray-800 font-medium">156 h</span></div>
-              <div className="flex justify-between text-xs"><span className="text-gray-500">Konsumsi</span><span className="text-gray-800 font-medium">280 L</span></div>
+            <div className="mt-3">
+              <TrendChart
+                points={trendPoints}
+                unit={machine.unit}
+                heightClassName="h-32"
+                minThreshold={minThreshold}
+                maxThreshold={maxThreshold}
+              />
             </div>
           </div>
         </div>
@@ -666,27 +654,8 @@ export default function MachineOverview() {
         </div>
       </div>
 
-      {/* ── ROW 7: Multi-Series Trend Chart (24h) ──────────────────────────── */}
-      <div className="rounded-lg border border-gray-200 bg-white p-5">
-        <CardHeader icon="ti-chart-line" title="Tren 24 Jam (Multi Parameter)" />
 
-        {/* Multi-select Filter Buttons */}
-        <div className="flex flex-wrap gap-2 mb-5">
-          {chartFilters.map((filter) => (
-            <button
-              key={filter.id}
-              onClick={() => toggleFilter(filter.id)}
-              className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition ${
-                selectedFilters.includes(filter.id)
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200"
-              }`}
-            >
-              {filter.label}
-            </button>
-          ))}
-        </div>
-      </div>
+
     </div>
   );
 }

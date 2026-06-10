@@ -32,6 +32,7 @@ import Water from "../pages/utilities/Water";
 import Hvac from "../pages/utilities/Hvac";
 import Wwtp from "../pages/utilities/Wwtp";
 import UtilityOverview from "../pages/utilities/UtilityOverview";
+import Tasks from "../pages/Tasks";
 
 export const AppRouter = () => {
   return (
@@ -40,10 +41,13 @@ export const AppRouter = () => {
         <Route element={<RequireAuth />}>
           <Route element={<AppLayout />}>
             <Route index element={<Dashboard />} />
+            <Route path="dashboard" element={<Navigate to="/" replace />} />
+            <Route path="tasks" element={<Tasks />} />
             <Route path="alarms" element={<Alarms />} />
             <Route path="historian" element={<Historian />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="plant-layout" element={<PlantLayout />} />
+            <Route path="plant" element={<Navigate to="/plant-layout" replace />} />
             <Route path="machines">
               <Route index element={<MachinesOverview />} />
               <Route path=":groupId" element={<MachineGroupOverview />} />

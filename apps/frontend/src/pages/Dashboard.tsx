@@ -158,6 +158,8 @@ export default function Dashboard() {
   const monthlyWaterEnergy = utilityBase.waterM3 * 30 * waterEnergyFactor;
   const totalMonthlyEnergy = monthlyElectric + monthlyGasEnergy + monthlyWaterEnergy;
   const co2Emission = totalMonthlyEnergy * emissionFactor;
+  const totalCo2Kg = co2Emission * 1000;
+  const trees = Math.round(totalCo2Kg / 21);
 
   const consumptionConfig = consumptionRanges.find((item) => item.id === consumptionRange) ?? consumptionRanges[0];
 
@@ -335,18 +337,18 @@ export default function Dashboard() {
         description="Ringkasan konsumsi energi, biaya, dan status utilitas utama."
       />
 
-      {/* Executive Summary — 4 equal cards */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+      {/* Executive Summary — 5 equal cards */}
+      <section className="rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-5 transition-colors duration-300">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
               Executive Summary
             </div>
-            <div className="mt-1 text-sm text-slate-400">
+            <div className="mt-1 text-sm text-[#47729f] dark:text-slate-400">
               Ringkasan periode {period.label.toLowerCase()}.
             </div>
           </div>
-          <div className="flex items-center gap-1 rounded-full border border-slate-800 bg-slate-950/80 px-1 text-xs">
+          <div className="flex items-center gap-1 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/80 px-1 text-xs">
             {periods.map((item, index) => (
               <button
                 key={item.id}
@@ -355,8 +357,8 @@ export default function Dashboard() {
                 className={[
                   "rounded-full px-3 py-1.5 font-semibold transition",
                   periodIndex === index
-                    ? "bg-slate-500 text-white"
-                    : "text-slate-400 hover:text-slate-300"
+                    ? "bg-[#1f6fb5] text-white"
+                    : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-300"
                 ].join(" ")}
               >
                 {item.label}
@@ -365,9 +367,9 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {/* Total Energy */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <ProgressRing
               value={totalEnergyKwh}
               target={energyTarget}
@@ -375,13 +377,13 @@ export default function Dashboard() {
               unit="kWh"
               tone="cyan"
             />
-            <div className="mt-2 text-xs text-slate-400">
+            <div className="mt-2 text-xs text-[#47729f] dark:text-slate-400">
               Gas & air dikonversi ke kWh setara.
             </div>
           </div>
 
           {/* Total Cost */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <ProgressRing
               value={totalCostIdr}
               target={costTarget}
@@ -389,74 +391,85 @@ export default function Dashboard() {
               unit="IDR"
               tone="amber"
             />
-            <div className="mt-2 text-xs text-slate-400">
+            <div className="mt-2 text-xs text-[#47729f] dark:text-slate-400">
               Kurs USD/IDR: {usdToIdr.toLocaleString()}
             </div>
           </div>
 
           {/* Solar Panel */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
               Solar Panel
             </div>
-            <div className="mt-2 text-2xl font-semibold text-slate-100">
+            <div className="mt-2 text-2xl font-semibold text-[#002b5c] dark:text-slate-100">
               {solarKwh.toFixed(0)} kWh
             </div>
-            <div className="mt-1 text-xs text-slate-400">
+            <div className="mt-1 text-xs text-[#47729f] dark:text-slate-400">
               Hemat {formatCurrency(solarSavings, "IDR")}
             </div>
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-900">
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-900">
               <div
-                className="h-full rounded-full bg-slate-500"
+                className="h-full rounded-full bg-[#1f6fb5]"
                 style={{ width: `${solarCoverage.toFixed(0)}%` }}
               />
             </div>
-            <div className="mt-2 text-xs text-slate-400">
+            <div className="mt-2 text-xs text-[#47729f] dark:text-slate-400">
               Coverage {solarCoverage.toFixed(1)}% listrik
             </div>
           </div>
 
           {/* CO2 Emission */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
               CO₂ Emission
             </div>
-            <div className="mt-2 text-2xl font-semibold text-slate-100">
+            <div className="mt-2 text-2xl font-semibold text-[#002b5c] dark:text-slate-100">
               {co2Emission.toFixed(1)} Ton
             </div>
-            <div className="mt-1 text-xs text-slate-400">
+            <div className="mt-1 text-xs text-[#47729f] dark:text-slate-400">
               Estimasi bulan berjalan
             </div>
-            <div className="mt-3 rounded-lg border border-slate-800 bg-slate-900/60 p-2">
-              <div className="text-xs text-slate-500">
-                Distribusi Energi Bulan Ini
-              </div>
-              <div className="mt-2">
-                <EnergyDonutChart
-                  labels={["Listrik", "Gas", "Air"]}
-                  values={[monthlyElectric, monthlyGasEnergy, monthlyWaterEnergy]}
-                  colors={["rgba(56, 189, 248, 0.9)", "rgba(250, 204, 21, 0.85)", "rgba(74, 222, 128, 0.85)"]}
-                  centerLabel="Total"
-                  centerValue={`${totalMonthlyEnergy.toFixed(0)}`}
-                />
-              </div>
+            <div className="mt-3 text-xs text-[#47729f]/80 dark:text-slate-500">
+              Rasio distribusi energi dihitung berdasarkan emisi setara batu bara dan gas alam cair.
+            </div>
+          </div>
+
+          {/* CO2 Reduction */}
+          <div className="rounded-xl border border-emerald-500/30 dark:border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/10 p-4 transition-colors duration-300">
+            <div className="text-xs uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400 font-semibold">
+              CO₂ Reduction
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-emerald-700 dark:text-emerald-300">
+              {(solarKwh * 0.87).toFixed(1)} kg
+            </div>
+            <div className="mt-1 text-xs text-[#47729f] dark:text-slate-400">
+              Mereduksi emisi karbon
+            </div>
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-900">
+              <div
+                className="h-full rounded-full bg-emerald-500"
+                style={{ width: "85%" }}
+              />
+            </div>
+            <div className="mt-2 text-[10px] text-emerald-600 dark:text-emerald-400/80 font-medium">
+              Sertifikasi Hijau Mandiri
             </div>
           </div>
         </div>
       </section>
 
       {/* Konsumsi Utilitas — Per Jam / Hari / Bulan */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+      <section className="rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-5 transition-colors duration-300">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
               Konsumsi Utilitas
             </div>
-            <div className="mt-1 text-sm text-slate-400">
+            <div className="mt-1 text-sm text-[#47729f] dark:text-slate-400">
               Pilih rentang untuk listrik, gas, dan air.
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1 rounded-full border border-slate-800 bg-slate-950/80 px-1 text-xs">
+          <div className="flex flex-wrap items-center gap-1 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/80 px-1 text-xs">
             {consumptionRanges.map((item) => (
               <button
                 key={item.id}
@@ -465,8 +478,8 @@ export default function Dashboard() {
                 className={[
                   "rounded-full px-3 py-1.5 font-semibold transition",
                   consumptionRange === item.id
-                    ? "bg-slate-500 text-white"
-                    : "text-slate-400 hover:text-slate-300"
+                    ? "bg-[#1f6fb5] text-white"
+                    : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-300"
                 ].join(" ")}
               >
                 {item.label}
@@ -475,16 +488,16 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <div className="mt-4 grid gap-4 lg:grid-cols-4">
           {/* Listrik */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Listrik</div>
-                <div className="mt-1 text-lg font-semibold text-slate-100">
+                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Listrik</div>
+                <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
                   {formatCurrency(electricityCost, "IDR")}
                 </div>
-                <div className="mt-0.5 text-xs text-slate-400">
+                <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
                   {electricitySeries.reduce((sum, v) => sum + v, 0).toFixed(1)} kWh
                 </div>
               </div>
@@ -503,14 +516,14 @@ export default function Dashboard() {
           </div>
 
           {/* Gas */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Gas</div>
-                <div className="mt-1 text-lg font-semibold text-slate-100">
+                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Gas</div>
+                <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
                   {formatCurrency(gasCostUsd, "USD")}
                 </div>
-                <div className="mt-0.5 text-xs text-slate-400">
+                <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
                   {formatCurrency(gasCostIdr, "IDR")} &middot; {gasSeries.reduce((sum, v) => sum + v, 0).toFixed(1)} Sm³
                 </div>
               </div>
@@ -528,14 +541,14 @@ export default function Dashboard() {
           </div>
 
           {/* Air */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Air</div>
-                <div className="mt-1 text-lg font-semibold text-slate-100">
+                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Air</div>
+                <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
                   {formatCurrency(waterCost, "IDR")}
                 </div>
-                <div className="mt-0.5 text-xs text-slate-400">
+                <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
                   {waterSeries.reduce((sum, v) => sum + v, 0).toFixed(1)} m³
                 </div>
               </div>
@@ -551,22 +564,45 @@ export default function Dashboard() {
               />
             </div>
           </div>
+
+          {/* Distribusi Energi */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Distribusi Energi</div>
+                <div className="mt-1 text-sm font-semibold text-[#47729f] dark:text-slate-400">Bulan Ini</div>
+              </div>
+              <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                ≈ {trees.toLocaleString("id-ID")} pohon
+              </div>
+            </div>
+            <div className="mt-3">
+              <EnergyDonutChart
+                labels={["Listrik", "Gas", "Air"]}
+                values={[monthlyElectric, monthlyGasEnergy, monthlyWaterEnergy]}
+                colors={["rgba(56, 189, 248, 0.9)", "rgba(250, 204, 21, 0.85)", "rgba(74, 222, 128, 0.85)"]}
+                centerLabel="Total"
+                centerValue={`${totalMonthlyEnergy.toFixed(0)}`}
+                height={160}
+              />
+            </div>
+          </div>
         </div>
       </section>
 
       {/* Actual Year to Date */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+      <section className="rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-5 transition-colors duration-300">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
               Actual Year to Date (YTD)
             </div>
-            <div className="text-sm text-slate-400">
+            <div className="text-sm text-[#47729f] dark:text-slate-400">
               Akumulasi bulanan per kategori. Centang untuk tampilkan di grafik total.
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-3 rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1.5 text-xs">
+            <div className="flex items-center gap-3 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/80 px-3 py-1.5 text-xs transition-colors duration-300">
               {([
                 { key: "electricity" as const, label: "Listrik", color: "#2f8ae5" },
                 { key: "gas" as const, label: "Gas", color: "#f4c542" },
@@ -574,7 +610,7 @@ export default function Dashboard() {
               ]).map((item) => (
                 <label
                   key={item.key}
-                  className="flex cursor-pointer items-center gap-1.5 font-semibold text-slate-300"
+                  className="flex cursor-pointer items-center gap-1.5 font-semibold text-[#002b5c] dark:text-slate-300"
                 >
                   <input
                     type="checkbox"
@@ -592,7 +628,7 @@ export default function Dashboard() {
             <button
               type="button"
               onClick={handleExportYtd}
-              className="rounded-full border border-slate-700 bg-slate-900/60 px-4 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-slate-500"
+              className="rounded-full border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-900/60 px-4 py-1.5 text-xs font-semibold text-[#002b5c] dark:text-slate-300 transition hover:border-[#7fb3e4] hover:bg-slate-50 dark:hover:bg-slate-800"
             >
               Export Excel
             </button>
@@ -601,12 +637,12 @@ export default function Dashboard() {
 
         {/* 3 YTD cards */}
         <div className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Listrik YTD</div>
-            <div className="mt-1 text-lg font-semibold text-slate-100">
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Listrik YTD</div>
+            <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
               {formatCurrency(ytdElectricityTotal * utilityRates.electricityIdr, "IDR")}
             </div>
-            <div className="mt-0.5 text-xs text-slate-400">
+            <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
               {ytdElectricityTotal.toFixed(0)} kWh
             </div>
             <div className="mt-3">
@@ -620,12 +656,12 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Gas YTD</div>
-            <div className="mt-1 text-lg font-semibold text-slate-100">
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Gas YTD</div>
+            <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
               {formatCurrency(ytdGasTotal * utilityRates.gasUsd, "USD")}
             </div>
-            <div className="mt-0.5 text-xs text-slate-400">
+            <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
               {ytdGasTotal.toFixed(0)} Sm³
             </div>
             <div className="mt-3">
@@ -639,12 +675,12 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Air YTD</div>
-            <div className="mt-1 text-lg font-semibold text-slate-100">
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Air YTD</div>
+            <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
               {formatCurrency(ytdWaterTotal * utilityRates.waterIdr, "IDR")}
             </div>
-            <div className="mt-0.5 text-xs text-slate-400">
+            <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
               {ytdWaterTotal.toFixed(0)} m³
             </div>
             <div className="mt-3">
@@ -660,11 +696,11 @@ export default function Dashboard() {
         </div>
 
         {/* Total YTD Stacked Chart */}
-        <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-          <div className="mb-1 text-xs uppercase tracking-[0.2em] text-slate-500">
+        <div className="mt-5 rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+          <div className="mb-1 text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
             Grafik Total YTD (kWh Setara)
           </div>
-          <div className="text-xs text-slate-400">
+          <div className="text-xs text-[#47729f] dark:text-slate-400">
             Hanya kategori yang dicentang. Gas & air dikonversi ke kWh.
           </div>
           <div className="mt-3">
@@ -681,17 +717,17 @@ export default function Dashboard() {
       {/* Status & Alarms */}
       <div className="grid gap-4 xl:grid-cols-[1fr_1fr_1fr]">
         {/* Utility Status */}
-        <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+        <section className="rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-4 transition-colors duration-300">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
                 Status Utility
               </div>
-              <div className="text-xs text-slate-400">
+              <div className="text-xs text-[#47729f] dark:text-slate-400">
                 Snapshot otomatis & manual override
               </div>
             </div>
-            <Link to="/utility-status" className="text-xs font-semibold text-slate-500 hover:text-slate-300">
+            <Link to="/utility-status" className="text-xs font-semibold text-[#1f6fb5] dark:text-sky-400 hover:underline">
               Lihat
             </Link>
           </div>
@@ -699,9 +735,9 @@ export default function Dashboard() {
             {utilityStatusPreview.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2"
+                className="flex items-center justify-between rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/80 px-3 py-2 transition-colors duration-300"
               >
-                <div className="truncate pr-3 text-xs font-semibold text-slate-200">
+                <div className="truncate pr-3 text-xs font-semibold text-[#002b5c] dark:text-slate-200">
                   {item.name}
                 </div>
                 <div className={`shrink-0 text-xs font-semibold ${statusTone[item.status]}`}>
@@ -713,17 +749,17 @@ export default function Dashboard() {
         </section>
 
         {/* HVAC Status */}
-        <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+        <section className="rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-4 transition-colors duration-300">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
                 Status HVAC
               </div>
-              <div className="text-xs text-slate-400">
+              <div className="text-xs text-[#47729f] dark:text-slate-400">
                 Snapshot otomatis & manual override
               </div>
             </div>
-            <Link to="/utility-status" className="text-xs font-semibold text-slate-500 hover:text-slate-300">
+            <Link to="/utility-status" className="text-xs font-semibold text-[#1f6fb5] dark:text-sky-400 hover:underline">
               Lihat
             </Link>
           </div>
@@ -731,9 +767,9 @@ export default function Dashboard() {
             {hvacStatusPreview.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2"
+                className="flex items-center justify-between rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/80 px-3 py-2 transition-colors duration-300"
               >
-                <div className="truncate pr-3 text-xs font-semibold text-slate-200">
+                <div className="truncate pr-3 text-xs font-semibold text-[#002b5c] dark:text-slate-200">
                   {item.name}
                 </div>
                 <div className={`shrink-0 text-xs font-semibold ${statusTone[item.status]}`}>
@@ -745,17 +781,17 @@ export default function Dashboard() {
         </section>
 
         {/* Alarm Strip */}
-        <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+        <section className="rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-4 transition-colors duration-300">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-rose-300">
+              <div className="text-xs uppercase tracking-[0.2em] text-rose-500 dark:text-rose-300 font-semibold">
                 Alarm Teraktif
               </div>
-              <div className="text-xs text-slate-400">
+              <div className="text-xs text-[#47729f] dark:text-slate-400">
                 {activeAlarms.length > 0 ? `${activeAlarms.length} alarm aktif` : "Demo alarm"}
               </div>
             </div>
-            <Link to="/alarms" className="text-xs font-semibold text-slate-500 hover:text-slate-300">
+            <Link to="/alarms" className="text-xs font-semibold text-[#1f6fb5] dark:text-sky-400 hover:underline">
               Lihat Semua
             </Link>
           </div>
@@ -763,23 +799,23 @@ export default function Dashboard() {
             {alarmPreview.map((alarm) => (
               <div
                 key={alarm.id}
-                className="flex items-start gap-3 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2.5"
+                className="flex items-start gap-3 rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/80 px-3 py-2.5 transition-colors duration-300"
               >
                 <div
                   className={[
                     "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-black",
                     alarm.severity === "critical" || alarm.severity === "high"
-                      ? "bg-rose-500/10 text-rose-300"
-                      : "bg-amber-500/10 text-amber-300"
+                      ? "bg-rose-500/10 text-rose-500 dark:text-rose-300 border border-rose-500/20"
+                      : "bg-amber-500/10 text-amber-500 dark:text-amber-300 border border-amber-500/20"
                   ].join(" ")}
                 >
                   !
                 </div>
                 <div className="min-w-0">
-                  <div className="truncate text-xs font-semibold text-slate-200">
+                  <div className="truncate text-xs font-semibold text-[#002b5c] dark:text-slate-200">
                     {alarm.title}
                   </div>
-                  <div className="mt-0.5 truncate text-xs text-slate-400">
+                  <div className="mt-0.5 truncate text-xs text-[#47729f] dark:text-slate-400">
                     {alarm.detail}
                   </div>
                 </div>
@@ -790,11 +826,11 @@ export default function Dashboard() {
       </div>
 
       {/* Perbandingan */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
-        <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+      <section className="rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-5 transition-colors duration-300">
+        <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
           Perbandingan Range Sebelumnya
         </div>
-        <div className="mt-1 text-sm text-slate-400">
+        <div className="mt-1 text-sm text-[#47729f] dark:text-slate-400">
           Range dibandingkan dengan periode sebelumnya.
         </div>
         <div className="mt-4">
