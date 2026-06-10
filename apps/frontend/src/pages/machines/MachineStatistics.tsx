@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
-import { BarChart } from "../../components/charts/BarChart";
 import { DonutChart } from "../../components/charts/DonutChart";
 import { MultiLineChart } from "../../components/charts/MultiLineChart";
+import { TrendChart } from "../../components/charts/TrendChart";
 import { TimeRangeControls } from "../../components/ui/TimeRangeControls";
 import { getUnitById } from "../../data/machines";
 import { useTimeRangeStore } from "../../store/timeRange.store";
@@ -51,6 +51,27 @@ export default function MachineStatistics() {
     return sliceSeries(machine.dailyConsumption, points);
   }, [machine, range]);
 
+  const consumptionPoints = useMemo(() => {
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    return consumptionValues.map((value, idx) => ({
+      ts: new Date(now - (consumptionValues.length - idx) * dayMs),
+      value
+    }));
+  }, [consumptionValues]);
+
+  const consumptionMinThreshold = useMemo(() => {
+    if (consumptionValues.length === 0) return undefined;
+    const avg = consumptionValues.reduce((sum, v) => sum + v, 0) / consumptionValues.length;
+    return avg * 0.85; // lower threshold
+  }, [consumptionValues]);
+
+  const consumptionMaxThreshold = useMemo(() => {
+    if (consumptionValues.length === 0) return undefined;
+    const avg = consumptionValues.reduce((sum, v) => sum + v, 0) / consumptionValues.length;
+    return avg * 1.15; // upper threshold
+  }, [consumptionValues]);
+
   const summary = useMemo(() => {
     if (!machine) {
       return null;
@@ -74,12 +95,12 @@ export default function MachineStatistics() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/70 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-4 transition-colors duration-300">
         <div>
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+          <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
             Data Statistik Secara Rinci
           </div>
-          <div className="mt-1 text-sm text-slate-300">
+          <div className="mt-1 text-sm text-[#002b5c] dark:text-slate-300">
             {machine.description}
           </div>
         </div>
@@ -87,8 +108,8 @@ export default function MachineStatistics() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_1.4fr]">
-        <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-5">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+        <section className="rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-5 transition-colors duration-300">
+          <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
             Status Distribution
           </div>
           <div className="mt-4 flex flex-col items-center gap-4 md:flex-row md:items-start">
@@ -103,8 +124,8 @@ export default function MachineStatistics() {
                     className="h-2.5 w-2.5 rounded-full"
                     style={{ backgroundColor: segment.color }}
                   />
-                  <span className="text-slate-300">{segment.label}</span>
-                  <span className="ml-auto font-mono text-slate-100">
+                  <span className="text-[#002b5c] dark:text-slate-300">{segment.label}</span>
+                  <span className="ml-auto font-mono text-[#002b5c] dark:text-slate-100">
                     {segment.value}%
                   </span>
                 </div>
@@ -112,31 +133,34 @@ export default function MachineStatistics() {
             </div>
           </div>
         </section>
-        <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-5">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+        <section className="rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-5 transition-colors duration-300">
+          <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
             Daily Consumption
           </div>
           <div className="mt-3">
-            <BarChart
-              values={consumptionValues}
+            <TrendChart
+              points={consumptionPoints}
               unit={machine.consumptionUnit}
+              minThreshold={consumptionMinThreshold}
+              maxThreshold={consumptionMaxThreshold}
+              heightClassName="h-40"
             />
           </div>
         </section>
       </div>
 
-      <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-5">
+      <section className="rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-5 transition-colors duration-300">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
               Parameter Trend
             </div>
-            <div className="mt-1 text-sm text-slate-300">
+            <div className="mt-1 text-sm text-[#002b5c] dark:text-slate-300">
               {machine.trend.label} ({machine.unit})
             </div>
           </div>
           {summary ? (
-            <div className="flex gap-4 text-xs text-slate-500">
+            <div className="flex gap-4 text-xs text-[#47729f] dark:text-slate-500">
               <span>Min {summary.min.toFixed(2)}</span>
               <span>Avg {summary.avg.toFixed(2)}</span>
               <span>Max {summary.max.toFixed(2)}</span>

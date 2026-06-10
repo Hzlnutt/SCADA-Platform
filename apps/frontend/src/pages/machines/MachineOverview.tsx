@@ -40,6 +40,14 @@ export default function MachineOverview() {
 
 
 
+  const minThreshold = useMemo(() => {
+    return machine?.trend.series.find((s) => s.name === "Min" || s.name === "min")?.values[0];
+  }, [machine]);
+
+  const maxThreshold = useMemo(() => {
+    return machine?.trend.series.find((s) => s.name === "Max" || s.name === "max")?.values[0];
+  }, [machine]);
+
   if (!machine) {
     return null;
   }
@@ -82,11 +90,14 @@ export default function MachineOverview() {
                 points={trendPoints}
                 unit={machine.unit}
                 heightClassName="h-32"
+                minThreshold={minThreshold}
+                maxThreshold={maxThreshold}
               />
             </div>
           </div>
         </section>
       </div>
+
 
 
     </div>

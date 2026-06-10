@@ -117,18 +117,18 @@ export default function MachinePidDiagram() {
 
       <div className="flex-1 flex gap-4 flex-col lg:flex-row overflow-hidden">
         
-        <section className="flex-1 flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 p-3 sm:p-5">
+        <section className="flex-1 flex flex-col overflow-hidden rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-3 sm:p-5 transition-colors duration-300">
 
         <div className="mb-4 flex items-center justify-between">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+          <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
             P&ID Diagram Canvas — {machine.name}
           </div>
           <button
             onClick={() => setAllOn(v => !v)}
             className={`rounded px-3 py-1 text-xs font-mono transition-colors ${
               allOn
-                ? "bg-cyan-900/60 text-cyan-400 border border-cyan-700"
-                : "bg-slate-800 text-slate-400 border border-slate-700"
+                ? "bg-[#1f6fb5]/10 text-[#1f6fb5] dark:text-cyan-400 dark:bg-cyan-900/60 border border-[#1f6fb5]/30 dark:border-cyan-700"
+                : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
             }`}
           >
             {allOn ? "● FLOW ON" : "○ FLOW OFF"} (demo)
@@ -137,7 +137,7 @@ export default function MachinePidDiagram() {
 
         <div className="overflow-x-auto overflow-y-hidden pb-0 flex-1">
           <div
-            className="relative mx-auto w-full min-w-[720px] max-w-[1836px] h-full overflow-hidden rounded-lg border border-dashed border-slate-700 bg-slate-900"
+            className="relative mx-auto w-full min-w-[720px] max-w-[1836px] h-full overflow-hidden rounded-lg border border-dashed border-[#acd3ff] dark:border-slate-700 bg-[#eef6ff] dark:bg-slate-900 transition-colors duration-300"
             // style={{ aspectRatio: "1836 / 789" }}
           >
             {/* ── SVG UTAMA (mengandung gambar background + komponen) ── */}
@@ -1291,20 +1291,20 @@ export default function MachinePidDiagram() {
         {/* ── Right Side ──────────────────────────────── */}
         <div className="flex flex-col gap-4 lg:w-96 overflow-hidden">
           
-          <div className="flex-1 flex flex-col rounded-lg border border-slate-800 bg-slate-950/70 p-4 overflow-hidden min-h-0">
-            <h3 className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold mb-3">Task Information</h3>
+          <div className="flex-1 flex flex-col rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-4 overflow-hidden min-h-0 transition-colors duration-300">
+            <h3 className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold mb-3">Task Information</h3>
             
             <div className="space-y-1.5 mb-2">
               <button
                 onClick={() => setSelectedTaskFilter("open_month")}
                 className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
                   selectedTaskFilter === "open_month"
-                    ? "bg-white border-cyan-500 text-slate-900"
-                    : "bg-white border-slate-300 text-slate-900 hover:border-cyan-400"
+                    ? "bg-[#eef6ff] dark:bg-slate-800 border-cyan-500 text-[#002b5c] dark:text-white"
+                    : "bg-white dark:bg-slate-900 border-[#acd3ff] dark:border-slate-700 text-[#002b5c] dark:text-slate-300 hover:border-cyan-400"
                 }`}
               >
                 <span className="text-xs font-medium">Task Open (Bulan Ini)</span>
-                <span className={`text-base font-semibold ${selectedTaskFilter === "open_month" ? "text-cyan-600" : "text-cyan-500"}`}>
+                <span className={`text-base font-semibold ${selectedTaskFilter === "open_month" ? "text-cyan-600 dark:text-cyan-400" : "text-cyan-500"}`}>
                   {taskInfo.openThisMonth}
                 </span>
               </button>
@@ -1313,12 +1313,12 @@ export default function MachinePidDiagram() {
                 onClick={() => setSelectedTaskFilter("open")}
                 className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
                   selectedTaskFilter === "open"
-                    ? "bg-white border-yellow-500 text-slate-900"
-                    : "bg-white border-slate-300 text-slate-900 hover:border-yellow-400"
+                    ? "bg-[#eef6ff] dark:bg-slate-800 border-yellow-500 text-[#002b5c] dark:text-white"
+                    : "bg-white dark:bg-slate-900 border-[#acd3ff] dark:border-slate-700 text-[#002b5c] dark:text-slate-300 hover:border-yellow-400"
                 }`}
               >
                 <span className="text-xs font-medium">Task Open</span>
-                <span className={`text-base font-semibold ${selectedTaskFilter === "open" ? "text-yellow-600" : "text-yellow-500"}`}>
+                <span className={`text-base font-semibold ${selectedTaskFilter === "open" ? "text-yellow-600 dark:text-yellow-400" : "text-yellow-500"}`}>
                   {taskInfo.taskOpen}
                 </span>
               </button>
@@ -1327,52 +1327,52 @@ export default function MachinePidDiagram() {
                 onClick={() => setSelectedTaskFilter("close")}
                 className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
                   selectedTaskFilter === "close"
-                    ? "bg-white border-green-500 text-slate-900"
-                    : "bg-white border-slate-300 text-slate-900 hover:border-green-400"
+                    ? "bg-[#eef6ff] dark:bg-slate-800 border-green-500 text-[#002b5c] dark:text-white"
+                    : "bg-white dark:bg-slate-900 border-[#acd3ff] dark:border-slate-700 text-[#002b5c] dark:text-slate-300 hover:border-green-400"
                 }`}
               >
                 <span className="text-xs font-medium">Task Close</span>
-                <span className={`text-base font-semibold ${selectedTaskFilter === "close" ? "text-green-600" : "text-green-500"}`}>
+                <span className={`text-base font-semibold ${selectedTaskFilter === "close" ? "text-green-600 dark:text-green-400" : "text-green-500"}`}>
                   {taskInfo.taskClose}
                 </span>
               </button>
             </div>
 
-            <div className="text-xs text-slate-600 font-medium mb-1">Keterangan ({filteredTasks.length})</div>
+            <div className="text-xs text-[#47729f] dark:text-slate-500 font-medium mb-1">Keterangan ({filteredTasks.length})</div>
             <div className="flex-1 overflow-y-auto space-y-2 pr-2">
               {filteredTasks.length > 0 ? (
                 filteredTasks.map((task) => (
-                  <div key={task.id} className={`bg-white rounded border-2 p-2 text-xs ${
+                  <div key={task.id} className={`bg-white dark:bg-slate-900 rounded border-2 p-2 text-xs transition-colors duration-300 ${
                     task.status === "open" ? "border-yellow-400" : "border-green-400"
                   }`}>
-                    <div className="font-medium text-slate-900">{task.title}</div>
+                    <div className="font-medium text-[#002b5c] dark:text-slate-200">{task.title}</div>
                     <div className="text-slate-600 mt-1">
                       <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
-                        task.status === "open" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"
+                        task.status === "open" ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300" : "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300"
                       }`}>
                         {task.status === "open" ? "OPEN" : "CLOSE"}
                       </span>
-                      <span className="text-slate-500 ml-2 text-xs">{task.createdDate}</span>
+                      <span className="text-slate-500 dark:text-slate-400 ml-2 text-xs">{task.createdDate}</span>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-center text-slate-400 py-4">Tidak ada task</div>
+                <div className="text-center text-slate-400 py-4 font-medium">Tidak ada task</div>
               )}
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col rounded-lg border border-slate-300 bg-white p-4 overflow-hidden min-h-0">
-            <h3 className="text-xs uppercase tracking-[0.2em] text-slate-700 font-semibold mb-3">Alarms</h3>
+          <div className="flex-1 flex flex-col rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-4 overflow-hidden min-h-0 transition-colors duration-300">
+            <h3 className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold mb-3">Alarms</h3>
             
             <div className="flex-1 overflow-y-auto space-y-2 pr-2">
               {alarmInfo.map((alarm) => (
-                <div key={alarm.id} className={`border-2 rounded p-3 bg-white ${
+                <div key={alarm.id} className={`border-2 rounded p-3 bg-white dark:bg-slate-900 transition-colors duration-300 ${
                   alarm.severity === "critical"
                     ? "border-red-500"
                     : alarm.severity === "warning"
                     ? "border-yellow-500"
-                    : "border-slate-300"
+                    : "border-[#acd3ff] dark:border-slate-700"
                 }`}>
                   <div className="flex items-start gap-2">
                     <div className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${
@@ -1382,11 +1382,11 @@ export default function MachinePidDiagram() {
                     }`} />
                     <div className="flex-1 min-w-0">
                       <div className={`text-xs font-mono font-semibold ${
-                        alarm.severity === "critical" ? "text-red-600" : "text-yellow-600"
+                        alarm.severity === "critical" ? "text-red-600 dark:text-red-400" : "text-yellow-600 dark:text-yellow-400"
                       }`}>
                         {alarm.code}
                       </div>
-                      <p className={`text-xs leading-snug mt-1 text-slate-700`}>
+                      <p className={`text-xs leading-snug mt-1 text-[#002b5c] dark:text-slate-300`}>
                         {alarm.message}
                       </p>
                     </div>

@@ -18,9 +18,23 @@
   --scada-text: #002b5c;
   --scada-muted: #47729f;
   --scada-green: #087f5b;
+  --scada-green-bg: #dff4ea;
+  --scada-green-border: #9ed9c1;
   --scada-amber: #bd7a12;
-  --scada-brown: #a44925;
+  --scada-amber-bg: #fff1d6;
+  --scada-amber-border: #f1c77c;
+  --scada-orange: #a44925;
+  --scada-orange-bg: #fde7d9;
+  --scada-orange-border: #efb18e;
   --scada-danger: #b42318;
+  --scada-danger-bg: #ffe6df;
+  --scada-danger-border: #f5aa99;
+  --scada-cyan: #1f6fb5;
+  --scada-cyan-bg: #dcecff;
+  --scada-cyan-border: #9dcaff;
+  --scada-input-bg: #ffffff;
+  --scada-hover-bg: #f2f8ff;
+  
   font-family:
     "Plus Jakarta Sans",
     "Segoe UI",
@@ -29,6 +43,38 @@
     sans-serif;
   background-color: var(--scada-bg);
   color: var(--scada-text);
+}
+
+html.dark {
+  color-scheme: dark;
+  --scada-bg: #090d16;
+  --scada-sidebar: #07192a;
+  --scada-sidebar-deep: #05101a;
+  --scada-card: #0d1527;
+  --scada-panel: #111c30;
+  --scada-border: #1e293b;
+  --scada-border-soft: #334155;
+  --scada-blue: #38bdf8;
+  --scada-blue-dark: #7dd3fc;
+  --scada-text: #f1f5f9;
+  --scada-muted: #94a3b8;
+  --scada-green: #34d399;
+  --scada-green-bg: rgba(52, 211, 153, 0.15);
+  --scada-green-border: rgba(52, 211, 153, 0.3);
+  --scada-amber: #fbbf24;
+  --scada-amber-bg: rgba(251, 191, 36, 0.15);
+  --scada-amber-border: rgba(251, 191, 36, 0.3);
+  --scada-orange: #f97316;
+  --scada-orange-bg: rgba(249, 115, 22, 0.15);
+  --scada-orange-border: rgba(249, 115, 22, 0.3);
+  --scada-danger: #f87171;
+  --scada-danger-bg: rgba(248, 113, 113, 0.15);
+  --scada-danger-border: rgba(248, 113, 113, 0.3);
+  --scada-cyan: #38bdf8;
+  --scada-cyan-bg: rgba(56, 189, 248, 0.15);
+  --scada-cyan-border: rgba(56, 189, 248, 0.3);
+  --scada-input-bg: #111c30;
+  --scada-hover-bg: #162238;
 }
 
 * {
@@ -66,10 +112,19 @@ code {
   background: #dcecff;
 }
 
+html.dark ::-webkit-scrollbar-track {
+  background: #0d1527;
+}
+
 ::-webkit-scrollbar-thumb {
   background: #8fb7df;
   border: 3px solid #dcecff;
   border-radius: 999px;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border: 3px solid #0d1527;
 }
 
 .scada-content {
@@ -77,6 +132,11 @@ code {
     linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(234, 244, 255, 0)),
     var(--scada-bg);
   color: var(--scada-text);
+  min-height: 100vh;
+}
+
+html.dark .scada-content {
+  background: var(--scada-bg);
 }
 
 .scada-content .bg-slate-950,
@@ -92,7 +152,7 @@ code {
 .scada-content .bg-slate-900\/60,
 .scada-content .bg-slate-900\/70,
 .scada-content .bg-slate-900\/80 {
-  background-color: #e8f3ff;
+  background-color: var(--scada-panel);
 }
 
 .scada-content .bg-gradient-to-br {
@@ -107,10 +167,10 @@ code {
 }
 
 .scada-content .border-dashed {
-  border-color: #b8d9f8;
+  border-color: var(--scada-border);
 }
 
-.scada-content .divide-slate-900 > :not([hidden]) ~ :not([hidden]) {
+.scada-content .divide-slate-900> :not([hidden])~ :not([hidden]) {
   border-color: var(--scada-border-soft);
 }
 
@@ -123,7 +183,7 @@ code {
 }
 
 .scada-content .text-slate-300 {
-  color: #164d86;
+  color: var(--scada-blue);
 }
 
 .scada-content .text-slate-400 {
@@ -131,43 +191,38 @@ code {
 }
 
 .scada-content .text-slate-500 {
-  color: #1f6feb;
+  color: var(--scada-blue);
 }
 
 .scada-content .text-slate-600 {
-  color: #86a9cc;
+  color: var(--scada-muted);
 }
 
 .scada-content .bg-slate-600 {
-  background-color: #9dbbdb;
+  background-color: var(--scada-border-soft);
 }
 
 .scada-content .shadow-\[0_0_40px_rgba\(15\,23\,42\,0\.25\)\] {
   box-shadow: 0 10px 28px rgba(31, 111, 181, 0.08);
 }
 
-.scada-content .rounded-2xl,
-.scada-content .rounded-xl {
-  border-radius: 0.5rem;
-}
-
 .scada-content select,
 .scada-content input,
 .scada-content textarea {
   color: var(--scada-text);
-  background-color: #ffffff;
+  background-color: var(--scada-input-bg);
 }
 
 .scada-content table tbody tr:hover {
-  background-color: #f2f8ff;
+  background-color: var(--scada-hover-bg);
 }
 
 .scada-content .bg-emerald-500\/10 {
-  background-color: #dff4ea;
+  background-color: var(--scada-green-bg);
 }
 
 .scada-content .border-emerald-500\/30 {
-  border-color: #9ed9c1;
+  border-color: var(--scada-green-border);
 }
 
 .scada-content .text-emerald-300 {
@@ -175,11 +230,11 @@ code {
 }
 
 .scada-content .bg-amber-500\/10 {
-  background-color: #fff1d6;
+  background-color: var(--scada-amber-bg);
 }
 
 .scada-content .border-amber-500\/30 {
-  border-color: #f1c77c;
+  border-color: var(--scada-amber-border);
 }
 
 .scada-content .text-amber-300 {
@@ -187,23 +242,23 @@ code {
 }
 
 .scada-content .bg-orange-500\/10 {
-  background-color: #fde7d9;
+  background-color: var(--scada-orange-bg);
 }
 
 .scada-content .border-orange-500\/30 {
-  border-color: #efb18e;
+  border-color: var(--scada-orange-border);
 }
 
 .scada-content .text-orange-300 {
-  color: var(--scada-brown);
+  color: var(--scada-orange);
 }
 
 .scada-content .bg-rose-500\/10 {
-  background-color: #ffe6df;
+  background-color: var(--scada-danger-bg);
 }
 
 .scada-content .border-rose-500\/30 {
-  border-color: #f5aa99;
+  border-color: var(--scada-danger-border);
 }
 
 .scada-content .text-rose-300 {
@@ -213,16 +268,14 @@ code {
 .scada-content .bg-cyan-500\/10,
 .scada-content .bg-cyan-500\/20,
 .scada-content .bg-teal-500\/20 {
-  background-color: #dcecff;
+  background-color: var(--scada-cyan-bg);
 }
 
 .scada-content .border-cyan-500\/30 {
-  border-color: #9dcaff;
+  border-color: var(--scada-cyan-border);
 }
 
 .scada-content .text-cyan-200,
 .scada-content .text-teal-200 {
   color: var(--scada-blue);
 }
-
-

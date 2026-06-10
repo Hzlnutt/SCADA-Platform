@@ -5,12 +5,14 @@ import { Topbar } from "../components/topbar/Topbar";
 
 export const AppLayout = () => {
   return (
-    <div className="min-h-screen bg-[#eaf4ff] text-[#002b5c]">
+    <div className="min-h-screen bg-[#eaf4ff] dark:bg-slate-950 text-[#002b5c] dark:text-slate-100 transition-colors duration-300">
       <div className="flex">
         <Sidebar />
         <main className="scada-content min-h-screen flex-1">
           <Topbar />
-          <MobileNav />
+          <div className="lg:hidden">
+            <MobileNav />
+          </div>
           <div className="px-5 py-5 lg:px-6">
             <Outlet />
           </div>
@@ -19,3 +21,4 @@ export const AppLayout = () => {
     </div>
   );
 };
+

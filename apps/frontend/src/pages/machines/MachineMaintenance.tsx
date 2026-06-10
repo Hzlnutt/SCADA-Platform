@@ -205,92 +205,92 @@ export default function MachineMaintenance() {
       {canCreate ? (
         formOpen ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
-            <div className="relative h-[90vh] w-[90vw] overflow-y-auto rounded-2xl border border-[#acd3ff] bg-white p-6 shadow-[0_20px_60px_rgba(0,0,0,0.2)]">
+            <div className="relative h-[90vh] w-[90vw] overflow-y-auto rounded-2xl border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.2)]">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[#1f6fb5]">
+                  <div className="text-xs uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">
                     Input Maintenance
                   </div>
-                  <div className="mt-1 text-sm text-[#47729f]">
+                  <div className="mt-1 text-sm text-[#47729f] dark:text-slate-400">
                     Tambahkan history perbaikan baru.
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setFormOpen(false)}
-                  className="rounded-full border border-[#acd3ff] px-3 py-1 text-xs font-semibold text-[#003b75]"
+                  className="rounded-full border border-[#acd3ff] dark:border-slate-600 px-3 py-1 text-xs font-semibold text-[#003b75] dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
                 >
                   Close
                 </button>
               </div>
               <form onSubmit={handleSubmit} className="mt-5 space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
-                  <label className="text-xs text-[#47729f]">
+                  <label className="text-xs text-[#47729f] dark:text-slate-400">
                     Tanggal
                     <input
                       type="datetime-local"
                       value={form.date}
                       onChange={(event) => handleChange("date", event.target.value)}
-                      className="mt-2 w-full rounded-md border border-[#d6e9fb] bg-white px-3 py-2 text-sm text-[#002b5c]"
+                      className="mt-2 w-full rounded-md border border-[#d6e9fb] dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-[#002b5c] dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       required
                     />
                   </label>
-                  <label className="text-xs text-[#47729f]">
+                  <label className="text-xs text-[#47729f] dark:text-slate-400">
                     Teknisi
                     <input
                       type="text"
                       value={form.technician}
                       onChange={(event) => handleChange("technician", event.target.value)}
-                      className="mt-2 w-full rounded-md border border-[#d6e9fb] bg-white px-3 py-2 text-sm text-[#002b5c]"
+                      className="mt-2 w-full rounded-md border border-[#d6e9fb] dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-[#002b5c] dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       required
                     />
                   </label>
-                  <label className="text-xs text-[#47729f]">
+                  <label className="text-xs text-[#47729f] dark:text-slate-400">
                     Item Maintenance
                     <input
                       type="text"
                       value={form.item}
                       onChange={(event) => handleChange("item", event.target.value)}
-                      className="mt-2 w-full rounded-md border border-[#d6e9fb] bg-white px-3 py-2 text-sm text-[#002b5c]"
+                      className="mt-2 w-full rounded-md border border-[#d6e9fb] dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-[#002b5c] dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       required
                     />
                   </label>
-                  <label className="text-xs text-[#47729f]">
+                  <label className="text-xs text-[#47729f] dark:text-slate-400">
                     Abnormalitas
                     <input
                       type="text"
                       value={form.abnormality}
                       onChange={(event) => handleChange("abnormality", event.target.value)}
-                      className="mt-2 w-full rounded-md border border-[#d6e9fb] bg-white px-3 py-2 text-sm text-[#002b5c]"
+                      className="mt-2 w-full rounded-md border border-[#d6e9fb] dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-[#002b5c] dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                   </label>
-                  <label className="text-xs text-[#47729f]">
+                  <label className="text-xs text-[#47729f] dark:text-slate-400">
                     Action
                     <input
                       type="text"
                       value={form.action}
                       onChange={(event) => handleChange("action", event.target.value)}
-                      className="mt-2 w-full rounded-md border border-[#d6e9fb] bg-white px-3 py-2 text-sm text-[#002b5c]"
+                      className="mt-2 w-full rounded-md border border-[#d6e9fb] dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-[#002b5c] dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       required
                     />
                   </label>
-                  <label className="text-xs text-[#47729f]">
+                  <label className="text-xs text-[#47729f] dark:text-slate-400">
                     Downtime (jam)
                     <input
                       type="number"
                       step="0.1"
                       value={form.downtimeHours}
                       onChange={(event) => handleChange("downtimeHours", event.target.value)}
-                      className="mt-2 w-full rounded-md border border-[#d6e9fb] bg-white px-3 py-2 text-sm text-[#002b5c]"
+                      className="mt-2 w-full rounded-md border border-[#d6e9fb] dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-[#002b5c] dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       required
                     />
                   </label>
-                  <label className="text-xs text-[#47729f]">
+                  <label className="text-xs text-[#47729f] dark:text-slate-400">
                     Status
                     <select
                       value={form.status}
                       onChange={(event) => handleChange("status", event.target.value)}
-                      className="mt-2 w-full rounded-md border border-[#d6e9fb] bg-white px-3 py-2 text-sm text-[#002b5c]"
+                      className="mt-2 w-full rounded-md border border-[#d6e9fb] dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-[#002b5c] dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
                       <option value="completed">Completed</option>
                       <option value="monitoring">Monitoring</option>
@@ -298,24 +298,24 @@ export default function MachineMaintenance() {
                     </select>
                   </label>
                 </div>
-                <label className="block text-xs text-[#47729f]">
+                <label className="block text-xs text-[#47729f] dark:text-slate-400">
                   Notes
                   <textarea
                     value={form.notes}
                     onChange={(event) => handleChange("notes", event.target.value)}
-                    className="mt-2 w-full rounded-md border border-[#d6e9fb] bg-white px-3 py-2 text-sm text-[#002b5c]"
+                    className="mt-2 w-full rounded-md border border-[#d6e9fb] dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-[#002b5c] dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     rows={4}
                   />
                 </label>
                 {error ? (
-                  <div className="rounded-md border border-[#f5aa99] bg-[#ffe6df] px-3 py-2 text-xs text-[#b42318]">
+                  <div className="rounded-md border border-[#f5aa99] dark:border-rose-900/50 bg-[#ffe6df] dark:bg-rose-950/20 px-3 py-2 text-xs text-[#b42318] dark:text-rose-400">
                     {error}
                   </div>
                 ) : null}
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded-full bg-[#1f6fb5] px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+                  className="rounded-full bg-[#1f6fb5] dark:bg-blue-600 hover:bg-[#155c99] dark:hover:bg-blue-700 px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70 transition"
                 >
                   {saving ? "Menyimpan..." : "Simpan Perbaikan"}
                 </button>
