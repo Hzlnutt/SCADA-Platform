@@ -956,7 +956,7 @@ export const machineGroups: MachineGroup[] = [
     category: "Air",
     units: [
       { id: "hvac-qc-lab", label: "QC Lab" },
-      { id: "hvac-qc-retained-sample", label: "QC Retained Sample" },
+      { id: "hvac-qc-retained-sample", label: "AHU-01 Retained" },
       { id: "hvac-wh-3", label: "WH-3" },
       { id: "hvac-wh-4", label: "WH-4" },
       { id: "hvac-wh-5", label: "WH-5" },
