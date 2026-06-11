@@ -15,6 +15,11 @@ export const MachineTabs = ({ basePath }: MachineTabsProps) => {
           tone="tabs"
         />
         <NavItem
+          to={`${basePath}/historian`}
+          label="Historian"
+          tone="tabs"
+        />
+        <NavItem
           to={`${basePath}/statistics`}
           label="Trend Analysis"
           tone="tabs"

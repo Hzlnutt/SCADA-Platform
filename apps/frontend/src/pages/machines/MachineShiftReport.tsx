@@ -4,6 +4,7 @@ import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { getUnitById } from "../../data/machines";
 import { getJson, postJson } from "../../services/api.client";
 import { useAuthStore } from "../../store/auth.store";
+import { utils, writeFile } from "xlsx";
 import type { MachineOutletContext } from "./MachineLayout";
 
 type ShiftReportItem = {
@@ -96,6 +97,26 @@ export default function MachineShiftReport() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleExport = () => {
+    const rows = records.map((record) => ({
+      Tanggal: new Date(record.reportDate).toLocaleDateString("id-ID"),
+      Shift: record.shift,
+      Mulai: record.start,
+      Selesai: record.end,
+      "Runtime (jam)": record.runtimeHours,
+      "Downtime (jam)": record.downtimeHours,
+      Output: record.output,
+      Energi: record.energy,
+      Notes: record.notes || "—",
+      Status: record.approvalStatus || "approved"
+    }));
+
+    const worksheet = utils.json_to_sheet(rows);
+    const workbook = utils.book_new();
+    utils.book_append_sheet(workbook, worksheet, "Laporan Shift");
+    writeFile(workbook, `shift_report_${machine.id}.xlsx`);
+  };
+
   const submitForm = async () => {
     setSaving(true);
     setError(null);
@@ -155,14 +176,23 @@ export default function MachineShiftReport() {
               Ringkasan shift untuk {machine.name}.
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setFormOpen(true)}
-            disabled={!canCreate}
-            className="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Input Shift Report
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleExport}
+              className="rounded-full border border-slate-700 bg-white dark:bg-slate-900/50 hover:bg-[#1f6fb5]/10 px-4 py-1.5 text-xs font-semibold text-[#002b5c] dark:text-slate-300 transition"
+            >
+              Export Report
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormOpen(true)}
+              disabled={!canCreate}
+              className="rounded-full border border-slate-700 bg-[#1f6fb5] hover:bg-[#155c99] px-4 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 transition"
+            >
+              Input Shift Report
+            </button>
+          </div>
         </div>
       </div>
 

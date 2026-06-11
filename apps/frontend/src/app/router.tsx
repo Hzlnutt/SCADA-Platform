@@ -22,6 +22,10 @@ import MachineShiftReport from "../pages/machines/MachineShiftReport";
 import MachinePidDiagram from "../pages/machines/MachinePidDiagram";
 import MachinesOverview from "../pages/machines/MachinesOverview";
 import MachineGroupOverview from "../pages/machines/MachineGroupOverview";
+import MachineHistorian from "../pages/machines/MachineHistorian";
+import MachineAlarm from "../pages/machines/MachineAlarm";
+import MachineEnergy from "../pages/machines/MachineEnergy";
+import MachineConfig from "../pages/machines/MachineConfig";
 import Approvals from "../pages/Approvals";
 import Thresholds from "../pages/Thresholds";
 import MachineHealth from "../pages/MachineHealth";
@@ -54,9 +58,13 @@ export const AppRouter = () => {
               <Route path=":groupId/:unitId" element={<MachineLayout />}>
                 <Route index element={<MachineOverview />} />
                 <Route path="pid-diagram" element={<MachinePidDiagram />} />
+                <Route path="historian" element={<MachineHistorian />} />
                 <Route path="statistics" element={<MachineStatistics />} />
                 <Route path="maintenance" element={<MachineMaintenance />} />
                 <Route path="shift-report" element={<MachineShiftReport />} />
+                <Route path="alarm" element={<MachineAlarm />} />
+                <Route path="energy" element={<MachineEnergy />} />
+                <Route path="configuration" element={<MachineConfig />} />
               </Route>
             </Route>
             <Route path="devices" element={<Devices />} />

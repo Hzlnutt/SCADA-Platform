@@ -10,7 +10,6 @@ export const MobileNav = () => {
     { to: "/machines", label: "Machines" },
     { to: "/devices", label: "Devices" },
     { to: "/alarms", label: "Alarms" },
-    { to: "/historian", label: "Historian" },
     { to: "/analytics", label: "Analytics" },
     { to: "/listrik", label: "Listrik" },
     { to: "/gas", label: "Gas" },

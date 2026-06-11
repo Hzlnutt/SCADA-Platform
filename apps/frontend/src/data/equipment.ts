@@ -232,3 +232,48 @@ export const wwtpEquipment: EquipmentItem[] = [
 ];
 
 export const allEquipment = [...utilityEquipment, ...hvacEquipment, ...wwtpEquipment];
+
+export type ConfigEqRow = {
+  tagKey: string;
+  tagName: string;
+  baseline: number;
+  lowLimit: number;
+  highLimit: number;
+  unit: string;
+  enableAlert: boolean;
+  suppressAlert: boolean;
+  status: "ON" | "OFF" | "—";
+};
+
+export const DEFAULT_EQ_CONFIGS: ConfigEqRow[] = [
+  { tagKey: "F-1", tagName: "Fan F-1 Running Hours", baseline: 1200, lowLimit: 0, highLimit: 5000, unit: "h", enableAlert: true, suppressAlert: false, status: "OFF" },
+  { tagKey: "F-2", tagName: "Fan F-2 Running Hours", baseline: 980, lowLimit: 0, highLimit: 5000, unit: "h", enableAlert: true, suppressAlert: false, status: "OFF" },
+  { tagKey: "F-3", tagName: "Fan F-3 Running Hours", baseline: 110, lowLimit: 0, highLimit: 5000, unit: "h", enableAlert: true, suppressAlert: false, status: "OFF" },
+  { tagKey: "M-1", tagName: "Motor M-1 Running Hours", baseline: 2100, lowLimit: 0, highLimit: 8000, unit: "h", enableAlert: true, suppressAlert: false, status: "OFF" },
+  { tagKey: "M-2", tagName: "Motor M-2 Running Hours", baseline: 542, lowLimit: 0, highLimit: 8000, unit: "h", enableAlert: true, suppressAlert: false, status: "OFF" },
+  { tagKey: "M-3", tagName: "Motor M-3 Running Hours", baseline: 437, lowLimit: 0, highLimit: 8000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "M-4", tagName: "Motor M-4 Running Hours", baseline: 387, lowLimit: 0, highLimit: 8000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "M-5", tagName: "Motor M-5 Running Hours", baseline: 208, lowLimit: 0, highLimit: 8000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "M-6", tagName: "Motor M-6 Running Hours", baseline: 347, lowLimit: 0, highLimit: 8000, unit: "h", enableAlert: true, suppressAlert: false, status: "OFF" },
+  { tagKey: "M-7", tagName: "Motor M-7 Running Hours", baseline: 298, lowLimit: 0, highLimit: 8000, unit: "h", enableAlert: true, suppressAlert: false, status: "OFF" },
+  { tagKey: "M-8", tagName: "Motor M-8 Running Hours", baseline: 503, lowLimit: 0, highLimit: 8000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "M-9", tagName: "Motor M-9 Running Hours", baseline: 689, lowLimit: 0, highLimit: 8000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "DOZING PUMP-1", tagName: "Dosing Pump 1 Running Hours", baseline: 689, lowLimit: 0, highLimit: 2000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "DOZING PUMP-2", tagName: "Dosing Pump 2 Running Hours", baseline: 689, lowLimit: 0, highLimit: 2000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "STRAINER M-1", tagName: "Strainer M-1 Running Hours", baseline: 689, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "STRAINER M-2", tagName: "Strainer M-2 Running Hours", baseline: 689, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "STRAINER M-3", tagName: "Strainer M-3 Running Hours", baseline: 689, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "STRAINER M-4", tagName: "Strainer M-4 Running Hours", baseline: 689, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "STRAINER M-5", tagName: "Strainer M-5 Running Hours", baseline: 689, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "STRAINER M-6", tagName: "Strainer M-6 Running Hours", baseline: 689, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "STRAINER M-7", tagName: "Strainer M-7 Running Hours", baseline: 689, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "STRAINER M-8", tagName: "Strainer M-8 Running Hours", baseline: 689, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "STRAINER M-9", tagName: "Strainer M-9 Running Hours", baseline: 689, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "BASIN CT-1", tagName: "Basin CT-1 Running Hours", baseline: 689, lowLimit: 0, highLimit: 5000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "BASIN CT-2", tagName: "Basin CT-2 Running Hours", baseline: 689, lowLimit: 0, highLimit: 5000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "BASIN CT-3", tagName: "Basin CT-3 Running Hours", baseline: 689, lowLimit: 0, highLimit: 5000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "CELLPAD CT-1", tagName: "Cellpad CT-1 Running Hours", baseline: 0, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: false, suppressAlert: false, status: "—" },
+  { tagKey: "CELLPAD CT-2", tagName: "Cellpad CT-2 Running Hours", baseline: 689, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "CELLPAD CT-3", tagName: "Cellpad CT-3 Running Hours", baseline: 689, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "PANEL", tagName: "Control Panel Running Hours", baseline: 689, lowLimit: 0, highLimit: 10000, unit: "h", enableAlert: true, suppressAlert: false, status: "—" }
+];
