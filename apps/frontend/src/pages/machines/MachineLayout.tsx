@@ -5,7 +5,7 @@ import {
   defaultGroupId,
   defaultUnitId,
   getGroupById,
-  getUnitById
+  getUnitById,
 } from "../../data/machines";
 
 export type MachineOutletContext = {
@@ -29,18 +29,28 @@ export const MachineLayout = () => {
     );
   }
 
+  // Cek apakah ini grup HVAC
+  const isHvac = group.id === "hvac";
+  const basePath = `/machines/${group.id}/${machine.id}`;
+
   return (
-  <div className="h-full flex flex-col">
-    <div className="flex-1 min-h-0 overflow-y-auto">
-      <PageHeader
-      title={machine.name}
-      description={`${group.name} | ${machine.area}`}
-    />
-      <MachineTabs basePath={`/machines/${group.id}/${machine.id}`} />
-      <Outlet
-        context={{ groupId: group.id, unitId: machine.id } satisfies MachineOutletContext}
-      />
+    <div className="h-full flex flex-col">
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <PageHeader
+          title={machine.name}
+          description={`${group.name} | ${machine.area}`}
+        />
+        {/* Hapus hvacUnits={hvacUnits} karena sudah hardcoded di dalam */}
+        <MachineTabs
+          basePath={basePath}
+          isHvacGroup={isHvac}
+          groupId={group.id}
+          currentUnitId={machine.id}
+        />
+        <Outlet
+          context={{ groupId: group.id, unitId: machine.id } satisfies MachineOutletContext}
+        />
+      </div>
     </div>
-  </div>
-);
-}
+  );
+};
