@@ -136,7 +136,6 @@ export const Sidebar = () => {
         <NavItem to="/plant" label="Plant Layout" icon={<IconPlant />} tone="scada" />
         <NavItem to="/machines" label="Machines" icon={<IconMachine />} tone="scada" />
         <NavItem to="/alarms" label="Alarms" icon={<IconAlarm />} tone="scada" />
-        <NavItem to="/historian" label="Historian" icon={<IconHistorian />} tone="scada" />
         <NavItem to="/analytics" label="Analytics" icon={<IconAnalytics />} tone="scada" />
         <NavItem to="/devices" label="Devices" icon={<IconDevice />} tone="scada" />
       </nav>

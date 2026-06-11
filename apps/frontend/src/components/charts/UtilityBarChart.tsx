@@ -13,6 +13,10 @@ type Thresholds = {
   lower?: number | null;
 };
 
+type ThresholdsWithOptions = Thresholds & {
+  unit?: string;
+};
+
 type UtilityBarChartProps = {
   labels: string[];
   values: number[];
@@ -22,15 +26,17 @@ type UtilityBarChartProps = {
   thresholds?: Thresholds;
 };
 
-const thresholdPlugin: Plugin<"bar", Thresholds> = {
+const thresholdPlugin: Plugin<"bar", ThresholdsWithOptions> = {
   id: "thresholdLines",
-  afterDatasetsDraw: (chart: Chart<"bar">, _args: unknown, options: Thresholds) => {
+  afterDatasetsDraw: (chart: Chart<"bar">, _args: unknown, options: ThresholdsWithOptions) => {
     const { ctx, chartArea, scales } = chart;
     if (!chartArea) return;
 
-    const drawLine = (value: number, color: string) => {
+    const drawLine = (value: number, color: string, label: string) => {
       const y = scales.y.getPixelForValue(value);
       ctx.save();
+      
+      // Draw dashed line
       ctx.beginPath();
       ctx.setLineDash([6, 4]);
       ctx.strokeStyle = color;
@@ -38,14 +44,36 @@ const thresholdPlugin: Plugin<"bar", Thresholds> = {
       ctx.moveTo(chartArea.left, y);
       ctx.lineTo(chartArea.right, y);
       ctx.stroke();
+
+      // Draw label box on the left, overlapping the dashed line
+      ctx.font = "bold 9px 'IBM Plex Sans', sans-serif";
+      const textWidth = ctx.measureText(label).width;
+      const boxWidth = textWidth + 8;
+      const boxHeight = 14;
+      const boxX = chartArea.left + 8;
+      const boxY = y - boxHeight / 2;
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 3);
+      } else {
+        ctx.rect(boxX, boxY, boxWidth, boxHeight);
+      }
+      ctx.fill();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "left";
+      ctx.fillText(label, boxX + 4, y);
       ctx.restore();
     };
 
     if (options?.upper !== null && options?.upper !== undefined) {
-      drawLine(options.upper, "rgba(251, 191, 36, 0.9)");
+      drawLine(options.upper, "rgba(239, 68, 68, 0.9)", `Maks: ${options.upper}${options.unit ? ` ${options.unit}` : ""}`);
     }
     if (options?.lower !== null && options?.lower !== undefined) {
-      drawLine(options.lower, "rgba(34, 197, 94, 0.9)");
+      drawLine(options.lower, "rgba(59, 130, 246, 0.9)", `Min: ${options.lower}${options.unit ? ` ${options.unit}` : ""}`);
     }
   }
 };
@@ -67,13 +95,14 @@ export const UtilityBarChart = ({
         backgroundColor: (ctx: ScriptableContext<"bar">) => {
           const { chart } = ctx;
           const { ctx: canvas } = chart;
-          const gradient = canvas.createLinearGradient(0, 0, 0, chart.height);
+          const gradient = canvas.createLinearGradient(0, 0, 0, chart.height || 200);
           gradient.addColorStop(0, `${color}cc`);
           gradient.addColorStop(1, `${color}22`);
           return gradient;
         },
-        borderRadius: 6,
-        maxBarThickness: 24
+        borderWidth: 0,
+        borderRadius: 4,
+        barPercentage: 0.65
       }
     ]
   };
@@ -89,12 +118,18 @@ export const UtilityBarChart = ({
             `${Number(context.parsed.y).toFixed(2)} ${unit}`
         }
       },
-      thresholdLines: thresholds
+      thresholdLines: { ...thresholds, unit }
     },
     scales: {
       x: {
         grid: { display: false },
-        ticks: { color: "rgba(148, 163, 184, 0.8)", font: { size: 10 } }
+        ticks: {
+          color: "rgba(148, 163, 184, 0.8)",
+          font: { size: 10 },
+          maxRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: 12
+        }
       },
       y: {
         grid: { color: "rgba(51, 65, 85, 0.4)" },

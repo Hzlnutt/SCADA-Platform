@@ -505,7 +505,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-4 grid gap-4 grid-cols-1 md:grid-cols-2">
           {/* Listrik */}
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <div className="flex items-center justify-between">
@@ -679,7 +679,7 @@ export default function Dashboard() {
         </div>
 
         {/* 4 YTD cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Listrik YTD</div>
             <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">

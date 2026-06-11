@@ -160,6 +160,9 @@ export default function Historian() {
           points={data}
           unit={selectedTag.unit}
           heightClassName="h-72"
+          minThreshold={selectedTag.normalMin}
+          maxThreshold={selectedTag.normalMax}
+          title={selectedTag.name}
         />
         <div className="mt-5 overflow-x-auto">
           <table className="w-full text-left text-sm">
