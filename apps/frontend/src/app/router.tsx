@@ -38,6 +38,9 @@ import Wwtp from "../pages/utilities/Wwtp";
 import UtilityOverview from "../pages/utilities/UtilityOverview";
 import Tasks from "../pages/Tasks";
 
+// ✅ IMPORT KOMPONEN CUSTOM TAB
+import MachineCustomTab from "../pages/machines/MachineCustomTab";
+
 export const AppRouter = () => {
   return (
     <BrowserRouter>
@@ -52,11 +55,18 @@ export const AppRouter = () => {
             <Route path="analytics" element={<Analytics />} />
             <Route path="plant-layout" element={<PlantLayout />} />
             <Route path="plant" element={<Navigate to="/plant-layout" replace />} />
+            
             <Route path="machines">
               <Route index element={<MachinesOverview />} />
               <Route path=":groupId" element={<MachineGroupOverview />} />
+              
               <Route path=":groupId/:unitId" element={<MachineLayout />}>
                 <Route index element={<MachineOverview />} />
+                
+                {/* ✅ ROUTE GENERIC UNTUK SEMUA CUSTOM TAB */}
+                <Route path="custom-tab/:tabId" element={<MachineCustomTab />} />
+
+                {/* Route standar */}
                 <Route path="pid-diagram" element={<MachinePidDiagram />} />
                 <Route path="historian" element={<MachineHistorian />} />
                 <Route path="statistics" element={<MachineStatistics />} />
@@ -67,6 +77,7 @@ export const AppRouter = () => {
                 <Route path="configuration" element={<MachineConfig />} />
               </Route>
             </Route>
+
             <Route path="devices" element={<Devices />} />
             <Route path="reports" element={<Reports />} />
             <Route path="utility-status" element={<UtilityStatus />} />
