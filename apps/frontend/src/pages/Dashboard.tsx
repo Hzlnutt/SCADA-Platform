@@ -505,120 +505,123 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 grid-cols-1 md:grid-cols-2">
-          {/* Listrik */}
-          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Listrik</div>
-                <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-                  {formatCurrency(electricityCost, "IDR")}
+        <div className="mt-4 grid gap-4 grid-cols-1 md:grid-cols-3">
+          {/* 4 Utility Bar Charts Grid (Left) */}
+          <div className="md:col-span-2 grid gap-4 grid-cols-1 sm:grid-cols-2">
+            {/* Listrik */}
+            <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Listrik</div>
+                  <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
+                    {formatCurrency(electricityCost, "IDR")}
+                  </div>
+                  <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
+                    {electricitySeries.reduce((sum, v) => sum + v, 0).toFixed(1)} kWh
+                  </div>
                 </div>
-                <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                  {electricitySeries.reduce((sum, v) => sum + v, 0).toFixed(1)} kWh
-                </div>
+                <div className="h-2 w-2 rounded-full bg-[#2f8ae5]" />
               </div>
-              <div className="h-2 w-2 rounded-full bg-[#2f8ae5]" />
+              <div className="mt-3">
+                <UtilityBarChart
+                  labels={consumptionLabels}
+                  values={electricitySeries}
+                  unit="kWh"
+                  color="#2f8ae5"
+                  height={160}
+                  thresholds={thresholdKwh ? { upper: thresholdKwh.upper, lower: thresholdKwh.lower } : undefined}
+                />
+              </div>
             </div>
-            <div className="mt-3">
-              <UtilityBarChart
-                labels={consumptionLabels}
-                values={electricitySeries}
-                unit="kWh"
-                color="#2f8ae5"
-                height={160}
-                thresholds={thresholdKwh ? { upper: thresholdKwh.upper, lower: thresholdKwh.lower } : undefined}
-              />
+
+            {/* Gas */}
+            <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Gas</div>
+                  <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
+                    {formatCurrency(gasCostUsd, "USD")}
+                  </div>
+                  <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
+                    {formatCurrency(gasCostIdr, "IDR")} &middot; {gasSeries.reduce((sum, v) => sum + v, 0).toFixed(1)} Sm³
+                  </div>
+                </div>
+                <div className="h-2 w-2 rounded-full bg-[#f4c542]" />
+              </div>
+              <div className="mt-3">
+                <UtilityBarChart
+                  labels={consumptionLabels}
+                  values={gasSeries}
+                  unit="Sm³"
+                  color="#f4c542"
+                  height={160}
+                />
+              </div>
+            </div>
+
+            {/* Air */}
+            <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Air</div>
+                  <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
+                    {formatCurrency(waterCost, "IDR")}
+                  </div>
+                  <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
+                    {waterSeries.reduce((sum, v) => sum + v, 0).toFixed(1)} m³
+                  </div>
+                </div>
+                <div className="h-2 w-2 rounded-full bg-[#3bb77e]" />
+              </div>
+              <div className="mt-3">
+                <UtilityBarChart
+                  labels={consumptionLabels}
+                  values={waterSeries}
+                  unit="m³"
+                  color="#3bb77e"
+                  height={160}
+                />
+              </div>
+            </div>
+
+            {/* Solar Panel */}
+            <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Solar Panel</div>
+                  <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
+                    {formatCurrency(solarSavings, "IDR")}
+                  </div>
+                  <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
+                    {solarSeries.reduce((sum, v) => sum + (v ?? 0), 0).toFixed(1)} kWh
+                  </div>
+                </div>
+                <div className="h-2 w-2 rounded-full bg-[#f59e0b]" />
+              </div>
+              <div className="mt-3">
+                <UtilityBarChart
+                  labels={consumptionLabels}
+                  values={solarSeries}
+                  unit="kWh"
+                  color="#f59e0b"
+                  height={160}
+                />
+              </div>
             </div>
           </div>
 
-          {/* Gas */}
-          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Gas</div>
-                <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-                  {formatCurrency(gasCostUsd, "USD")}
-                </div>
-                <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                  {formatCurrency(gasCostIdr, "IDR")} &middot; {gasSeries.reduce((sum, v) => sum + v, 0).toFixed(1)} Sm³
-                </div>
-              </div>
-              <div className="h-2 w-2 rounded-full bg-[#f4c542]" />
-            </div>
-            <div className="mt-3">
-              <UtilityBarChart
-                labels={consumptionLabels}
-                values={gasSeries}
-                unit="Sm³"
-                color="#f4c542"
-                height={160}
-              />
-            </div>
-          </div>
-
-          {/* Air */}
-          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Air</div>
-                <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-                  {formatCurrency(waterCost, "IDR")}
-                </div>
-                <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                  {waterSeries.reduce((sum, v) => sum + v, 0).toFixed(1)} m³
-                </div>
-              </div>
-              <div className="h-2 w-2 rounded-full bg-[#3bb77e]" />
-            </div>
-            <div className="mt-3">
-              <UtilityBarChart
-                labels={consumptionLabels}
-                values={waterSeries}
-                unit="m³"
-                color="#3bb77e"
-                height={160}
-              />
-            </div>
-          </div>
-
-          {/* Solar Panel */}
-          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Solar Panel</div>
-                <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-                  {formatCurrency(solarSavings, "IDR")}
-                </div>
-                <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                  {solarSeries.reduce((sum, v) => sum + (v ?? 0), 0).toFixed(1)} kWh
-                </div>
-              </div>
-              <div className="h-2 w-2 rounded-full bg-[#f59e0b]" />
-            </div>
-            <div className="mt-3">
-              <UtilityBarChart
-                labels={consumptionLabels}
-                values={solarSeries}
-                unit="kWh"
-                color="#f59e0b"
-                height={160}
-              />
-            </div>
-          </div>
-
-          {/* Distribusi Energi */}
-          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+          {/* Distribusi Energi (Right) */}
+          <div className="md:col-span-1 rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300 flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Distribusi Energi</div>
-                <div className="mt-1 text-sm font-semibold text-[#47729f] dark:text-slate-400">Bulan Ini</div>
+                <div className="mt-1 text-sm font-semibold text-[#47729f] dark:text-slate-400 font-medium">Bulan Ini</div>
               </div>
               <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
                 ≈ {trees.toLocaleString("id-ID")} pohon
               </div>
             </div>
-            <div className="mt-3">
+            <div className="mt-3 flex-1 flex items-center justify-center min-h-[200px]">
               <EnergyDonutChart
                 labels={["Listrik", "Gas", "Air"]}
                 values={[monthlyElectric, monthlyGasEnergy, monthlyWaterEnergy]}

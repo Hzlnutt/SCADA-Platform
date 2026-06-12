@@ -5,6 +5,11 @@ import { getUnitById } from "../../data/machines";
 import { industrialTags } from "../../data/industrial-tags";
 import { getJson } from "../../services/api.client";
 import type { MachineOutletContext } from "./MachineLayout";
+import { useSystemStore } from "../../store/system.store";
+import { DEFAULT_HVAC_CONFIG } from "../../data/equipment";
+import type { HvacConfig } from "../../data/equipment";
+import { Line } from "react-chartjs-2";
+import "../../components/charts/chartjs";
 
 type HistorianDoc = {
   ts: string;
@@ -33,6 +38,12 @@ const ranges = [
 export default function MachineHistorian() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
+  const theme = useSystemStore((state) => state.theme);
+  const isDark = theme === "dark";
+
+  if (unitId === "hvac-qc-retained-sample") {
+    return <HvacHistorian unitId={unitId} theme={theme} isDark={isDark} />;
+  }
 
   const [rangeMinutes, setRangeMinutes] = useState(60);
   const [resolution, setResolution] = useState<"1m" | "1h">("1m");
@@ -217,6 +228,450 @@ export default function MachineHistorian() {
           </table>
         </div>
       </section>
+    </div>
+  );
+}
+
+function calculateMKT(temps: number[]): number {
+  if (temps.length === 0) return 0;
+  // Ea = 83.144 kJ/mol = 83144 J/mol
+  // R = 8.3144 J/(mol*K)
+  // Ea/R = 83144 / 8.3144 = 10000 Kelvin
+  const Ea_R = 10000;
+  const sumExp = temps.reduce((acc, t) => acc + Math.exp(-Ea_R / (t + 273.15)), 0);
+  const avgExp = sumExp / temps.length;
+  const mktK = Ea_R / -Math.log(avgExp);
+  return Number((mktK - 273.15).toFixed(1));
+}
+
+function HvacHistorian({ unitId, theme, isDark }: { unitId: string; theme: string; isDark: boolean }) {
+  const [range, setRange] = useState<"24H" | "7D" | "30D">("24H");
+  const [zoomActive, setZoomActive] = useState(false);
+  const [isReplaying, setIsReplaying] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [refreshCounter, setRefreshCounter] = useState(0);
+
+  const config = useMemo<HvacConfig>(() => {
+    const saved = localStorage.getItem(`scada.config.hvac.${unitId}`);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return DEFAULT_HVAC_CONFIG;
+  }, [unitId]);
+
+  useEffect(() => {
+    setLoading(true);
+    const t = setTimeout(() => setLoading(false), 300);
+    return () => clearTimeout(t);
+  }, [range, refreshCounter]);
+
+  useEffect(() => {
+    if (isReplaying) {
+      setLoading(true);
+      const t = setTimeout(() => {
+        setLoading(false);
+        setIsReplaying(false);
+      }, 800);
+      return () => clearTimeout(t);
+    }
+  }, [isReplaying]);
+
+  const mockData = useMemo(() => {
+    let count = 24;
+    let labelFormat = (i: number) => {
+      const h = (new Date().getHours() - (count - 1 - i) + 24) % 24;
+      return `${h.toString().padStart(2, "0")}:00`;
+    };
+
+    if (range === "7D") {
+      count = 7;
+      const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      const todayIdx = new Date().getDay();
+      labelFormat = (i: number) => {
+        const idx = (todayIdx - (count - 1 - i) + 7) % 7;
+        return days[idx];
+      };
+    } else if (range === "30D") {
+      count = 30;
+      labelFormat = (i: number) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (count - 1 - i));
+        return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+      };
+    }
+
+    const data = [];
+    for (let i = 0; i < count; i++) {
+      const waveVal = Math.sin(i / (count / 6));
+      const cosWave = Math.cos(i / (count / 5));
+
+      let ahu1 = config.ahu1.tempSp + waveVal * 1.5 + (Math.random() - 0.5) * 0.4;
+      let ahu2 = config.ahu2.tempSp + waveVal * 1.4 + (Math.random() - 0.5) * 0.3;
+      let ahu3 = config.ahu3.tempSp + cosWave * 1.2 + (Math.random() - 0.5) * 0.3;
+
+      let ahu2H = config.ahu2.humiditySp + waveVal * 3.2 + (Math.random() - 0.5) * 0.6;
+      let ahu3H = 75.0 + cosWave * 2.5 + (Math.random() - 0.5) * 0.5;
+
+      ahu1 = Math.max(25.8, Math.min(29.1, ahu1));
+      ahu2 = Math.max(38.4, Math.min(41.6, ahu2));
+      ahu3 = Math.max(28.6, Math.min(31.4, ahu3));
+      ahu2H = Math.max(71.2, Math.min(78.9, ahu2H));
+      ahu3H = Math.max(72.1, Math.min(78.2, ahu3H));
+
+      data.push({
+        label: labelFormat(i),
+        ahu1Temp: Number(ahu1.toFixed(1)),
+        ahu2Temp: Number(ahu2.toFixed(1)),
+        ahu3Temp: Number(ahu3.toFixed(1)),
+        ahu2Hum: Number(ahu2H.toFixed(1)),
+        ahu3Hum: Number(ahu3H.toFixed(1))
+      });
+    }
+
+    if (range === "24H" && refreshCounter === 0) {
+      data[2].ahu1Temp = 25.8;
+      data[12].ahu1Temp = 29.1;
+      data[5].ahu2Temp = 38.4;
+      data[15].ahu2Temp = 41.6;
+      data[8].ahu3Temp = 28.6;
+      data[18].ahu3Temp = 31.4;
+      
+      data[3].ahu2Hum = 71.2;
+      data[13].ahu2Hum = 78.9;
+      data[6].ahu3Hum = 72.1;
+      data[16].ahu3Hum = 78.2;
+    }
+
+    return data;
+  }, [range, config, refreshCounter]);
+
+  const stats = useMemo(() => {
+    const getMin = (arr: number[]) => Math.min(...arr);
+    const getMax = (arr: number[]) => Math.max(...arr);
+    const getMean = (arr: number[]) => Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1));
+
+    const ahu1Temps = mockData.map(d => d.ahu1Temp);
+    const ahu2Temps = mockData.map(d => d.ahu2Temp);
+    const ahu3Temps = mockData.map(d => d.ahu3Temp);
+    const ahu2Hums = mockData.map(d => d.ahu2Hum);
+    const ahu3Hums = mockData.map(d => d.ahu3Hum);
+
+    return {
+      ahu1Temp: { min: getMin(ahu1Temps), max: getMax(ahu1Temps), mean: getMean(ahu1Temps), mkt: calculateMKT(ahu1Temps) },
+      ahu2Temp: { min: getMin(ahu2Temps), max: getMax(ahu2Temps), mean: getMean(ahu2Temps), mkt: calculateMKT(ahu2Temps) },
+      ahu3Temp: { min: getMin(ahu3Temps), max: getMax(ahu3Temps), mean: getMean(ahu3Temps), mkt: calculateMKT(ahu3Temps) },
+      ahu2Hum: { min: getMin(ahu2Hums), max: getMax(ahu2Hums), mean: getMean(ahu2Hums), mkt: "—" },
+      ahu3Hum: { min: getMin(ahu3Hums), max: getMax(ahu3Hums), mean: getMean(ahu3Hums), mkt: "—" }
+    };
+  }, [mockData]);
+
+  const downloadCSV = () => {
+    const headers = ["Timestamp", "AHU-01 Temp (degC)", "AHU-02 Temp (degC)", "AHU-03 Temp (degC)", "AHU-02 Humidity (%RH)", "AHU-03 Humidity (%RH)"];
+    const rows = mockData.map((d) => [d.label, d.ahu1Temp, d.ahu2Temp, d.ahu3Temp, d.ahu2Hum, d.ahu3Hum]);
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `hvac_retained_sample_trends_${range}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const printPDF = () => {
+    window.print();
+  };
+
+  const tempChartData = {
+    labels: mockData.map(d => d.label),
+    datasets: [
+      {
+        label: `AHU-01 Temp (Target: ${config.ahu1.lowTemp}-${config.ahu1.highTemp}°C)`,
+        data: mockData.map(d => d.ahu1Temp),
+        borderColor: "rgba(56, 189, 248, 0.9)",
+        backgroundColor: "rgba(56, 189, 248, 0.1)",
+        borderWidth: 2,
+        pointRadius: range === "30D" ? 0 : 2,
+        tension: 0.3
+      },
+      {
+        label: `AHU-02 Temp (Target: ${config.ahu2.tempSp}°C±2°C)`,
+        data: mockData.map(d => d.ahu2Temp),
+        borderColor: "rgba(249, 115, 22, 0.9)",
+        backgroundColor: "rgba(249, 115, 22, 0.1)",
+        borderWidth: 2,
+        pointRadius: range === "30D" ? 0 : 2,
+        tension: 0.3
+      },
+      {
+        label: `AHU-03 Temp (Target: ${config.ahu3.tempSp}°C±2°C)`,
+        data: mockData.map(d => d.ahu3Temp),
+        borderColor: "rgba(167, 139, 250, 0.9)",
+        backgroundColor: "rgba(167, 139, 250, 0.1)",
+        borderWidth: 2,
+        pointRadius: range === "30D" ? 0 : 2,
+        tension: 0.3
+      }
+    ]
+  };
+
+  const humidChartData = {
+    labels: mockData.map(d => d.label),
+    datasets: [
+      {
+        label: `AHU-02 Humidity (Target: ${config.ahu2.humiditySp}%±5%)`,
+        data: mockData.map(d => d.ahu2Hum),
+        borderColor: "rgba(249, 115, 22, 0.8)",
+        backgroundColor: "rgba(249, 115, 22, 0.05)",
+        borderWidth: 2,
+        pointRadius: range === "30D" ? 0 : 2,
+        tension: 0.3
+      },
+      {
+        label: `AHU-03 Humidity (Target: 75%±5%)`,
+        data: mockData.map(d => d.ahu3Hum),
+        borderColor: "rgba(167, 139, 250, 0.8)",
+        backgroundColor: "rgba(167, 139, 250, 0.05)",
+        borderWidth: 2,
+        pointRadius: range === "30D" ? 0 : 2,
+        tension: 0.3
+      }
+    ]
+  };
+
+  const tempOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: {
+          color: isDark ? "#94a3b8" : "#47729f",
+          font: { size: 10, family: "Plus Jakarta Sans", weight: "bold" as const }
+        }
+      },
+      tooltip: { mode: "index" as const, intersect: false }
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { color: isDark ? "#64748b" : "#47729f", font: { size: 9 } }
+      },
+      y: {
+        min: zoomActive ? 22 : 15,
+        max: zoomActive ? 43 : 48,
+        grid: { color: isDark ? "rgba(51, 65, 85, 0.3)" : "rgba(203, 213, 225, 0.4)" },
+        ticks: { color: isDark ? "#64748b" : "#47729f", font: { size: 9 } }
+      }
+    }
+  };
+
+  const humidOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: {
+          color: isDark ? "#94a3b8" : "#47729f",
+          font: { size: 10, family: "Plus Jakarta Sans", weight: "bold" as const }
+        }
+      },
+      tooltip: { mode: "index" as const, intersect: false }
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { color: isDark ? "#64748b" : "#47729f", font: { size: 9 } }
+      },
+      y: {
+        min: zoomActive ? 68 : 60,
+        max: zoomActive ? 82 : 88,
+        grid: { color: isDark ? "rgba(51, 65, 85, 0.3)" : "rgba(203, 213, 225, 0.4)" },
+        ticks: { color: isDark ? "#64748b" : "#47729f", font: { size: 9 } }
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Historical Range and Function Selectors Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-4 transition-colors duration-300 backdrop-blur-sm">
+        <div className="space-y-0.5">
+          <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-extrabold">
+            HVAC QC Retained Sample
+          </div>
+          <div className="text-sm text-[#002b5c] dark:text-slate-300 font-bold">
+            Trend Analysis Dashboard
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Ranges */}
+          <div className="flex rounded-full border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 px-1 py-1 text-xs font-bold shadow-sm">
+            {(["24H", "7D", "30D"] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`rounded-full px-4 py-1.5 transition ${
+                  range === r
+                    ? "bg-[#1f6fb5] text-white shadow-sm"
+                    : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-200"
+                }`}
+              >
+                {r === "24H" ? "24 Hours" : r === "7D" ? "7 Days" : "30 Days"}
+              </button>
+            ))}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl p-1">
+            <button
+              onClick={() => setZoomActive(!zoomActive)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                zoomActive
+                  ? "bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                  : "text-[#47729f] dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/80"
+              }`}
+              title="Zoom to Fit Target Bands"
+            >
+              🔍 Zoom
+            </button>
+            <button
+              onClick={() => setIsReplaying(true)}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold text-[#47729f] dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/80 transition flex items-center gap-1"
+            >
+              🔄 Replay
+            </button>
+            <button
+              onClick={() => setRefreshCounter(c => c + 1)}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold text-[#47729f] dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/80 transition flex items-center gap-1"
+            >
+              🔄 Refresh
+            </button>
+            <button
+              onClick={downloadCSV}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold text-[#47729f] dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/80 transition flex items-center gap-1"
+            >
+              📥 CSV
+            </button>
+            <button
+              onClick={printPDF}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold text-[#47729f] dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/80 transition flex items-center gap-1"
+            >
+              🖨️ PDF
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Charts Stack */}
+      <div className="grid grid-cols-1 gap-6">
+        {/* Temperature Trends Chart */}
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">
+                Room Temperature History
+              </h3>
+              <p className="text-[10px] text-[#47729f] dark:text-slate-500">
+                Hourly temperatures across AHU-01, AHU-02, and AHU-03 compared with setpoint limits.
+              </p>
+            </div>
+            {loading && (
+              <span className="text-xs text-sky-500 font-semibold animate-pulse">
+                Fetching trend series...
+              </span>
+            )}
+          </div>
+          <div className="h-72 min-h-0">
+            <Line data={tempChartData} options={tempOptions} />
+          </div>
+        </div>
+
+        {/* Humidity Trends Chart */}
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">
+                Room Relative Humidity History
+              </h3>
+              <p className="text-[10px] text-[#47729f] dark:text-slate-500">
+                Fluctuation trends of Reference Room (AHU-02) and Stability Room (AHU-03).
+              </p>
+            </div>
+            {loading && (
+              <span className="text-xs text-sky-500 font-semibold animate-pulse">
+                Fetching trend series...
+              </span>
+            )}
+          </div>
+          <div className="h-72 min-h-0">
+            <Line data={humidChartData} options={humidOptions} />
+          </div>
+        </div>
+      </div>
+
+      {/* Statistical Summary Grid */}
+      <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
+        <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide border-b border-[#acd3ff]/30 pb-2 mb-4">
+          Statistical Analysis Summary
+        </h3>
+        <div className="overflow-x-auto border border-[#acd3ff]/50 dark:border-slate-800 rounded-lg">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-[#f7fbff] dark:bg-slate-900/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-extrabold border-b border-[#acd3ff]/50 dark:border-slate-800">
+                <th className="py-3 px-4">Telemetry Parameter Tag</th>
+                <th className="py-3 px-4 text-center">Minimum</th>
+                <th className="py-3 px-4 text-center">Maximum</th>
+                <th className="py-3 px-4 text-center">Arithmetic Mean</th>
+                <th className="py-3 px-4 text-center text-[#1f6fb5] dark:text-sky-400">Mean Kinetic Temp (MKT)*</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-semibold text-[#002b5c] dark:text-slate-300">
+              <tr>
+                <td className="py-3.5 px-4 font-bold">AHU-01 Clean Area Temperature (°C)</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu1Temp.min.toFixed(1)}</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu1Temp.max.toFixed(1)}</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu1Temp.mean.toFixed(1)}</td>
+                <td className="py-3.5 px-4 text-center font-mono font-bold text-sky-500 bg-sky-500/5">{stats.ahu1Temp.mkt} °C</td>
+              </tr>
+              <tr>
+                <td className="py-3.5 px-4 font-bold">AHU-02 Accelerated Temperature (°C)</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu2Temp.min.toFixed(1)}</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu2Temp.max.toFixed(1)}</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu2Temp.mean.toFixed(1)}</td>
+                <td className="py-3.5 px-4 text-center font-mono font-bold text-sky-500 bg-sky-500/5">{stats.ahu2Temp.mkt} °C</td>
+              </tr>
+              <tr>
+                <td className="py-3.5 px-4 font-bold">AHU-03 Long-term Temperature (°C)</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu3Temp.min.toFixed(1)}</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu3Temp.max.toFixed(1)}</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu3Temp.mean.toFixed(1)}</td>
+                <td className="py-3.5 px-4 text-center font-mono font-bold text-sky-500 bg-sky-500/5">{stats.ahu3Temp.mkt} °C</td>
+              </tr>
+              <tr>
+                <td className="py-3.5 px-4 font-bold">AHU-02 Room Relative Humidity (%RH)</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu2Hum.min.toFixed(1)} %</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu2Hum.max.toFixed(1)} %</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu2Hum.mean.toFixed(1)} %</td>
+                <td className="py-3.5 px-4 text-center font-mono text-slate-400 font-normal">—</td>
+              </tr>
+              <tr>
+                <td className="py-3.5 px-4 font-bold">AHU-03 Room Relative Humidity (%RH)</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu3Hum.min.toFixed(1)} %</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu3Hum.max.toFixed(1)} %</td>
+                <td className="py-3.5 px-4 text-center font-mono">{stats.ahu3Hum.mean.toFixed(1)} %</td>
+                <td className="py-3.5 px-4 text-center font-mono text-slate-400 font-normal">—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
+          * Mean Kinetic Temperature (MKT) is calculated dynamically based on the activation energy constant <strong>Ea = 83.144 kJ/mol</strong> and gas constant <strong>R = 8.3144 J/(mol·K)</strong> using the formula: Tk = (Ea / R) / -ln( [e^(-Ea/RT1) + e^(-Ea/RT2) + ... + e^(-Ea/RTn)] / n ).
+        </p>
+      </div>
     </div>
   );
 }

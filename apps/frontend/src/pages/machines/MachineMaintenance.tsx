@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { getUnitById } from "../../data/machines";
-import { DEFAULT_EQ_CONFIGS } from "../../data/equipment";
+import { DEFAULT_EQ_CONFIGS, DEFAULT_HVAC_EQ_CONFIGS } from "../../data/equipment";
 import { getJson, postJson } from "../../services/api.client";
 import { useAuthStore } from "../../store/auth.store";
 import { useSystemStore } from "../../store/system.store";
@@ -142,6 +142,41 @@ export default function MachineMaintenance() {
   };
 
   const healthMatrixItems = useMemo(() => {
+    if (unitId === "hvac-qc-retained-sample") {
+      let eqConfigs = DEFAULT_HVAC_EQ_CONFIGS;
+      const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
+      if (savedEq) {
+        try {
+          eqConfigs = JSON.parse(savedEq);
+        } catch (e) {
+          // fallback
+        }
+      }
+
+      return eqConfigs.map((item) => {
+        const health = item.highLimit > 0
+          ? Math.max(0, Math.min(100, Math.round(((item.highLimit - item.baseline) / item.highLimit) * 100)))
+          : 100;
+        
+        let barColor = "bg-emerald-500";
+        if (health <= 50) barColor = "bg-rose-500";
+        else if (health <= 70) barColor = "bg-orange-500";
+        else if (health <= 85) barColor = "bg-amber-500";
+
+        const lastService = "2026-03-10";
+        const nextService = "2026-09-10";
+
+        return {
+          tag: item.tagName,
+          sub: `Last service: ${lastService} · Next: ${nextService} · P&ID Status: ${item.status}`,
+          run: `${item.baseline.toLocaleString()} / ${item.highLimit.toLocaleString()}`,
+          health,
+          barColor,
+          rem: `${(item.highLimit - item.baseline).toLocaleString()} h`
+        };
+      });
+    }
+
     if (unitId !== "cooling-water-1") {
       return [
         { tag: "AHU-01 Supply Fan", sub: "Last service: 2025-11-04 · Next: 2026-05-10", run: "8,432 / 10,000", health: 94, barColor: "bg-emerald-500", rem: "1,568 h" },
@@ -226,7 +261,7 @@ export default function MachineMaintenance() {
         <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide border-b border-[#acd3ff]/30 pb-2 mb-4">
           Equipment Health Matrix
         </h3>
-        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${unitId === "cooling-water-1" ? "max-h-[520px] overflow-y-auto pr-2" : ""}`}>
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${unitId === "cooling-water-1" || unitId === "hvac-qc-retained-sample" ? "max-h-[520px] overflow-y-auto pr-2" : ""}`}>
           {healthMatrixItems.map((item, idx) => (
             <div
               key={idx}

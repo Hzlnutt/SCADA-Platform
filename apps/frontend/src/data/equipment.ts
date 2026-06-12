@@ -277,3 +277,112 @@ export const DEFAULT_EQ_CONFIGS: ConfigEqRow[] = [
   { tagKey: "CELLPAD CT-3", tagName: "Cellpad CT-3 Running Hours", baseline: 689, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
   { tagKey: "PANEL", tagName: "Control Panel Running Hours", baseline: 689, lowLimit: 0, highLimit: 10000, unit: "h", enableAlert: true, suppressAlert: false, status: "—" }
 ];
+
+export type HvacConfig = {
+  ahu1: {
+    tempSp: number;
+    humiditySp: number;
+    sfCapacity: number;
+    eh1Capacity: number;
+    eh2Capacity: number;
+    coolDownTime: number;
+    highTemp: number;
+    lowTemp: number;
+    highHumidity: number;
+    lowHumidity: number;
+    alarmDelay: number;
+    stopBuzzer: number;
+    dbTemp1: number;
+    dbTemp2: number;
+    dbHumid1: number;
+    dbHumid2: number;
+    dbHumid3: number;
+  };
+  ahu2: {
+    tempSp: number;
+    humiditySp: number;
+    sfCapacity: number;
+    ehCapacity: number;
+    coolDownTime: number;
+    highTemp: number;
+    lowTemp: number;
+    highHumidity: number;
+    lowHumidity: number;
+    alarmDelay: number;
+    stopBuzzer: number;
+    dbTemp1: number;
+    dbTemp2: number;
+    dbHumid1: number;
+    dbHumid2: number;
+    dbHumid3: number;
+  };
+  ahu3: {
+    tempSp: number;
+    highTemp: number;
+    lowTemp: number;
+    alarmDelay: number;
+  };
+};
+
+export const DEFAULT_HVAC_CONFIG: HvacConfig = {
+  ahu1: {
+    tempSp: 27.6,
+    humiditySp: 60.0,
+    sfCapacity: 80,
+    eh1Capacity: 50,
+    eh2Capacity: 40,
+    coolDownTime: 15,
+    highTemp: 30.0,
+    lowTemp: 25.0,
+    highHumidity: 70.0,
+    lowHumidity: 40.0,
+    alarmDelay: 5,
+    stopBuzzer: 10,
+    dbTemp1: 1.0,
+    dbTemp2: 2.0,
+    dbHumid1: 2.0,
+    dbHumid2: 3.0,
+    dbHumid3: 4.0
+  },
+  ahu2: {
+    tempSp: 40.0,
+    humiditySp: 75.1,
+    sfCapacity: 85,
+    ehCapacity: 60,
+    coolDownTime: 10,
+    highTemp: 42.0,
+    lowTemp: 38.0,
+    highHumidity: 80.0,
+    lowHumidity: 70.0,
+    alarmDelay: 5,
+    stopBuzzer: 10,
+    dbTemp1: 1.0,
+    dbTemp2: 2.0,
+    dbHumid1: 2.0,
+    dbHumid2: 3.0,
+    dbHumid3: 4.0
+  },
+  ahu3: {
+    tempSp: 30.0,
+    highTemp: 32.0,
+    lowTemp: 28.0,
+    alarmDelay: 10
+  }
+};
+
+export const DEFAULT_HVAC_EQ_CONFIGS: ConfigEqRow[] = [
+  { tagKey: "UV_LAMP", tagName: "UV Lamp", baseline: 850, lowLimit: 0, highLimit: 2000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "WATER_TANK", tagName: "Water Tank", baseline: 1420, lowLimit: 0, highLimit: 5000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "MTR_WTR_TANK", tagName: "Motor Water Tank", baseline: 2100, lowLimit: 0, highLimit: 8000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "MAKEUP_WTR", tagName: "Make up Water", baseline: 680, lowLimit: 0, highLimit: 3000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "CELLPAD_01", tagName: "Cellpad-01", baseline: 1120, lowLimit: 0, highLimit: 4000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "CELLPAD_02", tagName: "Cellpad-02", baseline: 980, lowLimit: 0, highLimit: 4000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "MTR_DEHUM_01", tagName: "Motor Dehum-01", baseline: 3450, lowLimit: 0, highLimit: 10000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "MTR_DEHUM_02", tagName: "Motor Dehum-02", baseline: 1890, lowLimit: 0, highLimit: 10000, unit: "h", enableAlert: true, suppressAlert: false, status: "OFF" },
+  { tagKey: "EH_01", tagName: "EH-01", baseline: 2450, lowLimit: 0, highLimit: 12000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "EH_02", tagName: "EH-02", baseline: 1200, lowLimit: 0, highLimit: 12000, unit: "h", enableAlert: true, suppressAlert: false, status: "OFF" },
+  { tagKey: "CU_2.1", tagName: "CU-2.1", baseline: 4320, lowLimit: 0, highLimit: 15000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "CU_2.2", tagName: "CU-2.2", baseline: 2150, lowLimit: 0, highLimit: 15000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" },
+  { tagKey: "CU_3.1", tagName: "CU-3.1", baseline: 5230, lowLimit: 0, highLimit: 15000, unit: "h", enableAlert: true, suppressAlert: false, status: "ON" }
+];
+

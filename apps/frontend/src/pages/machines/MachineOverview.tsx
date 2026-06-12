@@ -6,12 +6,18 @@ import { useTelemetryStore } from "../../store/telemetry.store";
 import { useSystemStore } from "../../store/system.store";
 import type { MachineOutletContext } from "./MachineLayout";
 import "../../components/charts/chartjs";
+import { DEFAULT_HVAC_CONFIG } from "../../data/equipment";
+import type { HvacConfig } from "../../data/equipment";
 
 export default function MachineOverview() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
+
+  if (unitId === "hvac-qc-retained-sample") {
+    return <HvacOverview unitId={unitId} theme={theme} isDark={isDark} />;
+  }
 
   // Sub-tab selection: 'telemetry' or 'process'
   const [subTab, setSubTab] = useState<"telemetry" | "process">("telemetry");
@@ -712,16 +718,457 @@ export default function MachineOverview() {
 
           {/* pH & TDS Temp Supply 24H Line Chart */}
           <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
-            <h4 className="text-sm font-extrabold text-[#002b5c] dark:text-slate-100 mb-4 border-b border-[#acd3ff]/30 pb-2 flex items-center justify-between">
-              <span>24H pH, TDS & Temp Supply Trend</span>
-              <span className="text-[10px] text-slate-400">Triple-Axis Integration</span>
-            </h4>
-            <div className="h-64 min-h-0">
-              <Line data={processChartData} options={chartOptions} />
-            </div>
+              <div className="h-64 min-h-0">
+                <Line data={processChartData} options={chartOptions} />
+              </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string; isDark: boolean }) {
+  const config = useMemo<HvacConfig>(() => {
+    const saved = localStorage.getItem(`scada.config.hvac.${unitId}`);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return DEFAULT_HVAC_CONFIG;
+  }, [unitId]);
+
+  const [liveData, setLiveData] = useState({
+    ahu1: { temp: 27.6, supplyAir: 23.4, running: true, fan: true, heater: true, humidifier: true },
+    ahu2: { temp: 40.0, humidity: 75.1, running: true, fan: true, cooling: true, heater: true, humidifier: true },
+    ahu3: { temp: 30.0, humidity: 75.6, running: true, fan: true, cooling: true },
+    ambient: { temp1: 29.8, temp2: 29.9, humidity1: 60.1, humidity2: 59.9 },
+    energyToday: 312.6,
+    runningHours: 25264,
+    equipment: [
+      { area: "DU-03", status: "RUNNING", flow: 43.0, pow: 15.1, hrs: 6789, maint: "Good" },
+      { area: "BP-03", status: "RUNNING", flow: 36.5, pow: 10.8, hrs: 5432, maint: "Good" },
+      { area: "PREP 03", status: "RUNNING", flow: 55.7, pow: 18.5, hrs: 4521, maint: "Warning" },
+      { area: "S1-03", status: "STANDBY", flow: 0.0, pow: 0.0, hrs: 3456, maint: "Good" },
+      { area: "WASHING", status: "RUNNING", flow: 19.3, pow: 7.1, hrs: 2789, maint: "Good" },
+      { area: "MINI LAB", status: "RUNNING", flow: 7.2, pow: 3.3, hrs: 1567, maint: "Good" }
+    ]
+  });
+
+  const [timeStr, setTimeStr] = useState("Sun 07 Jun 2026 - 10:44:13");
+  useEffect(() => {
+    const clockTimer = setInterval(() => {
+      const now = new Date();
+      setTimeStr(now.toLocaleString("en-US", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      }).replace(/,/g, ""));
+    }, 1000);
+    return () => clearInterval(clockTimer);
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setLiveData((prev) => {
+        const drift = (val: number, sp: number) => {
+          const delta = (Math.random() - 0.5) * 0.1;
+          const next = val + delta;
+          return Number((next + (sp - next) * 0.05).toFixed(1));
+        };
+
+        return {
+          ahu1: {
+            ...prev.ahu1,
+            temp: drift(prev.ahu1.temp, config.ahu1.tempSp),
+            supplyAir: drift(prev.ahu1.supplyAir, 23.4)
+          },
+          ahu2: {
+            ...prev.ahu2,
+            temp: drift(prev.ahu2.temp, config.ahu2.tempSp),
+            humidity: drift(prev.ahu2.humidity, config.ahu2.humiditySp)
+          },
+          ahu3: {
+            ...prev.ahu3,
+            temp: drift(prev.ahu3.temp, config.ahu3.tempSp),
+            humidity: drift(prev.ahu3.humidity, 75.0)
+          },
+          ambient: {
+            temp1: drift(prev.ambient.temp1, 29.8),
+            temp2: drift(prev.ambient.temp2, 29.9),
+            humidity1: drift(prev.ambient.humidity1, 60.0),
+            humidity2: drift(prev.ambient.humidity2, 60.0)
+          },
+          energyToday: Number((prev.energyToday + Math.random() * 0.05).toFixed(1)),
+          runningHours: prev.runningHours + (Math.random() > 0.95 ? 1 : 0),
+          equipment: prev.equipment.map((eq) => {
+            if (eq.status === "STANDBY") return eq;
+            return {
+              ...eq,
+              flow: Number((eq.flow + (Math.random() - 0.5) * 0.2).toFixed(1)),
+              pow: Number((eq.pow + (Math.random() - 0.5) * 0.1).toFixed(1))
+            };
+          })
+        };
+      });
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [config]);
+
+  const tempChartData = useMemo(() => {
+    const labels = Array.from({ length: 24 }, (_, i) => {
+      const h = (new Date().getHours() - (23 - i) + 24) % 24;
+      return `${h.toString().padStart(2, "0")}:00`;
+    });
+
+    const ahu1Series = labels.map((_, i) => config.ahu1.tempSp + Math.sin(i / 5) * 0.3 + Math.random() * 0.1);
+    const ahu2Series = labels.map((_, i) => config.ahu2.tempSp + Math.sin(i / 4) * 0.2 + Math.random() * 0.1);
+    const ahu3Series = labels.map((_, i) => config.ahu3.tempSp + Math.cos(i / 6) * 0.3 + Math.random() * 0.1);
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: `AHU-01 (${config.ahu1.lowTemp}-${config.ahu1.highTemp}°C)`,
+          data: ahu1Series,
+          borderColor: "rgba(56, 189, 248, 0.9)",
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3
+        },
+        {
+          label: `AHU-02 (${config.ahu2.tempSp}±2°C)`,
+          data: ahu2Series,
+          borderColor: "rgba(249, 115, 22, 0.9)",
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3
+        },
+        {
+          label: `AHU-03 (${config.ahu3.tempSp}±2°C)`,
+          data: ahu3Series,
+          borderColor: "rgba(167, 139, 250, 0.9)",
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3
+        }
+      ]
+    };
+  }, [config]);
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: {
+          color: isDark ? "#94a3b8" : "#47729f",
+          font: { size: 11, family: "Plus Jakarta Sans", weight: "bold" as const }
+        }
+      },
+      tooltip: { mode: "index" as const, intersect: false }
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { color: isDark ? "#64748b" : "#47729f", font: { size: 9 } }
+      },
+      y: {
+        min: 20,
+        max: 45,
+        grid: { color: isDark ? "rgba(51, 65, 85, 0.3)" : "rgba(203, 213, 225, 0.4)" },
+        ticks: { color: isDark ? "#64748b" : "#47729f", font: { size: 9 } }
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3 bg-slate-900 border border-slate-800 rounded-xl p-3 text-white font-semibold text-[11px] items-center">
+        <div className="flex flex-col px-2 py-1 border-r border-slate-800 col-span-2">
+          <span className="text-[9px] uppercase tracking-wider text-slate-500 font-extrabold">DATE / TIME</span>
+          <span className="font-mono text-xs text-sky-400 font-bold truncate mt-0.5">{timeStr}</span>
+        </div>
+
+        <div className="flex items-center justify-center bg-rose-500/20 text-rose-500 border border-rose-500/30 rounded px-3 py-2 font-black tracking-widest text-xs uppercase animate-pulse">
+          ALARM
+        </div>
+
+        <div className="flex flex-col items-center bg-amber-500/10 text-amber-500 border border-amber-500/30 rounded px-2.5 py-1">
+          <span className="text-[8px] text-slate-500 font-extrabold">ACTIVE ALARMS</span>
+          <span className="text-sm font-bold font-mono">2</span>
+        </div>
+
+        <div className="flex flex-col items-center bg-rose-500/10 text-rose-500 border border-rose-500/30 rounded px-2.5 py-1">
+          <span className="text-[8px] text-slate-500 font-extrabold">CRITICAL</span>
+          <span className="text-sm font-bold font-mono">1</span>
+        </div>
+
+        <div className="flex flex-col px-3 py-1 border-l border-r border-slate-800">
+          <span className="text-[9px] uppercase tracking-wider text-slate-500 font-extrabold">ENERGY TODAY</span>
+          <span className="font-mono text-xs text-emerald-400 font-bold truncate mt-0.5">{liveData.energyToday.toFixed(1)} kWh</span>
+        </div>
+
+        <div className="flex flex-col px-3 py-1 border-r border-slate-800">
+          <span className="text-[9px] uppercase tracking-wider text-slate-500 font-extrabold">RUNNING HRS</span>
+          <span className="font-mono text-xs text-slate-300 font-bold truncate mt-0.5">{liveData.runningHours.toLocaleString()}</span>
+        </div>
+
+        <div className="flex items-center justify-center bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded px-3 py-2 font-bold text-xs uppercase">
+          CO2
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border-b border-[#acd3ff]/30 dark:border-slate-800/40 flex items-center justify-between">
+            <div>
+              <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-01 · CLEAN AREA</span>
+              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">Retained Sample Room</h4>
+            </div>
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
+              NORMAL
+            </span>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu1.lowTemp}-{config.ahu1.highTemp}°C</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE</span>
+                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">SUPPLY AIR</span>
+                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.supplyAir.toFixed(1)} <span className="text-xs">°C</span></span>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900">
+              {[
+                { label: "AHU-01", status: liveData.ahu1.running },
+                { label: "FAN", status: liveData.ahu1.fan },
+                { label: "HEATER", status: liveData.ahu1.heater },
+                { label: "HUMID", status: liveData.ahu1.humidifier }
+              ].map((ind, iIdx) => (
+                <div key={iIdx} className="flex flex-col items-center p-1 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase truncate w-full text-center">{ind.label}</span>
+                  <span className={`w-2 h-2 rounded-full mt-1.5 ${ind.status ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-950 border border-rose-500/20 dark:border-rose-500/10 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
+          <div className="p-3.5 bg-rose-500/5 dark:bg-rose-950/10 border-b border-rose-500/10 flex items-center justify-between">
+            <div>
+              <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-02 · ACCELERATED</span>
+              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">Reference Room</h4>
+            </div>
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-rose-500/10 text-rose-500 border border-rose-500/20 uppercase tracking-wider animate-pulse">
+              ALARM
+            </span>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu2.tempSp}°C ± 2°C · RH: {config.ahu2.humiditySp}% ± 5%</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE</span>
+                <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM HUMIDITY</span>
+                <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.humidity.toFixed(1)} <span className="text-xs">%RH</span></span>
+              </div>
+            </div>
+            <div className="grid grid-cols-5 gap-1 pt-2 border-t border-slate-100 dark:border-slate-900">
+              {[
+                { label: "AHU-02", status: liveData.ahu2.running },
+                { label: "FAN", status: liveData.ahu2.fan },
+                { label: "COOL", status: liveData.ahu2.cooling },
+                { label: "HEATER", status: liveData.ahu2.heater },
+                { label: "HUMID", status: liveData.ahu2.humidifier }
+              ].map((ind, iIdx) => (
+                <div key={iIdx} className="flex flex-col items-center p-1 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
+                  <span className="text-[7.5px] font-bold text-slate-400 uppercase truncate w-full text-center">{ind.label}</span>
+                  <span className={`w-2 h-2 rounded-full mt-1.5 ${ind.status ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border-b border-[#acd3ff]/30 dark:border-slate-800/40 flex items-center justify-between">
+            <div>
+              <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-03 · LONG-TERM</span>
+              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">Stability Room</h4>
+            </div>
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
+              NORMAL
+            </span>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu3.tempSp}°C ± 2°C · RH: 75% ± 5%</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE</span>
+                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM HUMIDITY</span>
+                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.humidity.toFixed(1)} <span className="text-xs">%RH</span></span>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900">
+              {[
+                { label: "AHU-03", status: liveData.ahu3.running },
+                { label: "FAN", status: liveData.ahu3.fan },
+                { label: "COOLING", status: liveData.ahu3.cooling }
+              ].map((ind, iIdx) => (
+                <div key={iIdx} className="flex flex-col items-center p-1 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase truncate w-full text-center">{ind.label}</span>
+                  <span className={`w-2 h-2 rounded-full mt-1.5 ${ind.status ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-[#f8fafc] dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-4 shadow-sm transition hover:shadow-md flex flex-col justify-between">
+          <div className="border-b border-[#acd3ff]/30 dark:border-slate-800/40 pb-2 mb-3">
+            <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">Ambient Temp & RH</h4>
+            <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">Dual Sensors Integration</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-xs flex-1">
+            <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-900 flex flex-col justify-center">
+              <span className="text-[8px] text-slate-400 uppercase font-bold">Ambient Temp 1</span>
+              <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 font-mono mt-0.5">{liveData.ambient.temp1.toFixed(1)} °C</span>
+            </div>
+            <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-900 flex flex-col justify-center">
+              <span className="text-[8px] text-slate-400 uppercase font-bold">Ambient Temp 2</span>
+              <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 font-mono mt-0.5">{liveData.ambient.temp2.toFixed(1)} °C</span>
+            </div>
+            <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-900 flex flex-col justify-center">
+              <span className="text-[8px] text-slate-400 uppercase font-bold">Ambient RH 1</span>
+              <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 font-mono mt-0.5">{liveData.ambient.humidity1.toFixed(1)} %</span>
+            </div>
+            <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-900 flex flex-col justify-center">
+              <span className="text-[8px] text-slate-400 uppercase font-bold">Ambient RH 2</span>
+              <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 font-mono mt-0.5">{liveData.ambient.humidity2.toFixed(1)} %</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm">
+          <h4 className="text-sm font-extrabold text-[#002b5c] dark:text-slate-100 mb-4 border-b border-[#acd3ff]/30 pb-2 uppercase tracking-wide">
+            Equipment Status & Area Matrix
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
+                  <th className="pb-3 px-3">Area</th>
+                  <th className="pb-3 px-3">Status</th>
+                  <th className="pb-3 px-3 text-right">Flow (m³/h)</th>
+                  <th className="pb-3 px-3 text-right">Power (kW)</th>
+                  <th className="pb-3 px-3 text-right">Running Hours</th>
+                  <th className="pb-3 px-3 text-center">Maintenance</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-[#002b5c] dark:text-slate-300">
+                {liveData.equipment.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
+                    <td className="py-2.5 px-3 font-bold">{row.area}</td>
+                    <td className="py-2.5 px-3">
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${
+                        row.status === "RUNNING"
+                          ? "bg-emerald-500/15 text-emerald-500"
+                          : "bg-amber-500/15 text-amber-500"
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${row.status === "RUNNING" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+                        {row.status}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono">{row.flow.toFixed(1)}</td>
+                    <td className="py-2.5 px-3 text-right font-mono">{row.pow.toFixed(1)}</td>
+                    <td className="py-2.5 px-3 text-right font-mono text-[#47729f] dark:text-slate-500">{row.hrs.toLocaleString()}</td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                        row.maint === "Good"
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                      }`}>
+                        {row.maint}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm flex flex-col justify-between transition-colors duration-300">
+          <div>
+            <div className="mb-4 flex items-center justify-between border-b border-[#acd3ff]/50 dark:border-slate-800/50 pb-2">
+              <h3 className="text-xs font-extrabold text-[#002b5c] dark:text-slate-100 flex items-center gap-2 uppercase tracking-wider">
+                <svg className="w-4 h-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                LATEST ALARMS
+              </h3>
+            </div>
+            <div className="space-y-2.5">
+              {[
+                { title: "Reference Room Temp High (42.4°C)", loc: "AHU-02", time: "08:42:11", type: "Critical", tone: "bg-rose-500/10 text-rose-500 border border-rose-500/30" },
+                { title: "RO-EDI Compressor Trip", loc: "AHU-02 / CU-02A", time: "08:31:05", type: "Major", tone: "bg-orange-500/10 text-orange-500 border border-orange-500/30" },
+                { title: "Humidifier water level low", loc: "AHU-03", time: "07:12:03", type: "Minor", tone: "bg-sky-500/10 text-sky-500 border border-sky-500/30" },
+                { title: "AHU-01 switched to Auto Mode", loc: "AHU-01", time: "06:20:18", type: "Info", tone: "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30" }
+              ].map((alarm, idx) => (
+                <div key={idx} className="flex items-start justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 hover:border-sky-300 dark:hover:border-slate-700 transition">
+                  <div className="space-y-0.5">
+                    <div className="text-[10px] font-bold text-[#002b5c] dark:text-slate-200 line-clamp-1">
+                      {alarm.title}
+                    </div>
+                    <div className="text-[8px] text-[#47729f] dark:text-slate-500 font-mono">
+                      {alarm.loc} | {alarm.time}
+                    </div>
+                  </div>
+                  <span className={`text-[7.5px] font-extrabold uppercase px-1.5 py-0.5 rounded ${alarm.tone}`}>
+                    {alarm.type}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-900 text-center">
+            <Link
+              to="../alarm"
+              className="text-xs font-bold text-[#1f6fb5] hover:text-[#002b5c] dark:hover:text-slate-200 hover:underline"
+            >
+              View All Alarms &rarr;
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm">
+        <h4 className="text-sm font-extrabold text-[#002b5c] dark:text-slate-100 mb-4 border-b border-[#acd3ff]/30 pb-2 uppercase tracking-wide flex justify-between items-center">
+          <span>24H TEMPERATURE OVERVIEW</span>
+          <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold">Clean Area, Reference & Stability Rooms</span>
+        </h4>
+        <div className="h-64">
+          <Line data={tempChartData} options={chartOptions} />
+        </div>
+      </div>
     </div>
   );
 }

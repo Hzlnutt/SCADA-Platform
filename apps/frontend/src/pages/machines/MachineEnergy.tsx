@@ -113,43 +113,124 @@ function PowerDemandOscilloscope() {
   );
 }
 
+// Radial Gauge Component matching Power Quality Mockup
+function RadialGauge({ label, value, unit, min = 0, max = 100, color = "#10b981" }: { label: string, value: number, unit: string, min?: number, max?: number, color?: string }) {
+  const pct = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  const r = 35;
+  const circ = 2 * Math.PI * r;
+  const angleRange = 240;
+  const arcLength = (angleRange / 360) * circ;
+  const strokeDashoffset = arcLength - pct * arcLength;
+
+  return (
+    <div className="flex flex-col items-center justify-between p-4 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-xl shadow-sm transition hover:scale-[1.01]">
+      <div className="relative w-28 h-20 flex items-center justify-center">
+        <svg className="w-full h-full transform -rotate-[210deg]" viewBox="0 0 100 100">
+          <circle
+            cx="50"
+            cy="50"
+            r={r}
+            fill="none"
+            stroke="#e2e8f0"
+            className="dark:stroke-slate-800"
+            strokeWidth="8"
+            strokeDasharray={`${arcLength} ${circ}`}
+            strokeLinecap="round"
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth="8"
+            strokeDasharray={`${arcLength} ${circ}`}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+          />
+        </svg>
+        <div className="absolute bottom-2 flex flex-col items-center">
+          <span className="text-sm font-extrabold font-mono text-[#002b5c] dark:text-slate-100">{value.toFixed(2)}{unit}</span>
+        </div>
+      </div>
+      <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500 tracking-wider text-center mt-2">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// Progress Bar Row Component for Tegangan & Arus
+function ProgressBarRow({ label, val, unit, nominal }: { label: string, val: number, unit: string, nominal: number }) {
+  const pct = Math.max(0, Math.min(100, (val / (nominal * 1.25)) * 100));
+  const barColors: Record<string, string> = {
+    L1: "bg-rose-500",
+    L2: "bg-amber-400",
+    L3: "bg-sky-400"
+  };
+
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between items-center text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+        <span className="font-extrabold">{label}</span>
+        <span className="font-mono font-bold text-[#002b5c] dark:text-slate-200">{val.toFixed(1)} {unit}</span>
+      </div>
+      <div className="w-full bg-slate-100 dark:bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-200/30 dark:border-slate-800/40">
+        <div className={`h-full ${barColors[label] || "bg-sky-500"} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 export default function MachineEnergy() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
 
-  // State to simulate drifting real-time grid metrics
-  const [metrics, setMetrics] = useState({
-    voltage: 414.2,
-    current: 190.5,
-    frequency: 49.97,
-    pf: 0.92,
-    activePower: 122.4,
-    apparentPower: 124.1,
-    reactivePower: 48.47,
-    energy: 284567,
-    thdVoltage: 2.97,
-    thdCurrent: 7.79,
-    vUnbalance: 0.93,
-    iUnbalance: 1.22
+  // State to simulate drifting real-time grid metrics matching mockup specs
+  const [pqData, setPqData] = useState({
+    activePower: 101.4,
+    reactivePower: 46.1,
+    apparentPower: 111.4,
+    pf: 0.91,
+
+    vll1: 399.5, vll2: 400.2, vll3: 402.8,
+    vln1: 229.1, vln2: 229.2, vln3: 228.9,
+    current1: 165.3, current2: 163.7, current3: 165.2,
+
+    freq: 49.92,
+    vUnb: 1.04,
+    iUnb: 2.64,
+    thdV: 3.15,
+    thdI: 9.82
   });
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setMetrics((prev) => ({
-        voltage: Number((414 + (Math.random() - 0.5) * 1.5).toFixed(1)),
-        current: Number((190 + (Math.random() - 0.5) * 2.0).toFixed(1)),
-        frequency: Number((49.95 + Math.random() * 0.05).toFixed(2)),
-        pf: Number((0.91 + Math.random() * 0.02).toFixed(2)),
-        activePower: Number((120 + (Math.random() - 0.5) * 3).toFixed(1)),
-        apparentPower: Number((123 + (Math.random() - 0.5) * 3).toFixed(1)),
-        reactivePower: Number((48 + (Math.random() - 0.5) * 0.8).toFixed(2)),
-        energy: prev.energy + Math.floor(Math.random() * 2),
-        thdVoltage: Number((2.8 + Math.random() * 0.3).toFixed(2)),
-        thdCurrent: Number((7.5 + Math.random() * 0.5).toFixed(2)),
-        vUnbalance: Number((0.9 + Math.random() * 0.06).toFixed(2)),
-        iUnbalance: Number((1.1 + Math.random() * 0.15).toFixed(2))
+      setPqData((prev) => ({
+        activePower: Number((101.4 + (Math.random() - 0.5) * 1.5).toFixed(1)),
+        reactivePower: Number((46.1 + (Math.random() - 0.5) * 0.8).toFixed(1)),
+        apparentPower: Number((111.4 + (Math.random() - 0.5) * 1.5).toFixed(1)),
+        pf: Number((0.91 + (Math.random() - 0.5) * 0.01).toFixed(2)),
+
+        vll1: Number((399.5 + (Math.random() - 0.5) * 1.0).toFixed(1)),
+        vll2: Number((400.2 + (Math.random() - 0.5) * 1.0).toFixed(1)),
+        vll3: Number((402.8 + (Math.random() - 0.5) * 1.0).toFixed(1)),
+
+        vln1: Number((229.1 + (Math.random() - 0.5) * 0.5).toFixed(1)),
+        vln2: Number((229.2 + (Math.random() - 0.5) * 0.5).toFixed(1)),
+        vln3: Number((228.9 + (Math.random() - 0.5) * 0.5).toFixed(1)),
+
+        current1: Number((165.3 + (Math.random() - 0.5) * 1.5).toFixed(1)),
+        current2: Number((163.7 + (Math.random() - 0.5) * 1.5).toFixed(1)),
+        current3: Number((165.2 + (Math.random() - 0.5) * 1.5).toFixed(1)),
+
+        freq: Number((49.92 + (Math.random() - 0.5) * 0.04).toFixed(2)),
+        vUnb: Number((1.04 + (Math.random() - 0.5) * 0.05).toFixed(2)),
+        iUnb: Number((2.64 + (Math.random() - 0.5) * 0.1).toFixed(2)),
+        thdV: Number((3.15 + (Math.random() - 0.5) * 0.1).toFixed(2)),
+        thdI: Number((9.82 + (Math.random() - 0.5) * 0.2).toFixed(2))
       }));
     }, 3000);
     return () => clearInterval(timer);
@@ -246,6 +327,10 @@ export default function MachineEnergy() {
     const m3 = days.map((_, i) => 12 + Math.sin(i / 3) * 2 + Math.random());
     const m4 = days.map((_, i) => 16 + Math.cos(i / 5) * 2 + Math.random());
     const m5 = days.map((_, i) => 14 + Math.sin(i / 4) * 2 + Math.random());
+    const m6 = days.map((_, i) => 15 + Math.cos(i / 3) * 2 + Math.random());
+    const m7 = days.map((_, i) => 13 + Math.sin(i / 5) * 2 + Math.random());
+    const m8 = days.map((_, i) => 17 + Math.cos(i / 4) * 2 + Math.random());
+    const m9 = days.map((_, i) => 14 + Math.sin(i / 3) * 2 + Math.random());
 
     return {
       labels: days,
@@ -254,7 +339,11 @@ export default function MachineEnergy() {
         { label: "MTR-2", data: m2, backgroundColor: "rgba(16, 185, 129, 0.8)" },
         { label: "MTR-3", data: m3, backgroundColor: "rgba(139, 92, 246, 0.8)" },
         { label: "MTR-4", data: m4, backgroundColor: "rgba(249, 115, 22, 0.8)" },
-        { label: "MTR-5", data: m5, backgroundColor: "rgba(100, 116, 139, 0.8)" }
+        { label: "MTR-5", data: m5, backgroundColor: "rgba(100, 116, 139, 0.8)" },
+        { label: "MTR-6", data: m6, backgroundColor: "rgba(236, 72, 153, 0.8)" },
+        { label: "MTR-7", data: m7, backgroundColor: "rgba(234, 179, 8, 0.8)" },
+        { label: "MTR-8", data: m8, backgroundColor: "rgba(20, 184, 166, 0.8)" },
+        { label: "MTR-9", data: m9, backgroundColor: "rgba(99, 102, 241, 0.8)" }
       ]
     };
   }, []);
@@ -332,32 +421,110 @@ export default function MachineEnergy() {
         ))}
       </div>
 
-      {/* Grid Metrics / Power Quality */}
-      <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
-        <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide border-b border-[#acd3ff]/30 pb-2 mb-4">
-          Power Quality & Grid Telemetry
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 text-xs font-medium text-[#002b5c] dark:text-slate-300">
-          {[
-            { label: "Voltage L-L", val: `${metrics.voltage} V` },
-            { label: "Current", val: `${metrics.current} A` },
-            { label: "Frequency", val: `${metrics.frequency} Hz` },
-            { label: "Power Factor", val: `${metrics.pf} PF` },
-            { label: "Active Power", val: `${metrics.activePower} kW` },
-            { label: "Apparent Power", val: `${metrics.apparentPower} kVA` },
-            { label: "Reactive Power", val: `${metrics.reactivePower} kVAR` },
-            { label: "Energy Today", val: `${metrics.energy.toLocaleString()} kWh` },
-            { label: "THD Voltage", val: `${metrics.thdVoltage} %` },
-            { label: "THD Current", val: `${metrics.thdCurrent} %` },
-            { label: "V-Unbalance", val: `${metrics.vUnbalance} %` },
-            { label: "I-Unbalance", val: `${metrics.iUnbalance} %` }
-          ].map((item, idx) => (
-            <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-900 rounded-xl">
-              <div className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 font-bold block">{item.label}</div>
-              <div className="mt-1 text-sm font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400">{item.val}</div>
+      {/* Power Quality & Grid Telemetry Sections matching Mockup */}
+      <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-6 shadow-sm transition-colors duration-300 space-y-6">
+        
+        {/* 1. Daya & Energi */}
+        <div className="space-y-3">
+          <div className="flex items-center border-l-4 border-sky-500 pl-2">
+            <span className="text-xs font-extrabold text-[#002b5c] dark:text-slate-100 uppercase tracking-wider">
+              Daya & Energi
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-xl shadow-sm">
+              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">ACTIVE POWER</span>
+              <div className="mt-1 text-lg font-extrabold text-emerald-500 font-mono">
+                {pqData.activePower.toFixed(1)} kW
+              </div>
             </div>
-          ))}
+            <div className="p-4 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-xl shadow-sm">
+              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">REACTIVE POWER</span>
+              <div className="mt-1 text-lg font-extrabold text-amber-500 font-mono">
+                {pqData.reactivePower.toFixed(1)} kVAR
+              </div>
+            </div>
+            <div className="p-4 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-xl shadow-sm">
+              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">APPARENT POWER</span>
+              <div className="mt-1 text-lg font-extrabold text-indigo-500 dark:text-indigo-400 font-mono">
+                {pqData.apparentPower.toFixed(1)} kVA
+              </div>
+            </div>
+            <div className="p-4 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-xl shadow-sm">
+              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">POWER FACTOR</span>
+              <div className="mt-1 text-lg font-extrabold text-emerald-500 font-mono">
+                {pqData.pf.toFixed(2)}
+              </div>
+              <div className="text-[10px] text-slate-400 font-bold mt-0.5">Baik</div>
+            </div>
+          </div>
         </div>
+
+        {/* 2. Tegangan & Arus */}
+        <div className="space-y-3">
+          <div className="flex items-center border-l-4 border-sky-500 pl-2">
+            <span className="text-xs font-extrabold text-[#002b5c] dark:text-slate-100 uppercase tracking-wider">
+              Tegangan & Arus
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Tegangan L-L */}
+            <div className="p-4 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-xl space-y-3 shadow-sm">
+              <div className="flex justify-between items-baseline">
+                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">TEGANGAN L-L (400 V)</span>
+                <span className="text-[9px] font-bold text-slate-400">Nominal 400 V</span>
+              </div>
+              <div className="space-y-2.5">
+                <ProgressBarRow label="L1" val={pqData.vll1} unit="V" nominal={400} />
+                <ProgressBarRow label="L2" val={pqData.vll2} unit="V" nominal={400} />
+                <ProgressBarRow label="L3" val={pqData.vll3} unit="V" nominal={400} />
+              </div>
+            </div>
+
+            {/* Tegangan L-N */}
+            <div className="p-4 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-xl space-y-3 shadow-sm">
+              <div className="flex justify-between items-baseline">
+                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">TEGANGAN L-N (230 V)</span>
+                <span className="text-[9px] font-bold text-slate-400">Nominal 230 V</span>
+              </div>
+              <div className="space-y-2.5">
+                <ProgressBarRow label="L1" val={pqData.vln1} unit="V" nominal={230} />
+                <ProgressBarRow label="L2" val={pqData.vln2} unit="V" nominal={230} />
+                <ProgressBarRow label="L3" val={pqData.vln3} unit="V" nominal={230} />
+              </div>
+            </div>
+
+            {/* Arus Per Fasa */}
+            <div className="p-4 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-xl space-y-3 shadow-sm">
+              <div className="flex justify-between items-baseline">
+                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">ARUS PER FASA</span>
+                <span className="text-[9px] font-bold text-slate-400">Nominal 197.64 A</span>
+              </div>
+              <div className="space-y-2.5">
+                <ProgressBarRow label="L1" val={pqData.current1} unit="A" nominal={197.64} />
+                <ProgressBarRow label="L2" val={pqData.current2} unit="A" nominal={197.64} />
+                <ProgressBarRow label="L3" val={pqData.current3} unit="A" nominal={197.64} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Kualitas Daya (Power Quality) */}
+        <div className="space-y-3">
+          <div className="flex items-center border-l-4 border-sky-500 pl-2">
+            <span className="text-xs font-extrabold text-[#002b5c] dark:text-slate-100 uppercase tracking-wider">
+              Kualitas Daya (Power Quality)
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <RadialGauge label="FREKUENSI" value={pqData.freq} unit=" Hz" min={48} max={52} color="#10b981" />
+            <RadialGauge label="V UNBALANCE" value={pqData.vUnb} unit=" %" min={0} max={5} color="#10b981" />
+            <RadialGauge label="I UNBALANCE" value={pqData.iUnb} unit=" %" min={0} max={10} color="#f59e0b" />
+            <RadialGauge label="THD VOLTAGE" value={pqData.thdV} unit=" %" min={0} max={10} color="#f59e0b" />
+            <RadialGauge label="THD CURRENT" value={pqData.thdI} unit=" %" min={0} max={20} color="#ef4444" />
+          </div>
+        </div>
+
       </div>
 
       {/* Real-time Oscilloscope Grid */}
