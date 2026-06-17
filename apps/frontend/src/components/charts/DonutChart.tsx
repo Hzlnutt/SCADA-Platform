@@ -40,7 +40,7 @@ export const DonutChart = ({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="#d6e9fb"
+          className="stroke-[#d6e9fb] dark:stroke-slate-800"
           strokeWidth={thickness}
           fill="none"
         />
@@ -58,17 +58,18 @@ export const DonutChart = ({
               strokeDashoffset={segment.dashOffset}
               fill="none"
               strokeLinecap="round"
+              className="transition-[stroke-dasharray,stroke-dashoffset] duration-750 ease-out"
               transform={`rotate(-90 ${size / 2} ${size / 2})`}
             />
           );
         })}
       </svg>
       {centerLabel ? (
-        <div className="absolute text-center text-xs text-[#47729f]">
-          <div className="text-lg font-semibold text-[#002b5c]">
+        <div className="absolute text-center text-[10px] text-[#47729f] dark:text-slate-400 font-medium">
+          <div className="text-base font-bold text-[#002b5c] dark:text-slate-100 leading-tight">
             {centerLabel}
           </div>
-          <div>Total</div>
+          <div className="mt-0.5">Total</div>
         </div>
       ) : null}
     </div>

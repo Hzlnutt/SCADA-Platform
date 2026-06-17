@@ -8,7 +8,7 @@ export const AppLayout = () => {
     <div className="min-h-screen bg-[#eaf4ff] dark:bg-slate-950 text-[#002b5c] dark:text-slate-100 transition-colors duration-300">
       <div className="flex">
         <Sidebar />
-        <main className="scada-content min-h-screen flex-1">
+        <main className="scada-content min-h-screen flex-1 min-w-0 overflow-x-hidden">
           <Topbar />
           <div className="lg:hidden">
             <MobileNav />

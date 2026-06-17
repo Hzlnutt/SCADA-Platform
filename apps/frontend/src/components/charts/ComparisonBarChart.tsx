@@ -78,15 +78,20 @@ export const ComparisonBarChart = ({
                 className="flex h-full flex-1 flex-col justify-end"
                 onMouseLeave={() => setHoverState(null)}
               >
-                <div className="flex h-full items-end gap-1">
+                <div className="flex h-full items-end gap-1.5">
                   {previous ? (
                     <div
                       className={[
-                        "w-1/2 rounded-t bg-slate-600/70 transition",
-                        highlightPrevious ? "bg-slate-300" : "",
-                        dimPrevious ? "opacity-40" : ""
+                        "w-1/2 rounded-t transition shadow-sm",
+                        highlightPrevious 
+                          ? "bg-gradient-to-t from-slate-400 to-slate-300" 
+                          : "bg-gradient-to-t from-slate-500 to-slate-400 dark:from-slate-700 dark:to-slate-500",
+                        dimPrevious ? "opacity-30" : ""
                       ].join(" ")}
-                      style={{ height: `${(previousValue / maxValue) * 100}%` }}
+                      style={{ 
+                        height: `${(previousValue / maxValue) * 100}%`,
+                        transition: "height 0.6s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s"
+                      }}
                       onMouseEnter={() =>
                         setHoverState({ index, series: "previous" })
                       }
@@ -95,17 +100,22 @@ export const ComparisonBarChart = ({
                   <div
                     className={[
                       previous ? "w-1/2" : "w-full",
-                      "rounded-t bg-cyan-500/70 transition",
-                      highlightCurrent ? "bg-cyan-300" : "",
-                      dimCurrent ? "opacity-40" : ""
+                      "rounded-t transition shadow-[0_0_8px_rgba(6,182,212,0.15)]",
+                      highlightCurrent 
+                        ? "bg-gradient-to-t from-cyan-400 to-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.4)]" 
+                        : "bg-gradient-to-t from-cyan-600 to-cyan-400 dark:from-cyan-500 dark:to-sky-400",
+                      dimCurrent ? "opacity-30" : ""
                     ].join(" ")}
-                    style={{ height: `${(currentValue / maxValue) * 100}%` }}
+                    style={{ 
+                      height: `${(currentValue / maxValue) * 100}%`,
+                      transition: "height 0.6s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s"
+                    }}
                     onMouseEnter={() =>
                       setHoverState({ index, series: "current" })
                     }
                   />
                 </div>
-                <div className="mt-2 text-center text-[10px] text-slate-500">
+                <div className="mt-2 text-center text-[10px] text-slate-500 dark:text-slate-400">
                   {label}
                 </div>
               </div>

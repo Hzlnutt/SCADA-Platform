@@ -164,6 +164,11 @@ export const TrendChart = ({
     : "";
   const minThresholdLabelWidth = minThresholdLabel.length * 5.2 + 10;
 
+  const dotX = hoverData ? hoverData.x : paddingX + ((numericPoints.length - 1) / Math.max(numericPoints.length - 1, 1)) * plotWidth;
+  const dotY = hoverData ? hoverData.y : paddingY + (1 - (latest.value - min) / range) * plotHeight;
+  const dotXPercent = (dotX / width) * 100;
+  const dotYPercent = (dotY / height) * 100;
+
   return (
     <div ref={containerRef} className={`${heightClassName} min-h-0 relative`}>
       <div className="mb-3 flex items-center justify-between gap-3 text-xs text-[#47729f] dark:text-slate-400">
@@ -259,16 +264,19 @@ export const TrendChart = ({
             />
           )}
 
-          {/* End value dot or hovered dot */}
-          <circle
-            cx={hoverData ? hoverData.x : paddingX + ((numericPoints.length - 1) / Math.max(numericPoints.length - 1, 1)) * plotWidth}
-            cy={hoverData ? hoverData.y : paddingY + (1 - (latest.value - min) / range) * plotHeight}
-            r="5"
-            fill={hoverData ? "#14b8a6" : "#0f766e"}
-            stroke={hoverData ? "#ffffff" : "transparent"}
-            strokeWidth="1.5"
-          />
         </svg>
+
+        {/* HTML overlay for indicator dot to prevent horizontal stretching */}
+        <div
+          className="absolute pointer-events-none rounded-full w-2.5 h-2.5 border border-white shadow-sm transition-all duration-150 ease-out"
+          style={{
+            left: `${dotXPercent}%`,
+            top: `${dotYPercent}%`,
+            transform: "translate(-50%, -50%)",
+            backgroundColor: hoverData ? "#14b8a6" : "#0f766e",
+            boxShadow: hoverData ? "0 0 10px rgba(20, 184, 166, 0.8)" : "none"
+          }}
+        />
 
         {/* HTML overlays for thresholds to prevent horizontal text stretching */}
         {isWithinBounds(minThreshold) && (

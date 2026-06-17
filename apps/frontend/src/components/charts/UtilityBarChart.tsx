@@ -7,6 +7,7 @@ import type {
   TooltipItem
 } from "chart.js";
 import "./chartjs";
+import { useSystemStore } from "../../store/system.store";
 
 type Thresholds = {
   upper?: number | null;
@@ -86,6 +87,9 @@ export const UtilityBarChart = ({
   height = 200,
   thresholds
 }: UtilityBarChartProps) => {
+  const theme = useSystemStore((state) => state.theme);
+  const isDark = theme === "dark";
+
   const data = {
     labels,
     datasets: [
@@ -94,10 +98,11 @@ export const UtilityBarChart = ({
         data: values,
         backgroundColor: (ctx: ScriptableContext<"bar">) => {
           const { chart } = ctx;
-          const { ctx: canvas } = chart;
-          const gradient = canvas.createLinearGradient(0, 0, 0, chart.height || 200);
-          gradient.addColorStop(0, `${color}cc`);
-          gradient.addColorStop(1, `${color}22`);
+          const { ctx: canvas, chartArea } = chart;
+          if (!chartArea) return `${color}aa`;
+          const gradient = canvas.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          gradient.addColorStop(0, `${color}ee`);
+          gradient.addColorStop(1, `${color}11`);
           return gradient;
         },
         borderWidth: 0,
@@ -110,9 +115,30 @@ export const UtilityBarChart = ({
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    animation: {
+      duration: 1000,
+      easing: "easeOutQuart" as const
+    },
+    hover: {
+      mode: "index" as const,
+      intersect: false
+    },
+    transitions: {
+      active: {
+        animation: {
+          duration: 250
+        }
+      }
+    },
     plugins: {
       legend: { display: false },
       tooltip: {
+        backgroundColor: isDark ? "rgba(13, 21, 39, 0.95)" : "rgba(255, 255, 255, 0.95)",
+        titleColor: isDark ? "rgba(241, 245, 249, 0.9)" : "rgba(15, 23, 42, 0.9)",
+        bodyColor: isDark ? "rgba(241, 245, 249, 0.9)" : "rgba(15, 23, 42, 0.9)",
+        borderColor: isDark ? "rgba(51, 65, 85, 0.5)" : "rgba(203, 213, 225, 0.5)",
+        borderWidth: 1,
+        padding: 8,
         callbacks: {
           label: (context: TooltipItem<"bar">) =>
             `${Number(context.parsed.y).toFixed(2)} ${unit}`
@@ -124,7 +150,7 @@ export const UtilityBarChart = ({
       x: {
         grid: { display: false },
         ticks: {
-          color: "rgba(148, 163, 184, 0.8)",
+          color: isDark ? "rgba(148, 163, 184, 0.8)" : "rgba(71, 85, 105, 0.8)",
           font: { size: 10 },
           maxRotation: 0,
           autoSkip: true,
@@ -132,9 +158,9 @@ export const UtilityBarChart = ({
         }
       },
       y: {
-        grid: { color: "rgba(51, 65, 85, 0.4)" },
+        grid: { color: isDark ? "rgba(51, 65, 85, 0.4)" : "rgba(203, 213, 225, 0.6)" },
         ticks: {
-          color: "rgba(148, 163, 184, 0.8)",
+          color: isDark ? "rgba(148, 163, 184, 0.8)" : "rgba(71, 85, 105, 0.8)",
           callback: (value: number) => `${value}`
         }
       }
