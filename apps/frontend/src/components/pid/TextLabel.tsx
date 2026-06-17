@@ -9,6 +9,7 @@ type Props = {
   h?: number;
   hasBorder?: boolean;
   fontSize?: number;
+  bgColor?: string; // tambahan opsi warna background
 };
 
 const LabelComponent: React.FC<Props> = ({
@@ -19,6 +20,7 @@ const LabelComponent: React.FC<Props> = ({
   h = 60,
   hasBorder = false,
   fontSize: customFontSize,
+  bgColor,
 }) => {
   const isDark = useIsDark();
   const padding = 8;
@@ -36,6 +38,10 @@ const LabelComponent: React.FC<Props> = ({
 
   const fontSize = customFontSize ?? autoFontSize;
 
+  // Tentukan warna background
+  const defaultBg = isDark ? "#1e293b" : "white";
+  const fillColor = bgColor ?? defaultBg;
+
   return (
     <g>
       {hasBorder && (
@@ -44,7 +50,7 @@ const LabelComponent: React.FC<Props> = ({
           y={y}
           width={w}
           height={h}
-          fill={isDark ? "#1e293b" : "white"}
+          fill={fillColor}
           rx={2}
         />
       )}
