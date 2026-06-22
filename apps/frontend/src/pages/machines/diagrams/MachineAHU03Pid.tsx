@@ -195,24 +195,39 @@ export default function MachineAHU01Pid({
         paddingTop={20}
         />
 
-        <LabelComponent text="R. T-03 A" x={545} y={300} w={120} h={35} hasBorder={true} fontSize={13}/>
+        <LabelComponent text="R. T-03 A" x={545} y={320} w={120} h={35} hasBorder={true} fontSize={13}/>
         <SensorIndicator 
-        x={545} y={340} 
+        x={545} y={360} 
         w={120} h={35}
         value={0.0} unit=" °C" 
         warningThreshold={0} alarmThreshold={0} 
         thresholdDirection="above" 
         decimalPlaces={1}
         />
-        <LabelComponent text="R. T-03 B" x={545} y={430} w={120} h={35} hasBorder={true} fontSize={13}/>
+        <LabelComponent text="R. T-03 B" x={545} y={410} w={120} h={35} hasBorder={true} fontSize={13}/>
           <SensorIndicator 
-        x={545} y={470} 
+        x={545} y={450} 
         w={120} h={35}
         value={0.0} unit=" °C" 
         warningThreshold={0} alarmThreshold={0} 
         thresholdDirection="above" 
         decimalPlaces={1}
         />
+
+          <DashedLine x={135} y={462} w={20} h={0} />
+          <DashedLine x={135} y={493} w={20} h={0} />
+          <DashedLine x={155} y={155} w={0} h={339} />
+          <DashedLine x={130} y={155} w={30} h={0} />
+
+          <LabelComponent text="PF-03" x={20} y={450} w={110} h={25} hasBorder={true} fontSize={13}/>
+         <SensorIndicator 
+          x={20} y={480} 
+          w={110} h={30}
+          value={0.0} unit=" Pa" 
+          warningThreshold={0} alarmThreshold={0} 
+          thresholdDirection="above" 
+          decimalPlaces={1}
+          />
 
     </svg>
   );

@@ -397,6 +397,21 @@ export default function MachineAHU01Pid({
               value={running} // true = ON (hijau), false = OFF (merah)
               mode="onoff"
               />
+
+        <LabelComponent text="PF-02" x={750} y={13} w={110} h={25} hasBorder={true} fontSize={13}/>
+         <SensorIndicator 
+          x={750} y={43} 
+          w={110} h={30}
+          value={0.0} unit=" Pa" 
+          warningThreshold={0} alarmThreshold={0} 
+          thresholdDirection="above" 
+          decimalPlaces={1}
+          />
+
+          <DashedLine x={130} y={25} w={615} h={0} />
+          <DashedLine x={730} y={57} w={20} h={0} />
+          <DashedLine x={730} y={30} w={0} h={30} />
+          <DashedLine x={130} y={25} w={0} h={60} />
     </svg>
   );
 }
