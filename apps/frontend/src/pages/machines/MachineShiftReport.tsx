@@ -61,29 +61,35 @@ export default function MachineShiftReport() {
     }
 
     let active = true;
-    setLoading(true);
     const statusParam = role === "user" ? "approved" : "all";
-    getJson<ShiftReportListResponse>(
-      `/machines/${machine.id}/shift-reports?limit=100&status=${statusParam}`
-    )
-      .then((result) => {
-        if (active) {
-          setRecords(result.data);
-        }
-      })
-      .catch((err) => {
-        if (active) {
-          setError(err instanceof Error ? err.message : "Gagal memuat data");
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
-      });
+
+    const fetchRecords = () => {
+      getJson<ShiftReportListResponse>(
+        `/machines/${machine.id}/shift-reports?limit=100&status=${statusParam}`
+      )
+        .then((result) => {
+          if (active) {
+            setRecords(result.data);
+          }
+        })
+        .catch((err) => {
+          if (active) {
+            setError(err instanceof Error ? err.message : "Failed to load data");
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setLoading(false);
+          }
+        });
+    };
+
+    fetchRecords();
+    const interval = setInterval(fetchRecords, 5000);
 
     return () => {
       active = false;
+      clearInterval(interval);
     };
   }, [machine, role]);
 
@@ -99,21 +105,21 @@ export default function MachineShiftReport() {
 
   const handleExport = () => {
     const rows = records.map((record) => ({
-      Tanggal: new Date(record.reportDate).toLocaleDateString("id-ID"),
+      Date: new Date(record.reportDate).toLocaleDateString("en-US"),
       Shift: record.shift,
-      Mulai: record.start,
-      Selesai: record.end,
-      "Runtime (jam)": record.runtimeHours,
-      "Downtime (jam)": record.downtimeHours,
+      Start: record.start,
+      End: record.end,
+      "Runtime (hours)": record.runtimeHours,
+      "Downtime (hours)": record.downtimeHours,
       Output: record.output,
-      Energi: record.energy,
+      Energy: record.energy,
       Notes: record.notes || "—",
       Status: record.approvalStatus || "approved"
     }));
 
     const worksheet = utils.json_to_sheet(rows);
     const workbook = utils.book_new();
-    utils.book_append_sheet(workbook, worksheet, "Laporan Shift");
+    utils.book_append_sheet(workbook, worksheet, "Shift Report");
     writeFile(workbook, `shift_report_${machine.id}.xlsx`);
   };
 
@@ -153,7 +159,7 @@ export default function MachineShiftReport() {
       });
       setFormOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal menyimpan data");
+      setError(err instanceof Error ? err.message : "Failed to save data");
     } finally {
       setSaving(false);
     }
@@ -173,7 +179,7 @@ export default function MachineShiftReport() {
               Shift Report
             </div>
             <div className="mt-2 text-sm text-slate-300">
-              Ringkasan shift untuk {machine.name}.
+              Shift summary log for {machine.name}.
             </div>
           </div>
           <div className="flex gap-2">
@@ -206,7 +212,7 @@ export default function MachineShiftReport() {
                     Form Shift Report
                   </div>
                   <div className="mt-1 text-sm text-[#47729f] dark:text-slate-400">
-                    Tambahkan laporan shift baru.
+                    Add a new shift report log.
                   </div>
                 </div>
                 <button
@@ -220,7 +226,7 @@ export default function MachineShiftReport() {
               <form onSubmit={handleSubmit} className="mt-5 space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="text-xs text-[#47729f] dark:text-slate-400">
-                    Tanggal
+                    Date
                     <input
                       type="date"
                       value={form.reportDate}
@@ -264,7 +270,7 @@ export default function MachineShiftReport() {
                     />
                   </label>
                   <label className="text-xs text-[#47729f] dark:text-slate-400">
-                    Runtime (jam)
+                    Runtime (hours)
                     <input
                       type="number"
                       step="0.1"
@@ -275,7 +281,7 @@ export default function MachineShiftReport() {
                     />
                   </label>
                   <label className="text-xs text-[#47729f] dark:text-slate-400">
-                    Downtime (jam)
+                    Downtime (hours)
                     <input
                       type="number"
                       step="0.1"
@@ -327,7 +333,7 @@ export default function MachineShiftReport() {
                   disabled={saving}
                   className="rounded-full bg-[#1f6fb5] dark:bg-blue-600 hover:bg-[#155c99] dark:hover:bg-blue-700 px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70 transition"
                 >
-                  {saving ? "Menyimpan..." : "Simpan Shift Report"}
+                  {saving ? "Saving..." : "Save Shift Report"}
                 </button>
               </form>
             </div>
@@ -335,23 +341,23 @@ export default function MachineShiftReport() {
         ) : null
       ) : (
         <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-4 text-xs text-slate-500">
-          Hanya operator, team head, leader, atau admin yang dapat menambahkan shift report.
+          Only operators, team heads, leaders, or admins can submit shift reports.
         </div>
       )}
 
       <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-4">
         <div className="overflow-x-auto">
           {loading ? (
-            <div className="text-sm text-slate-400">Memuat data...</div>
+            <div className="text-sm text-slate-400">Loading data...</div>
           ) : records.length === 0 ? (
             <div className="text-sm text-slate-400">
-              Belum ada data shift report.
+              No shift reports submitted yet.
             </div>
           ) : (
             <table className="w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">Tanggal</th>
+                  <th className="px-3 py-2">Date</th>
                   <th className="px-3 py-2">Shift</th>
                   <th className="px-3 py-2">Start</th>
                   <th className="px-3 py-2">End</th>
@@ -402,10 +408,10 @@ export default function MachineShiftReport() {
 
       <ConfirmDialog
         open={confirmOpen}
-        title="Konfirmasi simpan shift report"
-        description="Apakah Anda yakin ingin menyimpan laporan shift ini?"
-        confirmText="Ya"
-        cancelText="Tidak"
+        title="Confirm Shift Report Submission"
+        description="Are you sure you want to save this shift report?"
+        confirmText="Yes"
+        cancelText="No"
         onConfirm={() => {
           setConfirmOpen(false);
           submitForm();

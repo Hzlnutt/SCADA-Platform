@@ -1,4 +1,4 @@
-import { getAccessToken } from "../store/auth.store";
+import { getAccessToken, useAuthStore } from "../store/auth.store";
 
 const rawBaseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 const baseUrl = rawBaseUrl.replace(/\/$/, "");
@@ -17,6 +17,12 @@ const request = async (path: string, options?: RequestInit) => {
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      useAuthStore.getState().clearSession();
+      if (typeof window !== "undefined" && window.location.pathname !== "/login" && window.location.pathname !== "/register") {
+        window.location.href = "/login";
+      }
+    }
     const message = await response.text();
     throw new Error(message || "Request failed");
   }
@@ -46,5 +52,11 @@ export const patchJson = async <T>(path: string, body: unknown) => {
   return request(path, {
     method: "PATCH",
     body: JSON.stringify(body)
+  }) as Promise<T>;
+};
+
+export const deleteJson = async <T>(path: string) => {
+  return request(path, {
+    method: "DELETE"
   }) as Promise<T>;
 };

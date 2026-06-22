@@ -17,7 +17,16 @@ import type {
   RefreshInput
 } from "./auth.validation";
 
-export type UserRole = "admin" | "leader" | "operator" | "team_head" | "user";
+export type UserRole =
+  | "admin"
+  | "senior_unit_head"
+  | "unit_head"
+  | "kashift_utility_hvac"
+  | "kashift_utility"
+  | "kashift_hvac"
+  | "leader"
+  | "operator"
+  | "user";
 
 type UserDoc = {
   _id: ObjectId;

@@ -1,0 +1,45 @@
+# docker-compose.prod.yml
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  gateway-proxy:
+    restart: unless-stopped
+
+  frontend:
+    restart: unless-stopped
+
+  backend:
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - MONGODB_URI=mongodb://scada:ScadaW1datra2026!@mongo:27017/scada?authSource=admin
+      - MONGODB_DB=scada
+      - CORS_ORIGIN=http://localhost
+      - DUMMY_MODE=true
+      - REDIS_URL=redis://redis:6379
+
+  mongo:
+    restart: unless-stopped
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=scada
+      - MONGO_INITDB_ROOT_PASSWORD=ScadaW1datra2026!
+    volumes:
+      - scada_mongo:/data/db
+      - scada_mongo_config:/data/configdb
+    ports:
+      - "127.0.0.1:27017:27017"
+    command: ["mongod", "--wiredTigerCacheSizeGB", "2"]
+
+  redis:
+    restart: unless-stopped
+    volumes:
+      - scada_redis:/data
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb"]
+
+volumes:
+  scada_mongo:
+  scada_mongo_config:
+  scada_redis:

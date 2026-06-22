@@ -101,11 +101,11 @@ export const updateUserProfile = async (id: string, input: UpdateProfileInput) =
     { returnDocument: "after", projection: { passwordHash: 0 } }
   );
 
-  if (!result.value) {
+  if (!result) {
     throw createError("User not found", 404);
   }
 
-  return result.value;
+  return result;
 };
 
 export const updateUserRole = async (id: string, input: UpdateUserInput) => {
@@ -118,9 +118,46 @@ export const updateUserRole = async (id: string, input: UpdateUserInput) => {
     { returnDocument: "after", projection: { passwordHash: 0 } }
   );
 
-  if (!result.value) {
+  if (!result) {
     throw createError("User not found", 404);
   }
 
-  return result.value;
+  return result;
+};
+
+export const deleteUser = async (id: string) => {
+  const db = getMongoDb();
+  const users = db.collection<UserDoc>(USERS_COLLECTION);
+  const result = await users.deleteOne({ _id: new ObjectId(id) });
+  if (result.deletedCount === 0) {
+    throw createError("User not found", 404);
+  }
+  return { success: true };
+};
+
+export const listOperators = async () => {
+  const db = getMongoDb();
+  const users = db.collection<UserDoc>(USERS_COLLECTION);
+
+  return users
+    .find(
+      {
+        role: {
+          $in: [
+            "operator",
+            "kashift_utility_hvac",
+            "kashift_utility",
+            "kashift_hvac",
+            "leader",
+            "admin",
+            "senior_unit_head",
+            "unit_head"
+          ]
+        },
+        status: "active"
+      },
+      { projection: { passwordHash: 0 } }
+    )
+    .sort({ name: 1 })
+    .toArray();
 };

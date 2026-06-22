@@ -111,10 +111,10 @@ export const UserMenu = () => {
 
       <ConfirmDialog
         open={confirmLogout}
-        title="Konfirmasi logout"
-        description="Apakah Anda yakin ingin keluar dari sistem?"
-        confirmText="Ya"
-        cancelText="Tidak"
+        title="Confirm Logout"
+        description="Are you sure you want to log out of the system?"
+        confirmText="Yes"
+        cancelText="No"
         onConfirm={handleLogout}
         onCancel={() => setConfirmLogout(false)}
       />

@@ -243,6 +243,8 @@ export type ConfigEqRow = {
   enableAlert: boolean;
   suppressAlert: boolean;
   status: "ON" | "OFF" | "—";
+  runHoursBeforeMaintenance?: number;
+  runHoursLifetime?: number;
 };
 
 export const DEFAULT_EQ_CONFIGS: ConfigEqRow[] = [

@@ -62,17 +62,9 @@ export const registerHandler = async (
   next: NextFunction
 ) => {
   try {
-    const parsed = registerSchema.parse(req.body);
-    const result = await register(parsed);
-
-    await recordAudit({
-      actorId: result.user.id,
-      action: "auth.register",
-      resourceType: "user",
-      resourceId: result.user.id
-    });
-
-    res.status(201).json(result);
+    const err = new Error("Self-registration is disabled. Contact your administrator.") as Error & { statusCode?: number };
+    err.statusCode = 403;
+    throw err;
   } catch (err) {
     next(err);
   }

@@ -150,10 +150,10 @@ function RadialGauge({ label, value, unit, min = 0, max = 100, color = "#10b981"
           />
         </svg>
         <div className="absolute bottom-2 flex flex-col items-center">
-          <span className="text-sm font-extrabold font-mono text-[#002b5c] dark:text-slate-100">{value.toFixed(2)}{unit}</span>
+          <span className="text-xs font-extrabold font-mono text-[#002b5c] dark:text-slate-100">{value.toFixed(2)}{unit}</span>
         </div>
       </div>
-      <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500 tracking-wider text-center mt-2">
+      <span className="text-[9px] font-extrabold uppercase text-[#47729f] dark:text-slate-500 tracking-wider text-center mt-2">
         {label}
       </span>
     </div>
@@ -187,6 +187,33 @@ export default function MachineEnergy() {
   const machine = getUnitById(unitId);
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
+
+  // Interactive rates keyed by unitId
+  const [electricityRate, setElectricityRate] = useState(() => {
+    const saved = localStorage.getItem(`scada.tariff.electricity.${unitId}`);
+    return saved ? Number(saved) : 0.12;
+  });
+  const [gasRate, setGasRate] = useState(() => {
+    const saved = localStorage.getItem(`scada.tariff.gas.${unitId}`);
+    return saved ? Number(saved) : 0.45;
+  });
+  const [waterRate, setWaterRate] = useState(() => {
+    const saved = localStorage.getItem(`scada.tariff.water.${unitId}`);
+    return saved ? Number(saved) : 1.50;
+  });
+
+  const handleRateChange = (type: "electricity" | "gas" | "water", val: number) => {
+    if (type === "electricity") {
+      setElectricityRate(val);
+      localStorage.setItem(`scada.tariff.electricity.${unitId}`, val.toString());
+    } else if (type === "gas") {
+      setGasRate(val);
+      localStorage.setItem(`scada.tariff.gas.${unitId}`, val.toString());
+    } else if (type === "water") {
+      setWaterRate(val);
+      localStorage.setItem(`scada.tariff.water.${unitId}`, val.toString());
+    }
+  };
 
   // State to simulate drifting real-time grid metrics matching mockup specs
   const [pqData, setPqData] = useState({
@@ -390,16 +417,42 @@ export default function MachineEnergy() {
 
   if (!machine) return null;
 
+  // Real calculated consumptions based on unit specs
+  const dailyElectricity = machine.dailyBase ?? 3000;
+  const dailyGas = (machine.groupId === "boiler-plant" || machine.id.includes("boiler")) ? (dailyElectricity * 0.8) : 0;
+  const dailyWater = (
+    machine.groupId === "cooling-water-system" ||
+    machine.groupId === "water-treatment" ||
+    machine.groupId === "boiler-plant" ||
+    machine.id.includes("ro") ||
+    machine.id.includes("distillate") ||
+    machine.id.includes("pw") ||
+    machine.id.includes("wfi")
+  ) ? (machine.outputBase ?? 500) : 0;
+
+  const dailyElectricityCost = dailyElectricity * electricityRate;
+  const dailyGasCost = dailyGas * gasRate;
+  const dailyWaterCost = dailyWater * waterRate;
+
+  const totalDailyCost = dailyElectricityCost + dailyGasCost + dailyWaterCost;
+  const totalMonthlyCost = totalDailyCost * 30.437;
+  const totalYearlyCost = totalDailyCost * 365;
+
+  const electricityToday = dailyElectricity;
+  const electricityMonthly = dailyElectricity * 30.437 / 1000;
+  const electricityYearly = dailyElectricity * 365 / 1000;
+  const co2Emitted = dailyElectricity * 0.82 * 30.437 / 1000;
+
   return (
     <div className="space-y-6">
       {/* Today / Monthly / Cost Highlights row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
-          { label: "Today", value: "313 kWh", change: "-4.5% vs yesterday", status: "decrease" },
-          { label: "Monthly", value: "8.81 MWh", change: "-3.4% vs last month", status: "decrease" },
-          { label: "Yearly", value: "102.4 MWh", change: "FY 2026 Active", status: "neutral" },
-          { label: "CO2 Emitted", value: "31.2 t", change: "Monthly emission", status: "neutral" },
-          { label: "Energy Cost", value: "$14,580", change: "Monthly projection", status: "neutral" }
+          { label: "Today", value: `${electricityToday.toLocaleString()} kWh`, change: "Daily average", status: "neutral" },
+          { label: "Monthly", value: `${electricityMonthly.toFixed(1)} MWh`, change: "Monthly average", status: "neutral" },
+          { label: "Yearly", value: `${electricityYearly.toFixed(0)} MWh`, change: "Yearly average", status: "neutral" },
+          { label: "CO2 Emitted", value: `${co2Emitted.toFixed(1)} t`, change: "Monthly offset", status: "neutral" },
+          { label: "Energy Cost", value: `$${totalMonthlyCost.toLocaleString(undefined, {maximumFractionDigits: 0})}`, change: "Monthly cost", status: "neutral" }
         ].map((card, idx) => (
           <div
             key={idx}
@@ -412,9 +465,7 @@ export default function MachineEnergy() {
               {card.value}
             </div>
             <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500 font-semibold">
-              <span className={`w-1.5 h-1.5 rounded-full ${
-                card.status === "decrease" ? "bg-emerald-500" : "bg-sky-500"
-              }`} />
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
               <span>{card.change}</span>
             </div>
           </div>
@@ -424,11 +475,11 @@ export default function MachineEnergy() {
       {/* Power Quality & Grid Telemetry Sections matching Mockup */}
       <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-6 shadow-sm transition-colors duration-300 space-y-6">
         
-        {/* 1. Daya & Energi */}
+        {/* 1. Power & Energy */}
         <div className="space-y-3">
           <div className="flex items-center border-l-4 border-sky-500 pl-2">
             <span className="text-xs font-extrabold text-[#002b5c] dark:text-slate-100 uppercase tracking-wider">
-              Daya & Energi
+              Power & Energy
             </span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -455,23 +506,23 @@ export default function MachineEnergy() {
               <div className="mt-1 text-lg font-extrabold text-emerald-500 font-mono">
                 {pqData.pf.toFixed(2)}
               </div>
-              <div className="text-[10px] text-slate-400 font-bold mt-0.5">Baik</div>
+              <div className="text-[10px] text-slate-400 font-bold mt-0.5">Good</div>
             </div>
           </div>
         </div>
 
-        {/* 2. Tegangan & Arus */}
+        {/* 2. Voltage & Current */}
         <div className="space-y-3">
           <div className="flex items-center border-l-4 border-sky-500 pl-2">
             <span className="text-xs font-extrabold text-[#002b5c] dark:text-slate-100 uppercase tracking-wider">
-              Tegangan & Arus
+              Voltage & Current
             </span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Tegangan L-L */}
             <div className="p-4 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-xl space-y-3 shadow-sm">
               <div className="flex justify-between items-baseline">
-                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">TEGANGAN L-L (400 V)</span>
+                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">VOLTAGE L-L (400 V)</span>
                 <span className="text-[9px] font-bold text-slate-400">Nominal 400 V</span>
               </div>
               <div className="space-y-2.5">
@@ -484,7 +535,7 @@ export default function MachineEnergy() {
             {/* Tegangan L-N */}
             <div className="p-4 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-xl space-y-3 shadow-sm">
               <div className="flex justify-between items-baseline">
-                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">TEGANGAN L-N (230 V)</span>
+                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">VOLTAGE L-N (230 V)</span>
                 <span className="text-[9px] font-bold text-slate-400">Nominal 230 V</span>
               </div>
               <div className="space-y-2.5">
@@ -497,7 +548,7 @@ export default function MachineEnergy() {
             {/* Arus Per Fasa */}
             <div className="p-4 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-xl space-y-3 shadow-sm">
               <div className="flex justify-between items-baseline">
-                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">ARUS PER FASA</span>
+                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">CURRENT PER PHASE</span>
                 <span className="text-[9px] font-bold text-slate-400">Nominal 197.64 A</span>
               </div>
               <div className="space-y-2.5">
@@ -509,15 +560,15 @@ export default function MachineEnergy() {
           </div>
         </div>
 
-        {/* 3. Kualitas Daya (Power Quality) */}
+        {/* 3. Power Quality */}
         <div className="space-y-3">
           <div className="flex items-center border-l-4 border-sky-500 pl-2">
             <span className="text-xs font-extrabold text-[#002b5c] dark:text-slate-100 uppercase tracking-wider">
-              Kualitas Daya (Power Quality)
+              Power Quality
             </span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <RadialGauge label="FREKUENSI" value={pqData.freq} unit=" Hz" min={48} max={52} color="#10b981" />
+            <RadialGauge label="FREQUENCY" value={pqData.freq} unit=" Hz" min={48} max={52} color="#10b981" />
             <RadialGauge label="V UNBALANCE" value={pqData.vUnb} unit=" %" min={0} max={5} color="#10b981" />
             <RadialGauge label="I UNBALANCE" value={pqData.iUnb} unit=" %" min={0} max={10} color="#f59e0b" />
             <RadialGauge label="THD VOLTAGE" value={pqData.thdV} unit=" %" min={0} max={10} color="#f59e0b" />
@@ -537,22 +588,22 @@ export default function MachineEnergy() {
         </div>
       </div>
 
-      {/* 4 Cards Grid - Per-jam, Harian, Bulanan, Rincian */}
+      {/* 4 Cards Grid - Hourly, Daily, Monthly, Breakdown */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm">
-          <h4 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-3">Konsumsi Energi Per-Jam</h4>
+          <h4 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-3">Hourly Energy Consumption</h4>
           <div className="h-44"><Line data={hourlyChartData} options={simpleChartOptions} /></div>
         </div>
         <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm">
-          <h4 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-3">Konsumsi Energi Harian</h4>
+          <h4 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-3">Daily Energy Consumption</h4>
           <div className="h-44"><Bar data={dailyChartData} options={simpleChartOptions} /></div>
         </div>
         <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm">
-          <h4 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-3">Konsumsi Energi Bulanan</h4>
+          <h4 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-3">Monthly Energy Consumption</h4>
           <div className="h-44"><Bar data={monthlyChartData} options={simpleChartOptions} /></div>
         </div>
         <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm">
-          <h4 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-3">Rincian Konsumsi Energi</h4>
+          <h4 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-3">Energy Consumption Breakdown</h4>
           <div className="h-44"><Doughnut data={breakdownChartData} options={donutOptions} /></div>
         </div>
       </div>
@@ -576,24 +627,91 @@ export default function MachineEnergy() {
 
       {/* Cost & Carbon Split view */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Cost Analysis */}
+        {/* Cost Analysis Card */}
         <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
           <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide border-b border-[#acd3ff]/30 pb-2 mb-4">
-            Economic Cost Analysis
+            Economic Cost Analysis & Tariff Settings
           </h3>
+          
+          {/* Interactive Tariff Input Rates */}
+          <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-900/60">
+            <div>
+              <label className="block text-[9px] font-bold text-slate-400 uppercase">Electricity ($/kWh)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={electricityRate}
+                onChange={(e) => handleRateChange("electricity", Number(e.target.value))}
+                className="mt-1 w-full rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1 text-xs text-[#002b5c] dark:text-white focus:outline-none font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-[9px] font-bold text-slate-400 uppercase">Gas ($/Sm³)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={gasRate}
+                onChange={(e) => handleRateChange("gas", Number(e.target.value))}
+                className="mt-1 w-full rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1 text-xs text-[#002b5c] dark:text-white focus:outline-none font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-[9px] font-bold text-slate-400 uppercase">Water ($/m³)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={waterRate}
+                onChange={(e) => handleRateChange("water", Number(e.target.value))}
+                className="mt-1 w-full rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1 text-xs text-[#002b5c] dark:text-white focus:outline-none font-bold"
+              />
+            </div>
+          </div>
+
           <div className="space-y-3 font-semibold text-xs text-[#002b5c] dark:text-slate-300">
-            {[
-              { label: "Daily Energy Cost", val: "$142.30" },
-              { label: "Monthly Cost (proj.)", val: "$4,269.00" },
-              { label: "Yearly Cost (proj.)", val: "$51,900.00" },
-              { label: "Peak Demand Charge", val: "$1,240.00 / mo" },
-              { label: "Active Tariff Scheme", val: "$0.12 / kWh - Time of Use (TOU)" }
-            ].map((row, idx) => (
-              <div key={idx} className="flex justify-between items-center py-2.5 border-b border-slate-100 dark:border-slate-900 last:border-0">
-                <span className="text-slate-500">{row.label}</span>
-                <span className="font-bold font-mono text-sm text-[#1f6fb5] dark:text-sky-400">{row.val}</span>
+            <div className="flex justify-between items-center py-2.5 border-b border-slate-100 dark:border-slate-900">
+              <span className="text-slate-500">Daily Electricity Cost ({dailyElectricity.toLocaleString()} kWh)</span>
+              <span className="font-bold font-mono text-sm text-[#002b5c] dark:text-slate-200">
+                ${dailyElectricityCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-2.5 border-b border-slate-100 dark:border-slate-900">
+              <span className="text-slate-500">Daily Gas Cost ({dailyGas.toLocaleString()} Sm³)</span>
+              <span className="font-bold font-mono text-sm text-[#002b5c] dark:text-slate-200">
+                ${dailyGasCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-2.5 border-b border-slate-100 dark:border-slate-900">
+              <span className="text-slate-500">Daily Water Cost ({dailyWater.toLocaleString()} m³)</span>
+              <span className="font-bold font-mono text-sm text-[#002b5c] dark:text-slate-200">
+                ${dailyWaterCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              </span>
+            </div>
+            
+            {/* SUMMED TOTAL PROJECTION CALCULATOR */}
+            <div className="mt-4 pt-3 border-t border-[#acd3ff]/40 dark:border-slate-800 space-y-2">
+              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wider mb-2">Total Projected Cost Summary</h4>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-slate-500">Total Daily Cost</span>
+                <span className="font-bold font-mono text-sm text-[#1f6fb5] dark:text-sky-400">
+                  ${totalDailyCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                </span>
               </div>
-            ))}
+              <div className="flex justify-between items-center py-1">
+                <span className="text-slate-500">Total Monthly Cost</span>
+                <span className="font-bold font-mono text-sm text-[#1f6fb5] dark:text-sky-400">
+                  ${totalMonthlyCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-slate-500">Total Yearly Cost</span>
+                <span className="font-bold font-mono text-sm text-[#1f6fb5] dark:text-sky-400">
+                  ${totalYearlyCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -605,9 +723,9 @@ export default function MachineEnergy() {
           <div className="space-y-3 font-semibold text-xs text-[#002b5c] dark:text-slate-300">
             {[
               { label: "Grid Emission Factor", val: "0.82 kgCO₂ / kWh" },
-              { label: "Daily CO₂ Emissions", val: "348 kgCO₂" },
-              { label: "Monthly CO₂ Emissions", val: "10.2 tCO₂" },
-              { label: "Yearly CO₂ Emissions", val: "124.1 tCO₂" },
+              { label: "Daily CO₂ Emissions", val: `${(dailyElectricity * 0.82).toFixed(1)} kgCO₂` },
+              { label: "Monthly CO₂ Emissions", val: `${co2Emitted.toFixed(1)} tCO₂` },
+              { label: "Yearly CO₂ Emissions", val: `${(co2Emitted * 12).toFixed(1)} tCO₂` },
               { label: "Year-over-Year Offset Target (2026)", val: "-12% YoY Target" }
             ].map((row, idx) => (
               <div key={idx} className="flex justify-between items-center py-2.5 border-b border-slate-100 dark:border-slate-900 last:border-0">

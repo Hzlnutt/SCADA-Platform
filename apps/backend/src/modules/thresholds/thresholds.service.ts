@@ -92,9 +92,9 @@ export const upsertThreshold = async (
     { upsert: true, returnDocument: "after" }
   );
 
-  if (!result.value) {
+  if (!result) {
     throw createError("Threshold not saved", 500);
   }
 
-  return toThresholdResponse(result.value);
+  return toThresholdResponse(result);
 };

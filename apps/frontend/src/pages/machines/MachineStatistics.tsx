@@ -4,6 +4,7 @@ import { Bar, Line } from "react-chartjs-2";
 import { getUnitById } from "../../data/machines";
 import { useSystemStore } from "../../store/system.store";
 import type { MachineOutletContext } from "./MachineLayout";
+import { utils, writeFile } from "xlsx";
 import "../../components/charts/chartjs";
 
 // Dedicated Vibration Telemetry Waveform component using Canvas
@@ -142,6 +143,7 @@ function VibrationOscilloscope({ equipmentName }: { equipmentName: string }) {
 export default function MachineStatistics() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
+  if (!machine) return null;
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
 
@@ -150,6 +152,9 @@ export default function MachineStatistics() {
 
   // Parameter Trend Selector state
   const [activeParam, setActiveParam] = useState("Supply Water Temp");
+
+  // Resolution selector state
+  const [resolution, setResolution] = useState<"Hourly" | "Daily" | "Monthly">("Hourly");
 
   // 1. Grafik CT Effectiveness (30 days mock data)
   const ctEffectivenessData = useMemo(() => {
@@ -263,35 +268,60 @@ export default function MachineStatistics() {
     }
   };
 
+  const parametersList = [
+    "Supply Water Temp",
+    "Supply Water TDS",
+    "Supply Water pH",
+    "Supply Water Flow",
+    "Return Water Temp",
+    "Makeup Water Vol",
+    "Makeup Water TDS",
+    "Ambient Temp",
+    "Ambient Humidity",
+    "Blowdown Vol",
+    "Makeup Water pH"
+  ];
+
+  const unitMap: Record<string, string> = {
+    "Supply Water Temp": "°C",
+    "Supply Water TDS": "µS/cm",
+    "Supply Water pH": "pH",
+    "Supply Water Flow": "m³/h",
+    "Return Water Temp": "°C",
+    "Makeup Water Vol": "m³",
+    "Makeup Water TDS": "µS/cm",
+    "Ambient Temp": "°C",
+    "Ambient Humidity": "%",
+    "Blowdown Vol": "m³",
+    "Makeup Water pH": "pH"
+  };
+
   // 3. Left/Right parameter selector data
   const parameterTrendData = useMemo(() => {
-    const hours = Array.from({ length: 24 }, (_, i) => `${i}:00`);
+    let labels: string[] = [];
+    if (resolution === "Hourly") {
+      labels = Array.from({ length: 24 }, (_, i) => `${i}:00`);
+    } else if (resolution === "Daily") {
+      labels = Array.from({ length: 30 }, (_, i) => `Day ${i + 1}`);
+    } else {
+      labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    }
 
     // Helper to generate dynamic lines based on selected parameter name
     const getValuesForParam = (paramName: string) => {
       const charCodeSum = paramName.split("").reduce((sum, c) => sum + c.charCodeAt(0), 0);
       const baseVal = 10 + (charCodeSum % 100);
-      return hours.map((_, i) => baseVal + Math.sin(i / 3) * (baseVal * 0.05) + Math.random() * (baseVal * 0.01));
+      return labels.map((_, i) => {
+        const val = baseVal + Math.sin(i / 3) * (baseVal * 0.05) + Math.random() * (baseVal * 0.01);
+        return Number(val.toFixed(2));
+      });
     };
 
     const yValues = getValuesForParam(activeParam);
-    const unitMap: Record<string, string> = {
-      "Supply Water Temp": "°C",
-      "Supply Water TDS": "µS/cm",
-      "Supply Water pH": "pH",
-      "Supply Water Flow": "m³/h",
-      "Return Water Temp": "°C",
-      "Makeup Water Vol": "m³",
-      "Makeup Water TDS": "µS/cm",
-      "Ambient Temp": "°C",
-      "Ambient Humidity": "%",
-      "Blowdown Vol": "m³",
-      "Makeup Water pH": "pH"
-    };
 
     return {
       chartData: {
-        labels: hours,
+        labels,
         datasets: [
           {
             label: `${activeParam} (${unitMap[activeParam] ?? ""})`,
@@ -308,7 +338,7 @@ export default function MachineStatistics() {
       },
       unit: unitMap[activeParam] ?? ""
     };
-  }, [activeParam]);
+  }, [activeParam, resolution]);
 
   const parameterTrendOptions = {
     responsive: true,
@@ -328,21 +358,76 @@ export default function MachineStatistics() {
     }
   };
 
-  const parametersList = [
-    "Supply Water Temp",
-    "Supply Water TDS",
-    "Supply Water pH",
-    "Supply Water Flow",
-    "Return Water Temp",
-    "Makeup Water Vol",
-    "Makeup Water TDS",
-    "Ambient Temp",
-    "Ambient Humidity",
-    "Blowdown Vol",
-    "Makeup Water pH"
-  ];
+  const handleExportParameters = () => {
+    let labels: string[] = [];
+    if (resolution === "Hourly") {
+      labels = Array.from({ length: 24 }, (_, i) => `${i}:00`);
+    } else if (resolution === "Daily") {
+      labels = Array.from({ length: 30 }, (_, i) => `Day ${i + 1}`);
+    } else {
+      labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    }
 
-  if (!machine) return null;
+    const getValuesForParam = (paramName: string) => {
+      const charCodeSum = paramName.split("").reduce((sum, c) => sum + c.charCodeAt(0), 0);
+      const baseVal = 10 + (charCodeSum % 100);
+      return labels.map((_, i) => {
+        const val = baseVal + Math.sin(i / 3) * (baseVal * 0.05) + Math.random() * (baseVal * 0.01);
+        return Number(val.toFixed(2));
+      });
+    };
+
+    const paramDataMap: Record<string, number[]> = {};
+    parametersList.forEach((param) => {
+      paramDataMap[param] = getValuesForParam(param);
+    });
+
+    const rows = labels.map((label, index) => {
+      const row: Record<string, any> = {
+        Timestamp: label
+      };
+      parametersList.forEach((param) => {
+        const unit = unitMap[param] ? ` (${unitMap[param]})` : "";
+        row[`${param}${unit}`] = paramDataMap[param][index];
+      });
+      return row;
+    });
+
+    const worksheet = utils.json_to_sheet(rows);
+    const workbook = utils.book_new();
+    utils.book_append_sheet(workbook, worksheet, `${resolution} Parameters`);
+    writeFile(workbook, `historical-parameters-${resolution.toLowerCase()}-${machine.id}.xlsx`);
+  };
+
+  const handleExportVibration = () => {
+    const charCodeSum = selectedEq.split("").reduce((sum, c) => sum + c.charCodeAt(0), 0);
+    const eqFreq = 0.03 + (charCodeSum % 5) * 0.005;
+    const eqAmp1 = 20 + (charCodeSum % 7) * 3;
+    const eqAmp2 = 8 + (charCodeSum % 3) * 2;
+
+    const rows = Array.from({ length: 100 }, (_, i) => {
+      const angle1 = i * eqFreq;
+      const angle2 = i * eqFreq * 2.3;
+      const noise = (Math.sin(i * 0.5) + Math.cos(i * 0.9)) * 1.5;
+      const velocity = Math.sin(angle1) * eqAmp1 + Math.cos(angle2) * eqAmp2 + noise;
+      const acceleration = (Math.cos(angle1) * eqAmp1 * 0.15 + Math.sin(angle2) * eqAmp2 * 0.3 + noise * 0.2);
+
+      const time = new Date();
+      time.setMilliseconds(time.getMilliseconds() - (100 - i) * 10);
+
+      return {
+        "Sample No": i + 1,
+        "Timestamp": time.toISOString(),
+        "Vibration Velocity (mm/s)": Number(Math.abs(velocity).toFixed(2)),
+        "Vibration Acceleration (G)": Number(Math.abs(acceleration).toFixed(2))
+      };
+    });
+
+    const worksheet = utils.json_to_sheet(rows);
+    const workbook = utils.book_new();
+    utils.book_append_sheet(workbook, worksheet, "Vibration Waveform");
+    writeFile(workbook, `vibration-${selectedEq.toLowerCase().replace(/\s+/g, "-")}-${machine.id}.xlsx`);
+  };
 
   return (
     <div className="space-y-6">
@@ -376,13 +461,38 @@ export default function MachineStatistics() {
       {/* 2. Interactive Parameter Selector Grid (Image 4 bottom/right layout) */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
-          <div className="mb-4 flex items-center justify-between border-b border-[#acd3ff]/30 pb-2.5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#acd3ff]/30 pb-2.5">
             <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
               Historical Parameters Detail
             </h3>
-            <span className="text-xs text-emerald-500 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full">
-              {activeParam}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-0.5 rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-0.5 text-xs">
+                {(["Hourly", "Daily", "Monthly"] as const).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setResolution(r)}
+                    className={`rounded-md px-2.5 py-1 font-bold transition ${
+                      resolution === r
+                        ? "bg-[#1f6fb5] text-white"
+                        : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-300"
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={handleExportParameters}
+                className="rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-[#f7fbff]/50 dark:bg-slate-900 px-3 py-1 text-xs font-bold text-[#002b5c] dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-800/80"
+              >
+                📥 Export Excel
+              </button>
+              <span className="text-xs text-emerald-500 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full">
+                {activeParam}
+              </span>
+            </div>
           </div>
           <div className="h-64 min-h-0">
             <Line data={parameterTrendData.chartData} options={parameterTrendOptions} />
@@ -412,7 +522,7 @@ export default function MachineStatistics() {
             </div>
           </div>
           <p className="text-[10px] text-slate-400 dark:text-slate-600 mt-2 italic">
-            Select a parameter to view the 24H sensor trend.
+            Select a parameter to view the historical trend.
           </p>
         </div>
       </div>
@@ -428,19 +538,28 @@ export default function MachineStatistics() {
               Live oscilloscope visualization of equipment vibration metrics (velocity & acceleration limits).
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-bold text-slate-400">Equipment:</label>
-            <select
-              value={selectedEq}
-              onChange={(e) => setSelectedEq(e.target.value)}
-              className="bg-slate-50 dark:bg-slate-900 text-xs font-bold border border-slate-200 dark:border-slate-800 text-[#002b5c] dark:text-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1f6fb5]"
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleExportVibration}
+              className="rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-[#f7fbff]/50 dark:bg-slate-900 px-3 py-1.5 text-xs font-bold text-[#002b5c] dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-800/80"
             >
-              {["CT-1 Fan", "CT-1 Motor", "CT-2 Fan", "CT-2 Motor", "CT-3 Fan", "CT-3 Motor", "DU-03 Pump", "BP-03 Pump", "PREP-03 Pump"].map((eq) => (
-                <option key={eq} value={eq}>
-                  {eq}
-                </option>
-              ))}
-            </select>
+              📥 Export Excel
+            </button>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-400">Equipment:</label>
+              <select
+                value={selectedEq}
+                onChange={(e) => setSelectedEq(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-900 text-xs font-bold border border-slate-200 dark:border-slate-800 text-[#002b5c] dark:text-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1f6fb5]"
+              >
+                {["CT-1 Fan", "CT-1 Motor", "CT-2 Fan", "CT-2 Motor", "CT-3 Fan", "CT-3 Motor", "DU-03 Pump", "BP-03 Pump", "PREP-03 Pump"].map((eq) => (
+                  <option key={eq} value={eq}>
+                    {eq}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
         

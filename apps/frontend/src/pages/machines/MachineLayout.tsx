@@ -30,7 +30,7 @@ export const MachineLayout = () => {
   }
 
   // Cek apakah ini grup HVAC
-  const isHvac = group.id === "hvac";
+  const isHvac = group.id.startsWith("hvac");
   const basePath = `/machines/${group.id}/${machine.id}`;
 
   return (

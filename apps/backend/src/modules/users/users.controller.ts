@@ -5,7 +5,9 @@ import {
   getUserById,
   listUsers,
   updateUserProfile,
-  updateUserRole
+  updateUserRole,
+  deleteUser,
+  listOperators
 } from "./users.service";
 import {
   createUserSchema,
@@ -125,6 +127,43 @@ export const updateUserHandler = async (
     }
 
     res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteUserHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const result = await deleteUser(req.params.id);
+
+    const actorId = (req as unknown as { user?: { id: string } }).user?.id;
+    if (actorId) {
+      await recordAudit({
+        actorId,
+        action: "user.delete",
+        resourceType: "user",
+        resourceId: req.params.id
+      });
+    }
+
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const listOperatorsHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const data = await listOperators();
+    res.json({ data });
   } catch (err) {
     next(err);
   }

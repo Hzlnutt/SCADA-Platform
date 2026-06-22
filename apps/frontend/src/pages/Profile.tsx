@@ -49,7 +49,7 @@ export default function Profile() {
     try {
       const trimmedName = name.trim();
       if (!trimmedName) {
-        setMessage("Nama tidak boleh kosong.");
+        setMessage("Name cannot be empty.");
         setSaving(false);
         return;
       }
@@ -59,9 +59,9 @@ export default function Profile() {
         avatarUrl: avatarUrl || null
       });
       updateUser(result.data);
-      setMessage("Profil berhasil diperbarui.");
+      setMessage("Profile updated successfully.");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Gagal memperbarui profil.");
+      setMessage(err instanceof Error ? err.message : "Failed to update profile.");
     } finally {
       setSaving(false);
     }
@@ -76,7 +76,7 @@ export default function Profile() {
     <div className="space-y-6">
       <PageHeader
         title="Profile Settings"
-        description="Kelola identitas user dan foto profil."
+        description="Manage user identity details and avatar picture."
       />
       <div className="rounded-2xl border border-slate-900 bg-slate-950/60 p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -103,14 +103,14 @@ export default function Profile() {
                   onChange={handleAvatarChange}
                   className="hidden"
                 />
-                Upload Foto
+                Upload Photo
               </label>
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="text-xs font-semibold text-[#003b75]">Nama</label>
+              <label className="text-xs font-semibold text-[#003b75]">Full Name</label>
               <input
                 type="text"
                 value={name}
@@ -119,7 +119,7 @@ export default function Profile() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#003b75]">Role</label>
+              <label className="text-xs font-semibold text-[#003b75]">Access Role</label>
               <input
                 type="text"
                 value={user?.role ?? "user"}
@@ -140,17 +140,17 @@ export default function Profile() {
             disabled={saving}
             className="rounded-full bg-[#1f6fb5] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#155c99] disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {saving ? "Menyimpan..." : "Simpan Perubahan"}
+            {saving ? "Saving..." : "Save Changes"}
           </button>
         </form>
       </div>
 
       <ConfirmDialog
         open={confirmSave}
-        title="Konfirmasi simpan profil"
-        description="Apakah Anda yakin ingin menyimpan perubahan profil?"
-        confirmText="Ya"
-        cancelText="Tidak"
+        title="Confirm Profile Save"
+        description="Are you sure you want to save your profile changes?"
+        confirmText="Yes"
+        cancelText="No"
         onConfirm={() => {
           setConfirmSave(false);
           saveProfile();
@@ -160,10 +160,10 @@ export default function Profile() {
 
       <ConfirmDialog
         open={confirmAvatar}
-        title="Konfirmasi foto profil"
-        description="Gunakan foto profil yang baru dipilih?"
-        confirmText="Ya"
-        cancelText="Tidak"
+        title="Confirm Avatar Update"
+        description="Do you want to use the newly selected profile photo?"
+        confirmText="Yes"
+        cancelText="No"
         onConfirm={() => {
           setConfirmAvatar(false);
           if (pendingAvatar) {

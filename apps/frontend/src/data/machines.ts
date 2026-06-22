@@ -66,6 +66,8 @@ export type MachineData = {
   trend: MachineTrend;
   maintenance: MaintenanceRecord[];
   shiftReports: ShiftReport[];
+  dailyBase?: number;
+  outputBase?: number;
 };
 
 export type MachineUnit = MachineData & {
@@ -196,6 +198,8 @@ const buildMachine = (params: {
     unit: params.unit,
     consumptionUnit: params.consumptionUnit,
     description: `${params.name} operational summary and performance trends.`,
+    dailyBase: params.dailyBase,
+    outputBase: params.outputBase,
     summaryCards: [
       { label: "Running Hours", value: 225.3, unit: "h", caption: "Last 7 days" },
       { label: "Stop Hours", value: 18.9, unit: "h", caption: "Unplanned" },
@@ -950,23 +954,95 @@ export const machineGroups: MachineGroup[] = [
     ]
   }),
   buildGroup({
-    id: "hvac",
-    name: "HVAC",
+    id: "hvac-qc",
+    name: "HVAC QC",
     area: "HVAC",
     category: "Air",
     units: [
       { id: "hvac-qc-lab", label: "QC Lab" },
-      { id: "hvac-qc-retained-sample", label: "QC Retained Sample" },
+      { id: "hvac-qc-retained-sample", label: "QC Retained Sample" }
+    ].map((u, i) => buildUnit({
+      id: u.id,
+      unitLabel: u.label,
+      groupId: "hvac-qc",
+      groupName: "HVAC QC",
+      area: "HVAC",
+      category: "Air",
+      tagId: `hvac/${u.id.replace("hvac-", "")}_temp`,
+      unit: "C",
+      consumptionUnit: "kWh",
+      baseValue: 22.0,
+      variance: 2.0,
+      dailyBase: 1200 + i * 20,
+      dailyVariance: 150,
+      outputBase: 500,
+      energyBase: 35
+    }))
+  }),
+  buildGroup({
+    id: "hvac-warehouse",
+    name: "HVAC Warehouse",
+    area: "HVAC",
+    category: "Air",
+    units: [
       { id: "hvac-wh-3", label: "WH-3" },
       { id: "hvac-wh-4", label: "WH-4" },
       { id: "hvac-wh-5", label: "WH-5" },
       { id: "hvac-wh-6", label: "WH-6" },
-      { id: "hvac-wh-7", label: "WH-7" },
+      { id: "hvac-wh-7", label: "WH-7" }
+    ].map((u, i) => buildUnit({
+      id: u.id,
+      unitLabel: u.label,
+      groupId: "hvac-warehouse",
+      groupName: "HVAC Warehouse",
+      area: "HVAC",
+      category: "Air",
+      tagId: `hvac/${u.id.replace("hvac-", "")}_temp`,
+      unit: "C",
+      consumptionUnit: "kWh",
+      baseValue: 22.0,
+      variance: 2.0,
+      dailyBase: 1250 + i * 20,
+      dailyVariance: 150,
+      outputBase: 500,
+      energyBase: 35
+    }))
+  }),
+  buildGroup({
+    id: "hvac-wf1u3",
+    name: "HVAC Production WF1",
+    area: "HVAC",
+    category: "Air",
+    units: [
       { id: "hvac-preparation-wf1u3", label: "Prep WF1U3" },
       { id: "hvac-bottlepack-wf1u3", label: "Bottlepack WF1U3" },
       { id: "hvac-qc-sampling-wf1u3", label: "QC Sampling WF1U3" },
       { id: "hvac-corridor-wf1u3", label: "Corridor WF1U3" },
-      { id: "hvac-steril-ip-wf1u3", label: "Steril IP WF1U3" },
+      { id: "hvac-steril-ip-wf1u3", label: "Steril IP WF1U3" }
+    ].map((u, i) => buildUnit({
+      id: u.id,
+      unitLabel: u.label,
+      groupId: "hvac-wf1u3",
+      groupName: "HVAC Production WF1",
+      area: "HVAC",
+      category: "Air",
+      tagId: `hvac/${u.id.replace("hvac-", "")}_temp`,
+      unit: "C",
+      consumptionUnit: "kWh",
+      baseValue: 22.0,
+      variance: 2.0,
+      dailyBase: 1300 + i * 20,
+      dailyVariance: 150,
+      outputBase: 500,
+      energyBase: 35
+    }))
+  }),
+  buildGroup({
+    id: "hvac-wf2u1",
+    name: "HVAC Production WF2U1",
+    area: "HVAC",
+    category: "Air",
+    units: [
       { id: "hvac-preparation-wf2u1", label: "Prep WF2U1" },
       { id: "hvac-bottlepack-wf2u1", label: "Bottlepack WF2U1" },
       { id: "hvac-weighing-wf2u1", label: "Weighing WF2U1" },
@@ -978,7 +1054,31 @@ export const machineGroups: MachineGroup[] = [
       { id: "hvac-wt-wf2u1", label: "WT WF2U1" },
       { id: "hvac-qc-wf2u1", label: "QC WF2U1" },
       { id: "oac-1-wf2u1", label: "OAC-1 WF2U1" },
-      { id: "oac-2-wf2u1", label: "OAC-2 WF2U1" },
+      { id: "oac-2-wf2u1", label: "OAC-2 WF2U1" }
+    ].map((u, i) => buildUnit({
+      id: u.id,
+      unitLabel: u.label,
+      groupId: "hvac-wf2u1",
+      groupName: "HVAC Production WF2U1",
+      area: "HVAC",
+      category: "Air",
+      tagId: `hvac/${u.id.replace("hvac-", "")}_temp`,
+      unit: "C",
+      consumptionUnit: "kWh",
+      baseValue: 22.0,
+      variance: 2.0,
+      dailyBase: 1350 + i * 20,
+      dailyVariance: 150,
+      outputBase: 500,
+      energyBase: 35
+    }))
+  }),
+  buildGroup({
+    id: "hvac-wf2u2",
+    name: "HVAC Production WF2U2",
+    area: "HVAC",
+    category: "Air",
+    units: [
       { id: "hvac-preparation-wf2u2", label: "Prep WF2U2" },
       { id: "hvac-bottlepack-wf2u2", label: "Bottlepack WF2U2" },
       { id: "hvac-steril-wf2u2", label: "Steril WF2U2" },
@@ -988,8 +1088,8 @@ export const machineGroups: MachineGroup[] = [
     ].map((u, i) => buildUnit({
       id: u.id,
       unitLabel: u.label,
-      groupId: "hvac",
-      groupName: "HVAC",
+      groupId: "hvac-wf2u2",
+      groupName: "HVAC Production WF2U2",
       area: "HVAC",
       category: "Air",
       tagId: `hvac/${u.id.replace("hvac-", "")}_temp`,
@@ -997,7 +1097,7 @@ export const machineGroups: MachineGroup[] = [
       consumptionUnit: "kWh",
       baseValue: 22.0,
       variance: 2.0,
-      dailyBase: 1200 + i * 20,
+      dailyBase: 1400 + i * 20,
       dailyVariance: 150,
       outputBase: 500,
       energyBase: 35

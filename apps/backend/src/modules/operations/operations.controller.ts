@@ -224,7 +224,17 @@ export const reviewMaintenanceHandler = async (
     const recordId = req.params.id;
     const parsed = approvalReviewSchema.parse(req.body);
     const actorId = getActorId(req);
-    const role = getActorRole(req) as "team_head" | "leader" | "admin";
+    
+    const actorRole = getActorRole(req);
+    let role: "team_head" | "leader" | "admin" = "team_head";
+    if (actorRole === "admin" || actorRole === "senior_unit_head") {
+      role = "admin";
+    } else if (actorRole === "unit_head") {
+      role = "leader";
+    } else if (actorRole.startsWith("kashift_") || actorRole === "leader" || actorRole === "team_head") {
+      role = "team_head";
+    }
+
     const data = await reviewMaintenance(recordId, parsed, role, actorId);
 
     if (actorId) {
@@ -251,7 +261,17 @@ export const reviewShiftReportHandler = async (
     const recordId = req.params.id;
     const parsed = approvalReviewSchema.parse(req.body);
     const actorId = getActorId(req);
-    const role = getActorRole(req) as "team_head" | "leader" | "admin";
+    
+    const actorRole = getActorRole(req);
+    let role: "team_head" | "leader" | "admin" = "team_head";
+    if (actorRole === "admin" || actorRole === "senior_unit_head") {
+      role = "admin";
+    } else if (actorRole === "unit_head") {
+      role = "leader";
+    } else if (actorRole.startsWith("kashift_") || actorRole === "leader" || actorRole === "team_head") {
+      role = "team_head";
+    }
+
     const data = await reviewShiftReport(recordId, parsed, role, actorId);
 
     if (actorId) {

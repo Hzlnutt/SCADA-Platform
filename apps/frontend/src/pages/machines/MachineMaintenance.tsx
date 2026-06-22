@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { getUnitById } from "../../data/machines";
-import { DEFAULT_EQ_CONFIGS, DEFAULT_HVAC_EQ_CONFIGS } from "../../data/equipment";
+import { DEFAULT_EQ_CONFIGS, DEFAULT_HVAC_EQ_CONFIGS, type ConfigEqRow } from "../../data/equipment";
 import { getJson, postJson } from "../../services/api.client";
 import { useAuthStore } from "../../store/auth.store";
 import { useSystemStore } from "../../store/system.store";
@@ -30,13 +30,15 @@ type MaintenanceCreateResponse = {
   data: MaintenanceItem;
 };
 
-const formatDate = (value: string) => new Date(value).toLocaleDateString("id-ID", {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit"
-});
+const formatDate = (value: string) => {
+  return new Date(value).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+};
 
 export default function MachineMaintenance() {
   const { unitId } = useOutletContext<MachineOutletContext>();
@@ -62,40 +64,112 @@ export default function MachineMaintenance() {
     notes: ""
   });
 
+  const [operators, setOperators] = useState<Array<{ id: string; name: string; role: string }>>([]);
+
+  useEffect(() => {
+    getJson<{ data: Array<{ id: string; name: string; role: string }> }>("/users/operators")
+      .then((res) => {
+        setOperators(res.data);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch operators", err);
+      });
+  }, []);
+
+  // Nameplate Editing State
+  const defaultNameplate = useMemo(() => {
+    if (unitId.includes("hvac") || unitId.includes("ahu")) {
+      return {
+        model: "AHU-QC-RETAINED-01",
+        serial: "HVAC-2026-AHU01",
+        manufacturer: "Widatra HVAC Systems Ltd",
+        mfgDate: "November 14, 2024",
+        electrical: "380V / 3 Phase / 50Hz",
+        capacity: "12 kW",
+        flow: "3,500 m³/h",
+        refrigerant: "R410A / Air Loop"
+      };
+    }
+    return {
+      model: "CT-WF1-U3",
+      serial: "CW-2026-99381-CT",
+      manufacturer: "Widatra Industrial Cooling Ltd",
+      mfgDate: "October 12, 2023",
+      electrical: "380-415V / 3 Phase / 50Hz",
+      capacity: "450 kW",
+      flow: "120 m³/h",
+      refrigerant: "Water / Glycol Loop"
+    };
+  }, [unitId]);
+
+  const [nameplate, setNameplate] = useState(defaultNameplate);
+  const [nameplateOpen, setNameplateOpen] = useState(false);
+  const [nameplateForm, setNameplateForm] = useState(defaultNameplate);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(`scada.nameplate.${unitId}`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setNameplate(parsed);
+        setNameplateForm(parsed);
+      } catch (e) {
+        setNameplate(defaultNameplate);
+        setNameplateForm(defaultNameplate);
+      }
+    } else {
+      setNameplate(defaultNameplate);
+      setNameplateForm(defaultNameplate);
+    }
+  }, [unitId, defaultNameplate]);
+
   useEffect(() => {
     if (!machine) return;
 
     let active = true;
-    setLoading(true);
     const statusParam = role === "user" ? "approved" : "all";
-    getJson<MaintenanceListResponse>(
-      `/machines/${machine.id}/maintenance?limit=100&status=${statusParam}`
-    )
-      .then((result) => {
-        if (active) {
-          setRecords(result.data);
-        }
-      })
-      .catch((err) => {
-        if (active) {
-          setError(err instanceof Error ? err.message : "Gagal memuat data");
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
-      });
+
+    const fetchRecords = () => {
+      getJson<MaintenanceListResponse>(
+        `/machines/${machine.id}/maintenance?limit=100&status=${statusParam}`
+      )
+        .then((result) => {
+          if (active) {
+            setRecords(result.data);
+          }
+        })
+        .catch((err) => {
+          if (active) {
+            setError(err instanceof Error ? err.message : "Failed to load data");
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setLoading(false);
+          }
+        });
+    };
+
+    fetchRecords();
+    const interval = setInterval(fetchRecords, 5000);
 
     return () => {
       active = false;
+      clearInterval(interval);
     };
   }, [machine, role]);
 
   if (!machine) return null;
 
   const canCreate = ["operator", "team_head", "leader", "admin"].includes(role);
-  const lastRecord = records[0];
+  const canEditNameplate = [
+    "admin",
+    "senior_unit_head",
+    "unit_head",
+    "kashift_utility_hvac",
+    "kashift_utility",
+    "kashift_hvac"
+  ].includes(role);
 
   const handleChange = (field: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -135,75 +209,55 @@ export default function MachineMaintenance() {
       });
       setFormOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal menyimpan data");
+      setError(err instanceof Error ? err.message : "Failed to save data");
     } finally {
       setSaving(false);
     }
   };
 
+  const handleNameplateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem(`scada.nameplate.${unitId}`, JSON.stringify(nameplateForm));
+    setNameplate(nameplateForm);
+    setNameplateOpen(false);
+  };
+
   const healthMatrixItems = useMemo(() => {
+    let eqConfigs: ConfigEqRow[] = [];
     if (unitId === "hvac-qc-retained-sample") {
-      let eqConfigs = DEFAULT_HVAC_EQ_CONFIGS;
+      eqConfigs = DEFAULT_HVAC_EQ_CONFIGS;
       const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
       if (savedEq) {
         try {
           eqConfigs = JSON.parse(savedEq);
-        } catch (e) {
-          // fallback
-        }
+        } catch (e) {}
       }
-
-      return eqConfigs.map((item) => {
-        const health = item.highLimit > 0
-          ? Math.max(0, Math.min(100, Math.round(((item.highLimit - item.baseline) / item.highLimit) * 100)))
-          : 100;
-        
-        let barColor = "bg-emerald-500";
-        if (health <= 50) barColor = "bg-rose-500";
-        else if (health <= 70) barColor = "bg-orange-500";
-        else if (health <= 85) barColor = "bg-amber-500";
-
-        const lastService = "2026-03-10";
-        const nextService = "2026-09-10";
-
-        return {
-          tag: item.tagName,
-          sub: `Last service: ${lastService} · Next: ${nextService} · P&ID Status: ${item.status}`,
-          run: `${item.baseline.toLocaleString()} / ${item.highLimit.toLocaleString()}`,
-          health,
-          barColor,
-          rem: `${(item.highLimit - item.baseline).toLocaleString()} h`
-        };
-      });
-    }
-
-    if (unitId !== "cooling-water-1") {
-      return [
-        { tag: "AHU-01 Supply Fan", sub: "Last service: 2025-11-04 · Next: 2026-05-10", run: "8,432 / 10,000", health: 94, barColor: "bg-emerald-500", rem: "1,568 h" },
-        { tag: "AHU-01 Condensing Unit CU-01", sub: "Last service: 2025-10-12 · Next: 2026-04-18", run: "7,210 / 9,000", health: 88, barColor: "bg-orange-500", rem: "1,790 h" },
-        { tag: "AHU-02 Supply Fan", sub: "Last service: 2025-09-30 · Next: 2026-03-20", run: "9,128 / 10,000", health: 76, barColor: "bg-rose-500", rem: "880 h" },
-        { tag: "AHU-02 Electric Heater", sub: "Last service: 2025-08-14 · Next: 2026-05-10", run: "6,500 / 12,000", health: 97, barColor: "bg-teal-500", rem: "5,500 h" },
-        { tag: "AHU-02 Humidifier", sub: "Last service: 2025-12-01 · Next: 2026-06-05", run: "4,100 / 6,000", health: 82, barColor: "bg-emerald-500", rem: "1,900 h" },
-        { tag: "AHU-03 Supply Fan", sub: "Last service: 2025-10-20 · Next: 2026-04-25", run: "7,700 / 10,000", health: 91, barColor: "bg-amber-500", rem: "2,300 h" }
-      ];
-    }
-
-    // Load from localStorage or defaults
-    let eqConfigs = DEFAULT_EQ_CONFIGS;
-    const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
-    if (savedEq) {
-      try {
-        eqConfigs = JSON.parse(savedEq);
-      } catch (e) {
-        // use default
+    } else if (unitId === "cooling-water-1") {
+      eqConfigs = DEFAULT_EQ_CONFIGS;
+      const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
+      if (savedEq) {
+        try {
+          eqConfigs = JSON.parse(savedEq);
+        } catch (e) {}
+      }
+    } else {
+      // Fallback/other units
+      eqConfigs = DEFAULT_HVAC_EQ_CONFIGS;
+      const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
+      if (savedEq) {
+        try {
+          eqConfigs = JSON.parse(savedEq);
+        } catch (e) {}
       }
     }
 
     return eqConfigs.map((item) => {
+      const beforePm = item.runHoursBeforeMaintenance ?? item.baseline;
+      const lifetime = item.runHoursLifetime ?? item.baseline + 12432;
       const health = item.highLimit > 0
-        ? Math.max(0, Math.min(100, Math.round(((item.highLimit - item.baseline) / item.highLimit) * 100)))
+        ? Math.max(0, Math.min(100, Math.round(((item.highLimit - beforePm) / item.highLimit) * 100)))
         : 100;
-      
+
       let barColor = "bg-emerald-500";
       if (health <= 50) barColor = "bg-rose-500";
       else if (health <= 70) barColor = "bg-orange-500";
@@ -215,10 +269,12 @@ export default function MachineMaintenance() {
       return {
         tag: item.tagName,
         sub: `Last service: ${lastService} · Next: ${nextService} · P&ID Status: ${item.status}`,
-        run: `${item.baseline.toLocaleString()} / ${item.highLimit.toLocaleString()}`,
+        beforePm,
+        lifetime,
+        limit: item.highLimit,
         health,
         barColor,
-        rem: `${(item.highLimit - item.baseline).toLocaleString()} h`
+        rem: `${Math.max(0, item.highLimit - beforePm).toLocaleString()} h`
       };
     });
   }, [unitId]);
@@ -261,7 +317,7 @@ export default function MachineMaintenance() {
         <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide border-b border-[#acd3ff]/30 pb-2 mb-4">
           Equipment Health Matrix
         </h3>
-        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${unitId === "cooling-water-1" || unitId === "hvac-qc-retained-sample" ? "max-h-[520px] overflow-y-auto pr-2" : ""}`}>
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-h-[520px] overflow-y-auto pr-2`}>
           {healthMatrixItems.map((item, idx) => (
             <div
               key={idx}
@@ -275,17 +331,28 @@ export default function MachineMaintenance() {
                   {item.sub}
                 </div>
               </div>
-              <div className="space-y-1 pt-1">
-                <div className="flex justify-between text-[10px] font-bold text-slate-500">
-                  <span>Running Hrs: <span className="font-mono text-slate-400">{item.run}</span></span>
-                  <span className="text-[#002b5c] dark:text-slate-300 font-mono">Health: {item.health}%</span>
-                </div>
+              <div className="space-y-3 pt-1">
                 <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
                   <div className={`h-full ${item.barColor} rounded-full`} style={{ width: `${item.health}%` }} />
                 </div>
+                <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                  <div className="bg-slate-100/80 dark:bg-slate-800/40 rounded-full px-2.5 py-1.5 border border-slate-200/60 dark:border-slate-700/40 flex flex-col items-center justify-center">
+                    <span className="text-[8px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Before PM</span>
+                    <span className="text-base font-extrabold text-slate-800 dark:text-slate-100 font-mono mt-0.5">{item.beforePm.toLocaleString()} h</span>
+                  </div>
+                  <div className="bg-slate-100/80 dark:bg-slate-800/40 rounded-full px-2.5 py-1.5 border border-slate-200/60 dark:border-slate-700/40 flex flex-col items-center justify-center">
+                    <span className="text-[8px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Lifetime</span>
+                    <span className="text-base font-extrabold text-slate-800 dark:text-slate-100 font-mono mt-0.5">{item.lifetime.toLocaleString()} h</span>
+                  </div>
+                  <div className="bg-slate-100/80 dark:bg-slate-800/40 rounded-full px-2.5 py-1.5 border border-slate-200/60 dark:border-slate-700/40 flex flex-col items-center justify-center">
+                    <span className="text-[8px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Limit</span>
+                    <span className="text-base font-extrabold text-[#002b5c] dark:text-sky-400 font-mono mt-0.5">{item.limit.toLocaleString()} h</span>
+                  </div>
+                </div>
               </div>
-              <div className="text-[10px] text-right font-mono text-slate-400 pt-1">
-                Remaining: <span className="font-bold text-[#002b5c] dark:text-slate-200">{item.rem}</span>
+              <div className="flex justify-between items-center text-[10px] font-medium text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <span>Health: <span className="font-extrabold font-mono text-[#002b5c] dark:text-slate-200">{item.health}%</span></span>
+                <span>Remaining: <span className="font-extrabold font-mono text-[#002b5c] dark:text-slate-200">{item.rem}</span></span>
               </div>
             </div>
           ))}
@@ -328,41 +395,55 @@ export default function MachineMaintenance() {
         {/* Service & Name Plate */}
         <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300 flex flex-col justify-between">
           <div>
-            <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide border-b border-[#acd3ff]/30 pb-2 mb-3">
-              Service & Name Plate
-            </h3>
+            <div className="flex justify-between items-center border-b border-[#acd3ff]/30 pb-2 mb-3">
+              <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
+                Service & Name Plate
+              </h3>
+              {canEditNameplate && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNameplateForm(nameplate);
+                    setNameplateOpen(true);
+                  }}
+                  className="px-2.5 py-1 text-[10px] font-bold text-white bg-[#1f6fb5] hover:bg-[#155c99] rounded transition"
+                >
+                  Edit Plate
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-xs text-[#002b5c] dark:text-slate-300 font-medium">
               <div>
                 <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Model Number</span>
-                <span className="font-bold font-mono">CT-WF1-U3</span>
+                <span className="font-bold font-mono text-slate-900 dark:text-white">{nameplate.model}</span>
               </div>
               <div>
                 <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Serial Number</span>
-                <span className="font-bold font-mono">CW-2026-99381-CT</span>
+                <span className="font-bold font-mono text-slate-900 dark:text-white">{nameplate.serial}</span>
               </div>
               <div>
                 <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Manufacturer</span>
-                <span className="font-bold">Widatra Industrial Cooling Ltd</span>
+                <span className="font-bold text-slate-900 dark:text-white">{nameplate.manufacturer}</span>
               </div>
               <div>
                 <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Manufactured Date</span>
-                <span className="font-bold font-mono">October 12, 2023</span>
+                <span className="font-bold font-mono text-slate-900 dark:text-white">{nameplate.mfgDate}</span>
               </div>
               <div>
                 <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Electrical Rating</span>
-                <span className="font-bold font-mono">380-415V / 3 Phase / 50Hz</span>
+                <span className="font-bold font-mono text-slate-900 dark:text-white">{nameplate.electrical}</span>
               </div>
               <div>
-                <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Cooling Capacity</span>
-                <span className="font-bold font-mono">450 kW</span>
+                <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Capacity</span>
+                <span className="font-bold font-mono text-slate-900 dark:text-white">{nameplate.capacity}</span>
               </div>
               <div>
-                <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Water Flow Capacity</span>
-                <span className="font-bold font-mono">120 m³/h</span>
+                <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Flow Capacity</span>
+                <span className="font-bold font-mono text-slate-900 dark:text-white">{nameplate.flow}</span>
               </div>
               <div>
                 <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Refrigerant / Loop</span>
-                <span className="font-bold">Water / Glycol Loop</span>
+                <span className="font-bold text-slate-900 dark:text-white">{nameplate.refrigerant}</span>
               </div>
             </div>
           </div>
@@ -398,6 +479,62 @@ export default function MachineMaintenance() {
         </div>
       </div>
 
+      {/* Nameplate Edit Modal Overlay */}
+      {nameplateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
+          <div className="relative max-h-[90vh] w-[500px] overflow-y-auto rounded-2xl border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 p-6 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
+              <div>
+                <div className="text-xs uppercase tracking-wider text-[#1f6fb5] font-bold">
+                  Edit Nameplate Specifications
+                </div>
+                <p className="text-[10px] text-slate-500">Update machine service nameplate values.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNameplateOpen(false)}
+                className="text-xs font-bold text-slate-400 hover:text-slate-200"
+              >
+                Close
+              </button>
+            </div>
+            <form onSubmit={handleNameplateSubmit} className="space-y-3">
+              {[
+                { field: "model", label: "Model Number" },
+                { field: "serial", label: "Serial Number" },
+                { field: "manufacturer", label: "Manufacturer" },
+                { field: "mfgDate", label: "Manufactured Date" },
+                { field: "electrical", label: "Electrical Rating" },
+                { field: "capacity", label: "Capacity" },
+                { field: "flow", label: "Flow Capacity" },
+                { field: "refrigerant", label: "Refrigerant / Loop" }
+              ].map((inputItem) => (
+                <div key={inputItem.field}>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase">
+                    {inputItem.label}
+                  </label>
+                  <input
+                    type="text"
+                    value={(nameplateForm as any)[inputItem.field] || ""}
+                    onChange={(e) =>
+                      setNameplateForm((prev) => ({ ...prev, [inputItem.field]: e.target.value }))
+                    }
+                    required
+                    className="mt-1 w-full rounded-md border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              ))}
+              <button
+                type="submit"
+                className="w-full mt-4 rounded-md bg-[#1f6fb5] hover:bg-[#155c99] py-2 text-xs font-bold text-white transition"
+              >
+                Save Nameplate Changes
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Input Form Overlay modal */}
       {canCreate && formOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
@@ -408,7 +545,7 @@ export default function MachineMaintenance() {
                   Input Maintenance
                 </div>
                 <div className="mt-1 text-xs text-[#47729f] dark:text-slate-500">
-                  Tambahkan history perbaikan baru.
+                  Add a new repair log.
                 </div>
               </div>
               <button
@@ -423,7 +560,7 @@ export default function MachineMaintenance() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <label className="text-xs text-[#47729f] dark:text-slate-400 font-bold block">
-                  Tanggal
+                  Date
                   <input
                     type="datetime-local"
                     value={form.date}
@@ -433,19 +570,26 @@ export default function MachineMaintenance() {
                   />
                 </label>
                 <label className="text-xs text-[#47729f] dark:text-slate-400 font-bold block">
-                  Teknisi
-                  <input
-                    type="text"
+                  Technician
+                  <select
                     value={form.technician}
                     onChange={(event) => handleChange("technician", event.target.value)}
                     className="mt-1.5 w-full rounded-md border border-[#d6e9fb] dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#1f6fb5]"
                     required
-                  />
+                  >
+                    <option value="">Select Technician</option>
+                    {operators.map((op) => (
+                      <option key={op.id} value={op.name}>
+                        {op.name} ({op.role.replace(/_/g, " ").toUpperCase()})
+                      </option>
+                    ))}
+                    <option value="Vendor/External">Vendor/External</option>
+                  </select>
                 </label>
               </div>
 
               <label className="text-xs text-[#47729f] dark:text-slate-400 font-bold block">
-                Item Maintenance
+                Maintenance Item
                 <input
                   type="text"
                   value={form.item}
@@ -457,7 +601,7 @@ export default function MachineMaintenance() {
 
               <div className="grid grid-cols-2 gap-4">
                 <label className="text-xs text-[#47729f] dark:text-slate-400 font-bold block">
-                  Abnormalitas
+                  Abnormality
                   <input
                     type="text"
                     value={form.abnormality}
@@ -466,7 +610,7 @@ export default function MachineMaintenance() {
                   />
                 </label>
                 <label className="text-xs text-[#47729f] dark:text-slate-400 font-bold block">
-                  Downtime (jam)
+                  Downtime (hours)
                   <input
                     type="number"
                     step="0.1"
@@ -524,7 +668,7 @@ export default function MachineMaintenance() {
                 disabled={saving}
                 className="w-full rounded-lg bg-[#1f6fb5] hover:bg-[#155c99] py-2.5 text-xs font-bold text-white shadow-md disabled:cursor-not-allowed disabled:opacity-70 transition duration-200"
               >
-                {saving ? "Menyimpan..." : "Simpan Perbaikan"}
+                {saving ? "Saving..." : "Save Record"}
               </button>
             </form>
           </div>
@@ -535,21 +679,21 @@ export default function MachineMaintenance() {
       <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
         <div className="overflow-x-auto">
           {loading ? (
-            <div className="text-xs text-slate-400 animate-pulse py-6 text-center">Memuat data perbaikan...</div>
+            <div className="text-xs text-slate-400 animate-pulse py-6 text-center">Loading maintenance records...</div>
           ) : records.length === 0 ? (
             <div className="text-xs text-slate-400 py-6 text-center italic font-semibold">
-              Belum ada data perbaikan yang tersimpan.
+              No maintenance records available.
             </div>
           ) : (
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
-                  <th className="pb-3 px-3">Tanggal</th>
+                  <th className="pb-3 px-3">Date</th>
                   <th className="pb-3 px-3">Item</th>
-                  <th className="pb-3 px-3">Abnormalitas</th>
+                  <th className="pb-3 px-3">Abnormality</th>
                   <th className="pb-3 px-3">Action</th>
                   <th className="pb-3 px-3 text-right">Downtime</th>
-                  <th className="pb-3 px-3">Teknisi</th>
+                  <th className="pb-3 px-3">Technician</th>
                   <th className="pb-3 px-3 text-center">Status</th>
                   <th className="pb-3 px-3 text-right">Approval</th>
                 </tr>
@@ -597,10 +741,10 @@ export default function MachineMaintenance() {
 
       <ConfirmDialog
         open={confirmOpen}
-        title="Konfirmasi Simpan Maintenance"
-        description="Apakah Anda yakin ingin menyimpan data maintenance ini?"
-        confirmText="Ya"
-        cancelText="Tidak"
+        title="Confirm Maintenance Save"
+        description="Are you sure you want to save this maintenance log?"
+        confirmText="Yes"
+        cancelText="No"
         onConfirm={() => {
           setConfirmOpen(false);
           submitForm();

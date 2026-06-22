@@ -45,15 +45,15 @@ const waterEnergyFactor = 0.4;
 const solarShare = 0.18;
 
 const periods = [
-  { id: "daily", label: "Harian", scale: 1 },
-  { id: "monthly", label: "Bulanan", scale: 30 },
-  { id: "yearly", label: "Tahunan", scale: 365 }
+  { id: "daily", label: "Daily", scale: 1 },
+  { id: "monthly", label: "Monthly", scale: 30 },
+  { id: "yearly", label: "Yearly", scale: 365 }
 ] as const;
 
 const consumptionRanges = [
-  { id: "hour", label: "Per Jam", points: 24, stepMs: 60 * 60 * 1000, type: "time" as const, scale: 1 / 24 },
-  { id: "day", label: "Per Hari", points: 30, stepMs: 24 * 60 * 60 * 1000, type: "day" as const, scale: 1 },
-  { id: "month", label: "Per Bulan", points: 12, stepMs: 30 * 24 * 60 * 60 * 1000, type: "month" as const, scale: 30 }
+  { id: "hour", label: "Hourly", points: 24, stepMs: 60 * 60 * 1000, type: "time" as const, scale: 1 / 24 },
+  { id: "day", label: "Daily", points: 30, stepMs: 24 * 60 * 60 * 1000, type: "day" as const, scale: 1 },
+  { id: "month", label: "Monthly", points: 12, stepMs: 30 * 24 * 60 * 60 * 1000, type: "month" as const, scale: 30 }
 ] as const;
 
 const compareRanges = {
@@ -96,6 +96,15 @@ const statusTone: Record<StatusPreview["status"], string> = {
   Stopped: "text-rose-300"
 };
 
+const rangeOptions = [
+  { value: "5m", label: "5m" },
+  { value: "1h", label: "1h" },
+  { value: "1d", label: "1d" },
+  { value: "1w", label: "1w" },
+  { value: "1m", label: "1m" },
+  { value: "1y", label: "1y" }
+] as const;
+
 export default function Dashboard() {
   const [periodIndex, setPeriodIndex] = useState(0);
   const [consumptionRange, setConsumptionRange] = useState<(typeof consumptionRanges)[number]["id"]>("hour");
@@ -105,6 +114,16 @@ export default function Dashboard() {
   const { range, compare } = useTimeRangeStore();
   const latest = useTelemetryStore((state) => state.latest);
   const activeAlarms = useAlarmStore((state) => state.activeList);
+
+  const [waterTarget, setWaterTarget] = useState(() => Number(localStorage.getItem("scada.makeupWaterTarget") ?? 1000));
+  const [elRange, setElRange] = useState<keyof typeof compareRanges>("1d");
+  const [gasRange, setGasRange] = useState<keyof typeof compareRanges>("1d");
+  const [waterRange, setWaterRange] = useState<keyof typeof compareRanges>("1d");
+  const [carbonRange, setCarbonRange] = useState<keyof typeof compareRanges>("1d");
+
+  useEffect(() => {
+    localStorage.setItem("scada.makeupWaterTarget", waterTarget.toString());
+  }, [waterTarget]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -136,6 +155,7 @@ export default function Dashboard() {
   const electricityKwh = utilityBase.electricityKwh * period.scale;
   const gasSm3 = utilityBase.gasSm3 * period.scale;
   const waterM3 = utilityBase.waterM3 * period.scale;
+  const monthlyWaterVolume = utilityBase.waterM3 * 30;
 
   const electricityCost = electricityKwh * utilityRates.electricityIdr;
   const waterCost = waterM3 * utilityRates.waterIdr;
@@ -248,10 +268,29 @@ export default function Dashboard() {
     });
   }, [ytdElectricitySeries, ytdGasSeries, ytdWaterSeries, ytdSolarSeries, ytdChecks, ytdMonthIndex]);
 
-  const compareConfig = compareRanges[range];
-  const compareLabels = buildLabels(compareConfig.points, compareConfig.stepMs, compareConfig.label);
-  const compareCurrent = buildSeries(compareConfig.points, utilityBase.electricityKwh / 24, utilityBase.electricityKwh / 60, 2);
-  const comparePrevious = compareCurrent.map((value) => Number((value * 0.92).toFixed(2)));
+  const elCompareConfig = compareRanges[elRange];
+  const elCompareLabels = useMemo(() => buildLabels(elCompareConfig.points, elCompareConfig.stepMs, elCompareConfig.label), [elCompareConfig]);
+  const elCurrent = useMemo(() => buildSeries(elCompareConfig.points, utilityBase.electricityKwh / 24, (utilityBase.electricityKwh / 24) * 0.3, 1), [elCompareConfig]);
+  const elPrevious = useMemo(() => elCurrent.map((value) => Number((value * 0.92).toFixed(2))), [elCurrent]);
+
+  const gasCompareConfig = compareRanges[gasRange];
+  const gasCompareLabels = useMemo(() => buildLabels(gasCompareConfig.points, gasCompareConfig.stepMs, gasCompareConfig.label), [gasCompareConfig]);
+  const gasCurrent = useMemo(() => buildSeries(gasCompareConfig.points, utilityBase.gasSm3 / 24, (utilityBase.gasSm3 / 24) * 0.25, 2), [gasCompareConfig]);
+  const gasPrevious = useMemo(() => gasCurrent.map((value) => Number((value * 0.94).toFixed(2))), [gasCurrent]);
+
+  const waterCompareConfig = compareRanges[waterRange];
+  const waterCompareLabels = useMemo(() => buildLabels(waterCompareConfig.points, waterCompareConfig.stepMs, waterCompareConfig.label), [waterCompareConfig]);
+  const waterCurrent = useMemo(() => buildSeries(waterCompareConfig.points, utilityBase.waterM3 / 24, (utilityBase.waterM3 / 24) * 0.2, 3), [waterCompareConfig]);
+  const waterPrevious = useMemo(() => waterCurrent.map((value) => Number((value * 0.91).toFixed(2))), [waterCurrent]);
+
+  const carbonCompareConfig = compareRanges[carbonRange];
+  const carbonCompareLabels = useMemo(() => buildLabels(carbonCompareConfig.points, carbonCompareConfig.stepMs, carbonCompareConfig.label), [carbonCompareConfig]);
+  const carbonCurrent = useMemo(() => {
+    const baseEnergy = (utilityBase.electricityKwh + utilityBase.gasSm3 * gasEnergyFactor + utilityBase.waterM3 * waterEnergyFactor) / 24;
+    const baseCarbon = baseEnergy * emissionFactor * 1000;
+    return buildSeries(carbonCompareConfig.points, baseCarbon, baseCarbon * 0.28, 4);
+  }, [carbonCompareConfig]);
+  const carbonPrevious = useMemo(() => carbonCurrent.map((value) => Number((value * 0.93).toFixed(2))), [carbonCurrent]);
 
   const thresholdKwh = thresholds.find((item) => item.metric === "kwh");
 
@@ -301,26 +340,26 @@ export default function Dashboard() {
       : [
           {
             id: "alarm-electricity",
-            title: "Konsumsi Listrik",
-            detail: "Melebihi ambang batas",
+            title: "Electricity Consumption",
+            detail: "Exceeds threshold",
             severity: "high"
           },
           {
             id: "alarm-gas",
-            title: "Tekanan Gas Boiler 1",
-            detail: "Di bawah normal",
+            title: "Boiler 1 Gas Pressure",
+            detail: "Below normal",
             severity: "medium"
           },
           {
             id: "alarm-water",
-            title: "Level Air Cooling Tower 1",
-            detail: "Di bawah normal",
+            title: "Cooling Tower 1 Water Level",
+            detail: "Below normal",
             severity: "medium"
           },
           {
             id: "alarm-flow",
-            title: "Flow Air Bersih",
-            detail: "Di bawah normal",
+            title: "Clean Water Flow",
+            detail: "Below normal",
             severity: "critical"
           }
         ];
@@ -332,26 +371,26 @@ export default function Dashboard() {
       const waterValue = ytdWaterSeries[index] ?? 0;
       const solarValue = ytdSolarSeries[index] ?? 0;
       return {
-        month: label,
-        electricity_kwh: Number(electricityValue.toFixed(2)),
-        gas_sm3: Number(gasValue.toFixed(2)),
-        water_m3: Number(waterValue.toFixed(2)),
-        solar_kwh: Number(solarValue.toFixed(2)),
-        total_kwh_equiv: Number(ytdTotalSeries[index]?.toFixed(2) ?? 0)
+        Month: label,
+        "Electricity (kWh)": Number(electricityValue.toFixed(2)),
+        "Gas (Sm³)": Number(gasValue.toFixed(2)),
+        "Water (m³)": Number(waterValue.toFixed(2)),
+        "Solar (kWh)": Number(solarValue.toFixed(2)),
+        "Total Equivalent (kWh)": Number(ytdTotalSeries[index]?.toFixed(2) ?? 0)
       };
     });
 
     const worksheet = utils.json_to_sheet(rows);
     const workbook = utils.book_new();
-    utils.book_append_sheet(workbook, worksheet, "YTD Energi");
-    writeFile(workbook, `ytd-energi.xlsx`);
+    utils.book_append_sheet(workbook, worksheet, "YTD Energy");
+    writeFile(workbook, `ytd-energy.xlsx`);
   };
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Utility & Energy Monitoring Dashboard"
-        description="Ringkasan konsumsi energi, biaya, dan status utilitas utama."
+        description="Summary of energy consumption, costs, and key utility status."
       />
 
       {/* Executive Summary — 5 equal cards */}
@@ -362,7 +401,7 @@ export default function Dashboard() {
               Executive Summary
             </div>
             <div className="mt-1 text-sm text-[#47729f] dark:text-slate-400">
-              Ringkasan periode {period.label.toLowerCase()}.
+              Summary of {period.label.toLowerCase()} period.
             </div>
           </div>
           <div className="flex items-center gap-1 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/80 px-1 text-xs">
@@ -390,12 +429,12 @@ export default function Dashboard() {
             <ProgressRing
               value={totalEnergyKwh}
               target={energyTarget}
-              label="Total Energi"
+              label="Total Energy"
               unit="kWh"
               tone="cyan"
             />
             <div className="mt-2 text-xs text-[#47729f] dark:text-slate-400">
-              Gas & air dikonversi ke kWh setara.
+              Gas & water converted to equivalent kWh.
             </div>
           </div>
 
@@ -404,12 +443,12 @@ export default function Dashboard() {
             <ProgressRing
               value={totalCostIdr}
               target={costTarget}
-              label="Total Biaya"
+              label="Total Cost"
               unit="IDR"
               tone="amber"
             />
             <div className="mt-2 text-xs text-[#47729f] dark:text-slate-400">
-              Kurs USD/IDR: {usdToIdr.toLocaleString()}
+              USD/IDR Exchange Rate: {usdToIdr.toLocaleString()}
             </div>
           </div>
 
@@ -422,10 +461,10 @@ export default function Dashboard() {
               {co2Emission.toFixed(1)} Ton
             </div>
             <div className="mt-1 text-xs text-[#47729f] dark:text-slate-400">
-              Estimasi bulan berjalan
+              Current month estimate
             </div>
             <div className="mt-3 text-xs text-[#47729f]/80 dark:text-slate-500">
-              Rasio distribusi energi dihitung berdasarkan emisi setara batu bara dan gas alam cair.
+              Energy distribution ratio calculated based on equivalent emissions of coal and liquefied natural gas.
             </div>
           </div>
 
@@ -438,7 +477,7 @@ export default function Dashboard() {
               {solarKwh.toFixed(0)} kWh
             </div>
             <div className="mt-1 text-xs text-[#47729f] dark:text-slate-400">
-              Hemat {formatCurrency(solarSavings, "IDR")}
+              Saved {formatCurrency(solarSavings, "IDR")}
             </div>
             <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-900">
               <div
@@ -447,7 +486,7 @@ export default function Dashboard() {
               />
             </div>
             <div className="mt-2 text-xs text-[#47729f] dark:text-slate-400">
-              Coverage {solarCoverage.toFixed(1)}% listrik
+              Coverage {solarCoverage.toFixed(1)}% of electricity
             </div>
           </div>
 
@@ -460,7 +499,7 @@ export default function Dashboard() {
               {(solarKwh * 0.87).toFixed(1)} kg
             </div>
             <div className="mt-1 text-xs text-[#47729f] dark:text-slate-400">
-              Mereduksi emisi karbon
+              Reduces carbon emissions
             </div>
             <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-900">
               <div
@@ -469,7 +508,7 @@ export default function Dashboard() {
               />
             </div>
             <div className="mt-2 text-[10px] text-emerald-600 dark:text-emerald-400/80 font-medium">
-              Sertifikasi Hijau Mandiri
+              Independent Green Certification
             </div>
           </div>
         </div>
@@ -480,10 +519,10 @@ export default function Dashboard() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
-              Konsumsi Utilitas
+              Utility Consumption
             </div>
             <div className="mt-1 text-sm text-[#47729f] dark:text-slate-400">
-              Pilih rentang untuk listrik, gas, dan air.
+              Select range for electricity, gas, and water.
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-1 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/80 px-1 text-xs">
@@ -508,11 +547,11 @@ export default function Dashboard() {
         <div className="mt-4 grid gap-4 grid-cols-1 md:grid-cols-3">
           {/* 4 Utility Bar Charts Grid (Left) */}
           <div className="md:col-span-2 grid gap-4 grid-cols-1 sm:grid-cols-2">
-            {/* Listrik */}
+            {/* Electricity */}
             <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Listrik</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Electricity</div>
                   <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
                     {formatCurrency(electricityCost, "IDR")}
                   </div>
@@ -559,11 +598,11 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Air */}
+            {/* Water */}
             <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Air</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Water</div>
                   <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
                     {formatCurrency(waterCost, "IDR")}
                   </div>
@@ -609,27 +648,57 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-
           {/* Distribusi Energi (Right) */}
-          <div className="md:col-span-1 rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
+          <div className="md:col-span-1 flex flex-col">
+            {/* Energy Distribution */}
+            <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-5 transition-colors duration-300 flex-1 flex flex-col justify-between">
               <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Distribusi Energi</div>
-                <div className="mt-1 text-sm font-semibold text-[#47729f] dark:text-slate-400 font-medium">Bulan Ini</div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Energy Distribution</div>
+                    <div className="text-[10px] text-[#47729f] dark:text-slate-400 font-medium">This Month</div>
+                  </div>
+                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                    ≈ {trees.toLocaleString("en-US")} trees
+                  </div>
+                </div>
+                <div className="flex items-center justify-center min-h-[220px] mt-4">
+                  <EnergyDonutChart
+                    labels={["Electricity", "Gas", "Water"]}
+                    values={[monthlyElectric, monthlyGasEnergy, monthlyWaterEnergy]}
+                    colors={["rgba(56, 189, 248, 0.9)", "rgba(250, 204, 21, 0.85)", "rgba(74, 222, 128, 0.85)"]}
+                    centerLabel="Total"
+                    centerValue={`${totalMonthlyEnergy.toFixed(0)}`}
+                    height={220}
+                  />
+                </div>
               </div>
-              <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                ≈ {trees.toLocaleString("id-ID")} pohon
+
+              <div className="mt-6 space-y-3">
+                {[
+                  { label: "Electricity", value: monthlyElectric, unit: "kWh", color: "bg-sky-400", rawVal: monthlyElectric },
+                  { label: "Gas (equiv.)", value: monthlyGasEnergy, unit: "kWh", color: "bg-yellow-400", rawVal: monthlyGasEnergy },
+                  { label: "Water (equiv.)", value: monthlyWaterEnergy, unit: "kWh", color: "bg-green-400", rawVal: monthlyWaterEnergy }
+                ].map((item) => {
+                  const pct = totalMonthlyEnergy > 0 ? (item.rawVal / totalMonthlyEnergy) * 100 : 0;
+                  return (
+                    <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-900 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{item.label}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono font-bold text-slate-900 dark:text-white">
+                          {item.value.toLocaleString(undefined, { maximumFractionDigits: 0 })} {item.unit}
+                        </span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium ml-2">
+                          ({pct.toFixed(1)}%)
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-            <div className="mt-3 flex-1 flex items-center justify-center min-h-[200px]">
-              <EnergyDonutChart
-                labels={["Listrik", "Gas", "Air"]}
-                values={[monthlyElectric, monthlyGasEnergy, monthlyWaterEnergy]}
-                colors={["rgba(56, 189, 248, 0.9)", "rgba(250, 204, 21, 0.85)", "rgba(74, 222, 128, 0.85)"]}
-                centerLabel="Total"
-                centerValue={`${totalMonthlyEnergy.toFixed(0)}`}
-                height={160}
-              />
             </div>
           </div>
         </div>
@@ -643,15 +712,15 @@ export default function Dashboard() {
               Actual Year to Date (YTD)
             </div>
             <div className="text-sm text-[#47729f] dark:text-slate-400">
-              Akumulasi bulanan per kategori. Centang untuk tampilkan di grafik total.
+              Monthly accumulation per category. Check to display in the total chart.
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-3 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/80 px-3 py-1.5 text-xs transition-colors duration-300">
               {([
-                { key: "electricity" as const, label: "Listrik", color: "#2f8ae5" },
+                { key: "electricity" as const, label: "Electricity", color: "#2f8ae5" },
                 { key: "gas" as const, label: "Gas", color: "#f4c542" },
-                { key: "water" as const, label: "Air", color: "#3bb77e" },
+                { key: "water" as const, label: "Water", color: "#3bb77e" },
                 { key: "solar" as const, label: "Solar Panel", color: "#f59e0b" }
               ]).map((item) => (
                 <label
@@ -684,7 +753,7 @@ export default function Dashboard() {
         {/* 4 YTD cards */}
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Listrik YTD</div>
+            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Electricity YTD</div>
             <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
               {formatCurrency(ytdElectricityTotal * utilityRates.electricityIdr, "IDR")}
             </div>
@@ -722,7 +791,7 @@ export default function Dashboard() {
           </div>
 
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Air YTD</div>
+            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Water YTD</div>
             <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
               {formatCurrency(ytdWaterTotal * utilityRates.waterIdr, "IDR")}
             </div>
@@ -763,10 +832,10 @@ export default function Dashboard() {
         {/* Total YTD Stacked Chart */}
         <div className="mt-5 rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
           <div className="mb-1 text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
-            Grafik Total YTD (kWh Setara)
+            Total YTD Chart (Equivalent kWh)
           </div>
           <div className="text-xs text-[#47729f] dark:text-slate-400">
-            Hanya kategori yang dicentang. Gas & air dikonversi ke kWh.
+            Only checked categories. Gas & water converted to kWh.
           </div>
           <div className="mt-3">
             <EnergyTrendStackedChart
@@ -787,14 +856,14 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
-                Status Utility
+                Utility Status
               </div>
               <div className="text-xs text-[#47729f] dark:text-slate-400">
-                Snapshot otomatis & manual override
+                Automatic snapshot & manual override
               </div>
             </div>
             <Link to="/utility-status" className="text-xs font-semibold text-[#1f6fb5] dark:text-sky-400 hover:underline">
-              Lihat
+              View
             </Link>
           </div>
           <div className="mt-3 space-y-2">
@@ -819,14 +888,14 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
-                Status HVAC
+                HVAC Status
               </div>
               <div className="text-xs text-[#47729f] dark:text-slate-400">
-                Snapshot otomatis & manual override
+                Automatic snapshot & manual override
               </div>
             </div>
             <Link to="/utility-status" className="text-xs font-semibold text-[#1f6fb5] dark:text-sky-400 hover:underline">
-              Lihat
+              View
             </Link>
           </div>
           <div className="mt-3 space-y-2">
@@ -851,14 +920,14 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs uppercase tracking-[0.2em] text-rose-500 dark:text-rose-300 font-semibold">
-                Alarm Teraktif
+                Most Active Alarms
               </div>
               <div className="text-xs text-[#47729f] dark:text-slate-400">
-                {activeAlarms.length > 0 ? `${activeAlarms.length} alarm aktif` : "Demo alarm"}
+                {activeAlarms.length > 0 ? `${activeAlarms.length} active alarms` : "Demo alarm"}
               </div>
             </div>
             <Link to="/alarms" className="text-xs font-semibold text-[#1f6fb5] dark:text-sky-400 hover:underline">
-              Lihat Semua
+              View All
             </Link>
           </div>
           <div className="mt-3 space-y-2">
@@ -893,23 +962,143 @@ export default function Dashboard() {
 
       {/* Perbandingan */}
       <section className="rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-5 transition-colors duration-300">
-        <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
-          Perbandingan Range Sebelumnya
+        <div className="mb-4">
+          <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
+            Previous Range Comparison (Electricity, Gas, Water, Carbon)
+          </div>
+          <div className="mt-1 text-sm text-[#47729f] dark:text-slate-400">
+            Select comparison ranges independently for each parameter.
+          </div>
         </div>
-        <div className="mt-1 text-sm text-[#47729f] dark:text-slate-400">
-          Range dibandingkan dengan periode sebelumnya.
-        </div>
-        <div className="mt-4">
-          <TimeRangeControls />
-        </div>
-        <div className="mt-4">
-          <ComparisonBarChart
-            labels={compareLabels}
-            current={compareCurrent}
-            previous={compare ? comparePrevious : undefined}
-            unit="kWh"
-            heightClassName="h-40"
-          />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+          {/* Card Electricity */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300 flex flex-col justify-between">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <span className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-400 font-semibold">Electricity</span>
+              <div className="flex gap-0.5 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-0.5 text-[9px]">
+                {rangeOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setElRange(opt.value)}
+                    className={`rounded-full px-1.5 py-0.5 font-bold transition ${
+                      elRange === opt.value
+                        ? "bg-[#1f6fb5] text-white"
+                        : "text-[#47729f] dark:text-slate-500 hover:text-[#002b5c] dark:hover:text-slate-300"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2 flex-1">
+              <ComparisonBarChart
+                labels={elCompareLabels}
+                current={elCurrent}
+                previous={elPrevious}
+                unit="kWh"
+                heightClassName="h-32"
+              />
+            </div>
+          </div>
+
+          {/* Card Gas */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300 flex flex-col justify-between">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <span className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-400 font-semibold">Gas</span>
+              <div className="flex gap-0.5 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-0.5 text-[9px]">
+                {rangeOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setGasRange(opt.value)}
+                    className={`rounded-full px-1.5 py-0.5 font-bold transition ${
+                      gasRange === opt.value
+                        ? "bg-[#1f6fb5] text-white"
+                        : "text-[#47729f] dark:text-slate-500 hover:text-[#002b5c] dark:hover:text-slate-300"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2 flex-1">
+              <ComparisonBarChart
+                labels={gasCompareLabels}
+                current={gasCurrent}
+                previous={gasPrevious}
+                unit="Sm³"
+                heightClassName="h-32"
+              />
+            </div>
+          </div>
+
+          {/* Card Water */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300 flex flex-col justify-between">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <span className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-400 font-semibold">Water</span>
+              <div className="flex gap-0.5 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-0.5 text-[9px]">
+                {rangeOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setWaterRange(opt.value)}
+                    className={`rounded-full px-1.5 py-0.5 font-bold transition ${
+                      waterRange === opt.value
+                        ? "bg-[#1f6fb5] text-white"
+                        : "text-[#47729f] dark:text-slate-500 hover:text-[#002b5c] dark:hover:text-slate-300"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2 flex-1">
+              <ComparisonBarChart
+                labels={waterCompareLabels}
+                current={waterCurrent}
+                previous={waterPrevious}
+                unit="m³"
+                heightClassName="h-32"
+              />
+            </div>
+          </div>
+
+          {/* Card Carbon */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300 flex flex-col justify-between">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <span className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-400 font-semibold">Carbon</span>
+              <div className="flex gap-0.5 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-0.5 text-[9px]">
+                {rangeOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setCarbonRange(opt.value)}
+                    className={`rounded-full px-1.5 py-0.5 font-bold transition ${
+                      carbonRange === opt.value
+                        ? "bg-[#1f6fb5] text-white"
+                        : "text-[#47729f] dark:text-slate-500 hover:text-[#002b5c] dark:hover:text-slate-300"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2 flex-1">
+              <ComparisonBarChart
+                labels={carbonCompareLabels}
+                current={carbonCurrent}
+                previous={carbonPrevious}
+                unit="kg"
+                heightClassName="h-32"
+              />
+            </div>
+          </div>
         </div>
       </section>
     </div>

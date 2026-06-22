@@ -39,6 +39,13 @@ export const ComparisonBarChart = ({
   const showUpper = thresholds?.upper !== null && thresholds?.upper !== undefined;
   const showLower = thresholds?.lower !== null && thresholds?.lower !== undefined;
 
+  const shouldShowLabel = (index: number, total: number) => {
+    if (total <= 8) return true;
+    if (total <= 15) return index % 2 === 0;
+    if (total <= 25) return index % 4 === 0;
+    return index % 5 === 0;
+  };
+
   return (
     <div className="relative">
       <div className={`relative ${heightClassName}`}>
@@ -115,8 +122,8 @@ export const ComparisonBarChart = ({
                     }
                   />
                 </div>
-                <div className="mt-2 text-center text-[10px] text-slate-500 dark:text-slate-400">
-                  {label}
+                <div className="mt-2 text-center text-[10px] text-slate-500 dark:text-slate-400 min-h-[14px]">
+                  {shouldShowLabel(index, labels.length) ? label : "\u00A0"}
                 </div>
               </div>
             );
@@ -126,12 +133,12 @@ export const ComparisonBarChart = ({
       <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-400">
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-cyan-400" />
-          Timeline Saat Ini
+          Current Timeline
         </div>
         {previous ? (
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-slate-500" />
-            Timeline Sebelumnya
+            Previous Timeline
           </div>
         ) : null}
         {hoverState ? (

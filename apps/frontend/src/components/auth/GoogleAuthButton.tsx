@@ -14,27 +14,48 @@ export const GoogleAuthButton = ({
   const buttonRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!clientId || !buttonRef.current || !window.google?.accounts?.id) {
-      return;
+    if (!clientId || !buttonRef.current) return;
+
+    let intervalId: number | undefined;
+
+    const initializeGoogleButton = () => {
+      if (!window.google?.accounts?.id || !buttonRef.current) return false;
+
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response) => {
+          if (response.credential) {
+            onCredential(response.credential);
+          }
+        }
+      });
+
+      window.google.accounts.id.renderButton(buttonRef.current, {
+        theme: "outline",
+        size: "large",
+        width: 320,
+        text: "continue_with"
+      });
+
+      onReady?.();
+      return true;
+    };
+
+    const succeeded = initializeGoogleButton();
+    if (!succeeded) {
+      intervalId = window.setInterval(() => {
+        const ok = initializeGoogleButton();
+        if (ok) {
+          window.clearInterval(intervalId);
+        }
+      }, 100);
     }
 
-    window.google.accounts.id.initialize({
-      client_id: clientId,
-      callback: (response) => {
-        if (response.credential) {
-          onCredential(response.credential);
-        }
+    return () => {
+      if (intervalId) {
+        window.clearInterval(intervalId);
       }
-    });
-
-    window.google.accounts.id.renderButton(buttonRef.current, {
-      theme: "outline",
-      size: "large",
-      width: 320,
-      text: "continue_with"
-    });
-
-    onReady?.();
+    };
   }, [clientId, onCredential, onReady]);
 
   if (!clientId) {

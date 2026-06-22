@@ -113,8 +113,11 @@ export const Sidebar = () => {
     });
   };
 
-  const hvacGroup = machineGroups.find((g) => g.id === "hvac");
-  const hvacUnits = hvacGroup?.units ?? [];
+  const hvacQcGroup = machineGroups.find((g) => g.id === "hvac-qc");
+  const hvacWarehouseGroup = machineGroups.find((g) => g.id === "hvac-warehouse");
+  const hvacWf1Group = machineGroups.find((g) => g.id === "hvac-wf1u3");
+  const hvacWf2u1Group = machineGroups.find((g) => g.id === "hvac-wf2u1");
+  const hvacWf2u2Group = machineGroups.find((g) => g.id === "hvac-wf2u2");
 
   return (
     <aside className="sticky top-0 hidden h-screen w-[260px] shrink-0 flex-col border-r border-[#acd3ff] dark:border-slate-800 bg-[#eaf4ff] dark:bg-slate-900 px-4 py-5 text-[#002b5c] dark:text-slate-100 lg:flex overflow-y-auto scrollbar-thin transition-colors duration-300">
@@ -129,8 +132,8 @@ export const Sidebar = () => {
         </div>
       </div>
 
-      {/* UTAMA */}
-      <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400">UTAMA</div>
+      {/* MAIN MENU */}
+      <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400">MAIN MENU</div>
       <nav className="flex flex-col gap-0.5 mb-5">
         <NavItem to="/dashboard" label="Dashboard" icon={<IconDashboard />} tone="scada" />
         <NavItem to="/plant" label="Plant Layout" icon={<IconPlant />} tone="scada" />
@@ -200,11 +203,57 @@ export const Sidebar = () => {
             <IconChevron open={openSections.hvac} />
           </button>
           {openSections.hvac && (
-            <div className="flex flex-col gap-0.5 mt-1 border-l border-[#acd3ff] dark:border-slate-800 ml-2 max-h-60 overflow-y-auto scrollbar-thin">
-              {hvacUnits.map((unit) => (
+            <div className="flex flex-col gap-0.5 mt-1 border-l border-[#acd3ff] dark:border-slate-800 ml-2 max-h-72 overflow-y-auto scrollbar-thin">
+              {/* HVAC QC */}
+              <div className="pl-6 py-1 text-[10px] uppercase font-bold text-[#47729f] dark:text-[#79b6eb]/70 tracking-wider">HVAC QC</div>
+              {hvacQcGroup?.units.map((unit) => (
                 <NavItem
                   key={unit.id}
-                  to={`/machines/hvac/${unit.id}`}
+                  to={`/machines/hvac-qc/${unit.id}`}
+                  label={unit.unitLabel}
+                  tone="scada"
+                />
+              ))}
+
+              {/* HVAC Warehouse */}
+              <div className="pl-6 py-1 text-[10px] uppercase font-bold text-[#47729f] dark:text-[#79b6eb]/70 tracking-wider">HVAC Warehouse</div>
+              {hvacWarehouseGroup?.units.map((unit) => (
+                <NavItem
+                  key={unit.id}
+                  to={`/machines/hvac-warehouse/${unit.id}`}
+                  label={unit.unitLabel}
+                  tone="scada"
+                />
+              ))}
+
+              {/* HVAC Production WF1 */}
+              <div className="pl-6 py-1 text-[10px] uppercase font-bold text-[#47729f] dark:text-[#79b6eb]/70 tracking-wider">HVAC Production WF1</div>
+              {hvacWf1Group?.units.map((unit) => (
+                <NavItem
+                  key={unit.id}
+                  to={`/machines/hvac-wf1u3/${unit.id}`}
+                  label={unit.unitLabel}
+                  tone="scada"
+                />
+              ))}
+
+              {/* HVAC Production WF2U1 */}
+              <div className="pl-6 py-1 text-[10px] uppercase font-bold text-[#47729f] dark:text-[#79b6eb]/70 tracking-wider">HVAC Production WF2U1</div>
+              {hvacWf2u1Group?.units.map((unit) => (
+                <NavItem
+                  key={unit.id}
+                  to={`/machines/hvac-wf2u1/${unit.id}`}
+                  label={unit.unitLabel}
+                  tone="scada"
+                />
+              ))}
+
+              {/* HVAC Production WF2U2 */}
+              <div className="pl-6 py-1 text-[10px] uppercase font-bold text-[#47729f] dark:text-[#79b6eb]/70 tracking-wider">HVAC Production WF2U2</div>
+              {hvacWf2u2Group?.units.map((unit) => (
+                <NavItem
+                  key={unit.id}
+                  to={`/machines/hvac-wf2u2/${unit.id}`}
                   label={unit.unitLabel}
                   tone="scada"
                 />
@@ -222,35 +271,35 @@ export const Sidebar = () => {
         </div>
       </div>
 
-      {/* PENGGUNAAN UTILITY */}
+      {/* UTILITY CONSUMPTION */}
       <div className="mb-1">
         <button
           type="button"
           onClick={() => toggleSection("penggunaanUtility")}
           className="flex w-full items-center justify-between py-1 text-left text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400 hover:text-[#002b5c] dark:hover:text-white"
         >
-          <span>PENGGUNAAN UTILITY</span>
+          <span>UTILITY CONSUMPTION</span>
           <IconChevron open={openSections.penggunaanUtility} />
         </button>
       </div>
 
       {openSections.penggunaanUtility && (
         <nav className="flex flex-col gap-0.5 mb-5 pl-2">
-          <NavItem to="/listrik" label="Listrik" icon={<IconDevice />} tone="scada" />
+          <NavItem to="/listrik" label="Electricity" icon={<IconDevice />} tone="scada" />
           <NavItem to="/gas" label="Gas" icon={<IconDevice />} tone="scada" />
-          <NavItem to="/air" label="Air" icon={<IconDevice />} tone="scada" />
+          <NavItem to="/air" label="Water" icon={<IconDevice />} tone="scada" />
           <NavItem to="/wwtp" label="WWTP" icon={<IconDevice />} tone="scada" />
         </nav>
       )}
 
-      {/* OPERASIONAL */}
+      {/* OPERATIONS */}
       <div className="mb-1">
         <button
           type="button"
           onClick={() => toggleSection("operasional")}
           className="flex w-full items-center justify-between py-1 text-left text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400 hover:text-[#002b5c] dark:hover:text-white"
         >
-          <span>OPERASIONAL</span>
+          <span>OPERATIONS</span>
           <IconChevron open={openSections.operasional} />
         </button>
       </div>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
+import * as XLSX from "xlsx";
 import { TrendChart } from "../../components/charts/TrendChart";
 import { getUnitById } from "../../data/machines";
 import { industrialTags } from "../../data/industrial-tags";
@@ -46,7 +47,7 @@ export default function MachineHistorian() {
   }
 
   const [rangeMinutes, setRangeMinutes] = useState(60);
-  const [resolution, setResolution] = useState<"1m" | "1h">("1m");
+  const [resolution, setResolution] = useState<"Hourly" | "Daily" | "Monthly">("Hourly");
   const [data, setData] = useState<HistorianDoc[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -69,12 +70,22 @@ export default function MachineHistorian() {
     let mounted = true;
     setLoading(true);
     const to = new Date();
-    const from = new Date(to.getTime() - rangeMinutes * 60 * 1000);
+    
+    let fetchMinutes = rangeMinutes;
+    if (resolution === "Daily") {
+      fetchMinutes = 1440 * 15; // last 15 days
+    } else if (resolution === "Monthly") {
+      fetchMinutes = 1440 * 180; // last 180 days
+    }
+
+    const from = new Date(to.getTime() - fetchMinutes * 60 * 1000);
+    const backendRes = (resolution === "Hourly" && rangeMinutes <= 360) ? "1m" : "1h";
+
     const params = new URLSearchParams({
       tagId: machine.tagId,
       from: from.toISOString(),
       to: to.toISOString(),
-      resolution,
+      resolution: backendRes,
       limit: "2000"
     });
 
@@ -95,6 +106,67 @@ export default function MachineHistorian() {
     };
   }, [machine, rangeMinutes, resolution]);
 
+  const displayData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    if (resolution === "Hourly") return data;
+
+    const groups: Record<string, HistorianDoc[]> = {};
+    data.forEach((item) => {
+      const date = new Date(item.ts);
+      let key = "";
+      if (resolution === "Daily") {
+        key = date.toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" });
+      } else {
+        key = date.toLocaleDateString("en-US", { year: "numeric", month: "2-digit" });
+      }
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(item);
+    });
+
+    return Object.entries(groups).map(([key, items]) => {
+      const values = items
+        .map((i) => (typeof i.value === "number" ? i.value : Number(i.value)))
+        .filter((v) => !isNaN(v));
+      const avgValue = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+      const minVal = values.length > 0 ? Math.min(...values) : 0;
+      const maxVal = values.length > 0 ? Math.max(...values) : 0;
+      const lastVal = values.length > 0 ? values[values.length - 1] : 0;
+
+      const sampleItem = items[0];
+      return {
+        ts: items[items.length - 1].ts,
+        value: avgValue,
+        quality: sampleItem.quality,
+        meta: {
+          tagId: sampleItem.meta.tagId,
+          unit: sampleItem.meta.unit,
+          count: items.reduce((sum, item) => sum + (item.meta.count ?? 1), 0),
+          min: minVal,
+          max: maxVal,
+          last: lastVal
+        }
+      } as HistorianDoc;
+    });
+  }, [data, resolution]);
+
+  const downloadExcel = () => {
+    if (!machine) return;
+    const excelData = displayData.map((d) => ({
+      Timestamp: new Date(d.ts).toLocaleString(),
+      Value: typeof d.value === "number" ? Number(d.value.toFixed(3)) : d.value,
+      Samples: d.meta.count ?? 1,
+      Min: d.meta.min?.toFixed(3) ?? "—",
+      Max: d.meta.max?.toFixed(3) ?? "—"
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Historian Data");
+    XLSX.writeFile(wb, `${machine.id}_historian_${resolution.toLowerCase()}.xlsx`);
+  };
+
   if (!machine || !selectedTag) {
     return (
       <div className="rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-5 text-center text-sm text-[#47729f] dark:text-slate-400">
@@ -114,7 +186,7 @@ export default function MachineHistorian() {
             {selectedTag.name} <span className="font-mono text-xs opacity-60">({machine.tagId})</span>
           </div>
         </div>
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex rounded-full border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 px-1 py-1 text-xs">
             {ranges.map((range) => (
               <button
@@ -137,15 +209,11 @@ export default function MachineHistorian() {
             ))}
           </div>
           <div className="flex rounded-full border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 px-1 py-1 text-xs">
-            {(["1m", "1h"] as const).map((item) => (
+            {(["Hourly", "Daily", "Monthly"] as const).map((item) => (
               <button
                 key={item}
                 type="button"
-                onClick={() => {
-                  if (item !== resolution) {
-                    setResolution(item);
-                  }
-                }}
+                onClick={() => setResolution(item)}
                 className={[
                   "rounded-full px-3 py-1 font-semibold transition",
                   resolution === item
@@ -157,6 +225,12 @@ export default function MachineHistorian() {
               </button>
             ))}
           </div>
+          <button
+            onClick={downloadExcel}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 hover:bg-[#1f6fb5]/10 dark:hover:bg-[#1f6fb5]/20 text-[#002b5c] dark:text-slate-300 rounded-full transition"
+          >
+            📥 Export Excel
+          </button>
         </div>
       </div>
 
@@ -167,7 +241,7 @@ export default function MachineHistorian() {
               Telemetry History
             </div>
             <div className="mt-1 text-xs text-[#47729f] dark:text-slate-500">
-              {data.length} samples | {resolution} resolution
+              {displayData.length} samples | {resolution} resolution
             </div>
           </div>
           {loading ? (
@@ -176,7 +250,7 @@ export default function MachineHistorian() {
         </div>
         
         <TrendChart
-          points={data}
+          points={displayData}
           unit={selectedTag.unit}
           heightClassName="h-72"
           minThreshold={selectedTag.normalMin}
@@ -196,7 +270,7 @@ export default function MachineHistorian() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#acd3ff] dark:divide-slate-800">
-              {data.slice(-12).reverse().map((row) => (
+              {displayData.slice(-12).reverse().map((row) => (
                 <tr key={`${row.meta.tagId}-${row.ts}`} className="text-[#002b5c] dark:text-slate-300 hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                   <td className="px-4 py-3 text-xs text-[#47729f] dark:text-slate-500">
                     {new Date(row.ts).toLocaleString()}
@@ -217,7 +291,7 @@ export default function MachineHistorian() {
                   </td>
                 </tr>
               ))}
-              {data.length === 0 && (
+              {displayData.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-xs text-[#47729f] dark:text-slate-500">
                     No data points found for this range.
@@ -232,19 +306,8 @@ export default function MachineHistorian() {
   );
 }
 
-function calculateMKT(temps: number[]): number {
-  if (temps.length === 0) return 0;
-  // Ea = 83.144 kJ/mol = 83144 J/mol
-  // R = 8.3144 J/(mol*K)
-  // Ea/R = 83144 / 8.3144 = 10000 Kelvin
-  const Ea_R = 10000;
-  const sumExp = temps.reduce((acc, t) => acc + Math.exp(-Ea_R / (t + 273.15)), 0);
-  const avgExp = sumExp / temps.length;
-  const mktK = Ea_R / -Math.log(avgExp);
-  return Number((mktK - 273.15).toFixed(1));
-}
-
 function HvacHistorian({ unitId, theme, isDark }: { unitId: string; theme: string; isDark: boolean }) {
+  const [resolution, setResolution] = useState<"Hourly" | "Daily" | "Monthly">("Hourly");
   const [range, setRange] = useState<"24H" | "7D" | "30D">("24H");
   const [zoomActive, setZoomActive] = useState(false);
   const [isReplaying, setIsReplaying] = useState(false);
@@ -265,7 +328,7 @@ function HvacHistorian({ unitId, theme, isDark }: { unitId: string; theme: strin
     setLoading(true);
     const t = setTimeout(() => setLoading(false), 300);
     return () => clearTimeout(t);
-  }, [range, refreshCounter]);
+  }, [range, resolution, refreshCounter]);
 
   useEffect(() => {
     if (isReplaying) {
@@ -285,20 +348,21 @@ function HvacHistorian({ unitId, theme, isDark }: { unitId: string; theme: strin
       return `${h.toString().padStart(2, "0")}:00`;
     };
 
-    if (range === "7D") {
-      count = 7;
+    if (resolution === "Daily") {
+      count = range === "7D" ? 7 : 30;
       const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
       const todayIdx = new Date().getDay();
       labelFormat = (i: number) => {
         const idx = (todayIdx - (count - 1 - i) + 7) % 7;
         return days[idx];
       };
-    } else if (range === "30D") {
-      count = 30;
+    } else if (resolution === "Monthly") {
+      count = 12;
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const currentMonth = new Date().getMonth();
       labelFormat = (i: number) => {
-        const d = new Date();
-        d.setDate(d.getDate() - (count - 1 - i));
-        return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+        const idx = (currentMonth - (count - 1 - i) + 12) % 12;
+        return `${months[idx]} 2026`;
       };
     }
 
@@ -330,7 +394,7 @@ function HvacHistorian({ unitId, theme, isDark }: { unitId: string; theme: strin
       });
     }
 
-    if (range === "24H" && refreshCounter === 0) {
+    if (resolution === "Hourly" && range === "24H" && refreshCounter === 0) {
       data[2].ahu1Temp = 25.8;
       data[12].ahu1Temp = 29.1;
       data[5].ahu2Temp = 38.4;
@@ -345,7 +409,7 @@ function HvacHistorian({ unitId, theme, isDark }: { unitId: string; theme: strin
     }
 
     return data;
-  }, [range, config, refreshCounter]);
+  }, [range, resolution, config, refreshCounter]);
 
   const stats = useMemo(() => {
     const getMin = (arr: number[]) => Math.min(...arr);
@@ -359,11 +423,11 @@ function HvacHistorian({ unitId, theme, isDark }: { unitId: string; theme: strin
     const ahu3Hums = mockData.map(d => d.ahu3Hum);
 
     return {
-      ahu1Temp: { min: getMin(ahu1Temps), max: getMax(ahu1Temps), mean: getMean(ahu1Temps), mkt: calculateMKT(ahu1Temps) },
-      ahu2Temp: { min: getMin(ahu2Temps), max: getMax(ahu2Temps), mean: getMean(ahu2Temps), mkt: calculateMKT(ahu2Temps) },
-      ahu3Temp: { min: getMin(ahu3Temps), max: getMax(ahu3Temps), mean: getMean(ahu3Temps), mkt: calculateMKT(ahu3Temps) },
-      ahu2Hum: { min: getMin(ahu2Hums), max: getMax(ahu2Hums), mean: getMean(ahu2Hums), mkt: "—" },
-      ahu3Hum: { min: getMin(ahu3Hums), max: getMax(ahu3Hums), mean: getMean(ahu3Hums), mkt: "—" }
+      ahu1Temp: { min: getMin(ahu1Temps), max: getMax(ahu1Temps), mean: getMean(ahu1Temps) },
+      ahu2Temp: { min: getMin(ahu2Temps), max: getMax(ahu2Temps), mean: getMean(ahu2Temps) },
+      ahu3Temp: { min: getMin(ahu3Temps), max: getMax(ahu3Temps), mean: getMean(ahu3Temps) },
+      ahu2Hum: { min: getMin(ahu2Hums), max: getMax(ahu2Hums), mean: getMean(ahu2Hums) },
+      ahu3Hum: { min: getMin(ahu3Hums), max: getMax(ahu3Hums), mean: getMean(ahu3Hums) }
     };
   }, [mockData]);
 
@@ -375,10 +439,26 @@ function HvacHistorian({ unitId, theme, isDark }: { unitId: string; theme: strin
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `hvac_retained_sample_trends_${range}.csv`);
+    link.setAttribute("download", `hvac_retained_sample_trends_${resolution.toLowerCase()}_${range}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const downloadExcel = () => {
+    const excelData = mockData.map((d) => ({
+      Timestamp: d.label,
+      "AHU-01 Temp (°C)": d.ahu1Temp,
+      "AHU-02 Temp (°C)": d.ahu2Temp,
+      "AHU-03 Temp (°C)": d.ahu3Temp,
+      "AHU-02 Humidity (%RH)": d.ahu2Hum,
+      "AHU-03 Humidity (%RH)": d.ahu3Hum
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "HVAC Telemetry");
+    XLSX.writeFile(wb, `hvac_retained_sample_trends_${resolution.toLowerCase()}.xlsx`);
   };
 
   const printPDF = () => {
@@ -497,7 +577,7 @@ function HvacHistorian({ unitId, theme, isDark }: { unitId: string; theme: strin
   return (
     <div className="space-y-6">
       {/* Historical Range and Function Selectors Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-4 transition-colors duration-300 backdrop-blur-sm">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-4 transition-colors duration-300 backdrop-blur-md">
         <div className="space-y-0.5">
           <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-extrabold">
             HVAC QC Retained Sample
@@ -508,22 +588,46 @@ function HvacHistorian({ unitId, theme, isDark }: { unitId: string; theme: strin
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Ranges */}
+          {/* Resolution Selector */}
           <div className="flex rounded-full border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 px-1 py-1 text-xs font-bold shadow-sm">
-            {(["24H", "7D", "30D"] as const).map((r) => (
+            {(["Hourly", "Daily", "Monthly"] as const).map((res) => (
               <button
-                key={r}
-                onClick={() => setRange(r)}
-                className={`rounded-full px-4 py-1.5 transition ${
-                  range === r
+                key={res}
+                onClick={() => {
+                  setResolution(res);
+                  if (res === "Hourly") setRange("24H");
+                  else if (res === "Daily") setRange("7D");
+                  else if (res === "Monthly") setRange("30D");
+                }}
+                className={`rounded-full px-3 py-1.5 transition ${
+                  resolution === res
                     ? "bg-[#1f6fb5] text-white shadow-sm"
                     : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-200"
                 }`}
               >
-                {r === "24H" ? "24 Hours" : r === "7D" ? "7 Days" : "30 Days"}
+                {res}
               </button>
             ))}
           </div>
+
+          {/* Ranges (only visible for Daily to choose between 7D and 30D) */}
+          {resolution === "Daily" && (
+            <div className="flex rounded-full border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 px-1 py-1 text-xs font-bold shadow-sm">
+              {(["7D", "30D"] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRange(r)}
+                  className={`rounded-full px-3 py-1.5 transition ${
+                    range === r
+                      ? "bg-[#1f6fb5] text-white shadow-sm"
+                      : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-200"
+                  }`}
+                >
+                  {r === "7D" ? "7 Days" : "30 Days"}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Action buttons */}
           <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl p-1">
@@ -549,6 +653,12 @@ function HvacHistorian({ unitId, theme, isDark }: { unitId: string; theme: strin
               className="px-3 py-1.5 rounded-lg text-xs font-bold text-[#47729f] dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800/80 transition flex items-center gap-1"
             >
               🔄 Refresh
+            </button>
+            <button
+              onClick={downloadExcel}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#1f6fb5] hover:bg-[#155c99] text-white transition flex items-center gap-1 shadow-sm"
+            >
+              📥 Export Excel
             </button>
             <button
               onClick={downloadCSV}
@@ -625,8 +735,7 @@ function HvacHistorian({ unitId, theme, isDark }: { unitId: string; theme: strin
                 <th className="py-3 px-4">Telemetry Parameter Tag</th>
                 <th className="py-3 px-4 text-center">Minimum</th>
                 <th className="py-3 px-4 text-center">Maximum</th>
-                <th className="py-3 px-4 text-center">Arithmetic Mean</th>
-                <th className="py-3 px-4 text-center text-[#1f6fb5] dark:text-sky-400">Mean Kinetic Temp (MKT)*</th>
+                <th className="py-3 px-4 text-center">AVERAGE</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-semibold text-[#002b5c] dark:text-slate-300">
@@ -635,42 +744,34 @@ function HvacHistorian({ unitId, theme, isDark }: { unitId: string; theme: strin
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu1Temp.min.toFixed(1)}</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu1Temp.max.toFixed(1)}</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu1Temp.mean.toFixed(1)}</td>
-                <td className="py-3.5 px-4 text-center font-mono font-bold text-sky-500 bg-sky-500/5">{stats.ahu1Temp.mkt} °C</td>
               </tr>
               <tr>
                 <td className="py-3.5 px-4 font-bold">AHU-02 Accelerated Temperature (°C)</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu2Temp.min.toFixed(1)}</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu2Temp.max.toFixed(1)}</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu2Temp.mean.toFixed(1)}</td>
-                <td className="py-3.5 px-4 text-center font-mono font-bold text-sky-500 bg-sky-500/5">{stats.ahu2Temp.mkt} °C</td>
               </tr>
               <tr>
                 <td className="py-3.5 px-4 font-bold">AHU-03 Long-term Temperature (°C)</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu3Temp.min.toFixed(1)}</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu3Temp.max.toFixed(1)}</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu3Temp.mean.toFixed(1)}</td>
-                <td className="py-3.5 px-4 text-center font-mono font-bold text-sky-500 bg-sky-500/5">{stats.ahu3Temp.mkt} °C</td>
               </tr>
               <tr>
                 <td className="py-3.5 px-4 font-bold">AHU-02 Room Relative Humidity (%RH)</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu2Hum.min.toFixed(1)} %</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu2Hum.max.toFixed(1)} %</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu2Hum.mean.toFixed(1)} %</td>
-                <td className="py-3.5 px-4 text-center font-mono text-slate-400 font-normal">—</td>
               </tr>
               <tr>
                 <td className="py-3.5 px-4 font-bold">AHU-03 Room Relative Humidity (%RH)</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu3Hum.min.toFixed(1)} %</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu3Hum.max.toFixed(1)} %</td>
                 <td className="py-3.5 px-4 text-center font-mono">{stats.ahu3Hum.mean.toFixed(1)} %</td>
-                <td className="py-3.5 px-4 text-center font-mono text-slate-400 font-normal">—</td>
               </tr>
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
-          * Mean Kinetic Temperature (MKT) is calculated dynamically based on the activation energy constant <strong>Ea = 83.144 kJ/mol</strong> and gas constant <strong>R = 8.3144 J/(mol·K)</strong> using the formula: Tk = (Ea / R) / -ln( [e^(-Ea/RT1) + e^(-Ea/RT2) + ... + e^(-Ea/RTn)] / n ).
-        </p>
       </div>
     </div>
   );

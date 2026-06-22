@@ -1,4 +1,4 @@
-import { STATE_COLLECTION, USERS_COLLECTION } from "../database/collections";
+import { STATE_COLLECTION, USERS_COLLECTION, ALARMS_COLLECTION } from "../database/collections";
 import { getMongoDb } from "../database/mongo";
 import { ingestAlarmEvents } from "../modules/alarms/alarms.service";
 import { publishAlarmEvents } from "./alarms.publisher";
@@ -184,16 +184,37 @@ const evaluatePoint = async (doc: TelemetryDoc) => {
 
 export const processThresholdAlerts = async (docs: TelemetryDoc[]) => {
   const alerts: ThresholdAlert[] = [];
+  const clearEvents: AlarmEventInput[] = [];
+
+  const db = getMongoDb();
+  const alarmsCollection = db.collection(ALARMS_COLLECTION);
 
   for (const doc of docs) {
     const alert = await evaluatePoint(doc);
     if (alert) {
       alerts.push(alert);
-    }
-  }
+    } else {
+      // Telemetry point is within normal bounds. Check if there are active/ack alarms for this tagId.
+      const activeAlarms = await alarmsCollection.find({
+        tagId: doc.meta.tagId,
+        status: { $in: ["active", "ack"] }
+      }).toArray();
 
-  if (alerts.length === 0) {
-    return;
+      if (activeAlarms.length > 0) {
+        for (const alarm of activeAlarms) {
+          clearEvents.push({
+            alarmKey: alarm.alarmKey,
+            tagId: alarm.tagId,
+            deviceId: alarm.deviceId,
+            unit: alarm.unit,
+            area: alarm.area,
+            message: `Cleared: Telemetry parameter for tag ${alarm.tagId} has returned to normal range.`,
+            severity: alarm.severity,
+            status: "cleared"
+          });
+        }
+      }
+    }
   }
 
   const events: AlarmEventInput[] = [];
@@ -223,6 +244,11 @@ export const processThresholdAlerts = async (docs: TelemetryDoc[]) => {
 
   if (events.length > 0) {
     const result = await ingestAlarmEvents(events);
+    publishAlarmEvents(result.events);
+  }
+
+  if (clearEvents.length > 0) {
+    const result = await ingestAlarmEvents(clearEvents);
     publishAlarmEvents(result.events);
   }
 };

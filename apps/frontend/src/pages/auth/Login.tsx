@@ -55,7 +55,7 @@ export default function Login() {
       setSession(result);
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login gagal");
+      setError(err instanceof Error ? err.message : "Login failed");
     } finally {
       setSubmitting(false);
     }
@@ -69,7 +69,7 @@ export default function Login() {
       setSession(result);
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Google login gagal");
+      setError(err instanceof Error ? err.message : "Google login failed");
     } finally {
       setSubmitting(false);
     }
@@ -83,7 +83,7 @@ export default function Login() {
         </div>
         <h2 className="mt-2 text-2xl font-semibold">Welcome back</h2>
         <p className="mt-2 text-sm text-[#47729f]">
-          Masuk untuk memonitor PLC, historian, dan laporan shift.
+          Sign in to monitor PLC telemetry, historian graphs, and shift logs.
         </p>
       </div>
 
@@ -106,7 +106,7 @@ export default function Login() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             className="mt-2 w-full rounded-xl border border-[#d6e9fb] bg-white px-4 py-3 text-sm focus:border-[#1f6fb5] focus:outline-none"
-            placeholder="Minimum 8 karakter"
+            placeholder="Minimum 8 characters"
             required
           />
         </div>
@@ -120,13 +120,13 @@ export default function Login() {
           disabled={submitting}
           className="w-full rounded-full bg-[#1f6fb5] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#155c99] disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {submitting ? "Memproses..." : "Masuk"}
+          {submitting ? "Processing..." : "Sign In"}
         </button>
       </form>
 
       <div className="flex items-center gap-3">
         <div className="h-px flex-1 bg-[#d6e9fb]" />
-        <span className="text-xs text-[#86a9cc]">atau</span>
+        <span className="text-xs text-[#86a9cc]">or</span>
         <div className="h-px flex-1 bg-[#d6e9fb]" />
       </div>
 
@@ -135,11 +135,8 @@ export default function Login() {
         onCredential={handleGoogle}
       />
 
-      <div className="text-center text-sm text-[#47729f]">
-        Belum punya akun?{" "}
-        <Link to="/register" className="font-semibold text-[#1f6fb5]">
-          Daftar
-        </Link>
+      <div className="text-center text-xs text-[#47729f]">
+        Self-registration is disabled. Please contact your system administrator to register.
       </div>
     </div>
   );

@@ -48,32 +48,39 @@ export default function Approvals() {
       : "all";
 
     let active = true;
-    Promise.all([
-      getJson<ApprovalListResponse>(
-        `/approvals/maintenance?limit=50&status=${statusParam}`
-      ),
-      getJson<ApprovalListResponse>(
-        `/approvals/shift-reports?limit=50&status=${statusParam}`
-      )
-    ])
-      .then(([maintenanceResult, shiftResult]) => {
-        const filterPending = (items: ApprovalItem[]) =>
-          statusParam === "all"
-            ? items.filter((item) => item.approvalStatus !== "approved")
-            : items;
-        if (active) {
-          setMaintenance(filterPending(maintenanceResult.data));
-          setShiftReports(filterPending(shiftResult.data));
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
-      });
+
+    const fetchData = () => {
+      Promise.all([
+        getJson<ApprovalListResponse>(
+          `/approvals/maintenance?limit=50&status=${statusParam}`
+        ),
+        getJson<ApprovalListResponse>(
+          `/approvals/shift-reports?limit=50&status=${statusParam}`
+        )
+      ])
+        .then(([maintenanceResult, shiftResult]) => {
+          const filterPending = (items: ApprovalItem[]) =>
+            statusParam === "all"
+              ? items.filter((item) => item.approvalStatus !== "approved")
+              : items;
+          if (active) {
+            setMaintenance(filterPending(maintenanceResult.data));
+            setShiftReports(filterPending(shiftResult.data));
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setLoading(false);
+          }
+        });
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 5000);
 
     return () => {
       active = false;
+      clearInterval(interval);
     };
   }, [canApprove, role]);
 
@@ -82,10 +89,10 @@ export default function Approvals() {
       <div>
         <PageHeader
           title="Approvals"
-          description="Hanya team head dan leader yang dapat melakukan approval."
+          description="Only team heads, leaders, and administrators can approve operational records."
         />
         <div className="rounded-lg border border-slate-900 bg-slate-950/60 p-6 text-sm text-slate-300">
-          Anda tidak memiliki akses approval.
+          You do not have approval access.
         </div>
       </div>
     );
@@ -116,7 +123,7 @@ export default function Approvals() {
     <div className="space-y-6">
       <PageHeader
         title="Approvals"
-        description="Konfirmasi data maintenance dan shift report yang diajukan." 
+        description="Confirm or reject submitted maintenance logs and shift reports." 
       />
 
       <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-5">
@@ -125,18 +132,18 @@ export default function Approvals() {
         </div>
         <div className="mt-4 overflow-x-auto">
           {loading ? (
-            <div className="text-sm text-slate-400">Memuat data...</div>
+            <div className="text-sm text-slate-400">Loading data...</div>
           ) : maintenance.length === 0 ? (
-            <div className="text-sm text-slate-400">Tidak ada data pending.</div>
+            <div className="text-sm text-slate-400">No pending approvals found.</div>
           ) : (
             <table className="w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">Tanggal</th>
+                  <th className="px-3 py-2">Date</th>
                   <th className="px-3 py-2">Item</th>
-                  <th className="px-3 py-2">Teknisi</th>
+                  <th className="px-3 py-2">Technician</th>
                   <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Action</th>
+                  <th className="px-3 py-2">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-900">
@@ -186,17 +193,17 @@ export default function Approvals() {
         </div>
         <div className="mt-4 overflow-x-auto">
           {loading ? (
-            <div className="text-sm text-slate-400">Memuat data...</div>
+            <div className="text-sm text-slate-400">Loading data...</div>
           ) : shiftReports.length === 0 ? (
-            <div className="text-sm text-slate-400">Tidak ada data pending.</div>
+            <div className="text-sm text-slate-400">No pending approvals found.</div>
           ) : (
             <table className="w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">Tanggal</th>
+                  <th className="px-3 py-2">Date</th>
                   <th className="px-3 py-2">Shift</th>
                   <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Action</th>
+                  <th className="px-3 py-2">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-900">
@@ -239,10 +246,10 @@ export default function Approvals() {
 
       <ConfirmDialog
         open={confirmOpen}
-        title="Konfirmasi approval"
-        description="Apakah Anda yakin ingin melanjutkan?"
-        confirmText="Ya"
-        cancelText="Tidak"
+        title="Confirm Approval Action"
+        description="Are you sure you want to proceed with this approval action?"
+        confirmText="Yes"
+        cancelText="No"
         onConfirm={async () => {
           setConfirmOpen(false);
           await confirmAction();

@@ -243,11 +243,11 @@ export const updateMaintenance = async (
     { returnDocument: "after" }
   );
 
-  if (!result.value) {
+  if (!result) {
     throw createError("Maintenance record not found", 404);
   }
 
-  return toMaintenanceResponse(result.value);
+  return toMaintenanceResponse(result);
 };
 
 export const listShiftReports = async (
@@ -357,11 +357,11 @@ export const updateShiftReport = async (
     { returnDocument: "after" }
   );
 
-  if (!result.value) {
+  if (!result) {
     throw createError("Shift report not found", 404);
   }
 
-  return toShiftReportResponse(result.value);
+  return toShiftReportResponse(result);
 };
 
 export const reviewMaintenance = async (
@@ -415,11 +415,11 @@ export const reviewMaintenance = async (
     { returnDocument: "after" }
   );
 
-  if (!result.value) {
+  if (!result) {
     throw createError("Maintenance record not found", 404);
   }
 
-  return toMaintenanceResponse(result.value);
+  return toMaintenanceResponse(result);
 };
 
 export const reviewShiftReport = async (
@@ -473,9 +473,9 @@ export const reviewShiftReport = async (
     { returnDocument: "after" }
   );
 
-  if (!result.value) {
+  if (!result) {
     throw createError("Shift report not found", 404);
   }
 
-  return toShiftReportResponse(result.value);
+  return toShiftReportResponse(result);
 };

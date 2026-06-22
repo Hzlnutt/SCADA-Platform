@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, authorize } from "../auth/auth.middleware";
+import { authenticate, authorize, checkMachineScope } from "../auth/auth.middleware";
 import {
   createMaintenanceHandler,
   createShiftReportHandler,
@@ -15,72 +15,111 @@ import {
 
 export const operationsRouter = Router();
 
+const writeRoles = [
+  "admin",
+  "senior_unit_head",
+  "unit_head",
+  "kashift_utility_hvac",
+  "kashift_utility",
+  "kashift_hvac",
+  "leader",
+  "team_head"
+];
+
+const approvalRoles = [
+  "admin",
+  "senior_unit_head",
+  "unit_head",
+  "kashift_utility_hvac",
+  "kashift_utility",
+  "kashift_hvac",
+  "leader",
+  "team_head"
+];
+
 operationsRouter.get(
   "/machines/:machineId/maintenance",
   authenticate,
+  checkMachineScope,
   listMaintenanceHandler
 );
+
 operationsRouter.post(
   "/machines/:machineId/maintenance",
   authenticate,
-  authorize(["operator", "team_head", "leader", "admin"]),
+  authorize(writeRoles),
+  checkMachineScope,
   createMaintenanceHandler
 );
+
 operationsRouter.patch(
   "/machines/:machineId/maintenance/:id",
   authenticate,
-  authorize(["admin"]),
+  authorize(writeRoles),
+  checkMachineScope,
   updateMaintenanceHandler
 );
+
 operationsRouter.get(
   "/maintenance",
   authenticate,
   listAllMaintenanceHandler
 );
+
 operationsRouter.get(
   "/approvals/maintenance",
   authenticate,
-  authorize(["team_head", "leader", "admin"]),
+  authorize(approvalRoles),
   listAllMaintenanceHandler
 );
+
 operationsRouter.patch(
   "/approvals/maintenance/:id",
   authenticate,
-  authorize(["team_head", "leader", "admin"]),
+  authorize(approvalRoles),
   reviewMaintenanceHandler
 );
+
 operationsRouter.get(
   "/machines/:machineId/shift-reports",
   authenticate,
+  checkMachineScope,
   listShiftReportsHandler
 );
+
 operationsRouter.post(
   "/machines/:machineId/shift-reports",
   authenticate,
-  authorize(["operator", "team_head", "leader", "admin"]),
+  authorize(writeRoles),
+  checkMachineScope,
   createShiftReportHandler
 );
+
 operationsRouter.patch(
   "/machines/:machineId/shift-reports/:id",
   authenticate,
-  authorize(["admin"]),
+  authorize(writeRoles),
+  checkMachineScope,
   updateShiftReportHandler
 );
+
 operationsRouter.get(
   "/shift-reports",
   authenticate,
-  authorize(["admin"]),
+  authorize(writeRoles),
   listAllShiftReportsHandler
 );
+
 operationsRouter.get(
   "/approvals/shift-reports",
   authenticate,
-  authorize(["team_head", "leader", "admin"]),
+  authorize(approvalRoles),
   listAllShiftReportsHandler
 );
+
 operationsRouter.patch(
   "/approvals/shift-reports/:id",
   authenticate,
-  authorize(["team_head", "leader", "admin"]),
+  authorize(approvalRoles),
   reviewShiftReportHandler
 );

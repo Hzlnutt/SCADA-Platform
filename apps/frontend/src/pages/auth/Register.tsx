@@ -19,21 +19,8 @@ export default function Register() {
   );
 
   useEffect(() => {
-    let active = true;
-    fetchGoogleConfig()
-      .then((result) => {
-        if (active && result.clientId) {
-          setGoogleClientId(result.clientId);
-        }
-      })
-      .catch(() => {
-        // fallback to env client id if backend is unreachable
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    navigate("/login", { replace: true });
+  }, [navigate]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();

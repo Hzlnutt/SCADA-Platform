@@ -97,10 +97,10 @@ export default function Thresholds() {
       <div>
         <PageHeader
           title="Thresholds"
-          description="Hanya team head dan leader yang dapat mengatur ambang batas." 
+          description="Only team heads, leaders, and administrators can modify alarm thresholds." 
         />
         <div className="rounded-lg border border-slate-900 bg-slate-950/60 p-6 text-sm text-slate-300">
-          Anda tidak memiliki akses untuk mengubah threshold.
+          You do not have administrative access to edit warning thresholds.
         </div>
       </div>
     );
@@ -147,13 +147,13 @@ export default function Thresholds() {
     <div className="space-y-6">
       <PageHeader
         title="Thresholds"
-        description="Pengaturan ambang batas untuk peringatan dan machine health." 
+        description="Configure trigger levels and limit parameters for telemetry alerts and machine health indicators." 
       />
 
       <div className="grid gap-4 xl:grid-cols-[1fr_2fr]">
         <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-5">
           <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
-            Daftar Machine Group
+            Machine Groups
           </div>
           <div className="mt-4 space-y-2">
             {machineGroups.map((group) => {
@@ -184,7 +184,7 @@ export default function Thresholds() {
                     </span>
                   </div>
                   <div className="mt-1 text-[11px] text-slate-500">
-                    {group.category} · {group.units.length} unit
+                    {group.category} · {group.units.length} units
                   </div>
                 </button>
               );
@@ -221,67 +221,67 @@ export default function Thresholds() {
           </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="text-xs text-slate-400">
-            Metric
-            <select
-              value={form.metric}
-              onChange={(event) => handleChange("metric", event.target.value)}
-              className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
-            >
-              {metrics.map((metric) => (
-                <option key={metric.id} value={metric.id}>
-                  {metric.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs text-slate-400">
-            Unit
-            <input
-              type="text"
-              value={form.unit}
-              onChange={(event) => handleChange("unit", event.target.value)}
-              className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
-            />
-          </label>
-          <label className="text-xs text-slate-400">
-            Lower Threshold
-            <input
-              type="number"
-              value={form.lower}
-              onChange={(event) => handleChange("lower", event.target.value)}
-              className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
-            />
-          </label>
-          <label className="text-xs text-slate-400">
-            Upper Threshold
-            <input
-              type="number"
-              value={form.upper}
-              onChange={(event) => handleChange("upper", event.target.value)}
-              className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
-            />
-          </label>
-          <label className="text-xs text-slate-400">
-            Warning Percent (0.5 - 0.99)
-            <input
-              type="number"
-              step="0.01"
-              value={form.warningPct}
-              onChange={(event) => handleChange("warningPct", event.target.value)}
-              className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
-            />
-          </label>
-          <label className="text-xs text-slate-400">
-            Action Text
-            <input
-              type="text"
-              value={form.actionText}
-              onChange={(event) => handleChange("actionText", event.target.value)}
-              className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
-            />
-          </label>
-        </div>
+            <label className="text-xs text-slate-400">
+              Metric
+              <select
+                value={form.metric}
+                onChange={(event) => handleChange("metric", event.target.value)}
+                className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
+              >
+                {metrics.map((metric) => (
+                  <option key={metric.id} value={metric.id}>
+                    {metric.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-slate-400">
+              Unit
+              <input
+                type="text"
+                value={form.unit}
+                onChange={(event) => handleChange("unit", event.target.value)}
+                className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
+              />
+            </label>
+            <label className="text-xs text-slate-400">
+              Lower Threshold
+              <input
+                type="number"
+                value={form.lower}
+                onChange={(event) => handleChange("lower", event.target.value)}
+                className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
+              />
+            </label>
+            <label className="text-xs text-slate-400">
+              Upper Threshold
+              <input
+                type="number"
+                value={form.upper}
+                onChange={(event) => handleChange("upper", event.target.value)}
+                className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
+              />
+            </label>
+            <label className="text-xs text-slate-400">
+              Warning Percent (0.5 - 0.99)
+              <input
+                type="number"
+                step="0.01"
+                value={form.warningPct}
+                onChange={(event) => handleChange("warningPct", event.target.value)}
+                className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
+              />
+            </label>
+            <label className="text-xs text-slate-400">
+              Action Text
+              <input
+                type="text"
+                value={form.actionText}
+                onChange={(event) => handleChange("actionText", event.target.value)}
+                className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
+              />
+            </label>
+          </div>
 
           <div className="mt-4 text-xs text-slate-500">
             Tag IDs: {selectedGroup?.units.map((unit) => unit.tagId).join(", ")}
@@ -293,18 +293,18 @@ export default function Thresholds() {
             disabled={saving}
             className="mt-4 rounded-full bg-cyan-500/20 px-4 py-2 text-xs font-semibold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {saving ? "Menyimpan..." : "Simpan Threshold"}
+            {saving ? "Saving..." : "Save Threshold"}
           </button>
         </section>
       </div>
 
       <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-5">
         <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
-          Ringkasan Threshold
+          Thresholds Summary
         </div>
         <div className="mt-4 overflow-x-auto">
           {thresholds.length === 0 ? (
-            <div className="text-sm text-slate-400">Belum ada threshold.</div>
+            <div className="text-sm text-slate-400">No threshold configurations defined.</div>
           ) : (
             <table className="w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">

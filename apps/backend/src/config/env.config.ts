@@ -26,7 +26,7 @@ const envSchema = z.object({
     .string()
     .min(16)
     .default("change-me-refresh-secret"),
-  JWT_EXPIRES_IN: z.string().default("15m"),
+  JWT_EXPIRES_IN: z.string().default("24h"),
   JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
   GOOGLE_CLIENT_ID: z.string().default(""),
   DUMMY_MODE: z.coerce.boolean().default(false),

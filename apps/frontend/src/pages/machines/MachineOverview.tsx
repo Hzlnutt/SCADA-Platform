@@ -11,13 +11,18 @@ import type { HvacConfig } from "../../data/equipment";
 
 export default function MachineOverview() {
   const { unitId } = useOutletContext<MachineOutletContext>();
-  const machine = getUnitById(unitId);
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
 
   if (unitId === "hvac-qc-retained-sample") {
     return <HvacOverview unitId={unitId} theme={theme} isDark={isDark} />;
   }
+
+  return <StandardMachineOverview unitId={unitId} theme={theme} isDark={isDark} />;
+}
+
+function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; theme: string; isDark: boolean }) {
+  const machine = getUnitById(unitId);
 
   // Sub-tab selection: 'telemetry' or 'process'
   const [subTab, setSubTab] = useState<"telemetry" | "process">("telemetry");
@@ -926,44 +931,7 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border-b border-[#acd3ff]/30 dark:border-slate-800/40 flex items-center justify-between">
-            <div>
-              <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-01 · CLEAN AREA</span>
-              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">Retained Sample Room</h4>
-            </div>
-            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
-              NORMAL
-            </span>
-          </div>
-          <div className="p-4 space-y-4">
-            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu1.lowTemp}-{config.ahu1.highTemp}°C</div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE</span>
-                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">SUPPLY AIR</span>
-                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.supplyAir.toFixed(1)} <span className="text-xs">°C</span></span>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900">
-              {[
-                { label: "AHU-01", status: liveData.ahu1.running },
-                { label: "FAN", status: liveData.ahu1.fan },
-                { label: "HEATER", status: liveData.ahu1.heater },
-                { label: "HUMID", status: liveData.ahu1.humidifier }
-              ].map((ind, iIdx) => (
-                <div key={iIdx} className="flex flex-col items-center p-1 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
-                  <span className="text-[8px] font-bold text-slate-400 uppercase truncate w-full text-center">{ind.label}</span>
-                  <span className={`w-2 h-2 rounded-full mt-1.5 ${ind.status ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
+        {/* Reference Room (AHU-02) */}
         <div className="bg-white dark:bg-slate-950 border border-rose-500/20 dark:border-rose-500/10 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
           <div className="p-3.5 bg-rose-500/5 dark:bg-rose-950/10 border-b border-rose-500/10 flex items-center justify-between">
             <div>
@@ -978,12 +946,12 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
             <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu2.tempSp}°C ± 2°C · RH: {config.ahu2.humiditySp}% ± 5%</div>
             <div className="grid grid-cols-2 gap-4">
               <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE</span>
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 1</span>
                 <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.temp.toFixed(1)} <span className="text-xs">°C</span></span>
               </div>
               <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM HUMIDITY</span>
-                <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.humidity.toFixed(1)} <span className="text-xs">%RH</span></span>
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 2</span>
+                <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.humidity.toFixed(1)} <span className="text-xs">°C</span></span>
               </div>
             </div>
             <div className="grid grid-cols-5 gap-1 pt-2 border-t border-slate-100 dark:border-slate-900">
@@ -1003,6 +971,7 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
           </div>
         </div>
 
+        {/* Stability Room (AHU-03) */}
         <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
           <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border-b border-[#acd3ff]/30 dark:border-slate-800/40 flex items-center justify-between">
             <div>
@@ -1017,12 +986,12 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
             <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu3.tempSp}°C ± 2°C · RH: 75% ± 5%</div>
             <div className="grid grid-cols-2 gap-4">
               <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE</span>
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 1</span>
                 <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.temp.toFixed(1)} <span className="text-xs">°C</span></span>
               </div>
               <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM HUMIDITY</span>
-                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.humidity.toFixed(1)} <span className="text-xs">%RH</span></span>
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 2</span>
+                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.humidity.toFixed(1)} <span className="text-xs">°C</span></span>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900">
@@ -1030,6 +999,45 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
                 { label: "AHU-03", status: liveData.ahu3.running },
                 { label: "FAN", status: liveData.ahu3.fan },
                 { label: "COOLING", status: liveData.ahu3.cooling }
+              ].map((ind, iIdx) => (
+                <div key={iIdx} className="flex flex-col items-center p-1 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase truncate w-full text-center">{ind.label}</span>
+                  <span className={`w-2 h-2 rounded-full mt-1.5 ${ind.status ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Retained Sample Room (AHU-01) */}
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border-b border-[#acd3ff]/30 dark:border-slate-800/40 flex items-center justify-between">
+            <div>
+              <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-01 · CLEAN AREA</span>
+              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">Retained Sample Room</h4>
+            </div>
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
+              NORMAL
+            </span>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu1.lowTemp}-{config.ahu1.highTemp}°C</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 1</span>
+                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 2</span>
+                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.supplyAir.toFixed(1)} <span className="text-xs">°C</span></span>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900">
+              {[
+                { label: "AHU-01", status: liveData.ahu1.running },
+                { label: "FAN", status: liveData.ahu1.fan },
+                { label: "HEATER", status: liveData.ahu1.heater },
+                { label: "HUMID", status: liveData.ahu1.humidifier }
               ].map((ind, iIdx) => (
                 <div key={iIdx} className="flex flex-col items-center p-1 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
                   <span className="text-[8px] font-bold text-slate-400 uppercase truncate w-full text-center">{ind.label}</span>
