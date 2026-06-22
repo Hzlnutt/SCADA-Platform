@@ -5,10 +5,10 @@ import type { MachineOutletContext } from "./MachineLayout";
 import PidPageTemplate from "./PidPageTemplate";
 import type { Task, Alarm } from "./PidPageTemplate";
 import CoolingWF1U3Pid from "./diagrams/CoolingWF1U3Pid";
-import MachineAHU01 from "./diagrams/MachineAHU01";
-import MachineAHU02 from "./diagrams/MachineAHU02";
-import MachineAHU03 from "./diagrams/MachineAHU03";
-import MachineUtility from "./diagrams/MachineUtility";
+import MachineAHU01Pid from "./diagrams/MachineAHU01Pid";
+import MachineAHU02Pid from "./diagrams/MachineAHU02Pid";
+import MachineAHU03Pid from "./diagrams/MachineAHU03Pid";
+import MachineUtilityPid from "./diagrams/MachineUtilityPid";
 
 // ═══════════════════════════════════════════════
 // DATA TASK & ALARM PER MESIN (dummy, nanti dari API)
@@ -41,8 +41,10 @@ const defaultData: { tasks: Task[]; alarms: Alarm[] } = {
 // ── Mapping diagram ──────────────────────────────────────
 const diagramMap: Record<string, React.ComponentType<any>> = {
   "cooling-water-1": CoolingWF1U3Pid,
-  "ahu-01": MachineAHU01,
-  // "chiller-1": ChillerPid,
+  "ahu-01": MachineAHU01Pid,
+  "ahu-02": MachineAHU02Pid,
+  "ahu-03": MachineAHU03Pid,
+  "utility": MachineUtilityPid,
 };
 
 function selectPidDiagram(unitId: string) {
@@ -131,7 +133,7 @@ export default function MachinePidDiagram() {
 
         {/* 2. MAIN AREA: P&ID & SIDEBAR */}
         <div className="flex gap-4 flex-1 min-h-0">
-          
+
           {/* P&ID Canvas (Card 2) */}
           <div className="flex-1 rounded-lg border border-slate-600 bg-slate-900/70 relative overflow-hidden">
             <div className="absolute inset-0 overflow-auto">
@@ -147,7 +149,7 @@ export default function MachinePidDiagram() {
 
           {/* RIGHT SIDEBAR */}
           <div className="w-80 flex flex-col gap-2 h-full">
-            
+
             {/* 3. SYSTEM MODE */}
             <div className="flex-1 border border-slate-600 rounded-lg bg-[#1e293b] p-4 flex flex-col gap-2 min-h-[150px]">
               <h3 className="text-white font-bold font-mono border-b border-slate-600 pb-2 mb-2">SYSTEM MODE</h3>

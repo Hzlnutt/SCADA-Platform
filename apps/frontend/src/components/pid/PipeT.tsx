@@ -1,157 +1,211 @@
-import React from 'react';
+import React, { useId } from "react";
 
 interface PipeTProps {
   x: number;
   y: number;
-  w: number;
-  h: number;
+  armLength: number;       // panjang lengan dari pusat ke ujung
+  thickness?: number;      // tebal pipa (diameter luar)
   direction?: 'down' | 'up' | 'left' | 'right';
 }
 
-/**
- * Pipe Tee Component
- * Meniru logam 3D dari Ignition Vision XML
- */
 export function PipeT({
   x,
   y,
-  w,
-  h,
+  armLength,
+  thickness = 20,
   direction = 'down',
 }: PipeTProps) {
-  const cx = x + w / 2;
-  const cy = y + h / 2;
+  const uid = useId().replace(/:/g, "_");
+  const halfThick = thickness / 2;
 
-  const getRotate = () => {
-    switch (direction) {
-      case 'down': return 0;
-      case 'up': return 180;
-      case 'left': return 90;
-      case 'right': return 270;
-      default: return 0;
+  // Flange tipis, kotak, masuk ke dalam
+  const flangeWidth = thickness * 1.2;   // lebar flange (tegak lurus pipa)
+  const flangeLength = thickness * 0.18; // panjang flange tipis
+  const inset = flangeLength * 0.8;      // masuk ke dalam
+
+  // Tentukan orientasi
+  const isHorizontalMain = direction === 'down' || direction === 'up';
+
+  let mainRect: { x: number; y: number; w: number; h: number };
+  let branchRect: { x: number; y: number; w: number; h: number };
+  let flange1: { x: number; y: number; w: number; h: number }; // ujung kiri/atas
+  let flange2: { x: number; y: number; w: number; h: number }; // ujung kanan/bawah
+  let flangeBranch: { x: number; y: number; w: number; h: number };
+
+  if (isHorizontalMain) {
+    // Batang utama horizontal
+    const mainLeft = x - armLength;
+    const mainRight = x + armLength;
+    const mainY = y - halfThick;
+    mainRect = { x: mainLeft, y: mainY, w: armLength * 2, h: thickness };
+
+    // Cabang vertikal
+    const isDown = direction === 'down';
+    const branchX = x - halfThick;
+    const branchY = isDown ? y : y - armLength;
+    branchRect = { x: branchX, y: branchY, w: thickness, h: armLength };
+
+    // Flange kiri
+    flange1 = {
+      x: mainLeft + inset,
+      y: mainY + (thickness - flangeWidth) / 2,
+      w: flangeLength,
+      h: flangeWidth,
+    };
+    // Flange kanan
+    flange2 = {
+      x: mainRight - flangeLength - inset,
+      y: mainY + (thickness - flangeWidth) / 2,
+      w: flangeLength,
+      h: flangeWidth,
+    };
+    // Flange cabang
+    if (isDown) {
+      flangeBranch = {
+        x: branchX + (thickness - flangeWidth) / 2,
+        y: branchY + armLength - flangeLength - inset,
+        w: flangeWidth,
+        h: flangeLength,
+      };
+    } else {
+      flangeBranch = {
+        x: branchX + (thickness - flangeWidth) / 2,
+        y: branchY + inset,
+        w: flangeWidth,
+        h: flangeLength,
+      };
     }
-  };
+  } else {
+    // Batang utama vertikal
+    const mainTop = y - armLength;
+    const mainBottom = y + armLength;
+    const mainX = x - halfThick;
+    mainRect = { x: mainX, y: mainTop, w: thickness, h: armLength * 2 };
 
-  const rotate = getRotate();
+    // Cabang horizontal
+    const isLeft = direction === 'left';
+    const branchY = y - halfThick;
+    const branchX = isLeft ? x - armLength : x;
+    branchRect = { x: branchX, y: branchY, w: armLength, h: thickness };
 
-  const thickness = Math.min(w, h) * 0.22;
-  const barWidth = w * 0.8;
-  const barHeight = thickness;
-  const branchWidth = thickness;
-  const branchHeight = h * 0.6;
+    // Flange atas
+    flange1 = {
+      x: mainX + (thickness - flangeWidth) / 2,
+      y: mainTop + inset,
+      w: flangeWidth,
+      h: flangeLength,
+    };
+    // Flange bawah
+    flange2 = {
+      x: mainX + (thickness - flangeWidth) / 2,
+      y: mainBottom - flangeLength - inset,
+      w: flangeWidth,
+      h: flangeLength,
+    };
+    // Flange cabang
+    if (isLeft) {
+      flangeBranch = {
+        x: branchX + inset,
+        y: branchY + (thickness - flangeWidth) / 2,
+        w: flangeLength,
+        h: flangeWidth,
+      };
+    } else {
+      flangeBranch = {
+        x: branchX + armLength - flangeLength - inset,
+        y: branchY + (thickness - flangeWidth) / 2,
+        w: flangeLength,
+        h: flangeWidth,
+      };
+    }
+  }
 
-  // Posisi horizontal (cross bar)
-  const barX = x + (w - barWidth) / 2;
-  const barY = y + (h - barHeight) / 2;
-
-  // Posisi vertical (branch)
-  const branchX = x + (w - branchWidth) / 2;
-  const branchY = y + (h - branchHeight) / 2;
-  const branchRadius = branchWidth * 0.2;
+  // Gradien IDs
+  const gBodyHoriz = `body_horiz_${uid}`;
+  const gBodyVert = `body_vert_${uid}`;
+  const gFlangeH = `flange_h_${uid}`;
+  const gFlangeV = `flange_v_${uid}`;
 
   return (
-    <g transform={`rotate(${rotate} ${cx} ${cy})`}>
+    <g>
       <defs>
-        {/* Gradasi vertikal untuk Horizontal Bar */}
-        <linearGradient id="tee-h" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#eeeeee" />
-          <stop offset="15%" stopColor="#ffffff" />
-          <stop offset="35%" stopColor="#aaaaaa" />
-          <stop offset="65%" stopColor="#777777" />
-          <stop offset="100%" stopColor="#333333" />
+        <linearGradient id={gBodyHoriz} x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox">
+          <stop offset="0%" stopColor="#5a5b5c" />
+          <stop offset="2%" stopColor="#5a5b5c" />
+          <stop offset="15%" stopColor="#909090" />
+          <stop offset="48%" stopColor="#e8e8e8" />
+          <stop offset="82%" stopColor="#b0b0b0" />
+          <stop offset="100%" stopColor="#6a6a6a" />
         </linearGradient>
-
-        {/* Gradasi horizontal untuk Vertical Branch */}
-        <linearGradient id="tee-v" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#cccccc" />
-          <stop offset="15%" stopColor="#ffffff" />
-          <stop offset="45%" stopColor="#aaaaaa" />
-          <stop offset="80%" stopColor="#555555" />
-          <stop offset="100%" stopColor="#333333" />
+        <linearGradient id={gBodyVert} x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+          <stop offset="0%" stopColor="#5a5b5c" />
+          <stop offset="2%" stopColor="#5a5b5c" />
+          <stop offset="15%" stopColor="#909090" />
+          <stop offset="48%" stopColor="#e8e8e8" />
+          <stop offset="82%" stopColor="#b0b0b0" />
+          <stop offset="100%" stopColor="#6a6a6a" />
         </linearGradient>
-        
-        {/* Radiasi untuk pertemuan cabang */}
-        <radialGradient id="tee-join" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
-          <stop offset="30%" stopColor="#dddddd" stopOpacity="0.5" />
-          <stop offset="100%" stopColor="#888888" stopOpacity="0.1" />
-        </radialGradient>
+        <linearGradient id={gFlangeH} x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+          <stop offset="0%" stopColor="#4a4b4c" />
+          <stop offset="15%" stopColor="#787878" />
+          <stop offset="50%" stopColor="#c8c8c8" />
+          <stop offset="82%" stopColor="#909090" />
+          <stop offset="100%" stopColor="#505050" />
+        </linearGradient>
+        <linearGradient id={gFlangeV} x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox">
+          <stop offset="0%" stopColor="#4a4b4c" />
+          <stop offset="15%" stopColor="#787878" />
+          <stop offset="50%" stopColor="#c8c8c8" />
+          <stop offset="82%" stopColor="#909090" />
+          <stop offset="100%" stopColor="#505050" />
+        </linearGradient>
       </defs>
 
-      {/* 1. HORIZONTAL BAR */}
+      {/* Layer belakang: cabang */}
       <rect
-        x={barX}
-        y={barY}
-        width={barWidth}
-        height={barHeight}
-        fill="url(#tee-h)"
-        rx={barHeight * 0.2}
+        x={branchRect.x}
+        y={branchRect.y}
+        width={branchRect.w}
+        height={branchRect.h}
+        fill={isHorizontalMain ? `url(#${gBodyVert})` : `url(#${gBodyHoriz})`}
+        rx={0}
       />
 
-      {/* 2. VERTICAL BRANCH */}
+      {/* Batang utama */}
       <rect
-        x={branchX}
-        y={branchY}
-        width={branchWidth}
-        height={branchHeight}
-        fill="url(#tee-v)"
-        rx={branchRadius}
+        x={mainRect.x}
+        y={mainRect.y}
+        width={mainRect.w}
+        height={mainRect.h}
+        fill={isHorizontalMain ? `url(#${gBodyHoriz})` : `url(#${gBodyVert})`}
+        rx={thickness * 0.2}
       />
 
-      {/* 3. JOIN BLEND (Lingkaran di tengah pertemuan untuk menyatukan visual) */}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={thickness * 0.6}
-        fill="url(#tee-join)"
-      />
+      {/* Flange ujung 1 (kiri/atas) */}
+      <rect x={flange1.x} y={flange1.y} width={flange1.w} height={flange1.h} fill={`url(#${gFlangeH})`} rx={0} />
+      <rect x={flange1.x} y={flange1.y} width={flange1.w} height={flange1.h * 0.25} fill="#FFFFFF" opacity="0.15" rx={0} />
 
-      {/* 4. HIGHLIGHTS (Efek 3D) */}
-      {/* Highlight atas horizontal */}
-      <line
-        x1={barX}
-        y1={barY}
-        x2={barX + barWidth}
-        y2={barY}
-        stroke="#ffffff"
-        strokeWidth={thickness * 0.15}
-        opacity="0.8"
-        strokeLinecap="round"
-      />
-      {/* Highlight kiri vertical */}
-      <line
-        x1={branchX}
-        y1={branchY}
-        x2={branchX}
-        y2={branchY + branchHeight}
-        stroke="#ffffff"
-        strokeWidth={branchWidth * 0.15}
-        opacity="0.6"
-        strokeLinecap="round"
-      />
+      {/* Flange ujung 2 (kanan/bawah) */}
+      <rect x={flange2.x} y={flange2.y} width={flange2.w} height={flange2.h} fill={`url(#${gFlangeH})`} rx={0} />
+      <rect x={flange2.x} y={flange2.y} width={flange2.w} height={flange2.h * 0.25} fill="#FFFFFF" opacity="0.15" rx={0} />
 
-      {/* 5. SHADOWS */}
-      {/* Shadow bawah horizontal */}
-      <line
-        x1={barX}
-        y1={barY + barHeight}
-        x2={barX + barWidth}
-        y2={barY + barHeight}
-        stroke="#222222"
-        strokeWidth={thickness * 0.1}
-        opacity="0.4"
-        strokeLinecap="round"
+      {/* Flange cabang */}
+      <rect
+        x={flangeBranch.x}
+        y={flangeBranch.y}
+        width={flangeBranch.w}
+        height={flangeBranch.h}
+        fill={isHorizontalMain ? `url(#${gFlangeV})` : `url(#${gFlangeH})`}
+        rx={0}
       />
-      {/* Shadow kanan vertical */}
-      <line
-        x1={branchX + branchWidth}
-        y1={branchY}
-        x2={branchX + branchWidth}
-        y2={branchY + branchHeight}
-        stroke="#222222"
-        strokeWidth={branchWidth * 0.1}
-        opacity="0.4"
-        strokeLinecap="round"
+      <rect
+        x={flangeBranch.x}
+        y={flangeBranch.y}
+        width={flangeBranch.w}
+        height={flangeBranch.h * 0.25}
+        fill="#FFFFFF"
+        opacity="0.15"
+        rx={0}
       />
     </g>
   );

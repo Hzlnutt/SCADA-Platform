@@ -303,11 +303,10 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
         <div className="flex gap-2">
           <button
             onClick={() => setSubTab("telemetry")}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${
-              subTab === "telemetry"
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${subTab === "telemetry"
                 ? "bg-[#1f6fb5] text-white shadow-md shadow-[#1f6fb5]/25"
                 : "text-[#47729f] dark:text-slate-400 hover:bg-[#1f6fb5]/10 hover:text-[#002b5c] dark:hover:text-slate-200"
-            }`}
+              }`}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
@@ -316,11 +315,10 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
           </button>
           <button
             onClick={() => setSubTab("process")}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${
-              subTab === "process"
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${subTab === "process"
                 ? "bg-[#1f6fb5] text-white shadow-md shadow-[#1f6fb5]/25"
                 : "text-[#47729f] dark:text-slate-400 hover:bg-[#1f6fb5]/10 hover:text-[#002b5c] dark:hover:text-slate-200"
-            }`}
+              }`}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
@@ -689,11 +687,10 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
                     <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                       <td className="py-3 px-3 font-bold">{row.area}</td>
                       <td className="py-3 px-3">
-                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${
-                          row.status === "Running"
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${row.status === "Running"
                             ? "bg-emerald-500/15 text-emerald-500"
                             : "bg-amber-500/15 text-amber-500"
-                        }`}>
+                          }`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${row.status === "Running" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
                           {row.status}
                         </span>
@@ -706,11 +703,10 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
                       <td className="py-3 px-3 text-right font-mono text-orange-500 font-bold">{row.temp.toFixed(1)}</td>
                       <td className="py-3 px-3 text-right font-mono text-[#47729f] dark:text-slate-500">{row.hrs.toLocaleString()}</td>
                       <td className="py-3 px-3 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                          row.maint === "Good"
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${row.maint === "Good"
                             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                             : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-                        }`}>
+                          }`}>
                           {row.maint}
                         </span>
                       </td>
@@ -723,9 +719,9 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
 
           {/* pH & TDS Temp Supply 24H Line Chart */}
           <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
-              <div className="h-64 min-h-0">
-                <Line data={processChartData} options={chartOptions} />
-              </div>
+            <div className="h-64 min-h-0">
+              <Line data={processChartData} options={chartOptions} />
+            </div>
           </div>
         </div>
       )}
@@ -739,13 +735,13 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
     if (saved) {
       try {
         return JSON.parse(saved);
-      } catch (e) {}
+      } catch (e) { }
     }
     return DEFAULT_HVAC_CONFIG;
   }, [unitId]);
 
   const [liveData, setLiveData] = useState({
-    ahu1: { temp: 27.6, supplyAir: 23.4, running: true, fan: true, heater: true, humidifier: true },
+    ahu1: { temp: 27.6, humidity: 74.4, supplyAir: 23.4, running: true, fan: true, heater: true, humidifier: true },
     ahu2: { temp: 40.0, humidity: 75.1, running: true, fan: true, cooling: true, heater: true, humidifier: true },
     ahu3: { temp: 30.0, humidity: 75.6, running: true, fan: true, cooling: true },
     ambient: { temp1: 29.8, temp2: 29.9, humidity1: 60.1, humidity2: 59.9 },
@@ -931,34 +927,91 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {/* Reference Room (AHU-02) */}
+        {/* Accelerated Stability Room (AHU-01) */}
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border-b border-[#acd3ff]/30 dark:border-slate-800/40 flex items-center justify-between">
+            <div>
+              <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-01 · ACCELERATED</span>
+              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">ACCELERATED STABILITY ROOM</h4>
+            </div>
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
+              NORMAL
+            </span>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu1.targetTemp} ± {config.ahu1.tolerance}°C · RH: {config.ahu1.targetHumidity}% ± 5%</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 1</span>
+                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 2</span>
+                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 1</span>
+                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.humidity.toFixed(1)} <span className="text-xs">%</span></span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 2</span>
+                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.humidity.toFixed(1)} <span className="text-xs">%</span></span>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900">
+              {[
+                { label: "AHU-01", status: liveData.ahu1.running },
+                { label: "FAN", status: liveData.ahu1.fan },
+                { label: "HEATER", status: liveData.ahu1.heater },
+                { label: "HUMID", status: liveData.ahu1.humidifier }
+              ].map((ind, iIdx) => (
+                <div key={iIdx} className="flex flex-col items-center p-1 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase truncate w-full text-center">{ind.label}</span>
+                  <span className={`w-2 h-2 rounded-full mt-1.5 ${ind.status ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Longterm Stability Room (AHU-02) */}
         <div className="bg-white dark:bg-slate-950 border border-rose-500/20 dark:border-rose-500/10 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
           <div className="p-3.5 bg-rose-500/5 dark:bg-rose-950/10 border-b border-rose-500/10 flex items-center justify-between">
             <div>
-              <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-02 · ACCELERATED</span>
-              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">Reference Room</h4>
+              <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-02 · LONG-TERM</span>
+              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">Longterm Stability Room</h4>
             </div>
             <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-rose-500/10 text-rose-500 border border-rose-500/20 uppercase tracking-wider animate-pulse">
               ALARM
             </span>
           </div>
           <div className="p-4 space-y-4">
-            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu2.tempSp}°C ± 2°C · RH: {config.ahu2.humiditySp}% ± 5%</div>
+            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu2.targetTemp}°C ± 2°C · RH: {config.ahu2.targetHumidity}% ± 5%</div>
             <div className="grid grid-cols-2 gap-4">
               <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 1</span>
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 1</span>
                 <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.temp.toFixed(1)} <span className="text-xs">°C</span></span>
               </div>
               <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 2</span>
-                <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.humidity.toFixed(1)} <span className="text-xs">°C</span></span>
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 2</span>
+                <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 1</span>
+                <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.humidity.toFixed(1)} <span className="text-xs">%</span></span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 2</span>
+                <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.humidity.toFixed(1)} <span className="text-xs">%</span></span>
               </div>
             </div>
             <div className="grid grid-cols-5 gap-1 pt-2 border-t border-slate-100 dark:border-slate-900">
               {[
                 { label: "AHU-02", status: liveData.ahu2.running },
-                { label: "FAN", status: liveData.ahu2.fan },
-                { label: "COOL", status: liveData.ahu2.cooling },
+                { label: "FAN-1", status: liveData.ahu2.fan },
+                { label: "FAN-2", status: liveData.ahu2.fan },
+                { label: "COOL-1", status: liveData.ahu2.cooling },
+                { label: "COOL-2", status: liveData.ahu2.cooling },
                 { label: "HEATER", status: liveData.ahu2.heater },
                 { label: "HUMID", status: liveData.ahu2.humidifier }
               ].map((ind, iIdx) => (
@@ -975,23 +1028,23 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
         <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
           <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border-b border-[#acd3ff]/30 dark:border-slate-800/40 flex items-center justify-between">
             <div>
-              <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-03 · LONG-TERM</span>
-              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">Stability Room</h4>
+              <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-03 · RETENTION</span>
+              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">REF. RETENTION ROOM</h4>
             </div>
             <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
               NORMAL
             </span>
           </div>
           <div className="p-4 space-y-4">
-            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu3.tempSp}°C ± 2°C · RH: 75% ± 5%</div>
+            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu3.maxTemp}°C</div>
             <div className="grid grid-cols-2 gap-4">
               <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 1</span>
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 1</span>
                 <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.temp.toFixed(1)} <span className="text-xs">°C</span></span>
               </div>
               <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 2</span>
-                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.humidity.toFixed(1)} <span className="text-xs">°C</span></span>
+                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 2</span>
+                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.temp.toFixed(1)} <span className="text-xs">°C</span></span>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900">
@@ -1059,16 +1112,8 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
               <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 font-mono mt-0.5">{liveData.ambient.temp1.toFixed(1)} °C</span>
             </div>
             <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-900 flex flex-col justify-center">
-              <span className="text-[8px] text-slate-400 uppercase font-bold">Ambient Temp 2</span>
-              <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 font-mono mt-0.5">{liveData.ambient.temp2.toFixed(1)} °C</span>
-            </div>
-            <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-900 flex flex-col justify-center">
               <span className="text-[8px] text-slate-400 uppercase font-bold">Ambient RH 1</span>
               <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 font-mono mt-0.5">{liveData.ambient.humidity1.toFixed(1)} %</span>
-            </div>
-            <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-900 flex flex-col justify-center">
-              <span className="text-[8px] text-slate-400 uppercase font-bold">Ambient RH 2</span>
-              <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 font-mono mt-0.5">{liveData.ambient.humidity2.toFixed(1)} %</span>
             </div>
           </div>
         </div>
@@ -1096,11 +1141,10 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
                   <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                     <td className="py-2.5 px-3 font-bold">{row.area}</td>
                     <td className="py-2.5 px-3">
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${
-                        row.status === "RUNNING"
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${row.status === "RUNNING"
                           ? "bg-emerald-500/15 text-emerald-500"
                           : "bg-amber-500/15 text-amber-500"
-                      }`}>
+                        }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${row.status === "RUNNING" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
                         {row.status}
                       </span>
@@ -1109,11 +1153,10 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
                     <td className="py-2.5 px-3 text-right font-mono">{row.pow.toFixed(1)}</td>
                     <td className="py-2.5 px-3 text-right font-mono text-[#47729f] dark:text-slate-500">{row.hrs.toLocaleString()}</td>
                     <td className="py-2.5 px-3 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                        row.maint === "Good"
+                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${row.maint === "Good"
                           ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                           : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-                      }`}>
+                        }`}>
                         {row.maint}
                       </span>
                     </td>

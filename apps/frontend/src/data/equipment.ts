@@ -290,6 +290,9 @@ export type HvacConfig = {
     coolDownTime: number;
     highTemp: number;
     lowTemp: number;
+    targetTemp: number;
+    tolerance: number;
+    targetHumidity:number;
     highHumidity: number;
     lowHumidity: number;
     alarmDelay: number;
@@ -308,6 +311,9 @@ export type HvacConfig = {
     coolDownTime: number;
     highTemp: number;
     lowTemp: number;
+    targetTemp: number;
+    tolerance: number;
+    targetHumidity:number;
     highHumidity: number;
     lowHumidity: number;
     alarmDelay: number;
@@ -322,6 +328,7 @@ export type HvacConfig = {
     tempSp: number;
     highTemp: number;
     lowTemp: number;
+    maxTemp: number;
     alarmDelay: number;
   };
 };
@@ -335,7 +342,10 @@ export const DEFAULT_HVAC_CONFIG: HvacConfig = {
     eh2Capacity: 40,
     coolDownTime: 15,
     highTemp: 30.0,
-    lowTemp: 25.0,
+    lowTemp: 25,
+    targetTemp: 40,
+    tolerance: 2,
+    targetHumidity: 75,
     highHumidity: 70.0,
     lowHumidity: 40.0,
     alarmDelay: 5,
@@ -354,6 +364,9 @@ export const DEFAULT_HVAC_CONFIG: HvacConfig = {
     coolDownTime: 10,
     highTemp: 42.0,
     lowTemp: 38.0,
+    targetTemp: 30,
+    tolerance: 2,
+    targetHumidity: 75,
     highHumidity: 80.0,
     lowHumidity: 70.0,
     alarmDelay: 5,
@@ -368,6 +381,7 @@ export const DEFAULT_HVAC_CONFIG: HvacConfig = {
     tempSp: 30.0,
     highTemp: 32.0,
     lowTemp: 28.0,
+    maxTemp: 30,
     alarmDelay: 10
   }
 };

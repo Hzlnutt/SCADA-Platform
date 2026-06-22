@@ -3,10 +3,10 @@ import { useParams } from "react-router-dom";
 import HvacLayout from "./HvacLayout";
 
 // Import diagram components
-import MachineAHU01Diagram from "./diagrams/MachineAHU01";
-import MachineAHU02Diagram from "./diagrams/MachineAHU02";
-import MachineAHU03Diagram from "./diagrams/MachineAHU03";
-import MachineUtilityDiagram from "./diagrams/MachineUtility";
+import MachineAHU01Pid from "./diagrams/MachineAHU01Pid";
+import MachineAHU02Pid from "./diagrams/MachineAHU02Pid";
+import MachineAHU03Pid from "./diagrams/MachineAHU03Pid";
+import MachineUtilityPid from "./diagrams/MachineUtilityPid";
 
 // Inline SVG Icons for control panel
 const startIcon = (
@@ -58,7 +58,7 @@ const MachineCustomTab = () => {
 
   // ================= RENDER LOGIC =================
   if (unitId === "hvac-qc-retained-sample") {
-    
+
     // ----- TAB: AHU-01 -----
     if (tabId === "ahu-01") {
       const systemMode = [
@@ -66,7 +66,6 @@ const MachineCustomTab = () => {
         { label: "Fan Status", value: ahu01Status, statusColor: ahu01Status === "Running" ? "green" : (ahu01Status === "Maintenance" ? "cyan" : "red") as any },
         { label: "Electric Heater", value: ahu01Status === "Running" ? "On" : "Off", statusColor: ahu01Status === "Running" ? "green" : "default" as any },
         { label: "Humidifier Fan Status", value: ahu01Status === "Running" ? "Running" : "Stopped", statusColor: ahu01Status === "Running" ? "green" : "red" as any },
-        { label: "Utility Status", value: ahu01Status === "Running" ? "On" : "Off", statusColor: ahu01Status === "Running" ? "green" : "default" as any },
       ];
 
       const setpoints = [
@@ -125,7 +124,7 @@ const MachineCustomTab = () => {
           targetTemp="40°C ± 2°C"
           targetHumidity="75%RH ± 5%"
           diagramComponent={
-            <MachineAHU01Diagram
+            <MachineAHU01Pid
               tempSP={ahu01Temp}
               humiditySP={ahu01Humid}
               running={ahu01Status === "Running"}
@@ -143,12 +142,12 @@ const MachineCustomTab = () => {
       const isRunning = ahu02Status === "Running";
       const systemMode = [
         { label: "Operating Mode", value: ahu02Mode, statusColor: ahu02Mode === "Auto" ? "cyan" : "yellow" as any },
-        { label: "Fan Status", value: ahu02Status, statusColor: isRunning ? "green" : (ahu02Status === "Maintenance" ? "cyan" : "red") as any },
-        { label: "Cooling", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
-        { label: "Condensing Unit", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
+        { label: "Fan-02 A Status", value: ahu02Status, statusColor: isRunning ? "green" : (ahu02Status === "Maintenance" ? "cyan" : "red") as any },
+        { label: "Fan-02 B Status", value: ahu02Status, statusColor: isRunning ? "green" : (ahu02Status === "Maintenance" ? "cyan" : "red") as any },
+        { label: "CU-02 A Status", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
+        { label: "CU-02 B STatus", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
         { label: "Electric Heater Status", value: isRunning ? "On" : "Off", statusColor: isRunning ? "green" : "default" as any },
         { label: "Humidity Fan Status", value: isRunning ? "Running" : "Stopped", statusColor: isRunning ? "green" : "red" as any },
-        { label: "Utility Status", value: isRunning ? "On" : "Off", statusColor: isRunning ? "green" : "default" as any },
       ];
 
       const setpoints = [
@@ -207,7 +206,7 @@ const MachineCustomTab = () => {
           targetTemp="30°C ± 2°C"
           targetHumidity="75%RH ± 5%"
           diagramComponent={
-            <MachineAHU02Diagram
+            <MachineAHU02Pid
               tempSP={ahu02Temp}
               humiditySP={ahu02Humid}
               running={isRunning}
@@ -227,7 +226,6 @@ const MachineCustomTab = () => {
         { label: "Operating Mode", value: ahu03Mode, statusColor: ahu03Mode === "Auto" ? "cyan" : "yellow" as any },
         { label: "Fan Status", value: ahu03Status, statusColor: isRunning ? "green" : (ahu03Status === "Maintenance" ? "cyan" : "red") as any },
         { label: "Cooling", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
-        { label: "Condensing Unit", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
       ];
 
       const setpoints = [
@@ -286,7 +284,7 @@ const MachineCustomTab = () => {
           targetTemp="Max 30°C"
           targetHumidity="55%RH ± 10%"
           diagramComponent={
-            <MachineAHU03Diagram
+            <MachineAHU03Pid
               tempSP={ahu03Temp}
               humiditySP={ahu03Humid}
               running={isRunning}
@@ -304,58 +302,8 @@ const MachineCustomTab = () => {
       const isRunning = utilStatus === "Running";
       const systemMode = [
         { label: "Operating Mode", value: utilMode, statusColor: utilMode === "Auto" ? "cyan" : "yellow" as any },
-        { label: "Fan Status", value: utilStatus, statusColor: isRunning ? "green" : (utilStatus === "Maintenance" ? "cyan" : "red") as any },
-        { label: "Cooling", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
-        { label: "Condensing Unit", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
-      ];
-
-      const setpoints = [
-        {
-          label: "Temperature SP",
-          value: utilTemp,
-          unit: "°C",
-          min: 10.0,
-          max: 30.0,
-          onChange: setUtilTemp,
-        },
-        {
-          label: "Humidity SP",
-          value: utilHumid,
-          unit: "%RH",
-          min: 30.0,
-          max: 80.0,
-          onChange: setUtilHumid,
-        },
-      ];
-
-      const controlButtons = [
-        {
-          label: "START AHU",
-          onClick: () => {
-            setUtilStatus("Running");
-            setUtilMode("Auto");
-          },
-          variant: "green" as any,
-          icon: startIcon,
-        },
-        {
-          label: "STOP AHU",
-          onClick: () => {
-            setUtilStatus("Stopped");
-            setUtilMode("Manual");
-          },
-          variant: "red" as any,
-          icon: stopIcon,
-        },
-        {
-          label: "MAINTENANCE",
-          onClick: () => {
-            setUtilStatus("Maintenance");
-            setUtilMode("Manual");
-          },
-          variant: "blue" as any,
-          icon: maintenanceIcon,
-        },
+        { label: "Pump Status", value: utilStatus, statusColor: isRunning ? "green" : (utilStatus === "Maintenance" ? "cyan" : "red") as any },
+        { label: "UV Lamp Status", value: isRunning ? "Active" : "Off", statusColor: isRunning ? "green" : "default" as any },
       ];
 
       return (
@@ -365,15 +313,13 @@ const MachineCustomTab = () => {
           targetTemp="22°C ± 2°C"
           targetHumidity="55%RH ± 5%"
           diagramComponent={
-            <MachineUtilityDiagram
+            <MachineUtilityPid
               tempSP={utilTemp}
               humiditySP={utilHumid}
               running={isRunning}
             />
           }
           systemMode={systemMode}
-          setpoints={setpoints}
-          controlButtons={controlButtons}
         />
       );
     }

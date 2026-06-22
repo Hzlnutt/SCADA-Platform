@@ -31,8 +31,8 @@ interface HvacLayoutProps {
   targetHumidity: string;
   diagramComponent: ReactNode;
   systemMode: SystemModeItem[];
-  setpoints: SetpointConfig[];
-  controlButtons: ControlButtonItem[];
+  setpoints?: SetpointConfig[];
+  controlButtons?: ControlButtonItem[];
 }
 
 export default function HvacLayout({
@@ -141,7 +141,7 @@ export default function HvacLayout({
         <div className="w-80 flex flex-col gap-4 h-full min-h-0">
           
           {/* SYSTEM MODE */}
-          <div className="flex-[1.5] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-0 shadow-sm dark:shadow-2xl transition-all duration-300">
+          <div className={`${setpoints?.length || controlButtons?.length ? 'flex-[1.5]' : 'flex-1'} border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-0 shadow-sm dark:shadow-2xl transition-all duration-300`}>
             <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm border-b border-slate-100 dark:border-slate-800 pb-2 mb-3 tracking-wide">
               SYSTEM MODE
             </h3>
@@ -158,6 +158,7 @@ export default function HvacLayout({
           </div>
 
           {/* SETPOINTS */}
+          {setpoints && setpoints.length > 0 && (
           <div className="flex-[1.2] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-[160px] shadow-sm dark:shadow-2xl transition-all duration-300">
             <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm border-b border-slate-100 dark:border-slate-800 pb-2 mb-3 tracking-wide">
               SETPOINTS
@@ -184,8 +185,10 @@ export default function HvacLayout({
               ))}
             </div>
           </div>
+          )}
 
           {/* CONTROL PANEL */}
+          {controlButtons && controlButtons.length > 0 && (
           <div className="flex-[1] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-0 shadow-sm dark:shadow-2xl transition-all duration-300">
             <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm border-b border-slate-100 dark:border-slate-800 pb-2 mb-3 tracking-wide">
               CONTROL PANEL
@@ -205,6 +208,7 @@ export default function HvacLayout({
               </div>
             </div>
           </div>
+          )}
 
         </div>
       </div>
