@@ -30,7 +30,7 @@ services:
       - scada_mongo:/data/db
       - scada_mongo_config:/data/configdb
     ports:
-      - "127.0.0.1:27017:27017"
+      - "127.0.0.1:27018:27017"
     command: ["mongod", "--wiredTigerCacheSizeGB", "2"]
 
   redis:
