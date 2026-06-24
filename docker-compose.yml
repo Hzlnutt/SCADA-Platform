@@ -52,8 +52,6 @@ services:
       - MONGO_INITDB_ROOT_PASSWORD=scada
     volumes:
       - scada_mongo:/data/db
-    ports:
-      - "27018:27017"
     networks:
       - scada_net
 
