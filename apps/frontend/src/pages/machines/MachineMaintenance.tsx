@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { getUnitById } from "../../data/machines";
-import { DEFAULT_EQ_CONFIGS, DEFAULT_HVAC_EQ_CONFIGS, type ConfigEqRow } from "../../data/equipment";
+import { DEFAULT_EQ_CONFIGS, DEFAULT_HVAC_EQ_CONFIGS, getDefaultEqConfigs, type ConfigEqRow } from "../../data/equipment";
 import { getJson, postJson } from "../../services/api.client";
 import { useAuthStore } from "../../store/auth.store";
 import { useSystemStore } from "../../store/system.store";
@@ -223,37 +223,17 @@ export default function MachineMaintenance() {
   };
 
   const healthMatrixItems = useMemo(() => {
-    let eqConfigs: ConfigEqRow[] = [];
-    if (unitId === "hvac-qc-retained-sample") {
-      eqConfigs = DEFAULT_HVAC_EQ_CONFIGS;
-      const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
-      if (savedEq) {
-        try {
-          eqConfigs = JSON.parse(savedEq);
-        } catch (e) {}
-      }
-    } else if (unitId === "cooling-water-1") {
-      eqConfigs = DEFAULT_EQ_CONFIGS;
-      const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
-      if (savedEq) {
-        try {
-          eqConfigs = JSON.parse(savedEq);
-        } catch (e) {}
-      }
-    } else {
-      // Fallback/other units
-      eqConfigs = DEFAULT_HVAC_EQ_CONFIGS;
-      const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
-      if (savedEq) {
-        try {
-          eqConfigs = JSON.parse(savedEq);
-        } catch (e) {}
-      }
+    let eqConfigs = getDefaultEqConfigs(unitId);
+    const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
+    if (savedEq) {
+      try {
+        eqConfigs = JSON.parse(savedEq);
+      } catch (e) {}
     }
 
     return eqConfigs.map((item) => {
       const beforePm = item.runHoursBeforeMaintenance ?? item.baseline;
-      const lifetime = item.runHoursLifetime ?? item.baseline + 12432;
+      const lifetime = item.runHoursLifetime ?? (item.baseline + 12432);
       const health = item.highLimit > 0
         ? Math.max(0, Math.min(100, Math.round(((item.highLimit - beforePm) / item.highLimit) * 100)))
         : 100;
@@ -279,6 +259,37 @@ export default function MachineMaintenance() {
     });
   }, [unitId]);
 
+  const overallHealth = useMemo(() => {
+    if (healthMatrixItems.length === 0) return 100;
+    const sum = healthMatrixItems.reduce((acc, item) => acc + item.health, 0);
+    return Math.round(sum / healthMatrixItems.length);
+  }, [healthMatrixItems]);
+
+  const maxRunningHours = useMemo(() => {
+    if (healthMatrixItems.length === 0) return 0;
+    return Math.max(...healthMatrixItems.map((item) => item.lifetime));
+  }, [healthMatrixItems]);
+
+  const pmDueCount = useMemo(() => {
+    return healthMatrixItems.filter((item) => item.health > 0 && item.health <= 20).length;
+  }, [healthMatrixItems]);
+
+  const overdueCount = useMemo(() => {
+    return healthMatrixItems.filter((item) => item.health === 0).length;
+  }, [healthMatrixItems]);
+
+  const summaryCards = useMemo(() => {
+    const healthColor = overallHealth >= 80 ? "text-emerald-500" : overallHealth >= 60 ? "text-amber-500" : "text-rose-500";
+    const healthCap = overallHealth >= 80 ? "Normal Range" : overallHealth >= 60 ? "Warning Range" : "Critical Range";
+    
+    return [
+      { label: "Overall Health", value: `${overallHealth}%`, cap: healthCap, color: healthColor, bg: "bg-emerald-500/10" },
+      { label: "Running Hours (All)", value: `${maxRunningHours.toLocaleString()} hrs`, cap: "Max Component Hours", color: "text-blue-500", bg: "bg-blue-500/10" },
+      { label: "PM Due This Month", value: `${pmDueCount} Tasks`, cap: pmDueCount > 0 ? "Needs Scheduled PM" : "No pending PM Tasks", color: "text-amber-500", bg: "bg-amber-500/10" },
+      { label: "Overdue Items", value: `${overdueCount} Critical`, cap: overdueCount > 0 ? "Requires Attention" : "All clear", color: overdueCount > 0 ? "text-rose-500" : "text-emerald-500", bg: overdueCount > 0 ? "bg-rose-500/10" : "bg-emerald-500/10" }
+    ];
+  }, [overallHealth, maxRunningHours, pmDueCount, overdueCount]);
+
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     setConfirmOpen(true);
@@ -288,12 +299,7 @@ export default function MachineMaintenance() {
     <div className="space-y-6">
       {/* 1. Maintenance Summary Indicators Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Overall Health", value: "86%", cap: "Normal Range", color: "text-emerald-500", bg: "bg-emerald-500/10" },
-          { label: "Running Hours (All)", value: "57,122 hrs", cap: "Total Cumulative", color: "text-blue-500", bg: "bg-blue-500/10" },
-          { label: "PM Due This Month", value: "3 Tasks", cap: "Next due 15-Jun", color: "text-amber-500", bg: "bg-amber-500/10" },
-          { label: "Overdue Items", value: "1 Critical", cap: "Requires Attention", color: "text-rose-500", bg: "bg-rose-500/10" }
-        ].map((card, idx) => (
+        {summaryCards.map((card, idx) => (
           <div
             key={idx}
             className="p-4 bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl shadow-sm transition hover:scale-[1.01] hover:shadow"

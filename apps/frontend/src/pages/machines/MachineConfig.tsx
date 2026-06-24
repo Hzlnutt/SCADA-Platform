@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
-import { DEFAULT_EQ_CONFIGS, DEFAULT_HVAC_CONFIG, DEFAULT_HVAC_EQ_CONFIGS } from "../../data/equipment";
+import { DEFAULT_EQ_CONFIGS, DEFAULT_HVAC_CONFIG, DEFAULT_HVAC_EQ_CONFIGS, getDefaultEqConfigs } from "../../data/equipment";
 import type { ConfigEqRow, HvacConfig } from "../../data/equipment";
 import type { MachineOutletContext } from "./MachineLayout";
 
@@ -57,16 +57,17 @@ export default function MachineConfig() {
     }
 
     // Equipment configurations load
-    if (unitId === "cooling-water-1") {
+    const isCoolingTower = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
+    if (isCoolingTower) {
       const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
       if (savedEq) {
         try {
           setEqRows(JSON.parse(savedEq));
         } catch (e) {
-          setEqRows(DEFAULT_EQ_CONFIGS);
+          setEqRows(getDefaultEqConfigs(unitId));
         }
       } else {
-        setEqRows(DEFAULT_EQ_CONFIGS);
+        setEqRows(getDefaultEqConfigs(unitId));
       }
     } else {
       setEqRows([]);
@@ -166,7 +167,7 @@ export default function MachineConfig() {
       </div>
 
       {/* Internal configuration section sub-tabs */}
-      {unitId === "cooling-water-1" && (
+      {(unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3") && (
         <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 rounded-xl w-fit">
           <button
             onClick={() => setConfigTab("sensors")}

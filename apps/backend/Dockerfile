@@ -1,8 +1,8 @@
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /repo
 
-RUN corepack enable && corepack prepare pnpm@11.1.3 --activate
+RUN corepack enable && corepack prepare pnpm@11.3.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/backend apps/backend

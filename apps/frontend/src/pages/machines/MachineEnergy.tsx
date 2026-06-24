@@ -188,24 +188,31 @@ export default function MachineEnergy() {
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
 
-  // Interactive rates keyed by unitId
-  const [electricityRate, setElectricityRate] = useState(() => {
-    const saved = localStorage.getItem(`scada.tariff.electricity.${unitId}`);
-    return saved ? Number(saved) : 0.12;
+  // Interactive rates keyed by unitId (in Rp)
+  const [electricityLwbpRate, setElectricityLwbpRate] = useState(() => {
+    const saved = localStorage.getItem(`scada.tariff.electricity_lwbp.${unitId}`);
+    return saved ? Number(saved) : 1112;
+  });
+  const [electricityWbpRate, setElectricityWbpRate] = useState(() => {
+    const saved = localStorage.getItem(`scada.tariff.electricity_wbp.${unitId}`);
+    return saved ? Number(saved) : 1600;
   });
   const [gasRate, setGasRate] = useState(() => {
     const saved = localStorage.getItem(`scada.tariff.gas.${unitId}`);
-    return saved ? Number(saved) : 0.45;
+    return saved ? Number(saved) : 120000;
   });
   const [waterRate, setWaterRate] = useState(() => {
     const saved = localStorage.getItem(`scada.tariff.water.${unitId}`);
-    return saved ? Number(saved) : 1.50;
+    return saved ? Number(saved) : 9000;
   });
 
-  const handleRateChange = (type: "electricity" | "gas" | "water", val: number) => {
-    if (type === "electricity") {
-      setElectricityRate(val);
-      localStorage.setItem(`scada.tariff.electricity.${unitId}`, val.toString());
+  const handleRateChange = (type: "electricity_lwbp" | "electricity_wbp" | "gas" | "water", val: number) => {
+    if (type === "electricity_lwbp") {
+      setElectricityLwbpRate(val);
+      localStorage.setItem(`scada.tariff.electricity_lwbp.${unitId}`, val.toString());
+    } else if (type === "electricity_wbp") {
+      setElectricityWbpRate(val);
+      localStorage.setItem(`scada.tariff.electricity_wbp.${unitId}`, val.toString());
     } else if (type === "gas") {
       setGasRate(val);
       localStorage.setItem(`scada.tariff.gas.${unitId}`, val.toString());
@@ -233,34 +240,9 @@ export default function MachineEnergy() {
     thdI: 9.82
   });
 
+  // Drift simulation disabled for production telemetry integration
   useEffect(() => {
-    const timer = setInterval(() => {
-      setPqData((prev) => ({
-        activePower: Number((101.4 + (Math.random() - 0.5) * 1.5).toFixed(1)),
-        reactivePower: Number((46.1 + (Math.random() - 0.5) * 0.8).toFixed(1)),
-        apparentPower: Number((111.4 + (Math.random() - 0.5) * 1.5).toFixed(1)),
-        pf: Number((0.91 + (Math.random() - 0.5) * 0.01).toFixed(2)),
-
-        vll1: Number((399.5 + (Math.random() - 0.5) * 1.0).toFixed(1)),
-        vll2: Number((400.2 + (Math.random() - 0.5) * 1.0).toFixed(1)),
-        vll3: Number((402.8 + (Math.random() - 0.5) * 1.0).toFixed(1)),
-
-        vln1: Number((229.1 + (Math.random() - 0.5) * 0.5).toFixed(1)),
-        vln2: Number((229.2 + (Math.random() - 0.5) * 0.5).toFixed(1)),
-        vln3: Number((228.9 + (Math.random() - 0.5) * 0.5).toFixed(1)),
-
-        current1: Number((165.3 + (Math.random() - 0.5) * 1.5).toFixed(1)),
-        current2: Number((163.7 + (Math.random() - 0.5) * 1.5).toFixed(1)),
-        current3: Number((165.2 + (Math.random() - 0.5) * 1.5).toFixed(1)),
-
-        freq: Number((49.92 + (Math.random() - 0.5) * 0.04).toFixed(2)),
-        vUnb: Number((1.04 + (Math.random() - 0.5) * 0.05).toFixed(2)),
-        iUnb: Number((2.64 + (Math.random() - 0.5) * 0.1).toFixed(2)),
-        thdV: Number((3.15 + (Math.random() - 0.5) * 0.1).toFixed(2)),
-        thdI: Number((9.82 + (Math.random() - 0.5) * 0.2).toFixed(2))
-      }));
-    }, 3000);
-    return () => clearInterval(timer);
+    // Timer drift simulation turned off to prevent mock data display
   }, []);
 
   // 1. Hourly Energy (Line Chart)
@@ -430,9 +412,24 @@ export default function MachineEnergy() {
     machine.id.includes("wfi")
   ) ? (machine.outputBase ?? 500) : 0;
 
-  const dailyElectricityCost = dailyElectricity * electricityRate;
-  const dailyGasCost = dailyGas * gasRate;
-  const dailyWaterCost = dailyWater * waterRate;
+  // Split electricity into LWBP (22:00 - 17:00, 19 hours) and WBP (17:00 - 22:00, 5 hours)
+  const lwbpKwh = dailyElectricity * (19 / 24);
+  const wbpKwh = dailyElectricity * (5 / 24);
+  const dailyElectricityCost = (lwbpKwh * electricityLwbpRate) + (wbpKwh * electricityWbpRate);
+
+  // Gas consumption in Sm3 and converted to MMBtu
+  const gasSm3 = dailyGas;
+  const gasMmbtu = gasSm3 * 0.035315;
+  const dailyGasCost = gasMmbtu * gasRate; // gasRate is Rp/MMBtu
+
+  // Water consumption in m3
+  const dailyWaterCost = dailyWater * waterRate; // waterRate is Rp/m³
+
+  // Equivalent Energy (kWh Setara)
+  const electricityKwhSetara = dailyElectricity;
+  const gasKwhSetara = gasMmbtu * 293.07;
+  const waterKwhSetara = dailyWater * 0.5;
+  const totalKwhSetara = electricityKwhSetara + gasKwhSetara + waterKwhSetara;
 
   const totalDailyCost = dailyElectricityCost + dailyGasCost + dailyWaterCost;
   const totalMonthlyCost = totalDailyCost * 30.437;
@@ -441,7 +438,14 @@ export default function MachineEnergy() {
   const electricityToday = dailyElectricity;
   const electricityMonthly = dailyElectricity * 30.437 / 1000;
   const electricityYearly = dailyElectricity * 365 / 1000;
-  const co2Emitted = dailyElectricity * 0.82 * 30.437 / 1000;
+
+  // Carbon emissions split
+  const carbonElectricityDaily = dailyElectricity * 0.82;
+  const carbonGasDaily = gasSm3 * 1.88;
+  const totalCarbonDaily = carbonElectricityDaily + carbonGasDaily;
+  const totalCarbonMonthly = totalCarbonDaily * 30.437 / 1000;
+  const totalCarbonYearly = totalCarbonDaily * 365 / 1000;
+  const co2Emitted = totalCarbonMonthly;
 
   return (
     <div className="space-y-6">
@@ -452,7 +456,7 @@ export default function MachineEnergy() {
           { label: "Monthly", value: `${electricityMonthly.toFixed(1)} MWh`, change: "Monthly average", status: "neutral" },
           { label: "Yearly", value: `${electricityYearly.toFixed(0)} MWh`, change: "Yearly average", status: "neutral" },
           { label: "CO2 Emitted", value: `${co2Emitted.toFixed(1)} t`, change: "Monthly offset", status: "neutral" },
-          { label: "Energy Cost", value: `$${totalMonthlyCost.toLocaleString(undefined, {maximumFractionDigits: 0})}`, change: "Monthly cost", status: "neutral" }
+          { label: "Energy Cost", value: `Rp. ${totalMonthlyCost.toLocaleString(undefined, {maximumFractionDigits: 0})}`, change: "Monthly cost", status: "neutral" }
         ].map((card, idx) => (
           <div
             key={idx}
@@ -634,60 +638,103 @@ export default function MachineEnergy() {
           </h3>
           
           {/* Interactive Tariff Input Rates */}
-          <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-900/60">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-900/60">
             <div>
-              <label className="block text-[9px] font-bold text-slate-400 uppercase">Electricity ($/kWh)</label>
+              <label className="block text-[8px] font-bold text-slate-400 uppercase">Electricity LWBP (Rp/kWh)</label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 min="0"
-                value={electricityRate}
-                onChange={(e) => handleRateChange("electricity", Number(e.target.value))}
-                className="mt-1 w-full rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1 text-xs text-[#002b5c] dark:text-white focus:outline-none font-bold"
+                value={electricityLwbpRate}
+                onChange={(e) => handleRateChange("electricity_lwbp", Number(e.target.value))}
+                className="mt-1 w-full rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1 text-xs text-[#002b5c] dark:text-white focus:outline-none font-bold font-mono"
               />
             </div>
             <div>
-              <label className="block text-[9px] font-bold text-slate-400 uppercase">Gas ($/Sm³)</label>
+              <label className="block text-[8px] font-bold text-slate-400 uppercase">Electricity WBP (Rp/kWh)</label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
+                min="0"
+                value={electricityWbpRate}
+                onChange={(e) => handleRateChange("electricity_wbp", Number(e.target.value))}
+                className="mt-1 w-full rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1 text-xs text-[#002b5c] dark:text-white focus:outline-none font-bold font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-[8px] font-bold text-slate-400 uppercase">Gas (Rp/MMBtu)</label>
+              <input
+                type="number"
+                step="1000"
                 min="0"
                 value={gasRate}
                 onChange={(e) => handleRateChange("gas", Number(e.target.value))}
-                className="mt-1 w-full rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1 text-xs text-[#002b5c] dark:text-white focus:outline-none font-bold"
+                className="mt-1 w-full rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1 text-xs text-[#002b5c] dark:text-white focus:outline-none font-bold font-mono"
               />
             </div>
             <div>
-              <label className="block text-[9px] font-bold text-slate-400 uppercase">Water ($/m³)</label>
+              <label className="block text-[8px] font-bold text-slate-400 uppercase">Water (Rp/m³)</label>
               <input
                 type="number"
-                step="0.01"
+                step="100"
                 min="0"
                 value={waterRate}
                 onChange={(e) => handleRateChange("water", Number(e.target.value))}
-                className="mt-1 w-full rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1 text-xs text-[#002b5c] dark:text-white focus:outline-none font-bold"
+                className="mt-1 w-full rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1 text-xs text-[#002b5c] dark:text-white focus:outline-none font-bold font-mono"
               />
             </div>
           </div>
 
           <div className="space-y-3 font-semibold text-xs text-[#002b5c] dark:text-slate-300">
             <div className="flex justify-between items-center py-2.5 border-b border-slate-100 dark:border-slate-900">
-              <span className="text-slate-500">Daily Electricity Cost ({dailyElectricity.toLocaleString()} kWh)</span>
-              <span className="font-bold font-mono text-sm text-[#002b5c] dark:text-slate-200">
-                ${dailyElectricityCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-              </span>
+              <span className="text-slate-500 font-extrabold uppercase text-[10px]">1. Electricity KWH (Total)</span>
+              <div className="text-right">
+                <div className="font-bold text-sm text-[#002b5c] dark:text-slate-200">
+                  {dailyElectricity.toLocaleString()} kWh | Rp. {dailyElectricityCost.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                </div>
+                <div className="text-[10px] text-slate-400 font-semibold font-mono">
+                  {electricityKwhSetara.toLocaleString(undefined, {maximumFractionDigits: 1})} kWh Setara
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between items-center py-2.5 border-b border-slate-100 dark:border-slate-900">
-              <span className="text-slate-500">Daily Gas Cost ({dailyGas.toLocaleString()} Sm³)</span>
-              <span className="font-bold font-mono text-sm text-[#002b5c] dark:text-slate-200">
-                ${dailyGasCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-              </span>
+            
+            <div className="pl-4 space-y-1.5 py-1.5 border-b border-slate-100/50 dark:border-slate-900/50 bg-slate-50/50 dark:bg-slate-900/20 rounded-lg">
+              <div className="flex justify-between items-center text-[10.5px]">
+                <span className="text-slate-500 font-medium">LWBP (Luar Waktu Beban Puncak) (22.00 - 17.00)</span>
+                <span className="font-semibold font-mono text-[#002b5c] dark:text-slate-300">
+                  {lwbpKwh.toFixed(1)} kWh | Rp. {(lwbpKwh * electricityLwbpRate).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[10.5px]">
+                <span className="text-slate-500 font-medium">WBP (Waktu Beban Puncak) (17.00 - 22.00)</span>
+                <span className="font-semibold font-mono text-[#002b5c] dark:text-slate-300">
+                  {wbpKwh.toFixed(1)} kWh | Rp. {(wbpKwh * electricityWbpRate).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                </span>
+              </div>
             </div>
+
             <div className="flex justify-between items-center py-2.5 border-b border-slate-100 dark:border-slate-900">
-              <span className="text-slate-500">Daily Water Cost ({dailyWater.toLocaleString()} m³)</span>
-              <span className="font-bold font-mono text-sm text-[#002b5c] dark:text-slate-200">
-                ${dailyWaterCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-              </span>
+              <span className="text-slate-500 font-extrabold uppercase text-[10px]">2. Water m³</span>
+              <div className="text-right">
+                <div className="font-bold text-sm text-[#002b5c] dark:text-slate-200">
+                  {dailyWater.toLocaleString()} m³ | Cost: Rp. {dailyWaterCost.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                </div>
+                <div className="text-[10px] text-slate-400 font-semibold font-mono">
+                  {waterKwhSetara.toLocaleString(undefined, {maximumFractionDigits: 1})} kWh Setara
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center py-2.5 border-b border-slate-100 dark:border-slate-900">
+              <span className="text-slate-500 font-extrabold uppercase text-[10px]">3. Gas MMBtu</span>
+              <div className="text-right">
+                <div className="font-bold text-sm text-[#002b5c] dark:text-slate-200">
+                  {gasMmbtu.toFixed(4)} mmbtu | Cost: Rp. {dailyGasCost.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                </div>
+                <div className="text-[10px] text-slate-400 font-semibold font-mono">
+                  {gasSm3.toLocaleString()} Sm³ | {gasKwhSetara.toLocaleString(undefined, {maximumFractionDigits: 1})} kWh Setara
+                </div>
+              </div>
             </div>
             
             {/* SUMMED TOTAL PROJECTION CALCULATOR */}
@@ -696,19 +743,19 @@ export default function MachineEnergy() {
               <div className="flex justify-between items-center py-1">
                 <span className="text-slate-500">Total Daily Cost</span>
                 <span className="font-bold font-mono text-sm text-[#1f6fb5] dark:text-sky-400">
-                  ${totalDailyCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  Rp. {totalDailyCost.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                 </span>
               </div>
               <div className="flex justify-between items-center py-1">
                 <span className="text-slate-500">Total Monthly Cost</span>
                 <span className="font-bold font-mono text-sm text-[#1f6fb5] dark:text-sky-400">
-                  ${totalMonthlyCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  Rp. {totalMonthlyCost.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                 </span>
               </div>
               <div className="flex justify-between items-center py-1">
                 <span className="text-slate-500">Total Yearly Cost</span>
                 <span className="font-bold font-mono text-sm text-[#1f6fb5] dark:text-sky-400">
-                  ${totalYearlyCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  Rp. {totalYearlyCost.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                 </span>
               </div>
             </div>
@@ -721,18 +768,59 @@ export default function MachineEnergy() {
             Carbon Emission Estimation
           </h3>
           <div className="space-y-3 font-semibold text-xs text-[#002b5c] dark:text-slate-300">
-            {[
-              { label: "Grid Emission Factor", val: "0.82 kgCO₂ / kWh" },
-              { label: "Daily CO₂ Emissions", val: `${(dailyElectricity * 0.82).toFixed(1)} kgCO₂` },
-              { label: "Monthly CO₂ Emissions", val: `${co2Emitted.toFixed(1)} tCO₂` },
-              { label: "Yearly CO₂ Emissions", val: `${(co2Emitted * 12).toFixed(1)} tCO₂` },
-              { label: "Year-over-Year Offset Target (2026)", val: "-12% YoY Target" }
-            ].map((row, idx) => (
-              <div key={idx} className="flex justify-between items-center py-2.5 border-b border-slate-100 dark:border-slate-900 last:border-0">
-                <span className="text-slate-500">{row.label}</span>
-                <span className="font-bold font-mono text-sm text-rose-500">{row.val}</span>
+            <div className="py-1">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">1. Electricity (Listrik)</span>
+              <div className="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-900">
+                <span className="text-slate-500">Grid Emission Factor</span>
+                <span className="font-bold font-mono text-slate-600 dark:text-slate-300">0.82 kgCO₂ / kWh</span>
               </div>
-            ))}
+              <div className="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-900">
+                <span className="text-slate-500">Daily CO₂ Emissions</span>
+                <span className="font-bold font-mono text-rose-500">{carbonElectricityDaily.toFixed(1)} kgCO₂</span>
+              </div>
+              <div className="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-900">
+                <span className="text-slate-500">Monthly CO₂ Emissions</span>
+                <span className="font-bold font-mono text-rose-500">{(carbonElectricityDaily * 30.437 / 1000).toFixed(2)} tCO₂</span>
+              </div>
+            </div>
+
+            <div className="py-1 mt-2">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">2. Gas</span>
+              <div className="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-900">
+                <span className="text-slate-500">Gas Emission Factor</span>
+                <span className="font-bold font-mono text-slate-600 dark:text-slate-300">1.88 kgCO₂ / Sm³</span>
+              </div>
+              <div className="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-900">
+                <span className="text-slate-500">Daily CO₂ Emissions</span>
+                <span className="font-bold font-mono text-rose-500">{carbonGasDaily.toFixed(1)} kgCO₂</span>
+              </div>
+              <div className="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-900">
+                <span className="text-slate-500">Monthly CO₂ Emissions</span>
+                <span className="font-bold font-mono text-rose-500">{(carbonGasDaily * 30.437 / 1000).toFixed(2)} tCO₂</span>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[#acd3ff]/40 dark:border-slate-800 space-y-2 mt-2">
+              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wider">Total Carbon Emissions Summary</h4>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-slate-500">Total Daily Emissions</span>
+                <span className="font-bold font-mono text-sm text-rose-500">
+                  {totalCarbonDaily.toFixed(1)} kgCO₂
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-slate-500">Total Monthly Emissions</span>
+                <span className="font-bold font-mono text-sm text-rose-500">
+                  {totalCarbonMonthly.toFixed(2)} tCO₂
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-slate-500">Total Yearly Emissions</span>
+                <span className="font-bold font-mono text-sm text-rose-500">
+                  {totalCarbonYearly.toFixed(2)} tCO₂
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

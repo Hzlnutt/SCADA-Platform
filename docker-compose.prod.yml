@@ -18,7 +18,7 @@ services:
       - MONGODB_URI=mongodb://scada:ScadaW1datra2026!@mongo:27017/scada?authSource=admin
       - MONGODB_DB=scada
       - CORS_ORIGIN=http://localhost
-      - DUMMY_MODE=true
+      - DUMMY_MODE=false
       - REDIS_URL=redis://redis:6379
 
   mongo:

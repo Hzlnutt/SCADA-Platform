@@ -1,6 +1,8 @@
 import { getAccessToken, useAuthStore } from "../store/auth.store";
 
-const rawBaseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+const devFallback = "http://localhost:3001";
+const prodFallback = typeof window !== "undefined" ? window.location.origin : "";
+const rawBaseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? devFallback : prodFallback);
 const baseUrl = rawBaseUrl.replace(/\/$/, "");
 const apiBase = baseUrl.endsWith("/api/v1") ? baseUrl : `${baseUrl}/api/v1`;
 

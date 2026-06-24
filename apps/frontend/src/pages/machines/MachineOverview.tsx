@@ -6,7 +6,7 @@ import { useTelemetryStore } from "../../store/telemetry.store";
 import { useSystemStore } from "../../store/system.store";
 import type { MachineOutletContext } from "./MachineLayout";
 import "../../components/charts/chartjs";
-import { DEFAULT_HVAC_CONFIG } from "../../data/equipment";
+import { DEFAULT_HVAC_CONFIG, getDefaultEqConfigs } from "../../data/equipment";
 import type { HvacConfig } from "../../data/equipment";
 
 export default function MachineOverview() {
@@ -21,11 +21,62 @@ export default function MachineOverview() {
   return <StandardMachineOverview unitId={unitId} theme={theme} isDark={isDark} />;
 }
 
+const INITIAL_ALARMS = [
+  { id: "1", timestamp: "08:42:11", description: "Reference Room Temp High (42.4°C)", equipment: "AHU-02", status: "Active" },
+  { id: "2", timestamp: "08:31:05", description: "CU-03B Compressor Trip", equipment: "AHU-03 / CU-03B", status: "Active" },
+  { id: "3", timestamp: "07:58:44", description: "Pre-Filter Differential Pressure High", equipment: "AHU-02", status: "Resolved" },
+  { id: "4", timestamp: "07:12:03", description: "Humidifier water tank level low", equipment: "AHU-03", status: "Resolved" },
+  { id: "5", timestamp: "06:20:18", description: "AHU-01 switched to Auto Mode", equipment: "AHU-01", status: "Resolved" }
+];
+
 function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; theme: string; isDark: boolean }) {
   const machine = getUnitById(unitId);
 
   // Sub-tab selection: 'telemetry' or 'process'
   const [subTab, setSubTab] = useState<"telemetry" | "process">("telemetry");
+
+  // Load alarms and eqConfigs to compute active alarms
+  const alarms = useMemo(() => {
+    const saved = localStorage.getItem(`scada.alarm_logs.${unitId}`);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return INITIAL_ALARMS;
+  }, [unitId]);
+
+  const eqConfigs = useMemo(() => {
+    let configs = getDefaultEqConfigs(unitId);
+    const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
+    if (savedEq) {
+      try {
+        configs = JSON.parse(savedEq);
+      } catch (e) {}
+    }
+    return configs;
+  }, [unitId]);
+
+  const dynamicAlarms = useMemo(() => {
+    return eqConfigs
+      .filter((item) => item.enableAlert && (item.runHoursBeforeMaintenance ?? item.baseline) >= item.highLimit)
+      .map((item) => ({
+        id: `maint-overdue-${item.tagKey}`,
+        timestamp: "08:00:00",
+        description: `Maintenance Overdue: ${item.tagName} (${(item.runHoursBeforeMaintenance ?? item.baseline).toLocaleString()} / ${item.highLimit.toLocaleString()} hrs)`,
+        equipment: item.tagKey,
+        operatorAction: "",
+        status: "Active" as const,
+        rtn: "—",
+        operatorName: "",
+        approverName: ""
+      }));
+  }, [eqConfigs]);
+
+  const allActiveAlarms = useMemo(() => {
+    const staticActive = alarms.filter((item: any) => item.status === "Active");
+    return [...dynamicAlarms, ...staticActive];
+  }, [alarms, dynamicAlarms]);
 
   // Dynamic baselines from config (localStorage)
   const baselines = useMemo(() => {
@@ -57,7 +108,8 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
   }, [unitId]);
 
   // Simulated live telemetry state with slight random drift
-  const [liveData, setLiveData] = useState({
+  // Simulated live telemetry state with slight random drift
+  const [liveDataState, setLiveDataState] = useState({
     supplyTemp: 29.9,
     returnTemp: 39.9,
     ambientTemp: 31.9,
@@ -94,107 +146,35 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
     ]
   });
 
-  // Drift simulation to make the SCADA dashboard alive and dynamic
+  const latest = useTelemetryStore((state) => state.latest);
+
+  // Compute live data reactively by merging state with real socket telemetry if present
+  const liveData = useMemo(() => {
+    const ct1Flow = latest["cooling-water/flow_1"]?.value;
+    const ct2Flow = latest["cooling-water/flow_2"]?.value;
+    const ct3Flow = latest["cooling-water/flow_3"]?.value;
+
+    return {
+      ...liveDataState,
+      supplyFlow: typeof ct1Flow === "number" ? ct1Flow : liveDataState.supplyFlow,
+      ct1: {
+        ...liveDataState.ct1,
+        flow: typeof ct1Flow === "number" ? ct1Flow : liveDataState.ct1.flow,
+      },
+      ct2: {
+        ...liveDataState.ct2,
+        flow: typeof ct2Flow === "number" ? ct2Flow : liveDataState.ct2.flow,
+      },
+      ct3: {
+        ...liveDataState.ct3,
+        flow: typeof ct3Flow === "number" ? ct3Flow : liveDataState.ct3.flow,
+      }
+    };
+  }, [liveDataState, latest]);
+
+  // Drift simulation disabled for production telemetry integration
   useEffect(() => {
-    const timer = setInterval(() => {
-      setLiveData((prev) => {
-        const supplyDrift = (Math.random() - 0.5) * 0.1;
-        const returnDrift = (Math.random() - 0.5) * 0.1;
-        const nextSupplyTemp = Number((prev.supplyTemp + supplyDrift).toFixed(1));
-        const nextReturnTemp = Number((prev.returnTemp + returnDrift).toFixed(1));
-
-        return {
-          ...prev,
-          supplyTemp: nextSupplyTemp,
-          returnTemp: nextReturnTemp,
-          ambientTemp: Number((prev.ambientTemp + (Math.random() - 0.5) * 0.05).toFixed(1)),
-          ctEfficiency: Number((prev.ctEfficiency + (Math.random() - 0.5) * 0.1).toFixed(1)),
-          totalEnergy: prev.totalEnergy + Math.floor(Math.random() * 2),
-
-          supplyTds: prev.supplyTds + (Math.random() > 0.7 ? (Math.random() > 0.5 ? 1 : -1) : 0),
-          supplyFlow: Number((prev.supplyFlow + (Math.random() - 0.5) * 0.5).toFixed(1)),
-          makeupVol: Number((prev.makeupVol + 0.005).toFixed(2)),
-          makeupTds: prev.makeupTds + (Math.random() > 0.8 ? (Math.random() > 0.5 ? 1 : -1) : 0),
-
-          ct1: {
-            ...prev.ct1,
-            fanSpeed: prev.ct1.fanSpeed + Math.floor((Math.random() - 0.5) * 4),
-            motorCurrent: Number((prev.ct1.motorCurrent + (Math.random() - 0.5) * 0.2).toFixed(1)),
-            motorPower: Number((prev.ct1.motorPower + (Math.random() - 0.5) * 0.1).toFixed(1)),
-            flow: prev.ct1.flow + Math.floor((Math.random() - 0.5) * 2),
-            pressure: Number((prev.ct1.pressure + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            vibration: Number((prev.ct1.vibration + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            vibraFan: Number((prev.ct1.vibraFan + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            vibraMotor: Number((prev.ct1.vibraMotor + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            basinTemp: Number((prev.ct1.basinTemp + (Math.random() - 0.5) * 0.05).toFixed(1))
-          },
-          ct2: {
-            ...prev.ct2,
-            fanSpeed: prev.ct2.fanSpeed + Math.floor((Math.random() - 0.5) * 4),
-            motorCurrent: Number((prev.ct2.motorCurrent + (Math.random() - 0.5) * 0.2).toFixed(1)),
-            motorPower: Number((prev.ct2.motorPower + (Math.random() - 0.5) * 0.1).toFixed(1)),
-            flow: prev.ct2.flow + Math.floor((Math.random() - 0.5) * 2),
-            pressure: Number((prev.ct2.pressure + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            vibration: Number((prev.ct2.vibration + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            vibraFan: Number((prev.ct2.vibraFan + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            vibraMotor: Number((prev.ct2.vibraMotor + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            basinTemp: Number((prev.ct2.basinTemp + (Math.random() - 0.5) * 0.05).toFixed(1))
-          },
-          ct3: {
-            ...prev.ct3,
-            fanSpeed: prev.ct3.fanSpeed + Math.floor((Math.random() - 0.5) * 4),
-            motorCurrent: Number((prev.ct3.motorCurrent + (Math.random() - 0.5) * 0.2).toFixed(1)),
-            motorPower: Number((prev.ct3.motorPower + (Math.random() - 0.5) * 0.1).toFixed(1)),
-            flow: prev.ct3.flow + Math.floor((Math.random() - 0.5) * 2),
-            pressure: Number((prev.ct3.pressure + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            vibration: Number((prev.ct3.vibration + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            vibraFan: Number((prev.ct3.vibraFan + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            vibraMotor: Number((prev.ct3.vibraMotor + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            basinTemp: Number((prev.ct3.basinTemp + (Math.random() - 0.5) * 0.05).toFixed(1))
-          },
-
-          coolingTank: {
-            ...prev.coolingTank,
-            ph: Number((prev.coolingTank.ph + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            tds: Number((prev.coolingTank.tds + (Math.random() - 0.5) * 1.5).toFixed(1)),
-            cond: Number((prev.coolingTank.cond + (Math.random() - 0.5) * 2).toFixed(1)),
-            lvl: Number((prev.coolingTank.lvl + (Math.random() - 0.5) * 0.1).toFixed(1)),
-            temp: Number((prev.coolingTank.temp + (Math.random() - 0.5) * 0.05).toFixed(1))
-          },
-          makeupWater: {
-            ...prev.makeupWater,
-            ph: Number((prev.makeupWater.ph + (Math.random() - 0.5) * 0.01).toFixed(2)),
-            tds: Number((prev.makeupWater.tds + (Math.random() - 0.5) * 0.5).toFixed(1)),
-            flow: Number((prev.makeupWater.flow + (Math.random() - 0.5) * 0.1).toFixed(1)),
-            vol: Number((prev.makeupWater.vol + 0.01).toFixed(1))
-          },
-          dosingA: {
-            ...prev.dosingA,
-            flow: Number((prev.dosingA.flow + (Math.random() - 0.5) * 0.05).toFixed(2)),
-            cons: Number((prev.dosingA.cons + 0.01).toFixed(1))
-          },
-          blowdown: {
-            ...prev.blowdown,
-            flow: Number((prev.blowdown.flow + (Math.random() - 0.5) * 0.02).toFixed(2)),
-            vol: Number((prev.blowdown.vol + 0.005).toFixed(1))
-          },
-
-          equipment: prev.equipment.map((item) => {
-            if (item.status === "Standby") return item;
-            return {
-              ...item,
-              flow: Number((item.flow + (Math.random() - 0.5) * 0.2).toFixed(1)),
-              press: Number((item.press + (Math.random() - 0.5) * 0.02).toFixed(2)),
-              curr: Number((item.curr + (Math.random() - 0.5) * 0.1).toFixed(1)),
-              pow: Number((item.pow + (Math.random() - 0.5) * 0.05).toFixed(1)),
-              vib: Number((item.vib + (Math.random() - 0.5) * 0.05).toFixed(1)),
-              temp: Number((item.temp + (Math.random() - 0.5) * 0.1).toFixed(1))
-            };
-          })
-        };
-      });
-    }, 3000);
-    return () => clearInterval(timer);
+    // Timer drift simulation turned off to prevent mock data display
   }, []);
 
   // Compute Delta T dynamically
@@ -332,8 +312,15 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
       </div>
 
       {/* Top Value Cards Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className={`grid grid-cols-2 md:grid-cols-3 ${machine.tagId ? "lg:grid-cols-7" : "lg:grid-cols-6"} gap-4`}>
         {[
+          ...(machine.tagId ? [{
+            label: `${machine.unitLabel || machine.name} Telemetry`,
+            val: latest[machine.tagId]?.value !== undefined ? `${latest[machine.tagId]?.value} ${machine.unit}` : `— ${machine.unit}`,
+            base: `${machine.dailyBase ? machine.dailyBase.toLocaleString() : "N/A"} ${machine.unit}`,
+            color: "text-[#1f6fb5] dark:text-sky-400 font-extrabold",
+            bg: "bg-[#1f6fb5]/10"
+          }] : []),
           { label: "Supply Temp", val: `${liveData.supplyTemp} °C`, base: `${baselines.SPLY_WTR_TEMP.toFixed(1)} °C`, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" },
           { label: "Return Temp", val: `${liveData.returnTemp} °C`, base: `${baselines.RTN_WTR_TEMP.toFixed(1)} °C`, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500/10" },
           { label: "Delta T", val: `${deltaT} °C`, base: `${(baselines.RTN_WTR_TEMP - baselines.SPLY_WTR_TEMP).toFixed(1)} °C`, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },
@@ -423,27 +410,38 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
                   </h3>
                 </div>
                 <div className="space-y-3">
-                  {[
-                    { title: "Reference Room Temp High (42.4°C)", loc: "AHU-02", time: "08:42:11", type: "Critical", tone: "bg-rose-500/10 text-rose-500 border border-rose-500/30" },
-                    { title: "CU-03B Compressor Trip", loc: "AHU-03 / CU-03B", time: "08:31:05", type: "Major", tone: "bg-orange-500/10 text-orange-500 border border-orange-500/30" },
-                    { title: "Pre-Filter Pressure High", loc: "AHU-02", time: "07:58:44", type: "Warning", tone: "bg-amber-500/10 text-amber-600 border border-amber-500/30" },
-                    { title: "Humidifier water tank level low", loc: "AHU-03", time: "07:12:03", type: "Minor", tone: "bg-sky-500/10 text-sky-500 border border-sky-500/30" },
-                    { title: "AHU-01 switched to Auto Mode", loc: "AHU-01", time: "06:20:18", type: "Info", tone: "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30" }
-                  ].map((alarm, idx) => (
-                    <div key={idx} className="flex items-start justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 hover:border-sky-300 dark:hover:border-slate-700 transition">
-                      <div className="space-y-1">
-                        <div className="text-[11px] font-bold text-[#002b5c] dark:text-slate-200 line-clamp-1">
-                          {alarm.title}
+                  {allActiveAlarms.length > 0 ? (
+                    allActiveAlarms.slice(0, 5).map((alarm) => {
+                      const isCritical = alarm.description.toLowerCase().includes("critical") || alarm.description.toLowerCase().includes("overdue");
+                      const isMajor = alarm.description.toLowerCase().includes("trip") || alarm.description.toLowerCase().includes("high");
+                      const type = isCritical ? "Critical" : isMajor ? "Major" : "Warning";
+                      const tone = isCritical
+                        ? "bg-rose-500/10 text-rose-500 border border-rose-500/30"
+                        : isMajor
+                        ? "bg-orange-500/10 text-orange-500 border border-orange-500/30"
+                        : "bg-amber-500/10 text-amber-600 border border-amber-500/30";
+
+                      return (
+                        <div key={alarm.id} className="flex items-start justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 hover:border-sky-300 dark:hover:border-slate-700 transition">
+                          <div className="space-y-1">
+                            <div className="text-[11px] font-bold text-[#002b5c] dark:text-slate-200 line-clamp-1">
+                              {alarm.description}
+                            </div>
+                            <div className="text-[9px] text-[#47729f] dark:text-slate-500 font-mono">
+                              {alarm.equipment} | {alarm.timestamp}
+                            </div>
+                          </div>
+                          <span className={`text-[8px] font-extrabold uppercase px-2 py-0.5 rounded-md ${tone}`}>
+                            {type}
+                          </span>
                         </div>
-                        <div className="text-[9px] text-[#47729f] dark:text-slate-500 font-mono">
-                          {alarm.loc} | {alarm.time}
-                        </div>
-                      </div>
-                      <span className={`text-[8px] font-extrabold uppercase px-2 py-0.5 rounded-md ${alarm.tone}`}>
-                        {alarm.type}
-                      </span>
+                      );
+                    })
+                  ) : (
+                    <div className="py-6 text-center text-xs text-[#47729f] dark:text-slate-500 italic font-semibold">
+                      No active alarms. System operating normal.
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
               <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-900 text-center">
@@ -740,7 +738,54 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
     return DEFAULT_HVAC_CONFIG;
   }, [unitId]);
 
-  const [liveData, setLiveData] = useState({
+  const alarms = useMemo(() => {
+    const saved = localStorage.getItem(`scada.alarm_logs.${unitId}`);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return INITIAL_ALARMS;
+  }, [unitId]);
+
+  const eqConfigs = useMemo(() => {
+    let configs = getDefaultEqConfigs(unitId);
+    const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
+    if (savedEq) {
+      try {
+        configs = JSON.parse(savedEq);
+      } catch (e) {}
+    }
+    return configs;
+  }, [unitId]);
+
+  const dynamicAlarms = useMemo(() => {
+    return eqConfigs
+      .filter((item) => item.enableAlert && (item.runHoursBeforeMaintenance ?? item.baseline) >= item.highLimit)
+      .map((item) => ({
+        id: `maint-overdue-${item.tagKey}`,
+        timestamp: "08:00:00",
+        description: `Maintenance Overdue: ${item.tagName} (${(item.runHoursBeforeMaintenance ?? item.baseline).toLocaleString()} / ${item.highLimit.toLocaleString()} hrs)`,
+        equipment: item.tagKey,
+        operatorAction: "",
+        status: "Active" as const,
+        rtn: "—",
+        operatorName: "",
+        approverName: ""
+      }));
+  }, [eqConfigs]);
+
+  const allActiveAlarms = useMemo(() => {
+    const staticActive = alarms.filter((item: any) => item.status === "Active");
+    return [...dynamicAlarms, ...staticActive];
+  }, [alarms, dynamicAlarms]);
+
+  const activeAlarmsCount = allActiveAlarms.length;
+  const criticalAlarmsCount = allActiveAlarms.filter(
+    (a: any) => a.description.toLowerCase().includes("critical") || a.description.toLowerCase().includes("overdue")
+  ).length;
+
+  const [liveDataState, setLiveDataState] = useState({
     ahu1: { temp: 27.6, humidity: 74.4, supplyAir: 23.4, running: true, fan: true, heater: true, humidifier: true },
     ahu2: { temp: 40.0, humidity: 75.1, running: true, fan: true, cooling: true, heater: true, humidifier: true },
     ahu3: { temp: 30.0, humidity: 75.6, running: true, fan: true, cooling: true },
@@ -756,6 +801,31 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
       { area: "MINI LAB", status: "RUNNING", flow: 7.2, pow: 3.3, hrs: 1567, maint: "Good" }
     ]
   });
+
+  const latest = useTelemetryStore((state) => state.latest);
+
+  // Compute live data reactively by merging state with real socket telemetry if present
+  const liveData = useMemo(() => {
+    const ahu1Temp = latest["hvac/qc-lab_temp"]?.value;
+    const ahu2Temp = latest["hvac/qc-retained-sample_temp"]?.value;
+    const ahu3Temp = latest["hvac/wh-3_temp"]?.value;
+
+    return {
+      ...liveDataState,
+      ahu1: {
+        ...liveDataState.ahu1,
+        temp: typeof ahu1Temp === "number" ? ahu1Temp : liveDataState.ahu1.temp,
+      },
+      ahu2: {
+        ...liveDataState.ahu2,
+        temp: typeof ahu2Temp === "number" ? ahu2Temp : liveDataState.ahu2.temp,
+      },
+      ahu3: {
+        ...liveDataState.ahu3,
+        temp: typeof ahu3Temp === "number" ? ahu3Temp : liveDataState.ahu3.temp,
+      }
+    };
+  }, [liveDataState, latest]);
 
   const [timeStr, setTimeStr] = useState("Sun 07 Jun 2026 - 10:44:13");
   useEffect(() => {
@@ -775,51 +845,9 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
     return () => clearInterval(clockTimer);
   }, []);
 
+  // Drift simulation disabled for production telemetry integration
   useEffect(() => {
-    const timer = setInterval(() => {
-      setLiveData((prev) => {
-        const drift = (val: number, sp: number) => {
-          const delta = (Math.random() - 0.5) * 0.1;
-          const next = val + delta;
-          return Number((next + (sp - next) * 0.05).toFixed(1));
-        };
-
-        return {
-          ahu1: {
-            ...prev.ahu1,
-            temp: drift(prev.ahu1.temp, config.ahu1.tempSp),
-            supplyAir: drift(prev.ahu1.supplyAir, 23.4)
-          },
-          ahu2: {
-            ...prev.ahu2,
-            temp: drift(prev.ahu2.temp, config.ahu2.tempSp),
-            humidity: drift(prev.ahu2.humidity, config.ahu2.humiditySp)
-          },
-          ahu3: {
-            ...prev.ahu3,
-            temp: drift(prev.ahu3.temp, config.ahu3.tempSp),
-            humidity: drift(prev.ahu3.humidity, 75.0)
-          },
-          ambient: {
-            temp1: drift(prev.ambient.temp1, 29.8),
-            temp2: drift(prev.ambient.temp2, 29.9),
-            humidity1: drift(prev.ambient.humidity1, 60.0),
-            humidity2: drift(prev.ambient.humidity2, 60.0)
-          },
-          energyToday: Number((prev.energyToday + Math.random() * 0.05).toFixed(1)),
-          runningHours: prev.runningHours + (Math.random() > 0.95 ? 1 : 0),
-          equipment: prev.equipment.map((eq) => {
-            if (eq.status === "STANDBY") return eq;
-            return {
-              ...eq,
-              flow: Number((eq.flow + (Math.random() - 0.5) * 0.2).toFixed(1)),
-              pow: Number((eq.pow + (Math.random() - 0.5) * 0.1).toFixed(1))
-            };
-          })
-        };
-      });
-    }, 3000);
-    return () => clearInterval(timer);
+    // Timer drift simulation turned off to prevent mock data display
   }, [config]);
 
   const tempChartData = useMemo(() => {
@@ -897,18 +925,18 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
           <span className="font-mono text-xs text-sky-400 font-bold truncate mt-0.5">{timeStr}</span>
         </div>
 
-        <div className="flex items-center justify-center bg-rose-500/20 text-rose-500 border border-rose-500/30 rounded px-3 py-2 font-black tracking-widest text-xs uppercase animate-pulse">
-          ALARM
+        <div className={`flex items-center justify-center border rounded px-3 py-2 font-black tracking-widest text-xs uppercase ${activeAlarmsCount > 0 ? "bg-rose-500/20 text-rose-500 border-rose-500/30 animate-pulse" : "bg-emerald-500/20 text-emerald-500 border-emerald-500/30"}`}>
+          {activeAlarmsCount > 0 ? "ALARM" : "NORMAL"}
         </div>
 
         <div className="flex flex-col items-center bg-amber-500/10 text-amber-500 border border-amber-500/30 rounded px-2.5 py-1">
           <span className="text-[8px] text-slate-500 font-extrabold">ACTIVE ALARMS</span>
-          <span className="text-sm font-bold font-mono">2</span>
+          <span className="text-sm font-bold font-mono">{activeAlarmsCount}</span>
         </div>
 
         <div className="flex flex-col items-center bg-rose-500/10 text-rose-500 border border-rose-500/30 rounded px-2.5 py-1">
           <span className="text-[8px] text-slate-500 font-extrabold">CRITICAL</span>
-          <span className="text-sm font-bold font-mono">1</span>
+          <span className="text-sm font-bold font-mono">{criticalAlarmsCount}</span>
         </div>
 
         <div className="flex flex-col px-3 py-1 border-l border-r border-slate-800">
@@ -928,7 +956,7 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* Accelerated Stability Room (AHU-01) */}
-        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col transition hover:shadow-md">
           <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border-b border-[#acd3ff]/30 dark:border-slate-800/40 flex items-center justify-between">
             <div>
               <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-01 · ACCELERATED</span>
@@ -938,27 +966,29 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
               NORMAL
             </span>
           </div>
-          <div className="p-4 space-y-4">
-            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu1.targetTemp} ± {config.ahu1.tolerance}°C · RH: {config.ahu1.targetHumidity}% ± 5%</div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 1</span>
-                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 2</span>
-                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 1</span>
-                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.humidity.toFixed(1)} <span className="text-xs">%</span></span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 2</span>
-                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.humidity.toFixed(1)} <span className="text-xs">%</span></span>
+          <div className="p-4 flex-grow flex flex-col justify-between flex-1">
+            <div className="space-y-4">
+              <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu1.targetTemp} ± {config.ahu1.tolerance}°C · RH: {config.ahu1.targetHumidity}% ± 5%</div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 1</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 2</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 1</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.humidity.toFixed(1)} <span className="text-xs">%</span></span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 2</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.humidity.toFixed(1)} <span className="text-xs">%</span></span>
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900">
+            <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900 mt-4">
               {[
                 { label: "AHU-01", status: liveData.ahu1.running },
                 { label: "FAN", status: liveData.ahu1.fan },
@@ -975,7 +1005,7 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
         </div>
 
         {/* Longterm Stability Room (AHU-02) */}
-        <div className="bg-white dark:bg-slate-950 border border-rose-500/20 dark:border-rose-500/10 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
+        <div className="bg-white dark:bg-slate-950 border border-rose-500/20 dark:border-rose-500/10 rounded-xl overflow-hidden shadow-sm flex flex-col transition hover:shadow-md">
           <div className="p-3.5 bg-rose-500/5 dark:bg-rose-950/10 border-b border-rose-500/10 flex items-center justify-between">
             <div>
               <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-02 · LONG-TERM</span>
@@ -985,27 +1015,29 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
               ALARM
             </span>
           </div>
-          <div className="p-4 space-y-4">
-            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu2.targetTemp}°C ± 2°C · RH: {config.ahu2.targetHumidity}% ± 5%</div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 1</span>
-                <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.temp.toFixed(1)} <span className="text-xs">°C</span></span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 2</span>
-                <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.temp.toFixed(1)} <span className="text-xs">°C</span></span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 1</span>
-                <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.humidity.toFixed(1)} <span className="text-xs">%</span></span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 2</span>
-                <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.humidity.toFixed(1)} <span className="text-xs">%</span></span>
+          <div className="p-4 flex-grow flex flex-col justify-between flex-1">
+            <div className="space-y-4">
+              <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu2.targetTemp}°C ± 2°C · RH: {config.ahu2.targetHumidity}% ± 5%</div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 1</span>
+                  <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 2</span>
+                  <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 1</span>
+                  <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.humidity.toFixed(1)} <span className="text-xs">%</span></span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 2</span>
+                  <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.humidity.toFixed(1)} <span className="text-xs">%</span></span>
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-5 gap-1 pt-2 border-t border-slate-100 dark:border-slate-900">
+            <div className="grid grid-cols-5 gap-1 pt-2 border-t border-slate-100 dark:border-slate-900 mt-4">
               {[
                 { label: "AHU-02", status: liveData.ahu2.running },
                 { label: "FAN-1", status: liveData.ahu2.fan },
@@ -1025,7 +1057,7 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
         </div>
 
         {/* Stability Room (AHU-03) */}
-        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col transition hover:shadow-md">
           <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border-b border-[#acd3ff]/30 dark:border-slate-800/40 flex items-center justify-between">
             <div>
               <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-03 · RETENTION</span>
@@ -1035,19 +1067,21 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
               NORMAL
             </span>
           </div>
-          <div className="p-4 space-y-4">
-            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu3.maxTemp}°C</div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 1</span>
-                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.temp.toFixed(1)} <span className="text-xs">°C</span></span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 2</span>
-                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+          <div className="p-4 flex-grow flex flex-col justify-between flex-1">
+            <div className="space-y-4">
+              <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu3.maxTemp}°C</div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 1</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 2</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900">
+            <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900 mt-4">
               {[
                 { label: "AHU-03", status: liveData.ahu3.running },
                 { label: "FAN", status: liveData.ahu3.fan },
@@ -1063,7 +1097,7 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
         </div>
 
         {/* Retained Sample Room (AHU-01) */}
-        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md">
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col transition hover:shadow-md">
           <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border-b border-[#acd3ff]/30 dark:border-slate-800/40 flex items-center justify-between">
             <div>
               <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-01 · CLEAN AREA</span>
@@ -1073,19 +1107,21 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
               NORMAL
             </span>
           </div>
-          <div className="p-4 space-y-4">
-            <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu1.lowTemp}-{config.ahu1.highTemp}°C</div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 1</span>
-                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 2</span>
-                <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.supplyAir.toFixed(1)} <span className="text-xs">°C</span></span>
+          <div className="p-4 flex-grow flex flex-col justify-between flex-1">
+            <div className="space-y-4">
+              <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu1.lowTemp}-{config.ahu1.highTemp}°C</div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 1</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 2</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.supplyAir.toFixed(1)} <span className="text-xs">°C</span></span>
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900">
+            <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900 mt-4">
               {[
                 { label: "AHU-01", status: liveData.ahu1.running },
                 { label: "FAN", status: liveData.ahu1.fan },
@@ -1178,26 +1214,38 @@ function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string
               </h3>
             </div>
             <div className="space-y-2.5">
-              {[
-                { title: "Reference Room Temp High (42.4°C)", loc: "AHU-02", time: "08:42:11", type: "Critical", tone: "bg-rose-500/10 text-rose-500 border border-rose-500/30" },
-                { title: "RO-EDI Compressor Trip", loc: "AHU-02 / CU-02A", time: "08:31:05", type: "Major", tone: "bg-orange-500/10 text-orange-500 border border-orange-500/30" },
-                { title: "Humidifier water level low", loc: "AHU-03", time: "07:12:03", type: "Minor", tone: "bg-sky-500/10 text-sky-500 border border-sky-500/30" },
-                { title: "AHU-01 switched to Auto Mode", loc: "AHU-01", time: "06:20:18", type: "Info", tone: "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30" }
-              ].map((alarm, idx) => (
-                <div key={idx} className="flex items-start justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 hover:border-sky-300 dark:hover:border-slate-700 transition">
-                  <div className="space-y-0.5">
-                    <div className="text-[10px] font-bold text-[#002b5c] dark:text-slate-200 line-clamp-1">
-                      {alarm.title}
+              {allActiveAlarms.length > 0 ? (
+                allActiveAlarms.slice(0, 5).map((alarm) => {
+                  const isCritical = alarm.description.toLowerCase().includes("critical") || alarm.description.toLowerCase().includes("overdue");
+                  const isMajor = alarm.description.toLowerCase().includes("trip") || alarm.description.toLowerCase().includes("high");
+                  const type = isCritical ? "Critical" : isMajor ? "Major" : "Warning";
+                  const tone = isCritical
+                    ? "bg-rose-500/10 text-rose-500 border border-rose-500/30"
+                    : isMajor
+                    ? "bg-orange-500/10 text-orange-500 border border-orange-500/30"
+                    : "bg-amber-500/10 text-amber-600 border border-amber-500/30";
+
+                  return (
+                    <div key={alarm.id} className="flex items-start justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 hover:border-sky-300 dark:hover:border-slate-700 transition">
+                      <div className="space-y-0.5">
+                        <div className="text-[10px] font-bold text-[#002b5c] dark:text-slate-200 line-clamp-1">
+                          {alarm.description}
+                        </div>
+                        <div className="text-[8px] text-[#47729f] dark:text-slate-500 font-mono">
+                          {alarm.equipment} | {alarm.timestamp}
+                        </div>
+                      </div>
+                      <span className={`text-[7.5px] font-extrabold uppercase px-1.5 py-0.5 rounded ${tone}`}>
+                        {type}
+                      </span>
                     </div>
-                    <div className="text-[8px] text-[#47729f] dark:text-slate-500 font-mono">
-                      {alarm.loc} | {alarm.time}
-                    </div>
-                  </div>
-                  <span className={`text-[7.5px] font-extrabold uppercase px-1.5 py-0.5 rounded ${alarm.tone}`}>
-                    {alarm.type}
-                  </span>
+                  );
+                })
+              ) : (
+                <div className="py-6 text-center text-xs text-[#47729f] dark:text-slate-500 italic font-semibold">
+                  No active alarms. System operating normal.
                 </div>
-              ))}
+              )}
             </div>
           </div>
           <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-900 text-center">

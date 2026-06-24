@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
 import { useAuthStore } from "../../store/auth.store";
+import { getDefaultEqConfigs } from "../../data/equipment";
 import type { MachineOutletContext } from "./MachineLayout";
 
 type AlarmLogItem = {
@@ -91,9 +92,43 @@ export default function MachineAlarm() {
     localStorage.setItem(`scada.alarm_logs.${unitId}`, JSON.stringify(updatedAlarms));
   };
 
+  // Load eqConfigs dynamically
+  const eqConfigs = useMemo(() => {
+    let configs = getDefaultEqConfigs(unitId);
+    const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
+    if (savedEq) {
+      try {
+        configs = JSON.parse(savedEq);
+      } catch (e) {}
+    }
+    return configs;
+  }, [unitId]);
+
+  const [loadTime] = useState(() => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const now = new Date();
+    return `${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+  });
+
+  const dynamicAlarms = useMemo(() => {
+    return eqConfigs
+      .filter((item) => item.enableAlert && (item.runHoursBeforeMaintenance ?? item.baseline) >= item.highLimit)
+      .map((item) => ({
+        id: `maint-overdue-${item.tagKey}`,
+        timestamp: loadTime,
+        description: `Maintenance Overdue: ${item.tagName} (${(item.runHoursBeforeMaintenance ?? item.baseline).toLocaleString()} / ${item.highLimit.toLocaleString()} hrs)`,
+        equipment: item.tagKey,
+        operatorAction: "",
+        status: "Active" as const,
+        rtn: "—",
+        operatorName: "",
+        approverName: ""
+      }));
+  }, [eqConfigs, loadTime]);
+
   // Filter and sort alarms based on active category and timestamp (descending)
   const processedAlarms = useMemo(() => {
-    let result = [...alarms];
+    let result = [...dynamicAlarms, ...alarms];
 
     // Filter by status
     if (filter !== "All") {
@@ -104,7 +139,7 @@ export default function MachineAlarm() {
     result.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
     return result;
-  }, [alarms, filter]);
+  }, [alarms, dynamicAlarms, filter]);
 
   // Handle single selection checkbox
   const handleSelectToggle = (id: string) => {
@@ -121,7 +156,7 @@ export default function MachineAlarm() {
 
   // Handle Select All toggle (only for selectable Active alarms)
   const handleSelectAllToggle = () => {
-    const activeAlarms = processedAlarms.filter((item) => item.status === "Active");
+    const activeAlarms = processedAlarms.filter((item) => item.status === "Active" && !item.id.startsWith("maint-overdue-"));
     if (selectedIds.size === activeAlarms.length) {
       setSelectedIds(new Set());
     } else {
@@ -231,7 +266,7 @@ export default function MachineAlarm() {
 
   if (!machine) return null;
 
-  const activeAlarmsToFixCount = processedAlarms.filter((item) => item.status === "Active").length;
+  const activeAlarmsToFixCount = processedAlarms.filter((item) => item.status === "Active" && !item.id.startsWith("maint-overdue-")).length;
 
   return (
     <div className="space-y-6">
@@ -339,7 +374,7 @@ export default function MachineAlarm() {
                       type="checkbox"
                       checked={selectedIds.has(row.id)}
                       onChange={() => handleSelectToggle(row.id)}
-                      disabled={row.status !== "Active"}
+                      disabled={row.status !== "Active" || row.id.startsWith("maint-overdue-")}
                       className="rounded border-slate-300 text-[#1f6fb5] focus:ring-[#1f6fb5] disabled:opacity-40"
                     />
                   </td>
@@ -378,7 +413,12 @@ export default function MachineAlarm() {
                   </td>
                   <td className="py-3 px-3 text-center">
                     <div className="flex justify-center gap-1.5">
-                      {row.status === "Active" && canAck && (
+                      {row.status === "Active" && row.id.startsWith("maint-overdue-") && (
+                        <span className="text-[10px] text-amber-555 font-extrabold bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded">
+                          Reset Hours
+                        </span>
+                      )}
+                      {row.status === "Active" && !row.id.startsWith("maint-overdue-") && canAck && (
                         <button
                           onClick={() => handleSingleFix(row.id)}
                           className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-[10px] font-bold shadow-sm transition"
