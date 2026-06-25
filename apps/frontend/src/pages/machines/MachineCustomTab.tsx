@@ -31,35 +31,58 @@ const maintenanceIcon = (
 const MachineCustomTab = () => {
   const { tabId, unitId } = useParams();
 
-  // ================= STATE MANAGEMENT PER TAB =================
-  // AHU-01 State
+  // Ambil data user dari context/auth (sesuaikan)
+  // Contoh: const { user } = useAuth();
+  const [currentUser] = useState("Admin"); // Ganti dengan user.name dari context
+
+  // State untuk AHU-01
   const [ahu01Temp, setAhu01Temp] = useState(46.8);
   const [ahu01Humid, setAhu01Humid] = useState(75.0);
   const [ahu01Mode, setAhu01Mode] = useState("Auto");
   const [ahu01Status, setAhu01Status] = useState("Running");
 
-  // AHU-02 State
+  // State untuk AHU-02
   const [ahu02Temp, setAhu02Temp] = useState(22.4);
   const [ahu02Humid, setAhu02Humid] = useState(55.0);
   const [ahu02Mode, setAhu02Mode] = useState("Auto");
   const [ahu02Status, setAhu02Status] = useState("Running");
 
-  // AHU-03 State
+  // State untuk AHU-03
   const [ahu03Temp, setAhu03Temp] = useState(20.5);
   const [ahu03Humid, setAhu03Humid] = useState(55.0);
   const [ahu03Mode, setAhu03Mode] = useState("Manual");
   const [ahu03Status, setAhu03Status] = useState("Running");
 
-  // Utility State
+  // State untuk Utility
   const [utilTemp, setUtilTemp] = useState(22.0);
   const [utilHumid, setUtilHumid] = useState(60.0);
   const [utilMode, setUtilMode] = useState("Auto");
   const [utilStatus, setUtilStatus] = useState("Running");
 
-  // ================= RENDER LOGIC =================
-  if (unitId === "hvac-qc-retained-sample") {
+  // ===== FUNGSI VERIFIKASI PASSWORD =====
+  const verifyPassword = async (password: string): Promise<boolean> => {
+    try {
+      const response = await fetch("/api/auth/verify-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+        },
+        body: JSON.stringify({ password }),
+      });
 
-    // ----- TAB: AHU-01 -----
+      if (!response.ok) return false;
+      const data = await response.json();
+      return data.valid;
+    } catch (error) {
+      console.error("Verifikasi password gagal:", error);
+      return false;
+    }
+  };
+
+  // ===== RENDER =====
+  if (unitId === "hvac-qc-retained-sample") {
+    // ----- AHU-01 -----
     if (tabId === "ahu-01") {
       const systemMode = [
         { label: "Operating Mode", value: ahu01Mode, statusColor: ahu01Mode === "Auto" ? "cyan" : "yellow" as any },
@@ -90,28 +113,19 @@ const MachineCustomTab = () => {
       const controlButtons = [
         {
           label: "START AHU",
-          onClick: () => {
-            setAhu01Status("Running");
-            setAhu01Mode("Auto");
-          },
+          onClick: () => { setAhu01Status("Running"); setAhu01Mode("Auto"); },
           variant: "green" as any,
           icon: startIcon,
         },
         {
           label: "STOP AHU",
-          onClick: () => {
-            setAhu01Status("Stopped");
-            setAhu01Mode("Manual");
-          },
+          onClick: () => { setAhu01Status("Stopped"); setAhu01Mode("Manual"); },
           variant: "red" as any,
           icon: stopIcon,
         },
         {
           label: "MAINTENANCE",
-          onClick: () => {
-            setAhu01Status("Maintenance");
-            setAhu01Mode("Manual");
-          },
+          onClick: () => { setAhu01Status("Maintenance"); setAhu01Mode("Manual"); },
           variant: "blue" as any,
           icon: maintenanceIcon,
         },
@@ -123,21 +137,17 @@ const MachineCustomTab = () => {
           roomType="ACCELERATED STABILITY ROOM"
           targetTemp="40°C ± 2°C"
           targetHumidity="75%RH ± 5%"
-          diagramComponent={
-            <MachineAHU01Pid
-              tempSP={ahu01Temp}
-              humiditySP={ahu01Humid}
-              running={ahu01Status === "Running"}
-            />
-          }
+          diagramComponent={<MachineAHU01Pid tempSP={ahu01Temp} humiditySP={ahu01Humid} running={ahu01Status === "Running"} />}
           systemMode={systemMode}
           setpoints={setpoints}
           controlButtons={controlButtons}
+          currentUser={currentUser}
+          onVerifyPassword={verifyPassword}
         />
       );
     }
 
-    // ----- TAB: AHU-02 -----
+    // ----- AHU-02 -----
     if (tabId === "ahu-02") {
       const isRunning = ahu02Status === "Running";
       const systemMode = [
@@ -145,58 +155,20 @@ const MachineCustomTab = () => {
         { label: "Fan-02 A Status", value: ahu02Status, statusColor: isRunning ? "green" : (ahu02Status === "Maintenance" ? "cyan" : "red") as any },
         { label: "Fan-02 B Status", value: ahu02Status, statusColor: isRunning ? "green" : (ahu02Status === "Maintenance" ? "cyan" : "red") as any },
         { label: "CU-02 A Status", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
-        { label: "CU-02 B STatus", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
+        { label: "CU-02 B Status", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
         { label: "Electric Heater Status", value: isRunning ? "On" : "Off", statusColor: isRunning ? "green" : "default" as any },
         { label: "Humidity Fan Status", value: isRunning ? "Running" : "Stopped", statusColor: isRunning ? "green" : "red" as any },
       ];
 
       const setpoints = [
-        {
-          label: "Cooling Target Temp",
-          value: ahu02Temp,
-          unit: "°C",
-          min: 15.0,
-          max: 35.0,
-          onChange: setAhu02Temp,
-        },
-        {
-          label: "Dehumidify Target",
-          value: ahu02Humid,
-          unit: "%RH",
-          min: 30.0,
-          max: 80.0,
-          onChange: setAhu02Humid,
-        },
+        { label: "Cooling Target Temp", value: ahu02Temp, unit: "°C", min: 15.0, max: 35.0, onChange: setAhu02Temp },
+        { label: "Dehumidify Target", value: ahu02Humid, unit: "%RH", min: 30.0, max: 80.0, onChange: setAhu02Humid },
       ];
 
       const controlButtons = [
-        {
-          label: "START AHU",
-          onClick: () => {
-            setAhu02Status("Running");
-            setAhu02Mode("Auto");
-          },
-          variant: "green" as any,
-          icon: startIcon,
-        },
-        {
-          label: "STOP AHU",
-          onClick: () => {
-            setAhu02Status("Stopped");
-            setAhu02Mode("Manual");
-          },
-          variant: "red" as any,
-          icon: stopIcon,
-        },
-        {
-          label: "MAINTENANCE",
-          onClick: () => {
-            setAhu02Status("Maintenance");
-            setAhu02Mode("Manual");
-          },
-          variant: "blue" as any,
-          icon: maintenanceIcon,
-        },
+        { label: "START AHU", onClick: () => { setAhu02Status("Running"); setAhu02Mode("Auto"); }, variant: "green" as any, icon: startIcon },
+        { label: "STOP AHU", onClick: () => { setAhu02Status("Stopped"); setAhu02Mode("Manual"); }, variant: "red" as any, icon: stopIcon },
+        { label: "MAINTENANCE", onClick: () => { setAhu02Status("Maintenance"); setAhu02Mode("Manual"); }, variant: "blue" as any, icon: maintenanceIcon },
       ];
 
       return (
@@ -205,21 +177,17 @@ const MachineCustomTab = () => {
           roomType="LONGTERM STABILITY ROOM"
           targetTemp="30°C ± 2°C"
           targetHumidity="75%RH ± 5%"
-          diagramComponent={
-            <MachineAHU02Pid
-              tempSP={ahu02Temp}
-              humiditySP={ahu02Humid}
-              running={isRunning}
-            />
-          }
+          diagramComponent={<MachineAHU02Pid tempSP={ahu02Temp} humiditySP={ahu02Humid} running={isRunning} />}
           systemMode={systemMode}
           setpoints={setpoints}
           controlButtons={controlButtons}
+          currentUser={currentUser}
+          onVerifyPassword={verifyPassword}
         />
       );
     }
 
-    // ----- TAB: AHU-03 -----
+    // ----- AHU-03 -----
     if (tabId === "ahu-03") {
       const isRunning = ahu03Status === "Running";
       const systemMode = [
@@ -229,52 +197,14 @@ const MachineCustomTab = () => {
       ];
 
       const setpoints = [
-        {
-          label: "Room Temp SP",
-          value: ahu03Temp,
-          unit: "°C",
-          min: 15.0,
-          max: 30.0,
-          onChange: setAhu03Temp,
-        },
-        {
-          label: "Room Humidity SP",
-          value: ahu03Humid,
-          unit: "%RH",
-          min: 30.0,
-          max: 80.0,
-          onChange: setAhu03Humid,
-        },
+        { label: "Room Temp SP", value: ahu03Temp, unit: "°C", min: 15.0, max: 30.0, onChange: setAhu03Temp },
+        { label: "Room Humidity SP", value: ahu03Humid, unit: "%RH", min: 30.0, max: 80.0, onChange: setAhu03Humid },
       ];
 
       const controlButtons = [
-        {
-          label: "START AHU",
-          onClick: () => {
-            setAhu03Status("Running");
-            setAhu03Mode("Auto");
-          },
-          variant: "green" as any,
-          icon: startIcon,
-        },
-        {
-          label: "STOP AHU",
-          onClick: () => {
-            setAhu03Status("Stopped");
-            setAhu03Mode("Manual");
-          },
-          variant: "red" as any,
-          icon: stopIcon,
-        },
-        {
-          label: "MAINTENANCE",
-          onClick: () => {
-            setAhu03Status("Maintenance");
-            setAhu03Mode("Manual");
-          },
-          variant: "blue" as any,
-          icon: maintenanceIcon,
-        },
+        { label: "START AHU", onClick: () => { setAhu03Status("Running"); setAhu03Mode("Auto"); }, variant: "green" as any, icon: startIcon },
+        { label: "STOP AHU", onClick: () => { setAhu03Status("Stopped"); setAhu03Mode("Manual"); }, variant: "red" as any, icon: stopIcon },
+        { label: "MAINTENANCE", onClick: () => { setAhu03Status("Maintenance"); setAhu03Mode("Manual"); }, variant: "blue" as any, icon: maintenanceIcon },
       ];
 
       return (
@@ -283,21 +213,17 @@ const MachineCustomTab = () => {
           roomType="REF.RETENTION ROOM"
           targetTemp="Max 30°C"
           targetHumidity="55%RH ± 10%"
-          diagramComponent={
-            <MachineAHU03Pid
-              tempSP={ahu03Temp}
-              humiditySP={ahu03Humid}
-              running={isRunning}
-            />
-          }
+          diagramComponent={<MachineAHU03Pid tempSP={ahu03Temp} humiditySP={ahu03Humid} running={isRunning} />}
           systemMode={systemMode}
           setpoints={setpoints}
           controlButtons={controlButtons}
+          currentUser={currentUser}
+          onVerifyPassword={verifyPassword}
         />
       );
     }
 
-    // ----- TAB: UTILITY -----
+    // ----- UTILITY -----
     if (tabId === "utility") {
       const isRunning = utilStatus === "Running";
       const systemMode = [
@@ -312,26 +238,21 @@ const MachineCustomTab = () => {
           roomType="CENTRAL UTILITY LOOP"
           targetTemp="22°C ± 2°C"
           targetHumidity="55%RH ± 5%"
-          diagramComponent={
-            <MachineUtilityPid
-              tempSP={utilTemp}
-              humiditySP={utilHumid}
-              running={isRunning}
-            />
-          }
+          diagramComponent={<MachineUtilityPid tempSP={utilTemp} humiditySP={utilHumid} running={isRunning} />}
           systemMode={systemMode}
+          currentUser={currentUser}
+          onVerifyPassword={verifyPassword}
         />
       );
     }
   }
 
-  // Kasus: WH-3
+  // WH-3
   if (unitId === "hvac-wh-3") {
     if (tabId === "heating-coil") return <div className="p-4 text-slate-800 dark:text-slate-200">🔥 Data Heating Coil WH-3</div>;
     if (tabId === "fan-motor") return <div className="p-4 text-slate-800 dark:text-slate-200">🌀 Data Fan Motor WH-3</div>;
   }
 
-  // Default jika tab tidak ditemukan
   return (
     <div className="p-4 text-yellow-500 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
       ⚠️ Tab <strong>{tabId}</strong> belum dikonfigurasi untuk mesin <strong>{unitId}</strong>.

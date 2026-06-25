@@ -211,14 +211,14 @@ export default function MachineAHU01Pid({
         />
 
         <PipeH x={525} y={340} w={54} h={6} 
-        on={true} dir="left" type="cold" />
+        on={running} dir="left" type="cold" />
         <PipeBend x={501} y={325} size={25} angle={0} />
         <PipeV x={503} y={244} w={6} h={82} 
-        on={true} dir="up" type="cold" />
+        on={running} dir="up" type="cold" />
         <PipeV x={520} y={244} w={6} h={59} 
-        on={true} dir="down" type="cold" />
+        on={running} dir="down" type="cold" />
         <PipeH x={543} y={315} w={36} h={6} 
-        on={true} dir="right" type="cold" />
+        on={running} dir="right" type="cold" />
         <PipeBend x={518} y={300} size={25} angle={0} />
         
         <LabelComponent text="HF-02" x={535} y={140} w={65} h={25} hasBorder={true} fontSize={13}/>
@@ -353,15 +353,15 @@ export default function MachineAHU01Pid({
           <ACUnit x={2700} y={2800} w={200} h={75} running={running} />
 
           <PipeV x={253} y={255} w={6} h={210} 
-          on={true} dir="up" type="cold" />
+          on={running} dir="up" type="cold" />
           <PipeV x={350} y={104} w={6} h={295} 
-          on={true} dir="down" type="cold" />
+          on={running} dir="down" type="cold" />
           <PipeV x={263} y={430} w={6} h={11} 
-          on={true} dir="down" type="cold" />
+         on={running} dir="down" type="cold" />
           <PipeV x={434} y={428} w={6} h={13} 
-          on={true} dir="down" type="cold" />
+          on={running} dir="down" type="cold" />
           <PipeV x={424} y={398} w={6} h={68} 
-          on={true} dir="up" type="cold" />
+          on={running} dir="up" type="cold" />
           <PipeT x={256} y={380} armLength={13} thickness={8} direction="right" />
           <PipeT x={353} y={410} armLength={13} thickness={8} direction="up" />
 
@@ -370,11 +370,11 @@ export default function MachineAHU01Pid({
           <PipeBend x={407} y={374} size={25} angle={180} />
           
           <PipeH x={285} y={407} w={55} h={6} 
-          on={true} dir="left" type="cold" />
+          on={running} dir="left" type="cold" />
           <PipeH x={269} y={377} w={138} h={6} 
-          on={true} dir="left" type="cold" />
+          on={running} dir="left" type="cold" />
           <PipeH x={366} y={407} w={52} h={6} 
-          on={true} dir="right" type="cold" />
+          on={running} dir="right" type="cold" />
 
           <LabelComponent text="M" x={347} y={450} w={40} h={20} hasBorder={true} fontSize={13}/>
           <LabelComponent text="S" x={520} y={450} w={40} h={20} hasBorder={true} fontSize={13}/>

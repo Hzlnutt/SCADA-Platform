@@ -6,7 +6,8 @@ import {
   login,
   logout,
   register,
-  refreshAccessToken
+  refreshAccessToken,
+  verifyPassword // <-- tambahan
 } from "./auth.service";
 import { env } from "../../config/env.config";
 import {
@@ -15,7 +16,8 @@ import {
   loginSchema,
   logoutSchema,
   registerSchema,
-  refreshSchema
+  refreshSchema,
+  verifyPasswordSchema // <-- tambahan
 } from "./auth.validation";
 
 export const loginHandler = async (
@@ -62,9 +64,17 @@ export const registerHandler = async (
   next: NextFunction
 ) => {
   try {
-    const err = new Error("Self-registration is disabled. Contact your administrator.") as Error & { statusCode?: number };
-    err.statusCode = 403;
-    throw err;
+    const parsed = registerSchema.parse(req.body);
+    const result = await register(parsed);
+
+    await recordAudit({
+      actorId: result.user.id,
+      action: "auth.register",
+      resourceType: "user",
+      resourceId: result.user.id
+    });
+
+    res.status(201).json(result);
   } catch (err) {
     next(err);
   }
@@ -128,6 +138,27 @@ export const bootstrapHandler = async (
     });
 
     res.status(201).json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ===== TAMBAHAN: VERIFY PASSWORD HANDLER =====
+export const verifyPasswordHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const parsed = verifyPasswordSchema.parse(req.body);
+    const user = (req as unknown as { user?: { id: string } }).user;
+    
+    if (!user) {
+      return res.status(401).json({ valid: false, message: "Unauthorized" });
+    }
+
+    const valid = await verifyPassword(user.id, parsed.password);
+    res.json({ valid });
   } catch (err) {
     next(err);
   }

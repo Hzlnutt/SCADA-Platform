@@ -129,11 +129,11 @@ export default function MachineAHU01Pid({
 
       
       <PipeV x={168} y={250} w={6} h={170} 
-          on={true} dir="up" type="cold" />
+          on={running} dir="up" type="cold" />
       <PipeV x={265.5} y={93} w={6} h={320} 
-          on={true} dir="down" type="cold" />
+          on={running} dir="down" type="cold" />
       <PipeH x={190} y={434} w={90} h={6} 
-          on={true} dir="left" type="cold" />
+          on={running} dir="left" type="cold" />
        <PipeBend x={165} y={225} size={25} angle={90} />
        <PipeBend x={250} y={70} size={25} angle={180} />
        <PipeBend x={165.5} y={418} size={25} angle={0} />

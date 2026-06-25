@@ -17,16 +17,7 @@ import type {
   RefreshInput
 } from "./auth.validation";
 
-export type UserRole =
-  | "admin"
-  | "senior_unit_head"
-  | "unit_head"
-  | "kashift_utility_hvac"
-  | "kashift_utility"
-  | "kashift_hvac"
-  | "leader"
-  | "operator"
-  | "user";
+export type UserRole = "admin" | "leader" | "operator" | "team_head" | "user";
 
 type UserDoc = {
   _id: ObjectId;
@@ -348,4 +339,17 @@ export const bootstrapAdmin = async (input: BootstrapInput) => {
     name: input.name,
     role: "admin"
   };
+};
+
+// ===== TAMBAHAN: VERIFY PASSWORD =====
+export const verifyPassword = async (userId: string, password: string): Promise<boolean> => {
+  const db = getMongoDb();
+  const users = db.collection<UserDoc>(USERS_COLLECTION);
+
+  const user = await users.findOne({ _id: new ObjectId(userId) });
+  if (!user || !user.passwordHash) {
+    return false;
+  }
+
+  return bcrypt.compare(password, user.passwordHash);
 };

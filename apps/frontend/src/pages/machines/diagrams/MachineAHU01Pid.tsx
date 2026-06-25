@@ -196,14 +196,14 @@ export default function MachineAHU01Pid({
       />
 
       <PipeH x={510} y={340} w={69} h={6}
-        on={true} dir="left" type="cold" />
+        on={running} dir="left" type="cold"/>
       <PipeBend x={501} y={325} size={25} angle={0} />
       <PipeV x={503.5} y={221} w={6} h={105}
-        on={true} dir="up" type="cold" />
+        on={running} dir="up" type="cold" />
       <PipeV x={529} y={221} w={6} h={90}
-        on={true} dir="down" type="cold" />
+        on={running} dir="down" type="cold" />
       <PipeH x={550} y={315} w={29} h={6}
-        on={true} dir="right" type="cold" />
+        on={running} dir="right" type="cold" />
       <PipeBend x={527} y={300} size={25} angle={0} />
 
       <LabelComponent text="HF-01" x={558} y={60} w={65} h={25} hasBorder={true} fontSize={13} />

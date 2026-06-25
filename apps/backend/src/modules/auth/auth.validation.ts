@@ -29,9 +29,15 @@ export const googleSchema = z.object({
   credential: z.string().min(20)
 });
 
+// ===== TAMBAHAN: VERIFY PASSWORD SCHEMA =====
+export const verifyPasswordSchema = z.object({
+  password: z.string().min(1)
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshInput = z.infer<typeof refreshSchema>;
 export type LogoutInput = z.infer<typeof logoutSchema>;
 export type BootstrapInput = z.infer<typeof bootstrapSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type GoogleLoginInput = z.infer<typeof googleSchema>;
+export type VerifyPasswordInput = z.infer<typeof verifyPasswordSchema>;

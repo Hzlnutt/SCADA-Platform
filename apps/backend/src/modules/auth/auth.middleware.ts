@@ -8,6 +8,23 @@ const createError = (message: string, statusCode: number) => {
   return error;
 };
 
+// Definisikan tipe user yang akan disimpan di req.user
+interface UserPayload {
+  id: string;
+  role: string;
+  name?: string;
+  machineAccess?: string[]; // daftar machineId yang boleh diakses user
+}
+
+// Extend Express Request agar TypeScript mengenali req.user
+declare global {
+  namespace Express {
+    interface Request {
+      user?: UserPayload;
+    }
+  }
+}
+
 export const authenticate = (
   req: Request,
   _res: Response,
@@ -27,12 +44,14 @@ export const authenticate = (
     const payload = jwt.verify(token, env.jwtSecret) as jwt.JwtPayload & {
       role?: string;
       name?: string;
+      machineAccess?: string[];
     };
-    (req as unknown as { user?: { id: string; role: string; name?: string } })
-      .user = {
+
+    req.user = {
       id: payload.sub as string,
       role: payload.role ?? "user",
-      name: payload.name
+      name: payload.name,
+      machineAccess: payload.machineAccess ?? [] // ambil dari token, default array kosong
     };
 
     return next();
@@ -43,7 +62,7 @@ export const authenticate = (
 
 export const authorize = (roles: string[]) => {
   return (req: Request, _res: Response, next: NextFunction) => {
-    const user = (req as unknown as { user?: { role: string } }).user;
+    const user = req.user;
     if (!user) {
       return next(createError("Unauthorized", 401));
     }
@@ -56,50 +75,35 @@ export const authorize = (roles: string[]) => {
   };
 };
 
-export const hasMachineAccess = (role: string, machineId: string): boolean => {
-  // Admin, senior_unit_head, unit_head, kashift_utility_hvac, and leader have full write access to all machines
-  const fullWriteRoles = ["admin", "senior_unit_head", "unit_head", "kashift_utility_hvac", "leader"];
-  if (fullWriteRoles.includes(role)) {
-    return true;
-  }
-
-  const isHvac = machineId.startsWith("hvac-") || 
-                 machineId.startsWith("oac-") || 
-                 machineId.includes("hvac") ||
-                 machineId === "chiller-trane-rtac-250-wf2" || 
-                 machineId === "chiller-trane-185-wf2";
-
-  if (role === "kashift_hvac") {
-    return isHvac;
-  }
-
-  if (role === "kashift_utility") {
-    // kashift_utility has access to everything EXCEPT HVAC
-    return !isHvac;
-  }
-
-  return false;
-};
-
-export const checkMachineScope = (req: Request, _res: Response, next: NextFunction) => {
-  const user = (req as unknown as { user?: { role: string } }).user;
-  const machineId = req.params.machineId;
-
+/**
+ * Middleware untuk mengecek akses ke mesin tertentu (machineId di params)
+ */
+export const checkMachineScope = (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+) => {
+  const user = req.user;
   if (!user) {
     return next(createError("Unauthorized", 401));
   }
 
-  // Operator has view-only access, they cannot POST/PATCH anything
-  if (user.role === "operator") {
-    // If it's a GET request, we allow it (handled by routes). For write requests, reject operators.
-    if (req.method !== "GET") {
-      return next(createError("Forbidden: Operators are view-only", 403));
-    }
+  const machineId = req.params.machineId;
+  if (!machineId) {
+    return next(createError("Machine ID is required", 400));
   }
 
-  if (machineId && !hasMachineAccess(user.role, machineId)) {
-    return next(createError("Forbidden: Scoped role cannot access this machine", 403));
+  // Role yang dianggap super admin / dapat mengakses semua mesin
+  const superRoles = ["admin", "senior_unit_head", "unit_head"];
+  if (superRoles.includes(user.role)) {
+    return next();
   }
 
-  return next();
+  // Untuk role lain, cek apakah machineId ada di daftar akses user
+  const accessList = user.machineAccess ?? [];
+  if (accessList.includes(machineId)) {
+    return next();
+  }
+
+  return next(createError("Access denied to this machine", 403));
 };
