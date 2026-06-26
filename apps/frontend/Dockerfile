@@ -19,6 +19,8 @@ RUN pnpm -C apps/frontend build
 
 FROM nginx:1.27-alpine
 
+COPY apps/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /repo/apps/frontend/dist /usr/share/nginx/html
 
 EXPOSE 80
+
