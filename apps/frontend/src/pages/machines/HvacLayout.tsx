@@ -1,4 +1,4 @@
-import { type ReactNode, useState, useEffect, useRef, useMemo } from "react";
+1import { type ReactNode, useState, useEffect, useRef, useMemo } from "react";
 import { useAuthStore } from "../../store/auth.store";
 import { verifyBiometrics } from "../../services/auth.service";
 import { extractFaceDescriptor } from "../../utils/faceExtractor";
@@ -71,7 +71,7 @@ export default function HvacLayout({
 
   // Biometric state variables
   const [verificationMode, setVerificationMode] = useState<"password" | "biometric">("password");
-  const [biometricStatus, setBiometricStatus] = useState<"ready" | "scanning" | "success" | "failed">("ready");
+  const [biometricStatus, setBiometricStatus] = useState<"ready" | "scanning" | "success" | "failed" | "mismatch">("ready");
   const [biometricProgress, setBiometricProgress] = useState(0);
   const [biometricLog, setBiometricLog] = useState("");
   const [biometricMatchScore, setBiometricMatchScore] = useState<number | null>(null);
@@ -120,7 +120,7 @@ export default function HvacLayout({
 
   // Run the biometric scanning
   const startBiometricScan = () => {
-    if (biometricStatus !== "ready" && biometricStatus !== "failed") return;
+    if (biometricStatus !== "ready" && biometricStatus !== "failed" && biometricStatus !== "mismatch") return;
     if (!user?.hasBiometrics) {
       setBiometricStatus("failed");
       setBiometricLog("Biometrik wajah belum terdaftar untuk akun Anda. Harap daftarkan di Pengaturan Profil.");
@@ -155,8 +155,8 @@ export default function HvacLayout({
         try {
           const verificationResult = await verifyBiometrics(descriptor);
           if (verificationResult.valid) {
-            // Distance of 0 means 100% match. 0.6 distance is threshold (which we map to 70% min to 100% max)
-            const rawScore = 1 - (verificationResult.distance || 0);
+            // Distance of 0 means 100% match. 7.2 distance is threshold (which we map to 70% min to 100% max)
+            const rawScore = 1 - (verificationResult.distance || 0) / 7.2;
             const match = parseFloat(Math.min(100, Math.max(70, rawScore * 100)).toFixed(2));
             setBiometricMatchScore(match);
             setBiometricStatus("success");
@@ -178,7 +178,7 @@ export default function HvacLayout({
               setPassword("");
             }, 1500);
           } else {
-            setBiometricStatus("failed");
+            setBiometricStatus("mismatch");
             setBiometricLog("Wajah tidak cocok dengan akun Anda. Silakan coba lagi.");
           }
         } catch (err) {
@@ -661,7 +661,7 @@ export default function HvacLayout({
                     <div className={`text-[10px] font-mono text-center tracking-wide font-semibold py-1 rounded px-2 ${
                       biometricStatus === "success" 
                         ? "bg-emerald-500/10 text-emerald-450" 
-                        : biometricStatus === "failed"
+                        : (biometricStatus === "failed" || biometricStatus === "mismatch")
                         ? "bg-rose-500/10 text-rose-455"
                         : biometricStatus === "scanning"
                         ? "text-cyan-450"
@@ -688,7 +688,7 @@ export default function HvacLayout({
                   >
                     Batal
                   </button>
-                  {(biometricStatus === "ready" || biometricStatus === "failed") && (
+                  {(biometricStatus === "ready" || biometricStatus === "failed" || biometricStatus === "mismatch") && (
                     <button
                       type="button"
                       onClick={startBiometricScan}
