@@ -32,7 +32,19 @@ export const updateUserSchema = z.object({
   role: userRoleSchema
 });
 
+export const updateBiometricsSchema = z.object({
+  password: z.string(),
+  biometricDescriptor: z.array(z.number()).length(128)
+});
+
+export const verifyBiometricsSchema = z.object({
+  biometricDescriptor: z.array(z.number()).length(128)
+});
+
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UserRole = z.infer<typeof userRoleSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+export type UpdateBiometricsInput = z.infer<typeof updateBiometricsSchema>;
+export type VerifyBiometricsInput = z.infer<typeof verifyBiometricsSchema>;
+

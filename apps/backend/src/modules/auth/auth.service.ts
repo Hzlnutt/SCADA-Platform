@@ -28,6 +28,7 @@ type UserDoc = {
   provider?: "local" | "google";
   providerId?: string;
   avatarUrl?: string | null;
+  biometricDescriptor?: number[];
   status: "active" | "disabled";
   createdAt: Date;
   updatedAt: Date;
@@ -95,7 +96,8 @@ const buildAuthResponse = async (user: UserDoc) => {
       email: user.email,
       name: user.name,
       role: user.role,
-      avatarUrl: user.avatarUrl ?? null
+      avatarUrl: user.avatarUrl ?? null,
+      hasBiometrics: !!user.biometricDescriptor
     }
   };
 };

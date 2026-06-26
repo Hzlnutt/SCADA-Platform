@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { recordAudit } from "../../services/audit.service";
+import { verifyPassword } from "../auth/auth.service";
 import {
   createUser,
   getUserById,
@@ -7,13 +8,17 @@ import {
   updateUserProfile,
   updateUserRole,
   deleteUser,
-  listOperators
+  listOperators,
+  updateUserBiometrics,
+  getBiometricDescriptor
 } from "./users.service";
 import {
   createUserSchema,
   updateProfileSchema,
   updateUserSchema,
-  usersQuerySchema
+  usersQuerySchema,
+  updateBiometricsSchema,
+  verifyBiometricsSchema
 } from "./users.validation";
 
 export const createUserHandler = async (
@@ -168,3 +173,72 @@ export const listOperatorsHandler = async (
     next(err);
   }
 };
+
+export const updateMeBiometricsHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const userId = (req as unknown as { user?: { id: string } }).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const parsed = updateBiometricsSchema.parse(req.body);
+
+    const valid = await verifyPassword(userId, parsed.password);
+    if (!valid) {
+      return res.status(400).json({ success: false, message: "Password salah. Gagal menyimpan data biometrik." });
+    }
+
+    const user = await updateUserBiometrics(userId, parsed.biometricDescriptor);
+
+    await recordAudit({
+      actorId: userId,
+      action: "user.update_biometrics",
+      resourceType: "user",
+      resourceId: userId
+    });
+
+    res.json({ success: true, message: "Data biometrik wajah berhasil disimpan.", data: user });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const verifyMeBiometricsHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const userId = (req as unknown as { user?: { id: string } }).user?.id;
+    if (!userId) {
+      return res.status(401).json({ valid: false, message: "Unauthorized" });
+    }
+
+    const parsed = verifyBiometricsSchema.parse(req.body);
+
+    const storedDescriptor = await getBiometricDescriptor(userId);
+    if (!storedDescriptor) {
+      return res.status(400).json({ valid: false, message: "Biometrik wajah belum terdaftar untuk akun ini." });
+    }
+
+    if (storedDescriptor.length !== parsed.biometricDescriptor.length) {
+      return res.status(400).json({ valid: false, message: "Format deskriptor wajah tidak cocok." });
+    }
+
+    let sum = 0;
+    for (let i = 0; i < storedDescriptor.length; i++) {
+      sum += Math.pow(storedDescriptor[i] - parsed.biometricDescriptor[i], 2);
+    }
+    const distance = Math.sqrt(sum);
+    const valid = distance <= 0.6;
+
+    res.json({ valid, distance });
+  } catch (err) {
+    next(err);
+  }
+};
+

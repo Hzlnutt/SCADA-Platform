@@ -1,4 +1,7 @@
 import { type ReactNode, useState, useEffect, useRef, useMemo } from "react";
+import { useAuthStore } from "../../store/auth.store";
+import { verifyBiometrics } from "../../services/auth.service";
+import { extractFaceDescriptor } from "../../utils/faceExtractor";
 
 export interface SetpointConfig {
   label: string;
@@ -63,6 +66,9 @@ export default function HvacLayout({
   const [passwordError, setPasswordError] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
 
+  // Access auth store user
+  const user = useAuthStore((state) => state.user);
+
   // Biometric state variables
   const [verificationMode, setVerificationMode] = useState<"password" | "biometric">("password");
   const [biometricStatus, setBiometricStatus] = useState<"ready" | "scanning" | "success" | "failed">("ready");
@@ -76,6 +82,12 @@ export default function HvacLayout({
   useEffect(() => {
     let activeStream: MediaStream | null = null;
     if (isConfirmModalOpen && verificationMode === "biometric" && biometricStatus === "ready") {
+      if (!user?.hasBiometrics) {
+        setBiometricStatus("failed");
+        setBiometricLog("Biometrik wajah belum terdaftar untuk akun Anda. Harap daftarkan di Pengaturan Profil.");
+        return;
+      }
+
       setBiometricLog("Mengakses kamera...");
       navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } })
         .then((s) => {
@@ -99,48 +111,75 @@ export default function HvacLayout({
       }
       setStream(null);
     };
-  }, [isConfirmModalOpen, verificationMode, biometricStatus]);
+  }, [isConfirmModalOpen, verificationMode, biometricStatus, user]);
 
-  // Run the biometric scanning simulation
+  // Run the biometric scanning
   const startBiometricScan = () => {
     if (biometricStatus !== "ready" && biometricStatus !== "failed") return;
+    if (!user?.hasBiometrics) {
+      setBiometricStatus("failed");
+      setBiometricLog("Biometrik wajah belum terdaftar untuk akun Anda. Harap daftarkan di Pengaturan Profil.");
+      return;
+    }
+
     setBiometricStatus("scanning");
     setBiometricProgress(0);
     setBiometricLog("Menginisialisasi pemindaian wajah...");
 
     let progress = 0;
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       progress += 10;
       setBiometricProgress(progress);
 
       if (progress === 30) {
         setBiometricLog("Melacak kontur wajah (3D Landmark)...");
       } else if (progress === 60) {
-        setBiometricLog(`Membandingkan dengan akun: ${currentUser}...`);
+        setBiometricLog(`Membandingkan dengan data biometrik akun Anda...`);
       } else if (progress === 85) {
-        setBiometricLog("Memverifikasi kecocokan data biometrik...");
+        setBiometricLog("Memverifikasi kecocokan wajah di server...");
       } else if (progress >= 100) {
         clearInterval(interval);
-        const match = parseFloat((97.2 + Math.random() * 2.5).toFixed(2));
-        setBiometricMatchScore(match);
-        setBiometricStatus("success");
-        setBiometricLog(`Wajah Terverifikasi: ${currentUser} (Kecocokan: ${match}%)`);
 
-        // Wait 1.5 seconds, then execute the action automatically
-        setTimeout(() => {
-          if (pendingAction) {
-            pendingAction();
-            addLog(modalLabel);
+        const descriptor = extractFaceDescriptor(videoRef.current!);
+        if (!descriptor) {
+          setBiometricStatus("failed");
+          setBiometricLog("Gagal mendeteksi wajah. Harap pastikan wajah terlihat jelas di kamera.");
+          return;
+        }
+
+        try {
+          const verificationResult = await verifyBiometrics(descriptor);
+          if (verificationResult.valid) {
+            // Distance of 0 means 100% match. 0.6 distance is threshold (which we map to 70% min to 100% max)
+            const rawScore = 1 - (verificationResult.distance || 0);
+            const match = parseFloat(Math.min(100, Math.max(70, rawScore * 100)).toFixed(2));
+            setBiometricMatchScore(match);
+            setBiometricStatus("success");
+            setBiometricLog(`Wajah Terverifikasi: ${user.name} (Akurasi: ${match}%)`);
+
+            // Wait 1.5 seconds, then execute the action automatically
+            setTimeout(() => {
+              if (pendingAction) {
+                pendingAction();
+                addLog(modalLabel);
+              }
+              setIsConfirmModalOpen(false);
+              setPendingAction(null);
+              // Reset states
+              setVerificationMode("password");
+              setBiometricStatus("ready");
+              setBiometricProgress(0);
+              setBiometricMatchScore(null);
+              setPassword("");
+            }, 1500);
+          } else {
+            setBiometricStatus("failed");
+            setBiometricLog("Wajah tidak cocok dengan akun Anda. Silakan coba lagi.");
           }
-          setIsConfirmModalOpen(false);
-          setPendingAction(null);
-          // Reset states
-          setVerificationMode("password");
-          setBiometricStatus("ready");
-          setBiometricProgress(0);
-          setBiometricMatchScore(null);
-          setPassword("");
-        }, 1500);
+        } catch (err) {
+          setBiometricStatus("failed");
+          setBiometricLog("Terjadi kesalahan koneksi server saat verifikasi.");
+        }
       }
     }, 200);
   };

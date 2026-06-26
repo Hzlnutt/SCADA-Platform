@@ -18,6 +18,7 @@ type UserDoc = {
   provider?: "local" | "google";
   providerId?: string;
   avatarUrl?: string | null;
+  biometricDescriptor?: number[];
   status: "active" | "disabled";
   createdAt: Date;
   updatedAt: Date;
@@ -80,7 +81,15 @@ export const getUserById = async (id: string) => {
   const db = getMongoDb();
   const users = db.collection<UserDoc>(USERS_COLLECTION);
 
-  return users.findOne({ _id: new ObjectId(id) }, { projection: { passwordHash: 0 } });
+  const user = await users.findOne({ _id: new ObjectId(id) }, { projection: { passwordHash: 0 } });
+  if (!user) return null;
+
+  const { biometricDescriptor, ...rest } = user;
+  return {
+    ...rest,
+    id: user._id.toString(),
+    hasBiometrics: !!biometricDescriptor
+  };
 };
 
 export const updateUserProfile = async (id: string, input: UpdateProfileInput) => {
@@ -105,7 +114,12 @@ export const updateUserProfile = async (id: string, input: UpdateProfileInput) =
     throw createError("User not found", 404);
   }
 
-  return result;
+  const { biometricDescriptor, ...rest } = result;
+  return {
+    ...rest,
+    id: result._id.toString(),
+    hasBiometrics: !!biometricDescriptor
+  };
 };
 
 export const updateUserRole = async (id: string, input: UpdateUserInput) => {
@@ -122,7 +136,12 @@ export const updateUserRole = async (id: string, input: UpdateUserInput) => {
     throw createError("User not found", 404);
   }
 
-  return result;
+  const { biometricDescriptor, ...rest } = result;
+  return {
+    ...rest,
+    id: result._id.toString(),
+    hasBiometrics: !!biometricDescriptor
+  };
 };
 
 export const deleteUser = async (id: string) => {
@@ -161,3 +180,33 @@ export const listOperators = async () => {
     .sort({ name: 1 })
     .toArray();
 };
+
+export const updateUserBiometrics = async (id: string, descriptor: number[]) => {
+  const db = getMongoDb();
+  const users = db.collection<UserDoc>(USERS_COLLECTION);
+
+  const result = await users.findOneAndUpdate(
+    { _id: new ObjectId(id) },
+    { $set: { biometricDescriptor: descriptor, updatedAt: new Date() } },
+    { returnDocument: "after", projection: { passwordHash: 0 } }
+  );
+
+  if (!result) {
+    throw createError("User not found", 404);
+  }
+
+  return result;
+};
+
+export const getBiometricDescriptor = async (id: string): Promise<number[] | null> => {
+  const db = getMongoDb();
+  const users = db.collection<UserDoc>(USERS_COLLECTION);
+
+  const user = await users.findOne(
+    { _id: new ObjectId(id) },
+    { projection: { biometricDescriptor: 1 } }
+  );
+
+  return user?.biometricDescriptor ?? null;
+};
+

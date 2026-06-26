@@ -6,6 +6,7 @@ type AuthUser = {
   name: string;
   role: string;
   avatarUrl?: string | null;
+  hasBiometrics?: boolean;
 };
 
 type AuthSession = {
