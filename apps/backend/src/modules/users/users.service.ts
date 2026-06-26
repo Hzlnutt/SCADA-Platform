@@ -195,7 +195,12 @@ export const updateUserBiometrics = async (id: string, descriptor: number[]) => 
     throw createError("User not found", 404);
   }
 
-  return result;
+  const { biometricDescriptor, ...rest } = result;
+  return {
+    ...rest,
+    id: result._id.toString(),
+    hasBiometrics: !!biometricDescriptor
+  };
 };
 
 export const getBiometricDescriptor = async (id: string): Promise<number[] | null> => {
