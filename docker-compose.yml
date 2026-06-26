@@ -66,12 +66,13 @@ services:
 
   python-biometrics:
     build:
-      context: .
-      dockerfile: apps/python-biometrics/Dockerfile
+      context: ./apps/python-biometrics
+      dockerfile: Dockerfile
     ports:
       - "5001:5001"
     networks:
       - scada_net
+
 
 volumes:
   scada_mongo:
