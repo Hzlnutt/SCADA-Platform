@@ -1,7 +1,6 @@
 import { type ReactNode, useState, useEffect, useRef, useMemo } from "react";
 import { useAuthStore } from "../../store/auth.store";
 import { verifyBiometrics } from "../../services/auth.service";
-import { extractFaceDescriptor } from "../../utils/faceExtractor";
 
 export interface SetpointConfig {
   label: string;
@@ -37,10 +36,12 @@ interface HvacLayoutProps {
   controlButtons?: ControlButtonItem[];
   currentUser?: string;
   onVerifyPassword: (password: string) => Promise<boolean>;
+  logs: LogEntry[];
+  onRefreshData?: () => Promise<void> | void;
 }
 
-interface LogEntry {
-  id: number;
+export interface LogEntry {
+  id: string | number;
   action: string;
   user: string;
   timestamp: Date;
@@ -58,6 +59,8 @@ export default function HvacLayout({
   controlButtons,
   currentUser = "Unknown User",
   onVerifyPassword,
+  logs,
+  onRefreshData,
 }: HvacLayoutProps) {
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -145,28 +148,44 @@ export default function HvacLayout({
       } else if (progress >= 100) {
         clearInterval(interval);
 
-        const descriptor = extractFaceDescriptor(videoRef.current!);
-        if (!descriptor) {
+        const video = videoRef.current!;
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth || 320;
+        canvas.height = video.videoHeight || 240;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
           setBiometricStatus("failed");
-          setBiometricLog("Gagal mendeteksi wajah. Harap pastikan wajah terlihat jelas di kamera.");
+          setBiometricLog("Gagal menginisialisasi canvas untuk mengambil foto.");
           return;
         }
 
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageBase64 = canvas.toDataURL("image/jpeg", 0.8);
+        console.log("HVAC Verification Capture - Video Dimensions:", video.videoWidth, "x", video.videoHeight);
+        console.log("HVAC Verification Capture - Canvas Dimensions:", canvas.width, "x", canvas.height);
+        console.log("HVAC Verification Capture - Base64 Length:", imageBase64.length);
+
         try {
-          const verificationResult = await verifyBiometrics(descriptor);
+          const verificationResult = await verifyBiometrics(imageBase64);
           if (verificationResult.valid) {
-            // Distance of 0 means 100% match. 8.5 distance is threshold (which we map to 70% min to 100% max)
-            const rawScore = 1 - (verificationResult.distance || 0) / 8.5;
-            const match = parseFloat(Math.min(100, Math.max(70, rawScore * 100)).toFixed(2));
+            // Distance of 0 means 100% match. 0.22 distance is threshold (which we map to 70% min to 100% max)
+            const rawScore = 1 - (verificationResult.distance || 0) / 0.22;
+            const match = parseFloat(Math.min(100, Math.max(70, 70 + rawScore * 30)).toFixed(2));
             setBiometricMatchScore(match);
             setBiometricStatus("success");
             setBiometricLog(`Wajah Terverifikasi: ${user.name} (Akurasi: ${match}%)`);
 
             // Wait 1.5 seconds, then execute the action automatically
-            setTimeout(() => {
+            setTimeout(async () => {
               if (pendingAction) {
-                pendingAction();
-                addLog(modalLabel);
+                try {
+                  await pendingAction();
+                  if (onRefreshData) {
+                    await onRefreshData();
+                  }
+                } catch (err) {
+                  console.error("Action error:", err);
+                }
               }
               setIsConfirmModalOpen(false);
               setPendingAction(null);
@@ -189,29 +208,8 @@ export default function HvacLayout({
     }, 200);
   };
 
-  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [logFilter, setLogFilter] = useState<"all" | "start" | "stop" | "maintenance">("all");
-
-  const addLog = (action: string) => {
-    let type: LogEntry["type"] = "other";
-    const lower = action.toLowerCase();
-    if (lower.includes("start")) type = "start";
-    else if (lower.includes("stop")) type = "stop";
-    else if (lower.includes("maintenance")) type = "maintenance";
-
-    const fullAction = `${roomName} - ${action}`;
-    setLogs((prev) => [
-      {
-        id: Date.now(),
-        action: fullAction,
-        user: user?.name || currentUser,
-        timestamp: new Date(),
-        type,
-      },
-      ...prev,
-    ]);
-  };
 
   const handleControlClick = (btn: ControlButtonItem) => {
     setModalLabel(btn.label);
@@ -234,8 +232,10 @@ export default function HvacLayout({
         return;
       }
 
-      pendingAction();
-      addLog(modalLabel);
+      await pendingAction();
+      if (onRefreshData) {
+        await onRefreshData();
+      }
       setIsConfirmModalOpen(false);
       setPendingAction(null);
       setPassword("");

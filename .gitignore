@@ -16,3 +16,12 @@ build/
 .idea/
 mongodb-database-tools-windows-x86_64-100.17.0.msi
 .turbo/
+
+# Python virtual environments and caches
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.jpg
+*.jpeg
+*.png

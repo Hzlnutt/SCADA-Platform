@@ -34,11 +34,11 @@ export const updateUserSchema = z.object({
 
 export const updateBiometricsSchema = z.object({
   password: z.string(),
-  biometricDescriptor: z.array(z.number()).length(128)
+  images: z.array(z.string())
 });
 
 export const verifyBiometricsSchema = z.object({
-  biometricDescriptor: z.array(z.number()).length(128)
+  image: z.string()
 });
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;

@@ -1,5 +1,11 @@
 import { ObjectId } from "mongodb";
-import { MAINTENANCE_COLLECTION, SHIFT_REPORTS_COLLECTION } from "../../database/collections";
+import { 
+  MAINTENANCE_COLLECTION, 
+  SHIFT_REPORTS_COLLECTION,
+  STATE_COLLECTION,
+  AUDIT_COLLECTION,
+  USERS_COLLECTION
+} from "../../database/collections";
 import { getMongoDb } from "../../database/mongo";
 import type {
   ApprovalReviewInput,
@@ -479,3 +485,110 @@ export const reviewShiftReport = async (
 
   return toShiftReportResponse(result);
 };
+
+export const getHvacStates = async () => {
+  const db = getMongoDb();
+  const collection = db.collection(STATE_COLLECTION);
+  
+  const docs = await collection.find({ key: { $regex: /^hvac_state_/ } }).toArray();
+  const stateMap = new Map(docs.map((doc) => [doc.key, doc]));
+
+  const defaults: Record<string, { temp: number; humid: number; mode: string; status: string }> = {
+    "hvac_state_ahu-01": { temp: 46.8, humid: 75.0, mode: "Auto", status: "Running" },
+    "hvac_state_ahu-02": { temp: 22.4, humid: 55.0, mode: "Auto", status: "Running" },
+    "hvac_state_ahu-03": { temp: 20.5, humid: 55.0, mode: "Manual", status: "Running" },
+    "hvac_state_utility": { temp: 22.0, humid: 60.0, mode: "Auto", status: "Running" }
+  };
+
+  const result: Record<string, any> = {};
+  for (const [key, defValue] of Object.entries(defaults)) {
+    const doc = stateMap.get(key);
+    result[key] = doc ? {
+      temp: doc.temp !== undefined ? doc.temp : defValue.temp,
+      humid: doc.humid !== undefined ? doc.humid : defValue.humid,
+      mode: doc.mode !== undefined ? doc.mode : defValue.mode,
+      status: doc.status !== undefined ? doc.status : defValue.status,
+    } : defValue;
+  }
+
+  return result;
+};
+
+export const updateHvacState = async (
+  unitId: string,
+  updates: {
+    status?: string;
+    mode?: string;
+    temp?: number;
+    humid?: number;
+  }
+) => {
+  const db = getMongoDb();
+  const collection = db.collection(STATE_COLLECTION);
+  const key = `hvac_state_${unitId}`;
+
+  const current = await collection.findOne({ key });
+  const defaults: Record<string, { temp: number; humid: number; mode: string; status: string }> = {
+    "ahu-01": { temp: 46.8, humid: 75.0, mode: "Auto", status: "Running" },
+    "ahu-02": { temp: 22.4, humid: 55.0, mode: "Auto", status: "Running" },
+    "ahu-03": { temp: 20.5, humid: 55.0, mode: "Manual", status: "Running" },
+    "utility": { temp: 22.0, humid: 60.0, mode: "Auto", status: "Running" }
+  };
+  const def = defaults[unitId] || { temp: 20, humid: 50, mode: "Auto", status: "Running" };
+
+  const merged = {
+    temp: updates.temp !== undefined ? updates.temp : (current?.temp !== undefined ? current.temp : def.temp),
+    humid: updates.humid !== undefined ? updates.humid : (current?.humid !== undefined ? current.humid : def.humid),
+    mode: updates.mode !== undefined ? updates.mode : (current?.mode !== undefined ? current.mode : def.mode),
+    status: updates.status !== undefined ? updates.status : (current?.status !== undefined ? current.status : def.status),
+  };
+
+  await collection.updateOne(
+    { key },
+    {
+      $set: {
+        ...merged,
+        updatedAt: new Date()
+      }
+    },
+    { upsert: true }
+  );
+
+  return merged;
+};
+
+export const getHvacLogs = async (limit: number = 50) => {
+  const db = getMongoDb();
+  const auditCollection = db.collection(AUDIT_COLLECTION);
+  const usersCollection = db.collection(USERS_COLLECTION);
+
+  const logs = await auditCollection
+    .find({ action: "hvac.control" })
+    .sort({ ts: -1 })
+    .limit(limit)
+    .toArray();
+
+  const actorIds = [...new Set(logs.map(log => log.actorId))].filter(Boolean).map(id => {
+    try {
+      return new ObjectId(id);
+    } catch {
+      return null;
+    }
+  }).filter(Boolean) as ObjectId[];
+
+  const users = await usersCollection
+    .find({ _id: { $in: actorIds } })
+    .project({ _id: 1, name: 1 })
+    .toArray();
+
+  const userMap = new Map(users.map(u => [u._id.toString(), u.name]));
+
+  return logs.map(log => ({
+    id: log._id.toString(),
+    action: log.meta?.actionLabel ? `${log.meta.roomName} - ${log.meta.actionLabel}` : log.action,
+    user: userMap.get(log.actorId) || "System / Unknown",
+    timestamp: log.ts,
+    type: log.meta?.type || "other"
+  }));
+};
+

@@ -20,6 +20,7 @@ services:
       - CORS_ORIGIN=http://localhost
       - DUMMY_MODE=false
       - REDIS_URL=redis://redis:6379
+      - PYTHON_BIOMETRICS_URL=http://python-biometrics:5001
 
   mongo:
     restart: unless-stopped
@@ -36,6 +37,9 @@ services:
     volumes:
       - scada_redis:/data
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb"]
+
+  python-biometrics:
+    restart: unless-stopped
 
 volumes:
   scada_mongo:

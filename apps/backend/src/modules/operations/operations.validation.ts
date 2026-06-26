@@ -43,6 +43,15 @@ export const listQuerySchema = z.object({
   status: approvalStatusSchema.or(z.literal("all")).optional()
 });
 
+export const hvacControlSchema = z.object({
+  unitId: z.enum(["ahu-01", "ahu-02", "ahu-03", "utility"]),
+  status: z.enum(["Running", "Stopped", "Maintenance"]).optional(),
+  mode: z.enum(["Auto", "Manual"]).optional(),
+  temp: z.number().optional(),
+  humid: z.number().optional(),
+  actionLabel: z.string().optional()
+});
+
 export type MaintenanceInput = z.infer<typeof maintenanceSchema>;
 export type ShiftReportInput = z.infer<typeof shiftReportSchema>;
 export type MaintenanceUpdateInput = z.infer<typeof maintenanceUpdateSchema>;
@@ -50,3 +59,5 @@ export type ShiftReportUpdateInput = z.infer<typeof shiftReportUpdateSchema>;
 export type ListQueryInput = z.infer<typeof listQuerySchema>;
 export type ApprovalStatus = z.infer<typeof approvalStatusSchema>;
 export type ApprovalReviewInput = z.infer<typeof approvalReviewSchema>;
+export type HvacControlInput = z.infer<typeof hvacControlSchema>;
+

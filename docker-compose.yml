@@ -39,9 +39,11 @@ services:
       - ROLLUP_HOURLY_LAG_MINUTES=5
       - DUMMY_MODE=false
       - REDIS_URL=redis://redis:6379
+      - PYTHON_BIOMETRICS_URL=http://python-biometrics:5001
     depends_on:
       - mongo
       - redis
+      - python-biometrics
     networks:
       - scada_net
 
@@ -59,6 +61,15 @@ services:
     image: redis:7-alpine
     volumes:
       - scada_redis:/data
+    networks:
+      - scada_net
+
+  python-biometrics:
+    build:
+      context: .
+      dockerfile: apps/python-biometrics/Dockerfile
+    ports:
+      - "5001:5001"
     networks:
       - scada_net
 

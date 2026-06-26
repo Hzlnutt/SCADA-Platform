@@ -10,7 +10,10 @@ import {
   reviewMaintenance,
   reviewShiftReport,
   updateMaintenance,
-  updateShiftReport
+  updateShiftReport,
+  getHvacStates,
+  updateHvacState,
+  getHvacLogs
 } from "./operations.service";
 import {
   approvalReviewSchema,
@@ -18,7 +21,8 @@ import {
   maintenanceSchema,
   maintenanceUpdateSchema,
   shiftReportSchema,
-  shiftReportUpdateSchema
+  shiftReportUpdateSchema,
+  hvacControlSchema
 } from "./operations.validation";
 
 const createError = (message: string, statusCode: number) => {
@@ -283,6 +287,83 @@ export const reviewShiftReportHandler = async (
       });
     }
 
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getHvacStatesHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const data = await getHvacStates();
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateHvacStateHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const parsed = hvacControlSchema.parse(req.body);
+    const actorId = getActorId(req);
+
+    const data = await updateHvacState(parsed.unitId, {
+      status: parsed.status,
+      mode: parsed.mode,
+      temp: parsed.temp,
+      humid: parsed.humid
+    });
+
+    if (parsed.actionLabel && actorId) {
+      const roomMap: Record<string, string> = {
+        "ahu-01": "AHU-01",
+        "ahu-02": "AHU-02",
+        "ahu-03": "AHU-03",
+        "utility": "UTILITY"
+      };
+      const roomName = roomMap[parsed.unitId] || parsed.unitId.toUpperCase();
+
+      let type: "start" | "stop" | "maintenance" | "other" = "other";
+      const lowerAction = parsed.actionLabel.toLowerCase();
+      if (lowerAction.includes("start")) type = "start";
+      else if (lowerAction.includes("stop")) type = "stop";
+      else if (lowerAction.includes("maintenance")) type = "maintenance";
+
+      await recordAudit({
+        actorId,
+        action: "hvac.control",
+        resourceType: "hvac",
+        resourceId: parsed.unitId,
+        meta: {
+          actionLabel: parsed.actionLabel,
+          roomName,
+          type
+        }
+      });
+    }
+
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getHvacLogsHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const parsedLimit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+    const data = await getHvacLogs(parsedLimit);
     res.json({ data });
   } catch (err) {
     next(err);

@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { recordAudit } from "../../services/audit.service";
 import { verifyPassword } from "../auth/auth.service";
+import { env } from "../../config/env.config";
 import {
   createUser,
   getUserById,
@@ -10,7 +11,7 @@ import {
   deleteUser,
   listOperators,
   updateUserBiometrics,
-  getBiometricDescriptor
+  getBiometricDescriptors
 } from "./users.service";
 import {
   createUserSchema,
@@ -192,7 +193,28 @@ export const updateMeBiometricsHandler = async (
       return res.status(400).json({ success: false, message: "Password salah. Gagal menyimpan data biometrik." });
     }
 
-    const user = await updateUserBiometrics(userId, parsed.biometricDescriptor);
+    // Call Python biometrics service to extract the descriptor for each base64 image
+    const descriptors: number[][] = [];
+    for (const image of parsed.images) {
+      const response = await fetch(`${env.pythonBiometricsUrl}/extract`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image })
+      });
+
+      if (!response.ok) {
+        return res.status(500).json({ success: false, message: "Gagal terhubung dengan layanan computer vision Python." });
+      }
+
+      const result = (await response.json()) as { success: boolean; descriptor?: number[]; message?: string };
+      if (!result.success || !result.descriptor) {
+        return res.status(400).json({ success: false, message: result.message || "Gagal mendeteksi pola wajah pada salah satu foto." });
+      }
+
+      descriptors.push(result.descriptor);
+    }
+
+    const user = await updateUserBiometrics(userId, descriptors);
 
     await recordAudit({
       actorId: userId,
@@ -220,23 +242,50 @@ export const verifyMeBiometricsHandler = async (
 
     const parsed = verifyBiometricsSchema.parse(req.body);
 
-    const storedDescriptor = await getBiometricDescriptor(userId);
-    if (!storedDescriptor) {
+    const storedDescriptors = await getBiometricDescriptors(userId);
+    if (!storedDescriptors || storedDescriptors.length === 0) {
       return res.status(400).json({ valid: false, message: "Biometrik wajah belum terdaftar untuk akun ini." });
     }
 
-    if (storedDescriptor.length !== parsed.biometricDescriptor.length) {
+    // Call Python biometrics service to extract descriptor for comparison
+    const response = await fetch(`${env.pythonBiometricsUrl}/extract`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: parsed.image })
+    });
+
+    if (!response.ok) {
+      return res.status(500).json({ valid: false, message: "Gagal terhubung dengan layanan computer vision Python." });
+    }
+
+    const result = (await response.json()) as { success: boolean; descriptor?: number[]; message?: string };
+    if (!result.success || !result.descriptor) {
+      return res.status(400).json({ valid: false, message: result.message || "Gagal mendeteksi pola wajah pada kamera." });
+    }
+
+    // Compare the current descriptor against all stored descriptors
+    let minDistance = Infinity;
+    for (const stored of storedDescriptors) {
+      if (stored.length !== result.descriptor.length) continue;
+      
+      let sum = 0;
+      for (let i = 0; i < stored.length; i++) {
+        sum += Math.pow(stored[i] - result.descriptor[i], 2);
+      }
+      const distance = Math.sqrt(sum);
+      if (distance < minDistance) {
+        minDistance = distance;
+      }
+    }
+
+    if (minDistance === Infinity) {
       return res.status(400).json({ valid: false, message: "Format deskriptor wajah tidak cocok." });
     }
 
-    let sum = 0;
-    for (let i = 0; i < storedDescriptor.length; i++) {
-      sum += Math.pow(storedDescriptor[i] - parsed.biometricDescriptor[i], 2);
-    }
-    const distance = Math.sqrt(sum);
-    const valid = distance <= 8.5;
+    // Face shape matching threshold: 0.22 (robust for normalized 3D shapes)
+    const valid = minDistance <= 0.22;
 
-    res.json({ valid, distance });
+    res.json({ valid, distance: minDistance });
   } catch (err) {
     next(err);
   }

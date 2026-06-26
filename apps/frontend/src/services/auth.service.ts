@@ -40,16 +40,16 @@ export const updateProfile = async (payload: {
   return patchJson<{ data: AuthUser }>("/users/me", payload);
 };
 
-export const updateBiometrics = async (password: string, biometricDescriptor: number[]) => {
+export const updateBiometrics = async (password: string, images: string[]) => {
   return postJson<{ success: boolean; message: string; data: AuthUser }>("/users/me/biometrics", {
     password,
-    biometricDescriptor
+    images
   });
 };
 
-export const verifyBiometrics = async (biometricDescriptor: number[]) => {
+export const verifyBiometrics = async (image: string) => {
   return postJson<{ valid: boolean; distance: number }>("/users/me/verify-biometrics", {
-    biometricDescriptor
+    image
   });
 };
 

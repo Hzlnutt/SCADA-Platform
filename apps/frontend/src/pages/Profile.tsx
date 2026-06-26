@@ -3,7 +3,6 @@ import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { PageHeader } from "../components/ui/PageHeader";
 import { updateProfile, updateBiometrics, verifyPassword } from "../services/auth.service";
 import { useAuthStore } from "../store/auth.store";
-import { extractFaceDescriptor } from "../utils/faceExtractor";
 
 const initialsFromName = (name?: string | null) => {
   if (!name) return "U";
@@ -35,6 +34,8 @@ export default function Profile() {
   const [cameraStreamError, setCameraStreamError] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [regStep, setRegStep] = useState<1 | 2 | 3>(1);
+  const [capturedImages, setCapturedImages] = useState<string[]>([]);
 
   const initials = useMemo(() => initialsFromName(name), [name]);
 
@@ -51,7 +52,7 @@ export default function Profile() {
           if (videoRef.current) {
             videoRef.current.srcObject = s;
           }
-          setBiomLog("Kamera aktif. Silakan sejajarkan wajah Anda pada area target.");
+          setBiomLog("Langkah 1/3: Posisikan wajah lurus ke depan, lalu ambil foto.");
         })
         .catch((err) => {
           console.error("Camera access error:", err);
@@ -86,6 +87,8 @@ export default function Profile() {
       setIsVerifyingPassword(false);
       setIsRegistering(true);
       setBiomStatus("ready");
+      setRegStep(1);
+      setCapturedImages([]);
     } catch (err) {
       setBiometricError("Password salah atau gagal memverifikasi. Silakan coba lagi.");
     } finally {
@@ -101,47 +104,70 @@ export default function Profile() {
 
     let progress = 0;
     const interval = setInterval(async () => {
-      progress += 10;
+      progress += 20;
       setBiomProgress(progress);
 
-      if (progress === 30) {
-        setBiomLog("Menganalisis sudut wajah dan pencahayaan...");
-      } else if (progress === 60) {
-        setBiomLog("Mengekstraksi deskriptor wajah (128-float grayscale)...");
+      if (progress === 40) {
+        setBiomLog("Menganalisis sudut wajah...");
       } else if (progress === 80) {
-        setBiomLog("Mengompresi data biometrik untuk pengiriman aman...");
+        setBiomLog("Mengambil gambar wajah...");
       } else if (progress >= 100) {
         clearInterval(interval);
         
-        const descriptor = extractFaceDescriptor(videoRef.current!);
-        if (!descriptor) {
+        const video = videoRef.current!;
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth || 320;
+        canvas.height = video.videoHeight || 240;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
           setBiomStatus("failed");
-          setBiomLog("Gagal mendeteksi wajah. Harap pastikan wajah terlihat jelas di kamera.");
+          setBiomLog("Gagal menginisialisasi canvas untuk mengambil foto.");
           return;
         }
 
-        setBiomLog("Menyimpan data biometrik wajah ke database...");
-        try {
-          const result = await updateBiometrics(confirmPassword, descriptor);
-          if (result.success) {
-            setBiomStatus("success");
-            setBiomLog("Registrasi Biometrik Sukses! Wajah Anda terdaftar.");
-            updateUser(result.data);
-            
-            setTimeout(() => {
-              setIsRegistering(false);
-              setConfirmPassword("");
-            }, 2000);
-          } else {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageBase64 = canvas.toDataURL("image/jpeg", 0.8);
+        console.log("Profile Register Capture - Video Dimensions:", video.videoWidth, "x", video.videoHeight);
+        console.log("Profile Register Capture - Canvas Dimensions:", canvas.width, "x", canvas.height);
+        console.log("Profile Register Capture - Base64 Length:", imageBase64.length);
+
+        if (regStep === 1) {
+          setCapturedImages([imageBase64]);
+          setRegStep(2);
+          setBiomStatus("ready");
+          setBiomLog("Langkah 2/3: Hadapkan wajah sedikit ke kiri, lalu ambil foto.");
+        } else if (regStep === 2) {
+          setCapturedImages((prev) => [...prev, imageBase64]);
+          setRegStep(3);
+          setBiomStatus("ready");
+          setBiomLog("Langkah 3/3: Hadapkan wajah sedikit ke kanan, lalu ambil foto.");
+        } else if (regStep === 3) {
+          const allImages = [...capturedImages, imageBase64];
+          setBiomLog("Menyimpan data biometrik wajah (3 sudut) ke database...");
+          try {
+            const result = await updateBiometrics(confirmPassword, allImages);
+            if (result.success) {
+              setBiomStatus("success");
+              setBiomLog("Registrasi Biometrik Sukses! 3 sudut wajah telah terdaftar.");
+              updateUser(result.data);
+              
+              setTimeout(() => {
+                setIsRegistering(false);
+                setConfirmPassword("");
+                setRegStep(1);
+                setCapturedImages([]);
+              }, 2000);
+            } else {
+              setBiomStatus("failed");
+              setBiomLog("Gagal menyimpan biometrik ke server.");
+            }
+          } catch (err) {
             setBiomStatus("failed");
-            setBiomLog("Gagal menyimpan biometrik ke server.");
+            setBiomLog(err instanceof Error ? err.message : "Kesalahan server.");
           }
-        } catch (err) {
-          setBiomStatus("failed");
-          setBiomLog(err instanceof Error ? err.message : "Kesalahan server.");
         }
       }
-    }, 150);
+    }, 100);
   };
 
   const handleCancelRegistration = () => {
@@ -149,6 +175,8 @@ export default function Profile() {
     setConfirmPassword("");
     setBiomStatus("ready");
     setBiomProgress(0);
+    setRegStep(1);
+    setCapturedImages([]);
   };
 
   useEffect(() => {
@@ -466,7 +494,7 @@ export default function Profile() {
                       disabled={cameraStreamError}
                       className="rounded-lg bg-cyan-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-cyan-700 disabled:opacity-50"
                     >
-                      Ambil Foto & Simpan
+                      {regStep === 1 ? "Ambil Foto Tengah (1/3)" : regStep === 2 ? "Ambil Foto Kiri (2/3)" : "Ambil Foto Kanan (3/3)"}
                     </button>
                   )}
                   

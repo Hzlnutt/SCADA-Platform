@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
-import HvacLayout from "./HvacLayout";
+import HvacLayout, { type LogEntry } from "./HvacLayout";
 import { useAuthStore } from "../../store/auth.store";
+import { getJson, postJson } from "../../services/api.client";
 
 // Import diagram components
 import MachineAHU01Pid from "./diagrams/MachineAHU01Pid";
@@ -59,6 +60,122 @@ const MachineCustomTab = () => {
   const [utilMode, setUtilMode] = useState("Auto");
   const [utilStatus, setUtilStatus] = useState("Running");
 
+  // Dynamic logs from backend
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+
+  // Ref for debouncing slider changes
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const fetchHvacData = useCallback(async () => {
+    try {
+      const statesRes = await getJson<{ data: Record<string, any> }>("/operations/hvac/states");
+      const logsRes = await getJson<{ data: any[] }>("/operations/hvac/logs");
+
+      const states = statesRes.data;
+      if (states["hvac_state_ahu-01"]) {
+        const s = states["hvac_state_ahu-01"];
+        setAhu01Temp(s.temp);
+        setAhu01Humid(s.humid);
+        setAhu01Mode(s.mode);
+        setAhu01Status(s.status);
+      }
+      if (states["hvac_state_ahu-02"]) {
+        const s = states["hvac_state_ahu-02"];
+        setAhu02Temp(s.temp);
+        setAhu02Humid(s.humid);
+        setAhu02Mode(s.mode);
+        setAhu02Status(s.status);
+      }
+      if (states["hvac_state_ahu-03"]) {
+        const s = states["hvac_state_ahu-03"];
+        setAhu03Temp(s.temp);
+        setAhu03Humid(s.humid);
+        setAhu03Mode(s.mode);
+        setAhu03Status(s.status);
+      }
+      if (states["hvac_state_utility"]) {
+        const s = states["hvac_state_utility"];
+        setUtilTemp(s.temp);
+        setUtilHumid(s.humid);
+        setUtilMode(s.mode);
+        setUtilStatus(s.status);
+      }
+
+      if (logsRes.data) {
+        setLogs(logsRes.data.map((l: any) => ({
+          ...l,
+          timestamp: new Date(l.timestamp)
+        })));
+      }
+    } catch (error) {
+      console.error("Failed to fetch HVAC data:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchHvacData();
+  }, [fetchHvacData, tabId, unitId]);
+
+  useEffect(() => {
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      Object.values(debounceTimers.current).forEach(clearTimeout);
+    };
+  }, []);
+
+  const updateHvacBackend = async (
+    unitId: "ahu-01" | "ahu-02" | "ahu-03" | "utility",
+    updates: { status?: string; mode?: string; temp?: number; humid?: number },
+    actionLabel?: string
+  ) => {
+    try {
+      await postJson("/operations/hvac/control", {
+        unitId,
+        ...updates,
+        actionLabel
+      });
+      if (unitId === "ahu-01") {
+        if (updates.status !== undefined) setAhu01Status(updates.status);
+        if (updates.mode !== undefined) setAhu01Mode(updates.mode);
+        if (updates.temp !== undefined) setAhu01Temp(updates.temp);
+        if (updates.humid !== undefined) setAhu01Humid(updates.humid);
+      } else if (unitId === "ahu-02") {
+        if (updates.status !== undefined) setAhu02Status(updates.status);
+        if (updates.mode !== undefined) setAhu02Mode(updates.mode);
+        if (updates.temp !== undefined) setAhu02Temp(updates.temp);
+        if (updates.humid !== undefined) setAhu02Humid(updates.humid);
+      } else if (unitId === "ahu-03") {
+        if (updates.status !== undefined) setAhu03Status(updates.status);
+        if (updates.mode !== undefined) setAhu03Mode(updates.mode);
+        if (updates.temp !== undefined) setAhu03Temp(updates.temp);
+        if (updates.humid !== undefined) setAhu03Humid(updates.humid);
+      } else if (unitId === "utility") {
+        if (updates.status !== undefined) setUtilStatus(updates.status);
+        if (updates.mode !== undefined) setUtilMode(updates.mode);
+        if (updates.temp !== undefined) setUtilTemp(updates.temp);
+        if (updates.humid !== undefined) setUtilHumid(updates.humid);
+      }
+    } catch (err) {
+      console.error("Failed to update HVAC state:", err);
+    }
+  };
+
+  const debouncedUpdateHvac = useCallback((
+    unitId: "ahu-01" | "ahu-02" | "ahu-03" | "utility",
+    updates: { status?: string; mode?: string; temp?: number; humid?: number }
+  ) => {
+    const key = `${unitId}_${Object.keys(updates).join("_")}`;
+    if (debounceTimers.current[key]) {
+      clearTimeout(debounceTimers.current[key]);
+    }
+    debounceTimers.current[key] = setTimeout(() => {
+      postJson("/operations/hvac/control", {
+        unitId,
+        ...updates
+      }).catch(err => console.error("Debounced update failed:", err));
+    }, 500);
+  }, []);
+
   // ===== FUNGSI VERIFIKASI PASSWORD =====
   const verifyPassword = async (password: string): Promise<boolean> => {
     try {
@@ -98,7 +215,10 @@ const MachineCustomTab = () => {
           unit: "°C",
           min: 30.0,
           max: 50.0,
-          onChange: setAhu01Temp,
+          onChange: (val: number) => {
+            setAhu01Temp(val);
+            debouncedUpdateHvac("ahu-01", { temp: val });
+          },
         },
         {
           label: "Humidity Setpoint",
@@ -106,26 +226,29 @@ const MachineCustomTab = () => {
           unit: "%RH",
           min: 60.0,
           max: 90.0,
-          onChange: setAhu01Humid,
+          onChange: (val: number) => {
+            setAhu01Humid(val);
+            debouncedUpdateHvac("ahu-01", { humid: val });
+          },
         },
       ];
 
       const controlButtons = [
         {
           label: "START AHU",
-          onClick: () => { setAhu01Status("Running"); setAhu01Mode("Auto"); },
+          onClick: () => updateHvacBackend("ahu-01", { status: "Running", mode: "Auto" }, "START AHU"),
           variant: "green" as any,
           icon: startIcon,
         },
         {
           label: "STOP AHU",
-          onClick: () => { setAhu01Status("Stopped"); setAhu01Mode("Manual"); },
+          onClick: () => updateHvacBackend("ahu-01", { status: "Stopped", mode: "Manual" }, "STOP AHU"),
           variant: "red" as any,
           icon: stopIcon,
         },
         {
           label: "MAINTENANCE",
-          onClick: () => { setAhu01Status("Maintenance"); setAhu01Mode("Manual"); },
+          onClick: () => updateHvacBackend("ahu-01", { status: "Maintenance", mode: "Manual" }, "MAINTENANCE"),
           variant: "blue" as any,
           icon: maintenanceIcon,
         },
@@ -143,6 +266,8 @@ const MachineCustomTab = () => {
           controlButtons={controlButtons}
           currentUser={currentUser}
           onVerifyPassword={verifyPassword}
+          logs={logs}
+          onRefreshData={fetchHvacData}
         />
       );
     }
@@ -161,14 +286,49 @@ const MachineCustomTab = () => {
       ];
 
       const setpoints = [
-        { label: "Cooling Target Temp", value: ahu02Temp, unit: "°C", min: 15.0, max: 35.0, onChange: setAhu02Temp },
-        { label: "Dehumidify Target", value: ahu02Humid, unit: "%RH", min: 30.0, max: 80.0, onChange: setAhu02Humid },
+        {
+          label: "Cooling Target Temp",
+          value: ahu02Temp,
+          unit: "°C",
+          min: 15.0,
+          max: 35.0,
+          onChange: (val: number) => {
+            setAhu02Temp(val);
+            debouncedUpdateHvac("ahu-02", { temp: val });
+          }
+        },
+        {
+          label: "Dehumidify Target",
+          value: ahu02Humid,
+          unit: "%RH",
+          min: 30.0,
+          max: 80.0,
+          onChange: (val: number) => {
+            setAhu02Humid(val);
+            debouncedUpdateHvac("ahu-02", { humid: val });
+          }
+        },
       ];
 
       const controlButtons = [
-        { label: "START AHU", onClick: () => { setAhu02Status("Running"); setAhu02Mode("Auto"); }, variant: "green" as any, icon: startIcon },
-        { label: "STOP AHU", onClick: () => { setAhu02Status("Stopped"); setAhu02Mode("Manual"); }, variant: "red" as any, icon: stopIcon },
-        { label: "MAINTENANCE", onClick: () => { setAhu02Status("Maintenance"); setAhu02Mode("Manual"); }, variant: "blue" as any, icon: maintenanceIcon },
+        {
+          label: "START AHU",
+          onClick: () => updateHvacBackend("ahu-02", { status: "Running", mode: "Auto" }, "START AHU"),
+          variant: "green" as any,
+          icon: startIcon
+        },
+        {
+          label: "STOP AHU",
+          onClick: () => updateHvacBackend("ahu-02", { status: "Stopped", mode: "Manual" }, "STOP AHU"),
+          variant: "red" as any,
+          icon: stopIcon
+        },
+        {
+          label: "MAINTENANCE",
+          onClick: () => updateHvacBackend("ahu-02", { status: "Maintenance", mode: "Manual" }, "MAINTENANCE"),
+          variant: "blue" as any,
+          icon: maintenanceIcon
+        },
       ];
 
       return (
@@ -183,6 +343,8 @@ const MachineCustomTab = () => {
           controlButtons={controlButtons}
           currentUser={currentUser}
           onVerifyPassword={verifyPassword}
+          logs={logs}
+          onRefreshData={fetchHvacData}
         />
       );
     }
@@ -197,14 +359,49 @@ const MachineCustomTab = () => {
       ];
 
       const setpoints = [
-        { label: "Room Temp SP", value: ahu03Temp, unit: "°C", min: 15.0, max: 30.0, onChange: setAhu03Temp },
-        { label: "Room Humidity SP", value: ahu03Humid, unit: "%RH", min: 30.0, max: 80.0, onChange: setAhu03Humid },
+        {
+          label: "Room Temp SP",
+          value: ahu03Temp,
+          unit: "°C",
+          min: 15.0,
+          max: 30.0,
+          onChange: (val: number) => {
+            setAhu03Temp(val);
+            debouncedUpdateHvac("ahu-03", { temp: val });
+          }
+        },
+        {
+          label: "Room Humidity SP",
+          value: ahu03Humid,
+          unit: "%RH",
+          min: 30.0,
+          max: 80.0,
+          onChange: (val: number) => {
+            setAhu03Humid(val);
+            debouncedUpdateHvac("ahu-03", { humid: val });
+          }
+        },
       ];
 
       const controlButtons = [
-        { label: "START AHU", onClick: () => { setAhu03Status("Running"); setAhu03Mode("Auto"); }, variant: "green" as any, icon: startIcon },
-        { label: "STOP AHU", onClick: () => { setAhu03Status("Stopped"); setAhu03Mode("Manual"); }, variant: "red" as any, icon: stopIcon },
-        { label: "MAINTENANCE", onClick: () => { setAhu03Status("Maintenance"); setAhu03Mode("Manual"); }, variant: "blue" as any, icon: maintenanceIcon },
+        {
+          label: "START AHU",
+          onClick: () => updateHvacBackend("ahu-03", { status: "Running", mode: "Auto" }, "START AHU"),
+          variant: "green" as any,
+          icon: startIcon
+        },
+        {
+          label: "STOP AHU",
+          onClick: () => updateHvacBackend("ahu-03", { status: "Stopped", mode: "Manual" }, "STOP AHU"),
+          variant: "red" as any,
+          icon: stopIcon
+        },
+        {
+          label: "MAINTENANCE",
+          onClick: () => updateHvacBackend("ahu-03", { status: "Maintenance", mode: "Manual" }, "MAINTENANCE"),
+          variant: "blue" as any,
+          icon: maintenanceIcon
+        },
       ];
 
       return (
@@ -219,6 +416,8 @@ const MachineCustomTab = () => {
           controlButtons={controlButtons}
           currentUser={currentUser}
           onVerifyPassword={verifyPassword}
+          logs={logs}
+          onRefreshData={fetchHvacData}
         />
       );
     }
@@ -242,6 +441,8 @@ const MachineCustomTab = () => {
           systemMode={systemMode}
           currentUser={currentUser}
           onVerifyPassword={verifyPassword}
+          logs={logs}
+          onRefreshData={fetchHvacData}
         />
       );
     }

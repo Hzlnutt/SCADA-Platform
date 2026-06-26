@@ -10,7 +10,10 @@ import {
   reviewMaintenanceHandler,
   reviewShiftReportHandler,
   updateMaintenanceHandler,
-  updateShiftReportHandler
+  updateShiftReportHandler,
+  getHvacStatesHandler,
+  updateHvacStateHandler,
+  getHvacLogsHandler
 } from "./operations.controller";
 
 export const operationsRouter = Router();
@@ -122,4 +125,23 @@ operationsRouter.patch(
   authenticate,
   authorize(approvalRoles),
   reviewShiftReportHandler
+);
+
+operationsRouter.get(
+  "/operations/hvac/states",
+  authenticate,
+  getHvacStatesHandler
+);
+
+operationsRouter.post(
+  "/operations/hvac/control",
+  authenticate,
+  authorize(writeRoles),
+  updateHvacStateHandler
+);
+
+operationsRouter.get(
+  "/operations/hvac/logs",
+  authenticate,
+  getHvacLogsHandler
 );

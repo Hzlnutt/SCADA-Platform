@@ -19,6 +19,7 @@ type UserDoc = {
   providerId?: string;
   avatarUrl?: string | null;
   biometricDescriptor?: number[];
+  biometricDescriptors?: number[][];
   status: "active" | "disabled";
   createdAt: Date;
   updatedAt: Date;
@@ -84,11 +85,11 @@ export const getUserById = async (id: string) => {
   const user = await users.findOne({ _id: new ObjectId(id) }, { projection: { passwordHash: 0 } });
   if (!user) return null;
 
-  const { biometricDescriptor, ...rest } = user;
+  const { biometricDescriptor, biometricDescriptors, ...rest } = user;
   return {
     ...rest,
     id: user._id.toString(),
-    hasBiometrics: !!biometricDescriptor
+    hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor
   };
 };
 
@@ -114,11 +115,11 @@ export const updateUserProfile = async (id: string, input: UpdateProfileInput) =
     throw createError("User not found", 404);
   }
 
-  const { biometricDescriptor, ...rest } = result;
+  const { biometricDescriptor, biometricDescriptors, ...rest } = result;
   return {
     ...rest,
     id: result._id.toString(),
-    hasBiometrics: !!biometricDescriptor
+    hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor
   };
 };
 
@@ -136,11 +137,11 @@ export const updateUserRole = async (id: string, input: UpdateUserInput) => {
     throw createError("User not found", 404);
   }
 
-  const { biometricDescriptor, ...rest } = result;
+  const { biometricDescriptor, biometricDescriptors, ...rest } = result;
   return {
     ...rest,
     id: result._id.toString(),
-    hasBiometrics: !!biometricDescriptor
+    hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor
   };
 };
 
@@ -181,13 +182,16 @@ export const listOperators = async () => {
     .toArray();
 };
 
-export const updateUserBiometrics = async (id: string, descriptor: number[]) => {
+export const updateUserBiometrics = async (id: string, descriptors: number[][]) => {
   const db = getMongoDb();
   const users = db.collection<UserDoc>(USERS_COLLECTION);
 
   const result = await users.findOneAndUpdate(
     { _id: new ObjectId(id) },
-    { $set: { biometricDescriptor: descriptor, updatedAt: new Date() } },
+    { 
+      $set: { biometricDescriptors: descriptors, updatedAt: new Date() },
+      $unset: { biometricDescriptor: "" }
+    },
     { returnDocument: "after", projection: { passwordHash: 0 } }
   );
 
@@ -195,23 +199,30 @@ export const updateUserBiometrics = async (id: string, descriptor: number[]) => 
     throw createError("User not found", 404);
   }
 
-  const { biometricDescriptor, ...rest } = result;
+  const { biometricDescriptor, biometricDescriptors, ...rest } = result;
   return {
     ...rest,
     id: result._id.toString(),
-    hasBiometrics: !!biometricDescriptor
+    hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor
   };
 };
 
-export const getBiometricDescriptor = async (id: string): Promise<number[] | null> => {
+export const getBiometricDescriptors = async (id: string): Promise<number[][] | null> => {
   const db = getMongoDb();
   const users = db.collection<UserDoc>(USERS_COLLECTION);
 
   const user = await users.findOne(
     { _id: new ObjectId(id) },
-    { projection: { biometricDescriptor: 1 } }
+    { projection: { biometricDescriptors: 1, biometricDescriptor: 1 } }
   );
 
-  return user?.biometricDescriptor ?? null;
+  if (!user) return null;
+  if (user.biometricDescriptors && user.biometricDescriptors.length > 0) {
+    return user.biometricDescriptors;
+  }
+  if (user.biometricDescriptor) {
+    return [user.biometricDescriptor]; // backward compatibility
+  }
+  return null;
 };
 
