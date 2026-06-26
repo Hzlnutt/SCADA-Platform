@@ -81,7 +81,7 @@ export default function HvacLayout({
   // Handle webcam stream based on active biometric scanner
   useEffect(() => {
     let activeStream: MediaStream | null = null;
-    if (isConfirmModalOpen && verificationMode === "biometric" && biometricStatus === "ready") {
+    if (isConfirmModalOpen && verificationMode === "biometric") {
       if (!user?.hasBiometrics) {
         setBiometricStatus("failed");
         setBiometricLog("Biometrik wajah belum terdaftar untuk akun Anda. Harap daftarkan di Pengaturan Profil.");
@@ -109,9 +109,14 @@ export default function HvacLayout({
       if (activeStream) {
         activeStream.getTracks().forEach((track) => track.stop());
       }
-      setStream(null);
+      setStream((prevStream) => {
+        if (prevStream) {
+          prevStream.getTracks().forEach((track) => track.stop());
+        }
+        return null;
+      });
     };
-  }, [isConfirmModalOpen, verificationMode, biometricStatus, user]);
+  }, [isConfirmModalOpen, verificationMode, user]);
 
   // Run the biometric scanning
   const startBiometricScan = () => {
