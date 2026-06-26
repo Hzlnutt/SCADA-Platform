@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useState, useEffect, useRef, useMemo } from "react";
 
 export interface SetpointConfig {
   label: string;
@@ -62,6 +62,88 @@ export default function HvacLayout({
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
+
+  // Biometric state variables
+  const [verificationMode, setVerificationMode] = useState<"password" | "biometric">("password");
+  const [biometricStatus, setBiometricStatus] = useState<"ready" | "scanning" | "success" | "failed">("ready");
+  const [biometricProgress, setBiometricProgress] = useState(0);
+  const [biometricLog, setBiometricLog] = useState("");
+  const [biometricMatchScore, setBiometricMatchScore] = useState<number | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Handle webcam stream based on active biometric scanner
+  useEffect(() => {
+    let activeStream: MediaStream | null = null;
+    if (isConfirmModalOpen && verificationMode === "biometric" && biometricStatus === "ready") {
+      setBiometricLog("Mengakses kamera...");
+      navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } })
+        .then((s) => {
+          activeStream = s;
+          setStream(s);
+          if (videoRef.current) {
+            videoRef.current.srcObject = s;
+          }
+          setBiometricLog("Kamera aktif. Posisikan wajah Anda di area pemindaian.");
+        })
+        .catch((err) => {
+          console.error("Camera access error:", err);
+          setBiometricStatus("failed");
+          setBiometricLog("Akses kamera ditolak atau gagal. Silakan gunakan password.");
+        });
+    }
+
+    return () => {
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => track.stop());
+      }
+      setStream(null);
+    };
+  }, [isConfirmModalOpen, verificationMode, biometricStatus]);
+
+  // Run the biometric scanning simulation
+  const startBiometricScan = () => {
+    if (biometricStatus !== "ready" && biometricStatus !== "failed") return;
+    setBiometricStatus("scanning");
+    setBiometricProgress(0);
+    setBiometricLog("Menginisialisasi pemindaian wajah...");
+
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 10;
+      setBiometricProgress(progress);
+
+      if (progress === 30) {
+        setBiometricLog("Melacak kontur wajah (3D Landmark)...");
+      } else if (progress === 60) {
+        setBiometricLog(`Membandingkan dengan akun: ${currentUser}...`);
+      } else if (progress === 85) {
+        setBiometricLog("Memverifikasi kecocokan data biometrik...");
+      } else if (progress >= 100) {
+        clearInterval(interval);
+        const match = parseFloat((97.2 + Math.random() * 2.5).toFixed(2));
+        setBiometricMatchScore(match);
+        setBiometricStatus("success");
+        setBiometricLog(`Wajah Terverifikasi: ${currentUser} (Kecocokan: ${match}%)`);
+
+        // Wait 1.5 seconds, then execute the action automatically
+        setTimeout(() => {
+          if (pendingAction) {
+            pendingAction();
+            addLog(modalLabel);
+          }
+          setIsConfirmModalOpen(false);
+          setPendingAction(null);
+          // Reset states
+          setVerificationMode("password");
+          setBiometricStatus("ready");
+          setBiometricProgress(0);
+          setBiometricMatchScore(null);
+          setPassword("");
+        }, 1500);
+      }
+    }, 200);
+  };
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
@@ -359,52 +441,238 @@ export default function HvacLayout({
         </div>
       </div>
 
-      {/* MODAL KONFIRMASI PASSWORD */}
+      {/* MODAL KONFIRMASI DENGAN BIOMETRIK / PASSWORD */}
       {isConfirmModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 max-w-sm w-full border border-slate-200 dark:border-slate-700">
             <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">
               Konfirmasi Tindakan
             </h3>
-            <p className="text-sm text-slate-600 dark:text-slate-300 mb-3">
+            <p className="text-sm text-slate-650 dark:text-slate-350 mb-4">
               Anda yakin ingin{" "}
-              <span className="font-semibold text-cyan-600 dark:text-cyan-400">{modalLabel}</span>?
+              <span className="font-semibold text-cyan-600 dark:text-cyan-405">{modalLabel}</span>?
             </p>
-            <p className="text-sm text-slate-600 dark:text-slate-300 mb-3">
-              Masukkan password Anda untuk verifikasi:
-            </p>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Masukkan password"
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all"
-              onKeyDown={(e) => e.key === "Enter" && handleConfirmAction()}
-              autoFocus
-            />
-            {passwordError && (
-              <p className="text-rose-500 text-xs mt-1">{passwordError}</p>
-            )}
-            <div className="flex gap-3 justify-end mt-4">
+
+            {/* TAB MODE VERIFIKASI */}
+            <div className="flex border-b border-slate-150 dark:border-slate-800 mb-4 text-xs font-bold uppercase tracking-wider">
               <button
+                type="button"
                 onClick={() => {
-                  setIsConfirmModalOpen(false);
-                  setPendingAction(null);
-                  setPassword("");
-                  setPasswordError("");
+                  setVerificationMode("password");
+                  setBiometricStatus("ready");
                 }}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                className={`flex-1 pb-2 text-center border-b-2 transition-all ${
+                  verificationMode === "password"
+                    ? "border-cyan-500 text-cyan-600 dark:text-cyan-400"
+                    : "border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                }`}
               >
-                Batal
+                Password
               </button>
               <button
-                onClick={handleConfirmAction}
-                disabled={isVerifying}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-cyan-600 hover:bg-cyan-700 text-white transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                type="button"
+                onClick={() => {
+                  setVerificationMode("biometric");
+                  setBiometricStatus("ready");
+                }}
+                className={`flex-1 pb-2 text-center border-b-2 transition-all ${
+                  verificationMode === "biometric"
+                    ? "border-cyan-500 text-cyan-600 dark:text-cyan-400"
+                    : "border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                }`}
               >
-                {isVerifying ? "Memverifikasi..." : "Konfirmasi"}
+                Pindai Wajah
               </button>
             </div>
+
+            {verificationMode === "password" ? (
+              <>
+                <p className="text-sm text-slate-600 dark:text-slate-300 mb-3">
+                  Masukkan password Anda untuk verifikasi:
+                </p>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Masukkan password"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all"
+                  onKeyDown={(e) => e.key === "Enter" && handleConfirmAction()}
+                  autoFocus
+                />
+                {passwordError && (
+                  <p className="text-rose-500 text-xs mt-1">{passwordError}</p>
+                )}
+                <div className="flex gap-3 justify-end mt-4">
+                  <button
+                    onClick={() => {
+                      setIsConfirmModalOpen(false);
+                      setPendingAction(null);
+                      setPassword("");
+                      setPasswordError("");
+                    }}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={handleConfirmAction}
+                    disabled={isVerifying}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-cyan-600 hover:bg-cyan-700 text-white transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isVerifying ? "Memverifikasi..." : "Konfirmasi"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* BIOMETRICS SCANNER */}
+                <div className="flex flex-col items-center">
+                  <style>{`
+                    @keyframes scan {
+                      0% { top: 5%; }
+                      50% { top: 95%; }
+                      100% { top: 5%; }
+                    }
+                    @keyframes pulse-ring {
+                      0% { transform: scale(0.95); opacity: 0.2; }
+                      50% { transform: scale(1.02); opacity: 0.5; }
+                      100% { transform: scale(0.95); opacity: 0.2; }
+                    }
+                  `}</style>
+                  
+                  <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-950 border border-slate-800 relative flex items-center justify-center shadow-inner">
+                    {biometricStatus === "failed" ? (
+                      <div className="text-center p-4">
+                        <svg className="w-10 h-10 text-rose-500 mx-auto mb-2 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span className="text-xs text-rose-400 font-medium font-mono">Akses Kamera Gagal</span>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Live camera stream */}
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="absolute inset-0 w-full h-full object-cover scale-x-[-1]"
+                        />
+
+                        {/* Scanner HUD Overlay */}
+                        <div className="absolute inset-0 border border-cyan-500/20 rounded-xl pointer-events-none">
+                          {/* Circular scanning area */}
+                          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full border-2 border-dashed transition-all duration-300 ${
+                            biometricStatus === "success" 
+                              ? "border-emerald-500 bg-emerald-500/10 scale-105" 
+                              : biometricStatus === "scanning"
+                              ? "border-cyan-400 scale-100"
+                              : "border-cyan-500/40"
+                          }`}
+                          style={{
+                            animation: biometricStatus === "scanning" ? "pulse-ring 2s infinite" : "none"
+                          }}>
+                            {/* Checkmark overlay on success */}
+                            {biometricStatus === "success" && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-emerald-950/20 rounded-full">
+                                <svg className="w-12 h-12 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Grid layout */}
+                          <div className="absolute inset-0 bg-[linear-gradient(to_right,#0891b208_1px,transparent_1px),linear-gradient(to_bottom,#0891b208_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none" />
+
+                          {/* Active laser scan line */}
+                          {biometricStatus === "scanning" && (
+                            <div 
+                              className="absolute left-0 w-full h-0.5 bg-cyan-400 shadow-[0_0_8px_#22d3ee] opacity-80"
+                              style={{ animation: "scan 2s ease-in-out infinite" }}
+                            />
+                          )}
+
+                          {/* Futuristic corner brackets */}
+                          <div className="absolute top-2 left-2 w-3 h-3 border-t-2 border-l-2 border-cyan-500" />
+                          <div className="absolute top-2 right-2 w-3 h-3 border-t-2 border-r-2 border-cyan-500" />
+                          <div className="absolute bottom-2 left-2 w-3 h-3 border-b-2 border-l-2 border-cyan-500" />
+                          <div className="absolute bottom-2 right-2 w-3 h-3 border-b-2 border-r-2 border-cyan-500" />
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Status log messages & progress */}
+                  <div className="w-full mt-3 space-y-1.5">
+                    {biometricStatus === "scanning" && (
+                      <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-cyan-500 transition-all duration-200"
+                          style={{ width: `${biometricProgress}%` }}
+                        />
+                      </div>
+                    )}
+
+                    <div className={`text-[10px] font-mono text-center tracking-wide font-semibold py-1 rounded px-2 ${
+                      biometricStatus === "success" 
+                        ? "bg-emerald-500/10 text-emerald-450" 
+                        : biometricStatus === "failed"
+                        ? "bg-rose-500/10 text-rose-455"
+                        : biometricStatus === "scanning"
+                        ? "text-cyan-450"
+                        : "text-slate-400"
+                    }`}>
+                      {biometricLog}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 justify-end mt-4 w-full border-t border-slate-100 dark:border-slate-800 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsConfirmModalOpen(false);
+                      setPendingAction(null);
+                      setVerificationMode("password");
+                      setBiometricStatus("ready");
+                      setBiometricProgress(0);
+                      setBiometricMatchScore(null);
+                      setPassword("");
+                    }}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  >
+                    Batal
+                  </button>
+                  {(biometricStatus === "ready" || biometricStatus === "failed") && (
+                    <button
+                      type="button"
+                      onClick={startBiometricScan}
+                      disabled={biometricStatus === "failed"}
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-cyan-600 hover:bg-cyan-700 text-white transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Mulai Pindai
+                    </button>
+                  )}
+                  {biometricStatus === "scanning" && (
+                    <button
+                      disabled
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-cyan-400 transition-all cursor-not-allowed"
+                    >
+                      Memindai...
+                    </button>
+                  )}
+                  {biometricStatus === "success" && (
+                    <button
+                      disabled
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white transition-all cursor-not-allowed"
+                    >
+                      Sukses ✓
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
