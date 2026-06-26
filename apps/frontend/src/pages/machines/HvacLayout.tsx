@@ -1,4 +1,4 @@
-1import { type ReactNode, useState, useEffect, useRef, useMemo } from "react";
+import { type ReactNode, useState, useEffect, useRef, useMemo } from "react";
 import { useAuthStore } from "../../store/auth.store";
 import { verifyBiometrics } from "../../services/auth.service";
 import { extractFaceDescriptor } from "../../utils/faceExtractor";
@@ -205,7 +205,7 @@ export default function HvacLayout({
       {
         id: Date.now(),
         action: fullAction,
-        user: currentUser,
+        user: user?.name || currentUser,
         timestamp: new Date(),
         type,
       },

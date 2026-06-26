@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import HvacLayout from "./HvacLayout";
+import { useAuthStore } from "../../store/auth.store";
 
 // Import diagram components
 import MachineAHU01Pid from "./diagrams/MachineAHU01Pid";
@@ -31,9 +32,8 @@ const maintenanceIcon = (
 const MachineCustomTab = () => {
   const { tabId, unitId } = useParams();
 
-  // Ambil data user dari context/auth (sesuaikan)
-  // Contoh: const { user } = useAuth();
-  const [currentUser] = useState("Admin"); // Ganti dengan user.name dari context
+  const user = useAuthStore((state) => state.user);
+  const currentUser = user?.name || "Admin";
 
   // State untuk AHU-01
   const [ahu01Temp, setAhu01Temp] = useState(46.8);

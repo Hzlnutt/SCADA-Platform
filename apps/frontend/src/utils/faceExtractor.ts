@@ -28,8 +28,8 @@ export const extractFaceDescriptor = (video: HTMLVideoElement): number[] | null 
     canvas.width = targetW;
     canvas.height = targetH;
 
-    // Calculate crop box (center square of the video feed)
-    const cropSize = Math.min(videoWidth, videoHeight) * 0.7; // 70% of the minor dimension
+    // Calculate crop box (tight center square of the video feed to isolate the face)
+    const cropSize = Math.min(videoWidth, videoHeight) * 0.38; // 38% of minor dimension focuses strictly on the face
     const cropX = (videoWidth - cropSize) / 2;
     const cropY = (videoHeight - cropSize) / 2;
 
@@ -50,33 +50,38 @@ export const extractFaceDescriptor = (video: HTMLVideoElement): number[] | null 
     const imgData = ctx.getImageData(0, 0, targetW, targetH);
     const data = imgData.data;
 
-    // Convert pixels to grayscale and store in array
+    // Convert pixels to grayscale
     const grayscale: number[] = [];
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-      // Standard grayscale conversion formula
       const gray = 0.299 * r + 0.587 * g + 0.114 * b;
       grayscale.push(gray);
     }
 
-    // Calculate Mean (rata-rata)
+    // Dynamic Contrast Stretching (Histogram Equalization to normalize environmental lighting conditions)
+    const minGray = Math.min(...grayscale);
+    const maxGray = Math.max(...grayscale);
+    const range = maxGray - minGray || 1;
+    const stretched = grayscale.map((val) => ((val - minGray) / range) * 255);
+
+    // Calculate Mean of stretched values
     let sum = 0;
-    for (let i = 0; i < grayscale.length; i++) {
-      sum += grayscale[i];
+    for (let i = 0; i < stretched.length; i++) {
+      sum += stretched[i];
     }
-    const mean = sum / grayscale.length;
+    const mean = sum / stretched.length;
 
-    // Calculate Standard Deviation (deviasi standar)
+    // Calculate Standard Deviation of stretched values
     let varianceSum = 0;
-    for (let i = 0; i < grayscale.length; i++) {
-      varianceSum += Math.pow(grayscale[i] - mean, 2);
+    for (let i = 0; i < stretched.length; i++) {
+      varianceSum += Math.pow(stretched[i] - mean, 2);
     }
-    const stdDev = Math.sqrt(varianceSum / grayscale.length) || 1.0;
+    const stdDev = Math.sqrt(varianceSum / stretched.length) || 1.0;
 
-    // Normalize (Z-score normalization) to make it invariant to lighting/brightness
-    const descriptor = grayscale.map((val) => (val - mean) / stdDev);
+    // Normalize (Z-score normalization) to make it invariant to lighting scale
+    const descriptor = stretched.map((val) => (val - mean) / stdDev);
 
     return descriptor;
   } catch (error) {
