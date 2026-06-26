@@ -155,8 +155,8 @@ export default function HvacLayout({
         try {
           const verificationResult = await verifyBiometrics(descriptor);
           if (verificationResult.valid) {
-            // Distance of 0 means 100% match. 7.2 distance is threshold (which we map to 70% min to 100% max)
-            const rawScore = 1 - (verificationResult.distance || 0) / 7.2;
+            // Distance of 0 means 100% match. 8.5 distance is threshold (which we map to 70% min to 100% max)
+            const rawScore = 1 - (verificationResult.distance || 0) / 8.5;
             const match = parseFloat(Math.min(100, Math.max(70, rawScore * 100)).toFixed(2));
             setBiometricMatchScore(match);
             setBiometricStatus("success");

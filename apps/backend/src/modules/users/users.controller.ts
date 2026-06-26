@@ -234,7 +234,7 @@ export const verifyMeBiometricsHandler = async (
       sum += Math.pow(storedDescriptor[i] - parsed.biometricDescriptor[i], 2);
     }
     const distance = Math.sqrt(sum);
-    const valid = distance <= 7.2;
+    const valid = distance <= 8.5;
 
     res.json({ valid, distance });
   } catch (err) {
