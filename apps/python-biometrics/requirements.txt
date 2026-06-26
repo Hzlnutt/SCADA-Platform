@@ -1,6 +1,10 @@
 fastapi==0.111.0
 uvicorn==0.30.1
 opencv-python-headless==4.10.0.84
-mediapipe==0.10.14
 pydantic==2.7.4
 numpy==1.26.4
+protobuf>=4.25.3,<5
+absl-py>=2.4.0
+flatbuffers>=24.3.25
+attrs>=26.1.0
+

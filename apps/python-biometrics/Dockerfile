@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple --no-cache-dir --default-timeout=1000 -r requirements.txt
+RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple --no-cache-dir --no-deps mediapipe==0.10.14
+
 
 
 
