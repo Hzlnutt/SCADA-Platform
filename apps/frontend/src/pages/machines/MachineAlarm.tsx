@@ -3,6 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
 import { useAuthStore } from "../../store/auth.store";
 import { getDefaultEqConfigs } from "../../data/equipment";
+import { getJson } from "../../services/api.client";
 import type { MachineOutletContext } from "./MachineLayout";
 
 type AlarmLogItem = {
@@ -29,8 +30,6 @@ const INITIAL_ALARMS: AlarmLogItem[] = [
   { id: "9", timestamp: "03-13 15:03:00", description: "Stability Room Humidity Low (68.1%RH)", equipment: "AHU-03", operatorAction: "Inspect humidifier", status: "Resolved", rtn: "15:41:09", operatorName: "Budi Santoso", approverName: "Agus Suprapto" },
   { id: "10", timestamp: "03-13 10:22:47", description: "Preventive Maintenance reminder — AHU-02 Fan", equipment: "AHU-02", operatorAction: "—", status: "Resolved", rtn: "10:22:47", operatorName: "System", approverName: "System" }
 ];
-
-const OPERATORS = ["Agus Suprapto", "Budi Santoso", "Eko Prasetyo", "Hendro Wibowo", "Siti Aminah"];
 
 const badgeStyle: Record<AlarmLogItem["status"], string> = {
   Active: "bg-rose-500/15 text-rose-500 border border-rose-500/35",
@@ -63,8 +62,45 @@ export default function MachineAlarm() {
 
   // Acknowledgment Modal State
   const [ackModalOpen, setAckModalOpen] = useState(false);
-  const [ackOperator, setAckOperator] = useState(OPERATORS.includes(user?.name ?? "") ? user?.name ?? "" : OPERATORS[0]);
+  const [ackOperator, setAckOperator] = useState(user?.name ?? "");
   const [ackAction, setAckAction] = useState("");
+
+  const [operatorsList, setOperatorsList] = useState<string[]>([]);
+
+  // Fetch active operators/heads from backend database
+  useEffect(() => {
+    let mounted = true;
+    getJson<{ data: Array<{ name: string }> }>("/users/operators")
+      .then((res) => {
+        if (mounted && res && res.data) {
+          const names = res.data.map((u) => u.name);
+          setOperatorsList(names);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch operators list:", err);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Sync default select name with current logged-in user
+  useEffect(() => {
+    if (user?.name) {
+      setAckOperator(user.name);
+    } else if (operatorsList.length > 0 && !ackOperator) {
+      setAckOperator(operatorsList[0]);
+    }
+  }, [user, operatorsList, ackOperator]);
+
+  // Display fallback to current user if API list is not loaded yet
+  const displayOperators = useMemo(() => {
+    if (operatorsList.length > 0) {
+      return operatorsList;
+    }
+    return user?.name ? [user.name] : [];
+  }, [operatorsList, user]);
 
   // Edit Finalized Modal State
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -478,7 +514,7 @@ export default function MachineAlarm() {
                   onChange={(e) => setAckOperator(e.target.value)}
                   className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white focus:outline-none focus:border-[#1f6fb5]"
                 >
-                  {OPERATORS.map((op) => (
+                  {displayOperators.map((op) => (
                     <option key={op} value={op}>
                       {op}
                     </option>
