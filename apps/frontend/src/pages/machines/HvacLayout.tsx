@@ -96,6 +96,11 @@ export default function HvacLayout({
       }
 
       setBiometricLog("Mengakses kamera...");
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setBiometricStatus("failed");
+        setBiometricLog("Akses kamera gagal: Web biometrik memerlukan koneksi aman (HTTPS atau localhost).");
+        return;
+      }
       navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } })
         .then((s) => {
           activeStream = s;

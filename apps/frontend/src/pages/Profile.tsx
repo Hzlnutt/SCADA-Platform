@@ -45,6 +45,13 @@ export default function Profile() {
     if (isRegistering) {
       setBiomLog("Mengakses kamera...");
       setCameraStreamError(false);
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setCameraStreamError(true);
+        setBiomLog("Akses kamera gagal: Web biometrik memerlukan koneksi aman (HTTPS atau localhost).");
+        return;
+      }
+
       navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } })
         .then((s) => {
           activeStream = s;
@@ -374,6 +381,12 @@ export default function Profile() {
                 placeholder="Password Anda"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleVerifyPasswordForBiometrics();
+                  }
+                }}
                 className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
               />
               <button
