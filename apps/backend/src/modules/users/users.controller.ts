@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { recordAudit } from "../../services/audit.service";
+import { logger } from "../../config/logger.config";
 import { verifyPassword } from "../auth/auth.service";
 import { env } from "../../config/env.config";
 import {
@@ -11,8 +12,11 @@ import {
   deleteUser,
   listOperators,
   updateUserBiometrics,
-  getBiometricDescriptors
+  getBiometricDescriptors,
+  updateUserBiometricsCloud,
+  getBiometricImages
 } from "./users.service";
+import { compareFacesWithGemini } from "../../services/gemini.service";
 import {
   createUserSchema,
   updateProfileSchema,
@@ -193,28 +197,35 @@ export const updateMeBiometricsHandler = async (
       return res.status(400).json({ success: false, message: "Password salah. Gagal menyimpan data biometrik." });
     }
 
-    // Call Python biometrics service to extract the descriptor for each base64 image
-    const descriptors: number[][] = [];
-    for (const image of parsed.images) {
-      const response = await fetch(`${env.pythonBiometricsUrl}/extract`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image })
-      });
+    let user;
 
-      if (!response.ok) {
-        return res.status(500).json({ success: false, message: "Gagal terhubung dengan layanan computer vision Python." });
+    if (env.geminiApiKey) {
+      // Cloud face biometrics registration (store raw images directly in MongoDB)
+      user = await updateUserBiometricsCloud(userId, parsed.images);
+    } else {
+      // Fallback local face biometrics registration (extract descriptors via Python)
+      const descriptors: number[][] = [];
+      for (const image of parsed.images) {
+        const response = await fetch(`${env.pythonBiometricsUrl}/extract`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image })
+        });
+
+        if (!response.ok) {
+          return res.status(500).json({ success: false, message: "Gagal terhubung dengan layanan computer vision Python." });
+        }
+
+        const result = (await response.json()) as { success: boolean; descriptor?: number[]; message?: string };
+        if (!result.success || !result.descriptor) {
+          return res.status(400).json({ success: false, message: result.message || "Gagal mendeteksi pola wajah pada salah satu foto." });
+        }
+
+        descriptors.push(result.descriptor);
       }
 
-      const result = (await response.json()) as { success: boolean; descriptor?: number[]; message?: string };
-      if (!result.success || !result.descriptor) {
-        return res.status(400).json({ success: false, message: result.message || "Gagal mendeteksi pola wajah pada salah satu foto." });
-      }
-
-      descriptors.push(result.descriptor);
+      user = await updateUserBiometrics(userId, descriptors);
     }
-
-    const user = await updateUserBiometrics(userId, descriptors);
 
     await recordAudit({
       actorId: userId,
@@ -223,7 +234,13 @@ export const updateMeBiometricsHandler = async (
       resourceId: userId
     });
 
-    res.json({ success: true, message: "Data biometrik wajah berhasil disimpan.", data: user });
+    res.json({ 
+      success: true, 
+      message: env.geminiApiKey 
+        ? "Data biometrik wajah berhasil disimpan (via Gemini API)." 
+        : "Data biometrik wajah berhasil disimpan (via Local CPU).", 
+      data: user 
+    });
   } catch (err) {
     next(err);
   }
@@ -242,6 +259,26 @@ export const verifyMeBiometricsHandler = async (
 
     const parsed = verifyBiometricsSchema.parse(req.body);
 
+    // Check for cloud biometrics first (raw reference images)
+    if (env.geminiApiKey) {
+      const storedImages = await getBiometricImages(userId);
+      if (storedImages && storedImages.length > 0) {
+        try {
+          const result = await compareFacesWithGemini(parsed.image, storedImages);
+          const distance = 1 - result.confidence;
+          return res.json({
+            valid: result.valid,
+            distance,
+            message: result.reason
+          });
+        } catch (geminiError) {
+          // If Gemini fails, log it and try to fall back to descriptors if they exist
+          logger.error({ err: geminiError }, "Gemini API biometrics verification failed");
+        }
+      }
+    }
+
+    // Fallback: local/descriptor-based face biometrics
     const storedDescriptors = await getBiometricDescriptors(userId);
     if (!storedDescriptors || storedDescriptors.length === 0) {
       return res.status(400).json({ valid: false, message: "Biometrik wajah belum terdaftar untuk akun ini." });
@@ -290,4 +327,6 @@ export const verifyMeBiometricsHandler = async (
     next(err);
   }
 };
+
+
 

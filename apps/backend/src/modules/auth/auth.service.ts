@@ -29,6 +29,8 @@ type UserDoc = {
   providerId?: string;
   avatarUrl?: string | null;
   biometricDescriptor?: number[];
+  biometricDescriptors?: number[][];
+  biometricImages?: string[];
   status: "active" | "disabled";
   createdAt: Date;
   updatedAt: Date;
@@ -97,7 +99,7 @@ const buildAuthResponse = async (user: UserDoc) => {
       name: user.name,
       role: user.role,
       avatarUrl: user.avatarUrl ?? null,
-      hasBiometrics: !!user.biometricDescriptor
+      hasBiometrics: !!(user.biometricDescriptors && user.biometricDescriptors.length > 0) || !!user.biometricDescriptor || !!(user.biometricImages && user.biometricImages.length > 0)
     }
   };
 };

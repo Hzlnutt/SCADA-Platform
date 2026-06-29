@@ -20,6 +20,7 @@ type UserDoc = {
   avatarUrl?: string | null;
   biometricDescriptor?: number[];
   biometricDescriptors?: number[][];
+  biometricImages?: string[];
   status: "active" | "disabled";
   createdAt: Date;
   updatedAt: Date;
@@ -85,11 +86,11 @@ export const getUserById = async (id: string) => {
   const user = await users.findOne({ _id: new ObjectId(id) }, { projection: { passwordHash: 0 } });
   if (!user) return null;
 
-  const { biometricDescriptor, biometricDescriptors, ...rest } = user;
+  const { biometricDescriptor, biometricDescriptors, biometricImages, ...rest } = user;
   return {
     ...rest,
     id: user._id.toString(),
-    hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor
+    hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor || !!(biometricImages && biometricImages.length > 0)
   };
 };
 
@@ -115,11 +116,11 @@ export const updateUserProfile = async (id: string, input: UpdateProfileInput) =
     throw createError("User not found", 404);
   }
 
-  const { biometricDescriptor, biometricDescriptors, ...rest } = result;
+  const { biometricDescriptor, biometricDescriptors, biometricImages, ...rest } = result;
   return {
     ...rest,
     id: result._id.toString(),
-    hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor
+    hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor || !!(biometricImages && biometricImages.length > 0)
   };
 };
 
@@ -137,11 +138,11 @@ export const updateUserRole = async (id: string, input: UpdateUserInput) => {
     throw createError("User not found", 404);
   }
 
-  const { biometricDescriptor, biometricDescriptors, ...rest } = result;
+  const { biometricDescriptor, biometricDescriptors, biometricImages, ...rest } = result;
   return {
     ...rest,
     id: result._id.toString(),
-    hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor
+    hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor || !!(biometricImages && biometricImages.length > 0)
   };
 };
 
@@ -190,7 +191,7 @@ export const updateUserBiometrics = async (id: string, descriptors: number[][]) 
     { _id: new ObjectId(id) },
     { 
       $set: { biometricDescriptors: descriptors, updatedAt: new Date() },
-      $unset: { biometricDescriptor: "" }
+      $unset: { biometricDescriptor: "", biometricImages: "" }
     },
     { returnDocument: "after", projection: { passwordHash: 0 } }
   );
@@ -199,12 +200,50 @@ export const updateUserBiometrics = async (id: string, descriptors: number[][]) 
     throw createError("User not found", 404);
   }
 
-  const { biometricDescriptor, biometricDescriptors, ...rest } = result;
+  const { biometricDescriptor, biometricDescriptors, biometricImages, ...rest } = result;
   return {
     ...rest,
     id: result._id.toString(),
-    hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor
+    hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor || !!(biometricImages && biometricImages.length > 0)
   };
+};
+
+export const updateUserBiometricsCloud = async (id: string, images: string[]) => {
+  const db = getMongoDb();
+  const users = db.collection<UserDoc>(USERS_COLLECTION);
+
+  const result = await users.findOneAndUpdate(
+    { _id: new ObjectId(id) },
+    { 
+      $set: { biometricImages: images, updatedAt: new Date() },
+      $unset: { biometricDescriptor: "", biometricDescriptors: "" }
+    },
+    { returnDocument: "after", projection: { passwordHash: 0 } }
+  );
+
+  if (!result) {
+    throw createError("User not found", 404);
+  }
+
+  const { biometricDescriptor, biometricDescriptors, biometricImages, ...rest } = result;
+  return {
+    ...rest,
+    id: result._id.toString(),
+    hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor || !!(biometricImages && biometricImages.length > 0)
+  };
+};
+
+export const getBiometricImages = async (id: string): Promise<string[] | null> => {
+  const db = getMongoDb();
+  const users = db.collection<UserDoc>(USERS_COLLECTION);
+
+  const user = await users.findOne(
+    { _id: new ObjectId(id) },
+    { projection: { biometricImages: 1 } }
+  );
+
+  if (!user) return null;
+  return user.biometricImages || null;
 };
 
 export const getBiometricDescriptors = async (id: string): Promise<number[][] | null> => {

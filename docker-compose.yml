@@ -43,7 +43,6 @@ services:
     depends_on:
       - mongo
       - redis
-      - python-biometrics
     networks:
       - scada_net
 
