@@ -122,7 +122,7 @@ export default function HvacLayout({
   }, [isConfirmModalOpen, verificationMode, user]);
 
   // Run the biometric scanning
-  const startBiometricScan = () => {
+  const startBiometricScan = async () => {
     if (biometricStatus !== "ready" && biometricStatus !== "failed" && biometricStatus !== "mismatch") return;
     if (!user?.hasBiometrics) {
       setBiometricStatus("failed");
@@ -130,95 +130,102 @@ export default function HvacLayout({
       return;
     }
 
+    const video = videoRef.current;
+    if (!video) {
+      setBiometricStatus("failed");
+      setBiometricLog("Kamera tidak aktif.");
+      return;
+    }
+
     setBiometricStatus("scanning");
     setBiometricProgress(0);
-    setBiometricLog("Menginisialisasi pemindaian wajah...");
+    setBiometricLog("Mengambil gambar wajah...");
 
+    // Capture immediately
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 320;
+    canvas.height = video.videoHeight || 240;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      setBiometricStatus("failed");
+      setBiometricLog("Gagal menginisialisasi canvas untuk mengambil foto.");
+      return;
+    }
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageBase64 = canvas.toDataURL("image/jpeg", 0.8);
+
+    // Start progress bar animation (fast visual feedback)
     let progress = 0;
-    const interval = setInterval(async () => {
-      progress += 10;
-      setBiometricProgress(progress);
-
-      if (progress === 30) {
-        setBiometricLog("Melacak kontur wajah (3D Landmark)...");
-      } else if (progress === 60) {
-        setBiometricLog(`Membandingkan dengan data biometrik akun Anda...`);
-      } else if (progress === 85) {
-        setBiometricLog("Memverifikasi kecocokan wajah di server...");
-      } else if (progress >= 100) {
-        clearInterval(interval);
-
-        const video = videoRef.current!;
-        const canvas = document.createElement("canvas");
-        canvas.width = video.videoWidth || 320;
-        canvas.height = video.videoHeight || 240;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          setBiometricStatus("failed");
-          setBiometricLog("Gagal menginisialisasi canvas untuk mengambil foto.");
-          return;
-        }
-
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageBase64 = canvas.toDataURL("image/jpeg", 0.8);
-        console.log("HVAC Verification Capture - Video Dimensions:", video.videoWidth, "x", video.videoHeight);
-        console.log("HVAC Verification Capture - Canvas Dimensions:", canvas.width, "x", canvas.height);
-        console.log("HVAC Verification Capture - Base64 Length:", imageBase64.length);
-
-        try {
-          const verificationResult = await verifyBiometrics(imageBase64);
-          if (verificationResult.valid) {
-            // Distance of 0 means 100% match. 0.22 distance is threshold (which we map to 70% min to 100% max)
-            const rawScore = 1 - (verificationResult.distance || 0) / 0.22;
-            const match = parseFloat(Math.min(100, Math.max(70, 70 + rawScore * 30)).toFixed(2));
-            setBiometricMatchScore(match);
-            setBiometricStatus("success");
-            setBiometricLog(`Wajah Terverifikasi: ${user.name} (Akurasi: ${match}%)`);
-
-            // Wait 1.5 seconds, then execute the action automatically
-            setTimeout(async () => {
-              if (pendingAction) {
-                try {
-                  await pendingAction();
-                  if (onRefreshData) {
-                    await onRefreshData();
-                  }
-                } catch (err) {
-                  console.error("Action error:", err);
-                }
-              }
-              setIsConfirmModalOpen(false);
-              setPendingAction(null);
-              // Reset states
-              setVerificationMode("password");
-              setBiometricStatus("ready");
-              setBiometricProgress(0);
-              setBiometricMatchScore(null);
-              setPassword("");
-            }, 1500);
-          } else {
-            setBiometricStatus("mismatch");
-            setBiometricLog("Wajah tidak cocok dengan akun Anda. Silakan coba lagi.");
-          }
-        } catch (err) {
-          setBiometricStatus("failed");
-          let errMsg = "Terjadi kesalahan koneksi server saat verifikasi.";
-          if (err instanceof Error) {
-            try {
-              const parsed = JSON.parse(err.message);
-              if (parsed && parsed.message) {
-                errMsg = parsed.message;
-              } else {
-                errMsg = err.message;
-              }
-            } catch {
-              errMsg = err.message;
-            }
-          }
-          setBiometricLog(errMsg);
+    const interval = setInterval(() => {
+      if (progress < 90) {
+        progress += 10;
+        setBiometricProgress(progress);
+        if (progress === 30) {
+          setBiometricLog("Melacak kontur wajah...");
+        } else if (progress === 60) {
+          setBiometricLog("Membandingkan wajah...");
         }
       }
-    }, 200);
+    }, 80);
+
+    try {
+      // Call verification in parallel
+      const verificationResult = await verifyBiometrics(imageBase64);
+      clearInterval(interval);
+      setBiometricProgress(100);
+
+      if (verificationResult.valid) {
+        // Distance of 0 means 100% match. 0.22 distance is threshold (which we map to 70% min to 100% max)
+        const rawScore = 1 - (verificationResult.distance || 0) / 0.22;
+        const match = parseFloat(Math.min(100, Math.max(70, 70 + rawScore * 30)).toFixed(2));
+        setBiometricMatchScore(match);
+        setBiometricStatus("success");
+        setBiometricLog(`Wajah Terverifikasi: ${user.name} (Akurasi: ${match}%)`);
+
+        // Wait 1.5 seconds, then execute the action automatically
+        setTimeout(async () => {
+          if (pendingAction) {
+            try {
+              await pendingAction();
+              if (onRefreshData) {
+                await onRefreshData();
+              }
+            } catch (err) {
+              console.error("Action error:", err);
+            }
+          }
+          setIsConfirmModalOpen(false);
+          setPendingAction(null);
+          // Reset states
+          setVerificationMode("password");
+          setBiometricStatus("ready");
+          setBiometricProgress(0);
+          setBiometricMatchScore(null);
+          setPassword("");
+        }, 1500);
+      } else {
+        setBiometricStatus("mismatch");
+        setBiometricLog("Wajah tidak cocok dengan akun Anda. Silakan coba lagi.");
+      }
+    } catch (err) {
+      clearInterval(interval);
+      setBiometricStatus("failed");
+      let errMsg = "Terjadi kesalahan koneksi server saat verifikasi.";
+      if (err instanceof Error) {
+        try {
+          const parsed = JSON.parse(err.message);
+          if (parsed && parsed.message) {
+            errMsg = parsed.message;
+          } else {
+            errMsg = err.message;
+          }
+        } catch {
+          errMsg = err.message;
+        }
+      }
+      setBiometricLog(errMsg);
+    }
   };
 
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
