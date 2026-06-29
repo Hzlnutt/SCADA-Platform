@@ -202,7 +202,20 @@ export default function HvacLayout({
           }
         } catch (err) {
           setBiometricStatus("failed");
-          setBiometricLog("Terjadi kesalahan koneksi server saat verifikasi.");
+          let errMsg = "Terjadi kesalahan koneksi server saat verifikasi.";
+          if (err instanceof Error) {
+            try {
+              const parsed = JSON.parse(err.message);
+              if (parsed && parsed.message) {
+                errMsg = parsed.message;
+              } else {
+                errMsg = err.message;
+              }
+            } catch {
+              errMsg = err.message;
+            }
+          }
+          setBiometricLog(errMsg);
         }
       }
     }, 200);
