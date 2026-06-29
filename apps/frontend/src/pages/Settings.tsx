@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { PageHeader } from "../components/ui/PageHeader";
 
+import { useSystemStore } from "../store/system.store";
+
 const STORAGE_KEY = "scada.settings";
 
 type AppSettings = {
-  theme: "system" | "light" | "dark";
   accentColor: string;
   fontFamily: string;
   fontSize: string;
@@ -18,7 +19,6 @@ type AppSettings = {
 };
 
 const defaults: AppSettings = {
-  theme: "system",
   accentColor: "cyan",
   fontFamily: "Inter",
   fontSize: "default",
@@ -108,6 +108,7 @@ const SettingRow = ({ label, description, children }: { label: string; descripti
 
 export default function Settings() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
+  const { theme, setTheme } = useSystemStore();
 
   const save = useCallback((patch: Partial<AppSettings>) => {
     setSettings(prev => {
@@ -117,23 +118,10 @@ export default function Settings() {
     });
   }, []);
 
-  // Apply theme
-  useEffect(() => {
-    const html = document.documentElement;
-    if (settings.theme === "dark") {
-      html.classList.add("dark");
-    } else if (settings.theme === "light") {
-      html.classList.remove("dark");
-    } else {
-      // system
-      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      html.classList.toggle("dark", isDark);
-    }
-  }, [settings.theme]);
-
   const resetAll = () => {
     localStorage.removeItem(STORAGE_KEY);
     setSettings({ ...defaults });
+    setTheme("dark"); // Default SCADA theme
   };
 
   return (
@@ -145,18 +133,18 @@ export default function Settings() {
         <SectionCard title="Tampilan">
           <SettingRow label="Tema" description="Pilih mode tampilan untuk seluruh aplikasi.">
             <div className="flex gap-1 rounded-lg border border-slate-200 dark:border-slate-700 p-0.5">
-              {(["system", "light", "dark"] as const).map(t => (
+              {(["light", "dark"] as const).map(t => (
                 <button
                   key={t}
                   type="button"
-                  onClick={() => save({ theme: t })}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-md capitalize transition-all ${
-                    settings.theme === t
+                  onClick={() => setTheme(t)}
+                  className={`px-4 py-1.5 text-xs font-semibold rounded-md capitalize transition-all ${
+                    theme === t
                       ? "bg-cyan-500 text-white shadow-sm"
                       : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                   }`}
                 >
-                  {t === "system" ? "Sistem" : t === "light" ? "Terang" : "Gelap"}
+                  {t === "light" ? "Terang" : "Gelap"}
                 </button>
               ))}
             </div>
