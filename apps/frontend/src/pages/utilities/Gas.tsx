@@ -46,97 +46,136 @@ export default function Gas() {
   const boilerSeries = useMemo(() => {
     const base = (gasBase * config.scale) / 2;
     return [
-      { name: "Boiler 1 Flow", values: buildTimeAwareSeries(config.points, base, base * 0.15, 1, maxIdx), color: "#f4c542" },
-      { name: "Boiler 2 Flow", values: buildTimeAwareSeries(config.points, base, base * 0.25, 2, maxIdx), color: "#e07b2c", dashed: true }
+      { name: "Boiler 1 Flow", values: buildTimeAwareSeries(config.points, base, base * 0.15, 1, maxIdx), color: "#f59e0b" },
+      { name: "Boiler 2 Flow", values: buildTimeAwareSeries(config.points, base, base * 0.25, 2, maxIdx), color: "#ea580c", dashed: true }
     ];
   }, [config, maxIdx]);
 
   const donutSegments = useMemo(() => [
-    { label: "Boiler 1", value: 55, color: "rgba(244, 197, 66, 0.88)" },
-    { label: "Boiler 2", value: 45, color: "rgba(224, 123, 44, 0.85)" }
+    { label: "Boiler 1", value: 55, color: "#f59e0b" },
+    { label: "Boiler 2", value: 45, color: "#ea580c" }
   ], []);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader title="Gas" description="Monitor konsumsi gas dan biaya energi berbasis USD." />
 
+      {/* Executive Summary */}
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-700 hover:bg-slate-950/80">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Total Biaya</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-100">{formatCurrency(costUsd, "USD")}</div>
-          <div className="mt-1 text-xs text-slate-400">{formatCurrency(costIdr, "IDR")} &middot; {total.toFixed(0)} Sm³</div>
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-amber-400 dark:hover:border-amber-500">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Total Biaya (USD)</span>
+            <span className="text-lg">💵</span>
+          </div>
+          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{formatCurrency(costUsd, "USD")}</div>
+          <div className="mt-1 text-xs font-semibold text-amber-600 dark:text-amber-400">{formatCurrency(costIdr, "IDR")} &middot; {total.toLocaleString("id-ID", { maximumFractionDigits: 0 })} Sm³</div>
         </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-700 hover:bg-slate-950/80">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Peak Usage</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-100">{peak.toFixed(1)} Sm³</div>
-          <div className="mt-1 text-xs text-slate-400">Kebutuhan gas maksimum</div>
+
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-orange-400 dark:hover:border-orange-500">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Peak Usage</span>
+            <span className="text-lg">🔥</span>
+          </div>
+          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{peak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} Sm³</div>
+          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Kebutuhan gas maksimum</div>
         </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-700 hover:bg-slate-950/80">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Kurs IDR</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-100">Rp 16,200</div>
-          <div className="mt-1 text-xs text-slate-400">per USD</div>
+
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Kurs IDR</span>
+            <span className="text-lg">💱</span>
+          </div>
+          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">Rp 16.200</div>
+          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Per USD</div>
         </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-700 hover:bg-slate-950/80">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Tarif</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-100">$0.38</div>
-          <div className="mt-1 text-xs text-slate-400">per Sm³</div>
+
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-cyan-400 dark:hover:border-cyan-500">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Tarif</span>
+            <span className="text-lg">🏷️</span>
+          </div>
+          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">$0.38</div>
+          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Per Sm³</div>
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* MultiLineChart + Donut */}
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Trend Aliran Boiler</div>
-              <div className="mt-1 text-sm text-slate-400">Boiler 1 dan Boiler 2 gas flow — realtime hingga saat ini.</div>
+              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Trend Aliran Boiler</h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Boiler 1 dan Boiler 2 gas flow — real-time.</p>
             </div>
-            <div className="flex items-center gap-1 rounded-full border border-slate-800 bg-slate-950/80 px-1 text-xs">
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-0.5 text-xs">
               {ranges.map((item) => (
-                <button key={item.id} type="button" onClick={() => setRange(item.id)}
-                  className={["rounded-full px-3 py-1.5 font-semibold transition", range === item.id ? "bg-slate-500 text-white" : "text-slate-400 hover:text-slate-300"].join(" ")}>
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setRange(item.id)}
+                  className={`rounded-md px-3 py-1.5 font-bold transition-all ${
+                    range === item.id
+                      ? "bg-cyan-500 text-white shadow-sm"
+                      : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  }`}
+                >
                   {item.label}
                 </button>
               ))}
             </div>
           </div>
-          <div className="mt-4">
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
             <MultiLineChart series={boilerSeries} unit="Sm³" heightClassName="h-56" />
           </div>
         </section>
-        <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Distribusi Gas</div>
-          <div className="mt-1 text-sm text-slate-400">Boiler 1 vs Boiler 2.</div>
-          <div className="mt-4 flex justify-center">
-            <DonutChart segments={donutSegments} size={180} thickness={22} centerLabel="100%" />
+
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Distribusi Gas</h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Boiler 1 vs Boiler 2.</p>
+          </div>
+          <div className="my-6 flex justify-center">
+            <DonutChart segments={donutSegments} size={150} thickness={18} centerLabel="100%" />
+          </div>
+          <div className="space-y-2">
+            {donutSegments.map((item) => (
+              <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5 last:border-0 last:pb-0">
+                <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+                  {item.label}
+                </span>
+                <span className="font-bold text-slate-800 dark:text-white font-mono">{item.value}%</span>
+              </div>
+            ))}
           </div>
         </section>
       </div>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
-        <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Parameter & Rate Limit</div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 transition hover:border-slate-700">
-            <div className="text-xs text-slate-400">Target Pressure</div>
-            <div className="mt-1 font-semibold text-slate-200">4 - 6 bar</div>
+      {/* Parameters */}
+      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mb-4">Parameter & Rate Limit</h3>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-cyan-400">
+            <div className="text-xs text-slate-400 dark:text-slate-500">Target Pressure</div>
+            <div className="mt-1 text-lg font-bold text-slate-800 dark:text-white font-mono">4 - 6 bar</div>
           </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 transition hover:border-slate-700">
-            <div className="text-xs text-slate-400">Min Heating Value</div>
-            <div className="mt-1 font-semibold text-slate-200">38.5 MJ/Sm³</div>
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-cyan-400">
+            <div className="text-xs text-slate-400 dark:text-slate-500">Min Heating Value</div>
+            <div className="mt-1 text-lg font-bold text-slate-800 dark:text-white font-mono">38.5 MJ/Sm³</div>
           </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 transition hover:border-slate-700">
-            <div className="text-xs text-slate-400">Supply Contract</div>
-            <div className="mt-1 font-semibold text-slate-200">50,000 Sm³/mo</div>
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-cyan-400">
+            <div className="text-xs text-slate-400 dark:text-slate-500">Supply Contract</div>
+            <div className="mt-1 text-lg font-bold text-slate-800 dark:text-white font-mono">50,000 Sm³/mo</div>
           </div>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
-        <div>
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Bar Chart Konsumsi</div>
-          <div className="text-sm text-slate-400">Bar per periode (data realtime, masa depan kosong).</div>
-        </div>
-        <div className="mt-4">
-          <UtilityBarChart labels={labels} values={series} unit="Sm³" color="#f4c542" height={220} />
+      {/* Bar Chart */}
+      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Bar Chart Konsumsi</h3>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 mb-4">Konsumsi gas per periode.</p>
+        <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
+          <UtilityBarChart labels={labels} values={series} unit="Sm³" color="#f59e0b" height={220} />
         </div>
       </section>
     </div>

@@ -48,105 +48,138 @@ export default function Electricity() {
   const mdpSeries = useMemo(() => {
     const base = (dailyEnergyTotal * config.scale) / 3;
     return [
-      { name: "MDP 1", values: buildTimeAwareSeries(config.points, base, base * 0.12, 1, maxIdx), color: "#2f8ae5" },
-      { name: "MDP 2", values: buildTimeAwareSeries(config.points, base, base * 0.2, 2, maxIdx), color: "#f4c542" },
-      { name: "MDP 3", values: buildTimeAwareSeries(config.points, base, base * 0.15, 3, maxIdx), color: "#3bb77e", dashed: true }
+      { name: "MDP 1", values: buildTimeAwareSeries(config.points, base, base * 0.12, 1, maxIdx), color: "#3b82f6" },
+      { name: "MDP 2", values: buildTimeAwareSeries(config.points, base, base * 0.2, 2, maxIdx), color: "#f59e0b" },
+      { name: "MDP 3", values: buildTimeAwareSeries(config.points, base, base * 0.15, 3, maxIdx), color: "#10b981", dashed: true }
     ];
   }, [config, maxIdx]);
 
   const donutSegments = useMemo(() => [
-    { label: "Chillers", value: 42, color: "rgba(47, 138, 229, 0.88)" },
-    { label: "Compressors", value: 31, color: "rgba(244, 197, 66, 0.85)" },
-    { label: "Production", value: 27, color: "rgba(59, 183, 126, 0.85)" }
+    { label: "Chillers", value: 42, color: "#3b82f6" },
+    { label: "Compressors", value: 31, color: "#f59e0b" },
+    { label: "Production", value: 27, color: "#10b981" }
   ], []);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader title="Listrik" description="Monitor beban listrik utama, peak demand, dan biaya energi." />
 
       {/* Executive Summary */}
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-700 hover:bg-slate-950/80">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Total Biaya</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-100">{formatCurrency(cost)}</div>
-          <div className="mt-1 text-xs text-slate-400">{total.toFixed(0)} kWh</div>
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Total Biaya</span>
+            <span className="text-lg">💰</span>
+          </div>
+          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{formatCurrency(cost)}</div>
+          <div className="mt-1 text-xs font-semibold text-blue-600 dark:text-blue-400">{total.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh</div>
         </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-700 hover:bg-slate-950/80">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Peak Demand</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-100">{peak.toFixed(1)} kW</div>
-          <div className="mt-1 text-xs text-slate-400">Estimasi beban puncak</div>
+
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-amber-400 dark:hover:border-amber-500">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Peak Demand</span>
+            <span className="text-lg">⚡</span>
+          </div>
+          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{peak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW</div>
+          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Estimasi beban puncak</div>
         </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-700 hover:bg-slate-950/80">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Load Factor</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-100">{loadFactor.toFixed(1)}%</div>
-          <div className="mt-1 text-xs text-slate-400">Stabilitas beban listrik</div>
+
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-500">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Load Factor</span>
+            <span className="text-lg">📈</span>
+          </div>
+          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{loadFactor.toFixed(1)}%</div>
+          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Stabilitas beban listrik</div>
         </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-700 hover:bg-slate-950/80">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Tarif</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-100">Rp 1.467</div>
-          <div className="mt-1 text-xs text-slate-400">per kWh</div>
+
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-cyan-400 dark:hover:border-cyan-500">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Tarif</span>
+            <span className="text-lg">🎟️</span>
+          </div>
+          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{formatCurrency(electricityRate)}</div>
+          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Per kWh</div>
         </div>
       </section>
 
       {/* MultiLineChart + Donut */}
-      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Trend Panel Distribusi</div>
-              <div className="mt-1 text-sm text-slate-400">Beban MDP 1, MDP 2, MDP 3 — realtime hingga saat ini.</div>
+              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Trend Panel Distribusi</h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Beban MDP 1, MDP 2, MDP 3 — real-time.</p>
             </div>
-            <div className="flex items-center gap-1 rounded-full border border-slate-800 bg-slate-950/80 px-1 text-xs">
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-0.5 text-xs">
               {ranges.map((item) => (
-                <button key={item.id} type="button" onClick={() => setRange(item.id)}
-                  className={["rounded-full px-3 py-1.5 font-semibold transition", range === item.id ? "bg-slate-500 text-white" : "text-slate-400 hover:text-slate-300"].join(" ")}>
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setRange(item.id)}
+                  className={`rounded-md px-3 py-1.5 font-bold transition-all ${
+                    range === item.id
+                      ? "bg-cyan-500 text-white shadow-sm"
+                      : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  }`}
+                >
                   {item.label}
                 </button>
               ))}
             </div>
           </div>
-          <div className="mt-4">
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
             <MultiLineChart series={mdpSeries} unit="kW" heightClassName="h-56" />
           </div>
         </section>
-        <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Distribusi Beban</div>
-          <div className="mt-1 text-sm text-slate-400">Chillers, Compressors, Production.</div>
-          <div className="mt-4 flex justify-center">
-            <DonutChart segments={donutSegments} size={180} thickness={22} centerLabel="100%" />
+
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Distribusi Beban</h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Alokasi konsumsi daya utama.</p>
+          </div>
+          <div className="my-6 flex justify-center">
+            <DonutChart segments={donutSegments} size={150} thickness={18} centerLabel="100%" />
+          </div>
+          <div className="space-y-2">
+            {donutSegments.map((item) => (
+              <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5 last:border-0 last:pb-0">
+                <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+                  {item.label}
+                </span>
+                <span className="font-bold text-slate-800 dark:text-white font-mono">{item.value}%</span>
+              </div>
+            ))}
           </div>
         </section>
       </div>
 
       {/* Parameters */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
-        <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Parameter & Rate Limit</div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 transition hover:border-slate-700">
-            <div className="text-xs text-slate-400">Peak Limit</div>
-            <div className="mt-1 font-semibold text-slate-200">12,000 kW</div>
+      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mb-4">Parameter & Rate Limit</h3>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-cyan-400">
+            <div className="text-xs text-slate-400 dark:text-slate-500">Peak Limit</div>
+            <div className="mt-1 text-lg font-bold text-slate-800 dark:text-white font-mono">12,000 kW</div>
           </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 transition hover:border-slate-700">
-            <div className="text-xs text-slate-400">Trafo Capacity</div>
-            <div className="mt-1 font-semibold text-slate-200">15,000 kVA</div>
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-cyan-400">
+            <div className="text-xs text-slate-400 dark:text-slate-500">Trafo Capacity</div>
+            <div className="mt-1 text-lg font-bold text-slate-800 dark:text-white font-mono">15,000 kVA</div>
           </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 transition hover:border-slate-700">
-            <div className="text-xs text-slate-400">Power Factor Target</div>
-            <div className="mt-1 font-semibold text-slate-200">&ge; 0.85</div>
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-cyan-400">
+            <div className="text-xs text-slate-400 dark:text-slate-500">Power Factor Target</div>
+            <div className="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">&ge; 0.85</div>
           </div>
         </div>
       </section>
 
       {/* Bar Chart */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Bar Chart Konsumsi</div>
-            <div className="text-sm text-slate-400">Bar per periode (data realtime, masa depan kosong).</div>
-          </div>
-        </div>
-        <div className="mt-4">
-          <UtilityBarChart labels={labels} values={series} unit="kWh" color="#2f8ae5" height={220} />
+      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Bar Chart Konsumsi</h3>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 mb-4">Konsumsi total real-time.</p>
+        <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
+          <UtilityBarChart labels={labels} values={series} unit="kWh" color="#3b82f6" height={220} />
         </div>
       </section>
     </div>
