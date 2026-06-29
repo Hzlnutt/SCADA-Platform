@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { machineGroups } from "../../data/machines";
@@ -45,6 +45,7 @@ const getGroupStats = (groupId: string) => {
 export default function MachinesOverview() {
   const activeAlarms = useAlarmStore((state) => state.activeList);
   const tasks = useTaskStore((state) => state.tasks);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const utilityGroups = useMemo(
     () => machineGroups.filter((g) => g.area !== "HVAC"),
@@ -54,6 +55,36 @@ export default function MachinesOverview() {
     () => machineGroups.filter((g) => g.area === "HVAC"),
     []
   );
+
+  const allUnits = useMemo(
+    () => machineGroups.flatMap((g) => g.units),
+    []
+  );
+
+  // Filter based on query
+  const filteredGroups = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return machineGroups.filter(
+      (g) =>
+        g.name.toLowerCase().includes(q) ||
+        g.area.toLowerCase().includes(q) ||
+        g.category.toLowerCase().includes(q)
+    );
+  }, [searchQuery]);
+
+  const filteredUnits = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return allUnits.filter(
+      (u) =>
+        u.name.toLowerCase().includes(q) ||
+        u.unitLabel.toLowerCase().includes(q) ||
+        u.tagId.toLowerCase().includes(q) ||
+        u.category.toLowerCase().includes(q) ||
+        u.groupName.toLowerCase().includes(q)
+    );
+  }, [searchQuery, allUnits]);
 
   const renderGroupCard = (group: any) => {
     const stats = getGroupStats(group.id);
@@ -135,45 +166,143 @@ export default function MachinesOverview() {
     );
   };
 
+  const isSearching = searchQuery.trim().length > 0;
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Machines Overview"
-        description="Unified status of telemetry and quick access to department machines."
-      />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Column 1: Utility Machines */}
-        <div className="space-y-4">
-          <h3 className="text-xs font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-widest border-b border-[#acd3ff]/30 pb-2">
-            Utility Department ({utilityGroups.length})
-          </h3>
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-            {utilityGroups.map((group) => renderGroupCard(group))}
-          </div>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <PageHeader
+          title="Machines Overview"
+          description="Unified status of telemetry and quick access to department machines."
+        />
+        
+        {/* Search bar */}
+        <div className="relative w-full md:w-80">
+          <input
+            type="text"
+            placeholder="Cari machine atau unit..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 shadow-sm"
+          />
+          <span className="absolute left-3.5 top-2.5 text-slate-400">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </span>
+          {isSearching && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-2.5 text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            >
+              Clear
+            </button>
+          )}
         </div>
+      </div>
 
-        {/* Column 2: HVAC & WWTP */}
-        <div className="space-y-4">
-          <h3 className="text-xs font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-widest border-b border-[#acd3ff]/30 pb-2">
-            HVAC & WWTP Departments
-          </h3>
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-            {hvacWwtpGroups.map((group) => renderGroupCard(group))}
-            {/* WWTP Coming Soon Card */}
-            <div className="rounded-xl border border-dashed border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/30 dark:bg-slate-900/10 p-5 flex flex-col items-center justify-center text-center opacity-70">
-              <svg className="h-8 w-8 text-[#47729f]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <h4 className="mt-2 text-xs font-bold text-[#002b5c] dark:text-slate-300 uppercase tracking-wide">
-                Waste Water Treatment (WWTP)
-              </h4>
-              <p className="mt-1 text-[10px] text-slate-400">PLC integration scheduled for next phase</p>
+      {isSearching ? (
+        <div className="space-y-8">
+          {/* Machine Groups Results */}
+          {filteredGroups.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-widest border-b border-[#acd3ff]/30 pb-2">
+                Kategori / Group Machine ({filteredGroups.length})
+              </h3>
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredGroups.map((group) => renderGroupCard(group))}
+              </div>
+            </div>
+          )}
+
+          {/* Machine Units Results */}
+          {filteredUnits.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-widest border-b border-[#acd3ff]/30 pb-2">
+                Unit Machine Spesifik ({filteredUnits.length})
+              </h3>
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {filteredUnits.map((unit) => {
+                  const unitAlarms = activeAlarms.filter((alarm) => alarm.tagId === unit.tagId);
+                  return (
+                    <Link
+                      key={unit.id}
+                      to={`/machines/${unit.groupId}/${unit.unitId}`}
+                      className="group rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm hover:shadow-md hover:border-cyan-400 dark:hover:border-cyan-500 transition-all flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 truncate max-w-[150px]">
+                            {unit.groupName}
+                          </span>
+                          <span className="text-[10px] bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded font-mono text-slate-500 dark:text-slate-400">
+                            {unit.area}
+                          </span>
+                        </div>
+                        <h4 className="mt-1.5 text-sm font-bold text-slate-800 dark:text-white group-hover:text-cyan-500 transition-colors">
+                          {unit.unitLabel}
+                        </h4>
+                        <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 font-mono truncate">
+                          Tag: {unit.tagId}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-[10px] font-semibold">
+                        <span className="text-slate-400 dark:text-slate-500 capitalize">{unit.category}</span>
+                        <div className="flex items-center gap-1">
+                          <span className={`h-1.5 w-1.5 rounded-full ${unitAlarms.length > 0 ? "bg-rose-500 animate-pulse" : "bg-emerald-500"}`} />
+                          <span className={unitAlarms.length > 0 ? "text-rose-500" : "text-emerald-500"}>
+                            {unitAlarms.length > 0 ? `${unitAlarms.length} Alarm` : "Normal"}
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {filteredGroups.length === 0 && filteredUnits.length === 0 && (
+            <div className="text-center py-12 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/10">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Tidak ada machine atau unit yang cocok dengan "{searchQuery}"</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Column 1: Utility Machines */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-widest border-b border-[#acd3ff]/30 pb-2">
+              Utility Department ({utilityGroups.length})
+            </h3>
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+              {utilityGroups.map((group) => renderGroupCard(group))}
+            </div>
+          </div>
+
+          {/* Column 2: HVAC & WWTP */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-widest border-b border-[#acd3ff]/30 pb-2">
+              HVAC & WWTP Departments
+            </h3>
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+              {hvacWwtpGroups.map((group) => renderGroupCard(group))}
+              {/* WWTP Coming Soon Card */}
+              <div className="rounded-xl border border-dashed border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/30 dark:bg-slate-900/10 p-5 flex flex-col items-center justify-center text-center opacity-70">
+                <svg className="h-8 w-8 text-[#47729f]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <h4 className="mt-2 text-xs font-bold text-[#002b5c] dark:text-slate-300 uppercase tracking-wide">
+                  Waste Water Treatment (WWTP)
+                </h4>
+                <p className="mt-1 text-[10px] text-slate-400">PLC integration scheduled for next phase</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
