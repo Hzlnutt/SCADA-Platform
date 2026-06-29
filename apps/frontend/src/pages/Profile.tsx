@@ -431,8 +431,49 @@ export default function Profile() {
               {/* Webcam frame */}
               <div className="w-64 h-48 rounded-xl overflow-hidden bg-slate-950 border border-slate-700 relative flex items-center justify-center shadow-inner">
                 {cameraStreamError ? (
-                  <div className="text-center p-3">
-                    <span className="text-xs text-rose-500 font-mono">Akses Kamera Gagal</span>
+                  <div className="text-center p-3 space-y-2">
+                    <span className="text-xs text-rose-500 font-mono block">Akses Kamera Gagal</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setCameraStreamError(false);
+                        setBiomStatus("scanning");
+                        setBiomProgress(0);
+                        setBiomLog("Mensimulasikan pengambilan foto sudut wajah...");
+                        let prog = 0;
+                        const interval = setInterval(async () => {
+                          prog += 20;
+                          setBiomProgress(prog);
+                          if (prog >= 100) {
+                            clearInterval(interval);
+                            setBiomLog("Menyimpan data biometrik simulasi ke database...");
+                            try {
+                              const result = await updateBiometrics(confirmPassword, ["mock_img_1", "mock_img_2", "mock_img_3"]);
+                              if (result.success) {
+                                setBiomStatus("success");
+                                setBiomLog("Registrasi Biometrik Sukses (Simulasi)!");
+                                updateUser(result.data);
+                                setTimeout(() => {
+                                  setIsRegistering(false);
+                                  setConfirmPassword("");
+                                  setRegStep(1);
+                                  setCapturedImages([]);
+                                }, 2000);
+                              } else {
+                                setBiomStatus("failed");
+                                setBiomLog("Gagal menyimpan biometrik ke server.");
+                              }
+                            } catch (err) {
+                              setBiomStatus("failed");
+                              setBiomLog("Gagal menyimpan data.");
+                            }
+                          }
+                        }, 100);
+                      }}
+                      className="px-2 py-1 text-[10px] rounded bg-cyan-700 hover:bg-cyan-600 text-white font-bold transition active:scale-95"
+                    >
+                      Bypass & Simulasi Registrasi
+                    </button>
                   </div>
                 ) : (
                   <>
