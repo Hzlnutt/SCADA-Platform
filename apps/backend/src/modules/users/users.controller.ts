@@ -272,12 +272,14 @@ export const verifyMeBiometricsHandler = async (
             message: result.reason
           });
         } catch (geminiError) {
-          // If Gemini fails, log it and try to fall back to descriptors if they exist
           logger.error({ err: geminiError }, "Gemini API biometrics verification failed");
+          return res.status(500).json({
+            valid: false,
+            message: `Gagal memverifikasi wajah menggunakan Gemini API: ${geminiError instanceof Error ? geminiError.message : String(geminiError)}`
+          });
         }
       }
     }
-
     // Fallback: local/descriptor-based face biometrics
     const storedDescriptors = await getBiometricDescriptors(userId);
     if (!storedDescriptors || storedDescriptors.length === 0) {
