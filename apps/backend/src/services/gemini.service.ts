@@ -32,7 +32,7 @@ export const compareFacesWithGemini = async (
     throw new Error("GEMINI_API_KEY is not configured.");
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const scanned = parseBase64Image(scannedImageBase64);
   const references = referenceImagesBase64.map((img) => parseBase64Image(img));
