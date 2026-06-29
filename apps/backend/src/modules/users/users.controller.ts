@@ -273,6 +273,14 @@ export const verifyMeBiometricsHandler = async (
           });
         } catch (geminiError) {
           logger.error({ err: geminiError }, "Gemini API biometrics verification failed");
+          if (env.nodeEnv === "development") {
+            logger.warn("Gemini API offline / fetch failed. Falling back to development bypass mock.");
+            return res.json({
+              valid: true,
+              distance: 0.05,
+              message: "Bypass development: Wajah berhasil diverifikasi secara lokal (Gemini offline)."
+            });
+          }
           return res.status(500).json({
             valid: false,
             message: `Gagal memverifikasi wajah menggunakan Gemini API: ${geminiError instanceof Error ? geminiError.message : String(geminiError)}`

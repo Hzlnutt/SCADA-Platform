@@ -14,7 +14,10 @@ import {
   SHIFT_REPORTS_COLLECTION,
   TELEMETRY_COLLECTION,
   THRESHOLDS_COLLECTION,
-  USERS_COLLECTION
+  USERS_COLLECTION,
+  MACHINE_CATEGORIES_COLLECTION,
+  MACHINE_CONFIGS_COLLECTION,
+  MACHINE_THRESHOLDS_COLLECTION
 } from "./collections";
 import { connectMongo } from "./mongo";
 
@@ -156,4 +159,16 @@ export const ensureMongoCollections = async () => {
   await ensureThresholdCollections(db);
 
   await ensureStateCollection(db);
+  await ensureDynamicConfigCollections(db);
+};
+
+const ensureDynamicConfigCollections = async (db: Db) => {
+  const categories = await ensureCollection(db, MACHINE_CATEGORIES_COLLECTION);
+  await categories.createIndex({ id: 1 }, { unique: true });
+
+  const configs = await ensureCollection(db, MACHINE_CONFIGS_COLLECTION);
+  await configs.createIndex({ id: 1 }, { unique: true });
+
+  const thresholds = await ensureCollection(db, MACHINE_THRESHOLDS_COLLECTION);
+  await thresholds.createIndex({ machineId: 1, parameter: 1 }, { unique: true });
 };

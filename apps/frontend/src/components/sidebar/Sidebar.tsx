@@ -309,6 +309,7 @@ export const Sidebar = () => {
           <NavItem to="/tasks" label="Tasks" icon={<IconReport />} tone="scada" />
           <NavItem to="/reports" label="Reports" icon={<IconReport />} tone="scada" />
           <NavItem to="/settings" label="Settings" icon={<IconSettings />} tone="scada" />
+          {isAdmin && <NavItem to="/settings/machines" label="Machine Config" icon={<IconSettings />} tone="scada" />}
           {canApprove && <NavItem to="/approvals" label="Approvals" icon={<IconReport />} tone="scada" />}
 
           {isAdmin && <NavItem to="/admin" label="Admin Panel" icon={<IconAdmin />} tone="scada" />}

@@ -11,3 +11,7 @@ export const MAINTENANCE_COLLECTION = "maintenance_records";
 export const SHIFT_REPORTS_COLLECTION = "shift_reports";
 export const THRESHOLDS_COLLECTION = "machine_thresholds";
 export const NOTIFICATIONS_COLLECTION = "email_notifications";
+
+export const MACHINE_CATEGORIES_COLLECTION = "machine_config_categories";
+export const MACHINE_CONFIGS_COLLECTION = "machine_configs";
+export const MACHINE_THRESHOLDS_COLLECTION = "machine_config_thresholds";

@@ -9,16 +9,50 @@ import "../../components/charts/chartjs";
 import { DEFAULT_HVAC_CONFIG, getDefaultEqConfigs } from "../../data/equipment";
 import type { HvacConfig } from "../../data/equipment";
 
+import { useMachineConfig } from "../../hooks/useMachineConfig";
+import { getSocket } from "../../services/socket.service";
+
 export default function MachineOverview() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
 
+  const { machines, categories } = useMachineConfig();
+  const machineConfig = machines?.find((m) => m.id === unitId);
+  const category = categories?.find((c) => c._id === machineConfig?.categoryId || c.id === machineConfig?.categoryId);
+
+  // Subscribe dynamically to socket tags when the unit changes
+  useEffect(() => {
+    if (machineConfig && machineConfig.apiBindings) {
+      const tagIds = Object.values(machineConfig.apiBindings).filter(Boolean);
+      if (tagIds.length > 0) {
+        const socket = getSocket();
+        socket.emit("telemetry:subscribe", { tagIds });
+      }
+    }
+  }, [machineConfig]);
+
   if (unitId === "hvac-qc-retained-sample") {
-    return <HvacOverview unitId={unitId} theme={theme} isDark={isDark} />;
+    return (
+      <HvacOverview
+        unitId={unitId}
+        theme={theme}
+        isDark={isDark}
+        machineConfig={machineConfig}
+        category={category}
+      />
+    );
   }
 
-  return <StandardMachineOverview unitId={unitId} theme={theme} isDark={isDark} />;
+  return (
+    <StandardMachineOverview
+      unitId={unitId}
+      theme={theme}
+      isDark={isDark}
+      machineConfig={machineConfig}
+      category={category}
+    />
+  );
 }
 
 const INITIAL_ALARMS = [
@@ -29,7 +63,19 @@ const INITIAL_ALARMS = [
   { id: "5", timestamp: "06:20:18", description: "AHU-01 switched to Auto Mode", equipment: "AHU-01", status: "Resolved" }
 ];
 
-function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; theme: string; isDark: boolean }) {
+function StandardMachineOverview({
+  unitId,
+  theme,
+  isDark,
+  machineConfig,
+  category
+}: {
+  unitId: string;
+  theme: string;
+  isDark: boolean;
+  machineConfig?: any;
+  category?: any;
+}) {
   const machine = getUnitById(unitId);
 
   // Sub-tab selection: 'telemetry' or 'process'
@@ -150,16 +196,54 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
 
   // Compute live data reactively by merging state with real socket telemetry if present
   const liveData = useMemo(() => {
-    const ct1Flow = latest["cooling-water/flow_1"]?.value;
+    let dynamicSupplyTemp = liveDataState.supplyTemp;
+    let dynamicReturnTemp = liveDataState.returnTemp;
+    let dynamicSupplyFlow = liveDataState.supplyFlow;
+    let dynamicSupplyTds = liveDataState.supplyTds;
+    let dynamicSupplyPh = liveDataState.supplyPh;
+
+    if (machineConfig) {
+      const tempTag = machineConfig.apiBindings["temp"] || machineConfig.apiBindings["supply_temp"] || "";
+      const flowTag = machineConfig.apiBindings["flow"] || machineConfig.apiBindings["supply_flow"] || "";
+      const tdsTag = machineConfig.apiBindings["tds"] || machineConfig.apiBindings["supply_tds"] || "";
+      const phTag = machineConfig.apiBindings["ph"] || machineConfig.apiBindings["supply_ph"] || "";
+      const returnTempTag = machineConfig.apiBindings["return_temp"] || "";
+
+      if (tempTag && typeof latest[tempTag]?.value === "number") {
+        dynamicSupplyTemp = latest[tempTag].value;
+      }
+      if (returnTempTag && typeof latest[returnTempTag]?.value === "number") {
+        dynamicReturnTemp = latest[returnTempTag].value;
+      }
+      if (flowTag && typeof latest[flowTag]?.value === "number") {
+        dynamicSupplyFlow = latest[flowTag].value;
+      }
+      if (tdsTag && typeof latest[tdsTag]?.value === "number") {
+        dynamicSupplyTds = latest[tdsTag].value;
+      }
+      if (phTag && typeof latest[phTag]?.value === "number") {
+        dynamicSupplyPh = latest[phTag].value;
+      }
+    } else {
+      const ct1Flow = latest["cooling-water/flow_1"]?.value;
+      if (typeof ct1Flow === "number") {
+        dynamicSupplyFlow = ct1Flow;
+      }
+    }
+
     const ct2Flow = latest["cooling-water/flow_2"]?.value;
     const ct3Flow = latest["cooling-water/flow_3"]?.value;
 
     return {
       ...liveDataState,
-      supplyFlow: typeof ct1Flow === "number" ? ct1Flow : liveDataState.supplyFlow,
+      supplyTemp: dynamicSupplyTemp,
+      returnTemp: dynamicReturnTemp,
+      supplyFlow: dynamicSupplyFlow,
+      supplyTds: dynamicSupplyTds,
+      supplyPh: dynamicSupplyPh,
       ct1: {
         ...liveDataState.ct1,
-        flow: typeof ct1Flow === "number" ? ct1Flow : liveDataState.ct1.flow,
+        flow: dynamicSupplyFlow,
       },
       ct2: {
         ...liveDataState.ct2,
@@ -170,7 +254,7 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
         flow: typeof ct3Flow === "number" ? ct3Flow : liveDataState.ct3.flow,
       }
     };
-  }, [liveDataState, latest]);
+  }, [liveDataState, latest, machineConfig]);
 
   // Drift simulation disabled for production telemetry integration
   useEffect(() => {
@@ -181,6 +265,37 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
   const deltaT = useMemo(() => {
     return Number((liveData.returnTemp - liveData.supplyTemp).toFixed(1));
   }, [liveData.supplyTemp, liveData.returnTemp]);
+
+  const telemetryRows = useMemo(() => {
+    if (category && machineConfig) {
+      return category.parameters.map((param: any) => {
+        const tagId = machineConfig.apiBindings[param.key] || "";
+        const rawValue = tagId ? latest[tagId]?.value : undefined;
+        const baseKey = param.key.toUpperCase();
+        const baseVal = baselines[baseKey] ?? baselines[param.key] ?? 0;
+        return {
+          name: param.label,
+          val: typeof rawValue === "number" ? `${rawValue.toFixed(1)} ${param.unit}` : `— ${param.unit}`,
+          avg: typeof rawValue === "number" ? `${(rawValue * 0.98).toFixed(1)} ${param.unit}` : `— ${param.unit}`,
+          base: baseVal ? `${baseVal.toFixed(1)} ${param.unit}` : "—",
+          alert: typeof rawValue === "number" && baseVal > 0 && rawValue > baseVal
+        };
+      });
+    }
+
+    return [
+      { name: "Supply Water Temp", val: `${liveData.supplyTemp} °C`, avg: "29.8 °C", base: `${baselines.SPLY_WTR_TEMP.toFixed(1)} °C`, alert: false },
+      { name: "Supply Water TDS", val: `${liveData.supplyTds} µS/cm`, avg: "272.0 µS/cm", base: `${baselines.SPLY_WTR_TDS.toFixed(1)} µS/cm`, alert: false },
+      { name: "Supply Water pH", val: `${liveData.supplyPh} pH`, avg: "7.0 pH", base: `${baselines.SPLY_WTR_PH.toFixed(1)} pH`, alert: false },
+      { name: "Supply Water Flow", val: `${liveData.supplyFlow} m³/h`, avg: "395.2 m³/h", base: `${baselines.SPLY_WTR_FLOW.toFixed(1)} m³/h`, alert: false },
+      { name: "Return Water Temp", val: `${liveData.returnTemp} °C`, avg: "39.2 °C", base: `${baselines.RTN_WTR_TEMP.toFixed(1)} °C`, alert: false },
+      { name: "Makeup Water Vol", val: `${liveData.makeupVol} m³`, avg: "34.2 m³", base: "—", alert: false },
+      { name: "Makeup Water TDS", val: `${liveData.makeupTds} µS/cm`, avg: "168.0 µS/cm", base: `${baselines.MAKEUP_WTR_TDS.toFixed(1)} µS/cm`, alert: liveData.makeupTds > baselines.MAKEUP_WTR_TDS },
+      { name: "Makeup Water pH", val: `${liveData.makeupPh} pH`, avg: "7.1 pH", base: `${baselines.MAKEUP_WTR_PH.toFixed(1)} pH`, alert: false },
+      { name: "Ambient Humidity", val: `${liveData.ambientHumidity} %`, avg: "69.1 %", base: `${baselines.AMBIENT_HUMIDITY.toFixed(1)} %`, alert: false },
+      { name: "Blowdown Vol", val: `${liveData.blowdownVol} m³`, avg: "14.8 m³", base: "—", alert: false }
+    ];
+  }, [category, machineConfig, latest, liveData, baselines]);
 
   // pH, TDS, Temp Supply 24 Hours mock data for process chart
   const processChartData = useMemo(() => {
@@ -372,18 +487,7 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-[#002b5c] dark:text-slate-300">
-                    {[
-                      { name: "Supply Water Temp", val: `${liveData.supplyTemp} °C`, avg: "29.8 °C", base: `${baselines.SPLY_WTR_TEMP.toFixed(1)} °C`, alert: false },
-                      { name: "Supply Water TDS", val: `${liveData.supplyTds} µS/cm`, avg: "272.0 µS/cm", base: `${baselines.SPLY_WTR_TDS.toFixed(1)} µS/cm`, alert: false },
-                      { name: "Supply Water pH", val: `${liveData.supplyPh} pH`, avg: "7.0 pH", base: `${baselines.SPLY_WTR_PH.toFixed(1)} pH`, alert: false },
-                      { name: "Supply Water Flow", val: `${liveData.supplyFlow} m³/h`, avg: "395.2 m³/h", base: `${baselines.SPLY_WTR_FLOW.toFixed(1)} m³/h`, alert: false },
-                      { name: "Return Water Temp", val: `${liveData.returnTemp} °C`, avg: "39.2 °C", base: `${baselines.RTN_WTR_TEMP.toFixed(1)} °C`, alert: false },
-                      { name: "Makeup Water Vol", val: `${liveData.makeupVol} m³`, avg: "34.2 m³", base: "—", alert: false },
-                      { name: "Makeup Water TDS", val: `${liveData.makeupTds} µS/cm`, avg: "168.0 µS/cm", base: `${baselines.MAKEUP_WTR_TDS.toFixed(1)} µS/cm`, alert: liveData.makeupTds > baselines.MAKEUP_WTR_TDS },
-                      { name: "Makeup Water pH", val: `${liveData.makeupPh} pH`, avg: "7.1 pH", base: `${baselines.MAKEUP_WTR_PH.toFixed(1)} pH`, alert: false },
-                      { name: "Ambient Humidity", val: `${liveData.ambientHumidity} %`, avg: "69.1 %", base: `${baselines.AMBIENT_HUMIDITY.toFixed(1)} %`, alert: false },
-                      { name: "Blowdown Vol", val: `${liveData.blowdownVol} m³`, avg: "14.8 m³", base: "—", alert: false }
-                    ].map((row, idx) => (
+                    {telemetryRows.map((row: any, idx: number) => (
                       <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                         <td className="py-2.5 text-xs font-semibold">{row.name}</td>
                         <td className={`py-2.5 text-right font-mono font-bold text-xs ${row.alert ? "text-rose-500 animate-pulse" : ""}`}>
@@ -727,7 +831,19 @@ function StandardMachineOverview({ unitId, theme, isDark }: { unitId: string; th
   );
 }
 
-function HvacOverview({ unitId, theme, isDark }: { unitId: string; theme: string; isDark: boolean }) {
+function HvacOverview({
+  unitId,
+  theme,
+  isDark,
+  machineConfig,
+  category
+}: {
+  unitId: string;
+  theme: string;
+  isDark: boolean;
+  machineConfig?: any;
+  category?: any;
+}) {
   const config = useMemo<HvacConfig>(() => {
     const saved = localStorage.getItem(`scada.config.hvac.${unitId}`);
     if (saved) {

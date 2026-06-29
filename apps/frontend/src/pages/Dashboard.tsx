@@ -21,16 +21,17 @@ import {
   buildTimeLabels,
   getElapsedIndex
 } from "../utils/series";
+import { useMachineConfig } from "../hooks/useMachineConfig";
 
-const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
+const staticDailyEnergyTotal = machineGroups.reduce((sum, group) => {
   const energy = group.summaryCards.find((card) => card.label === "Total Energy")?.value ?? 0;
   return sum + energy;
 }, 0);
 
-const utilityBase = {
-  electricityKwh: dailyEnergyTotal,
-  gasSm3: dailyEnergyTotal / 7,
-  waterM3: dailyEnergyTotal / 25
+const staticUtilityBase = {
+  electricityKwh: staticDailyEnergyTotal,
+  gasSm3: staticDailyEnergyTotal / 7,
+  waterM3: staticDailyEnergyTotal / 25
 };
 
 const utilityRates = {
@@ -115,6 +116,36 @@ export default function Dashboard() {
   const latest = useTelemetryStore((state) => state.latest);
   const activeAlarms = useAlarmStore((state) => state.activeList);
 
+  const { machines } = useMachineConfig();
+
+  const dailyEnergyTotal = useMemo(() => {
+    if (machines && machines.length > 0) {
+      const costMapping: Record<string, number> = {
+        "cooling-tower-1": 1500,
+        "cooling-tower-2": 1100,
+        "cooling-tower-3": 502.1,
+        "boiler-1": 900,
+        "boiler-2": 602.1,
+        "ro-1": 450,
+        "ro-2": 353.1,
+        "chiller-1": 1600,
+        "chiller-2": 1502.1,
+        "distillate-1": 800,
+        "distillate-2": 397.9,
+        "purified-water-1": 350,
+        "purified-water-2": 252.1
+      };
+      return machines.reduce((sum, m) => sum + (costMapping[m.id] ?? 0), 0);
+    }
+    return staticDailyEnergyTotal;
+  }, [machines]);
+
+  const utilityBase = useMemo(() => ({
+    electricityKwh: dailyEnergyTotal,
+    gasSm3: dailyEnergyTotal / 7,
+    waterM3: dailyEnergyTotal / 25
+  }), [dailyEnergyTotal]);
+
   const [waterTarget, setWaterTarget] = useState(() => Number(localStorage.getItem("scada.makeupWaterTarget") ?? 1000));
   const [elRange, setElRange] = useState<keyof typeof compareRanges>("1d");
   const [gasRange, setGasRange] = useState<keyof typeof compareRanges>("1d");
@@ -191,17 +222,17 @@ export default function Dashboard() {
   const electricitySeries = useMemo(() => {
     const base = utilityBase.electricityKwh * consumptionConfig.scale;
     return buildTimeAwareSeries(consumptionConfig.points, base, base * 0.35, 1, maxIndex);
-  }, [consumptionConfig, maxIndex]);
+  }, [consumptionConfig, maxIndex, utilityBase]);
 
   const gasSeries = useMemo(() => {
     const base = utilityBase.gasSm3 * consumptionConfig.scale;
     return buildTimeAwareSeries(consumptionConfig.points, base, base * 0.3, 2, maxIndex);
-  }, [consumptionConfig, maxIndex]);
+  }, [consumptionConfig, maxIndex, utilityBase]);
 
   const waterSeries = useMemo(() => {
     const base = utilityBase.waterM3 * consumptionConfig.scale;
     return buildTimeAwareSeries(consumptionConfig.points, base, base * 0.25, 3, maxIndex);
-  }, [consumptionConfig, maxIndex]);
+  }, [consumptionConfig, maxIndex, utilityBase]);
 
   const solarSeries = useMemo(() => {
     return electricitySeries.map((v) => (v !== null ? Number((v * solarShare).toFixed(1)) : null as unknown as number));
@@ -216,17 +247,17 @@ export default function Dashboard() {
 
   const ytdElectricitySeries = useMemo(
     () => buildTimeAwareSeries(12, utilityBase.electricityKwh * 30, utilityBase.electricityKwh * 12, 1, ytdMonthIndex),
-    [ytdMonthIndex]
+    [ytdMonthIndex, utilityBase]
   );
 
   const ytdGasSeries = useMemo(
     () => buildTimeAwareSeries(12, utilityBase.gasSm3 * 30, utilityBase.gasSm3 * 12, 2, ytdMonthIndex),
-    [ytdMonthIndex]
+    [ytdMonthIndex, utilityBase]
   );
 
   const ytdWaterSeries = useMemo(
     () => buildTimeAwareSeries(12, utilityBase.waterM3 * 30, utilityBase.waterM3 * 8, 3, ytdMonthIndex),
-    [ytdMonthIndex]
+    [ytdMonthIndex, utilityBase]
   );
 
   const ytdElectricityTotal = useMemo(
@@ -270,17 +301,17 @@ export default function Dashboard() {
 
   const elCompareConfig = compareRanges[elRange];
   const elCompareLabels = useMemo(() => buildLabels(elCompareConfig.points, elCompareConfig.stepMs, elCompareConfig.label), [elCompareConfig]);
-  const elCurrent = useMemo(() => buildSeries(elCompareConfig.points, utilityBase.electricityKwh / 24, (utilityBase.electricityKwh / 24) * 0.3, 1), [elCompareConfig]);
+  const elCurrent = useMemo(() => buildSeries(elCompareConfig.points, utilityBase.electricityKwh / 24, (utilityBase.electricityKwh / 24) * 0.3, 1), [elCompareConfig, utilityBase]);
   const elPrevious = useMemo(() => elCurrent.map((value) => Number((value * 0.92).toFixed(2))), [elCurrent]);
 
   const gasCompareConfig = compareRanges[gasRange];
   const gasCompareLabels = useMemo(() => buildLabels(gasCompareConfig.points, gasCompareConfig.stepMs, gasCompareConfig.label), [gasCompareConfig]);
-  const gasCurrent = useMemo(() => buildSeries(gasCompareConfig.points, utilityBase.gasSm3 / 24, (utilityBase.gasSm3 / 24) * 0.25, 2), [gasCompareConfig]);
+  const gasCurrent = useMemo(() => buildSeries(gasCompareConfig.points, utilityBase.gasSm3 / 24, (utilityBase.gasSm3 / 24) * 0.25, 2), [gasCompareConfig, utilityBase]);
   const gasPrevious = useMemo(() => gasCurrent.map((value) => Number((value * 0.94).toFixed(2))), [gasCurrent]);
 
   const waterCompareConfig = compareRanges[waterRange];
   const waterCompareLabels = useMemo(() => buildLabels(waterCompareConfig.points, waterCompareConfig.stepMs, waterCompareConfig.label), [waterCompareConfig]);
-  const waterCurrent = useMemo(() => buildSeries(waterCompareConfig.points, utilityBase.waterM3 / 24, (utilityBase.waterM3 / 24) * 0.2, 3), [waterCompareConfig]);
+  const waterCurrent = useMemo(() => buildSeries(waterCompareConfig.points, utilityBase.waterM3 / 24, (utilityBase.waterM3 / 24) * 0.2, 3), [waterCompareConfig, utilityBase]);
   const waterPrevious = useMemo(() => waterCurrent.map((value) => Number((value * 0.91).toFixed(2))), [waterCurrent]);
 
   const carbonCompareConfig = compareRanges[carbonRange];
@@ -289,12 +320,30 @@ export default function Dashboard() {
     const baseEnergy = (utilityBase.electricityKwh + utilityBase.gasSm3 * gasEnergyFactor + utilityBase.waterM3 * waterEnergyFactor) / 24;
     const baseCarbon = baseEnergy * emissionFactor * 1000;
     return buildSeries(carbonCompareConfig.points, baseCarbon, baseCarbon * 0.28, 4);
-  }, [carbonCompareConfig]);
+  }, [carbonCompareConfig, utilityBase]);
   const carbonPrevious = useMemo(() => carbonCurrent.map((value) => Number((value * 0.93).toFixed(2))), [carbonCurrent]);
 
   const thresholdKwh = thresholds.find((item) => item.metric === "kwh");
 
   const utilityStatusPreview = useMemo<StatusPreview[]>(() => {
+    const dynamicItems = machines?.filter(
+      (m) => m.area === "Utility" || m.area === "Utilities" || m.area === "WWTP" || m.area === "Production"
+    ) || [];
+
+    if (dynamicItems.length > 0) {
+      return dynamicItems.slice(0, 9).map((m) => {
+        const tagId = m.apiBindings?.flow || m.apiBindings?.temp || Object.values(m.apiBindings)[0] || "";
+        const rawValue = tagId ? latest[tagId]?.value : undefined;
+        const numericValue = typeof rawValue === "number" ? rawValue : undefined;
+        const status = numericValue === undefined ? "Standby" : numericValue <= 0 ? "Stopped" : "Running";
+        return {
+          id: m.id,
+          name: m.name,
+          status
+        };
+      });
+    }
+
     const items = utilityEquipment.slice(0, 9);
     return items.map((item) => {
       const rawValue = item.tagId ? latest[item.tagId]?.value : undefined;
@@ -306,9 +355,24 @@ export default function Dashboard() {
         status
       } satisfies StatusPreview;
     });
-  }, [latest]);
+  }, [machines, latest]);
 
   const hvacStatusPreview = useMemo<StatusPreview[]>(() => {
+    const dynamicItems = machines?.filter((m) => m.area === "HVAC") || [];
+    if (dynamicItems.length > 0) {
+      return dynamicItems.slice(0, 9).map((m) => {
+        const tagId = m.apiBindings?.temp || Object.values(m.apiBindings)[0] || "";
+        const rawValue = tagId ? latest[tagId]?.value : undefined;
+        const numericValue = typeof rawValue === "number" ? rawValue : undefined;
+        const status = numericValue === undefined ? "Standby" : numericValue <= 0 ? "Stopped" : "Running";
+        return {
+          id: m.id,
+          name: m.name,
+          status
+        };
+      });
+    }
+
     const items = hvacEquipment.slice(0, 9);
     return items.map((item, index) => {
       const rawValue = item.tagId ? latest[item.tagId]?.value : undefined;
@@ -327,7 +391,7 @@ export default function Dashboard() {
         status
       } satisfies StatusPreview;
     });
-  }, [latest]);
+  }, [machines, latest]);
 
   const alarmPreview =
     activeAlarms.length > 0
@@ -843,7 +907,6 @@ export default function Dashboard() {
               electricity={ytdChecks.electricity ? ytdElectricitySeries : ytdElectricitySeries.map(() => 0)}
               gas={ytdChecks.gas ? ytdGasSeries.map((v) => (v ?? 0) * gasEnergyFactor) : ytdGasSeries.map(() => 0)}
               water={ytdChecks.water ? ytdWaterSeries.map((v) => (v ?? 0) * waterEnergyFactor) : ytdWaterSeries.map(() => 0)}
-              solar={ytdChecks.solar ? ytdSolarSeries : ytdSolarSeries.map(() => 0)}
             />
           </div>
         </div>

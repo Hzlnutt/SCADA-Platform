@@ -4,6 +4,7 @@ import { RequireAuth } from "./RequireAuth";
 import Alarms from "../pages/Alarms";
 import Analytics from "../pages/Analytics";
 import Dashboard from "../pages/Dashboard";
+import MachinesConfigPage from "../pages/settings/MachinesConfigPage";
 import Devices from "../pages/Devices";
 import Historian from "../pages/Historian";
 import PlantLayout from "../pages/PlantLayout";
@@ -88,6 +89,7 @@ export const AppRouter = () => {
             <Route path="hvac" element={<Hvac />} />
             <Route path="wwtp" element={<Wwtp />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="settings/machines" element={<MachinesConfigPage />} />
             <Route path="approvals" element={<Approvals />} />
 
             <Route path="machine-health" element={<MachineHealth />} />
