@@ -179,17 +179,7 @@ const MachineCustomTab = () => {
   // ===== FUNGSI VERIFIKASI PASSWORD =====
   const verifyPassword = async (password: string): Promise<boolean> => {
     try {
-      const response = await fetch("/api/auth/verify-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-        },
-        body: JSON.stringify({ password }),
-      });
-
-      if (!response.ok) return false;
-      const data = await response.json();
+      const data = await postJson<{ valid: boolean }>("/auth/verify-password", { password });
       return data.valid;
     } catch (error) {
       console.error("Verifikasi password gagal:", error);
