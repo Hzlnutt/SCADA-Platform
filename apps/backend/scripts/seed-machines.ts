@@ -18,11 +18,11 @@ const seed = async () => {
 
     logger.info("Existing config collections cleared.");
 
-    // 2. Categories
+    // 2. Comprehensive Categories List
     const categories = [
       {
         id: "cooling-water",
-        name: "Cooling Water System",
+        name: "Cooling Water System (Cooling Tower)",
         parameters: [
           { key: "temp", label: "Supply Water Temp", unit: "°C", type: "realtime" },
           { key: "return_temp", label: "Return Water Temp", unit: "°C", type: "realtime" },
@@ -33,13 +33,73 @@ const seed = async () => {
         ]
       },
       {
+        id: "boiler",
+        name: "Boiler Plant System (Steam)",
+        parameters: [
+          { key: "steam_press", label: "Steam Pressure", unit: "bar", type: "realtime" },
+          { key: "temp", label: "Steam Temperature", unit: "°C", type: "realtime" },
+          { key: "flow", label: "Feedwater Flow Rate", unit: "m³/h", type: "realtime" },
+          { key: "fuel_flow", label: "Fuel Gas Flow Rate", unit: "m³/h", type: "realtime" }
+        ]
+      },
+      {
+        id: "chiller",
+        name: "Chiller Plant System",
+        parameters: [
+          { key: "evap_temp", label: "Evaporator Temp", unit: "°C", type: "realtime" },
+          { key: "cond_temp", label: "Condenser Temp", unit: "°C", type: "realtime" },
+          { key: "power", label: "Compressor Power", unit: "kW", type: "realtime" },
+          { key: "flow", label: "Chilled Water Flow", unit: "m³/h", type: "realtime" }
+        ]
+      },
+      {
+        id: "purified-water",
+        name: "Purified Water System (RO)",
+        parameters: [
+          { key: "flow", label: "RO Product Flow", unit: "m³/h", type: "realtime" },
+          { key: "cond", label: "Water Conductivity", unit: "µS/cm", type: "realtime" },
+          { key: "recovery", label: "Recovery Rate", unit: "%", type: "realtime" },
+          { key: "ph", label: "Water pH", unit: "pH", type: "realtime" }
+        ]
+      },
+      {
+        id: "distillation",
+        name: "Distillation Plant System",
+        parameters: [
+          { key: "feed_flow", label: "Feedwater Flow", unit: "m³/h", type: "realtime" },
+          { key: "dist_flow", label: "Distillate Flow", unit: "m³/h", type: "realtime" },
+          { key: "cond", label: "Distillate Conductivity", unit: "µS/cm", type: "realtime" },
+          { key: "temp", label: "Distillate Temp", unit: "°C", type: "realtime" }
+        ]
+      },
+      {
+        id: "compressed-air",
+        name: "Compressed Air System",
+        parameters: [
+          { key: "press", label: "Discharge Pressure", unit: "bar", type: "realtime" },
+          { key: "temp", label: "Discharge Temperature", unit: "°C", type: "realtime" },
+          { key: "flow", label: "Airflow Rate", unit: "m³/h", type: "realtime" }
+        ]
+      },
+      {
         id: "hvac",
-        name: "HVAC System",
+        name: "HVAC Clean Room System",
         parameters: [
           { key: "temp", label: "Room Temperature", unit: "°C", type: "realtime" },
           { key: "humidity", label: "Room Relative Humidity", unit: "%", type: "realtime" },
           { key: "dp", label: "Differential Pressure", unit: "Pa", type: "realtime" },
           { key: "flow", label: "Supply Airflow Rate", unit: "m³/h", type: "realtime" }
+        ]
+      },
+      {
+        id: "wwtp",
+        name: "WWTP Treatment System",
+        parameters: [
+          { key: "influent_flow", label: "Influent Flow Rate", unit: "m³/h", type: "realtime" },
+          { key: "effluent_flow", label: "Effluent Flow Rate", unit: "m³/h", type: "realtime" },
+          { key: "ph", label: "Effluent pH", unit: "pH", type: "realtime" },
+          { key: "cod", label: "Effluent COD Level", unit: "mg/L", type: "realtime" },
+          { key: "bod", label: "Effluent BOD Level", unit: "mg/L", type: "realtime" }
         ]
       }
     ];
