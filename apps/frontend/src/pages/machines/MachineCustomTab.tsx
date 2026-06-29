@@ -258,6 +258,8 @@ const MachineCustomTab = () => {
           onVerifyPassword={verifyPassword}
           logs={logs}
           onRefreshData={fetchHvacData}
+          currentMode={ahu01Mode}
+          currentStatus={ahu01Status}
         />
       );
     }
@@ -335,6 +337,8 @@ const MachineCustomTab = () => {
           onVerifyPassword={verifyPassword}
           logs={logs}
           onRefreshData={fetchHvacData}
+          currentMode={ahu02Mode}
+          currentStatus={ahu02Status}
         />
       );
     }
@@ -408,6 +412,8 @@ const MachineCustomTab = () => {
           onVerifyPassword={verifyPassword}
           logs={logs}
           onRefreshData={fetchHvacData}
+          currentMode={ahu03Mode}
+          currentStatus={ahu03Status}
         />
       );
     }
@@ -433,6 +439,8 @@ const MachineCustomTab = () => {
           onVerifyPassword={verifyPassword}
           logs={logs}
           onRefreshData={fetchHvacData}
+          currentMode={utilMode}
+          currentStatus={utilStatus}
         />
       );
     }

@@ -38,6 +38,8 @@ interface HvacLayoutProps {
   onVerifyPassword: (password: string) => Promise<boolean>;
   logs: LogEntry[];
   onRefreshData?: () => Promise<void> | void;
+  currentMode?: string;
+  currentStatus?: string;
 }
 
 export interface LogEntry {
@@ -61,6 +63,8 @@ export default function HvacLayout({
   onVerifyPassword,
   logs,
   onRefreshData,
+  currentMode = "Auto",
+  currentStatus = "Running",
 }: HvacLayoutProps) {
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -352,8 +356,12 @@ export default function HvacLayout({
             <span className="text-[10px] text-slate-450 dark:text-slate-500 font-mono uppercase tracking-wider">
               MODE
             </span>
-            <span className="text-sm text-cyan-600 dark:text-cyan-400 font-bold font-mono">
-              Auto
+            <span className={`text-sm font-bold font-mono ${
+              currentMode === "Auto" 
+                ? "text-cyan-600 dark:text-cyan-400" 
+                : "text-amber-600 dark:text-amber-400"
+            }`}>
+              {currentMode}
             </span>
           </div>
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-800"></div>
@@ -361,12 +369,29 @@ export default function HvacLayout({
             <span className="text-[10px] text-slate-450 dark:text-slate-500 font-mono uppercase tracking-wider">
               STATUS
             </span>
-            <span className="text-sm text-emerald-600 dark:text-emerald-400 font-bold font-mono flex items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              Running
+            <span className={`text-sm font-bold font-mono flex items-center gap-1.5 ${
+              currentStatus === "Running" 
+                ? "text-emerald-600 dark:text-emerald-400" 
+                : currentStatus === "Maintenance"
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-rose-600 dark:text-rose-455"
+            }`}>
+              {currentStatus === "Running" && (
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+              )}
+              {currentStatus === "Maintenance" && (
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </span>
+              )}
+              {currentStatus !== "Running" && currentStatus !== "Maintenance" && (
+                <span className="h-2 w-2 rounded-full bg-rose-500"></span>
+              )}
+              {currentStatus}
             </span>
           </div>
         </div>
