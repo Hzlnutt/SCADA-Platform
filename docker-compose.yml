@@ -6,8 +6,10 @@ services:
       context: .
       dockerfile: apps/gateway-proxy/Dockerfile
     ports:
-      - "8080:80"
-      - "8443:443"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./apps/gateway-proxy/ssl:/etc/nginx/ssl
     depends_on:
       - frontend
       - backend
