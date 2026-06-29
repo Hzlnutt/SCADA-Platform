@@ -21,7 +21,7 @@ export const MobileNav = () => {
   ];
 
   if (canApprove) {
-    items.push({ to: "/approvals", label: "Approvals" }, { to: "/thresholds", label: "Thresholds" });
+    items.push({ to: "/approvals", label: "Approvals" });
   }
 
   if (role === "admin") {

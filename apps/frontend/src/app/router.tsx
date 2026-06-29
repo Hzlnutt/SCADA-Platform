@@ -27,7 +27,7 @@ import MachineAlarm from "../pages/machines/MachineAlarm";
 import MachineEnergy from "../pages/machines/MachineEnergy";
 import MachineConfig from "../pages/machines/MachineConfig";
 import Approvals from "../pages/Approvals";
-import Thresholds from "../pages/Thresholds";
+
 import MachineHealth from "../pages/MachineHealth";
 import UtilityStatus from "../pages/UtilityStatus";
 import Electricity from "../pages/utilities/Electricity";
@@ -89,7 +89,7 @@ export const AppRouter = () => {
             <Route path="wwtp" element={<Wwtp />} />
             <Route path="settings" element={<Settings />} />
             <Route path="approvals" element={<Approvals />} />
-            <Route path="thresholds" element={<Thresholds />} />
+
             <Route path="machine-health" element={<MachineHealth />} />
             <Route path="profile" element={<Profile />} />
             <Route path="admin" element={<AdminPanel />} />
