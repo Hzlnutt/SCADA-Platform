@@ -44,25 +44,46 @@ export const ingestHistorian = async (points: HistorianPointInput[]) => {
 };
 
 export const getHistorianRangeFromPostgres = async (query: RangeQuery) => {
+  const tagMappings: Record<string, { table: string; column: string }> = {
+    // Cooling Tower WF1-U3
+    "cooling/return_temp": { table: "cooling_tower_telemetry", column: "return_temp" },
+    "chiller/daikin_wf1u3_temp": { table: "cooling_tower_telemetry", column: "supply_temp" },
+    "cooling/flow": { table: "cooling_tower_telemetry", column: "flow" },
+    "cooling/tds": { table: "cooling_tower_telemetry", column: "tds" },
+    "cooling/ph": { table: "cooling_tower_telemetry", column: "ph" },
+    "cooling/humidity": { table: "cooling_tower_telemetry", column: "humidity" },
+
+    // Dashboard Utama
+    "utility/electricity": { table: "dashboard_telemetry", column: "electricity_kwh" },
+    "utility/gas": { table: "dashboard_telemetry", column: "gas_sm3" },
+    "utility/water": { table: "dashboard_telemetry", column: "water_m3" },
+    "utility/solar": { table: "dashboard_telemetry", column: "solar_kwh" }
+  };
+
+  const mapping = tagMappings[query.tagId];
+  if (!mapping) {
+    throw new Error(`Unsupported tag for Postgres: ${query.tagId}`);
+  }
+
   const pool = getPostgresPool();
   const client = await pool.connect();
   try {
-    const params: any[] = [query.tagId];
-    let queryText = `SELECT ts, tag_value::float AS value FROM test_telemetry WHERE tag_name = $1`;
-    let paramIndex = 2;
+    const params: any[] = [];
+    let queryText = `SELECT t_stamp AS ts, ${mapping.column}::float AS value FROM ${mapping.table} WHERE ${mapping.column} IS NOT NULL`;
+    let paramIndex = 1;
 
     if (query.from) {
-      queryText += ` AND ts >= $${paramIndex}`;
+      queryText += ` AND t_stamp >= $${paramIndex}`;
       params.push(query.from);
       paramIndex++;
     }
     if (query.to) {
-      queryText += ` AND ts <= $${paramIndex}`;
+      queryText += ` AND t_stamp <= $${paramIndex}`;
       params.push(query.to);
       paramIndex++;
     }
 
-    queryText += ` ORDER BY ts ASC LIMIT $${paramIndex}`;
+    queryText += ` ORDER BY t_stamp ASC LIMIT $${paramIndex}`;
     params.push(query.limit);
 
     const res = await client.query(queryText, params);
