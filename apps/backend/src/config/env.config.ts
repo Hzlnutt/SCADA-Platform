@@ -40,7 +40,12 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: z.string().default(""),
   SMTP_PASS: z.string().default(""),
-  SMTP_FROM: z.string().default("")
+  SMTP_FROM: z.string().default(""),
+  POSTGRES_HOST: z.string().default("localhost"),
+  POSTGRES_PORT: z.coerce.number().int().positive().default(5432),
+  POSTGRES_USER: z.string().default("test_user"),
+  POSTGRES_PASSWORD: z.string().default("Pandaan1"),
+  POSTGRES_DB: z.string().default("scada_test")
 });
 
 const parsed = envSchema.parse({
@@ -70,7 +75,12 @@ const parsed = envSchema.parse({
   SMTP_PORT: process.env.SMTP_PORT,
   SMTP_USER: process.env.SMTP_USER,
   SMTP_PASS: process.env.SMTP_PASS,
-  SMTP_FROM: process.env.SMTP_FROM
+  SMTP_FROM: process.env.SMTP_FROM,
+  POSTGRES_HOST: process.env.POSTGRES_HOST,
+  POSTGRES_PORT: process.env.POSTGRES_PORT,
+  POSTGRES_USER: process.env.POSTGRES_USER,
+  POSTGRES_PASSWORD: process.env.POSTGRES_PASSWORD,
+  POSTGRES_DB: process.env.POSTGRES_DB
 });
 
 export const env = {
@@ -100,5 +110,10 @@ export const env = {
   smtpPort: parsed.SMTP_PORT,
   smtpUser: parsed.SMTP_USER,
   smtpPass: parsed.SMTP_PASS,
-  smtpFrom: parsed.SMTP_FROM
+  smtpFrom: parsed.SMTP_FROM,
+  postgresHost: parsed.POSTGRES_HOST,
+  postgresPort: parsed.POSTGRES_PORT,
+  postgresUser: parsed.POSTGRES_USER,
+  postgresPassword: parsed.POSTGRES_PASSWORD,
+  postgresDb: parsed.POSTGRES_DB
 };

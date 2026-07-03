@@ -26,7 +26,7 @@ export const startScheduler = () => {
   setInterval(() => {
     rollupHistorianHour().catch((err) => {
       logger.error({ err }, "hourly rollup failed");
-    });
+    });1
   }, hourlyIntervalMs);
 
   logger.info({ minuteIntervalMs, hourlyIntervalMs }, "scheduler started");

@@ -17,7 +17,10 @@ import {
   USERS_COLLECTION,
   MACHINE_CATEGORIES_COLLECTION,
   MACHINE_CONFIGS_COLLECTION,
-  MACHINE_THRESHOLDS_COLLECTION
+  MACHINE_THRESHOLDS_COLLECTION,
+  ELECTRICITY_RAW_COLLECTION,
+  ELECTRICITY_1M_COLLECTION,
+  ELECTRICITY_1H_COLLECTION
 } from "./collections";
 import { connectMongo } from "./mongo";
 
@@ -147,6 +150,25 @@ export const ensureMongoCollections = async () => {
   }, historianExpire);
 
   await ensureTimeSeries(db, HISTORIAN_HOURLY_COLLECTION, {
+    timeField: "ts",
+    metaField: "meta",
+    granularity: "hours"
+  }, historianHourlyExpire);
+
+  // Dedicated time-series collections for PLN electricity
+  await ensureTimeSeries(db, ELECTRICITY_RAW_COLLECTION, {
+    timeField: "ts",
+    metaField: "meta",
+    granularity: "seconds"
+  }, telemetryExpire);
+
+  await ensureTimeSeries(db, ELECTRICITY_1M_COLLECTION, {
+    timeField: "ts",
+    metaField: "meta",
+    granularity: "minutes"
+  }, historianExpire);
+
+  await ensureTimeSeries(db, ELECTRICITY_1H_COLLECTION, {
     timeField: "ts",
     metaField: "meta",
     granularity: "hours"

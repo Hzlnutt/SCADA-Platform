@@ -6,6 +6,8 @@ import { useSystemStore } from "../../store/system.store";
 import type { MachineOutletContext } from "./MachineLayout";
 import { utils, writeFile } from "xlsx";
 import "../../components/charts/chartjs";
+import coolingSt3Data from "../../data/cooling_st3_data.json";
+import { getJson } from "../../services/api.client";
 
 // Dedicated Vibration Telemetry Waveform component using Canvas
 function VibrationOscilloscope({ equipmentName }: { equipmentName: string }) {
@@ -151,10 +153,102 @@ export default function MachineStatistics() {
   const [selectedEq, setSelectedEq] = useState("CT-1 Fan");
 
   // Parameter Trend Selector state
-  const [activeParam, setActiveParam] = useState("Supply Water Temp");
+  const [activeParam, setActiveParam] = useState(() =>
+    unitId === "cooling-water-1" ? "ST3 Return Temp" : "Supply Water Temp"
+  );
+
+  // Synchronize parameter default based on machine type
+  useEffect(() => {
+    setActiveParam(unitId === "cooling-water-1" ? "ST3 Return Temp" : "Supply Water Temp");
+  }, [unitId]);
 
   // Resolution selector state
   const [resolution, setResolution] = useState<"Hourly" | "Daily" | "Monthly">("Hourly");
+
+  // Database-fetched Return Temperature Data state
+  const [dbData, setDbData] = useState<{
+    hourly: number[];
+    daily: number[];
+    monthly: number[];
+  } | null>(null);
+  const [dbLoading, setDbLoading] = useState(false);
+
+  useEffect(() => {
+    if (unitId !== "cooling-water-1" || activeParam !== "ST3 Return Temp") {
+      return;
+    }
+
+    setDbLoading(true);
+    // Fetch data for 2025 range
+    const from = "2025-01-01T00:00:00.000Z";
+    const to = "2025-12-31T23:59:59.000Z";
+    const params = new URLSearchParams({
+      tagId: "cooling/return_temp",
+      from,
+      to,
+      resolution: "1h",
+      limit: "10000"
+    });
+
+    getJson<{ data: any[] }>(`/historian/range?${params.toString()}`)
+      .then((res) => {
+        const points = res.data || [];
+        if (points.length === 0) {
+          setDbData(null);
+          return;
+        }
+
+        // Process hourly profile: 24 points (Hour 0 to Hour 23 averages)
+        const hourGroups = Array.from({ length: 24 }, () => [] as number[]);
+        points.forEach((pt) => {
+          const d = new Date(pt.ts);
+          const hr = d.getUTCHours(); // using UTC since database dates are stored in UTC
+          const val = typeof pt.value === "number" ? pt.value : Number(pt.value);
+          if (!isNaN(val)) {
+            hourGroups[hr].push(val);
+          }
+        });
+        const hourly = hourGroups.map((arr) =>
+          arr.length > 0 ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(3)) : 0
+        );
+
+        // Process daily profile: 30 points (Day of month 1 to 30 averages)
+        const dayGroups = Array.from({ length: 30 }, () => [] as number[]);
+        points.forEach((pt) => {
+          const d = new Date(pt.ts);
+          const dy = d.getUTCDate(); // 1-31
+          const val = typeof pt.value === "number" ? pt.value : Number(pt.value);
+          if (!isNaN(val) && dy <= 30) {
+            dayGroups[dy - 1].push(val);
+          }
+        });
+        const daily = dayGroups.map((arr) =>
+          arr.length > 0 ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(3)) : 0
+        );
+
+        // Process monthly profile: 12 points (Jan to Dec averages)
+        const monthGroups = Array.from({ length: 12 }, () => [] as number[]);
+        points.forEach((pt) => {
+          const d = new Date(pt.ts);
+          const mo = d.getUTCMonth(); // 0-11
+          const val = typeof pt.value === "number" ? pt.value : Number(pt.value);
+          if (!isNaN(val)) {
+            monthGroups[mo].push(val);
+          }
+        });
+        const monthly = monthGroups.map((arr) =>
+          arr.length > 0 ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(3)) : 0
+        );
+
+        setDbData({ hourly, daily, monthly });
+      })
+      .catch((err) => {
+        console.error("Error fetching cooling ST3 Return Temp data:", err);
+      })
+      .finally(() => {
+        setDbLoading(false);
+      });
+  }, [unitId, activeParam]);
 
   // 1. Grafik CT Effectiveness (30 days mock data)
   const ctEffectivenessData = useMemo(() => {
@@ -268,21 +362,29 @@ export default function MachineStatistics() {
     }
   };
 
-  const parametersList = [
-    "Supply Water Temp",
-    "Supply Water TDS",
-    "Supply Water pH",
-    "Supply Water Flow",
-    "Return Water Temp",
-    "Makeup Water Vol",
-    "Makeup Water TDS",
-    "Ambient Temp",
-    "Ambient Humidity",
-    "Blowdown Vol",
-    "Makeup Water pH"
-  ];
+  const parametersList = useMemo(() => {
+    const list = [
+      "Supply Water Temp",
+      "Supply Water TDS",
+      "Supply Water pH",
+      "Supply Water Flow",
+      "Return Water Temp",
+      "Makeup Water Vol",
+      "Makeup Water TDS",
+      "Ambient Temp",
+      "Ambient Humidity",
+      "Blowdown Vol",
+      "Makeup Water pH"
+    ];
+    if (unitId === "cooling-water-1") {
+      return ["ST3 Return Temp", ...list];
+    }
+    return list;
+  }, [unitId]);
 
   const unitMap: Record<string, string> = {
+    "ST3 Return Temp": "°C",
+    "ST3 Supply Temp": "°C",
     "Supply Water Temp": "°C",
     "Supply Water TDS": "µS/cm",
     "Supply Water pH": "pH",
@@ -309,6 +411,22 @@ export default function MachineStatistics() {
 
     // Helper to generate dynamic lines based on selected parameter name
     const getValuesForParam = (paramName: string) => {
+      if (paramName === "ST3 Return Temp") {
+        if (dbData) {
+          if (resolution === "Hourly") return dbData.hourly;
+          if (resolution === "Daily") return dbData.daily;
+          return dbData.monthly;
+        }
+        // Fallback to static values while loading
+        if (resolution === "Hourly") return coolingSt3Data.hourly;
+        if (resolution === "Daily") return coolingSt3Data.daily;
+        return coolingSt3Data.monthly;
+      }
+      if (paramName === "ST3 Supply Temp") {
+        if (resolution === "Hourly") return coolingSt3Data.hourly;
+        if (resolution === "Daily") return coolingSt3Data.daily;
+        return coolingSt3Data.monthly;
+      }
       const charCodeSum = paramName.split("").reduce((sum, c) => sum + c.charCodeAt(0), 0);
       const baseVal = 10 + (charCodeSum % 100);
       return labels.map((_, i) => {
@@ -369,6 +487,11 @@ export default function MachineStatistics() {
     }
 
     const getValuesForParam = (paramName: string) => {
+      if (paramName === "ST3 Supply Temp") {
+        if (resolution === "Hourly") return coolingSt3Data.hourly;
+        if (resolution === "Daily") return coolingSt3Data.daily;
+        return coolingSt3Data.monthly;
+      }
       const charCodeSum = paramName.split("").reduce((sum, c) => sum + c.charCodeAt(0), 0);
       const baseVal = 10 + (charCodeSum % 100);
       return labels.map((_, i) => {
@@ -482,6 +605,11 @@ export default function MachineStatistics() {
                   </button>
                 ))}
               </div>
+              {dbLoading && (
+                <span className="text-xs text-blue-500 font-bold animate-pulse mr-2">
+                  Loading DB Data...
+                </span>
+              )}
               <button
                 type="button"
                 onClick={handleExportParameters}

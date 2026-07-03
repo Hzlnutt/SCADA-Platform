@@ -24,4 +24,7 @@ __pycache__/
 *.pyc
 *.jpg
 *.jpeg
-*.png
+*.png
+
+# Large database dumps and import files
+import-data/

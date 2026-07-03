@@ -5,6 +5,7 @@ import { getUnitById } from "../../data/machines";
 import { useSystemStore } from "../../store/system.store";
 import type { MachineOutletContext } from "./MachineLayout";
 import "../../components/charts/chartjs";
+import { getJson } from "../../services/api.client";
 
 // Canvas-based Power Demand real-time scrolling wave
 function PowerDemandOscilloscope() {
@@ -182,6 +183,13 @@ function ProgressBarRow({ label, val, unit, nominal }: { label: string, val: num
   );
 }
 
+const mapUnitIdToDeviceId = (id: string | undefined): string => {
+  if (id === "cubicle-pln") return "Cubicle_PLN_PM8000";
+  if (id === "cubicle-wf1") return "Cubicle_WF1_PM5560";
+  if (id === "cubicle-wf2") return "Cubicle_WF2_PM5500";
+  return "Cubicle_PLN_PM8000";
+};
+
 export default function MachineEnergy() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
@@ -205,6 +213,31 @@ export default function MachineEnergy() {
     const saved = localStorage.getItem(`scada.tariff.water.${unitId}`);
     return saved ? Number(saved) : 9000;
   });
+
+  const isElectricityMeter = ["cubicle-pln", "cubicle-wf1", "cubicle-wf2"].includes(unitId || "");
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isElectricityMeter) return;
+    setLoading(true);
+    const deviceId = mapUnitIdToDeviceId(unitId);
+    const params = new URLSearchParams({
+      deviceId,
+      lwbpRate: electricityLwbpRate.toString(),
+      wbpRate: electricityWbpRate.toString()
+    });
+    getJson<{ data: any }>(`/analytics/electricity?${params.toString()}`)
+      .then((res) => {
+        setAnalyticsData(res.data);
+      })
+      .catch((err) => {
+        console.error("Failed to load electricity analytics", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [unitId, electricityLwbpRate, electricityWbpRate, isElectricityMeter]);
 
   const handleRateChange = (type: "electricity_lwbp" | "electricity_wbp" | "gas" | "water", val: number) => {
     if (type === "electricity_lwbp") {
@@ -242,13 +275,17 @@ export default function MachineEnergy() {
 
   // Drift simulation disabled for production telemetry integration
   useEffect(() => {
-    // Timer drift simulation turned off to prevent mock data display
-  }, []);
+    if (isElectricityMeter && analyticsData) {
+      setPqData(analyticsData.pqData);
+    }
+  }, [analyticsData, isElectricityMeter]);
 
   // 1. Hourly Energy (Line Chart)
   const hourlyChartData = useMemo(() => {
-    const labels = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}`);
-    const values = labels.map((_, i) => 10 + Math.sin(i / 3) * 3 + Math.random() * 1.5);
+    const labels = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
+    const values = isElectricityMeter && analyticsData
+      ? analyticsData.charts.hourly
+      : labels.map((_, i) => 10 + Math.sin(i / 3) * 3 + Math.random() * 1.5);
     return {
       labels,
       datasets: [{
@@ -262,10 +299,21 @@ export default function MachineEnergy() {
         pointRadius: 0
       }]
     };
-  }, []);
+  }, [analyticsData, isElectricityMeter]);
 
   // 2. Daily Energy (Bar Chart)
   const dailyChartData = useMemo(() => {
+    if (isElectricityMeter && analyticsData) {
+      return {
+        labels: analyticsData.charts.daily.map((d: any) => d.day.substring(8)),
+        datasets: [{
+          label: "Daily Energy (kWh)",
+          data: analyticsData.charts.daily.map((d: any) => d.value),
+          backgroundColor: "rgba(59, 130, 246, 0.85)",
+          borderRadius: 3
+        }]
+      };
+    }
     const labels = Array.from({ length: 30 }, (_, i) => `Day ${i + 1}`);
     const values = labels.map((_, i) => 280 + Math.sin(i / 4) * 30 + Math.random() * 10);
     return {
@@ -277,10 +325,21 @@ export default function MachineEnergy() {
         borderRadius: 3
       }]
     };
-  }, []);
+  }, [analyticsData, isElectricityMeter]);
 
   // 3. Monthly Energy (Bar Chart)
   const monthlyChartData = useMemo(() => {
+    if (isElectricityMeter && analyticsData) {
+      return {
+        labels: analyticsData.charts.monthly.map((m: any) => m.month),
+        datasets: [{
+          label: "Monthly Energy (MWh)",
+          data: analyticsData.charts.monthly.map((m: any) => m.value),
+          backgroundColor: "rgba(139, 92, 246, 0.85)",
+          borderRadius: 3
+        }]
+      };
+    }
     const labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const values = [8.2, 7.9, 8.5, 8.8, 9.1, 8.9, 9.0, 9.2, 8.7, 8.5, 8.3, 8.8];
     return {
@@ -292,25 +351,35 @@ export default function MachineEnergy() {
         borderRadius: 3
       }]
     };
-  }, []);
+  }, [analyticsData, isElectricityMeter]);
 
   // 4. Energy Breakdown Donut Chart
   const breakdownChartData = useMemo(() => {
+    if (isElectricityMeter && analyticsData) {
+      return {
+        labels: analyticsData.charts.breakdown.map((b: any) => b.label),
+        datasets: [{
+          data: analyticsData.charts.breakdown.map((b: any) => b.value),
+          backgroundColor: analyticsData.charts.breakdown.map((b: any) => b.color)
+        }]
+      };
+    }
     return {
       labels: ["Chiller Plant", "Air Handling Unit", "Lighting", "Lite", "Other"],
-      datasets: [{
-        data: [50.2, 6.9, 8.3, 2.6, 32.0],
-        backgroundColor: [
-          "rgba(59, 130, 246, 0.85)", // Blue
-          "rgba(16, 185, 129, 0.85)", // Green
-          "rgba(139, 92, 246, 0.85)", // Purple
-          "rgba(249, 115, 22, 0.85)", // Orange
-          "rgba(100, 116, 139, 0.85)"  // Grey
-        ],
-        borderWidth: 0
-      }]
+      datasets: [
+        {
+          data: [40, 25, 15, 10, 10],
+          backgroundColor: [
+            "rgba(59, 130, 246, 0.8)",
+            "rgba(16, 185, 129, 0.8)",
+            "rgba(251, 191, 36, 0.8)",
+            "rgba(236, 72, 153, 0.8)",
+            "rgba(148, 163, 184, 0.8)"
+          ]
+        }
+      ]
     };
-  }, []);
+  }, [analyticsData, isElectricityMeter]);
 
   // 5. Fan & Motor daily breakdown charts over 30 days
   const fanBreakdownData = useMemo(() => {
@@ -400,7 +469,12 @@ export default function MachineEnergy() {
   if (!machine) return null;
 
   // Real calculated consumptions based on unit specs
-  const dailyElectricity = machine.dailyBase ?? 3000;
+  const hasDbData = isElectricityMeter && analyticsData;
+
+  const dailyElectricity = hasDbData 
+    ? (analyticsData.summary.totalKwh / analyticsData.charts.daily.length)
+    : (machine.dailyBase ?? 3000);
+
   const dailyGas = (machine.groupId === "boiler-plant" || machine.id.includes("boiler")) ? (dailyElectricity * 0.8) : 0;
   const dailyWater = (
     machine.groupId === "cooling-water-system" ||
@@ -412,10 +486,17 @@ export default function MachineEnergy() {
     machine.id.includes("wfi")
   ) ? (machine.outputBase ?? 500) : 0;
 
-  // Split electricity into LWBP (22:00 - 17:00, 19 hours) and WBP (17:00 - 22:00, 5 hours)
-  const lwbpKwh = dailyElectricity * (19 / 24);
-  const wbpKwh = dailyElectricity * (5 / 24);
-  const dailyElectricityCost = (lwbpKwh * electricityLwbpRate) + (wbpKwh * electricityWbpRate);
+  // Split electricity into LWBP and WBP
+  const lwbpKwh = hasDbData
+    ? (analyticsData.summary.lwbpKwh / analyticsData.charts.daily.length)
+    : (dailyElectricity * (19 / 24));
+  const wbpKwh = hasDbData
+    ? (analyticsData.summary.wbpKwh / analyticsData.charts.daily.length)
+    : (dailyElectricity * (5 / 24));
+
+  const dailyElectricityCost = hasDbData
+    ? (analyticsData.summary.totalCost / analyticsData.charts.daily.length)
+    : ((lwbpKwh * electricityLwbpRate) + (wbpKwh * electricityWbpRate));
 
   // Gas consumption in Sm3 and converted to MMBtu
   const gasSm3 = dailyGas;
@@ -432,19 +513,21 @@ export default function MachineEnergy() {
   const totalKwhSetara = electricityKwhSetara + gasKwhSetara + waterKwhSetara;
 
   const totalDailyCost = dailyElectricityCost + dailyGasCost + dailyWaterCost;
-  const totalMonthlyCost = totalDailyCost * 30.437;
-  const totalYearlyCost = totalDailyCost * 365;
+  const totalMonthlyCost = hasDbData ? analyticsData.summary.totalCost : (totalDailyCost * 30.437);
+  const totalYearlyCost = hasDbData ? (analyticsData.summary.totalCost * 12) : (totalDailyCost * 365);
 
-  const electricityToday = dailyElectricity;
-  const electricityMonthly = dailyElectricity * 30.437 / 1000;
-  const electricityYearly = dailyElectricity * 365 / 1000;
+  const electricityToday = hasDbData
+    ? (analyticsData.charts.daily[analyticsData.charts.daily.length - 1]?.value || 0)
+    : dailyElectricity;
+  const electricityMonthly = hasDbData ? analyticsData.summary.monthlyMwh : (dailyElectricity * 30.437 / 1000);
+  const electricityYearly = hasDbData ? analyticsData.summary.yearlyMwh : (dailyElectricity * 365 / 1000);
 
   // Carbon emissions split
   const carbonElectricityDaily = dailyElectricity * 0.82;
   const carbonGasDaily = gasSm3 * 1.88;
   const totalCarbonDaily = carbonElectricityDaily + carbonGasDaily;
-  const totalCarbonMonthly = totalCarbonDaily * 30.437 / 1000;
-  const totalCarbonYearly = totalCarbonDaily * 365 / 1000;
+  const totalCarbonMonthly = hasDbData ? analyticsData.summary.co2Emitted : (totalCarbonDaily * 30.437 / 1000);
+  const totalCarbonYearly = totalCarbonMonthly * 12;
   const co2Emitted = totalCarbonMonthly;
 
   return (

@@ -1102,6 +1102,65 @@ export const machineGroups: MachineGroup[] = [
       outputBase: 500,
       energyBase: 35
     }))
+  }),
+  buildGroup({
+    id: "electricity-meters",
+    name: "Electricity Meters",
+    area: "Utilities",
+    category: "Electricity",
+    units: [
+      buildUnit({
+        id: "cubicle-pln",
+        unitLabel: "Incoming PLN (PM8000)",
+        groupId: "electricity-meters",
+        groupName: "Electricity Meters",
+        area: "Utilities",
+        category: "Electricity",
+        tagId: "electricity/Cubicle_PLN_PM8000/active_power",
+        unit: "kW",
+        consumptionUnit: "kWh",
+        baseValue: 1100,
+        variance: 150,
+        dailyBase: 26400,
+        dailyVariance: 3600,
+        outputBase: 0,
+        energyBase: 26.4
+      }),
+      buildUnit({
+        id: "cubicle-wf1",
+        unitLabel: "Feeder WF1 (PM5560)",
+        groupId: "electricity-meters",
+        groupName: "Electricity Meters",
+        area: "Utilities",
+        category: "Electricity",
+        tagId: "electricity/Cubicle_WF1_PM5560/active_power",
+        unit: "kW",
+        consumptionUnit: "kWh",
+        baseValue: 1770,
+        variance: 250,
+        dailyBase: 42480,
+        dailyVariance: 6000,
+        outputBase: 0,
+        energyBase: 42.5
+      }),
+      buildUnit({
+        id: "cubicle-wf2",
+        unitLabel: "Feeder WF2 (PM5500)",
+        groupId: "electricity-meters",
+        groupName: "Electricity Meters",
+        area: "Utilities",
+        category: "Electricity",
+        tagId: "electricity/Cubicle_WF2_PM5500/active_power",
+        unit: "kW",
+        consumptionUnit: "kWh",
+        baseValue: 920,
+        variance: 120,
+        dailyBase: 22080,
+        dailyVariance: 3000,
+        outputBase: 0,
+        energyBase: 22.1
+      })
+    ]
   })
 ];
 

@@ -1,6 +1,11 @@
 export const TELEMETRY_COLLECTION = "telemetry_raw";
 export const HISTORIAN_COLLECTION = "historian_1m";
 export const HISTORIAN_HOURLY_COLLECTION = "historian_1h";
+
+// Dedicated electricity collections (PLN only)
+export const ELECTRICITY_RAW_COLLECTION = "electricity_raw";
+export const ELECTRICITY_1M_COLLECTION = "electricity_1m";
+export const ELECTRICITY_1H_COLLECTION = "electricity_1h";
 export const STATE_COLLECTION = "system_state";
 export const ALARMS_COLLECTION = "alarms";
 export const ALARM_EVENTS_COLLECTION = "alarm_events";

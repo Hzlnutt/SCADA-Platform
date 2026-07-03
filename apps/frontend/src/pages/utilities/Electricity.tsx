@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { UtilityBarChart } from "../../components/charts/UtilityBarChart";
 import { MultiLineChart } from "../../components/charts/MultiLineChart";
 import { DonutChart } from "../../components/charts/DonutChart";
 import { machineGroups } from "../../data/machines";
 import { buildTimeAwareSeries, buildTimeLabels, getElapsedIndex } from "../../utils/series";
+import { getJson } from "../../services/api.client";
 
 const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
   const energy = group.summaryCards.find((card) => card.label === "Total Energy")?.value ?? 0;
@@ -12,6 +13,18 @@ const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
 }, 0);
 
 const electricityRate = 1467;
+
+const MONTH_NAMES_ID = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+];
+const MONTH_SHORT_ID = [
+  "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+  "Jul", "Agu", "Sep", "Okt", "Nov", "Des"
+];
+const DAY_NAMES_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+
+const AVAILABLE_YEARS = [2025, 2026];
 
 const ranges = [
   { id: "ytd", label: "YTD", points: 12, type: "month" as const, scale: 30 },
@@ -25,81 +38,234 @@ const formatCurrency = (value: number) =>
 
 export default function Electricity() {
   const [range, setRange] = useState<(typeof ranges)[number]["id"]>("ytd");
+  const [selectedYear, setSelectedYear] = useState(2025);
   const config = ranges.find((item) => item.id === range) ?? ranges[0];
 
   const maxIdx = useMemo(() => getElapsedIndex(config.type), [config.type]);
 
+  const [plnData, setPlnData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Re-fetch when year changes
+  useEffect(() => {
+    setLoading(true);
+    getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${selectedYear}`)
+      .then((res) => {
+        setPlnData(res.data);
+      })
+      .catch((err) => {
+        console.error("Failed to load electricity analytics", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [selectedYear]);
+
+  const hasData = !!plnData;
+
+  // ========== TREND LINE CHART SERIES ==========
   const series = useMemo(() => {
+    if (hasData) {
+      if (range === "hour") {
+        return plnData.charts.hourly;
+      } else if (range === "day") {
+        return plnData.charts.daily.map((d: any) => d.value);
+      } else {
+        // YTD and Per Bulan: use monthly data (always 12 entries, Jan-Dec)
+        return plnData.charts.monthly.map((m: any) => m.value);
+      }
+    }
     const base = dailyEnergyTotal * config.scale;
     return buildTimeAwareSeries(config.points, base, base * 0.35, 1, maxIdx);
-  }, [config, maxIdx]);
+  }, [hasData, range, config, plnData, maxIdx]);
 
-  const labels = useMemo(
-    () => buildTimeLabels(config.points, config.type),
-    [config]
-  );
+  // ========== TIMELINE LABELS (rich, descriptive) ==========
+  const labels = useMemo(() => {
+    if (hasData) {
+      if (range === "hour") {
+        // "00:00 WIB", "01:00 WIB", ..., "23:00 WIB"
+        return Array.from({ length: 24 }, (_, i) =>
+          `${i.toString().padStart(2, "0")}:00 WIB`
+        );
+      } else if (range === "day") {
+        // "Senin, 01 Agustus 2025" for every day in the year
+        return plnData.charts.daily.map((d: any) => {
+          const [yr, mo, dy] = d.day.split("-").map(Number);
+          const dateObj = new Date(yr, mo - 1, dy);
+          const dayName = DAY_NAMES_ID[dateObj.getDay()];
+          const monthName = MONTH_NAMES_ID[mo - 1];
+          return `${dayName}, ${String(dy).padStart(2, "0")} ${monthName} ${yr}`;
+        });
+      } else {
+        // YTD / Per Bulan: "Januari 2025", "Februari 2025", ..., "Desember 2025"
+        return plnData.charts.monthly.map((m: any) => {
+          const [yr, mo] = m.month.split("-").map(Number);
+          return `${MONTH_NAMES_ID[mo - 1]} ${yr}`;
+        });
+      }
+    }
+    return buildTimeLabels(config.points, config.type);
+  }, [hasData, range, config, plnData]);
 
-  const total = series.reduce((sum, v) => sum + (v ?? 0), 0);
-  const cost = total * electricityRate;
-  const nonNull = series.filter((v): v is number => v !== null);
-  const peak = nonNull.length > 0 ? Math.max(...nonNull) : 0;
-  const loadFactor = nonNull.length > 0 ? ((total / nonNull.length) / Math.max(peak, 1)) * 100 : 0;
+  // ========== BAR CHART DATA (from database) ==========
+  const barLabels = useMemo(() => {
+    if (hasData) {
+      if (range === "hour") {
+        return Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
+      } else if (range === "day") {
+        return plnData.charts.daily.map((d: any) => {
+          const parts = d.day.split("-");
+          return `${parts[2]}/${parts[1]}`;
+        });
+      } else {
+        // Always 12 months
+        return plnData.charts.monthly.map((m: any) => {
+          const [yr, mo] = m.month.split("-").map(Number);
+          return `${MONTH_SHORT_ID[mo - 1]} ${yr}`;
+        });
+      }
+    }
+    return buildTimeLabels(config.points, config.type);
+  }, [hasData, range, config, plnData]);
 
+  const barValues = useMemo(() => {
+    if (hasData) {
+      if (range === "hour") {
+        return plnData.charts.hourly;
+      } else if (range === "day") {
+        return plnData.charts.daily.map((d: any) => d.value);
+      } else {
+        return plnData.charts.monthly.map((m: any) => m.value);
+      }
+    }
+    const base = dailyEnergyTotal * config.scale;
+    return buildTimeAwareSeries(config.points, base, base * 0.35, 1, maxIdx);
+  }, [hasData, range, config, plnData, maxIdx]);
+
+  const barUnit = useMemo(() => {
+    if (range === "hour") return "kWh";
+    if (range === "day") return "kWh";
+    return "MWh"; // YTD and Per Bulan
+  }, [range]);
+
+  const plnPeak = hasData ? plnData.pqData.activePower : 1200;
+  const plnLoadFactor = hasData ? plnData.pqData.pf * 100 : 88.5;
+  const plnCost = hasData ? plnData.summary.totalCost : (dailyEnergyTotal * config.scale * electricityRate);
+  const plnTotalKwh = hasData ? plnData.summary.totalKwh : (dailyEnergyTotal * config.scale);
+
+  // ========== TREND PANEL DISTRIBUSI (MultiLineChart) ==========
   const mdpSeries = useMemo(() => {
-    const base = (dailyEnergyTotal * config.scale) / 3;
+    if (hasData) {
+      if (range === "hour") {
+        return [
+          { name: "Incoming PLN", values: plnData.charts.hourly, color: "#3b82f6" }
+        ];
+      } else if (range === "day") {
+        return [
+          { name: "Incoming PLN", values: plnData.charts.daily.map((d: any) => d.value / 24), color: "#3b82f6" }
+        ];
+      } else {
+        return [
+          { name: "Incoming PLN", values: plnData.charts.monthly.map((m: any) => m.value), color: "#3b82f6" }
+        ];
+      }
+    }
+    const base = dailyEnergyTotal * config.scale;
     return [
-      { name: "MDP 1", values: buildTimeAwareSeries(config.points, base, base * 0.12, 1, maxIdx), color: "#3b82f6" },
-      { name: "MDP 2", values: buildTimeAwareSeries(config.points, base, base * 0.2, 2, maxIdx), color: "#f59e0b" },
-      { name: "MDP 3", values: buildTimeAwareSeries(config.points, base, base * 0.15, 3, maxIdx), color: "#10b981", dashed: true }
+      { name: "Incoming PLN", values: buildTimeAwareSeries(config.points, base, base * 0.15, 1, maxIdx), color: "#3b82f6" }
     ];
-  }, [config, maxIdx]);
+  }, [hasData, range, config, plnData, maxIdx]);
 
-  const donutSegments = useMemo(() => [
-    { label: "Chillers", value: 42, color: "#3b82f6" },
-    { label: "Compressors", value: 31, color: "#f59e0b" },
-    { label: "Production", value: 27, color: "#10b981" }
-  ], []);
+  const donutSegments = useMemo(() => {
+    if (hasData && plnData.summary.totalKwh > 0) {
+      const wbpPct = Math.round((plnData.summary.wbpKwh / Math.max(plnData.summary.totalKwh, 1)) * 100);
+      const lwbpPct = 100 - wbpPct;
+      return [
+        { label: "Beban WBP (17-22)", value: wbpPct, color: "#ef4444" },
+        { label: "Beban LWBP", value: lwbpPct, color: "#3b82f6" }
+      ];
+    }
+    return [
+      { label: "Beban WBP (17-22)", value: 0, color: "#ef4444" },
+      { label: "Beban LWBP", value: 0, color: "#3b82f6" }
+    ];
+  }, [hasData, plnData]);
 
   return (
     <div className="space-y-6">
       <PageHeader title="Listrik" description="Monitor beban listrik utama, peak demand, dan biaya energi." />
 
       {/* Executive Summary */}
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Total Biaya</span>
-            <span className="text-lg">💰</span>
+            <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+              <svg className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+            </div>
           </div>
-          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{formatCurrency(cost)}</div>
-          <div className="mt-1 text-xs font-semibold text-blue-600 dark:text-blue-400">{total.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh</div>
+          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">
+            {loading ? "Calculating..." : formatCurrency(plnCost)}
+          </div>
+          <div className="mt-1 text-xs font-semibold text-blue-600 dark:text-blue-400">
+            {plnTotalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh
+          </div>
         </div>
 
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-amber-400 dark:hover:border-amber-500">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Peak Demand</span>
-            <span className="text-lg">⚡</span>
+            <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+              <svg className="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" /></svg>
+            </div>
           </div>
-          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{peak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW</div>
+          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">
+            {loading ? "Loading..." : `${plnPeak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW`}
+          </div>
           <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Estimasi beban puncak</div>
         </div>
 
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-500">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Load Factor</span>
-            <span className="text-lg">📈</span>
+            <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+              <svg className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" /></svg>
+            </div>
           </div>
-          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{loadFactor.toFixed(1)}%</div>
+          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">
+            {loading ? "Loading..." : `${plnLoadFactor.toFixed(1)}%`}
+          </div>
           <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Stabilitas beban listrik</div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-cyan-400 dark:hover:border-cyan-500">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-rose-400 dark:hover:border-rose-500">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Tarif</span>
-            <span className="text-lg">🎟️</span>
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-rose-500 dark:text-rose-400">Beban WBP</span>
+            <div className="h-8 w-8 rounded-lg bg-rose-500/10 flex items-center justify-center">
+              <svg className="h-4 w-4 text-rose-500" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+            </div>
           </div>
-          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{formatCurrency(electricityRate)}</div>
-          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Per kWh</div>
+          <div className="mt-3 text-xl font-extrabold text-slate-800 dark:text-white font-mono">
+            {loading ? "Loading..." : `${(plnData?.summary.wbpKwh || 0).toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
+          </div>
+          <div className="mt-1 text-xs font-semibold text-rose-500">
+            {loading ? "" : formatCurrency(plnData?.summary.wbpCost || 0)}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-500">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 dark:text-emerald-400">Beban LWBP</span>
+            <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+              <svg className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 6.002-2.082Z" /></svg>
+            </div>
+          </div>
+          <div className="mt-3 text-xl font-extrabold text-slate-800 dark:text-white font-mono">
+            {loading ? "Loading..." : `${(plnData?.summary.lwbpKwh || 0).toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
+          </div>
+          <div className="mt-1 text-xs font-semibold text-emerald-500">
+            {loading ? "" : formatCurrency(plnData?.summary.lwbpCost || 0)}
+          </div>
         </div>
       </section>
 
@@ -109,37 +275,51 @@ export default function Electricity() {
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Trend Panel Distribusi</h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Beban MDP 1, MDP 2, MDP 3 — real-time.</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Beban Incoming PLN — data historis.</p>
             </div>
-            <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-0.5 text-xs">
-              {ranges.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setRange(item.id)}
-                  className={`rounded-md px-3 py-1.5 font-bold transition-all ${
-                    range === item.id
-                      ? "bg-cyan-500 text-white shadow-sm"
-                      : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              {/* Year Selector */}
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+              >
+                {AVAILABLE_YEARS.map((yr) => (
+                  <option key={yr} value={yr}>{yr}</option>
+                ))}
+              </select>
+
+              {/* Range Selector */}
+              <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-0.5 text-xs">
+                {ranges.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setRange(item.id)}
+                    className={`rounded-md px-3 py-1.5 font-bold transition-all ${
+                      range === item.id
+                        ? "bg-cyan-500 text-white shadow-sm"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
-            <MultiLineChart series={mdpSeries} unit="kW" heightClassName="h-56" />
+            <MultiLineChart series={mdpSeries} labels={labels} unit={range === "hour" ? "kW" : range === "day" ? "kWh" : "MWh"} heightClassName="h-64" />
           </div>
         </section>
 
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
           <div>
             <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Distribusi Beban</h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Alokasi konsumsi daya utama.</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Perbandingan konsumsi WBP vs LWBP.</p>
           </div>
           <div className="my-6 flex justify-center">
-            <DonutChart segments={donutSegments} size={150} thickness={18} centerLabel="100%" />
+            <DonutChart segments={donutSegments} size={150} thickness={18} centerLabel={`${donutSegments[0]?.value || 0}%`} />
           </div>
           <div className="space-y-2">
             {donutSegments.map((item) => (
@@ -176,10 +356,19 @@ export default function Electricity() {
 
       {/* Bar Chart */}
       <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-        <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Bar Chart Konsumsi</h3>
-        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 mb-4">Konsumsi total real-time.</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Bar Chart Konsumsi</h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+              Konsumsi energi PLN {range === "hour" ? "per jam hari ini" : range === "day" ? `per hari tahun ${selectedYear}` : `per bulan tahun ${selectedYear}`}.
+            </p>
+          </div>
+          <div className="text-xs font-mono text-slate-400">
+            {barUnit}
+          </div>
+        </div>
         <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
-          <UtilityBarChart labels={labels} values={series} unit="kWh" color="#3b82f6" height={220} />
+          <UtilityBarChart labels={barLabels} values={barValues} unit={barUnit} color="#3b82f6" height={240} />
         </div>
       </section>
     </div>

@@ -121,7 +121,7 @@ export default function Dashboard() {
   const dailyEnergyTotal = useMemo(() => {
     if (machines && machines.length > 0) {
       const costMapping: Record<string, number> = {
-        "cooling-tower-1": 1500,
+        "cooling-water-1": 1500,
         "cooling-tower-2": 1100,
         "cooling-tower-3": 502.1,
         "boiler-1": 900,
