@@ -85,13 +85,36 @@ export default function Electricity() {
 
   const hasData = !!plnData;
 
+  const currentMonth = useMemo(() => {
+    const now = new Date();
+    if (selectedYear === now.getFullYear()) {
+      return now.getMonth() + 1; // 1-indexed
+    }
+    if (hasData && plnData.charts.daily) {
+      for (let m = 12; m >= 1; m--) {
+        const monthPrefix = `${selectedYear}-${String(m).padStart(2, "0")}`;
+        const hasVal = plnData.charts.daily.some((d: any) => d.day.startsWith(monthPrefix) && d.value > 0);
+        if (hasVal) return m;
+      }
+    }
+    return 12; // fallback to December
+  }, [hasData, plnData, selectedYear]);
+
+  const monthlyDailyRecords = useMemo(() => {
+    if (hasData && plnData.charts.daily) {
+      const monthPrefix = `${selectedYear}-${String(currentMonth).padStart(2, "0")}`;
+      return plnData.charts.daily.filter((d: any) => d.day.startsWith(monthPrefix));
+    }
+    return [];
+  }, [hasData, plnData, selectedYear, currentMonth]);
+
   // ========== TREND LINE CHART SERIES ==========
   const series = useMemo(() => {
     if (hasData) {
       if (range === "hour") {
         return plnData.charts.hourly;
       } else if (range === "day") {
-        return plnData.charts.daily.map((d: any) => d.value);
+        return monthlyDailyRecords.map((d: any) => d.value);
       } else {
         // YTD and Per Bulan: use monthly data (always 12 entries, Jan-Dec)
         return plnData.charts.monthly.map((m: any) => m.value);
@@ -99,7 +122,7 @@ export default function Electricity() {
     }
     const base = dailyEnergyTotal * config.scale;
     return buildTimeAwareSeries(config.points, base, base * 0.35, 1, maxIdx);
-  }, [hasData, range, config, plnData, maxIdx]);
+  }, [hasData, range, config, plnData, maxIdx, monthlyDailyRecords]);
 
   // ========== TIMELINE LABELS (rich, descriptive) ==========
   const labels = useMemo(() => {
@@ -110,8 +133,8 @@ export default function Electricity() {
           `${i.toString().padStart(2, "0")}:00 WIB`
         );
       } else if (range === "day") {
-        // "Senin, 01 Agustus 2025" for every day in the year
-        return plnData.charts.daily.map((d: any) => {
+        // "Senin, 01 Agustus 2025" for every day in the month
+        return monthlyDailyRecords.map((d: any) => {
           const [yr, mo, dy] = d.day.split("-").map(Number);
           const dateObj = new Date(yr, mo - 1, dy);
           const dayName = DAY_NAMES_ID[dateObj.getDay()];
@@ -127,7 +150,7 @@ export default function Electricity() {
       }
     }
     return buildTimeLabels(config.points, config.type);
-  }, [hasData, range, config, plnData]);
+  }, [hasData, range, config, plnData, monthlyDailyRecords]);
 
   // ========== BAR CHART DATA (from database) ==========
   const barLabels = useMemo(() => {
@@ -135,9 +158,9 @@ export default function Electricity() {
       if (range === "hour") {
         return Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
       } else if (range === "day") {
-        return plnData.charts.daily.map((d: any) => {
+        return monthlyDailyRecords.map((d: any) => {
           const parts = d.day.split("-");
-          return `${parts[2]}/${parts[1]}`;
+          return `${parts[2]}`; // day number only, e.g. "01", "02"
         });
       } else {
         // Always 12 months
@@ -148,21 +171,21 @@ export default function Electricity() {
       }
     }
     return buildTimeLabels(config.points, config.type);
-  }, [hasData, range, config, plnData]);
+  }, [hasData, range, config, plnData, monthlyDailyRecords]);
 
   const barValues = useMemo(() => {
     if (hasData) {
       if (range === "hour") {
         return plnData.charts.hourly;
       } else if (range === "day") {
-        return plnData.charts.daily.map((d: any) => d.value);
+        return monthlyDailyRecords.map((d: any) => d.value);
       } else {
         return plnData.charts.monthly.map((m: any) => m.value);
       }
     }
     const base = dailyEnergyTotal * config.scale;
     return buildTimeAwareSeries(config.points, base, base * 0.35, 1, maxIdx);
-  }, [hasData, range, config, plnData, maxIdx]);
+  }, [hasData, range, config, plnData, maxIdx, monthlyDailyRecords]);
 
   const barUnit = useMemo(() => {
     if (range === "hour") return "kWh";
@@ -362,7 +385,11 @@ export default function Electricity() {
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Trend Panel Distribusi</h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Beban Incoming PLN — data historis.</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                {range === "day"
+                  ? `Beban Incoming PLN — Harian Bulan ${MONTH_NAMES_ID[currentMonth - 1]} ${selectedYear}.`
+                  : "Beban Incoming PLN — data historis."}
+              </p>
             </div>
             <div className="flex items-center gap-2">
               {/* Year Selector */}

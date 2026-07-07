@@ -111,7 +111,7 @@ export default function Dashboard() {
   const [consumptionRange, setConsumptionRange] = useState<(typeof consumptionRanges)[number]["id"]>("hour");
   const [usdToIdr, setUsdToIdr] = useState(16200);
   const [thresholds, setThresholds] = useState<ThresholdItem[]>([]);
-  const [ytdChecks, setYtdChecks] = useState({ electricity: true, gas: true, water: true, solar: true });
+  const [ytdChecks, setYtdChecks] = useState({ electricity: true, gas: true, water: true, solar: false });
   const [electricityData, setElectricityData] = useState<any>(null);
 
   useEffect(() => {
@@ -281,7 +281,18 @@ export default function Dashboard() {
       if (consumptionRange === "hour") {
         return electricityData.charts.hourly;
       } else if (consumptionRange === "day") {
-        return electricityData.charts.daily.map((d: any) => d.value);
+        const todayStr = new Date(new Date().getTime() + 7 * 60 * 60 * 1000).toISOString().split("T")[0]; // today in WIB
+        let todayIdx = electricityData.charts.daily.findIndex((d: any) => d.day === todayStr);
+        if (todayIdx === -1) {
+          todayIdx = electricityData.charts.daily.length - 1;
+        }
+        const startIndex = Math.max(0, todayIdx - 29);
+        const sliced = electricityData.charts.daily.slice(startIndex, todayIdx + 1);
+        const values = sliced.map((d: any) => d.value);
+        while (values.length < 30) {
+          values.unshift(0);
+        }
+        return values;
       } else {
         return electricityData.charts.monthly.map((m: any) => m.value * 1000);
       }
@@ -289,6 +300,11 @@ export default function Dashboard() {
     const base = utilityBase.electricityKwh * consumptionConfig.scale;
     return buildTimeAwareSeries(consumptionConfig.points, base, base * 0.35, 1, maxIndex);
   }, [consumptionConfig, maxIndex, utilityBase, electricityData, consumptionRange]);
+
+  const consumptionElectricityCost = useMemo(() => {
+    const totalKwh = electricitySeries.reduce((sum: number, v: number) => sum + v, 0);
+    return totalKwh * ((wbpRate + lwbpRate) / 2);
+  }, [electricitySeries, wbpRate, lwbpRate]);
 
   const gasSeries = useMemo(() => {
     const base = utilityBase.gasSm3 * consumptionConfig.scale;
@@ -559,9 +575,7 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        </div>        <div className="grid gap-4 sm:grid-cols-2">
           {/* Total Energy */}
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <ProgressRing
@@ -587,66 +601,6 @@ export default function Dashboard() {
             />
             <div className="mt-2 text-xs text-[#47729f] dark:text-slate-400">
               USD/IDR Exchange Rate: {usdToIdr.toLocaleString()}
-            </div>
-          </div>
-
-          {/* CO2 Emission */}
-          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
-              CO₂ Emission
-            </div>
-            <div className="mt-2 text-2xl font-semibold text-[#002b5c] dark:text-slate-100">
-              {co2Emission.toFixed(1)} Ton
-            </div>
-            <div className="mt-1 text-xs text-[#47729f] dark:text-slate-400">
-              Current month estimate
-            </div>
-            <div className="mt-3 text-xs text-[#47729f]/80 dark:text-slate-500">
-              Energy distribution ratio calculated based on equivalent emissions of coal and liquefied natural gas.
-            </div>
-          </div>
-
-          {/* Solar Panel */}
-          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
-              Solar Panel
-            </div>
-            <div className="mt-2 text-2xl font-semibold text-[#002b5c] dark:text-slate-100">
-              {solarKwh.toFixed(0)} kWh
-            </div>
-            <div className="mt-1 text-xs text-[#47729f] dark:text-slate-400">
-              Saved {formatCurrency(solarSavings, "IDR")}
-            </div>
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-900">
-              <div
-                className="h-full rounded-full bg-[#1f6fb5]"
-                style={{ width: `${solarCoverage.toFixed(0)}%` }}
-              />
-            </div>
-            <div className="mt-2 text-xs text-[#47729f] dark:text-slate-400">
-              Coverage {solarCoverage.toFixed(1)}% of electricity
-            </div>
-          </div>
-
-          {/* CO2 Reduction */}
-          <div className="rounded-xl border border-emerald-500/30 dark:border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/10 p-4 transition-colors duration-300">
-            <div className="text-xs uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400 font-semibold">
-              CO₂ Reduction
-            </div>
-            <div className="mt-2 text-2xl font-semibold text-emerald-700 dark:text-emerald-300">
-              {(solarKwh * 0.87).toFixed(1)} kg
-            </div>
-            <div className="mt-1 text-xs text-[#47729f] dark:text-slate-400">
-              Reduces carbon emissions
-            </div>
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-900">
-              <div
-                className="h-full rounded-full bg-emerald-500"
-                style={{ width: "85%" }}
-              />
-            </div>
-            <div className="mt-2 text-[10px] text-emerald-600 dark:text-emerald-400/80 font-medium">
-              Independent Green Certification
             </div>
           </div>
         </div>
@@ -684,14 +638,14 @@ export default function Dashboard() {
 
         <div className="mt-4 grid gap-4 grid-cols-1 md:grid-cols-3">
           {/* 4 Utility Bar Charts Grid (Left) */}
-          <div className="md:col-span-2 grid gap-4 grid-cols-1 sm:grid-cols-2">
+          <div className="md:col-span-2 grid gap-4 grid-cols-1 sm:grid-cols-3">
             {/* Electricity */}
             <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Electricity</div>
                   <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-                    {formatCurrency(electricityCost, "IDR")}
+                    {formatCurrency(consumptionElectricityCost, "IDR")}
                   </div>
                   <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
                     {electricitySeries.reduce((sum: number, v: number) => sum + v, 0).toFixed(1)} kWh
@@ -756,31 +710,6 @@ export default function Dashboard() {
                   values={waterSeries}
                   unit="m³"
                   color="#3bb77e"
-                  height={160}
-                />
-              </div>
-            </div>
-
-            {/* Solar Panel */}
-            <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Solar Panel</div>
-                  <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-                    {formatCurrency(solarSavings, "IDR")}
-                  </div>
-                  <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                    {solarSeries.reduce((sum: number, v: number) => sum + (v ?? 0), 0).toFixed(1)} kWh
-                  </div>
-                </div>
-                <div className="h-2 w-2 rounded-full bg-[#f59e0b]" />
-              </div>
-              <div className="mt-3">
-                <UtilityBarChart
-                  labels={consumptionLabels}
-                  values={solarSeries}
-                  unit="kWh"
-                  color="#f59e0b"
                   height={160}
                 />
               </div>
@@ -858,8 +787,7 @@ export default function Dashboard() {
               {([
                 { key: "electricity" as const, label: "Electricity", color: "#2f8ae5" },
                 { key: "gas" as const, label: "Gas", color: "#f4c542" },
-                { key: "water" as const, label: "Water", color: "#3bb77e" },
-                { key: "solar" as const, label: "Solar Panel", color: "#f59e0b" }
+                { key: "water" as const, label: "Water", color: "#3bb77e" }
               ]).map((item) => (
                 <label
                   key={item.key}
@@ -888,8 +816,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* 4 YTD cards */}
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+        {/* 3 YTD cards */}
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Electricity YTD</div>
             <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
@@ -942,25 +870,6 @@ export default function Dashboard() {
                 values={ytdWaterSeries}
                 unit="m³"
                 color="#3bb77e"
-                height={140}
-              />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-            <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Solar YTD</div>
-            <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-              {formatCurrency(ytdSolarTotal * utilityRates.electricityIdr, "IDR")}
-            </div>
-            <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-              {ytdSolarTotal.toFixed(0)} kWh
-            </div>
-            <div className="mt-3">
-              <UtilityBarChart
-                labels={ytdLabels}
-                values={ytdSolarSeries}
-                unit="kWh"
-                color="#f59e0b"
                 height={140}
               />
             </div>
@@ -1101,14 +1010,14 @@ export default function Dashboard() {
       <section className="rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-[#f7fbff]/80 dark:bg-slate-950/70 p-5 transition-colors duration-300">
         <div className="mb-4">
           <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">
-            Previous Range Comparison (Electricity, Gas, Water, Carbon)
+            Previous Range Comparison (Electricity, Gas, Water)
           </div>
           <div className="mt-1 text-sm text-[#47729f] dark:text-slate-400">
             Select comparison ranges independently for each parameter.
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* Card Electricity */}
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300 flex flex-col justify-between">
             <div className="mb-3 flex items-center justify-between gap-2">
@@ -1200,38 +1109,6 @@ export default function Dashboard() {
                 current={waterCurrent}
                 previous={waterPrevious}
                 unit="m³"
-                heightClassName="h-32"
-              />
-            </div>
-          </div>
-
-          {/* Card Carbon */}
-          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300 flex flex-col justify-between">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <span className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-400 font-semibold">Carbon</span>
-              <div className="flex gap-0.5 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-0.5 text-[9px]">
-                {rangeOptions.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setCarbonRange(opt.value)}
-                    className={`rounded-full px-1.5 py-0.5 font-bold transition ${
-                      carbonRange === opt.value
-                        ? "bg-[#1f6fb5] text-white"
-                        : "text-[#47729f] dark:text-slate-500 hover:text-[#002b5c] dark:hover:text-slate-300"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="mt-2 flex-1">
-              <ComparisonBarChart
-                labels={carbonCompareLabels}
-                current={carbonCurrent}
-                previous={carbonPrevious}
-                unit="kg"
                 heightClassName="h-32"
               />
             </div>
