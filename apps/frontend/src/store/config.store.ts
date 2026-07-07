@@ -25,3 +25,17 @@ export const useConfigStore = create<ConfigState>((set) => ({
     set({ wbpRate: wbp, lwbpRate: lwbp });
   }
 }));
+
+// Listen to changes from other tabs using the HTML5 storage event
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => {
+    if (event.key === "scada.config.wbpRate" || event.key === "scada.config.lwbpRate") {
+      const wbp = localStorage.getItem("scada.config.wbpRate");
+      const lwbp = localStorage.getItem("scada.config.lwbpRate");
+      useConfigStore.setState({
+        wbpRate: wbp ? Number(wbp) : 1600,
+        lwbpRate: lwbp ? Number(lwbp) : 1112
+      });
+    }
+  });
+}
