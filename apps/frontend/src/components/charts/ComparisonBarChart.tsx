@@ -46,6 +46,9 @@ export const ComparisonBarChart = ({
     return index % 5 === 0;
   };
 
+  const containerGap = labels.length > 15 ? "gap-1" : "gap-2";
+  const barGap = labels.length > 15 ? "gap-0.5" : "gap-1.5";
+
   return (
     <div className="relative">
       <div className={`relative ${heightClassName}`}>
@@ -66,7 +69,7 @@ export const ComparisonBarChart = ({
           />
         ) : null}
 
-        <div className="flex h-full items-end gap-2">
+        <div className={`flex h-full items-end ${containerGap}`}>
           {labels.map((label, index) => {
             const currentValue = current[index] ?? 0;
             const previousValue = previous ? previous[index] ?? 0 : 0;
@@ -85,7 +88,7 @@ export const ComparisonBarChart = ({
                 className="flex h-full flex-1 flex-col justify-end"
                 onMouseLeave={() => setHoverState(null)}
               >
-                <div className="flex h-full items-end gap-1.5">
+                <div className={`flex h-full items-end ${barGap}`}>
                   {previous ? (
                     <div
                       className={[

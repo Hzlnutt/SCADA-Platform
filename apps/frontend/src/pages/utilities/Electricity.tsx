@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { UtilityBarChart } from "../../components/charts/UtilityBarChart";
-import { MultiLineChart } from "../../components/charts/MultiLineChart";
+import { Bar } from "react-chartjs-2";
+import "../../components/charts/chartjs";
 import { DonutChart } from "../../components/charts/DonutChart";
 import { machineGroups } from "../../data/machines";
 import { buildTimeAwareSeries, buildTimeLabels, getElapsedIndex } from "../../utils/series";
@@ -212,6 +213,68 @@ export default function Electricity() {
     ];
   }, [hasData, plnData]);
 
+  // ========== TOP 10 ENERGY CONSUMING UNITS (Horizontal Bar Chart) ==========
+  const top10Units = useMemo(() => {
+    const allUnits: { name: string; value: number }[] = [];
+    machineGroups.forEach((group) => {
+      group.units.forEach((unit) => {
+        const energyCard = unit.summaryCards.find((c) => c.label === "Energy");
+        if (energyCard) {
+          allUnits.push({
+            name: unit.unitLabel,
+            value: energyCard.value
+          });
+        }
+      });
+    });
+    // Sort descending by value
+    allUnits.sort((a, b) => b.value - a.value);
+    // Take top 10
+    return allUnits.slice(0, 10);
+  }, []);
+
+  const top10Labels = useMemo(() => top10Units.map((u) => u.name), [top10Units]);
+  const top10Values = useMemo(() => top10Units.map((u) => u.value), [top10Units]);
+
+  const horizontalChartData = {
+    labels: top10Labels,
+    datasets: [
+      {
+        label: "kWh",
+        data: top10Values,
+        backgroundColor: "rgba(59, 130, 246, 0.8)",
+        borderColor: "rgb(59, 130, 246)",
+        borderWidth: 1,
+        borderRadius: 4,
+        barPercentage: 0.6
+      }
+    ]
+  };
+
+  const horizontalChartOptions = {
+    indexAxis: "y" as const,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (context: any) => `${Number(context.parsed.x).toLocaleString("id-ID")} kWh`
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: "rgba(203, 213, 225, 0.3)" },
+        ticks: { font: { size: 10 } }
+      },
+      y: {
+        grid: { display: false },
+        ticks: { font: { size: 10 }, autoSkip: false }
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Listrik" description="Monitor beban listrik utama, peak demand, dan biaya energi." />
@@ -333,11 +396,7 @@ export default function Electricity() {
             </div>
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
-            {range === "hour" ? (
-              <UtilityBarChart labels={barLabels} values={barValues} unit="kWh" color="#3b82f6" height={256} />
-            ) : (
-              <MultiLineChart series={mdpSeries} labels={labels} unit={range === "day" ? "kWh" : "MWh"} heightClassName="h-64" />
-            )}
+            <UtilityBarChart labels={barLabels} values={barValues} unit={barUnit} color="#3b82f6" height={256} />
           </div>
         </section>
 
@@ -388,21 +447,21 @@ export default function Electricity() {
         </div>
       </section>
 
-      {/* Bar Chart */}
+      {/* 10 Unit Konsumsi Terbesar (Horizontal Bar Chart) */}
       <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
-            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Bar Chart Konsumsi</h3>
+            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">10 Unit Konsumsi Terbesar</h3>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-              Konsumsi energi PLN {range === "hour" ? "per jam hari ini" : range === "day" ? `per hari tahun ${selectedYear}` : `per bulan tahun ${selectedYear}`}.
+              Peringkat konsumsi listrik per unit mesin (kWh) yang diurutkan dari terbesar.
             </p>
           </div>
           <div className="text-xs font-mono text-slate-400">
-            {barUnit}
+            kWh
           </div>
         </div>
-        <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
-          <UtilityBarChart labels={barLabels} values={barValues} unit={barUnit} color="#3b82f6" height={240} />
+        <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 h-96">
+          <Bar data={horizontalChartData} options={horizontalChartOptions} />
         </div>
       </section>
     </div>

@@ -112,6 +112,34 @@ export default function Dashboard() {
   const [usdToIdr, setUsdToIdr] = useState(16200);
   const [thresholds, setThresholds] = useState<ThresholdItem[]>([]);
   const [ytdChecks, setYtdChecks] = useState({ electricity: true, gas: true, water: true, solar: true });
+  const [electricityData, setElectricityData] = useState<any>(null);
+
+  useEffect(() => {
+    let active = true;
+    const fetchElectricity = () => {
+      const wbp = localStorage.getItem("scada.config.wbpRate") || "1600";
+      const lwbp = localStorage.getItem("scada.config.lwbpRate") || "1112";
+      const currentYear = new Date().getFullYear();
+      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${currentYear}&wbpRate=${wbp}&lwbpRate=${lwbp}`)
+        .then((res) => {
+          if (active) {
+            setElectricityData(res.data);
+          }
+        })
+        .catch((err) => {
+          console.error("Dashboard failed to fetch electricity data", err);
+        });
+    };
+
+    fetchElectricity();
+    const interval = setInterval(fetchElectricity, 30000); // auto-fetch every 30 seconds
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   const { range, compare } = useTimeRangeStore();
   const latest = useTelemetryStore((state) => state.latest);
   const activeAlarms = useAlarmStore((state) => state.activeList);
@@ -182,13 +210,42 @@ export default function Dashboard() {
       .catch(() => undefined);
   }, []);
 
+  const wbpRate = useMemo(() => {
+    const saved = localStorage.getItem("scada.config.wbpRate");
+    return saved ? Number(saved) : 1600;
+  }, []);
+
+  const lwbpRate = useMemo(() => {
+    const saved = localStorage.getItem("scada.config.lwbpRate");
+    return saved ? Number(saved) : 1112;
+  }, []);
+
   const period = periods[periodIndex];
-  const electricityKwh = utilityBase.electricityKwh * period.scale;
+
+  // Dynamic electricity calculations based on the period selector
+  const electricityKwh = useMemo(() => {
+    if (!electricityData) return utilityBase.electricityKwh * period.scale;
+    if (period.id === "daily") {
+      return electricityData.summary.todayKwh;
+    } else if (period.id === "monthly") {
+      return electricityData.summary.monthlyMwh * 1000;
+    } else {
+      return electricityData.summary.yearlyMwh * 1000;
+    }
+  }, [electricityData, period.id, utilityBase.electricityKwh, period.scale]);
+
+  const electricityCost = useMemo(() => {
+    if (!electricityData) return electricityKwh * utilityRates.electricityIdr;
+    if (period.id === "yearly") {
+      return electricityData.summary.totalCost;
+    }
+    return electricityKwh * ((wbpRate + lwbpRate) / 2);
+  }, [electricityData, period.id, electricityKwh, wbpRate, lwbpRate]);
+
   const gasSm3 = utilityBase.gasSm3 * period.scale;
   const waterM3 = utilityBase.waterM3 * period.scale;
   const monthlyWaterVolume = utilityBase.waterM3 * 30;
 
-  const electricityCost = electricityKwh * utilityRates.electricityIdr;
   const waterCost = waterM3 * utilityRates.waterIdr;
   const gasCostUsd = gasSm3 * utilityRates.gasUsd;
   const gasCostIdr = gasCostUsd * usdToIdr;
@@ -204,7 +261,7 @@ export default function Dashboard() {
   const solarSavings = solarKwh * utilityRates.electricityIdr;
   const solarCoverage = Math.min(100, (solarKwh / Math.max(electricityKwh, 1)) * 100);
 
-  const monthlyElectric = utilityBase.electricityKwh * 30;
+  const monthlyElectric = electricityData ? electricityData.summary.monthlyMwh * 1000 : utilityBase.electricityKwh * 30;
   const monthlyGasEnergy = utilityBase.gasSm3 * 30 * gasEnergyFactor;
   const monthlyWaterEnergy = utilityBase.waterM3 * 30 * waterEnergyFactor;
   const totalMonthlyEnergy = monthlyElectric + monthlyGasEnergy + monthlyWaterEnergy;
@@ -220,9 +277,18 @@ export default function Dashboard() {
   );
 
   const electricitySeries = useMemo(() => {
+    if (electricityData) {
+      if (consumptionRange === "hour") {
+        return electricityData.charts.hourly;
+      } else if (consumptionRange === "day") {
+        return electricityData.charts.daily.map((d: any) => d.value);
+      } else {
+        return electricityData.charts.monthly.map((m: any) => m.value * 1000);
+      }
+    }
     const base = utilityBase.electricityKwh * consumptionConfig.scale;
     return buildTimeAwareSeries(consumptionConfig.points, base, base * 0.35, 1, maxIndex);
-  }, [consumptionConfig, maxIndex, utilityBase]);
+  }, [consumptionConfig, maxIndex, utilityBase, electricityData, consumptionRange]);
 
   const gasSeries = useMemo(() => {
     const base = utilityBase.gasSm3 * consumptionConfig.scale;
@@ -235,7 +301,7 @@ export default function Dashboard() {
   }, [consumptionConfig, maxIndex, utilityBase]);
 
   const solarSeries = useMemo(() => {
-    return electricitySeries.map((v) => (v !== null ? Number((v * solarShare).toFixed(1)) : null as unknown as number));
+    return electricitySeries.map((v: number | null) => (v !== null ? Number((v * solarShare).toFixed(1)) : null as unknown as number));
   }, [electricitySeries]);
 
   const consumptionLabels = useMemo(
@@ -245,10 +311,15 @@ export default function Dashboard() {
 
   const ytdMonthIndex = useMemo(() => getElapsedIndex("month"), [periodIndex]);
 
-  const ytdElectricitySeries = useMemo(
-    () => buildTimeAwareSeries(12, utilityBase.electricityKwh * 30, utilityBase.electricityKwh * 12, 1, ytdMonthIndex),
-    [ytdMonthIndex, utilityBase]
-  );
+  const ytdElectricitySeries = useMemo(() => {
+    if (electricityData) {
+      return electricityData.charts.monthly.map((m: any, i: number) => {
+        if (i > ytdMonthIndex) return null as unknown as number;
+        return m.value * 1000; // MWh to kWh
+      });
+    }
+    return buildTimeAwareSeries(12, utilityBase.electricityKwh * 30, utilityBase.electricityKwh * 12, 1, ytdMonthIndex);
+  }, [ytdMonthIndex, utilityBase, electricityData]);
 
   const ytdGasSeries = useMemo(
     () => buildTimeAwareSeries(12, utilityBase.gasSm3 * 30, utilityBase.gasSm3 * 12, 2, ytdMonthIndex),
@@ -261,27 +332,27 @@ export default function Dashboard() {
   );
 
   const ytdElectricityTotal = useMemo(
-    () => ytdElectricitySeries.reduce((sum, v) => sum + (v ?? 0), 0),
+    () => ytdElectricitySeries.reduce((sum: number, v: number | null) => sum + (v ?? 0), 0),
     [ytdElectricitySeries]
   );
 
   const ytdGasTotal = useMemo(
-    () => ytdGasSeries.reduce((sum, v) => sum + (v ?? 0), 0),
+    () => ytdGasSeries.reduce((sum: number, v: number | null) => sum + (v ?? 0), 0),
     [ytdGasSeries]
   );
 
   const ytdWaterTotal = useMemo(
-    () => ytdWaterSeries.reduce((sum, v) => sum + (v ?? 0), 0),
+    () => ytdWaterSeries.reduce((sum: number, v: number | null) => sum + (v ?? 0), 0),
     [ytdWaterSeries]
   );
 
   const ytdSolarSeries = useMemo(
-    () => ytdElectricitySeries.map((v) => (v !== null ? Number((v * solarShare).toFixed(1)) : null as unknown as number)),
+    () => ytdElectricitySeries.map((v: number | null) => (v !== null ? Number((v * solarShare).toFixed(1)) : null as unknown as number)),
     [ytdElectricitySeries]
   );
 
   const ytdSolarTotal = useMemo(
-    () => ytdSolarSeries.reduce((sum, v) => sum + (v ?? 0), 0),
+    () => ytdSolarSeries.reduce((sum: number, v: number | null) => sum + (v ?? 0), 0),
     [ytdSolarSeries]
   );
 
@@ -301,7 +372,10 @@ export default function Dashboard() {
 
   const elCompareConfig = compareRanges[elRange];
   const elCompareLabels = useMemo(() => buildLabels(elCompareConfig.points, elCompareConfig.stepMs, elCompareConfig.label), [elCompareConfig]);
-  const elCurrent = useMemo(() => buildSeries(elCompareConfig.points, utilityBase.electricityKwh / 24, (utilityBase.electricityKwh / 24) * 0.3, 1), [elCompareConfig, utilityBase]);
+  const elCurrent = useMemo(() => {
+    const base = electricityData ? (electricityData.summary.todayKwh / 24) : (utilityBase.electricityKwh / 24);
+    return buildSeries(elCompareConfig.points, base, base * 0.3, 1);
+  }, [elCompareConfig, utilityBase, electricityData]);
   const elPrevious = useMemo(() => elCurrent.map((value) => Number((value * 0.92).toFixed(2))), [elCurrent]);
 
   const gasCompareConfig = compareRanges[gasRange];
@@ -620,7 +694,7 @@ export default function Dashboard() {
                     {formatCurrency(electricityCost, "IDR")}
                   </div>
                   <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                    {electricitySeries.reduce((sum, v) => sum + v, 0).toFixed(1)} kWh
+                    {electricitySeries.reduce((sum: number, v: number) => sum + v, 0).toFixed(1)} kWh
                   </div>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-[#2f8ae5]" />
@@ -696,7 +770,7 @@ export default function Dashboard() {
                     {formatCurrency(solarSavings, "IDR")}
                   </div>
                   <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                    {solarSeries.reduce((sum, v) => sum + (v ?? 0), 0).toFixed(1)} kWh
+                    {solarSeries.reduce((sum: number, v: number) => sum + (v ?? 0), 0).toFixed(1)} kWh
                   </div>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-[#f59e0b]" />
