@@ -38,7 +38,7 @@ const formatCurrency = (value: number) =>
 
 export default function Electricity() {
   const [range, setRange] = useState<(typeof ranges)[number]["id"]>("ytd");
-  const [selectedYear, setSelectedYear] = useState(2025);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const config = ranges.find((item) => item.id === range) ?? ranges[0];
 
   const maxIdx = useMemo(() => getElapsedIndex(config.type), [config.type]);
