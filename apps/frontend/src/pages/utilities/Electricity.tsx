@@ -46,13 +46,24 @@ export default function Electricity() {
   const [plnData, setPlnData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // Retrieve custom rates from localStorage (default to 1600 WBP and 1112 LWBP if not set)
+  const wbpRate = useMemo(() => {
+    const saved = localStorage.getItem("scada.config.wbpRate");
+    return saved ? Number(saved) : 1600;
+  }, []);
+
+  const lwbpRate = useMemo(() => {
+    const saved = localStorage.getItem("scada.config.lwbpRate");
+    return saved ? Number(saved) : 1112;
+  }, []);
+
   // Re-fetch when year changes or every 30 seconds (auto-fetch)
   useEffect(() => {
     let active = true;
 
     const fetchData = (showLoading = false) => {
       if (showLoading) setLoading(true);
-      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${selectedYear}`)
+      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${selectedYear}&wbpRate=${wbpRate}&lwbpRate=${lwbpRate}`)
         .then((res) => {
           if (active) {
             setPlnData(res.data);
@@ -75,7 +86,7 @@ export default function Electricity() {
       active = false;
       clearInterval(interval);
     };
-  }, [selectedYear]);
+  }, [selectedYear, wbpRate, lwbpRate]);
 
   const hasData = !!plnData;
 
@@ -223,8 +234,9 @@ export default function Electricity() {
           <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">
             {loading ? "Calculating..." : formatCurrency(plnCost)}
           </div>
-          <div className="mt-1 text-xs font-semibold text-blue-600 dark:text-blue-400">
-            {plnTotalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh
+          <div className="mt-1 text-xs font-semibold text-blue-600 dark:text-blue-400 flex justify-between items-center">
+            <span>{plnTotalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh</span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">Tarif: Rp {wbpRate}/{lwbpRate}</span>
           </div>
         </div>
 
@@ -358,7 +370,7 @@ export default function Electricity() {
       {/* Parameters */}
       <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
         <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mb-4">Parameter & Rate Limit</h3>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-cyan-400">
             <div className="text-xs text-slate-400 dark:text-slate-500">Peak Limit</div>
             <div className="mt-1 text-lg font-bold text-slate-800 dark:text-white font-mono">12,000 kW</div>
@@ -367,9 +379,15 @@ export default function Electricity() {
             <div className="text-xs text-slate-400 dark:text-slate-500">Trafo Capacity</div>
             <div className="mt-1 text-lg font-bold text-slate-800 dark:text-white font-mono">15,000 kVA</div>
           </div>
-          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-cyan-400">
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-emerald-400">
             <div className="text-xs text-slate-400 dark:text-slate-500">Power Factor Target</div>
             <div className="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">&ge; 0.85</div>
+          </div>
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-blue-400">
+            <div className="text-xs text-slate-400 dark:text-slate-500">Tarif WBP / LWBP</div>
+            <div className="mt-1 text-base font-bold text-slate-800 dark:text-white font-mono">
+              Rp {wbpRate.toLocaleString("id-ID")} / Rp {lwbpRate.toLocaleString("id-ID")}
+            </div>
           </div>
         </div>
       </section>

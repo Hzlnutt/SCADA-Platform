@@ -36,6 +36,7 @@ import Gas from "../pages/utilities/Gas";
 import Water from "../pages/utilities/Water";
 import Hvac from "../pages/utilities/Hvac";
 import Wwtp from "../pages/utilities/Wwtp";
+import UtilityConfig from "../pages/utilities/UtilityConfig";
 import UtilityOverview from "../pages/utilities/UtilityOverview";
 import Tasks from "../pages/Tasks";
 
@@ -88,6 +89,7 @@ export const AppRouter = () => {
             <Route path="gas" element={<Gas />} />
             <Route path="hvac" element={<Hvac />} />
             <Route path="wwtp" element={<Wwtp />} />
+            <Route path="utility-config" element={<UtilityConfig />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/machines" element={<MachinesConfigPage />} />
             <Route path="approvals" element={<Approvals />} />

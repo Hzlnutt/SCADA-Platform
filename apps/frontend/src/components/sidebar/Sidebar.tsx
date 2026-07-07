@@ -289,6 +289,7 @@ export const Sidebar = () => {
           <NavItem to="/gas" label="Gas" icon={<IconDevice />} tone="scada" />
           <NavItem to="/air" label="Water" icon={<IconDevice />} tone="scada" />
           <NavItem to="/wwtp" label="WWTP" icon={<IconDevice />} tone="scada" />
+          <NavItem to="/utility-config" label="Config" icon={<IconSettings />} tone="scada" />
         </nav>
       )}
 
