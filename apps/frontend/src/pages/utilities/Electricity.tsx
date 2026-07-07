@@ -46,19 +46,35 @@ export default function Electricity() {
   const [plnData, setPlnData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Re-fetch when year changes
+  // Re-fetch when year changes or every 30 seconds (auto-fetch)
   useEffect(() => {
-    setLoading(true);
-    getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${selectedYear}`)
-      .then((res) => {
-        setPlnData(res.data);
-      })
-      .catch((err) => {
-        console.error("Failed to load electricity analytics", err);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    let active = true;
+
+    const fetchData = (showLoading = false) => {
+      if (showLoading) setLoading(true);
+      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${selectedYear}`)
+        .then((res) => {
+          if (active) {
+            setPlnData(res.data);
+            if (showLoading) setLoading(false);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load electricity analytics", err);
+          if (active && showLoading) setLoading(false);
+        });
+    };
+
+    fetchData(true);
+
+    const interval = setInterval(() => {
+      fetchData(false); // auto-fetch silently in background
+    }, 30000); // every 30 seconds
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, [selectedYear]);
 
   const hasData = !!plnData;
