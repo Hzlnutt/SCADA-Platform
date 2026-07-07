@@ -34,7 +34,7 @@ const ranges = [
 ] as const;
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
+  new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
 export default function Electricity() {
   const [range, setRange] = useState<(typeof ranges)[number]["id"]>("ytd");
@@ -236,7 +236,9 @@ export default function Electricity() {
           </div>
           <div className="mt-1 text-xs font-semibold text-blue-600 dark:text-blue-400 flex justify-between items-center">
             <span>{plnTotalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh</span>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">Tarif: Rp {wbpRate}/{lwbpRate}</span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+              Tarif: Rp {wbpRate.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/{lwbpRate.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
           </div>
         </div>
 
@@ -386,7 +388,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-blue-400">
             <div className="text-xs text-slate-400 dark:text-slate-500">Tarif WBP / LWBP</div>
             <div className="mt-1 text-base font-bold text-slate-800 dark:text-white font-mono">
-              Rp {wbpRate.toLocaleString("id-ID")} / Rp {lwbpRate.toLocaleString("id-ID")}
+              Rp {wbpRate.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / Rp {lwbpRate.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           </div>
         </div>

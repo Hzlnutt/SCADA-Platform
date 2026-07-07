@@ -52,6 +52,7 @@ export default function UtilityConfig() {
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">Rp</span>
               <input
                 type="number"
+                step="any"
                 value={wbpRate}
                 onChange={(e) => setWbpRate(Number(e.target.value))}
                 min="0"
@@ -72,6 +73,7 @@ export default function UtilityConfig() {
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">Rp</span>
               <input
                 type="number"
+                step="any"
                 value={lwbpRate}
                 onChange={(e) => setLwbpRate(Number(e.target.value))}
                 min="0"
