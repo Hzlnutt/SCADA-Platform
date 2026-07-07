@@ -6,6 +6,7 @@ import { DonutChart } from "../../components/charts/DonutChart";
 import { machineGroups } from "../../data/machines";
 import { buildTimeAwareSeries, buildTimeLabels, getElapsedIndex } from "../../utils/series";
 import { getJson } from "../../services/api.client";
+import { useConfigStore } from "../../store/config.store";
 
 const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
   const energy = group.summaryCards.find((card) => card.label === "Total Energy")?.value ?? 0;
@@ -46,16 +47,9 @@ export default function Electricity() {
   const [plnData, setPlnData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Retrieve custom rates from localStorage (default to 1600 WBP and 1112 LWBP if not set)
-  const wbpRate = useMemo(() => {
-    const saved = localStorage.getItem("scada.config.wbpRate");
-    return saved ? Number(saved) : 1600;
-  }, []);
-
-  const lwbpRate = useMemo(() => {
-    const saved = localStorage.getItem("scada.config.lwbpRate");
-    return saved ? Number(saved) : 1112;
-  }, []);
+  // Retrieve custom rates from useConfigStore
+  const wbpRate = useConfigStore((state) => state.wbpRate);
+  const lwbpRate = useConfigStore((state) => state.lwbpRate);
 
   // Re-fetch when year changes or every 30 seconds (auto-fetch)
   useEffect(() => {

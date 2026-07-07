@@ -1,16 +1,14 @@
 import { useState } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
+import { useConfigStore } from "../../store/config.store";
 
 export default function UtilityConfig() {
-  const [wbpRate, setWbpRate] = useState(() => {
-    const saved = localStorage.getItem("scada.config.wbpRate");
-    return saved ? Number(saved) : 1600;
-  });
-  
-  const [lwbpRate, setLwbpRate] = useState(() => {
-    const saved = localStorage.getItem("scada.config.lwbpRate");
-    return saved ? Number(saved) : 1112;
-  });
+  const storeWbpRate = useConfigStore((state) => state.wbpRate);
+  const storeLwbpRate = useConfigStore((state) => state.lwbpRate);
+  const setRates = useConfigStore((state) => state.setRates);
+
+  const [wbpRate, setWbpRate] = useState(storeWbpRate);
+  const [lwbpRate, setLwbpRate] = useState(storeLwbpRate);
 
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -21,8 +19,7 @@ export default function UtilityConfig() {
     setSuccess(false);
 
     setTimeout(() => {
-      localStorage.setItem("scada.config.wbpRate", wbpRate.toString());
-      localStorage.setItem("scada.config.lwbpRate", lwbpRate.toString());
+      setRates(wbpRate, lwbpRate);
       setSaving(false);
       setSuccess(true);
 
