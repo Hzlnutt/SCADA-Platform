@@ -96,7 +96,7 @@ export const getElectricityAnalytics = async (
         electricity_kwh::float AS value
       FROM electricity_telemetry
       WHERE id_device = $1 AND t_stamp >= $2 AND t_stamp <= $3
-      ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
+      ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
     `, [deviceId, from, to]);
     hourlyRecords = res.rows;
   } catch (err) {
