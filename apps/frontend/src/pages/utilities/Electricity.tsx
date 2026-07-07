@@ -309,7 +309,11 @@ export default function Electricity() {
             </div>
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
-            <MultiLineChart series={mdpSeries} labels={labels} unit={range === "hour" ? "kW" : range === "day" ? "kWh" : "MWh"} heightClassName="h-64" />
+            {range === "hour" ? (
+              <UtilityBarChart labels={barLabels} values={barValues} unit="kWh" color="#3b82f6" height={256} />
+            ) : (
+              <MultiLineChart series={mdpSeries} labels={labels} unit={range === "day" ? "kWh" : "MWh"} heightClassName="h-64" />
+            )}
           </div>
         </section>
 
