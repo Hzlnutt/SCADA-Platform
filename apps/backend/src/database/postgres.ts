@@ -1,6 +1,12 @@
-import { Pool } from "pg";
+import { Pool, types } from "pg";
 import { env } from "../config/env.config";
 import { logger } from "../config/logger.config";
+
+// Parse OID 1114 (timestamp without time zone) by treating it as WIB (+07:00) local time.
+// This aligns timezone-naive database values with the application's timezone helpers.
+types.setTypeParser(1114, (str) => {
+  return new Date(str.replace(" ", "T") + "+07:00");
+});
 
 let pool: Pool | null = null;
 
