@@ -1,4 +1,5 @@
 import { getMongoDb } from "../../database/mongo";
+import { getPostgresPool } from "../../database/postgres";
 import { ELECTRICITY_RAW_COLLECTION, ELECTRICITY_1M_COLLECTION, ELECTRICITY_1H_COLLECTION } from "../../database/collections";
 
 export interface ElectricityAnalyticsResult {
@@ -86,13 +87,37 @@ export const getElectricityAnalytics = async (
   const activeEnergyTag = "electricity/Cubicle_PLN_PM8000/active_energy";
 
   // 1. Fetch hourly values of active energy for the range
-  const hourlyRecords = await hourlyCollection
-    .find({
-      "meta.tagId": activeEnergyTag,
-      ts: { $gte: from, $lte: to }
-    })
-    .sort({ ts: 1 })
-    .toArray();
+  let hourlyRecords: { ts: Date; value: number }[] = [];
+  const pool = getPostgresPool();
+  try {
+    const res = await pool.query(`
+      SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
+        t_stamp AS ts, 
+        electricity_kwh::float AS value
+      FROM electricity_telemetry
+      WHERE id_device = $1 AND t_stamp >= $2 AND t_stamp <= $3
+      ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
+    `, [deviceId, from, to]);
+    hourlyRecords = res.rows;
+  } catch (err) {
+    console.warn("PostgreSQL query failed for electricity analytics, falling back to MongoDB:", err);
+  }
+
+  // If no records found in Postgres, fall back to MongoDB
+  if (hourlyRecords.length === 0) {
+    const mongoRecords = await hourlyCollection
+      .find({
+        "meta.tagId": activeEnergyTag,
+        ts: { $gte: from, $lte: to }
+      })
+      .sort({ ts: 1 })
+      .toArray();
+    
+    hourlyRecords = mongoRecords.map(r => ({
+      ts: r.ts,
+      value: r.value
+    }));
+  }
 
   let wbpKwh = 0;
   let lwbpKwh = 0;
