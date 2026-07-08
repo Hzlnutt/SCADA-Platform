@@ -70,7 +70,7 @@ export const ComparisonBarChart = ({
           />
         ) : null}
 
-        <div className={`flex h-full items-end ${containerGap}`}>
+        <div className="grid h-full items-end w-full" style={{ gridTemplateColumns: `repeat(${labels.length}, minmax(0, 1fr))`, gap: labels.length > 15 ? '2px' : '6px' }}>
           {labels.map((label, index) => {
             const currentValue = current[index] ?? 0;
             const previousValue = previous ? previous[index] ?? 0 : 0;

@@ -262,9 +262,7 @@ export const getElectricityAnalytics = async (
   const yesterdayDate = new Date(new Date().getTime() - 24 * 60 * 60 * 1000);
   const yesterdayDateStr = getWibDateString(yesterdayDate);
   const dbPrevHourly = dailyHourlyMap.get(yesterdayDateStr);
-  const prevHourlyValues = dbPrevHourly && dbPrevHourly.some(v => v > 0)
-    ? dbPrevHourly
-    : hourlyValues.map(v => Number((v * 0.93).toFixed(2)));
+  const prevHourlyValues = dbPrevHourly || Array.from({ length: 24 }, () => 0);
 
   const totalKwh = wbpKwh + lwbpKwh;
   const wbpCost = wbpKwh * wbpRate;
