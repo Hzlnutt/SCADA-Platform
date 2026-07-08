@@ -248,6 +248,20 @@ export default function Dashboard() {
     if (period.id === "yearly") {
       return electricityData.summary.totalCost;
     }
+    if (period.id === "daily") {
+      const hourly = electricityData.charts.hourly || [];
+      let todayWbp = 0;
+      let todayLwbp = 0;
+      hourly.forEach((val: number, h: number) => {
+        const endHour = h + 1;
+        if (endHour >= 18 && endHour <= 22) {
+          todayWbp += val;
+        } else {
+          todayLwbp += val;
+        }
+      });
+      return todayWbp * wbpRate + todayLwbp * lwbpRate;
+    }
     return electricityKwh * ((wbpRate + lwbpRate) / 2);
   }, [electricityData, period.id, electricityKwh, wbpRate, lwbpRate]);
 
@@ -285,30 +299,30 @@ export default function Dashboard() {
     [consumptionConfig.type]
   );
 
+  const monthlyDailyRecords = useMemo(() => {
+    if (electricityData && electricityData.charts.daily) {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1; // 1-indexed
+      const monthPrefix = `${currentYear}-${String(currentMonth).padStart(2, "0")}`;
+      return electricityData.charts.daily.filter((d: any) => d.day.startsWith(monthPrefix));
+    }
+    return [];
+  }, [electricityData]);
+
   const electricitySeries = useMemo(() => {
     if (electricityData) {
       if (consumptionRange === "hour") {
         return electricityData.charts.hourly;
       } else if (consumptionRange === "day") {
-        const todayStr = new Date(new Date().getTime() + 7 * 60 * 60 * 1000).toISOString().split("T")[0]; // today in WIB
-        let todayIdx = electricityData.charts.daily.findIndex((d: any) => d.day === todayStr);
-        if (todayIdx === -1) {
-          todayIdx = electricityData.charts.daily.length - 1;
-        }
-        const startIndex = Math.max(0, todayIdx - 29);
-        const sliced = electricityData.charts.daily.slice(startIndex, todayIdx + 1);
-        const values = sliced.map((d: any) => d.value);
-        while (values.length < 30) {
-          values.unshift(0);
-        }
-        return values;
+        return monthlyDailyRecords.map((d: any) => d.value);
       } else {
         return electricityData.charts.monthly.map((m: any) => m.value * 1000);
       }
     }
     const base = utilityBase.electricityKwh * consumptionConfig.scale;
     return buildTimeAwareSeries(consumptionConfig.points, base, base * 0.35, 1, maxIndex);
-  }, [consumptionConfig, maxIndex, utilityBase, electricityData, consumptionRange]);
+  }, [consumptionConfig, maxIndex, utilityBase, electricityData, consumptionRange, monthlyDailyRecords]);
 
   const consumptionElectricityCost = useMemo(() => {
     const totalKwh = electricitySeries.reduce((sum: number, v: number) => sum + v, 0);
@@ -316,21 +330,36 @@ export default function Dashboard() {
   }, [electricitySeries, wbpRate, lwbpRate]);
 
   const gasSeries = useMemo(() => {
-    return Array.from({ length: consumptionConfig.points }, () => 0);
-  }, [consumptionConfig.points]);
+    return Array.from({ length: electricitySeries.length }, () => 0);
+  }, [electricitySeries.length]);
 
   const waterSeries = useMemo(() => {
-    return Array.from({ length: consumptionConfig.points }, () => 0);
-  }, [consumptionConfig.points]);
+    return Array.from({ length: electricitySeries.length }, () => 0);
+  }, [electricitySeries.length]);
 
   const solarSeries = useMemo(() => {
     return electricitySeries.map(() => 0);
   }, [electricitySeries]);
 
-  const consumptionLabels = useMemo(
-    () => buildTimeLabels(consumptionConfig.points, consumptionConfig.type),
-    [consumptionConfig]
-  );
+  const consumptionLabels = useMemo(() => {
+    if (electricityData) {
+      if (consumptionRange === "hour") {
+        return Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
+      } else if (consumptionRange === "day") {
+        return monthlyDailyRecords.map((d: any) => {
+          const parts = d.day.split("-");
+          return `${parts[2]}`; // day number, e.g. "01", "02"
+        });
+      } else {
+        const MONTH_SHORT_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+        return electricityData.charts.monthly.map((m: any) => {
+          const [yr, mo] = m.month.split("-").map(Number);
+          return `${MONTH_SHORT_ID[mo - 1]} ${yr}`;
+        });
+      }
+    }
+    return buildTimeLabels(consumptionConfig.points, consumptionConfig.type);
+  }, [consumptionConfig, electricityData, consumptionRange, monthlyDailyRecords]);
 
   const ytdMonthIndex = useMemo(() => getElapsedIndex("month"), [periodIndex]);
 

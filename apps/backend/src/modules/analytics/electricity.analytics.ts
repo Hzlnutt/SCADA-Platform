@@ -332,8 +332,10 @@ export const getElectricityAnalytics = async (
   const vUnb = 0.5 + Math.random() * 0.2;
   const iUnb = 2.0 + Math.random() * 0.5;
 
-  const today = daily[daily.length - 1]?.value || 0;
-  const monthlyMwh = totalKwh / 1000;
+  const todayStr = getWibDateString(new Date());
+  const today = dailyMap.get(todayStr) || 0;
+  const currentMonthStr = todayStr.substring(0, 7);
+  const monthlyMwh = (monthlyMap.get(currentMonthStr) || 0) / 1000;
   const yearlyMwh = totalKwh / 1000;
 
   return {
