@@ -8,7 +8,7 @@ import {
 } from "../../database/collections";
 import { z } from "zod";
 import { getSocketServer } from "../../services/socket.manager";
-import { recordAudit } from "../../services/audit.service";
+import { recordAudit, getClientIp } from "../../services/audit.service";
 
 // Zod schemas for validation
 const machinePayloadSchema = z.object({
@@ -84,6 +84,7 @@ export const createMachineHandler = async (req: Request, res: Response, next: Ne
       action: "create_machine",
       resourceType: "machine",
       resourceId: parsed.id,
+      ip: getClientIp(req),
       meta: {
         name: parsed.name,
         area: parsed.area,
@@ -126,6 +127,7 @@ export const updateMachineHandler = async (req: Request, res: Response, next: Ne
       action: "update_machine",
       resourceType: "machine",
       resourceId: id,
+      ip: getClientIp(req),
       meta: {
         before: {
           name: beforeDoc.name,
@@ -160,6 +162,7 @@ export const deleteMachineHandler = async (req: Request, res: Response, next: Ne
       action: "delete_machine",
       resourceType: "machine",
       resourceId: id,
+      ip: getClientIp(req),
       meta: {
         deletedMachine: existing ? { name: existing.name, area: existing.area } : null
       }
@@ -211,6 +214,7 @@ export const upsertThresholdsHandler = async (req: Request, res: Response, next:
       action: "update_thresholds",
       resourceType: "machine_threshold",
       resourceId: parsed.machineId,
+      ip: getClientIp(req),
       meta: {
         before: beforeThresholds.map(t => ({
           parameter: t.parameter,
@@ -320,6 +324,7 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
       action: "update_utility_config",
       resourceType: "utility_config",
       resourceId: "utility",
+      ip: getClientIp(req),
       meta: {
         before: { wbpRate: oldWbpRate, lwbpRate: oldLwbpRate },
         after: { wbpRate: parsed.wbpRate, lwbpRate: parsed.lwbpRate }

@@ -24,6 +24,7 @@ export const getAuditLogsHandler = async (
         { action: searchRegex },
         { resourceType: searchRegex },
         { resourceId: searchRegex },
+        { ip: searchRegex },
         { "meta.name": searchRegex },
         { "meta.email": searchRegex },
         { "meta.role": searchRegex },

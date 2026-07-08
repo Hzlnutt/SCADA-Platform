@@ -10,6 +10,7 @@ type AuditLogItem = {
   resourceType?: string;
   resourceId?: string;
   meta?: Record<string, any>;
+  ip?: string;
   ts: string;
 };
 
@@ -214,10 +215,11 @@ export default function AuditTrail() {
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-50 dark:bg-slate-850/50 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 dark:border-slate-800">
+            <thead className="bg-slate-50 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800/80 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               <tr>
                 <th className="px-4 py-3.5 w-44">Waktu</th>
                 <th className="px-4 py-3.5 w-48">User / Aktor</th>
+                <th className="px-4 py-3.5 w-36">IP Address</th>
                 <th className="px-4 py-3.5 w-48">Aksi</th>
                 <th className="px-4 py-3.5 w-56">Resource / ID</th>
                 <th className="px-4 py-3.5 text-right w-24">Detail</th>
@@ -226,13 +228,13 @@ export default function AuditTrail() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={6} className="px-4 py-12 text-center text-slate-400 dark:text-slate-500">
                     Memuat log audit trail...
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={6} className="px-4 py-12 text-center text-slate-400 dark:text-slate-500">
                     Tidak ditemukan rekaman log audit trail.
                   </td>
                 </tr>
@@ -250,23 +252,26 @@ export default function AuditTrail() {
 
                   return (
                     <div key={log._id} className="contents">
-                      <tr className="hover:bg-slate-50/40 dark:hover:bg-slate-850/10">
-                        <td className="px-4 py-3.5 font-mono text-slate-400 whitespace-nowrap">
+                      <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/15 transition-colors">
+                        <td className="px-4 py-3.5 font-mono text-slate-400 dark:text-slate-500 whitespace-nowrap">
                           {formattedTime}
                         </td>
-                        <td className="px-4 py-3.5 text-slate-850 dark:text-slate-200 font-bold">
+                        <td className="px-4 py-3.5 text-slate-800 dark:text-slate-200 font-bold">
                           {log.actorId}
+                        </td>
+                        <td className="px-4 py-3.5 font-mono text-slate-600 dark:text-slate-400">
+                          {log.ip || "127.0.0.1"}
                         </td>
                         <td className="px-4 py-3.5">
                           <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider border ${getActionBadgeColor(log.action)}`}>
                             {log.action.replace(/_/g, " ")}
                           </span>
                         </td>
-                        <td className="px-4 py-3.5 text-slate-500 whitespace-nowrap">
+                        <td className="px-4 py-3.5 text-slate-500 dark:text-slate-450 whitespace-nowrap">
                           {log.resourceType ? (
-                            <span className="font-bold text-slate-700 dark:text-slate-350">
+                            <span className="font-bold text-slate-700 dark:text-slate-300">
                               {log.resourceType.toUpperCase()}:{" "}
-                              <span className="font-mono font-medium text-slate-400">
+                              <span className="font-mono font-medium text-slate-400 dark:text-slate-500">
                                 {log.resourceId}
                               </span>
                             </span>
@@ -286,7 +291,7 @@ export default function AuditTrail() {
                       </tr>
                       {isExpanded && (
                         <tr>
-                          <td colSpan={5} className="px-4 py-4 bg-slate-50/50 dark:bg-slate-950/20 border-t border-b border-slate-100 dark:border-slate-800/80">
+                          <td colSpan={6} className="px-4 py-4 bg-slate-50/50 dark:bg-slate-950/40 border-t border-b border-slate-100 dark:border-slate-800/80">
                             {formatChangeDetails(log)}
                           </td>
                         </tr>
@@ -301,7 +306,7 @@ export default function AuditTrail() {
 
         {/* Pagination Footer */}
         {!loading && logs.length > 0 && (
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50 dark:bg-slate-850/10 px-4 py-3.5 border-t border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-semibold">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50 dark:bg-slate-950/30 px-4 py-3.5 border-t border-slate-100 dark:border-slate-800 text-slate-400 text-xs font-semibold">
             <div>
               Menampilkan {logs.length} dari {pagination.total} log audit
             </div>
