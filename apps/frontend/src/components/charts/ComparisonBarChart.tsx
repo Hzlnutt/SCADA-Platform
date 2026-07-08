@@ -89,11 +89,11 @@ export const ComparisonBarChart = ({
                 className="flex h-full flex-1 flex-col justify-end"
                 onMouseLeave={() => setHoverState(null)}
               >
-                <div className={`flex h-full items-end ${barGap}`}>
+                <div className="flex h-full w-full items-end gap-0.5">
                   {previous ? (
                     <div
                       className={[
-                        "w-1/2 rounded-t transition shadow-sm",
+                        "w-1/2 flex-1 rounded-t transition shadow-sm",
                         highlightPrevious 
                           ? "bg-slate-400 dark:bg-slate-300" 
                           : "bg-slate-300 dark:bg-slate-600",
@@ -112,7 +112,7 @@ export const ComparisonBarChart = ({
                   ) : null}
                   <div
                     className={[
-                      previous ? "w-1/2" : "w-full",
+                      previous ? "w-1/2 flex-1" : "w-full",
                       "rounded-t transition shadow-[0_0_8px_rgba(59,130,246,0.15)]",
                       highlightCurrent 
                         ? "bg-sky-400 dark:bg-sky-300 shadow-[0_0_12px_rgba(56,189,248,0.5)]" 

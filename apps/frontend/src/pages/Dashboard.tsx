@@ -60,7 +60,6 @@ const consumptionRanges = [
 ] as const;
 
 const compareRanges = {
-  "1h": { points: 12, stepMs: 5 * 60 * 1000, label: "time" },
   "1d": { points: 24, stepMs: 60 * 60 * 1000, label: "day" },
   "1w": { points: 7, stepMs: 24 * 60 * 60 * 1000, label: "day" },
   "1m": { points: 30, stepMs: 24 * 60 * 60 * 1000, label: "day" },
@@ -99,7 +98,6 @@ const statusTone: Record<StatusPreview["status"], string> = {
 };
 
 const rangeOptions = [
-  { value: "1h", label: "1h" },
   { value: "1d", label: "1d" },
   { value: "1w", label: "1w" },
   { value: "1m", label: "1m" },
@@ -445,16 +443,7 @@ export default function Dashboard() {
     let current: number[] = [];
     let previous: number[] = [];
 
-    if (elRange === "1h") {
-      const hourly = electricityData.charts.hourly || [];
-      const currentHour = now.getHours();
-      const startHour = Math.max(0, currentHour - 11);
-      for (let h = startHour; h <= currentHour; h++) {
-        labels.push(`${h.toString().padStart(2, "0")}:00`);
-        current.push(hourly[h] ?? 0);
-        previous.push(Number(((hourly[h] ?? 0) * 0.91).toFixed(2)));
-      }
-    } else if (elRange === "1d") {
+    if (elRange === "1d") {
       const hourly = electricityData.charts.hourly || [];
       for (let h = 0; h < 24; h++) {
         labels.push(`${h.toString().padStart(2, "0")}:00`);

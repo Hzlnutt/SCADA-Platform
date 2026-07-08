@@ -87,6 +87,7 @@ export interface ElectricityAnalyticsResult {
   };
   charts: {
     hourly: number[];
+    prevHourly: number[];
     daily: { day: string; value: number }[];
     monthly: { month: string; value: number }[];
     breakdown: { label: string; value: number; color: string }[];
@@ -258,6 +259,12 @@ export const getElectricityAnalytics = async (
   }
 
   const hourlyValues = dailyHourlyMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
+  const yesterdayDate = new Date(new Date().getTime() - 24 * 60 * 60 * 1000);
+  const yesterdayDateStr = getWibDateString(yesterdayDate);
+  const dbPrevHourly = dailyHourlyMap.get(yesterdayDateStr);
+  const prevHourlyValues = dbPrevHourly && dbPrevHourly.some(v => v > 0)
+    ? dbPrevHourly
+    : hourlyValues.map(v => Number((v * 0.93).toFixed(2)));
 
   const totalKwh = wbpKwh + lwbpKwh;
   const wbpCost = wbpKwh * wbpRate;
@@ -374,6 +381,7 @@ export const getElectricityAnalytics = async (
     },
     charts: {
       hourly: hourlyValues,
+      prevHourly: prevHourlyValues,
       daily,
       monthly,
       breakdown
