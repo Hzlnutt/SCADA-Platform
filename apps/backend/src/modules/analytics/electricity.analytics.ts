@@ -124,23 +124,27 @@ export const getElectricityAnalytics = async (
   const dailyMap = new Map<string, number>();
   const monthlyMap = new Map<string, number>();
 
-  const hourlyValues: number[] = Array.from({ length: 24 }, () => 0);
-  const hourlyCounts: number[] = Array.from({ length: 24 }, () => 0);
+  const dailyHourlyMap = new Map<string, number[]>();
+  let latestWibDate = hourlyRecords.length > 0
+    ? getWibDateString(hourlyRecords[hourlyRecords.length - 1].ts)
+    : getWibDateString(new Date());
 
   for (let i = 1; i < hourlyRecords.length; i++) {
-    const prevVal = hourlyRecords[i - 1].value;
-    const currVal = hourlyRecords[i].value;
+    const prevRecord = hourlyRecords[i - 1];
+    const currRecord = hourlyRecords[i];
+    const prevVal = prevRecord.value;
+    const currVal = currRecord.value;
     
     let diff = currVal - prevVal;
     if (diff < 0) diff = 0; // Guard against resets or anomalies
 
-    const record = hourlyRecords[i];
-    const hour = getWibHour(record.ts);
-    const dateStr = getWibDateString(record.ts);
+    const hour = getWibHour(prevRecord.ts);
+    const dateStr = getWibDateString(prevRecord.ts);
     const monthStr = dateStr.substring(0, 7);
 
     // If the hourly interval ends at 18:00 to 22:00 WIB, it started at WBP hours (17:00-21:00)
-    if (hour >= 18 && hour <= 22) {
+    const endHour = getWibHour(currRecord.ts);
+    if (endHour >= 18 && endHour <= 22) {
       wbpKwh += diff;
     } else {
       lwbpKwh += diff;
@@ -152,17 +156,17 @@ export const getElectricityAnalytics = async (
     // Group by Month
     monthlyMap.set(monthStr, (monthlyMap.get(monthStr) || 0) + diff);
 
-    // Accumulate for hourly profile
-    hourlyValues[hour] += diff;
-    hourlyCounts[hour] += 1;
-  }
-
-  // Calculate average hourly consumption profile
-  for (let h = 0; h < 24; h++) {
-    if (hourlyCounts[h] > 0) {
-      hourlyValues[h] = hourlyValues[h] / hourlyCounts[h];
+    // Accumulate for daily hourly map
+    if (!dailyHourlyMap.has(dateStr)) {
+      dailyHourlyMap.set(dateStr, Array.from({ length: 24 }, () => 0));
+    }
+    const dayHours = dailyHourlyMap.get(dateStr)!;
+    if (hour >= 0 && hour < 24) {
+      dayHours[hour] += diff;
     }
   }
+
+  const hourlyValues = dailyHourlyMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
 
   const totalKwh = wbpKwh + lwbpKwh;
   const wbpCost = wbpKwh * wbpRate;
