@@ -38,15 +38,25 @@ function parsePowerFactor(data: any): number | null {
 async function fetchPowerFactor(): Promise<number | null> {
   if (!env.powerFactorApiUrl) return null;
   try {
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = {
+      "Cache-Control": "no-cache",
+      "Pragma": "no-cache"
+    };
     if (env.powerFactorApiUser && env.powerFactorApiPass) {
       headers["Authorization"] = "Basic " + Buffer.from(env.powerFactorApiUser + ":" + env.powerFactorApiPass).toString("base64");
     }
     
+    let fetchUrl = env.powerFactorApiUrl;
+    if (fetchUrl.includes("?")) {
+      fetchUrl += `&_t=${Date.now()}`;
+    } else {
+      fetchUrl += `?_t=${Date.now()}`;
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
     
-    const res = await fetch(env.powerFactorApiUrl, {
+    const res = await fetch(fetchUrl, {
       headers,
       signal: controller.signal
     });

@@ -76,7 +76,7 @@ export default function Electricity() {
 
     const interval = setInterval(() => {
       fetchData(false); // auto-fetch silently in background
-    }, 30000); // every 30 seconds
+    }, 2000); // every 2 seconds
 
     const socket = getSocket();
 
