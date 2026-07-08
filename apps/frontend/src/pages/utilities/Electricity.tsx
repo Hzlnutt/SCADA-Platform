@@ -465,7 +465,7 @@ export default function Electricity() {
             <div>
               <div className="text-xs text-slate-400 dark:text-slate-500">Power Factor (Cos φ)</div>
               <div className="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                {loading ? "Loading..." : (plnLoadFactor / 100).toFixed(3)}
+                {loading ? "Loading..." : (plnLoadFactor / 100).toFixed(2)}
               </div>
             </div>
             <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Target: &ge; 0.85</div>
