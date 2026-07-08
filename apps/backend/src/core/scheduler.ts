@@ -47,8 +47,8 @@ export const startPostgresPolling = () => {
 
   // Initial poll
   poll();
-  // Poll every 5 seconds
-  pollingInterval = setInterval(poll, 5000);
+  // Poll every 1 second
+  pollingInterval = setInterval(poll, 1000);
 };
 
 export const startScheduler = () => {

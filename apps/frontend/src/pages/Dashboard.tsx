@@ -119,7 +119,7 @@ export default function Dashboard() {
     let active = true;
     const fetchElectricity = () => {
       const currentYear = new Date().getFullYear();
-      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${currentYear}`)
+      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${currentYear}&_t=${Date.now()}`)
         .then((res) => {
           if (active) {
             setElectricityData(res.data);
