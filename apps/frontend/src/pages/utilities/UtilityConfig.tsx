@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { useConfigStore } from "../../store/config.store";
 
 export default function UtilityConfig() {
   const storeWbpRate = useConfigStore((state) => state.wbpRate);
   const storeLwbpRate = useConfigStore((state) => state.lwbpRate);
+  const fetchRates = useConfigStore((state) => state.fetchRates);
   const setRates = useConfigStore((state) => state.setRates);
 
   const [wbpRate, setWbpRate] = useState(storeWbpRate);
@@ -13,19 +14,29 @@ export default function UtilityConfig() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetchRates();
+  }, [fetchRates]);
+
+  useEffect(() => {
+    setWbpRate(storeWbpRate);
+    setLwbpRate(storeLwbpRate);
+  }, [storeWbpRate, storeLwbpRate]);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setSuccess(false);
 
-    setTimeout(() => {
-      setRates(wbpRate, lwbpRate);
-      setSaving(false);
+    try {
+      await setRates(wbpRate, lwbpRate);
       setSuccess(true);
-
-      // Auto-hide success message
       setTimeout(() => setSuccess(false), 3000);
-    }, 800);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

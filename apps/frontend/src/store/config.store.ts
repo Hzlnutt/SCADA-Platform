@@ -1,41 +1,51 @@
 import { create } from "zustand";
+import { getJson, postJson } from "../services/api.client";
 
 type ConfigState = {
   wbpRate: number;
   lwbpRate: number;
-  setRates: (wbp: number, lwbp: number) => void;
-};
-
-const getSavedWbpRate = () => {
-  const saved = localStorage.getItem("scada.config.wbpRate");
-  return saved ? Number(saved) : 1600;
-};
-
-const getSavedLwbpRate = () => {
-  const saved = localStorage.getItem("scada.config.lwbpRate");
-  return saved ? Number(saved) : 1112;
+  loading: boolean;
+  fetchRates: () => Promise<void>;
+  setRates: (wbp: number, lwbp: number) => Promise<void>;
 };
 
 export const useConfigStore = create<ConfigState>((set) => ({
-  wbpRate: getSavedWbpRate(),
-  lwbpRate: getSavedLwbpRate(),
-  setRates: (wbp, lwbp) => {
-    localStorage.setItem("scada.config.wbpRate", wbp.toString());
-    localStorage.setItem("scada.config.lwbpRate", lwbp.toString());
-    set({ wbpRate: wbp, lwbpRate: lwbp });
+  wbpRate: 1600,
+  lwbpRate: 1112,
+  loading: false,
+  fetchRates: async () => {
+    try {
+      set({ loading: true });
+      const res = await getJson<{ data: { wbpRate: number; lwbpRate: number } }>("/config/utility");
+      if (res && res.data) {
+        set({ wbpRate: res.data.wbpRate, lwbpRate: res.data.lwbpRate });
+      }
+    } catch (err) {
+      console.error("Failed to fetch utility rates config:", err);
+    } finally {
+      set({ loading: false });
+    }
+  },
+  setRates: async (wbp, lwbp) => {
+    try {
+      set({ loading: true });
+      const res = await postJson<{ data: { wbpRate: number; lwbpRate: number } }>("/config/utility", {
+        wbpRate: wbp,
+        lwbpRate: lwbp
+      });
+      if (res && res.data) {
+        set({ wbpRate: res.data.wbpRate, lwbpRate: res.data.lwbpRate });
+      }
+    } catch (err) {
+      console.error("Failed to update utility rates config:", err);
+      throw err;
+    } finally {
+      set({ loading: false });
+    }
   }
 }));
 
-// Listen to changes from other tabs using the HTML5 storage event
+// Fetch configuration initially when config store module loads
 if (typeof window !== "undefined") {
-  window.addEventListener("storage", (event) => {
-    if (event.key === "scada.config.wbpRate" || event.key === "scada.config.lwbpRate") {
-      const wbp = localStorage.getItem("scada.config.wbpRate");
-      const lwbp = localStorage.getItem("scada.config.lwbpRate");
-      useConfigStore.setState({
-        wbpRate: wbp ? Number(wbp) : 1600,
-        lwbpRate: lwbp ? Number(lwbp) : 1112
-      });
-    }
-  });
+  useConfigStore.getState().fetchRates();
 }

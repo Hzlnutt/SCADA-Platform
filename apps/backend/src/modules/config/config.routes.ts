@@ -8,7 +8,9 @@ import {
   deleteMachineHandler,
   getThresholdsHandler,
   upsertThresholdsHandler,
-  testBindingHandler
+  testBindingHandler,
+  getUtilityConfigHandler,
+  updateUtilityConfigHandler
 } from "./config.controller";
 
 export const configRouter = Router();
@@ -21,3 +23,5 @@ configRouter.delete("/config/machines/:id", authenticate, authorize(["admin"]), 
 configRouter.get("/config/thresholds/:machineId", authenticate, getThresholdsHandler);
 configRouter.post("/config/thresholds", authenticate, authorize(["admin"]), upsertThresholdsHandler);
 configRouter.post("/config/machines/:id/bind", authenticate, authorize(["admin"]), testBindingHandler);
+configRouter.get("/config/utility", authenticate, getUtilityConfigHandler);
+configRouter.post("/config/utility", authenticate, updateUtilityConfigHandler);

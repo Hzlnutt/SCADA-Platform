@@ -3,7 +3,8 @@ import { getMongoDb } from "../../database/mongo";
 import {
   MACHINE_CATEGORIES_COLLECTION,
   MACHINE_CONFIGS_COLLECTION,
-  MACHINE_THRESHOLDS_COLLECTION
+  MACHINE_THRESHOLDS_COLLECTION,
+  GLOBAL_CONFIG_COLLECTION
 } from "../../database/collections";
 import { z } from "zod";
 
@@ -184,6 +185,59 @@ export const testBindingHandler = async (req: Request, res: Response, next: Next
     }
 
     res.json({ machineId: id, results });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const utilityConfigSchema = z.object({
+  wbpRate: z.number().nonnegative(),
+  lwbpRate: z.number().nonnegative()
+});
+
+export const getUtilityConfigHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const db = getMongoDb();
+    const config = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
+    if (config) {
+      res.json({
+        data: {
+          wbpRate: config.wbpRate,
+          lwbpRate: config.lwbpRate
+        }
+      });
+    } else {
+      res.json({
+        data: {
+          wbpRate: 1600,
+          lwbpRate: 1112
+        }
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateUtilityConfigHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const db = getMongoDb();
+    const parsed = utilityConfigSchema.parse(req.body);
+
+    const doc = {
+      key: "utility",
+      wbpRate: parsed.wbpRate,
+      lwbpRate: parsed.lwbpRate,
+      updatedAt: new Date()
+    };
+
+    await db.collection(GLOBAL_CONFIG_COLLECTION).updateOne(
+      { key: "utility" },
+      { $set: doc },
+      { upsert: true }
+    );
+
+    res.json({ data: doc });
   } catch (err) {
     next(err);
   }

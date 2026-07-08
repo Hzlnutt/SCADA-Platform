@@ -58,7 +58,7 @@ export default function Electricity() {
 
     const fetchData = (showLoading = false) => {
       if (showLoading) setLoading(true);
-      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${selectedYear}&wbpRate=${wbpRate}&lwbpRate=${lwbpRate}`)
+      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${selectedYear}`)
         .then((res) => {
           if (active) {
             setPlnData(res.data);

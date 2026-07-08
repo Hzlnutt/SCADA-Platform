@@ -117,10 +117,8 @@ export default function Dashboard() {
   useEffect(() => {
     let active = true;
     const fetchElectricity = () => {
-      const wbp = localStorage.getItem("scada.config.wbpRate") || "1600";
-      const lwbp = localStorage.getItem("scada.config.lwbpRate") || "1112";
       const currentYear = new Date().getFullYear();
-      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${currentYear}&wbpRate=${wbp}&lwbpRate=${lwbp}`)
+      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${currentYear}`)
         .then((res) => {
           if (active) {
             setElectricityData(res.data);
