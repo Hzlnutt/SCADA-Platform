@@ -121,6 +121,7 @@ export const getElectricityAnalytics = async (
 
   let wbpKwh = 0;
   let lwbpKwh = 0;
+  let maxDiff = 0;
   const dailyMap = new Map<string, number>();
   const monthlyMap = new Map<string, number>();
 
@@ -137,6 +138,10 @@ export const getElectricityAnalytics = async (
     
     let diff = currVal - prevVal;
     if (diff < 0) diff = 0; // Guard against resets or anomalies
+
+    if (diff > maxDiff) {
+      maxDiff = diff;
+    }
 
     const hour = getWibHour(prevRecord.ts);
     const dateStr = getWibDateString(prevRecord.ts);
@@ -233,7 +238,7 @@ export const getElectricityAnalytics = async (
     return match ? match.value : defaultVal;
   };
 
-  const activePower = getLatestVal("active_power", 101.4);
+  const activePower = maxDiff > 0 ? maxDiff : getLatestVal("active_power", 101.4);
   const reactivePower = getLatestVal("reactive_power", activePower * 0.45);
   const apparentPower = getLatestVal("apparent_power", Math.sqrt(activePower**2 + reactivePower**2));
   const pf = getLatestVal("power_factor", 0.91);
