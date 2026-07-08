@@ -96,15 +96,8 @@ export const UtilityBarChart = ({
       {
         label: unit,
         data: values,
-        backgroundColor: (ctx: ScriptableContext<"bar">) => {
-          const { chart } = ctx;
-          const { ctx: canvas, chartArea } = chart;
-          if (!chartArea) return `${color}aa`;
-          const gradient = canvas.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          gradient.addColorStop(0, `${color}ee`);
-          gradient.addColorStop(1, `${color}11`);
-          return gradient;
-        },
+        backgroundColor: `${color}b0`,
+        hoverBackgroundColor: color,
         borderWidth: 0,
         borderRadius: 4,
         barPercentage: 0.65
@@ -116,17 +109,17 @@ export const UtilityBarChart = ({
     responsive: true,
     maintainAspectRatio: false,
     animation: {
-      duration: 1000,
-      easing: "easeOutQuart" as const
+      duration: 0
     },
     hover: {
       mode: "index" as const,
       intersect: false
     },
+    responsiveAnimationDuration: 0,
     transitions: {
       active: {
         animation: {
-          duration: 250
+          duration: 0
         }
       }
     },

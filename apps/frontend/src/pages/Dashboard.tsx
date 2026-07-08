@@ -23,6 +23,7 @@ import {
   getElapsedIndex
 } from "../utils/series";
 import { useMachineConfig } from "../hooks/useMachineConfig";
+import { useConfigStore } from "../store/config.store";
 
 const staticDailyEnergyTotal = machineGroups.reduce((sum, group) => {
   const energy = group.summaryCards.find((card) => card.label === "Total Energy")?.value ?? 0;
@@ -59,7 +60,6 @@ const consumptionRanges = [
 ] as const;
 
 const compareRanges = {
-  "5m": { points: 6, stepMs: 60 * 1000, label: "time" },
   "1h": { points: 12, stepMs: 5 * 60 * 1000, label: "time" },
   "1d": { points: 24, stepMs: 60 * 60 * 1000, label: "day" },
   "1w": { points: 7, stepMs: 24 * 60 * 60 * 1000, label: "day" },
@@ -99,7 +99,6 @@ const statusTone: Record<StatusPreview["status"], string> = {
 };
 
 const rangeOptions = [
-  { value: "5m", label: "5m" },
   { value: "1h", label: "1h" },
   { value: "1d", label: "1d" },
   { value: "1w", label: "1w" },
@@ -137,6 +136,7 @@ export default function Dashboard() {
 
     const handleConfigUpdate = () => {
       console.log("Dashboard: config updated, reloading electricity...");
+      useConfigStore.getState().fetchRates();
       if (active) fetchElectricity();
     };
 
@@ -186,8 +186,8 @@ export default function Dashboard() {
 
   const utilityBase = useMemo(() => ({
     electricityKwh: dailyEnergyTotal,
-    gasSm3: dailyEnergyTotal / 7,
-    waterM3: dailyEnergyTotal / 25
+    gasSm3: 0,
+    waterM3: 0
   }), [dailyEnergyTotal]);
 
   const [waterTarget, setWaterTarget] = useState(() => Number(localStorage.getItem("scada.makeupWaterTarget") ?? 1000));
@@ -226,15 +226,8 @@ export default function Dashboard() {
       .catch(() => undefined);
   }, []);
 
-  const wbpRate = useMemo(() => {
-    const saved = localStorage.getItem("scada.config.wbpRate");
-    return saved ? Number(saved) : 1600;
-  }, []);
-
-  const lwbpRate = useMemo(() => {
-    const saved = localStorage.getItem("scada.config.lwbpRate");
-    return saved ? Number(saved) : 1112;
-  }, []);
+  const wbpRate = useConfigStore((state) => state.wbpRate);
+  const lwbpRate = useConfigStore((state) => state.lwbpRate);
 
   const period = periods[periodIndex];
 
@@ -323,14 +316,12 @@ export default function Dashboard() {
   }, [electricitySeries, wbpRate, lwbpRate]);
 
   const gasSeries = useMemo(() => {
-    const base = utilityBase.gasSm3 * consumptionConfig.scale;
-    return buildTimeAwareSeries(consumptionConfig.points, base, base * 0.3, 2, maxIndex);
-  }, [consumptionConfig, maxIndex, utilityBase]);
+    return Array.from({ length: consumptionConfig.points }, () => 0);
+  }, [consumptionConfig.points]);
 
   const waterSeries = useMemo(() => {
-    const base = utilityBase.waterM3 * consumptionConfig.scale;
-    return buildTimeAwareSeries(consumptionConfig.points, base, base * 0.25, 3, maxIndex);
-  }, [consumptionConfig, maxIndex, utilityBase]);
+    return Array.from({ length: consumptionConfig.points }, () => 0);
+  }, [consumptionConfig.points]);
 
   const solarSeries = useMemo(() => {
     return electricitySeries.map(() => 0);
@@ -353,15 +344,13 @@ export default function Dashboard() {
     return buildTimeAwareSeries(12, utilityBase.electricityKwh * 30, utilityBase.electricityKwh * 12, 1, ytdMonthIndex);
   }, [ytdMonthIndex, utilityBase, electricityData]);
 
-  const ytdGasSeries = useMemo(
-    () => buildTimeAwareSeries(12, utilityBase.gasSm3 * 30, utilityBase.gasSm3 * 12, 2, ytdMonthIndex),
-    [ytdMonthIndex, utilityBase]
-  );
+  const ytdGasSeries = useMemo(() => {
+    return Array.from({ length: 12 }, () => 0);
+  }, []);
 
-  const ytdWaterSeries = useMemo(
-    () => buildTimeAwareSeries(12, utilityBase.waterM3 * 30, utilityBase.waterM3 * 8, 3, ytdMonthIndex),
-    [ytdMonthIndex, utilityBase]
-  );
+  const ytdWaterSeries = useMemo(() => {
+    return Array.from({ length: 12 }, () => 0);
+  }, []);
 
   const ytdElectricityTotal = useMemo(
     () => ytdElectricitySeries.reduce((sum: number, v: number | null) => sum + (v ?? 0), 0),
@@ -404,27 +393,27 @@ export default function Dashboard() {
   const elCompareConfig = compareRanges[elRange];
   const elCompareLabels = useMemo(() => buildLabels(elCompareConfig.points, elCompareConfig.stepMs, elCompareConfig.label), [elCompareConfig]);
   const elCurrent = useMemo(() => {
-    const base = electricityData ? (electricityData.summary.todayKwh / 24) : (utilityBase.electricityKwh / 24);
-    return buildSeries(elCompareConfig.points, base, base * 0.3, 1);
+    const todayKwh = electricityData?.summary?.todayKwh ?? utilityBase.electricityKwh;
+    const base = todayKwh / 24;
+    const cleanBase = isNaN(base) || base <= 0 ? 100 : base;
+    return buildSeries(elCompareConfig.points, cleanBase, cleanBase * 0.3, 1);
   }, [elCompareConfig, utilityBase, electricityData]);
   const elPrevious = useMemo(() => elCurrent.map((value) => Number((value * 0.92).toFixed(2))), [elCurrent]);
 
   const gasCompareConfig = compareRanges[gasRange];
   const gasCompareLabels = useMemo(() => buildLabels(gasCompareConfig.points, gasCompareConfig.stepMs, gasCompareConfig.label), [gasCompareConfig]);
-  const gasCurrent = useMemo(() => buildSeries(gasCompareConfig.points, utilityBase.gasSm3 / 24, (utilityBase.gasSm3 / 24) * 0.25, 2), [gasCompareConfig, utilityBase]);
-  const gasPrevious = useMemo(() => gasCurrent.map((value) => Number((value * 0.94).toFixed(2))), [gasCurrent]);
+  const gasCurrent = useMemo(() => Array.from({ length: gasCompareConfig.points }, () => 0), [gasCompareConfig]);
+  const gasPrevious = useMemo(() => gasCurrent.map(() => 0), [gasCurrent]);
 
   const waterCompareConfig = compareRanges[waterRange];
   const waterCompareLabels = useMemo(() => buildLabels(waterCompareConfig.points, waterCompareConfig.stepMs, waterCompareConfig.label), [waterCompareConfig]);
-  const waterCurrent = useMemo(() => buildSeries(waterCompareConfig.points, utilityBase.waterM3 / 24, (utilityBase.waterM3 / 24) * 0.2, 3), [waterCompareConfig, utilityBase]);
-  const waterPrevious = useMemo(() => waterCurrent.map((value) => Number((value * 0.91).toFixed(2))), [waterCurrent]);
+  const waterCurrent = useMemo(() => Array.from({ length: waterCompareConfig.points }, () => 0), [waterCompareConfig]);
+  const waterPrevious = useMemo(() => waterCurrent.map(() => 0), [waterCurrent]);
 
   const carbonCompareConfig = compareRanges[carbonRange];
   const carbonCompareLabels = useMemo(() => buildLabels(carbonCompareConfig.points, carbonCompareConfig.stepMs, carbonCompareConfig.label), [carbonCompareConfig]);
-  const carbonCurrent = useMemo(() => {
-    return Array.from({ length: carbonCompareConfig.points }, () => 0);
-  }, [carbonCompareConfig]);
-  const carbonPrevious = useMemo(() => carbonCurrent.map((value) => Number((value * 0.93).toFixed(2))), [carbonCurrent]);
+  const carbonCurrent = useMemo(() => Array.from({ length: carbonCompareConfig.points }, () => 0), [carbonCompareConfig]);
+  const carbonPrevious = useMemo(() => carbonCurrent.map(() => 0), [carbonCurrent]);
 
   const thresholdKwh = thresholds.find((item) => item.metric === "kwh");
 
