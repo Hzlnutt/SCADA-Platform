@@ -12,6 +12,7 @@ import Reports from "../pages/Reports";
 import Settings from "../pages/Settings";
 import Profile from "../pages/Profile";
 import AdminPanel from "../pages/AdminPanel";
+import AuditTrail from "../pages/AuditTrail";
 import AuthLayout from "../pages/auth/AuthLayout";
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
@@ -97,6 +98,7 @@ export const AppRouter = () => {
             <Route path="machine-health" element={<MachineHealth />} />
             <Route path="profile" element={<Profile />} />
             <Route path="admin" element={<AdminPanel />} />
+            <Route path="audit-trail" element={<AuditTrail />} />
           </Route>
         </Route>
         <Route element={<AuthLayout />}>

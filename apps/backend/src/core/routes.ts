@@ -10,6 +10,7 @@ import { reportsRouter } from "../modules/reports";
 import { thresholdsRouter } from "../modules/thresholds";
 import { usersRouter } from "../modules/users";
 import { configRouter } from "../modules/config";
+import { auditRouter } from "../modules/audit";
 
 export const registerRoutes = (app: Express) => {
   const router = Router();
@@ -29,6 +30,7 @@ export const registerRoutes = (app: Express) => {
   router.use(authRouter);
   router.use(usersRouter);
   router.use(configRouter);
+  router.use(auditRouter);
 
   app.use("/api/v1", router);
 };

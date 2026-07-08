@@ -8,6 +8,7 @@ import {
 } from "../../database/collections";
 import { z } from "zod";
 import { getSocketServer } from "../../services/socket.manager";
+import { recordAudit } from "../../services/audit.service";
 
 // Zod schemas for validation
 const machinePayloadSchema = z.object({
@@ -76,6 +77,21 @@ export const createMachineHandler = async (req: Request, res: Response, next: Ne
     };
 
     await db.collection(MACHINE_CONFIGS_COLLECTION).insertOne(doc);
+
+    // Record audit trail
+    await recordAudit({
+      actorId: req.user?.name || req.user?.id || "anonymous",
+      action: "create_machine",
+      resourceType: "machine",
+      resourceId: parsed.id,
+      meta: {
+        name: parsed.name,
+        area: parsed.area,
+        status: parsed.status,
+        apiBindings: parsed.apiBindings
+      }
+    });
+
     res.status(201).json({ data: doc });
   } catch (err) {
     next(err);
@@ -88,6 +104,11 @@ export const updateMachineHandler = async (req: Request, res: Response, next: Ne
     const { id } = req.params;
     const parsed = machinePayloadSchema.partial().parse(req.body);
 
+    const beforeDoc = await db.collection(MACHINE_CONFIGS_COLLECTION).findOne({ id });
+    if (!beforeDoc) {
+      return res.status(404).json({ message: "Machine not found" });
+    }
+
     const result = await db.collection(MACHINE_CONFIGS_COLLECTION).findOneAndUpdate(
       { id },
       {
@@ -99,9 +120,22 @@ export const updateMachineHandler = async (req: Request, res: Response, next: Ne
       { returnDocument: "after" }
     );
 
-    if (!result) {
-      return res.status(404).json({ message: "Machine not found" });
-    }
+    // Record audit trail
+    await recordAudit({
+      actorId: req.user?.name || req.user?.id || "anonymous",
+      action: "update_machine",
+      resourceType: "machine",
+      resourceId: id,
+      meta: {
+        before: {
+          name: beforeDoc.name,
+          area: beforeDoc.area,
+          status: beforeDoc.status,
+          apiBindings: beforeDoc.apiBindings
+        },
+        after: parsed
+      }
+    });
 
     res.json({ data: result });
   } catch (err) {
@@ -114,9 +148,22 @@ export const deleteMachineHandler = async (req: Request, res: Response, next: Ne
     const db = getMongoDb();
     const { id } = req.params;
 
+    const existing = await db.collection(MACHINE_CONFIGS_COLLECTION).findOne({ id });
+
     // Hard-delete config, thresholds, etc.
     await db.collection(MACHINE_CONFIGS_COLLECTION).deleteOne({ id });
     await db.collection(MACHINE_THRESHOLDS_COLLECTION).deleteMany({ machineId: id });
+
+    // Record audit trail
+    await recordAudit({
+      actorId: req.user?.name || req.user?.id || "anonymous",
+      action: "delete_machine",
+      resourceType: "machine",
+      resourceId: id,
+      meta: {
+        deletedMachine: existing ? { name: existing.name, area: existing.area } : null
+      }
+    });
 
     res.json({ message: "Machine configuration deleted successfully" });
   } catch (err) {
@@ -140,6 +187,8 @@ export const upsertThresholdsHandler = async (req: Request, res: Response, next:
     const db = getMongoDb();
     const parsed = thresholdPayloadSchema.parse(req.body);
 
+    const beforeThresholds = await db.collection(MACHINE_THRESHOLDS_COLLECTION).find({ machineId: parsed.machineId }).toArray();
+
     for (const t of parsed.thresholds) {
       await db.collection(MACHINE_THRESHOLDS_COLLECTION).updateOne(
         { machineId: parsed.machineId, parameter: t.parameter },
@@ -155,6 +204,24 @@ export const upsertThresholdsHandler = async (req: Request, res: Response, next:
         { upsert: true }
       );
     }
+
+    // Record audit trail
+    await recordAudit({
+      actorId: req.user?.name || req.user?.id || "anonymous",
+      action: "update_thresholds",
+      resourceType: "machine_threshold",
+      resourceId: parsed.machineId,
+      meta: {
+        before: beforeThresholds.map(t => ({
+          parameter: t.parameter,
+          warningHigh: t.warningHigh,
+          alarmHigh: t.alarmHigh,
+          warningLow: t.warningLow,
+          alarmLow: t.alarmLow
+        })),
+        after: parsed.thresholds
+      }
+    });
 
     res.json({ message: "Thresholds configured successfully", count: parsed.thresholds.length });
   } catch (err) {
@@ -225,6 +292,10 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
     const db = getMongoDb();
     const parsed = utilityConfigSchema.parse(req.body);
 
+    const beforeDoc = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
+    const oldWbpRate = beforeDoc ? beforeDoc.wbpRate : 1600;
+    const oldLwbpRate = beforeDoc ? beforeDoc.lwbpRate : 1112;
+
     const doc = {
       key: "utility",
       wbpRate: parsed.wbpRate,
@@ -242,6 +313,18 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
     if (io) {
       io.emit("config:update", doc);
     }
+
+    // Record audit trail
+    await recordAudit({
+      actorId: req.user?.name || req.user?.id || "anonymous",
+      action: "update_utility_config",
+      resourceType: "utility_config",
+      resourceId: "utility",
+      meta: {
+        before: { wbpRate: oldWbpRate, lwbpRate: oldLwbpRate },
+        after: { wbpRate: parsed.wbpRate, lwbpRate: parsed.lwbpRate }
+      }
+    });
 
     res.json({ data: doc });
   } catch (err) {

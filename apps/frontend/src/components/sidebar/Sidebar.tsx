@@ -314,6 +314,7 @@ export const Sidebar = () => {
           {canApprove && <NavItem to="/approvals" label="Approvals" icon={<IconReport />} tone="scada" />}
 
           {isAdmin && <NavItem to="/admin" label="Admin Panel" icon={<IconAdmin />} tone="scada" />}
+          {isAdmin && <NavItem to="/audit-trail" label="Audit Trail" icon={<IconReport />} tone="scada" />}
         </nav>
       )}
 
