@@ -461,9 +461,14 @@ export default function Electricity() {
             <div className="text-xs text-slate-400 dark:text-slate-500">Trafo Capacity</div>
             <div className="mt-1 text-lg font-bold text-slate-800 dark:text-white font-mono">15,000 kVA</div>
           </div>
-          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-emerald-400">
-            <div className="text-xs text-slate-400 dark:text-slate-500">Power Factor Target</div>
-            <div className="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">&ge; 0.85</div>
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-emerald-400 flex flex-col justify-between">
+            <div>
+              <div className="text-xs text-slate-400 dark:text-slate-500">Power Factor (Cos φ)</div>
+              <div className="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                {loading ? "Loading..." : (plnLoadFactor / 100).toFixed(3)}
+              </div>
+            </div>
+            <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Target: &ge; 0.85</div>
           </div>
           <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-blue-400">
             <div className="text-xs text-slate-400 dark:text-slate-500">Tarif WBP / LWBP</div>
