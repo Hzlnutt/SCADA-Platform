@@ -45,7 +45,10 @@ const envSchema = z.object({
   POSTGRES_PORT: z.coerce.number().int().positive().default(5432),
   POSTGRES_USER: z.string().default("test_user"),
   POSTGRES_PASSWORD: z.string().default("Pandaan1"),
-  POSTGRES_DB: z.string().default("scada_test")
+  POSTGRES_DB: z.string().default("scada_test"),
+  POWER_FACTOR_API_URL: z.string().default("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln"),
+  POWER_FACTOR_API_USER: z.string().default(""),
+  POWER_FACTOR_API_PASS: z.string().default("")
 });
 
 const parsed = envSchema.parse({
@@ -80,7 +83,10 @@ const parsed = envSchema.parse({
   POSTGRES_PORT: process.env.POSTGRES_PORT,
   POSTGRES_USER: process.env.POSTGRES_USER,
   POSTGRES_PASSWORD: process.env.POSTGRES_PASSWORD,
-  POSTGRES_DB: process.env.POSTGRES_DB
+  POSTGRES_DB: process.env.POSTGRES_DB,
+  POWER_FACTOR_API_URL: process.env.POWER_FACTOR_API_URL,
+  POWER_FACTOR_API_USER: process.env.POWER_FACTOR_API_USER,
+  POWER_FACTOR_API_PASS: process.env.POWER_FACTOR_API_PASS
 });
 
 export const env = {
@@ -115,5 +121,8 @@ export const env = {
   postgresPort: parsed.POSTGRES_PORT,
   postgresUser: parsed.POSTGRES_USER,
   postgresPassword: parsed.POSTGRES_PASSWORD,
-  postgresDb: parsed.POSTGRES_DB
+  postgresDb: parsed.POSTGRES_DB,
+  powerFactorApiUrl: parsed.POWER_FACTOR_API_URL,
+  powerFactorApiUser: parsed.POWER_FACTOR_API_USER,
+  powerFactorApiPass: parsed.POWER_FACTOR_API_PASS
 };

@@ -1,6 +1,74 @@
 import { getMongoDb } from "../../database/mongo";
 import { getPostgresPool } from "../../database/postgres";
 import { ELECTRICITY_RAW_COLLECTION, ELECTRICITY_1M_COLLECTION, ELECTRICITY_1H_COLLECTION } from "../../database/collections";
+import { env } from "../../config/env.config";
+
+function parsePowerFactor(data: any): number | null {
+  if (typeof data === "number") {
+    return Math.abs(data);
+  }
+  if (typeof data === "string") {
+    const parsed = parseFloat(data);
+    if (!isNaN(parsed)) return Math.abs(parsed);
+  }
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const val = parsePowerFactor(item);
+      if (val !== null) return val;
+    }
+  }
+  if (data && typeof data === "object") {
+    const keys = ["power_factor", "powerFactor", "pf", "value", "val"];
+    for (const k of keys) {
+      if (data[k] !== undefined) {
+        const val = parseFloat(data[k]);
+        if (!isNaN(val)) return Math.abs(val);
+      }
+    }
+    for (const k of Object.keys(data)) {
+      if (k.toLowerCase().includes("power") || k.toLowerCase().includes("pf")) {
+        const val = parseFloat(data[k]);
+        if (!isNaN(val)) return Math.abs(val);
+      }
+    }
+  }
+  return null;
+}
+
+async function fetchPowerFactor(): Promise<number | null> {
+  if (!env.powerFactorApiUrl) return null;
+  try {
+    const headers: Record<string, string> = {};
+    if (env.powerFactorApiUser && env.powerFactorApiPass) {
+      headers["Authorization"] = "Basic " + Buffer.from(env.powerFactorApiUser + ":" + env.powerFactorApiPass).toString("base64");
+    }
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    
+    const res = await fetch(env.powerFactorApiUrl, {
+      headers,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        return parsePowerFactor(data);
+      } catch {
+        const parsed = parseFloat(text);
+        if (!isNaN(parsed)) return Math.abs(parsed);
+      }
+    } else {
+      console.warn(`Power Factor API request failed with status: ${res.status}`);
+    }
+  } catch (err: any) {
+    console.warn(`Power Factor API request failed: ${err.message}`);
+  }
+  return null;
+}
 
 export interface ElectricityAnalyticsResult {
   summary: {
@@ -241,7 +309,8 @@ export const getElectricityAnalytics = async (
   const activePower = maxDiff > 0 ? maxDiff : getLatestVal("active_power", 101.4);
   const reactivePower = getLatestVal("reactive_power", activePower * 0.45);
   const apparentPower = getLatestVal("apparent_power", Math.sqrt(activePower**2 + reactivePower**2));
-  const pf = getLatestVal("power_factor", 0.91);
+  const apiPf = await fetchPowerFactor();
+  const pf = apiPf !== null ? apiPf : getLatestVal("power_factor", 0.91);
   const freq = getLatestVal("frequency", 49.92);
   const volt_avg = getLatestVal("voltage_avg", 21000);
   
