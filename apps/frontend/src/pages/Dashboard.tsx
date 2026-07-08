@@ -245,25 +245,14 @@ export default function Dashboard() {
 
   const electricityCost = useMemo(() => {
     if (!electricityData) return electricityKwh * utilityRates.electricityIdr;
-    if (period.id === "yearly") {
+    if (period.id === "daily") {
+      return electricityData.summary.todayCost;
+    } else if (period.id === "monthly") {
+      return electricityData.summary.monthlyCost;
+    } else {
       return electricityData.summary.totalCost;
     }
-    if (period.id === "daily") {
-      const hourly = electricityData.charts.hourly || [];
-      let todayWbp = 0;
-      let todayLwbp = 0;
-      hourly.forEach((val: number, h: number) => {
-        const endHour = h + 1;
-        if (endHour >= 18 && endHour <= 22) {
-          todayWbp += val;
-        } else {
-          todayLwbp += val;
-        }
-      });
-      return todayWbp * wbpRate + todayLwbp * lwbpRate;
-    }
-    return electricityKwh * ((wbpRate + lwbpRate) / 2);
-  }, [electricityData, period.id, electricityKwh, wbpRate, lwbpRate]);
+  }, [electricityData, period.id, electricityKwh]);
 
   const gasSm3 = utilityBase.gasSm3 * period.scale;
   const waterM3 = utilityBase.waterM3 * period.scale;
@@ -325,9 +314,27 @@ export default function Dashboard() {
   }, [consumptionConfig, maxIndex, utilityBase, electricityData, consumptionRange, monthlyDailyRecords]);
 
   const consumptionElectricityCost = useMemo(() => {
-    const totalKwh = electricitySeries.reduce((sum: number, v: number) => sum + v, 0);
-    return totalKwh * ((wbpRate + lwbpRate) / 2);
-  }, [electricitySeries, wbpRate, lwbpRate]);
+    if (!electricityData) {
+      const totalKwh = electricitySeries.reduce((sum: number, v: number) => sum + v, 0);
+      return totalKwh * utilityRates.electricityIdr;
+    }
+    if (consumptionRange === "hour") {
+      let cost = 0;
+      electricitySeries.forEach((val: number, h: number) => {
+        const endHour = h + 1;
+        if (endHour >= 18 && endHour <= 22) {
+          cost += val * wbpRate;
+        } else {
+          cost += val * lwbpRate;
+        }
+      });
+      return cost;
+    } else if (consumptionRange === "day") {
+      return electricityData.summary.monthlyCost;
+    } else {
+      return electricityData.summary.totalCost;
+    }
+  }, [electricitySeries, wbpRate, lwbpRate, consumptionRange, electricityData]);
 
   const gasSeries = useMemo(() => {
     return Array.from({ length: electricitySeries.length }, () => 0);

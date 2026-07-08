@@ -73,7 +73,9 @@ async function fetchPowerFactor(): Promise<number | null> {
 export interface ElectricityAnalyticsResult {
   summary: {
     todayKwh: number;
+    todayCost: number;
     monthlyMwh: number;
+    monthlyCost: number;
     yearlyMwh: number;
     co2Emitted: number; // tons
     totalKwh: number;
@@ -187,9 +189,18 @@ export const getElectricityAnalytics = async (
     }));
   }
 
+  const todayStr = getWibDateString(new Date());
+  const currentMonthStr = todayStr.substring(0, 7);
+
   let wbpKwh = 0;
   let lwbpKwh = 0;
   let maxDiff = 0;
+
+  let todayWbpKwh = 0;
+  let todayLwbpKwh = 0;
+  let monthlyWbpKwh = 0;
+  let monthlyLwbpKwh = 0;
+
   const dailyMap = new Map<string, number>();
   const monthlyMap = new Map<string, number>();
 
@@ -215,12 +226,19 @@ export const getElectricityAnalytics = async (
     const dateStr = getWibDateString(prevRecord.ts);
     const monthStr = dateStr.substring(0, 7);
 
+    const isToday = dateStr === todayStr;
+    const isCurrentMonth = monthStr === currentMonthStr;
+
     // If the hourly interval ends at 18:00 to 22:00 WIB, it started at WBP hours (17:00-21:00)
     const endHour = getWibHour(currRecord.ts);
     if (endHour >= 18 && endHour <= 22) {
       wbpKwh += diff;
+      if (isToday) todayWbpKwh += diff;
+      if (isCurrentMonth) monthlyWbpKwh += diff;
     } else {
       lwbpKwh += diff;
+      if (isToday) todayLwbpKwh += diff;
+      if (isCurrentMonth) monthlyLwbpKwh += diff;
     }
 
     // Group by Day
@@ -245,6 +263,9 @@ export const getElectricityAnalytics = async (
   const wbpCost = wbpKwh * wbpRate;
   const lwbpCost = lwbpKwh * lwbpRate;
   const totalCost = wbpCost + lwbpCost;
+
+  const todayCost = todayWbpKwh * wbpRate + todayLwbpKwh * lwbpRate;
+  const monthlyCost = monthlyWbpKwh * wbpRate + monthlyLwbpKwh * lwbpRate;
 
   // Carbon coefficient: ~0.82 kg CO2 per kWh
   const co2Emitted = (totalKwh * 0.82) / 1000; // in tons
@@ -332,16 +353,16 @@ export const getElectricityAnalytics = async (
   const vUnb = 0.5 + Math.random() * 0.2;
   const iUnb = 2.0 + Math.random() * 0.5;
 
-  const todayStr = getWibDateString(new Date());
   const today = dailyMap.get(todayStr) || 0;
-  const currentMonthStr = todayStr.substring(0, 7);
   const monthlyMwh = (monthlyMap.get(currentMonthStr) || 0) / 1000;
   const yearlyMwh = totalKwh / 1000;
 
   return {
     summary: {
       todayKwh: Number(today.toFixed(0)),
+      todayCost: Number(todayCost.toFixed(0)),
       monthlyMwh: Number(monthlyMwh.toFixed(1)),
+      monthlyCost: Number(monthlyCost.toFixed(0)),
       yearlyMwh: Number(yearlyMwh.toFixed(0)),
       co2Emitted: Number(co2Emitted.toFixed(1)),
       totalKwh: Number(totalKwh.toFixed(0)),
