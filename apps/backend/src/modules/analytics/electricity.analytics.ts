@@ -361,9 +361,9 @@ export const getElectricityAnalytics = async (
     summary: {
       todayKwh: Number(today.toFixed(0)),
       todayCost: Number(todayCost.toFixed(0)),
-      monthlyMwh: Number(monthlyMwh.toFixed(1)),
+      monthlyMwh: Number(monthlyMwh.toFixed(4)),
       monthlyCost: Number(monthlyCost.toFixed(0)),
-      yearlyMwh: Number(yearlyMwh.toFixed(0)),
+      yearlyMwh: Number(yearlyMwh.toFixed(4)),
       co2Emitted: Number(co2Emitted.toFixed(1)),
       totalKwh: Number(totalKwh.toFixed(0)),
       wbpKwh: Number(wbpKwh.toFixed(0)),
