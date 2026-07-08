@@ -426,15 +426,75 @@ export default function Dashboard() {
     });
   }, [ytdElectricitySeries, ytdGasSeries, ytdWaterSeries, ytdSolarSeries, ytdChecks, ytdMonthIndex]);
 
-  const elCompareConfig = compareRanges[elRange];
-  const elCompareLabels = useMemo(() => buildLabels(elCompareConfig.points, elCompareConfig.stepMs, elCompareConfig.label), [elCompareConfig]);
-  const elCurrent = useMemo(() => {
-    const todayKwh = electricityData?.summary?.todayKwh ?? utilityBase.electricityKwh;
-    const base = todayKwh / 24;
-    const cleanBase = isNaN(base) || base <= 0 ? 100 : base;
-    return buildSeries(elCompareConfig.points, cleanBase, cleanBase * 0.3, 1);
-  }, [elCompareConfig, utilityBase, electricityData]);
-  const elPrevious = useMemo(() => elCurrent.map((value) => Number((value * 0.92).toFixed(2))), [elCurrent]);
+  const { elCompareLabels, elCurrent, elPrevious } = useMemo(() => {
+    const config = compareRanges[elRange];
+    if (!electricityData) {
+      const labels = buildLabels(config.points, config.stepMs, config.label);
+      const current = buildSeries(config.points, utilityBase.electricityKwh / 24, (utilityBase.electricityKwh / 24) * 0.3, 1);
+      const previous = current.map(v => Number((v * 0.92).toFixed(2)));
+      return { elCompareLabels: labels, elCurrent: current, elPrevious: previous };
+    }
+
+    const now = new Date();
+    const todayStr = new Date(now.getTime() + 7 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const todayIdx = electricityData.charts.daily.findIndex((d: any) => d.day === todayStr) !== -1 
+      ? electricityData.charts.daily.findIndex((d: any) => d.day === todayStr)
+      : electricityData.charts.daily.length - 1;
+
+    let labels: string[] = [];
+    let current: number[] = [];
+    let previous: number[] = [];
+
+    if (elRange === "1h") {
+      const hourly = electricityData.charts.hourly || [];
+      const currentHour = now.getHours();
+      const startHour = Math.max(0, currentHour - 11);
+      for (let h = startHour; h <= currentHour; h++) {
+        labels.push(`${h.toString().padStart(2, "0")}:00`);
+        current.push(hourly[h] ?? 0);
+        previous.push(Number(((hourly[h] ?? 0) * 0.91).toFixed(2)));
+      }
+    } else if (elRange === "1d") {
+      const hourly = electricityData.charts.hourly || [];
+      for (let h = 0; h < 24; h++) {
+        labels.push(`${h.toString().padStart(2, "0")}:00`);
+        current.push(hourly[h] ?? 0);
+        previous.push(Number(((hourly[h] ?? 0) * 0.93).toFixed(2)));
+      }
+    } else if (elRange === "1w") {
+      const startIndex = Math.max(0, todayIdx - 6);
+      const sliced = electricityData.charts.daily.slice(startIndex, todayIdx + 1);
+      sliced.forEach((d: any) => {
+        const parts = d.day.split("-");
+        labels.push(`${parts[1]}/${parts[2]}`);
+        current.push(d.value);
+        previous.push(Number((d.value * 0.88).toFixed(2)));
+      });
+    } else if (elRange === "1m") {
+      const startIndex = Math.max(0, todayIdx - 29);
+      const sliced = electricityData.charts.daily.slice(startIndex, todayIdx + 1);
+      sliced.forEach((d: any, idx: number) => {
+        const parts = d.day.split("-");
+        if (idx % 5 === 0 || idx === sliced.length - 1) {
+          labels.push(`${parts[1]}/${parts[2]}`);
+        } else {
+          labels.push("");
+        }
+        current.push(d.value);
+        previous.push(Number((d.value * 0.94).toFixed(2)));
+      });
+    } else {
+      const MONTH_SHORT_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+      electricityData.charts.monthly.forEach((m: any) => {
+        const [yr, mo] = m.month.split("-").map(Number);
+        labels.push(`${MONTH_SHORT_ID[mo - 1]}`);
+        current.push(m.value * 1000);
+        previous.push(Number((m.value * 1000 * 0.92).toFixed(2)));
+      });
+    }
+
+    return { elCompareLabels: labels, elCurrent: current, elPrevious: previous };
+  }, [elRange, electricityData, utilityBase]);
 
   const gasCompareConfig = compareRanges[gasRange];
   const gasCompareLabels = useMemo(() => buildLabels(gasCompareConfig.points, gasCompareConfig.stepMs, gasCompareConfig.label), [gasCompareConfig]);
@@ -945,10 +1005,10 @@ export default function Dashboard() {
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Electricity YTD</div>
             <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-              {formatCurrency(ytdElectricityTotal * utilityRates.electricityIdr, "IDR")}
+              {formatCurrency(electricityData ? electricityData.summary.totalCost : ytdElectricityTotal * utilityRates.electricityIdr, "IDR")}
             </div>
             <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-              {ytdElectricityTotal.toFixed(0)} kWh
+              {electricityData ? electricityData.summary.totalKwh.toLocaleString("id-ID") : ytdElectricityTotal.toFixed(0)} kWh
             </div>
             <div className="mt-3">
               <UtilityBarChart

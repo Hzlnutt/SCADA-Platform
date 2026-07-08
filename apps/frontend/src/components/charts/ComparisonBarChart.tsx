@@ -30,7 +30,8 @@ export const ComparisonBarChart = ({
   const [hoverState, setHoverState] = useState<HoverState>(null);
   const maxValue = useMemo(() => {
     const values = [...current, ...(previous ?? [])];
-    return values.length > 0 ? Math.max(...values) * 1.15 : 1;
+    const maxVal = values.length > 0 ? Math.max(...values) : 0;
+    return maxVal > 0 ? maxVal * 1.15 : 1;
   }, [current, previous]);
 
   const formatValue = (value: number) =>
@@ -94,13 +95,15 @@ export const ComparisonBarChart = ({
                       className={[
                         "w-1/2 rounded-t transition shadow-sm",
                         highlightPrevious 
-                          ? "bg-gradient-to-t from-slate-400 to-slate-300" 
-                          : "bg-gradient-to-t from-slate-500 to-slate-400 dark:from-slate-700 dark:to-slate-500",
+                          ? "bg-slate-400 dark:bg-slate-300" 
+                          : "bg-slate-300 dark:bg-slate-600",
                         dimPrevious ? "opacity-30" : ""
                       ].join(" ")}
                       style={{ 
-                        height: `${(previousValue / maxValue) * 100}%`,
-                        transition: "height 0.6s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s"
+                        height: previousValue > 0 
+                          ? `${Math.max(4, (previousValue / maxValue) * 100)}%` 
+                          : "0%",
+                        transition: "height 0.3s ease-out, opacity 0.2s"
                       }}
                       onMouseEnter={() =>
                         setHoverState({ index, series: "previous" })
@@ -110,15 +113,17 @@ export const ComparisonBarChart = ({
                   <div
                     className={[
                       previous ? "w-1/2" : "w-full",
-                      "rounded-t transition shadow-[0_0_8px_rgba(6,182,212,0.15)]",
+                      "rounded-t transition shadow-[0_0_8px_rgba(59,130,246,0.15)]",
                       highlightCurrent 
-                        ? "bg-gradient-to-t from-cyan-400 to-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.4)]" 
-                        : "bg-gradient-to-t from-cyan-600 to-cyan-400 dark:from-cyan-500 dark:to-sky-400",
+                        ? "bg-sky-400 dark:bg-sky-300 shadow-[0_0_12px_rgba(56,189,248,0.5)]" 
+                        : "bg-blue-600 dark:bg-blue-500",
                       dimCurrent ? "opacity-30" : ""
                     ].join(" ")}
                     style={{ 
-                      height: `${(currentValue / maxValue) * 100}%`,
-                      transition: "height 0.6s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s"
+                      height: currentValue > 0 
+                        ? `${Math.max(4, (currentValue / maxValue) * 100)}%` 
+                        : "0%",
+                      transition: "height 0.3s ease-out, opacity 0.2s"
                     }}
                     onMouseEnter={() =>
                       setHoverState({ index, series: "current" })
@@ -134,13 +139,13 @@ export const ComparisonBarChart = ({
         </div>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-400">
-        <div className="flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-cyan-400" />
+        <div className="flex items-center gap-2 font-semibold">
+          <span className="h-2.5 w-2.5 rounded-full bg-blue-600 dark:bg-blue-500" />
           Current Timeline
         </div>
         {previous ? (
-          <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-slate-500" />
+          <div className="flex items-center gap-2 font-semibold">
+            <span className="h-2.5 w-2.5 rounded-full bg-slate-300 dark:bg-slate-600" />
             Previous Timeline
           </div>
         ) : null}
