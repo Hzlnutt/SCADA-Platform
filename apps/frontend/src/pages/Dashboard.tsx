@@ -11,6 +11,7 @@ import { TimeRangeControls } from "../components/ui/TimeRangeControls";
 import { machineGroups } from "../data/machines";
 import { hvacEquipment, utilityEquipment } from "../data/equipment";
 import { getJson } from "../services/api.client";
+import { getSocket } from "../services/socket.service";
 import { useTimeRangeStore } from "../store/timeRange.store";
 import { useTelemetryStore } from "../store/telemetry.store";
 import { useAlarmStore } from "../store/alarm.store";
@@ -132,9 +133,26 @@ export default function Dashboard() {
     fetchElectricity();
     const interval = setInterval(fetchElectricity, 30000); // auto-fetch every 30 seconds
 
+    const socket = getSocket();
+
+    const handleConfigUpdate = () => {
+      console.log("Dashboard: config updated, reloading electricity...");
+      if (active) fetchElectricity();
+    };
+
+    const handleElectricityUpdate = () => {
+      console.log("Dashboard: electricity telemetry updated, reloading electricity...");
+      if (active) fetchElectricity();
+    };
+
+    socket.on("config:update", handleConfigUpdate);
+    socket.on("electricity:update", handleElectricityUpdate);
+
     return () => {
       active = false;
       clearInterval(interval);
+      socket.off("config:update", handleConfigUpdate);
+      socket.off("electricity:update", handleElectricityUpdate);
     };
   }, []);
 

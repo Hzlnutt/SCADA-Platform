@@ -7,6 +7,7 @@ import {
   GLOBAL_CONFIG_COLLECTION
 } from "../../database/collections";
 import { z } from "zod";
+import { getSocketServer } from "../../services/socket.manager";
 
 // Zod schemas for validation
 const machinePayloadSchema = z.object({
@@ -236,6 +237,11 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
       { $set: doc },
       { upsert: true }
     );
+
+    const io = getSocketServer();
+    if (io) {
+      io.emit("config:update", doc);
+    }
 
     res.json({ data: doc });
   } catch (err) {

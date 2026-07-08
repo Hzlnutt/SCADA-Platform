@@ -8,6 +8,7 @@ import { machineGroups } from "../../data/machines";
 import { buildTimeAwareSeries, buildTimeLabels, getElapsedIndex } from "../../utils/series";
 import { getJson } from "../../services/api.client";
 import { useConfigStore } from "../../store/config.store";
+import { getSocket } from "../../services/socket.service";
 
 const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
   const energy = group.summaryCards.find((card) => card.label === "Total Energy")?.value ?? 0;
@@ -77,9 +78,28 @@ export default function Electricity() {
       fetchData(false); // auto-fetch silently in background
     }, 30000); // every 30 seconds
 
+    const socket = getSocket();
+
+    const handleConfigUpdate = () => {
+      console.log("Config update event received from socket, fetching rates and data...");
+      useConfigStore.getState().fetchRates().then(() => {
+        if (active) fetchData(false);
+      });
+    };
+
+    const handleElectricityUpdate = () => {
+      console.log("Electricity update event received from socket, re-fetching data...");
+      if (active) fetchData(false);
+    };
+
+    socket.on("config:update", handleConfigUpdate);
+    socket.on("electricity:update", handleElectricityUpdate);
+
     return () => {
       active = false;
       clearInterval(interval);
+      socket.off("config:update", handleConfigUpdate);
+      socket.off("electricity:update", handleElectricityUpdate);
     };
   }, [selectedYear, wbpRate, lwbpRate]);
 
