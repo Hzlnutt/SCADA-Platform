@@ -271,11 +271,42 @@ export default function Dashboard() {
   const solarSavings = solarKwh * utilityRates.electricityIdr;
   const solarCoverage = Math.min(100, (solarKwh / Math.max(electricityKwh, 1)) * 100);
 
-  const monthlyElectric = electricityData ? electricityData.summary.monthlyMwh * 1000 : utilityBase.electricityKwh * 30;
-  const monthlyGasEnergy = utilityBase.gasSm3 * 30 * gasEnergyFactor;
-  const monthlyWaterEnergy = utilityBase.waterM3 * 30 * waterEnergyFactor;
-  const totalMonthlyEnergy = monthlyElectric + monthlyGasEnergy + monthlyWaterEnergy;
-  const co2Emission = totalMonthlyEnergy * emissionFactor;
+  const { currentElectric, currentGasEnergy, currentWaterEnergy, currentEnergyLabel } = useMemo(() => {
+    if (consumptionRange === "hour") {
+      const elec = electricityData ? electricityData.summary.todayKwh : utilityBase.electricityKwh;
+      const gas = utilityBase.gasSm3 * gasEnergyFactor;
+      const water = utilityBase.waterM3 * waterEnergyFactor;
+      return {
+        currentElectric: elec,
+        currentGasEnergy: gas,
+        currentWaterEnergy: water,
+        currentEnergyLabel: "Today"
+      };
+    } else if (consumptionRange === "day") {
+      const elec = electricityData ? electricityData.summary.monthlyMwh * 1000 : utilityBase.electricityKwh * 30;
+      const gas = utilityBase.gasSm3 * 30 * gasEnergyFactor;
+      const water = utilityBase.waterM3 * 30 * waterEnergyFactor;
+      return {
+        currentElectric: elec,
+        currentGasEnergy: gas,
+        currentWaterEnergy: water,
+        currentEnergyLabel: "This Month"
+      };
+    } else {
+      const elec = electricityData ? electricityData.summary.totalKwh : utilityBase.electricityKwh * 365;
+      const gas = utilityBase.gasSm3 * 365 * gasEnergyFactor;
+      const water = utilityBase.waterM3 * 365 * waterEnergyFactor;
+      return {
+        currentElectric: elec,
+        currentGasEnergy: gas,
+        currentWaterEnergy: water,
+        currentEnergyLabel: "This Year"
+      };
+    }
+  }, [consumptionRange, electricityData, utilityBase]);
+
+  const totalCurrentEnergy = currentElectric + currentGasEnergy + currentWaterEnergy;
+  const co2Emission = totalCurrentEnergy * emissionFactor;
   const totalCo2Kg = co2Emission * 1000;
   const trees = Math.round(totalCo2Kg / 21);
 
@@ -914,7 +945,7 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Energy Distribution</div>
-                    <div className="text-[10px] text-[#47729f] dark:text-slate-400 font-medium">This Month</div>
+                    <div className="text-[10px] text-[#47729f] dark:text-slate-400 font-medium">{currentEnergyLabel}</div>
                   </div>
                   <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
                     ≈ {trees.toLocaleString("en-US")} trees
@@ -923,10 +954,10 @@ export default function Dashboard() {
                 <div className="flex items-center justify-center min-h-[220px] mt-4">
                   <EnergyDonutChart
                     labels={["Electricity", "Gas", "Water"]}
-                    values={[monthlyElectric, monthlyGasEnergy, monthlyWaterEnergy]}
+                    values={[currentElectric, currentGasEnergy, currentWaterEnergy]}
                     colors={["rgba(56, 189, 248, 0.9)", "rgba(250, 204, 21, 0.85)", "rgba(74, 222, 128, 0.85)"]}
                     centerLabel="Total"
-                    centerValue={`${totalMonthlyEnergy.toFixed(0)}`}
+                    centerValue={`${totalCurrentEnergy.toFixed(0)}`}
                     height={220}
                   />
                 </div>
@@ -934,11 +965,11 @@ export default function Dashboard() {
 
               <div className="mt-6 space-y-3">
                 {[
-                  { label: "Electricity", value: monthlyElectric, unit: "kWh", color: "bg-sky-400", rawVal: monthlyElectric },
-                  { label: "Gas (equiv.)", value: monthlyGasEnergy, unit: "kWh", color: "bg-yellow-400", rawVal: monthlyGasEnergy },
-                  { label: "Water (equiv.)", value: monthlyWaterEnergy, unit: "kWh", color: "bg-green-400", rawVal: monthlyWaterEnergy }
+                  { label: "Electricity", value: currentElectric, unit: "kWh", color: "bg-sky-400", rawVal: currentElectric },
+                  { label: "Gas (equiv.)", value: currentGasEnergy, unit: "kWh", color: "bg-yellow-400", rawVal: currentGasEnergy },
+                  { label: "Water (equiv.)", value: currentWaterEnergy, unit: "kWh", color: "bg-green-400", rawVal: currentWaterEnergy }
                 ].map((item) => {
-                  const pct = totalMonthlyEnergy > 0 ? (item.rawVal / totalMonthlyEnergy) * 100 : 0;
+                  const pct = totalCurrentEnergy > 0 ? (item.rawVal / totalCurrentEnergy) * 100 : 0;
                   return (
                     <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-900 pb-2">
                       <div className="flex items-center gap-2">

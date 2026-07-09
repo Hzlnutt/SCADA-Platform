@@ -151,8 +151,7 @@ export const ComparisonBarChart = ({
         ) : null}
         {hoverState ? (
           <div className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1 text-[11px] text-slate-300">
-            {labels[hoverState.index]} · {formatValue(current[hoverState.index] ?? 0)}
-            {previous ? ` / ${formatValue(previous[hoverState.index] ?? 0)}` : ""}
+            {labels[hoverState.index]} · {previous ? `Prev: ${formatValue(previous[hoverState.index] ?? 0)} · ` : ""}Curr: ${formatValue(current[hoverState.index] ?? 0)}
           </div>
         ) : null}
       </div>
