@@ -94,6 +94,10 @@ export interface ElectricityAnalyticsResult {
     wbpCost: number;
     lwbpCost: number;
     totalCost: number;
+    todayWbpKwh: number;
+    todayLwbpKwh: number;
+    monthlyWbpKwh: number;
+    monthlyLwbpKwh: number;
   };
   charts: {
     hourly: number[];
@@ -396,7 +400,11 @@ export const getElectricityAnalytics = async (
       lwbpKwh: Number(lwbpKwh.toFixed(0)),
       wbpCost: Number(wbpCost.toFixed(0)),
       lwbpCost: Number(lwbpCost.toFixed(0)),
-      totalCost: Number(totalCost.toFixed(0))
+      totalCost: Number(totalCost.toFixed(0)),
+      todayWbpKwh: Number(todayWbpKwh.toFixed(0)),
+      todayLwbpKwh: Number(todayLwbpKwh.toFixed(0)),
+      monthlyWbpKwh: Number(monthlyWbpKwh.toFixed(0)),
+      monthlyLwbpKwh: Number(monthlyLwbpKwh.toFixed(0))
     },
     charts: {
       hourly: hourlyValues,

@@ -242,19 +242,32 @@ export default function Electricity() {
   }, [hasData, range, config, plnData, maxIdx]);
 
   const donutSegments = useMemo(() => {
-    if (hasData && plnData.summary.totalKwh > 0) {
-      const wbpPct = Math.round((plnData.summary.wbpKwh / Math.max(plnData.summary.totalKwh, 1)) * 100);
-      const lwbpPct = 100 - wbpPct;
-      return [
-        { label: "Beban WBP (17-22)", value: wbpPct, color: "#ef4444" },
-        { label: "Beban LWBP", value: lwbpPct, color: "#3b82f6" }
-      ];
+    if (hasData) {
+      let wbp = plnData.summary.wbpKwh;
+      let total = plnData.summary.totalKwh;
+
+      if (range === "hour") {
+        wbp = plnData.summary.todayWbpKwh ?? 0;
+        total = (plnData.summary.todayWbpKwh ?? 0) + (plnData.summary.todayLwbpKwh ?? 0);
+      } else if (range === "day") {
+        wbp = plnData.summary.monthlyWbpKwh ?? 0;
+        total = (plnData.summary.monthlyWbpKwh ?? 0) + (plnData.summary.monthlyLwbpKwh ?? 0);
+      }
+
+      if (total > 0) {
+        const wbpPct = Math.round((wbp / total) * 100);
+        const lwbpPct = 100 - wbpPct;
+        return [
+          { label: "Beban WBP (17-22)", value: wbpPct, color: "#ef4444" },
+          { label: "Beban LWBP", value: lwbpPct, color: "#3b82f6" }
+        ];
+      }
     }
     return [
       { label: "Beban WBP (17-22)", value: 0, color: "#ef4444" },
       { label: "Beban LWBP", value: 0, color: "#3b82f6" }
     ];
-  }, [hasData, plnData]);
+  }, [hasData, plnData, range]);
 
   // ========== TOP 10 ENERGY CONSUMING UNITS (Horizontal Bar Chart) ==========
   const top10Units = useMemo(() => {
