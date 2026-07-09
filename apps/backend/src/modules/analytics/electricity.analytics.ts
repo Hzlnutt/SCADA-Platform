@@ -327,47 +327,76 @@ export const getElectricityAnalytics = async (
   }
 
   // Latest Power Quality and Grid Telemetry (pqData)
-  // Fetch latest active values from telemetry_raw for Incoming PLN PM8000 only
-  let latestTelemetry = await db.collection("telemetry_raw")
-    .find({
-      "meta.deviceId": "Cubicle_PLN_PM8000",
-      ts: { $lte: to }
-    })
-    .sort({ ts: -1 })
-    .limit(40)
-    .toArray();
-
-  if (latestTelemetry.length === 0) {
-    latestTelemetry = await telemetryCollection
-      .find({
-        "meta.deviceId": "Cubicle_PLN_PM8000",
-        ts: { $lte: to }
-      })
-      .sort({ ts: -1 })
-      .limit(40)
-      .toArray();
+  // Fetch latest active values from PostgreSQL table electricity_telemetry
+  let latestRow: any = null;
+  try {
+    const latestPgRes = await pool.query(`
+      SELECT 
+        active_power,
+        reactive_power,
+        apparent_power,
+        power_factor,
+        frequency,
+        volt_ll_avg,
+        current_a,
+        current_b,
+        current_c,
+        voltage_ab,
+        voltage_bc,
+        voltage_ca
+      FROM electricity_telemetry
+      ORDER BY t_stamp DESC
+      LIMIT 1
+    `);
+    latestRow = latestPgRes.rows[0];
+  } catch (err: any) {
+    console.error("Failed to fetch latest electricity telemetry from PostgreSQL:", err.message);
   }
 
-  const getLatestVal = (key: string, defaultVal: number): number => {
-    const match = latestTelemetry.find((t) => t.meta.tagId.endsWith(`/${key}`));
-    return match ? match.value : defaultVal;
-  };
+  const activePower = latestRow && latestRow.active_power !== null && latestRow.active_power !== undefined
+    ? Number(latestRow.active_power)
+    : (maxDiff > 0 ? maxDiff : 101.4);
 
-  const activePower = maxDiff > 0 ? maxDiff : getLatestVal("active_power", 101.4);
-  const reactivePower = getLatestVal("reactive_power", activePower * 0.45);
-  const apparentPower = getLatestVal("apparent_power", Math.sqrt(activePower**2 + reactivePower**2));
+  const reactivePower = latestRow && latestRow.reactive_power !== null && latestRow.reactive_power !== undefined
+    ? Number(latestRow.reactive_power)
+    : (activePower * 0.45);
+
+  const apparentPower = latestRow && latestRow.apparent_power !== null && latestRow.apparent_power !== undefined
+    ? Number(latestRow.apparent_power)
+    : Math.sqrt(activePower**2 + reactivePower**2);
+
   const apiPf = await fetchPowerFactor();
-  const pf = apiPf !== null ? apiPf : getLatestVal("power_factor", 0.91);
-  const freq = getLatestVal("frequency", 49.92);
-  const volt_avg = getLatestVal("voltage_avg", 21000);
-  
-  const current1 = getLatestVal("current_a", 165.3);
-  const current2 = getLatestVal("current_b", 163.7);
-  const current3 = getLatestVal("current_c", 165.2);
+  const pf = apiPf !== null 
+    ? apiPf 
+    : (latestRow && latestRow.power_factor !== null && latestRow.power_factor !== undefined ? Number(latestRow.power_factor) : 0.91);
 
-  const vll1 = getLatestVal("voltage_ab", volt_avg);
-  const vll2 = getLatestVal("voltage_bc", volt_avg + 5);
-  const vll3 = getLatestVal("voltage_ca", volt_avg - 5);
+  const freq = latestRow && latestRow.frequency !== null && latestRow.frequency !== undefined
+    ? Number(latestRow.frequency)
+    : 49.92;
+
+  const volt_avg = latestRow && latestRow.volt_ll_avg !== null && latestRow.volt_ll_avg !== undefined
+    ? Number(latestRow.volt_ll_avg)
+    : 21000;
+  
+  const current1 = latestRow && latestRow.current_a !== null && latestRow.current_a !== undefined
+    ? Number(latestRow.current_a)
+    : 165.3;
+  const current2 = latestRow && latestRow.current_b !== null && latestRow.current_b !== undefined
+    ? Number(latestRow.current_b)
+    : 163.7;
+  const current3 = latestRow && latestRow.current_c !== null && latestRow.current_c !== undefined
+    ? Number(latestRow.current_c)
+    : 165.2;
+
+  const vll1 = latestRow && latestRow.voltage_ab !== null && latestRow.voltage_ab !== undefined
+    ? Number(latestRow.voltage_ab)
+    : volt_avg;
+  const vll2 = latestRow && latestRow.voltage_bc !== null && latestRow.voltage_bc !== undefined
+    ? Number(latestRow.voltage_bc)
+    : (volt_avg + 5);
+  const vll3 = latestRow && latestRow.voltage_ca !== null && latestRow.voltage_ca !== undefined
+    ? Number(latestRow.voltage_ca)
+    : (volt_avg - 5);
 
   const vln1 = vll1 / Math.sqrt(3);
   const vln2 = vll2 / Math.sqrt(3);
