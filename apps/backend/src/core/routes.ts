@@ -25,6 +25,13 @@ export const registerRoutes = (app: Express) => {
       const db = getMongoDb();
       await db.command({ ping: 1 });
       mongoStatus.connected = true;
+      
+      const latestMongo = await db.collection("telemetry_raw")
+        .find({ "meta.deviceId": "Cubicle_PLN_PM8000" })
+        .sort({ ts: -1 })
+        .limit(5)
+        .toArray();
+      mongoStatus.latestPoints = latestMongo;
     } catch (err: any) {
       mongoStatus.error = err.message;
     }
