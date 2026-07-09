@@ -328,7 +328,7 @@ export const getElectricityAnalytics = async (
 
   // Latest Power Quality and Grid Telemetry (pqData)
   // Fetch latest active values from telemetry_raw for Incoming PLN PM8000 only
-  const latestTelemetry = await telemetryCollection
+  let latestTelemetry = await db.collection("telemetry_raw")
     .find({
       "meta.deviceId": "Cubicle_PLN_PM8000",
       ts: { $lte: to }
@@ -336,6 +336,17 @@ export const getElectricityAnalytics = async (
     .sort({ ts: -1 })
     .limit(40)
     .toArray();
+
+  if (latestTelemetry.length === 0) {
+    latestTelemetry = await telemetryCollection
+      .find({
+        "meta.deviceId": "Cubicle_PLN_PM8000",
+        ts: { $lte: to }
+      })
+      .sort({ ts: -1 })
+      .limit(40)
+      .toArray();
+  }
 
   const getLatestVal = (key: string, defaultVal: number): number => {
     const match = latestTelemetry.find((t) => t.meta.tagId.endsWith(`/${key}`));
