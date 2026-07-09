@@ -37,7 +37,14 @@ export const registerRoutes = (app: Express) => {
       const pgRes = await client.query("SELECT COUNT(*)::int AS count FROM electricity_telemetry");
       pgStatus.recordCount = pgRes.rows[0]?.count ?? 0;
       
-      const latestPg = await client.query("SELECT t_stamp, power_factor FROM electricity_telemetry ORDER BY t_stamp DESC LIMIT 1");
+      const columnsRes = await client.query(`
+        SELECT column_name, data_type 
+        FROM information_schema.columns 
+        WHERE table_name = 'electricity_telemetry'
+      `);
+      pgStatus.columns = columnsRes.rows;
+
+      const latestPg = await client.query("SELECT * FROM electricity_telemetry ORDER BY t_stamp DESC LIMIT 1");
       pgStatus.latestRow = latestPg.rows[0] ?? null;
       
       client.release();
