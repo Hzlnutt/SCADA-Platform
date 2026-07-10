@@ -7,7 +7,8 @@ import { getLatestTelemetryByTags } from "../modules/telemetry/telemetry.service
 import {
   setSocketServer,
   TELEMETRY_ALL_ROOM,
-  telemetryTagRoom
+  telemetryTagRoom,
+  getTelemetryFromCache
 } from "../services/socket.manager";
 import {
   latestPowerFactorValue,
@@ -61,13 +62,16 @@ export const createSocketServer = (httpServer: HttpServer) => {
         nextRooms.forEach((room) => socket.join(room));
         socket.data.telemetryRooms = nextRooms;
 
-        const latest = parsed.all
-          ? []
-          : await getLatestTelemetryByTags([...new Set(parsed.tagIds ?? [])]);
+        const uniqueTagIds = [...new Set(parsed.tagIds ?? [])];
+        const latest = parsed.all ? [] : await getLatestTelemetryByTags(uniqueTagIds);
+        const dbPoints = serializeTelemetryDocs(latest);
+        const cachedPoints = parsed.all ? [] : getTelemetryFromCache(uniqueTagIds);
 
-        if (latest.length > 0) {
+        const points = [...dbPoints, ...cachedPoints];
+
+        if (points.length > 0) {
           socket.emit("telemetry:snapshot", {
-            points: serializeTelemetryDocs(latest)
+            points
           });
         }
 

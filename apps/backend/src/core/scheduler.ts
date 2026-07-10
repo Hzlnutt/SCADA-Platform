@@ -5,7 +5,7 @@ import {
   rollupTelemetryMinute
 } from "../modules/historian/historian.rollup";
 import { getPostgresPool } from "../database/postgres";
-import { getSocketServer, TELEMETRY_ALL_ROOM, telemetryTagRoom } from "../services/socket.manager";
+import { getSocketServer, TELEMETRY_ALL_ROOM, telemetryTagRoom, updateTelemetryCache } from "../services/socket.manager";
 import {
   fetchPowerFactor,
   setLatestPowerFactor
@@ -149,6 +149,9 @@ export const startCoolingTowerPolling = () => {
             source: "ignition-api"
           }
         }));
+
+        // Update in-memory cache
+        updateTelemetryCache(points);
 
         // Emit directly via WebSocket (no database, instant real-time)
         if (io) {

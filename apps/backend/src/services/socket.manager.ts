@@ -11,3 +11,23 @@ export const setSocketServer = (server: Server) => {
 };
 
 export const getSocketServer = () => socketServer;
+
+// --- IN-MEMORY CACHE FOR REALTIME TELEMETRY ---
+const telemetryCache = new Map<string, any>();
+
+export const updateTelemetryCache = (points: any[]) => {
+  points.forEach((point) => {
+    telemetryCache.set(point.meta.tagId, point);
+  });
+};
+
+export const getTelemetryFromCache = (tagIds: string[]) => {
+  const result: any[] = [];
+  tagIds.forEach((tagId) => {
+    const val = telemetryCache.get(tagId);
+    if (val) {
+      result.push(val);
+    }
+  });
+  return result;
+};

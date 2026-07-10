@@ -61,4 +61,31 @@ export const industrialTags: IndustrialTag[] = machineGroups.flatMap((group) => 
   });
 });
 
-export const telemetryTagIds = industrialTags.map((tag) => tag.tagId);
+const extraTags = [
+  "cooling-water/fan_status_1",
+  "cooling-water/fan_status_2",
+  "cooling-water/fan_status_3",
+  "cooling-water/motor_status_1",
+  "cooling-water/motor_status_2",
+  "cooling-water/motor_status_3",
+  "cooling-water/pressure_1",
+  "cooling-water/pressure_2",
+  "cooling-water/pressure_3",
+  "cooling-water/basin_lvl",
+  "cooling-water/eq_status_du03",
+  "cooling-water/eq_press_du03",
+  "cooling-water/eq_status_bp03",
+  "cooling-water/eq_press_bp03",
+  "cooling-water/eq_status_prep03",
+  "cooling-water/eq_press_prep03",
+  "cooling-water/eq_status_st03",
+  "cooling-water/eq_press_st03",
+  "cooling-water/eq_status_washing",
+  "cooling-water/eq_press_washing",
+  "cooling-water/eq_status_minilab"
+];
+
+export const telemetryTagIds = [
+  ...industrialTags.map((tag) => tag.tagId),
+  ...extraTags
+];
