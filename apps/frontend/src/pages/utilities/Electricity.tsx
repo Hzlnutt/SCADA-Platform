@@ -48,6 +48,8 @@ export default function Electricity() {
 
   const [plnData, setPlnData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [livePf, setLivePf] = useState<number | null>(null);
+  const [pfStatus, setPfStatus] = useState<"connected" | "offline">("offline");
 
   // Retrieve custom rates from useConfigStore
   const wbpRate = useConfigStore((state) => state.wbpRate);
@@ -63,6 +65,10 @@ export default function Electricity() {
         .then((res) => {
           if (active) {
             setPlnData(res.data);
+            if (res.data?.pqData) {
+              setLivePf(res.data.pqData.pf);
+              setPfStatus(res.data.pqData.pfStatus || "offline");
+            }
             if (showLoading) setLoading(false);
           }
         })
@@ -92,14 +98,24 @@ export default function Electricity() {
       if (active) fetchData(false);
     };
 
+    const handlePowerFactorStatus = (payload: any) => {
+      console.log("Power factor socket update:", payload);
+      if (active) {
+        setLivePf(payload.value);
+        setPfStatus(payload.status);
+      }
+    };
+
     socket.on("config:update", handleConfigUpdate);
     socket.on("electricity:update", handleElectricityUpdate);
+    socket.on("power_factor:status", handlePowerFactorStatus);
 
     return () => {
       active = false;
       clearInterval(interval);
       socket.off("config:update", handleConfigUpdate);
       socket.off("electricity:update", handleElectricityUpdate);
+      socket.off("power_factor:status", handlePowerFactorStatus);
     };
   }, [selectedYear, wbpRate, lwbpRate]);
 
@@ -148,9 +164,9 @@ export default function Electricity() {
   const labels = useMemo(() => {
     if (hasData) {
       if (range === "hour") {
-        // "00:00 WIB", "01:00 WIB", ..., "23:00 WIB"
+        // "01:00 WIB", "02:00 WIB", ..., "24:00 WIB"
         return Array.from({ length: 24 }, (_, i) =>
-          `${i.toString().padStart(2, "0")}:00 WIB`
+          `${(i + 1).toString().padStart(2, "0")}:00 WIB`
         );
       } else if (range === "day") {
         // "Senin, 01 Agustus 2025" for every day in the month
@@ -176,7 +192,7 @@ export default function Electricity() {
   const barLabels = useMemo(() => {
     if (hasData) {
       if (range === "hour") {
-        return Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
+        return Array.from({ length: 24 }, (_, i) => `${(i + 1).toString().padStart(2, "0")}:00`);
       } else if (range === "day") {
         return monthlyDailyRecords.map((d: any) => {
           const parts = d.day.split("-");
@@ -375,9 +391,15 @@ export default function Electricity() {
               <svg className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" /></svg>
             </div>
           </div>
-          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">
-            {loading ? "Loading..." : `${plnLoadFactor.toFixed(1)}%`}
-          </div>
+          {pfStatus === "offline" ? (
+            <div className="mt-3 text-base font-bold text-red-500 dark:text-red-400 font-mono">
+              API Tidak Terkirim
+            </div>
+          ) : (
+            <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">
+              {loading ? "Loading..." : livePf !== null ? `${(livePf * 100).toFixed(1)}%` : "Loading..."}
+            </div>
+          )}
           <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Stabilitas beban listrik</div>
         </div>
 
@@ -497,9 +519,15 @@ export default function Electricity() {
           <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-emerald-400 flex flex-col justify-between">
             <div>
               <div className="text-xs text-slate-400 dark:text-slate-500">Power Factor (Cos φ)</div>
-              <div className="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                {loading ? "Loading..." : (plnLoadFactor / 100).toFixed(2)}
-              </div>
+              {pfStatus === "offline" ? (
+                <div className="mt-1 text-sm font-bold text-red-500 dark:text-red-400 font-mono">
+                  API Tidak Terkirim
+                </div>
+              ) : (
+                <div className="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                  {loading ? "Loading..." : livePf !== null ? livePf.toFixed(2) : "Loading..."}
+                </div>
+              )}
             </div>
             <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Target: &ge; 0.85</div>
           </div>

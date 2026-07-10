@@ -6,9 +6,14 @@ import {
 } from "../modules/historian/historian.rollup";
 import { getPostgresPool } from "../database/postgres";
 import { getSocketServer } from "../services/socket.manager";
+import {
+  fetchPowerFactor,
+  setLatestPowerFactor
+} from "../modules/analytics/electricity.analytics";
 
 let lastElectricityTs: Date | null = null;
 let pollingInterval: NodeJS.Timeout | null = null;
+let pfPollingInterval: NodeJS.Timeout | null = null;
 
 export const startPostgresPolling = () => {
   if (pollingInterval) return;
@@ -51,6 +56,43 @@ export const startPostgresPolling = () => {
   pollingInterval = setInterval(poll, 1000);
 };
 
+export const startPowerFactorPolling = () => {
+  if (pfPollingInterval) return;
+
+  const poll = async () => {
+    try {
+      const val = await fetchPowerFactor();
+      const io = getSocketServer();
+      
+      if (val !== null) {
+        setLatestPowerFactor(val, "connected");
+        if (io) {
+          io.emit("power_factor:status", { value: val, status: "connected" });
+        }
+        logger.info({ value: val }, "Power factor API online");
+      } else {
+        setLatestPowerFactor(null, "offline");
+        if (io) {
+          io.emit("power_factor:status", { value: null, status: "offline" });
+        }
+        logger.warn("Power factor API offline");
+      }
+    } catch (err: any) {
+      setLatestPowerFactor(null, "offline");
+      const io = getSocketServer();
+      if (io) {
+        io.emit("power_factor:status", { value: null, status: "offline" });
+      }
+      logger.error({ err }, "Power factor polling failed");
+    }
+  };
+
+  // Initial poll
+  poll();
+  // Poll every 60 seconds (1 minute)
+  pfPollingInterval = setInterval(poll, 60000);
+};
+
 export const startScheduler = () => {
   const minuteIntervalMs = env.rollupIntervalMs;
   const hourlyIntervalMs = env.rollupHourlyIntervalMs;
@@ -64,6 +106,7 @@ export const startScheduler = () => {
   });
 
   startPostgresPolling();
+  startPowerFactorPolling();
 
   setInterval(() => {
     rollupTelemetryMinute().catch((err) => {

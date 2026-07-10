@@ -35,7 +35,15 @@ function parsePowerFactor(data: any): number | null {
   return null;
 }
 
-async function fetchPowerFactor(): Promise<number | null> {
+export let latestPowerFactorValue: number | null = null;
+export let latestPowerFactorStatus: "connected" | "offline" = "offline";
+
+export const setLatestPowerFactor = (val: number | null, status: "connected" | "offline") => {
+  latestPowerFactorValue = val;
+  latestPowerFactorStatus = status;
+};
+
+export async function fetchPowerFactor(): Promise<number | null> {
   if (!env.powerFactorApiUrl) return null;
   try {
     const headers: Record<string, string> = {
@@ -110,7 +118,8 @@ export interface ElectricityAnalyticsResult {
     activePower: number;
     reactivePower: number;
     apparentPower: number;
-    pf: number;
+    pf: number | null;
+    pfStatus: "connected" | "offline";
     freq: number;
     vUnb: number;
     iUnb: number;
@@ -360,8 +369,7 @@ export const getElectricityAnalytics = async (
   const activePower = maxDiff > 0 ? maxDiff : getLatestVal("active_power", 101.4);
   const reactivePower = getLatestVal("reactive_power", activePower * 0.45);
   const apparentPower = getLatestVal("apparent_power", Math.sqrt(activePower**2 + reactivePower**2));
-  const apiPf = await fetchPowerFactor();
-  const pf = apiPf !== null ? apiPf : getLatestVal("power_factor", 0.91);
+  const pf = latestPowerFactorStatus === "connected" ? latestPowerFactorValue : null;
   const freq = getLatestVal("frequency", 49.92);
   const volt_avg = getLatestVal("voltage_avg", 21000);
   
@@ -417,7 +425,8 @@ export const getElectricityAnalytics = async (
       activePower: Number(activePower.toFixed(1)),
       reactivePower: Number(reactivePower.toFixed(1)),
       apparentPower: Number(apparentPower.toFixed(1)),
-      pf: Number(pf.toFixed(2)),
+      pf: pf !== null ? Number(pf.toFixed(2)) : null,
+      pfStatus: latestPowerFactorStatus,
       freq: Number(freq.toFixed(2)),
       vUnb: Number(vUnb.toFixed(2)),
       iUnb: Number(iUnb.toFixed(2)),

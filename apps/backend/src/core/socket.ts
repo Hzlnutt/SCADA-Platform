@@ -9,6 +9,10 @@ import {
   TELEMETRY_ALL_ROOM,
   telemetryTagRoom
 } from "../services/socket.manager";
+import {
+  latestPowerFactorValue,
+  latestPowerFactorStatus
+} from "../modules/analytics/electricity.analytics";
 
 const telemetrySubscribeSchema = z.object({
   tagIds: z.array(z.string().min(1)).max(250).optional(),
@@ -34,6 +38,12 @@ export const createSocketServer = (httpServer: HttpServer) => {
 
   io.on("connection", (socket) => {
     logger.info({ id: socket.id }, "ws connected");
+
+    // Send initial power factor status on connect
+    socket.emit("power_factor:status", {
+      value: latestPowerFactorValue,
+      status: latestPowerFactorStatus
+    });
 
     socket.on("telemetry:subscribe", async (payload, ack) => {
       try {
