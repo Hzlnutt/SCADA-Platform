@@ -4,6 +4,7 @@ import { getUnitById } from "../../data/machines";
 import type { MachineOutletContext } from "./MachineLayout";
 import PidPageTemplate from "./PidPageTemplate";
 import type { Task, Alarm } from "./PidPageTemplate";
+import { useTelemetryStore } from "../../store/telemetry.store";
 import CoolingWF1U3Pid from "./diagrams/CoolingWF1U3Pid";
 import MachineAHU01Pid from "./diagrams/MachineAHU01Pid";
 import MachineAHU02Pid from "./diagrams/MachineAHU02Pid";
@@ -80,18 +81,27 @@ export default function MachinePidDiagram() {
   const data = machineDataMap[unitId] ?? defaultData;
   const { tasks: allTasks, alarms: alarmInfo } = data;
 
+  const latest = useTelemetryStore((state) => state.latest);
+
+  const getStatus = (tagId: string, fallback: boolean) => {
+    const val = latest[tagId]?.value;
+    if (typeof val === "number") return val === 1;
+    if (typeof val === "boolean") return val;
+    return fallback;
+  };
+
   const motorStatus = {
-    "FAN-1": allOn,
-    "FAN-2": allOn,
-    "FAN-3": allOn,
-    "MTR-1": allOn,
-    "MTR-2": allOn,
-    "MTR-3": allOn,
-    "MTR-4": allOn,
-    "MTR-5": allOn,
-    "MTR-6": allOn,
-    "MTR-7": allOn,
-    "MTR-8": allOn,
+    "FAN-1": getStatus("cooling-water/fan_status_1", allOn),
+    "FAN-2": getStatus("cooling-water/fan_status_2", allOn),
+    "FAN-3": getStatus("cooling-water/fan_status_3", allOn),
+    "MTR-1": getStatus("cooling-water/motor_status_1", allOn),
+    "MTR-2": getStatus("cooling-water/motor_status_2", allOn),
+    "MTR-3": getStatus("cooling-water/motor_status_3", allOn),
+    "MTR-4": getStatus("cooling-water/eq_status_du03", allOn),
+    "MTR-5": getStatus("cooling-water/eq_status_bp03", allOn),
+    "MTR-6": getStatus("cooling-water/eq_status_prep03", allOn),
+    "MTR-7": getStatus("cooling-water/eq_status_st03", allOn),
+    "MTR-8": getStatus("cooling-water/eq_status_washing", allOn),
     "MTR-9": allOn,
   };
 

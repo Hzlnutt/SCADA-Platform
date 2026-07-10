@@ -2,6 +2,7 @@ import { createServer } from "http";
 import { env } from "../config/env.config";
 import { logger } from "../config/logger.config";
 import { ensureMongoCollections } from "../database/setup";
+import { ensurePostgresTables } from "../database/postgres";
 import { createApp } from "./app";
 import { startScheduler } from "./scheduler";
 import { createSocketServer } from "./socket";
@@ -14,6 +15,7 @@ createSocketServer(httpServer);
 
 const start = async () => {
   await ensureMongoCollections();
+  await ensurePostgresTables();
   startScheduler();
   if (env.dummyMode) {
     startDummyGenerator();

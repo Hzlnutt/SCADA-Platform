@@ -23,14 +23,28 @@ export default function MachineOverview() {
 
   // Subscribe dynamically to socket tags when the unit changes
   useEffect(() => {
+    const socket = getSocket();
+    const tagIds: string[] = [];
     if (machineConfig && machineConfig.apiBindings) {
-      const tagIds = Object.values(machineConfig.apiBindings).filter(Boolean);
-      if (tagIds.length > 0) {
-        const socket = getSocket();
-        socket.emit("telemetry:subscribe", { tagIds });
-      }
+      tagIds.push(...Object.values(machineConfig.apiBindings).filter(Boolean));
     }
-  }, [machineConfig]);
+    if (unitId === "cooling-water-1") {
+      tagIds.push(
+        "cooling-water/fan_status_1", "cooling-water/fan_status_2", "cooling-water/fan_status_3",
+        "cooling-water/motor_status_1", "cooling-water/motor_status_2", "cooling-water/motor_status_3",
+        "cooling-water/pressure_1", "cooling-water/pressure_2", "cooling-water/pressure_3",
+        "cooling-water/basin_lvl",
+        "cooling-water/eq_status_du03", "cooling-water/eq_press_du03",
+        "cooling-water/eq_status_bp03", "cooling-water/eq_press_bp03",
+        "cooling-water/eq_status_prep03", "cooling-water/eq_press_prep03",
+        "cooling-water/eq_status_st03", "cooling-water/eq_press_st03",
+        "cooling-water/eq_status_washing", "cooling-water/eq_press_washing"
+      );
+    }
+    if (tagIds.length > 0) {
+      socket.emit("telemetry:subscribe", { tagIds });
+    }
+  }, [machineConfig, unitId]);
 
   if (unitId === "hvac-qc-retained-sample") {
     return (
@@ -234,6 +248,32 @@ function StandardMachineOverview({
     const ct2Flow = latest["cooling-water/flow_2"]?.value;
     const ct3Flow = latest["cooling-water/flow_3"]?.value;
 
+    const ct1Fan = latest["cooling-water/fan_status_1"]?.value;
+    const ct2Fan = latest["cooling-water/fan_status_2"]?.value;
+    const ct3Fan = latest["cooling-water/fan_status_3"]?.value;
+
+    const ct1Mtr = latest["cooling-water/motor_status_1"]?.value;
+    const ct2Mtr = latest["cooling-water/motor_status_2"]?.value;
+    const ct3Mtr = latest["cooling-water/motor_status_3"]?.value;
+
+    const ct1Press = latest["cooling-water/pressure_1"]?.value;
+    const ct2Press = latest["cooling-water/pressure_2"]?.value;
+    const ct3Press = latest["cooling-water/pressure_3"]?.value;
+
+    const basinLvl = latest["cooling-water/basin_lvl"]?.value;
+
+    const eqPressDu03 = latest["cooling-water/eq_press_du03"]?.value;
+    const eqPressBp03 = latest["cooling-water/eq_press_bp03"]?.value;
+    const eqPressPrep03 = latest["cooling-water/eq_press_prep03"]?.value;
+    const eqPressSt03 = latest["cooling-water/eq_press_st03"]?.value;
+    const eqPressWashing = latest["cooling-water/eq_press_washing"]?.value;
+
+    const eqStatusDu03 = latest["cooling-water/eq_status_du03"]?.value;
+    const eqStatusBp03 = latest["cooling-water/eq_status_bp03"]?.value;
+    const eqStatusPrep03 = latest["cooling-water/eq_status_prep03"]?.value;
+    const eqStatusSt03 = latest["cooling-water/eq_status_st03"]?.value;
+    const eqStatusWashing = latest["cooling-water/eq_status_washing"]?.value;
+
     return {
       ...liveDataState,
       supplyTemp: dynamicSupplyTemp,
@@ -244,15 +284,56 @@ function StandardMachineOverview({
       ct1: {
         ...liveDataState.ct1,
         flow: dynamicSupplyFlow,
+        fanStatus: typeof ct1Fan === "number" ? ct1Fan === 1 : liveDataState.ct1.fanStatus,
+        motorStatus: typeof ct1Mtr === "number" ? ct1Mtr === 1 : liveDataState.ct1.motorStatus,
+        pressure: typeof ct1Press === "number" ? ct1Press : liveDataState.ct1.pressure,
       },
       ct2: {
         ...liveDataState.ct2,
         flow: typeof ct2Flow === "number" ? ct2Flow : liveDataState.ct2.flow,
+        fanStatus: typeof ct2Fan === "number" ? ct2Fan === 1 : liveDataState.ct2.fanStatus,
+        motorStatus: typeof ct2Mtr === "number" ? ct2Mtr === 1 : liveDataState.ct2.motorStatus,
+        pressure: typeof ct2Press === "number" ? ct2Press : liveDataState.ct2.pressure,
       },
       ct3: {
         ...liveDataState.ct3,
         flow: typeof ct3Flow === "number" ? ct3Flow : liveDataState.ct3.flow,
-      }
+        fanStatus: typeof ct3Fan === "number" ? ct3Fan === 1 : liveDataState.ct3.fanStatus,
+        motorStatus: typeof ct3Mtr === "number" ? ct3Mtr === 1 : liveDataState.ct3.motorStatus,
+        pressure: typeof ct3Press === "number" ? ct3Press : liveDataState.ct3.pressure,
+      },
+      coolingTank: {
+        ...liveDataState.coolingTank,
+        lvl: typeof basinLvl === "number" ? basinLvl : liveDataState.coolingTank.lvl,
+      },
+      equipment: [
+        {
+          ...liveDataState.equipment[0],
+          status: typeof eqStatusDu03 === "number" ? (eqStatusDu03 === 1 ? "Running" : "Stopped") : liveDataState.equipment[0].status,
+          press: typeof eqPressDu03 === "number" ? eqPressDu03 : liveDataState.equipment[0].press,
+        },
+        {
+          ...liveDataState.equipment[1],
+          status: typeof eqStatusBp03 === "number" ? (eqStatusBp03 === 1 ? "Running" : "Stopped") : liveDataState.equipment[1].status,
+          press: typeof eqPressBp03 === "number" ? eqPressBp03 : liveDataState.equipment[1].press,
+        },
+        {
+          ...liveDataState.equipment[2],
+          status: typeof eqStatusPrep03 === "number" ? (eqStatusPrep03 === 1 ? "Running" : "Stopped") : liveDataState.equipment[2].status,
+          press: typeof eqPressPrep03 === "number" ? eqPressPrep03 : liveDataState.equipment[2].press,
+        },
+        {
+          ...liveDataState.equipment[3],
+          status: typeof eqStatusSt03 === "number" ? (eqStatusSt03 === 1 ? "Running" : "Stopped") : liveDataState.equipment[3].status,
+          press: typeof eqPressSt03 === "number" ? eqPressSt03 : liveDataState.equipment[3].press,
+        },
+        {
+          ...liveDataState.equipment[4],
+          status: typeof eqStatusWashing === "number" ? (eqStatusWashing === 1 ? "Running" : "Stopped") : liveDataState.equipment[4].status,
+          press: typeof eqPressWashing === "number" ? eqPressWashing : liveDataState.equipment[4].press,
+        },
+        liveDataState.equipment[5]
+      ]
     };
   }, [liveDataState, latest, machineConfig]);
 

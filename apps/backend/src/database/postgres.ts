@@ -36,3 +36,42 @@ export const closePostgres = async () => {
     pool = null;
   }
 };
+
+export const ensurePostgresTables = async () => {
+  const pool = getPostgresPool();
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cooling_tower_telemetry (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        id_device VARCHAR(50) NOT NULL,
+        press_ct_p1 NUMERIC,
+        status_mtr_washing BOOLEAN,
+        status_fan_ct2 BOOLEAN,
+        status_fan_ct3 BOOLEAN,
+        status_mtr_st3_p3 BOOLEAN,
+        press_ct_p2 NUMERIC,
+        scaled_press_prepu3 NUMERIC,
+        scaled_press_ct_p1 NUMERIC,
+        scaled_press_ct_p2 NUMERIC,
+        status_fan_ct1 BOOLEAN,
+        status_mtr_du45 BOOLEAN,
+        scaled_press_st3 NUMERIC,
+        press_ct3_p11 NUMERIC,
+        scaled_press_ct3_p11 NUMERIC,
+        status_mtr_ct_p1 BOOLEAN,
+        status_mtr_ct_p2 BOOLEAN,
+        scaled_press_bp NUMERIC,
+        status_mtr_prep3 BOOLEAN,
+        scaled_press_washing NUMERIC,
+        status_mtr_ct_p11 BOOLEAN,
+        scaled_press_duu3 NUMERIC,
+        scaled_level_tank_cooling3 NUMERIC,
+        status_mtr_bp BOOLEAN
+      );
+    `);
+    logger.info("cooling_tower_telemetry postgres table ensured");
+  } catch (err: any) {
+    logger.error({ err }, "failed to ensure postgres tables");
+  }
+};
