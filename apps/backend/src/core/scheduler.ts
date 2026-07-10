@@ -89,8 +89,8 @@ export const startPowerFactorPolling = () => {
 
   // Initial poll
   poll();
-  // Poll every 60 seconds (1 minute)
-  pfPollingInterval = setInterval(poll, 60000);
+  // Poll every 2 seconds for real-time responsiveness
+  pfPollingInterval = setInterval(poll, 2000);
 };
 
 export const startScheduler = () => {
