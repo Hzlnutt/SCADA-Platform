@@ -58,6 +58,11 @@ const SensorCard: React.FC<SensorCardProps> = ({
     );
   }
 
+  const isApiNotSent = (value && typeof value === "string" && (value.includes("API") || value.includes("TIDAK"))) || 
+                       (values && values.some(v => typeof v.value === "string" && (v.value.includes("API") || v.value.includes("TIDAK"))));
+  const displayFontSize = isApiNotSent ? "11" : "28";
+  const displayTextColor = isApiNotSent ? "#ff2222" : valueTextColor;
+
   return (
     <g transform={`translate(${x}, ${y})`}>
       <rect
@@ -95,9 +100,9 @@ const SensorCard: React.FC<SensorCardProps> = ({
         y={valueY}
         dominantBaseline="middle"
         textAnchor="middle"
-        fontSize="28"
+        fontSize={displayFontSize}
         fontWeight="bold"
-        fill={valueTextColor}
+        fill={displayTextColor}
         fontFamily="sans-serif"
       >
         {displayContent}

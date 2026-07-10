@@ -271,7 +271,7 @@ export default function Electricity() {
           totalCost: monthData.totalCost,
           totalKwh: monthData.totalKwh,
           peakDemand: monthData.peakDemand,
-          loadFactor: monthData.loadFactor * 100,
+          loadFactor: plnData.pqData.pf ? plnData.pqData.pf * 100 : 88.5,
           wbpKwh: monthData.wbpKwh,
           lwbpKwh: monthData.lwbpKwh,
           wbpCost: monthData.wbpCost,
@@ -609,9 +609,9 @@ export default function Electricity() {
               <svg className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" /></svg>
             </div>
           </div>
-          {pfStatus === "offline" && cardPeriod === "yearly" ? (
+          {pfStatus === "offline" ? (
             <div className="mt-3 text-base font-bold text-red-500 dark:text-red-400 font-mono">
-              API Tidak Terkirim
+              API TIDAK TERKIRIM
             </div>
           ) : (
             <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">

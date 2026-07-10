@@ -79,16 +79,6 @@ export default function PidPageTemplate({
           <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
             P&ID Diagram Canvas — {machineName}
           </div>
-          <button
-            onClick={onToggleAllOn}
-            className={`rounded px-3 py-1 text-xs font-mono transition-colors ${
-              allOn
-                ? "bg-cyan-900/60 text-cyan-400 border border-cyan-700 dark:bg-cyan-900/80 dark:text-cyan-300 dark:border-cyan-600"
-                : "bg-slate-800 text-slate-400 border border-slate-700 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600"
-            }`}
-          >
-            {allOn ? "● FLOW ON" : "○ FLOW OFF"} (demo)
-          </button>
         </div>
 
         {/* Canvas Wrapper */}

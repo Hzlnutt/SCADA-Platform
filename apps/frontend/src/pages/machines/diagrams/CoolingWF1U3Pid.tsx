@@ -15,6 +15,8 @@ import CoolingTower from "../../../components/pid/CoolingTower";
 import InfoCard from "../../../components/pid/InfoCard";
 import SensorCard from "../../../components/pid/SensorCard";
 import DashedLine from "../../../components/pid/DashedLine";
+import { useTelemetryStore } from "../../../store/telemetry.store";
+
 
 interface CoolingWF1U3PidProps {
   motorStatus: Record<string, boolean>;
@@ -23,10 +25,33 @@ interface CoolingWF1U3PidProps {
 }
 
 export default function CoolingWF1U3Pid({
-  motorStatus,
+  motorStatus: rawMotorStatus,
   svgRef,
   onSvgClick,
 }: CoolingWF1U3PidProps) {
+  const latest = useTelemetryStore((state) => state.latest);
+
+  // Keep a boolean proxy for pipes, motor icons, and cooling towers
+  const motorStatus = new Proxy(rawMotorStatus, {
+    get: (target, prop: string) => {
+      return target[prop] === true;
+    }
+  }) as Record<string, boolean>;
+
+  // Helper to extract numerical telemetry values or display custom offline indicator
+  const getVal = (tagId: string, unit = "") => {
+    const pt = latest[tagId];
+    if (!pt || pt.value === undefined) return "API TIDAK TERKIRIM";
+    return pt.value;
+  };
+
+  const getLvl = (tagId: string) => {
+    const pt = latest[tagId];
+    if (!pt || typeof pt.value !== "number") return 0;
+    return pt.value;
+  };
+
+
   return (
     <svg
       ref={svgRef}
@@ -250,20 +275,20 @@ export default function CoolingWF1U3Pid({
               <TankFrame x={708} y={410} w={120} h={163} label="" />
               <TankFrame x={837} y={410} w={120} h={163} label="" />
 
-              <LevelIndicator x={714} y={416} value={76} w={108} h={151} type="warm" />
-              <LevelIndicator x={843} y={416} value={76} w={108} h={151} type="cold" />
+              <LevelIndicator x={714} y={416} value={getLvl("cooling-water/basin_lvl")} w={108} h={151} type="warm" />
+              <LevelIndicator x={843} y={416} value={getLvl("cooling-water/basin_lvl")} w={108} h={151} type="cold" />
 
               <SensorIndicator 
                 x={860} y={492} 
                 w={75} h={30}
-                value={76} unit=" %" 
+                value={getVal("cooling-water/basin_lvl")} unit=" %" 
                 warningThreshold={75} alarmThreshold={70} 
                 thresholdDirection="below" 
               />
               <SensorIndicator 
                 x={860} y={530} 
                 w={75} h={30}
-                value={28.5} unit=" °C" 
+                value={getVal("cooling-water/basin_temp")} unit=" °C" 
                 warningThreshold={28} alarmThreshold={30}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -271,7 +296,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={731} y={530} 
                 w={75} h={30}
-                value={32.8} unit=" °C" 
+                value={getVal("cooling-water/warm_basin_temp")} unit=" °C" 
                 warningThreshold={38} alarmThreshold={40}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -281,7 +306,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={118} y={273} 
                 w={75} h={30}
-                value={1.8} unit=" BAR" 
+                value={getVal("cooling-water/pressure_1")} unit=" BAR" 
                 warningThreshold={1.5} alarmThreshold={2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -289,7 +314,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={333} y={273} 
                 w={75} h={30}
-                value={2} unit=" BAR" 
+                value={getVal("cooling-water/pressure_2")} unit=" BAR" 
                 warningThreshold={1.5} alarmThreshold={2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -297,7 +322,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={552} y={273} 
                 w={75} h={30}
-                value={1.2} unit=" BAR" 
+                value={getVal("cooling-water/pressure_3")} unit=" BAR" 
                 warningThreshold={1.5} alarmThreshold={2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -305,7 +330,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={1177} y={273} 
                 w={75} h={30}
-                value={1.5} unit=" BAR" 
+                value={getVal("cooling-water/eq_press_du03")} unit=" BAR" 
                 warningThreshold={1.5} alarmThreshold={2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -313,7 +338,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={1282} y={273} 
                 w={75} h={30}
-                value={1.4} unit=" BAR" 
+                value={getVal("cooling-water/eq_press_bp03")} unit=" BAR" 
                 warningThreshold={1.5} alarmThreshold={2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -321,7 +346,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={1390} y={273} 
                 w={75} h={30}
-                value={0.8} unit=" BAR" 
+                value={getVal("cooling-water/eq_press_prep03")} unit=" BAR" 
                 warningThreshold={1.5} alarmThreshold={2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -329,7 +354,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={1495} y={273} 
                 w={75} h={30}
-                value={2.4} unit=" BAR" 
+                value={getVal("cooling-water/eq_press_st03")} unit=" BAR" 
                 warningThreshold={1.5} alarmThreshold={2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -337,7 +362,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={1599} y={273} 
                 w={75} h={30}
-                value={1.3} unit=" BAR" 
+                value={getVal("cooling-water/eq_press_washing")} unit=" BAR" 
                 warningThreshold={1.5} alarmThreshold={2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -345,7 +370,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={1705} y={273} 
                 w={75} h={30}
-                value={0.8} unit=" BAR" 
+                value={getVal("cooling-water/eq_press_minilab")} unit=" BAR" 
                 warningThreshold={1.5} alarmThreshold={2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -354,7 +379,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={1496} y={147} 
                 w={75} h={30}
-                value={34.6} unit=" °C" 
+                value={getVal("cooling-water/flow_temp")} unit=" °C" 
                 warningThreshold={35} alarmThreshold={40}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -406,8 +431,8 @@ export default function CoolingWF1U3Pid({
 
               {/* Cooling Tower */}
               <CoolingTower x={55} y={-12} size={200} on={motorStatus["FAN-1"]} />
-              <CoolingTower x={269} y={-12} size={200} on={motorStatus["FAN-1"]} />
-              <CoolingTower x={487} y={-12} size={200} on={motorStatus["FAN-1"]} />
+              <CoolingTower x={269} y={-12} size={200} on={motorStatus["FAN-2"]} />
+              <CoolingTower x={487} y={-12} size={200} on={motorStatus["FAN-3"]} />
 
               {/* Info Card */}
 
@@ -425,7 +450,7 @@ export default function CoolingWF1U3Pid({
               y={784}
               w={63.75}
               h={25.5}
-              value={motorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
+              value={rawMotorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
               mode="onoff"
               />
               <SensorIndicator
@@ -433,27 +458,24 @@ export default function CoolingWF1U3Pid({
               y={812}
               w={63.75}
               h={25.5}
-              value={23000}
-              unit=" H"
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={70}
               y={840}
               w={63.75}
               h={25.5}
-              value={50}
-              unit=" Hz"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={70}
               y={868}
               w={63.75}
               h={25.5}
-              value={100}
-              unit=" KW"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
 
               {/* MTR 2 */}
@@ -470,7 +492,7 @@ export default function CoolingWF1U3Pid({
               y={784}
               w={63.75}
               h={25.5}
-              value={motorStatus["MTR-2"]} // true = ON (hijau), false = OFF (merah)
+              value={rawMotorStatus["MTR-2"]} // true = ON (hijau), false = OFF (merah)
               mode="onoff"
               />
               <SensorIndicator
@@ -478,27 +500,24 @@ export default function CoolingWF1U3Pid({
               y={812}
               w={63.75}
               h={25.5}
-              value={23000}
-              unit=" H"
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={238}
               y={840}
               w={63.75}
               h={25.5}
-              value={50}
-              unit=" Hz"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={238}
               y={868}
               w={63.75}
               h={25.5}
-              value={100}
-              unit=" KW"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
 
               {/* MTR 3 */}
@@ -515,7 +534,7 @@ export default function CoolingWF1U3Pid({
               y={784}
               w={63.75}
               h={25.5}
-              value={motorStatus["MTR-3"]} // true = ON (hijau), false = OFF (merah)
+              value={rawMotorStatus["MTR-3"]} // true = ON (hijau), false = OFF (merah)
               mode="onoff"
               />
               <SensorIndicator
@@ -523,27 +542,24 @@ export default function CoolingWF1U3Pid({
               y={812}
               w={63.75}
               h={25.5}
-              value={23000}
-              unit=" H"
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={406}
               y={840}
               w={63.75}
               h={25.5}
-              value={50}
-              unit=" Hz"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={406}
               y={868}
               w={63.75}
               h={25.5}
-              value={100}
-              unit=" KW"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
 
               {/* BLOWDOWN */}
@@ -560,7 +576,7 @@ export default function CoolingWF1U3Pid({
               y={756}
               w={63.75}
               h={25.5}
-              value={motorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
+              value="API TIDAK TERKIRIM"
               mode="onoff"
               />
               <SensorIndicator
@@ -568,11 +584,8 @@ export default function CoolingWF1U3Pid({
               y={784}
               w={63.75}
               h={25.5}
-              value={0}
+              value="API TIDAK TERKIRIM"
               unit=""
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
               />
 
               {/* COOLING TANK */}
@@ -589,7 +602,7 @@ export default function CoolingWF1U3Pid({
               y={752}
               w={63.75}
               h={25.5}
-              value={0}
+              value={getVal("cooling-water/cooling_tank_tds")}
               unit=""
               warningThreshold={23000}
               alarmThreshold={25000}
@@ -601,7 +614,7 @@ export default function CoolingWF1U3Pid({
               y={780}
               w={63.75}
               h={25.5}
-              value={7.4}
+              value={getVal("cooling-water/cooling_tank_ph")}
               unit=" PH"
               warningThreshold={7.5}
               alarmThreshold={8}
@@ -613,7 +626,7 @@ export default function CoolingWF1U3Pid({
               y={808}
               w={63.75}
               h={25.5}
-              value={74}
+              value={getVal("cooling-water/basin_lvl")}
               unit=" %"
               warningThreshold={75}
               alarmThreshold={70}
@@ -635,8 +648,8 @@ export default function CoolingWF1U3Pid({
               y={851}
               w={63.75}
               h={25.5}
-              value={74}
-              unit=" %"
+              value="API TIDAK TERKIRIM"
+              unit=""
               warningThreshold={75}
               alarmThreshold={70}
               thresholdDirection="below"
@@ -647,7 +660,7 @@ export default function CoolingWF1U3Pid({
               y={879}
               w={63.75}
               h={25.5}
-              value={motorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
+              value="API TIDAK TERKIRIM"
               mode="onoff"
               />
                <SensorIndicator
@@ -655,7 +668,7 @@ export default function CoolingWF1U3Pid({
               y={907}
               w={63.75}
               h={25.5}
-              value={0}
+              value="API TIDAK TERKIRIM"
               unit=""
               />
 
@@ -673,8 +686,8 @@ export default function CoolingWF1U3Pid({
               y={851}
               w={63.75}
               h={25.5}
-              value={74}
-              unit=" %"
+              value="API TIDAK TERKIRIM"
+              unit=""
               warningThreshold={75}
               alarmThreshold={70}
               thresholdDirection="below"
@@ -685,7 +698,7 @@ export default function CoolingWF1U3Pid({
               y={879}
               w={63.75}
               h={25.5}
-              value={motorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
+              value="API TIDAK TERKIRIM"
               mode="onoff"
               />
                <SensorIndicator
@@ -693,7 +706,7 @@ export default function CoolingWF1U3Pid({
               y={907}
               w={63.75}
               h={25.5}
-              value={0}
+              value="API TIDAK TERKIRIM"
               unit=""
               />
 
@@ -711,27 +724,24 @@ export default function CoolingWF1U3Pid({
               y={632}
               w={63.75}
               h={25.5}
-              value={23000}
-              unit=" H"
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={1285}
               y={660}
               w={63.75}
               h={25.5}
-              value={50}
-              unit=" A"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={1240}
               y={688}
               w={63.75}
               h={25.5}
-              value={100}
-              unit=" KW"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
 
               {/* MTR 5 */}
@@ -748,27 +758,24 @@ export default function CoolingWF1U3Pid({
               y={632}
               w={63.75}
               h={25.5}
-              value={23000}
-              unit=" H"
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={1460}
               y={660}
               w={63.75}
               h={25.5}
-              value={50}
-              unit=" A"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={1415}
               y={688}
               w={63.75}
               h={25.5}
-              value={100}
-              unit=" KW"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
 
               {/* MTR 6 */}
@@ -785,27 +792,24 @@ export default function CoolingWF1U3Pid({
               y={632}
               w={63.75}
               h={25.5}
-              value={23000}
-              unit=" H"
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={1635}
               y={660}
               w={63.75}
               h={25.5}
-              value={50}
-              unit=" A"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={1590}
               y={688}
               w={63.75}
               h={25.5}
-              value={100}
-              unit=" KW"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
 
               {/* MTR 7 */}
@@ -822,29 +826,27 @@ export default function CoolingWF1U3Pid({
               y={822}
               w={63.75}
               h={25.5}
-              value={23000}
-              unit=" H"
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={1405}
               y={850}
               w={63.75}
               h={25.5}
-              value={50}
-              unit=" A"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={1362}
               y={878}
               w={63.75}
               h={25.5}
-              value={100}
-              unit=" KW"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
 
+              {/* MTR 8 */}
               {/* MTR 8 */}
               <InfoCard
               x={1475}
@@ -859,27 +861,24 @@ export default function CoolingWF1U3Pid({
               y={822}
               w={63.75}
               h={25.5}
-              value={23000}
-              unit=" H"
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={1580}
               y={850}
               w={63.75}
               h={25.5}
-              value={50}
-              unit=" A"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={1537}
               y={878}
               w={63.75}
               h={25.5}
-              value={100}
-              unit=" KW"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
 
               {/* MTR 9 */}
@@ -896,27 +895,24 @@ export default function CoolingWF1U3Pid({
               y={822}
               w={63.75}
               h={25.5}
-              value={23000}
-              unit=" H"
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={1755}
               y={850}
               w={63.75}
               h={25.5}
-              value={50}
-              unit=" A"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={1712}
               y={878}
               w={63.75}
               h={25.5}
-              value={100}
-              unit=" KW"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
 
               {/* MAKEUP WATER */}
@@ -933,31 +929,23 @@ export default function CoolingWF1U3Pid({
               y={322}
               w={63.75}
               h={25.5}
-              value={0}
+              value="API TIDAK TERKIRIM"
               unit=""
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
-              decimalPlaces={1}
               />
               <SensorIndicator
               x={1068}
               y={350}
               w={63.75}
               h={25.5}
-              value={7.4}
-              unit=" PH"
-              warningThreshold={7.5}
-              alarmThreshold={8}
-              thresholdDirection="above"
-              decimalPlaces={1}
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={1075}
               y={378}
               w={63.75}
               h={25.5}
-              value={0}
+              value="API TIDAK TERKIRIM"
               unit=""
               />
 
@@ -975,7 +963,7 @@ export default function CoolingWF1U3Pid({
               y={-108}
               w={63.75}
               h={25.5}
-              value={motorStatus["FAN-1"]} // true = ON (hijau), false = OFF (merah)
+              value={rawMotorStatus["FAN-1"]} // true = ON (hijau), false = OFF (merah)
               mode="onoff"
               />
               <SensorIndicator
@@ -983,27 +971,24 @@ export default function CoolingWF1U3Pid({
               y={-79}
               w={63.75}
               h={25.5}
-              value={23000}
-              unit=" H"
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={130}
               y={-50}
               w={63.75}
               h={25.5}
-              value={50}
-              unit=" Hz"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={135}
               y={-22}
               w={63.75}
               h={25.5}
-              value={100}
-              unit=" KW"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
 
               {/* FAN 2 */}
@@ -1020,7 +1005,7 @@ export default function CoolingWF1U3Pid({
               y={-108}
               w={63.75}
               h={25.5}
-              value={motorStatus["FAN-2"]} // true = ON (hijau), false = OFF (merah)
+              value={rawMotorStatus["FAN-2"]} // true = ON (hijau), false = OFF (merah)
               mode="onoff"
               />
               <SensorIndicator
@@ -1028,27 +1013,24 @@ export default function CoolingWF1U3Pid({
               y={-79}
               w={63.75}
               h={25.5}
-              value={23000}
-              unit=" H"
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={344}
               y={-50}
               w={63.75}
               h={25.5}
-              value={50}
-              unit=" Hz"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={349}
               y={-22}
               w={63.75}
               h={25.5}
-              value={100}
-              unit=" KW"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
 
               {/* FAN 3 */}
@@ -1065,7 +1047,7 @@ export default function CoolingWF1U3Pid({
               y={-108}
               w={63.75}
               h={25.5}
-              value={motorStatus["FAN-3"]} // true = ON (hijau), false = OFF (merah)
+              value={rawMotorStatus["FAN-3"]} // true = ON (hijau), false = OFF (merah)
               mode="onoff"
               />
               <SensorIndicator
@@ -1073,27 +1055,24 @@ export default function CoolingWF1U3Pid({
               y={-79}
               w={63.75}
               h={25.5}
-              value={23000}
-              unit=" H"
-              warningThreshold={23000}
-              alarmThreshold={25000}
-              thresholdDirection="above"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={563}
               y={-50}
               w={63.75}
               h={25.5}
-              value={50}
-              unit=" Hz"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
               <SensorIndicator
               x={568}
               y={-22}
               w={63.75}
               h={25.5}
-              value={100}
-              unit=" KW"
+              value="API TIDAK TERKIRIM"
+              unit=""
               />
 
               {/* Text Label Area */}
@@ -1113,8 +1092,8 @@ export default function CoolingWF1U3Pid({
               y={-145}
               width={175}
               title="SUPPLY TEMP"
-              value={29.5}
-              unit={"°C"}
+              value="API TIDAK TERKIRIM"
+              unit=""
               colorType="green"
               />
               <SensorCard
@@ -1122,8 +1101,8 @@ export default function CoolingWF1U3Pid({
               y={-145}
               width={175}
               title="Δ TEMP"
-              value={5.5}
-              unit={"°C"}
+              value="API TIDAK TERKIRIM"
+              unit=""
               colorType="green"
               />
               <SensorCard
@@ -1131,8 +1110,8 @@ export default function CoolingWF1U3Pid({
               y={-35}
               width={175}
               title="RETURN TEMP"
-              value={34.5}
-              unit={"°C"}
+              value="API TIDAK TERKIRIM"
+              unit=""
               colorType="green"
               />
               <SensorCard
@@ -1141,8 +1120,7 @@ export default function CoolingWF1U3Pid({
               width={175}
               title="AMBIENT"
               values={[
-              { value: 5.5, unit: "°C" },
-              { value: 75, unit: "%" }
+              { value: "API TIDAK TERKIRIM", unit: "" }
               ]}
               colorType="green"
               />
@@ -1151,7 +1129,7 @@ export default function CoolingWF1U3Pid({
               y={-145}
               width={175}
               title="HEATING"
-              value={45}
+              value="API TIDAK TERKIRIM"
               colorType="blue"
               />
               <SensorCard
@@ -1159,7 +1137,7 @@ export default function CoolingWF1U3Pid({
               y={-145}
               width={175}
               title="PROSES ST"
-              value={"STANDBY"}
+              value="API TIDAK TERKIRIM"
               colorType="blue"
               />
               <SensorCard
@@ -1167,7 +1145,7 @@ export default function CoolingWF1U3Pid({
               y={-35}
               width={175}
               title="COOLING"
-              value={90}
+              value="API TIDAK TERKIRIM"
               colorType="blue"
               />
               <SensorCard
@@ -1175,7 +1153,7 @@ export default function CoolingWF1U3Pid({
               y={-35}
               width={175}
               title="LOT"
-              value={"A"}
+              value="API TIDAK TERKIRIM"
               colorType="blue"
               />
 

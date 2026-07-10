@@ -20,15 +20,8 @@ const machineDataMap: Record<
 > = {
   // Contoh untuk Cooling Water System WF1U3
   "cooling-water-1": {
-    tasks: [
-      { id: 1, title: "Inspeksi Motor MTR-1", status: "open", openedMonth: true, createdDate: "2026-06-01" },
-      { id: 2, title: "Calibration PT-01", status: "open", openedMonth: true, createdDate: "2026-06-02" },
-      // ... (sisa data dummy tasks)
-    ],
-    alarms: [
-      { id: 1, code: "ALM-001", message: "High temperature detected at CT-01", severity: "warning" },
-      // ... (sisa data dummy alarms)
-    ],
+    tasks: [],
+    alarms: [],
   },
   // Mesin non-HVAC lainnya...
 };
@@ -70,7 +63,6 @@ const isHvacTarget = (unitId: string) => {
 export default function MachinePidDiagram() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
-  const [allOn, setAllOn] = useState(false);
   const [selectedTaskFilter, setSelectedTaskFilter] = useState<
     "all" | "open_month" | "open" | "close"
   >("all");
@@ -83,26 +75,26 @@ export default function MachinePidDiagram() {
 
   const latest = useTelemetryStore((state) => state.latest);
 
-  const getStatus = (tagId: string, fallback: boolean) => {
+  const getStatus = (tagId: string) => {
     const val = latest[tagId]?.value;
     if (typeof val === "number") return val === 1;
     if (typeof val === "boolean") return val;
-    return fallback;
+    return "API TIDAK TERKIRIM";
   };
 
   const motorStatus = {
-    "FAN-1": getStatus("cooling-water/fan_status_1", allOn),
-    "FAN-2": getStatus("cooling-water/fan_status_2", allOn),
-    "FAN-3": getStatus("cooling-water/fan_status_3", allOn),
-    "MTR-1": getStatus("cooling-water/motor_status_1", allOn),
-    "MTR-2": getStatus("cooling-water/motor_status_2", allOn),
-    "MTR-3": getStatus("cooling-water/motor_status_3", allOn),
-    "MTR-4": getStatus("cooling-water/eq_status_du03", allOn),
-    "MTR-5": getStatus("cooling-water/eq_status_bp03", allOn),
-    "MTR-6": getStatus("cooling-water/eq_status_prep03", allOn),
-    "MTR-7": getStatus("cooling-water/eq_status_st03", allOn),
-    "MTR-8": getStatus("cooling-water/eq_status_washing", allOn),
-    "MTR-9": allOn,
+    "FAN-1": getStatus("cooling-water/fan_status_1"),
+    "FAN-2": getStatus("cooling-water/fan_status_2"),
+    "FAN-3": getStatus("cooling-water/fan_status_3"),
+    "MTR-1": getStatus("cooling-water/motor_status_1"),
+    "MTR-2": getStatus("cooling-water/motor_status_2"),
+    "MTR-3": getStatus("cooling-water/motor_status_3"),
+    "MTR-4": getStatus("cooling-water/eq_status_du03"),
+    "MTR-5": getStatus("cooling-water/eq_status_bp03"),
+    "MTR-6": getStatus("cooling-water/eq_status_prep03"),
+    "MTR-7": getStatus("cooling-water/eq_status_st03"),
+    "MTR-8": getStatus("cooling-water/eq_status_washing"),
+    "MTR-9": getStatus("cooling-water/eq_status_minilab"),
   };
 
   const taskInfo = {
@@ -208,8 +200,8 @@ export default function MachinePidDiagram() {
   return (
     <PidPageTemplate
       machineName={machine.name}
-      allOn={allOn}
-      onToggleAllOn={() => setAllOn((v) => !v)}
+      allOn={false}
+      onToggleAllOn={() => {}}
       tasks={allTasks}
       selectedTaskFilter={selectedTaskFilter}
       onFilterChange={setSelectedTaskFilter}

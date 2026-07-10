@@ -274,6 +274,114 @@ function StandardMachineOverview({
     const eqStatusSt03 = latest["cooling-water/eq_status_st03"]?.value;
     const eqStatusWashing = latest["cooling-water/eq_status_washing"]?.value;
 
+    if (unitId === "cooling-water-1") {
+      const formatStatus = (val: any) => {
+        if (typeof val === "number") return val === 1 ? "ON" : "OFF";
+        if (typeof val === "boolean") return val ? "ON" : "OFF";
+        return "API TIDAK TERKIRIM";
+      };
+
+      const formatPress = (val: any) => {
+        return typeof val === "number" ? `${val.toFixed(4)} bar` : "API TIDAK TERKIRIM";
+      };
+
+      return {
+        supplyTemp: "API TIDAK TERKIRIM",
+        returnTemp: "API TIDAK TERKIRIM",
+        supplyFlow: typeof latest["cooling-water/flow_1"]?.value === "number" ? `${(latest["cooling-water/flow_1"]?.value as number).toFixed(1)} m³/h` : "API TIDAK TERKIRIM",
+        supplyTds: "API TIDAK TERKIRIM",
+        supplyPh: "API TIDAK TERKIRIM",
+        ambientTemp: "API TIDAK TERKIRIM",
+        ctEfficiency: "API TIDAK TERKIRIM",
+        totalEnergy: "API TIDAK TERKIRIM",
+        ambientHumidity: "API TIDAK TERKIRIM",
+        makeupVol: "API TIDAK TERKIRIM",
+        makeupTds: "API TIDAK TERKIRIM",
+        makeupPh: "API TIDAK TERKIRIM",
+        blowdownVol: "API TIDAK TERKIRIM",
+        ct1: {
+          fanStatus: formatStatus(ct1Fan),
+          fanSpeed: "API TIDAK TERKIRIM",
+          motorStatus: formatStatus(ct1Mtr),
+          motorCurrent: "API TIDAK TERKIRIM",
+          motorPower: "API TIDAK TERKIRIM",
+          flow: "API TIDAK TERKIRIM",
+          pressure: formatPress(ct1Press),
+          vibration: "API TIDAK TERKIRIM",
+          vibraFan: "API TIDAK TERKIRIM",
+          vibraMotor: "API TIDAK TERKIRIM",
+          basinTemp: "API TIDAK TERKIRIM",
+          runningHours: "API TIDAK TERKIRIM",
+        },
+        ct2: {
+          fanStatus: formatStatus(ct2Fan),
+          fanSpeed: "API TIDAK TERKIRIM",
+          motorStatus: formatStatus(ct2Mtr),
+          motorCurrent: "API TIDAK TERKIRIM",
+          motorPower: "API TIDAK TERKIRIM",
+          flow: "API TIDAK TERKIRIM",
+          pressure: formatPress(ct2Press),
+          vibration: "API TIDAK TERKIRIM",
+          vibraFan: "API TIDAK TERKIRIM",
+          vibraMotor: "API TIDAK TERKIRIM",
+          basinTemp: "API TIDAK TERKIRIM",
+          runningHours: "API TIDAK TERKIRIM",
+        },
+        ct3: {
+          fanStatus: formatStatus(ct3Fan),
+          fanSpeed: "API TIDAK TERKIRIM",
+          motorStatus: formatStatus(ct3Mtr),
+          motorCurrent: "API TIDAK TERKIRIM",
+          motorPower: "API TIDAK TERKIRIM",
+          flow: "API TIDAK TERKIRIM",
+          pressure: formatPress(ct3Press),
+          vibration: "API TIDAK TERKIRIM",
+          vibraFan: "API TIDAK TERKIRIM",
+          vibraMotor: "API TIDAK TERKIRIM",
+          basinTemp: "API TIDAK TERKIRIM",
+          runningHours: "API TIDAK TERKIRIM",
+        },
+        coolingTank: {
+          ph: "API TIDAK TERKIRIM",
+          tds: "API TIDAK TERKIRIM",
+          cond: "API TIDAK TERKIRIM",
+          lvl: typeof basinLvl === "number" ? basinLvl : 0,
+          temp: "API TIDAK TERKIRIM",
+        },
+        makeupWater: {
+          ph: "API TIDAK TERKIRIM",
+          tds: "API TIDAK TERKIRIM",
+          flow: "API TIDAK TERKIRIM",
+          vol: "API TIDAK TERKIRIM",
+        },
+        dosingA: {
+          status: "API TIDAK TERKIRIM",
+          flow: "API TIDAK TERKIRIM",
+          hrs: "API TIDAK TERKIRIM",
+          cons: "API TIDAK TERKIRIM",
+        },
+        dosingB: {
+          status: "API TIDAK TERKIRIM",
+          flow: "API TIDAK TERKIRIM",
+          hrs: "API TIDAK TERKIRIM",
+          cons: "API TIDAK TERKIRIM",
+        },
+        blowdown: {
+          status: "API TIDAK TERKIRIM",
+          flow: "API TIDAK TERKIRIM",
+          vol: "API TIDAK TERKIRIM",
+        },
+        equipment: [
+          { area: "DU-03", status: typeof eqStatusDu03 === "number" ? (eqStatusDu03 === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressDu03 === "number" ? eqPressDu03 : 0, curr: 0, pow: 0, vib: 0, temp: 0, hrs: 0, maint: "API TIDAK TERKIRIM" },
+          { area: "BP-03", status: typeof eqStatusBp03 === "number" ? (eqStatusBp03 === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressBp03 === "number" ? eqPressBp03 : 0, curr: 0, pow: 0, vib: 0, temp: 0, hrs: 0, maint: "API TIDAK TERKIRIM" },
+          { area: "PREP 03", status: typeof eqStatusPrep03 === "number" ? (eqStatusPrep03 === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressPrep03 === "number" ? eqPressPrep03 : 0, curr: 0, pow: 0, vib: 0, temp: 0, hrs: 0, maint: "API TIDAK TERKIRIM" },
+          { area: "S1-03", status: typeof eqStatusSt03 === "number" ? (eqStatusSt03 === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressSt03 === "number" ? eqPressSt03 : 0, curr: 0, pow: 0, vib: 0, temp: 0, hrs: 0, maint: "API TIDAK TERKIRIM" },
+          { area: "WASHING", status: typeof eqStatusWashing === "number" ? (eqStatusWashing === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressWashing === "number" ? eqPressWashing : 0, curr: 0, pow: 0, vib: 0, temp: 0, hrs: 0, maint: "API TIDAK TERKIRIM" },
+          { area: "MINI LAB", status: "API TIDAK TERKIRIM", flow: 0, press: 0, curr: 0, pow: 0, vib: 0, temp: 0, hrs: 0, maint: "API TIDAK TERKIRIM" }
+        ]
+      };
+    }
+
     return {
       ...liveDataState,
       supplyTemp: dynamicSupplyTemp,
@@ -344,10 +452,28 @@ function StandardMachineOverview({
 
   // Compute Delta T dynamically
   const deltaT = useMemo(() => {
-    return Number((liveData.returnTemp - liveData.supplyTemp).toFixed(1));
+    if (typeof liveData.returnTemp === "number" && typeof liveData.supplyTemp === "number") {
+      return Number((liveData.returnTemp - liveData.supplyTemp).toFixed(1));
+    }
+    return "API TIDAK TERKIRIM";
   }, [liveData.supplyTemp, liveData.returnTemp]);
 
   const telemetryRows = useMemo(() => {
+    if (unitId === "cooling-water-1") {
+      return [
+        { name: "Supply Water Temp", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_TEMP.toFixed(1)} °C`, alert: false },
+        { name: "Supply Water TDS", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_TDS.toFixed(1)} µS/cm`, alert: false },
+        { name: "Supply Water pH", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_PH.toFixed(1)} pH`, alert: false },
+        { name: "Supply Water Flow", val: liveData.supplyFlow, avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_FLOW.toFixed(1)} m³/h`, alert: false },
+        { name: "Return Water Temp", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.RTN_WTR_TEMP.toFixed(1)} °C`, alert: false },
+        { name: "Makeup Water Vol", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: "—", alert: false },
+        { name: "Makeup Water TDS", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.MAKEUP_WTR_TDS.toFixed(1)} µS/cm`, alert: false },
+        { name: "Makeup Water pH", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.MAKEUP_WTR_PH.toFixed(1)} pH`, alert: false },
+        { name: "Ambient Humidity", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.AMBIENT_HUMIDITY.toFixed(1)} %`, alert: false },
+        { name: "Blowdown Vol", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: "—", alert: false }
+      ];
+    }
+
     if (category && machineConfig) {
       return category.parameters.map((param: any) => {
         const tagId = machineConfig.apiBindings[param.key] || "";
@@ -371,7 +497,7 @@ function StandardMachineOverview({
       { name: "Supply Water Flow", val: `${liveData.supplyFlow} m³/h`, avg: "395.2 m³/h", base: `${baselines.SPLY_WTR_FLOW.toFixed(1)} m³/h`, alert: false },
       { name: "Return Water Temp", val: `${liveData.returnTemp} °C`, avg: "39.2 °C", base: `${baselines.RTN_WTR_TEMP.toFixed(1)} °C`, alert: false },
       { name: "Makeup Water Vol", val: `${liveData.makeupVol} m³`, avg: "34.2 m³", base: "—", alert: false },
-      { name: "Makeup Water TDS", val: `${liveData.makeupTds} µS/cm`, avg: "168.0 µS/cm", base: `${baselines.MAKEUP_WTR_TDS.toFixed(1)} µS/cm`, alert: liveData.makeupTds > baselines.MAKEUP_WTR_TDS },
+      { name: "Makeup Water TDS", val: `${liveData.makeupTds} µS/cm`, avg: "168.0 µS/cm", base: `${baselines.MAKEUP_WTR_TDS.toFixed(1)} µS/cm`, alert: typeof liveData.makeupTds === "number" && liveData.makeupTds > baselines.MAKEUP_WTR_TDS },
       { name: "Makeup Water pH", val: `${liveData.makeupPh} pH`, avg: "7.1 pH", base: `${baselines.MAKEUP_WTR_PH.toFixed(1)} pH`, alert: false },
       { name: "Ambient Humidity", val: `${liveData.ambientHumidity} %`, avg: "69.1 %", base: `${baselines.AMBIENT_HUMIDITY.toFixed(1)} %`, alert: false },
       { name: "Blowdown Vol", val: `${liveData.blowdownVol} m³`, avg: "14.8 m³", base: "—", alert: false }
@@ -512,17 +638,53 @@ function StandardMachineOverview({
         {[
           ...(machine.tagId ? [{
             label: `${machine.unitLabel || machine.name} Telemetry`,
-            val: latest[machine.tagId]?.value !== undefined ? `${latest[machine.tagId]?.value} ${machine.unit}` : `— ${machine.unit}`,
+            val: latest[machine.tagId]?.value !== undefined ? `${latest[machine.tagId]?.value} ${machine.unit}` : "API TIDAK TERKIRIM",
             base: `${machine.dailyBase ? machine.dailyBase.toLocaleString() : "N/A"} ${machine.unit}`,
-            color: "text-[#1f6fb5] dark:text-sky-400 font-extrabold",
+            color: latest[machine.tagId]?.value !== undefined ? "text-[#1f6fb5] dark:text-sky-400 font-extrabold" : "text-rose-500 font-bold text-sm",
             bg: "bg-[#1f6fb5]/10"
           }] : []),
-          { label: "Supply Temp", val: `${liveData.supplyTemp} °C`, base: `${baselines.SPLY_WTR_TEMP.toFixed(1)} °C`, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" },
-          { label: "Return Temp", val: `${liveData.returnTemp} °C`, base: `${baselines.RTN_WTR_TEMP.toFixed(1)} °C`, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500/10" },
-          { label: "Delta T", val: `${deltaT} °C`, base: `${(baselines.RTN_WTR_TEMP - baselines.SPLY_WTR_TEMP).toFixed(1)} °C`, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },
-          { label: "Ambient Temp", val: `${liveData.ambientTemp} °C`, base: "30.0 °C", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },
-          { label: "CT Efficiency", val: `${liveData.ctEfficiency} %`, base: "92.0 %", color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-500/10" },
-          { label: "Total Energy", val: `${liveData.totalEnergy.toLocaleString()} kWh`, base: "N/A", color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-500/10" }
+          { 
+            label: "Supply Temp", 
+            val: unitId === "cooling-water-1" ? "API TIDAK TERKIRIM" : `${liveData.supplyTemp} °C`, 
+            base: `${baselines.SPLY_WTR_TEMP.toFixed(1)} °C`, 
+            color: unitId === "cooling-water-1" ? "text-rose-500 font-bold text-[13px] md:text-sm" : "text-emerald-600 dark:text-emerald-400", 
+            bg: "bg-emerald-500/10" 
+          },
+          { 
+            label: "Return Temp", 
+            val: unitId === "cooling-water-1" ? "API TIDAK TERKIRIM" : `${liveData.returnTemp} °C`, 
+            base: `${baselines.RTN_WTR_TEMP.toFixed(1)} °C`, 
+            color: unitId === "cooling-water-1" ? "text-rose-500 font-bold text-[13px] md:text-sm" : "text-blue-600 dark:text-blue-400", 
+            bg: "bg-blue-500/10" 
+          },
+          { 
+            label: "Delta T", 
+            val: unitId === "cooling-water-1" ? "API TIDAK TERKIRIM" : `${deltaT} °C`, 
+            base: `${(baselines.RTN_WTR_TEMP - baselines.SPLY_WTR_TEMP).toFixed(1)} °C`, 
+            color: unitId === "cooling-water-1" ? "text-rose-500 font-bold text-[13px] md:text-sm" : "text-indigo-600 dark:text-indigo-400", 
+            bg: "bg-indigo-500/10" 
+          },
+          { 
+            label: "Ambient Temp", 
+            val: unitId === "cooling-water-1" ? "API TIDAK TERKIRIM" : `${liveData.ambientTemp} °C`, 
+            base: "30.0 °C", 
+            color: unitId === "cooling-water-1" ? "text-rose-500 font-bold text-[13px] md:text-sm" : "text-amber-600 dark:text-amber-400", 
+            bg: "bg-amber-500/10" 
+          },
+          { 
+            label: "CT Efficiency", 
+            val: unitId === "cooling-water-1" ? "API TIDAK TERKIRIM" : `${liveData.ctEfficiency} %`, 
+            base: "92.0 %", 
+            color: unitId === "cooling-water-1" ? "text-rose-500 font-bold text-[13px] md:text-sm" : "text-purple-600 dark:text-purple-400", 
+            bg: "bg-purple-500/10" 
+          },
+          { 
+            label: "Total Energy", 
+            val: unitId === "cooling-water-1" ? "API TIDAK TERKIRIM" : `${liveData.totalEnergy.toLocaleString()} kWh`, 
+            base: "N/A", 
+            color: unitId === "cooling-water-1" ? "text-rose-500 font-bold text-[13px] md:text-sm" : "text-sky-600 dark:text-sky-400", 
+            bg: "bg-sky-500/10" 
+          }
         ].map((card, idx) => (
           <div
             key={idx}
@@ -641,7 +803,8 @@ function StandardMachineOverview({
           </div>
 
           {/* Cooling Tower details grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {unitId.startsWith("cooling-water") && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               { id: "CT-1", data: liveData.ct1, color: "from-emerald-500/10 to-teal-500/10" },
               { id: "CT-2", data: liveData.ct2, color: "from-blue-500/10 to-cyan-500/10" },
@@ -665,18 +828,18 @@ function StandardMachineOverview({
                 </div>
                 <div className="p-4 grid grid-cols-2 gap-3 text-xs flex-1">
                   {[
-                    { label: "Fan Status", value: ct.data.fanStatus ? "ON" : "OFF", base: "ON", highlight: "text-emerald-500 font-bold" },
-                    { label: "Fan Speed", value: `${ct.data.fanSpeed} RPM`, base: "1400 RPM" },
-                    { label: "Motor Status", value: ct.data.motorStatus ? "ON" : "OFF", base: "ON", highlight: "text-emerald-500 font-bold" },
-                    { label: "Motor Current", value: `${ct.data.motorCurrent} A`, base: "40.0 A" },
-                    { label: "Motor Power", value: `${ct.data.motorPower} kW`, base: "22.0 kW" },
-                    { label: "Flow Rate", value: `${ct.data.flow} m³/h`, base: "120 m³/h" },
-                    { label: "Discharge Press", value: `${ct.data.pressure} bar`, base: "2.20 bar" },
-                    { label: "Overall Vibra", value: `${ct.data.vibration} mm/s`, base: "2.00 mm/s" },
-                    { label: "Vibra Fan", value: `${ct.data.vibraFan} mm/s`, base: "2.00 mm/s" },
-                    { label: "Vibra Motor Sirk", value: `${ct.data.vibraMotor} mm/s`, base: "2.00 mm/s" },
-                    { label: "Basin Temp", value: `${ct.data.basinTemp} °C`, base: "28.0 °C" },
-                    { label: "Running Hours", value: `${ct.data.runningHours.toLocaleString()} hrs`, base: "—" }
+                    { label: "Fan Status", value: typeof ct.data.fanStatus === "string" ? ct.data.fanStatus : (ct.data.fanStatus ? "ON" : "OFF"), base: "ON", highlight: ct.data.fanStatus === "ON" || ct.data.fanStatus === true ? "text-emerald-500 font-bold" : (ct.data.fanStatus === "OFF" || ct.data.fanStatus === false ? "text-slate-500 font-bold" : "text-rose-500 font-bold") },
+                    { label: "Fan Speed", value: ct.data.fanSpeed === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.fanSpeed} RPM`, base: "1400 RPM", highlight: ct.data.fanSpeed === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
+                    { label: "Motor Status", value: typeof ct.data.motorStatus === "string" ? ct.data.motorStatus : (ct.data.motorStatus ? "ON" : "OFF"), base: "ON", highlight: ct.data.motorStatus === "ON" || ct.data.motorStatus === true ? "text-emerald-500 font-bold" : (ct.data.motorStatus === "OFF" || ct.data.motorStatus === false ? "text-slate-500 font-bold" : "text-rose-500 font-bold") },
+                    { label: "Motor Current", value: ct.data.motorCurrent === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.motorCurrent} A`, base: "40.0 A", highlight: ct.data.motorCurrent === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
+                    { label: "Motor Power", value: ct.data.motorPower === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.motorPower} kW`, base: "22.0 kW", highlight: ct.data.motorPower === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
+                    { label: "Flow Rate", value: ct.data.flow === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.flow} m³/h`, base: "120 m³/h", highlight: ct.data.flow === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
+                    { label: "Discharge Press", value: ct.data.pressure === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.pressure}`, base: "2.20 bar", highlight: ct.data.pressure === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
+                    { label: "Overall Vibra", value: ct.data.vibration === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.vibration} mm/s`, base: "2.00 mm/s", highlight: ct.data.vibration === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
+                    { label: "Vibra Fan", value: ct.data.vibraFan === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.vibraFan} mm/s`, base: "2.00 mm/s", highlight: ct.data.vibraFan === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
+                    { label: "Vibra Motor Sirk", value: ct.data.vibraMotor === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.vibraMotor} mm/s`, base: "2.00 mm/s", highlight: ct.data.vibraMotor === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
+                    { label: "Basin Temp", value: ct.data.basinTemp === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.basinTemp} °C`, base: "28.0 °C", highlight: ct.data.basinTemp === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
+                    { label: "Running Hours", value: ct.data.runningHours === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.runningHours.toLocaleString()} hrs`, base: "—", highlight: ct.data.runningHours === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" }
                   ].map((row, rIdx) => (
                     <div
                       key={rIdx}
@@ -697,6 +860,7 @@ function StandardMachineOverview({
               </div>
             ))}
           </div>
+          )}
         </div>
       ) : (
         /* =================== PROCESS & TANKS VIEW =================== */
@@ -711,22 +875,29 @@ function StandardMachineOverview({
               </h4>
               <div className="space-y-3">
                 {[
-                  { label: "pH Level", val: `${liveData.coolingTank.ph}`, max: 14, unit: "", fill: (liveData.coolingTank.ph / 14) * 100, barColor: "bg-emerald-500" },
-                  { label: "TDS", val: `${liveData.coolingTank.tds} ppm`, max: 2000, unit: "ppm", fill: (liveData.coolingTank.tds / 2000) * 100, barColor: "bg-sky-500" },
-                  { label: "Conductivity", val: `${liveData.coolingTank.cond} µS/cm`, max: 3000, unit: "µS/cm", fill: (liveData.coolingTank.cond / 3000) * 100, barColor: "bg-blue-600" },
-                  { label: "Tank Level", val: `${liveData.coolingTank.lvl} %`, max: 100, unit: "%", fill: liveData.coolingTank.lvl, barColor: "bg-indigo-500" },
-                  { label: "Temperature", val: `${liveData.coolingTank.temp} °C`, max: 50, unit: "°C", fill: (liveData.coolingTank.temp / 50) * 100, barColor: "bg-amber-500" }
-                ].map((item, idx) => (
-                  <div key={idx} className="space-y-1">
-                    <div className="flex justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                      <span>{item.label}</span>
-                      <span className="font-mono text-[#002b5c] dark:text-slate-200">{item.val}</span>
+                  { label: "pH Level", rawVal: liveData.coolingTank.ph, suffix: "", max: 14, barColor: "bg-emerald-500" },
+                  { label: "TDS", rawVal: liveData.coolingTank.tds, suffix: " ppm", max: 2000, barColor: "bg-sky-500" },
+                  { label: "Conductivity", rawVal: liveData.coolingTank.cond, suffix: " µS/cm", max: 3000, barColor: "bg-blue-600" },
+                  { label: "Tank Level", rawVal: liveData.coolingTank.lvl, suffix: " %", max: 100, barColor: "bg-indigo-500" },
+                  { label: "Temperature", rawVal: liveData.coolingTank.temp, suffix: " °C", max: 50, barColor: "bg-amber-500" }
+                ].map((item, idx) => {
+                  const isOffline = item.rawVal === "API TIDAK TERKIRIM";
+                  const val = isOffline ? "API TIDAK TERKIRIM" : `${item.rawVal}${item.suffix}`;
+                  const fill = isOffline ? 0 : (typeof item.rawVal === "number" ? (item.rawVal / item.max) * 100 : 0);
+                  const isLvlTextRed = isOffline && item.label === "Tank Level";
+
+                  return (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                        <span>{item.label}</span>
+                        <span className={`font-mono ${isOffline ? "text-rose-500 font-bold" : "text-[#002b5c] dark:text-slate-200"}`}>{val}</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div className={`h-full ${item.barColor} rounded-full transition-all duration-500`} style={{ width: `${fill}%` }} />
+                      </div>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                      <div className={`h-full ${item.barColor} rounded-full transition-all duration-500`} style={{ width: `${item.fill}%` }} />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -738,21 +909,27 @@ function StandardMachineOverview({
               </h4>
               <div className="space-y-3">
                 {[
-                  { label: "pH Level", val: `${liveData.makeupWater.ph}`, max: 14, fill: (liveData.makeupWater.ph / 14) * 100, barColor: "bg-emerald-500" },
-                  { label: "TDS", val: `${liveData.makeupWater.tds} ppm`, max: 1000, fill: (liveData.makeupWater.tds / 1000) * 100, barColor: "bg-teal-500" },
-                  { label: "Flow Rate", val: `${liveData.makeupWater.flow} m³/h`, max: 10, fill: (liveData.makeupWater.flow / 10) * 100, barColor: "bg-sky-500" },
-                  { label: "Makeup Volume", val: `${liveData.makeupWater.vol} m³`, max: 100, fill: liveData.makeupWater.vol, barColor: "bg-blue-600" }
-                ].map((item, idx) => (
-                  <div key={idx} className="space-y-1">
-                    <div className="flex justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                      <span>{item.label}</span>
-                      <span className="font-mono text-[#002b5c] dark:text-slate-200">{item.val}</span>
+                  { label: "pH Level", rawVal: liveData.makeupWater.ph, suffix: "", max: 14, barColor: "bg-emerald-500" },
+                  { label: "TDS", rawVal: liveData.makeupWater.tds, suffix: " ppm", max: 1000, barColor: "bg-teal-500" },
+                  { label: "Flow Rate", rawVal: liveData.makeupWater.flow, suffix: " m³/h", max: 10, barColor: "bg-sky-500" },
+                  { label: "Makeup Volume", rawVal: liveData.makeupWater.vol, suffix: " m³", max: 100, barColor: "bg-blue-600" }
+                ].map((item, idx) => {
+                  const isOffline = item.rawVal === "API TIDAK TERKIRIM";
+                  const val = isOffline ? "API TIDAK TERKIRIM" : `${item.rawVal}${item.suffix}`;
+                  const fill = isOffline ? 0 : (typeof item.rawVal === "number" ? (item.rawVal / item.max) * 100 : 0);
+
+                  return (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                        <span>{item.label}</span>
+                        <span className={`font-mono ${isOffline ? "text-rose-500 font-bold" : "text-[#002b5c] dark:text-slate-200"}`}>{val}</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div className={`h-full ${item.barColor} rounded-full transition-all duration-500`} style={{ width: `${fill}%` }} />
+                      </div>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                      <div className={`h-full ${item.barColor} rounded-full transition-all duration-500`} style={{ width: `${item.fill}%` }} />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -767,22 +944,28 @@ function StandardMachineOverview({
                 <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-xs font-extrabold text-[#002b5c] dark:text-slate-300">Dosing Pump A</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold animate-pulse">
-                      {liveData.dosingA.status.toUpperCase()}
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${liveData.dosingA.status === "API TIDAK TERKIRIM" ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 animate-pulse"}`}>
+                      {liveData.dosingA.status}
                     </span>
                   </div>
                   <div className="grid grid-cols-3 gap-1 text-[9px] text-[#47729f] dark:text-slate-500 font-mono">
                     <div>
                       <div>Flow Rate</div>
-                      <div className="font-bold text-[#002b5c] dark:text-slate-300">{liveData.dosingA.flow} L/h</div>
+                      <div className={`font-bold ${liveData.dosingA.flow === "API TIDAK TERKIRIM" ? "text-rose-500" : "text-[#002b5c] dark:text-slate-300"}`}>
+                        {liveData.dosingA.flow === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${liveData.dosingA.flow} L/h`}
+                      </div>
                     </div>
                     <div>
                       <div>Run Hrs</div>
-                      <div className="font-bold text-[#002b5c] dark:text-slate-300">{liveData.dosingA.hrs} h</div>
+                      <div className={`font-bold ${liveData.dosingA.hrs === "API TIDAK TERKIRIM" ? "text-rose-500" : "text-[#002b5c] dark:text-slate-300"}`}>
+                        {liveData.dosingA.hrs === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${liveData.dosingA.hrs} h`}
+                      </div>
                     </div>
                     <div>
                       <div>Daily Cons</div>
-                      <div className="font-bold text-[#002b5c] dark:text-slate-300">{liveData.dosingA.cons} L/d</div>
+                      <div className={`font-bold ${liveData.dosingA.cons === "API TIDAK TERKIRIM" ? "text-rose-500" : "text-[#002b5c] dark:text-slate-300"}`}>
+                        {liveData.dosingA.cons === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${liveData.dosingA.cons} L/d`}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -791,22 +974,28 @@ function StandardMachineOverview({
                 <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-xs font-extrabold text-[#002b5c] dark:text-slate-300">Dosing Pump B</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-500 border border-slate-500/20 font-bold">
-                      {liveData.dosingB.status.toUpperCase()}
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${liveData.dosingB.status === "API TIDAK TERKIRIM" ? "bg-rose-500/10 text-rose-500" : "bg-slate-500/10 text-slate-500 border border-slate-500/20"}`}>
+                      {liveData.dosingB.status}
                     </span>
                   </div>
                   <div className="grid grid-cols-3 gap-1 text-[9px] text-[#47729f] dark:text-slate-500 font-mono">
                     <div>
                       <div>Flow Rate</div>
-                      <div className="font-bold text-[#002b5c] dark:text-slate-300">{liveData.dosingB.flow} L/h</div>
+                      <div className={`font-bold ${liveData.dosingB.flow === "API TIDAK TERKIRIM" ? "text-rose-500" : "text-[#002b5c] dark:text-slate-300"}`}>
+                        {liveData.dosingB.flow === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${liveData.dosingB.flow} L/h`}
+                      </div>
                     </div>
                     <div>
                       <div>Run Hrs</div>
-                      <div className="font-bold text-[#002b5c] dark:text-slate-300">{liveData.dosingB.hrs} h</div>
+                      <div className={`font-bold ${liveData.dosingB.hrs === "API TIDAK TERKIRIM" ? "text-rose-500" : "text-[#002b5c] dark:text-slate-300"}`}>
+                        {liveData.dosingB.hrs === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${liveData.dosingB.hrs} h`}
+                      </div>
                     </div>
                     <div>
                       <div>Daily Cons</div>
-                      <div className="font-bold text-[#002b5c] dark:text-slate-300">{liveData.dosingB.cons} L/d</div>
+                      <div className={`font-bold ${liveData.dosingB.cons === "API TIDAK TERKIRIM" ? "text-rose-500" : "text-[#002b5c] dark:text-slate-300"}`}>
+                        {liveData.dosingB.cons === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${liveData.dosingB.cons} L/d`}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -822,24 +1011,30 @@ function StandardMachineOverview({
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold text-slate-500">Operation Status</span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                    {liveData.blowdown.status.toUpperCase()}
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${liveData.blowdown.status === "API TIDAK TERKIRIM" ? "bg-rose-500/10 text-rose-500 border-rose-500/20" : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"}`}>
+                    {liveData.blowdown.status}
                   </span>
                 </div>
                 {[
-                  { label: "Flow Rate", val: `${liveData.blowdown.flow} m³/h`, max: 5, fill: (liveData.blowdown.flow / 5) * 100, barColor: "bg-amber-500" },
-                  { label: "Accumulated Vol", val: `${liveData.blowdown.vol} m³`, max: 50, fill: (liveData.blowdown.vol / 50) * 100, barColor: "bg-amber-600" }
-                ].map((item, idx) => (
-                  <div key={idx} className="space-y-1">
-                    <div className="flex justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                      <span>{item.label}</span>
-                      <span className="font-mono text-[#002b5c] dark:text-slate-200">{item.val}</span>
+                  { label: "Flow Rate", rawVal: liveData.blowdown.flow, suffix: " m³/h", max: 5, barColor: "bg-amber-500" },
+                  { label: "Accumulated Vol", rawVal: liveData.blowdown.vol, suffix: " m³", max: 50, barColor: "bg-amber-600" }
+                ].map((item, idx) => {
+                  const isOffline = item.rawVal === "API TIDAK TERKIRIM";
+                  const val = isOffline ? "API TIDAK TERKIRIM" : `${item.rawVal}${item.suffix}`;
+                  const fill = isOffline ? 0 : (typeof item.rawVal === "number" ? (item.rawVal / item.max) * 100 : 0);
+
+                  return (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                        <span>{item.label}</span>
+                        <span className={`font-mono ${isOffline ? "text-rose-500 font-bold" : "text-[#002b5c] dark:text-slate-200"}`}>{val}</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div className={`h-full ${item.barColor} rounded-full transition-all duration-500`} style={{ width: `${fill}%` }} />
+                      </div>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                      <div className={`h-full ${item.barColor} rounded-full transition-all duration-500`} style={{ width: `${item.fill}%` }} />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -872,22 +1067,40 @@ function StandardMachineOverview({
                       <td className="py-3 px-3">
                         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${row.status === "Running"
                             ? "bg-emerald-500/15 text-emerald-500"
-                            : "bg-amber-500/15 text-amber-500"
+                            : row.status === "Stopped"
+                            ? "bg-amber-500/15 text-amber-500"
+                            : "bg-rose-500/15 text-rose-500"
                           }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${row.status === "Running" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full ${row.status === "Running" ? "bg-emerald-500 animate-pulse" : row.status === "Stopped" ? "bg-amber-500" : "bg-rose-500"}`} />
                           {row.status}
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-right font-mono">{row.flow.toFixed(1)}</td>
-                      <td className="py-3 px-3 text-right font-mono">{row.press.toFixed(2)}</td>
-                      <td className="py-3 px-3 text-right font-mono">{row.curr.toFixed(1)}</td>
-                      <td className="py-3 px-3 text-right font-mono">{row.pow.toFixed(1)}</td>
-                      <td className="py-3 px-3 text-right font-mono text-sky-500 font-bold">{row.vib.toFixed(1)}</td>
-                      <td className="py-3 px-3 text-right font-mono text-orange-500 font-bold">{row.temp.toFixed(1)}</td>
-                      <td className="py-3 px-3 text-right font-mono text-[#47729f] dark:text-slate-500">{row.hrs.toLocaleString()}</td>
+                      <td className={`py-3 px-3 text-right font-mono ${(row.flow as any) === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : ""}`}>
+                        {typeof row.flow === "number" ? row.flow.toFixed(1) : row.flow}
+                      </td>
+                      <td className={`py-3 px-3 text-right font-mono ${(row.press as any) === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : ""}`}>
+                        {typeof row.press === "number" ? row.press.toFixed(2) : row.press}
+                      </td>
+                      <td className={`py-3 px-3 text-right font-mono ${(row.curr as any) === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : ""}`}>
+                        {typeof row.curr === "number" ? row.curr.toFixed(1) : row.curr}
+                      </td>
+                      <td className={`py-3 px-3 text-right font-mono ${(row.pow as any) === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : ""}`}>
+                        {typeof row.pow === "number" ? row.pow.toFixed(1) : row.pow}
+                      </td>
+                      <td className={`py-3 px-3 text-right font-mono font-bold ${(row.vib as any) === "API TIDAK TERKIRIM" ? "text-rose-500" : "text-sky-500"}`}>
+                        {typeof row.vib === "number" ? row.vib.toFixed(1) : row.vib}
+                      </td>
+                      <td className={`py-3 px-3 text-right font-mono font-bold ${(row.temp as any) === "API TIDAK TERKIRIM" ? "text-rose-500" : "text-orange-500"}`}>
+                        {typeof row.temp === "number" ? row.temp.toFixed(1) : row.temp}
+                      </td>
+                      <td className={`py-3 px-3 text-right font-mono ${(row.hrs as any) === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "text-[#47729f] dark:text-slate-500"}`}>
+                        {typeof row.hrs === "number" ? row.hrs.toLocaleString() : row.hrs}
+                      </td>
                       <td className="py-3 px-3 text-center">
                         <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${row.maint === "Good"
                             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                            : (row.maint as any) === "API TIDAK TERKIRIM"
+                            ? "bg-rose-500/10 text-rose-500"
                             : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
                           }`}>
                           {row.maint}
