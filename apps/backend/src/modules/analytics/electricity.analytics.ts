@@ -106,12 +106,26 @@ export interface ElectricityAnalyticsResult {
     todayLwbpKwh: number;
     monthlyWbpKwh: number;
     monthlyLwbpKwh: number;
+    // Per-month summaries for period selector
+    perMonthSummary: {
+      month: string;
+      totalKwh: number;
+      wbpKwh: number;
+      lwbpKwh: number;
+      totalCost: number;
+      wbpCost: number;
+      lwbpCost: number;
+      peakDemand: number;
+      loadFactor: number;
+    }[];
   };
   charts: {
     hourly: number[];
+    hourlyWbp: number[];
+    hourlyLwbp: number[];
     prevHourly: number[];
-    daily: { day: string; value: number }[];
-    monthly: { month: string; value: number }[];
+    daily: { day: string; value: number; wbp: number; lwbp: number }[];
+    monthly: { month: string; value: number; wbp: number; lwbp: number }[];
     breakdown: { label: string; value: number; color: string }[];
   };
   pqData: {
@@ -226,9 +240,16 @@ export const getElectricityAnalytics = async (
   let monthlyLwbpKwh = 0;
 
   const dailyMap = new Map<string, number>();
+  const dailyWbpMap = new Map<string, number>();
+  const dailyLwbpMap = new Map<string, number>();
   const monthlyMap = new Map<string, number>();
+  const monthlyWbpMap = new Map<string, number>();
+  const monthlyLwbpMap = new Map<string, number>();
+  const monthlyPeakMap = new Map<string, number>();
 
   const dailyHourlyMap = new Map<string, number[]>();
+  const dailyHourlyWbpMap = new Map<string, number[]>();
+  const dailyHourlyLwbpMap = new Map<string, number[]>();
   let latestWibDate = hourlyRecords.length > 0
     ? getWibDateString(hourlyRecords[hourlyRecords.length - 1].ts)
     : getWibDateString(new Date());
@@ -255,7 +276,8 @@ export const getElectricityAnalytics = async (
 
     // If the hourly interval ends at 18:00 to 22:00 WIB, it started at WBP hours (17:00-21:00)
     const endHour = getWibHour(currRecord.ts);
-    if (endHour >= 18 && endHour <= 22) {
+    const isWbp = endHour >= 18 && endHour <= 22;
+    if (isWbp) {
       wbpKwh += diff;
       if (isToday) todayWbpKwh += diff;
       if (isCurrentMonth) monthlyWbpKwh += diff;
@@ -265,23 +287,50 @@ export const getElectricityAnalytics = async (
       if (isCurrentMonth) monthlyLwbpKwh += diff;
     }
 
-    // Group by Day
+    // Group by Day (total + WBP/LWBP split)
     dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + diff);
+    if (isWbp) {
+      dailyWbpMap.set(dateStr, (dailyWbpMap.get(dateStr) || 0) + diff);
+    } else {
+      dailyLwbpMap.set(dateStr, (dailyLwbpMap.get(dateStr) || 0) + diff);
+    }
 
-    // Group by Month
+    // Group by Month (total + WBP/LWBP split)
     monthlyMap.set(monthStr, (monthlyMap.get(monthStr) || 0) + diff);
+    if (isWbp) {
+      monthlyWbpMap.set(monthStr, (monthlyWbpMap.get(monthStr) || 0) + diff);
+    } else {
+      monthlyLwbpMap.set(monthStr, (monthlyLwbpMap.get(monthStr) || 0) + diff);
+    }
 
-    // Accumulate for daily hourly map
+    // Track peak demand per month
+    const currentMonthPeak = monthlyPeakMap.get(monthStr) || 0;
+    if (diff > currentMonthPeak) {
+      monthlyPeakMap.set(monthStr, diff);
+    }
+
+    // Accumulate for daily hourly map (total + WBP/LWBP split)
     if (!dailyHourlyMap.has(dateStr)) {
       dailyHourlyMap.set(dateStr, Array.from({ length: 24 }, () => 0));
+      dailyHourlyWbpMap.set(dateStr, Array.from({ length: 24 }, () => 0));
+      dailyHourlyLwbpMap.set(dateStr, Array.from({ length: 24 }, () => 0));
     }
     const dayHours = dailyHourlyMap.get(dateStr)!;
+    const dayWbpHours = dailyHourlyWbpMap.get(dateStr)!;
+    const dayLwbpHours = dailyHourlyLwbpMap.get(dateStr)!;
     if (hour >= 0 && hour < 24) {
       dayHours[hour] += diff;
+      if (isWbp) {
+        dayWbpHours[hour] += diff;
+      } else {
+        dayLwbpHours[hour] += diff;
+      }
     }
   }
 
   const hourlyValues = dailyHourlyMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
+  const hourlyWbpValues = dailyHourlyWbpMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
+  const hourlyLwbpValues = dailyHourlyLwbpMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
   const yesterdayDate = new Date(new Date().getTime() - 24 * 60 * 60 * 1000);
   const yesterdayDateStr = getWibDateString(yesterdayDate);
   const dbPrevHourly = dailyHourlyMap.get(yesterdayDateStr);
@@ -299,23 +348,51 @@ export const getElectricityAnalytics = async (
   const co2Emitted = (totalKwh * 0.82) / 1000; // in tons
 
   // ===== ALWAYS populate full 12 months (Jan-Dec) with 0 for missing =====
-  const monthly: { month: string; value: number }[] = [];
+  const monthly: { month: string; value: number; wbp: number; lwbp: number }[] = [];
   for (let m = 1; m <= 12; m++) {
     const monthKey = `${selectedYear}-${String(m).padStart(2, "0")}`;
     const val = monthlyMap.get(monthKey) || 0;
-    monthly.push({ month: monthKey, value: val / 1000 }); // convert to MWh
+    const mWbp = monthlyWbpMap.get(monthKey) || 0;
+    const mLwbp = monthlyLwbpMap.get(monthKey) || 0;
+    monthly.push({ month: monthKey, value: val / 1000, wbp: mWbp / 1000, lwbp: mLwbp / 1000 }); // convert to MWh
   }
 
   // ===== ALWAYS populate all days in the year with 0 for missing =====
-  const daily: { day: string; value: number }[] = [];
+  const daily: { day: string; value: number; wbp: number; lwbp: number }[] = [];
   for (let m = 1; m <= 12; m++) {
     const numDays = daysInMonth(selectedYear, m);
     for (let d = 1; d <= numDays; d++) {
       const dayKey = `${selectedYear}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       const val = dailyMap.get(dayKey) || 0;
-      daily.push({ day: dayKey, value: val });
+      const dWbp = dailyWbpMap.get(dayKey) || 0;
+      const dLwbp = dailyLwbpMap.get(dayKey) || 0;
+      daily.push({ day: dayKey, value: val, wbp: dWbp, lwbp: dLwbp });
     }
   }
+
+  // ===== Per-Month Summary for period selector =====
+  const perMonthSummary = monthly.map((m) => {
+    const monthKey = m.month;
+    const mTotalKwh = (monthlyMap.get(monthKey) || 0);
+    const mWbpKwh = (monthlyWbpMap.get(monthKey) || 0);
+    const mLwbpKwh = (monthlyLwbpMap.get(monthKey) || 0);
+    const mWbpCost = mWbpKwh * wbpRate;
+    const mLwbpCost = mLwbpKwh * lwbpRate;
+    const mTotalCost = mWbpCost + mLwbpCost;
+    const mPeak = monthlyPeakMap.get(monthKey) || 0;
+    const mLoadFactor = mPeak > 0 ? (mTotalKwh / (mPeak * 24 * daysInMonth(selectedYear, parseInt(monthKey.split("-")[1])))) : 0;
+    return {
+      month: monthKey,
+      totalKwh: Number(mTotalKwh.toFixed(0)),
+      wbpKwh: Number(mWbpKwh.toFixed(0)),
+      lwbpKwh: Number(mLwbpKwh.toFixed(0)),
+      totalCost: Number(mTotalCost.toFixed(0)),
+      wbpCost: Number(mWbpCost.toFixed(0)),
+      lwbpCost: Number(mLwbpCost.toFixed(0)),
+      peakDemand: Number(mPeak.toFixed(1)),
+      loadFactor: Number(mLoadFactor.toFixed(4))
+    };
+  });
 
   // Electricity breakdown
   const breakdown: { label: string; value: number; color: string }[] = [];
@@ -412,10 +489,13 @@ export const getElectricityAnalytics = async (
       todayWbpKwh: Number(todayWbpKwh.toFixed(0)),
       todayLwbpKwh: Number(todayLwbpKwh.toFixed(0)),
       monthlyWbpKwh: Number(monthlyWbpKwh.toFixed(0)),
-      monthlyLwbpKwh: Number(monthlyLwbpKwh.toFixed(0))
+      monthlyLwbpKwh: Number(monthlyLwbpKwh.toFixed(0)),
+      perMonthSummary
     },
     charts: {
       hourly: hourlyValues,
+      hourlyWbp: hourlyWbpValues,
+      hourlyLwbp: hourlyLwbpValues,
       prevHourly: prevHourlyValues,
       daily,
       monthly,

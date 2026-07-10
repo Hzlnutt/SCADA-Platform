@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
-import { UtilityBarChart } from "../../components/charts/UtilityBarChart";
 import { Bar } from "react-chartjs-2";
 import "../../components/charts/chartjs";
 import { DonutChart } from "../../components/charts/DonutChart";
@@ -9,6 +8,7 @@ import { buildTimeAwareSeries, buildTimeLabels, getElapsedIndex } from "../../ut
 import { getJson } from "../../services/api.client";
 import { useConfigStore } from "../../store/config.store";
 import { getSocket } from "../../services/socket.service";
+import { useSystemStore } from "../../store/system.store";
 
 const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
   const energy = group.summaryCards.find((card) => card.label === "Total Energy")?.value ?? 0;
@@ -44,6 +44,10 @@ export default function Electricity() {
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const config = ranges.find((item) => item.id === range) ?? ranges[0];
 
+  // Period selector for top 5 cards
+  const [cardPeriod, setCardPeriod] = useState<"yearly" | "monthly">("yearly");
+  const [cardMonth, setCardMonth] = useState(() => new Date().getMonth()); // 0-indexed
+
   const maxIdx = useMemo(() => getElapsedIndex(config.type), [config.type]);
 
   const [plnData, setPlnData] = useState<any>(null);
@@ -51,11 +55,14 @@ export default function Electricity() {
   const [livePf, setLivePf] = useState<number | null>(null);
   const [pfStatus, setPfStatus] = useState<"connected" | "offline">("offline");
 
+  const theme = useSystemStore((state) => state.theme);
+  const isDark = theme === "dark";
+
   // Retrieve custom rates from useConfigStore
   const wbpRate = useConfigStore((state) => state.wbpRate);
   const lwbpRate = useConfigStore((state) => state.lwbpRate);
 
-  // Re-fetch when year changes or every 30 seconds (auto-fetch)
+  // Re-fetch when year changes or every 2 seconds (auto-fetch)
   useEffect(() => {
     let active = true;
 
@@ -209,19 +216,32 @@ export default function Electricity() {
     return buildTimeLabels(config.points, config.type);
   }, [hasData, range, config, plnData, monthlyDailyRecords]);
 
-  const barValues = useMemo(() => {
+  // ========== STACKED WBP/LWBP BAR VALUES ==========
+  const barWbpValues = useMemo(() => {
     if (hasData) {
       if (range === "hour") {
-        return plnData.charts.hourly;
+        return plnData.charts.hourlyWbp || Array.from({ length: 24 }, () => 0);
       } else if (range === "day") {
-        return monthlyDailyRecords.map((d: any) => d.value);
+        return monthlyDailyRecords.map((d: any) => d.wbp || 0);
       } else {
-        return plnData.charts.monthly.map((m: any) => m.value);
+        return plnData.charts.monthly.map((m: any) => m.wbp || 0);
       }
     }
-    const base = dailyEnergyTotal * config.scale;
-    return buildTimeAwareSeries(config.points, base, base * 0.35, 1, maxIdx);
-  }, [hasData, range, config, plnData, maxIdx, monthlyDailyRecords]);
+    return Array.from({ length: config.points }, () => 0);
+  }, [hasData, range, config, plnData, monthlyDailyRecords]);
+
+  const barLwbpValues = useMemo(() => {
+    if (hasData) {
+      if (range === "hour") {
+        return plnData.charts.hourlyLwbp || Array.from({ length: 24 }, () => 0);
+      } else if (range === "day") {
+        return monthlyDailyRecords.map((d: any) => d.lwbp || 0);
+      } else {
+        return plnData.charts.monthly.map((m: any) => m.lwbp || 0);
+      }
+    }
+    return Array.from({ length: config.points }, () => 0);
+  }, [hasData, range, config, plnData, monthlyDailyRecords]);
 
   const barUnit = useMemo(() => {
     if (range === "hour") return "kWh";
@@ -229,10 +249,49 @@ export default function Electricity() {
     return "MWh"; // YTD and Per Bulan
   }, [range]);
 
-  const plnPeak = hasData ? plnData.pqData.activePower : 1200;
-  const plnLoadFactor = hasData ? plnData.pqData.pf * 100 : 88.5;
-  const plnCost = hasData ? plnData.summary.totalCost : (dailyEnergyTotal * config.scale * electricityRate);
-  const plnTotalKwh = hasData ? plnData.summary.totalKwh : (dailyEnergyTotal * config.scale);
+  // ========== CARD PERIOD VALUES (top 5 summary cards) ==========
+  const cardSummary = useMemo(() => {
+    if (!hasData) {
+      return {
+        totalCost: dailyEnergyTotal * config.scale * electricityRate,
+        totalKwh: dailyEnergyTotal * config.scale,
+        peakDemand: 1200,
+        loadFactor: 88.5,
+        wbpKwh: 0,
+        lwbpKwh: 0,
+        wbpCost: 0,
+        lwbpCost: 0
+      };
+    }
+
+    if (cardPeriod === "monthly" && plnData.summary.perMonthSummary) {
+      const monthData = plnData.summary.perMonthSummary[cardMonth];
+      if (monthData) {
+        return {
+          totalCost: monthData.totalCost,
+          totalKwh: monthData.totalKwh,
+          peakDemand: monthData.peakDemand,
+          loadFactor: monthData.loadFactor * 100,
+          wbpKwh: monthData.wbpKwh,
+          lwbpKwh: monthData.lwbpKwh,
+          wbpCost: monthData.wbpCost,
+          lwbpCost: monthData.lwbpCost
+        };
+      }
+    }
+
+    // Yearly (default)
+    return {
+      totalCost: plnData.summary.totalCost,
+      totalKwh: plnData.summary.totalKwh,
+      peakDemand: plnData.pqData.activePower,
+      loadFactor: plnData.pqData.pf ? plnData.pqData.pf * 100 : 0,
+      wbpKwh: plnData.summary.wbpKwh,
+      lwbpKwh: plnData.summary.lwbpKwh,
+      wbpCost: plnData.summary.wbpCost,
+      lwbpCost: plnData.summary.lwbpCost
+    };
+  }, [hasData, plnData, cardPeriod, cardMonth, config]);
 
   // ========== TREND PANEL DISTRIBUSI (MultiLineChart) ==========
   const mdpSeries = useMemo(() => {
@@ -347,9 +406,168 @@ export default function Electricity() {
     }
   };
 
+  // ========== STACKED BAR CHART DATA + OPTIONS ==========
+  const stackedBarData = {
+    labels: barLabels,
+    datasets: [
+      {
+        label: `LWBP ${barUnit}`,
+        data: barLwbpValues,
+        backgroundColor: "rgba(59, 130, 246, 0.8)",
+        hoverBackgroundColor: "rgba(59, 130, 246, 1)",
+        borderWidth: 0,
+        borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 },
+        barPercentage: 0.65,
+        stack: "beban"
+      },
+      {
+        label: `WBP ${barUnit}`,
+        data: barWbpValues,
+        backgroundColor: "rgba(239, 68, 68, 0.8)",
+        hoverBackgroundColor: "rgba(239, 68, 68, 1)",
+        borderWidth: 0,
+        borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+        barPercentage: 0.65,
+        stack: "beban"
+      }
+    ]
+  };
+
+  const stackedBarOptions: any = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 0 },
+    hover: { mode: "index" as const, intersect: false },
+    interaction: { mode: "index" as const, intersect: false },
+    plugins: {
+      legend: {
+        display: true,
+        position: "top" as const,
+        align: "end" as const,
+        labels: {
+          color: isDark ? "rgba(148, 163, 184, 0.9)" : "rgba(71, 85, 105, 0.9)",
+          font: { size: 10, family: "Plus Jakarta Sans", weight: "600" as const },
+          usePointStyle: true,
+          pointStyle: "rectRounded",
+          padding: 12
+        }
+      },
+      tooltip: {
+        backgroundColor: isDark ? "rgba(13, 21, 39, 0.95)" : "rgba(255, 255, 255, 0.95)",
+        titleColor: isDark ? "rgba(241, 245, 249, 0.9)" : "rgba(15, 23, 42, 0.9)",
+        bodyColor: isDark ? "rgba(241, 245, 249, 0.9)" : "rgba(15, 23, 42, 0.9)",
+        borderColor: isDark ? "rgba(51, 65, 85, 0.5)" : "rgba(203, 213, 225, 0.5)",
+        borderWidth: 1,
+        padding: 12,
+        bodyFont: { family: "IBM Plex Mono, monospace", size: 11 },
+        titleFont: { family: "Plus Jakarta Sans", size: 11, weight: "600" as const },
+        callbacks: {
+          label: (context: any) => {
+            const val = Number(context.parsed.y).toLocaleString("id-ID", { maximumFractionDigits: 2 });
+            return `${context.dataset.label}: ${val}`;
+          },
+          afterBody: (tooltipItems: any[]) => {
+            if (tooltipItems.length > 0) {
+              const index = tooltipItems[0].dataIndex;
+              const lwbp = barLwbpValues[index] || 0;
+              const wbp = barWbpValues[index] || 0;
+              const total = lwbp + wbp;
+              return [`─────────────────`, `Total: ${total.toLocaleString("id-ID", { maximumFractionDigits: 2 })} ${barUnit}`];
+            }
+            return [];
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        stacked: true,
+        grid: { display: false },
+        ticks: {
+          color: isDark ? "rgba(148, 163, 184, 0.8)" : "rgba(71, 85, 105, 0.8)",
+          font: { size: 10 },
+          maxRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: 12
+        }
+      },
+      y: {
+        stacked: true,
+        grid: { color: isDark ? "rgba(51, 65, 85, 0.4)" : "rgba(203, 213, 225, 0.6)" },
+        ticks: {
+          color: isDark ? "rgba(148, 163, 184, 0.8)" : "rgba(71, 85, 105, 0.8)",
+          callback: (value: number) => `${value}`
+        }
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Listrik" description="Monitor beban listrik utama, peak demand, dan biaya energi." />
+
+      {/* Period Selector for Executive Summary Cards */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">Periode Ringkasan:</span>
+        <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-0.5 text-xs">
+          <button
+            type="button"
+            onClick={() => setCardPeriod("yearly")}
+            className={`rounded-md px-3 py-1.5 font-bold transition-all ${
+              cardPeriod === "yearly"
+                ? "bg-cyan-500 text-white shadow-sm"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            }`}
+          >
+            Tahunan
+          </button>
+          <button
+            type="button"
+            onClick={() => setCardPeriod("monthly")}
+            className={`rounded-md px-3 py-1.5 font-bold transition-all ${
+              cardPeriod === "monthly"
+                ? "bg-cyan-500 text-white shadow-sm"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            }`}
+          >
+            Bulanan
+          </button>
+        </div>
+
+        {/* Year Selector */}
+        <select
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(Number(e.target.value))}
+          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+        >
+          {AVAILABLE_YEARS.map((yr) => (
+            <option key={yr} value={yr}>{yr}</option>
+          ))}
+        </select>
+
+        {/* Month Selector (only shown when period is monthly) */}
+        {cardPeriod === "monthly" && (
+          <select
+            value={cardMonth}
+            onChange={(e) => setCardMonth(Number(e.target.value))}
+            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+          >
+            {MONTH_NAMES_ID.map((name, idx) => (
+              <option key={idx} value={idx}>{name}</option>
+            ))}
+          </select>
+        )}
+
+        {/* Period badge indicator */}
+        <div className="ml-auto flex items-center gap-1.5">
+          <div className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse" />
+          <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+            {cardPeriod === "yearly"
+              ? `Tahun ${selectedYear}`
+              : `${MONTH_NAMES_ID[cardMonth]} ${selectedYear}`}
+          </span>
+        </div>
+      </div>
 
       {/* Executive Summary */}
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -361,10 +579,10 @@ export default function Electricity() {
             </div>
           </div>
           <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">
-            {loading ? "Calculating..." : formatCurrency(plnCost)}
+            {loading ? "Calculating..." : formatCurrency(cardSummary.totalCost)}
           </div>
           <div className="mt-1 text-xs font-semibold text-blue-600 dark:text-blue-400 flex justify-between items-center">
-            <span>{plnTotalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh</span>
+            <span>{cardSummary.totalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh</span>
             <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
               Tarif: Rp {wbpRate.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/{lwbpRate.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
@@ -379,7 +597,7 @@ export default function Electricity() {
             </div>
           </div>
           <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">
-            {loading ? "Loading..." : `${plnPeak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW`}
+            {loading ? "Loading..." : `${cardSummary.peakDemand.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW`}
           </div>
           <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Estimasi beban puncak</div>
         </div>
@@ -391,13 +609,13 @@ export default function Electricity() {
               <svg className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" /></svg>
             </div>
           </div>
-          {pfStatus === "offline" ? (
+          {pfStatus === "offline" && cardPeriod === "yearly" ? (
             <div className="mt-3 text-base font-bold text-red-500 dark:text-red-400 font-mono">
               API Tidak Terkirim
             </div>
           ) : (
             <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">
-              {loading ? "Loading..." : livePf !== null ? `${(livePf * 100).toFixed(1)}%` : "Loading..."}
+              {loading ? "Loading..." : `${cardSummary.loadFactor.toFixed(1)}%`}
             </div>
           )}
           <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Stabilitas beban listrik</div>
@@ -411,10 +629,10 @@ export default function Electricity() {
             </div>
           </div>
           <div className="mt-3 text-xl font-extrabold text-slate-800 dark:text-white font-mono">
-            {loading ? "Loading..." : `${(plnData?.summary.wbpKwh || 0).toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
+            {loading ? "Loading..." : `${cardSummary.wbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
           </div>
           <div className="mt-1 text-xs font-semibold text-rose-500">
-            {loading ? "" : formatCurrency(plnData?.summary.wbpCost || 0)}
+            {loading ? "" : formatCurrency(cardSummary.wbpCost)}
           </div>
         </div>
 
@@ -426,10 +644,10 @@ export default function Electricity() {
             </div>
           </div>
           <div className="mt-3 text-xl font-extrabold text-slate-800 dark:text-white font-mono">
-            {loading ? "Loading..." : `${(plnData?.summary.lwbpKwh || 0).toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
+            {loading ? "Loading..." : `${cardSummary.lwbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
           </div>
           <div className="mt-1 text-xs font-semibold text-emerald-500">
-            {loading ? "" : formatCurrency(plnData?.summary.lwbpCost || 0)}
+            {loading ? "" : formatCurrency(cardSummary.lwbpCost)}
           </div>
         </div>
       </section>
@@ -443,7 +661,7 @@ export default function Electricity() {
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                 {range === "day"
                   ? `Beban Incoming PLN — Harian Bulan ${MONTH_NAMES_ID[currentMonth - 1]} ${selectedYear}.`
-                  : "Beban Incoming PLN — data historis."}
+                  : "Beban Incoming PLN — data historis (WBP & LWBP)."}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -478,7 +696,9 @@ export default function Electricity() {
             </div>
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
-            <UtilityBarChart labels={barLabels} values={barValues} unit={barUnit} color="#3b82f6" height={256} />
+            <div style={{ height: 256 }}>
+              <Bar data={stackedBarData} options={stackedBarOptions} />
+            </div>
           </div>
         </section>
 
