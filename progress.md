@@ -8,6 +8,8 @@ Log perkembangan dan status pengerjaan fitur untuk menjaga konteks pengerjaan te
 - **Boiler & Chiller Ignition API integration**: Selesai.
 - **Cooling Water System WF1-U3 Overview & P&ID Cleanups**: Selesai.
 - **Electricity Load Factor Bugfix**: Selesai.
+- **Backend Telemetry Cache (In-Memory)**: Selesai (Mengaktifkan penyimpanan poin telemetry realtime yang database-free di memori server agar snapshot awal dapat ter-load instan oleh client).
+- **Frontend Telemetry Subscription**: Selesai (Menambahkan tag-tag cooling water baru ke list subscription).
 - **Build Status**: Sukses (`0 errors` pada TypeScript & build compilation).
 
 ---
@@ -33,7 +35,19 @@ Log perkembangan dan status pengerjaan fitur untuk menjaga konteks pengerjaan te
      - Menyembunyikan Cooling Tower Detail Grid untuk mesin selain Cooling Water (ditambahkan check `unitId.startsWith("cooling-water")`).
      - Mengamankan komparasi baris tabel status area matrix dengan typecast `(row.flow as any) === "API TIDAK TERKIRIM"` agar tidak memicu error compiler TS2367.
 
-### B. Bugfix Load Factor di Page Electricity
+### B. Live Telemetry Data Binding & Subscriptions
+- **Tujuan**: Menghubungkan real-time websocket dengan tags telemetry cooling-water yang baru tanpa menyimpan data tersebut ke database (sesuai request database-free), dan memastikan in-memory cache memuat snapshot awal instan tanpa delay.
+- **File yang Diubah**:
+  1. **`apps/frontend/src/data/industrial-tags.ts`**:
+     - Menambahkan array `extraTags` yang berisi list lengkap tag cooling-water realtime (seperti fan status, motor status, sensor pressure, basin level, dsb.) ke dalam array `telemetryTagIds`. Hal ini memastikan klien frontend mengirim trigger room subscription ke websocket server.
+  2. **`apps/backend/src/services/socket.manager.ts`**:
+     - Menambahkan map `telemetryCache` serta helper function `updateTelemetryCache` dan `getTelemetryFromCache` untuk menyimpan nilai realtime di memory.
+  3. **`apps/backend/src/core/scheduler.ts`**:
+     - Memanggil `updateTelemetryCache(points)` sesaat setelah Ignition API sukses di-poll, menyimpan nilai realtime di backend memory.
+  4. **`apps/backend/src/core/socket.ts`**:
+     - Saat klien frontend terhubung dan melakukan subscribe ke tagIds, menggabungkan data snapshot database dengan data dari `getTelemetryFromCache` sehingga data realtime dari API cooling-water langsung dikirimkan ke web browser secara instan tanpa menunggu siklus polling berikutnya.
+
+### C. Bugfix Load Factor di Page Electricity
 - **Tujuan**: Memastikan kartu Load Factor di halaman Electricity menampilkan nilai Power Factor (Cos Phi) yang sesuai dengan API baik dalam range bulanan maupun tahunan, serta menampilkan `"API TIDAK TERKIRIM"` saat status offline.
 - **File yang Diubah**:
   1. **`apps/frontend/src/pages/utilities/Electricity.tsx`**:
