@@ -48,6 +48,17 @@ const getLocalTodayString = () => {
   return `${yr}-${mo}-${dy}`;
 };
 
+const formatPeakTs = (tsStr: string) => {
+  if (!tsStr) return "";
+  const dateObj = new Date(tsStr);
+  const day = dateObj.getDate();
+  const month = MONTH_SHORT_ID[dateObj.getMonth()];
+  const year = dateObj.getFullYear();
+  const hrs = String(dateObj.getHours()).padStart(2, "0");
+  const mins = String(dateObj.getMinutes()).padStart(2, "0");
+  return `${day} ${month} ${year}, ${hrs}:${mins} WIB`;
+};
+
 export default function Electricity() {
   const [range, setRange] = useState<(typeof ranges)[number]["id"]>("ytd");
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
@@ -358,6 +369,7 @@ export default function Electricity() {
         totalCost: dailyEnergyTotal * config.scale * electricityRate,
         totalKwh: dailyEnergyTotal * config.scale,
         peakDemand: 1200,
+        peakDemandTs: null,
         loadFactor: 88.5,
         wbpKwh: 0,
         lwbpKwh: 0,
@@ -373,6 +385,7 @@ export default function Electricity() {
           totalCost: monthData.totalCost,
           totalKwh: monthData.totalKwh,
           peakDemand: monthData.peakDemand,
+          peakDemandTs: monthData.peakDemandTs,
           loadFactor: summaryData.pqData.pf ? summaryData.pqData.pf * 100 : 88.5,
           wbpKwh: monthData.wbpKwh,
           lwbpKwh: monthData.lwbpKwh,
@@ -387,6 +400,7 @@ export default function Electricity() {
       totalCost: summaryData.summary.totalCost,
       totalKwh: summaryData.summary.totalKwh,
       peakDemand: summaryData.pqData.activePower,
+      peakDemandTs: summaryData.pqData.activePowerTs,
       loadFactor: summaryData.pqData.pf ? summaryData.pqData.pf * 100 : 0,
       wbpKwh: summaryData.summary.wbpKwh,
       lwbpKwh: summaryData.summary.lwbpKwh,
@@ -756,7 +770,13 @@ export default function Electricity() {
           <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">
             {summaryLoading ? "Loading..." : `${cardSummary.peakDemand.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW`}
           </div>
-          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Estimasi beban puncak</div>
+          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            {cardSummary.peakDemandTs ? (
+              <span>Terjadi: <strong className="text-amber-500 font-semibold">{formatPeakTs(cardSummary.peakDemandTs)}</strong></span>
+            ) : (
+              "Estimasi beban puncak"
+            )}
+          </div>
         </div>
 
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-500">

@@ -130,6 +130,7 @@ export interface ElectricityAnalyticsResult {
   };
   pqData: {
     activePower: number;
+    activePowerTs: string | null;
     reactivePower: number;
     apparentPower: number;
     pf: number | null;
@@ -240,6 +241,7 @@ export const getElectricityAnalytics = async (
   let wbpKwh = 0;
   let lwbpKwh = 0;
   let maxDiff = 0;
+  let peakDemandTs: Date | null = null;
 
   let todayWbpKwh = 0;
   let todayLwbpKwh = 0;
@@ -253,6 +255,7 @@ export const getElectricityAnalytics = async (
   const monthlyWbpMap = new Map<string, number>();
   const monthlyLwbpMap = new Map<string, number>();
   const monthlyPeakMap = new Map<string, number>();
+  const monthlyPeakTsMap = new Map<string, Date>();
 
   const dailyHourlyMap = new Map<string, number[]>();
   const dailyHourlyWbpMap = new Map<string, number[]>();
@@ -272,6 +275,7 @@ export const getElectricityAnalytics = async (
 
     if (diff > maxDiff) {
       maxDiff = diff;
+      peakDemandTs = prevRecord.ts;
     }
 
     const hour = getWibHour(prevRecord.ts);
@@ -314,6 +318,7 @@ export const getElectricityAnalytics = async (
     const currentMonthPeak = monthlyPeakMap.get(monthStr) || 0;
     if (diff > currentMonthPeak) {
       monthlyPeakMap.set(monthStr, diff);
+      monthlyPeakTsMap.set(monthStr, prevRecord.ts);
     }
 
     // Accumulate for daily hourly map (total + WBP/LWBP split)
@@ -403,6 +408,7 @@ export const getElectricityAnalytics = async (
     const mLwbpCost = mLwbpKwh * lwbpRate;
     const mTotalCost = mWbpCost + mLwbpCost;
     const mPeak = monthlyPeakMap.get(monthKey) || 0;
+    const mPeakTs = monthlyPeakTsMap.get(monthKey);
     const [mYear, mMonth] = monthKey.split("-").map(Number);
     const mLoadFactor = mPeak > 0 ? (mTotalKwh / (mPeak * 24 * daysInMonth(mYear, mMonth))) : 0;
     return {
@@ -414,6 +420,7 @@ export const getElectricityAnalytics = async (
       wbpCost: Number(mWbpCost.toFixed(0)),
       lwbpCost: Number(mLwbpCost.toFixed(0)),
       peakDemand: Number(mPeak.toFixed(1)),
+      peakDemandTs: mPeakTs ? mPeakTs.toISOString() : null,
       loadFactor: Number(mLoadFactor.toFixed(4))
     };
   });
@@ -527,6 +534,7 @@ export const getElectricityAnalytics = async (
     },
     pqData: {
       activePower: Number(activePower.toFixed(1)),
+      activePowerTs: maxDiff > 0 && peakDemandTs ? peakDemandTs.toISOString() : null,
       reactivePower: Number(reactivePower.toFixed(1)),
       apparentPower: Number(apparentPower.toFixed(1)),
       pf: pf !== null ? Number(pf.toFixed(2)) : null,
