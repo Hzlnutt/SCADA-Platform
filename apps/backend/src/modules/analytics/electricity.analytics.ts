@@ -191,6 +191,13 @@ export const getElectricityAnalytics = async (
     ? new Date(toStr.includes("T") ? toStr : `${toStr}T23:59:59.999+07:00`)
     : new Date(`${selectedYear}-12-31T23:59:59.999+07:00`);
 
+  const fromQueryVal = fromStr
+    ? (fromStr.includes("T") ? fromStr.replace("T", " ").split(".")[0] : `${fromStr} 00:00:00.000`)
+    : `${selectedYear}-01-01 00:00:00.000`;
+  const toQueryVal = toStr
+    ? (toStr.includes("T") ? toStr.replace("T", " ").split(".")[0] : `${toStr} 23:59:59.999`)
+    : `${selectedYear}-12-31 23:59:59.999`;
+
   // Always calculate using Active Energy Delivered of PLN (PM8000)
   const activeEnergyTag = "electricity/Cubicle_PLN_PM8000/active_energy";
 
@@ -205,7 +212,7 @@ export const getElectricityAnalytics = async (
       FROM electricity_telemetry
       WHERE id_device = $1 AND t_stamp >= $2 AND t_stamp <= $3
       ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
-    `, [deviceId, from, to]);
+    `, [deviceId, fromQueryVal, toQueryVal]);
     hourlyRecords = res.rows;
   } catch (err) {
     console.warn("PostgreSQL query failed for electricity analytics, falling back to MongoDB:", err);
