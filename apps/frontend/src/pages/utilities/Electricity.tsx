@@ -231,6 +231,9 @@ export default function Electricity() {
       } else if (range === "day") {
         return monthlyDailyRecords.map((d: any) => d.value);
       } else if (range === "custom") {
+        if (chartStartDate === chartEndDate) {
+          return chartData.charts.hourly;
+        }
         return customDailyRecords.map((d: any) => d.value);
       } else {
         // YTD and Per Bulan: use monthly data (always 12 entries, Jan-Dec)
@@ -239,12 +242,12 @@ export default function Electricity() {
     }
     const base = dailyEnergyTotal * config.scale;
     return buildTimeAwareSeries(config.points, base, base * 0.35, 1, maxIdx);
-  }, [hasChartData, range, config, chartData, maxIdx, monthlyDailyRecords, customDailyRecords]);
+  }, [hasChartData, range, config, chartData, maxIdx, monthlyDailyRecords, customDailyRecords, chartStartDate, chartEndDate]);
 
   // ========== TIMELINE LABELS (rich, descriptive) ==========
   const labels = useMemo(() => {
     if (hasChartData) {
-      if (range === "hour") {
+      if (range === "hour" || (range === "custom" && chartStartDate === chartEndDate)) {
         // "01:00 WIB", "02:00 WIB", ..., "24:00 WIB"
         return Array.from({ length: 24 }, (_, i) =>
           `${(i + 1).toString().padStart(2, "0")}:00 WIB`
@@ -275,12 +278,12 @@ export default function Electricity() {
       }
     }
     return buildTimeLabels(config.points, config.type);
-  }, [hasChartData, range, config, chartData, monthlyDailyRecords, customDailyRecords]);
+  }, [hasChartData, range, config, chartData, monthlyDailyRecords, customDailyRecords, chartStartDate, chartEndDate]);
 
   // ========== BAR CHART DATA (from database) ==========
   const barLabels = useMemo(() => {
     if (hasChartData) {
-      if (range === "hour") {
+      if (range === "hour" || (range === "custom" && chartStartDate === chartEndDate)) {
         return Array.from({ length: 24 }, (_, i) => `${(i + 1).toString().padStart(2, "0")}:00`);
       } else if (range === "day") {
         return monthlyDailyRecords.map((d: any) => {
@@ -304,7 +307,7 @@ export default function Electricity() {
       }
     }
     return buildTimeLabels(config.points, config.type);
-  }, [hasChartData, range, config, chartData, monthlyDailyRecords, customDailyRecords]);
+  }, [hasChartData, range, config, chartData, monthlyDailyRecords, customDailyRecords, chartStartDate, chartEndDate]);
 
   // ========== STACKED WBP/LWBP BAR VALUES ==========
   const barWbpValues = useMemo(() => {
@@ -314,13 +317,16 @@ export default function Electricity() {
       } else if (range === "day") {
         return monthlyDailyRecords.map((d: any) => d.wbp || 0);
       } else if (range === "custom") {
+        if (chartStartDate === chartEndDate) {
+          return chartData.charts.hourlyWbp || Array.from({ length: 24 }, () => 0);
+        }
         return customDailyRecords.map((d: any) => d.wbp || 0);
       } else {
         return chartData.charts.monthly.map((m: any) => m.wbp || 0);
       }
     }
     return Array.from({ length: config.points }, () => 0);
-  }, [hasChartData, range, config, chartData, monthlyDailyRecords, customDailyRecords]);
+  }, [hasChartData, range, config, chartData, monthlyDailyRecords, customDailyRecords, chartStartDate, chartEndDate]);
 
   const barLwbpValues = useMemo(() => {
     if (hasChartData) {
@@ -329,13 +335,16 @@ export default function Electricity() {
       } else if (range === "day") {
         return monthlyDailyRecords.map((d: any) => d.lwbp || 0);
       } else if (range === "custom") {
+        if (chartStartDate === chartEndDate) {
+          return chartData.charts.hourlyLwbp || Array.from({ length: 24 }, () => 0);
+        }
         return customDailyRecords.map((d: any) => d.lwbp || 0);
       } else {
         return chartData.charts.monthly.map((m: any) => m.lwbp || 0);
       }
     }
     return Array.from({ length: config.points }, () => 0);
-  }, [hasChartData, range, config, chartData, monthlyDailyRecords, customDailyRecords]);
+  }, [hasChartData, range, config, chartData, monthlyDailyRecords, customDailyRecords, chartStartDate, chartEndDate]);
 
   const barUnit = useMemo(() => {
     if (range === "hour" || range === "day" || range === "custom") return "kWh";
@@ -398,6 +407,11 @@ export default function Electricity() {
           { name: "Incoming PLN", values: monthlyDailyRecords.map((d: any) => d.value / 24), color: "#3b82f6" }
         ];
       } else if (range === "custom") {
+        if (chartStartDate === chartEndDate) {
+          return [
+            { name: "Incoming PLN", values: chartData.charts.hourly, color: "#3b82f6" }
+          ];
+        }
         return [
           { name: "Incoming PLN", values: customDailyRecords.map((d: any) => d.value / 24), color: "#3b82f6" }
         ];
@@ -411,7 +425,7 @@ export default function Electricity() {
     return [
       { name: "Incoming PLN", values: buildTimeAwareSeries(config.points, base, base * 0.15, 1, maxIdx), color: "#3b82f6" }
     ];
-  }, [hasChartData, range, config, chartData, maxIdx, monthlyDailyRecords, customDailyRecords]);
+  }, [hasChartData, range, config, chartData, maxIdx, monthlyDailyRecords, customDailyRecords, chartStartDate, chartEndDate]);
 
   const donutSegments = useMemo(() => {
     if (hasChartData) {
@@ -425,9 +439,17 @@ export default function Electricity() {
         wbp = chartData.summary.monthlyWbpKwh ?? 0;
         total = (chartData.summary.monthlyWbpKwh ?? 0) + (chartData.summary.monthlyLwbpKwh ?? 0);
       } else if (range === "custom") {
-        wbp = customDailyRecords.reduce((acc: number, curr: any) => acc + (curr.wbp || 0), 0);
-        const lwbp = customDailyRecords.reduce((acc: number, curr: any) => acc + (curr.lwbp || 0), 0);
-        total = wbp + lwbp;
+        if (chartStartDate === chartEndDate) {
+          const hWbp = chartData.charts.hourlyWbp || Array.from({ length: 24 }, () => 0);
+          const hLwbp = chartData.charts.hourlyLwbp || Array.from({ length: 24 }, () => 0);
+          wbp = hWbp.reduce((acc: number, curr: number) => acc + curr, 0);
+          const lwbp = hLwbp.reduce((acc: number, curr: number) => acc + curr, 0);
+          total = wbp + lwbp;
+        } else {
+          wbp = customDailyRecords.reduce((acc: number, curr: any) => acc + (curr.wbp || 0), 0);
+          const lwbp = customDailyRecords.reduce((acc: number, curr: any) => acc + (curr.lwbp || 0), 0);
+          total = wbp + lwbp;
+        }
       }
 
       if (total > 0) {
@@ -443,7 +465,7 @@ export default function Electricity() {
       { label: "Beban WBP (17-22)", value: 0, color: "#ef4444" },
       { label: "Beban LWBP", value: 0, color: "#3b82f6" }
     ];
-  }, [hasChartData, chartData, range, customDailyRecords]);
+  }, [hasChartData, chartData, range, customDailyRecords, chartStartDate, chartEndDate]);
 
   // ========== TOP 10 ENERGY CONSUMING UNITS (Horizontal Bar Chart) ==========
   const top10Units = useMemo(() => {
@@ -797,7 +819,9 @@ export default function Electricity() {
                 {range === "day"
                   ? `Beban Incoming PLN — Harian Bulan ${MONTH_NAMES_ID[currentMonth - 1]} ${selectedYear}.`
                   : range === "custom"
-                  ? `Beban Incoming PLN — Periode ${chartStartDate} s/d ${chartEndDate}.`
+                  ? (chartStartDate === chartEndDate
+                      ? `Beban Incoming PLN — Per Jam Tanggal ${chartStartDate}.`
+                      : `Beban Incoming PLN — Periode ${chartStartDate} s/d ${chartEndDate}.`)
                   : "Beban Incoming PLN — data historis (WBP & LWBP)."}
               </p>
             </div>
