@@ -51,6 +51,12 @@ export default function CoolingWF1U3Pid({
     return pt.value;
   };
 
+  const supplyVal = latest["cooling-water/supply_temp"]?.value;
+  const returnVal = latest["cooling-water/return_temp"]?.value;
+  const deltaTVal = typeof supplyVal === "number" && typeof returnVal === "number"
+    ? Number((returnVal - supplyVal).toFixed(2))
+    : "API TIDAK TERKIRIM";
+
 
   return (
     <svg
@@ -379,7 +385,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={1496} y={147} 
                 w={75} h={30}
-                value={getVal("cooling-water/flow_temp")} unit=" °C" 
+                value={getVal("cooling-water/st3_return_temp")} unit=" °C" 
                 warningThreshold={35} alarmThreshold={40}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -1092,8 +1098,8 @@ export default function CoolingWF1U3Pid({
               y={-145}
               width={175}
               title="SUPPLY TEMP"
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getVal("cooling-water/supply_temp") as string | number}
+              unit={typeof getVal("cooling-water/supply_temp") === "number" ? " °C" : ""}
               colorType="green"
               />
               <SensorCard
@@ -1101,8 +1107,8 @@ export default function CoolingWF1U3Pid({
               y={-145}
               width={175}
               title="Δ TEMP"
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={deltaTVal}
+              unit={typeof deltaTVal === "number" ? " °C" : ""}
               colorType="green"
               />
               <SensorCard
@@ -1110,8 +1116,8 @@ export default function CoolingWF1U3Pid({
               y={-35}
               width={175}
               title="RETURN TEMP"
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getVal("cooling-water/return_temp") as string | number}
+              unit={typeof getVal("cooling-water/return_temp") === "number" ? " °C" : ""}
               colorType="green"
               />
               <SensorCard

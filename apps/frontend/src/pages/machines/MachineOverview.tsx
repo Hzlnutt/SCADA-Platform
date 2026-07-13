@@ -268,6 +268,9 @@ function StandardMachineOverview({
     const eqPressSt03 = latest["cooling-water/eq_press_st03"]?.value;
     const eqPressWashing = latest["cooling-water/eq_press_washing"]?.value;
 
+    const liveSupplyTemp = latest["cooling-water/supply_temp"]?.value;
+    const liveReturnTemp = latest["cooling-water/return_temp"]?.value;
+
     const eqStatusDu03 = latest["cooling-water/eq_status_du03"]?.value;
     const eqStatusBp03 = latest["cooling-water/eq_status_bp03"]?.value;
     const eqStatusPrep03 = latest["cooling-water/eq_status_prep03"]?.value;
@@ -286,8 +289,8 @@ function StandardMachineOverview({
       };
 
       return {
-        supplyTemp: "API TIDAK TERKIRIM",
-        returnTemp: "API TIDAK TERKIRIM",
+        supplyTemp: typeof liveSupplyTemp === "number" ? liveSupplyTemp : "API TIDAK TERKIRIM",
+        returnTemp: typeof liveReturnTemp === "number" ? liveReturnTemp : "API TIDAK TERKIRIM",
         supplyFlow: typeof latest["cooling-water/flow_1"]?.value === "number" ? `${(latest["cooling-water/flow_1"]?.value as number).toFixed(1)} m³/h` : "API TIDAK TERKIRIM",
         supplyTds: "API TIDAK TERKIRIM",
         supplyPh: "API TIDAK TERKIRIM",
@@ -461,11 +464,11 @@ function StandardMachineOverview({
   const telemetryRows = useMemo(() => {
     if (unitId === "cooling-water-1") {
       return [
-        { name: "Supply Water Temp", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_TEMP.toFixed(1)} °C`, alert: false },
+        { name: "Supply Water Temp", val: typeof liveData.supplyTemp === "number" ? `${liveData.supplyTemp} °C` : liveData.supplyTemp, avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_TEMP.toFixed(1)} °C`, alert: false },
         { name: "Supply Water TDS", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_TDS.toFixed(1)} µS/cm`, alert: false },
         { name: "Supply Water pH", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_PH.toFixed(1)} pH`, alert: false },
         { name: "Supply Water Flow", val: liveData.supplyFlow, avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_FLOW.toFixed(1)} m³/h`, alert: false },
-        { name: "Return Water Temp", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.RTN_WTR_TEMP.toFixed(1)} °C`, alert: false },
+        { name: "Return Water Temp", val: typeof liveData.returnTemp === "number" ? `${liveData.returnTemp} °C` : liveData.returnTemp, avg: "API TIDAK TERKIRIM", base: `${baselines.RTN_WTR_TEMP.toFixed(1)} °C`, alert: false },
         { name: "Makeup Water Vol", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: "—", alert: false },
         { name: "Makeup Water TDS", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.MAKEUP_WTR_TDS.toFixed(1)} µS/cm`, alert: false },
         { name: "Makeup Water pH", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.MAKEUP_WTR_PH.toFixed(1)} pH`, alert: false },
