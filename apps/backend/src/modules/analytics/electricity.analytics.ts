@@ -185,10 +185,10 @@ export const getElectricityAnalytics = async (
   // If year is provided, use full year range; otherwise use from/to or default to 2025
   const selectedYear = year || (fromStr ? parseInt(fromStr.split("-")[0]) : 2025);
   const from = fromStr
-    ? new Date(fromStr)
+    ? new Date(fromStr.includes("T") ? fromStr : `${fromStr}T00:00:00.000Z`)
     : new Date(`${selectedYear}-01-01T00:00:00Z`);
   const to = toStr
-    ? new Date(toStr)
+    ? new Date(toStr.includes("T") ? toStr : `${toStr}T23:59:59.999Z`)
     : new Date(`${selectedYear}-12-31T23:59:59Z`);
 
   // Always calculate using Active Energy Delivered of PLN (PM8000)
