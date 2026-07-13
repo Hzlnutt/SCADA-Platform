@@ -3,6 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import { Bar, Line } from "react-chartjs-2";
 import { getUnitById } from "../../data/machines";
 import { useSystemStore } from "../../store/system.store";
+import { useTelemetryStore } from "../../store/telemetry.store";
 import type { MachineOutletContext } from "./MachineLayout";
 import { utils, writeFile } from "xlsx";
 import "../../components/charts/chartjs";
@@ -148,6 +149,7 @@ export default function MachineStatistics() {
   if (!machine) return null;
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
+  const latest = useTelemetryStore((state) => state.latest);
 
   // Vibration selector state
   const [selectedEq, setSelectedEq] = useState("CT-1 Fan");
@@ -411,26 +413,25 @@ export default function MachineStatistics() {
 
     // Helper to generate dynamic lines based on selected parameter name
     const getValuesForParam = (paramName: string) => {
+      const liveST3Return = latest["cooling-water/st3_return_temp"]?.value;
+      const liveSupplyTemp = latest["cooling-water/supply_temp"]?.value;
+      const liveReturnTemp = latest["cooling-water/return_temp"]?.value;
+
+      let baseVal = 25;
       if (paramName === "ST3 Return Temp") {
-        if (dbData) {
-          if (resolution === "Hourly") return dbData.hourly;
-          if (resolution === "Daily") return dbData.daily;
-          return dbData.monthly;
-        }
-        // Fallback to static values while loading
-        if (resolution === "Hourly") return coolingSt3Data.hourly;
-        if (resolution === "Daily") return coolingSt3Data.daily;
-        return coolingSt3Data.monthly;
+        baseVal = typeof liveST3Return === "number" ? liveST3Return : 32.2;
+      } else if (paramName === "Supply Water Temp") {
+        baseVal = typeof liveSupplyTemp === "number" ? liveSupplyTemp : 29.1;
+      } else if (paramName === "Return Water Temp") {
+        baseVal = typeof liveReturnTemp === "number" ? liveReturnTemp : 31.4;
+      } else {
+        const charCodeSum = paramName.split("").reduce((sum, c) => sum + c.charCodeAt(0), 0);
+        baseVal = 10 + (charCodeSum % 100);
       }
-      if (paramName === "ST3 Supply Temp") {
-        if (resolution === "Hourly") return coolingSt3Data.hourly;
-        if (resolution === "Daily") return coolingSt3Data.daily;
-        return coolingSt3Data.monthly;
-      }
-      const charCodeSum = paramName.split("").reduce((sum, c) => sum + c.charCodeAt(0), 0);
-      const baseVal = 10 + (charCodeSum % 100);
+
       return labels.map((_, i) => {
-        const val = baseVal + Math.sin(i / 3) * (baseVal * 0.05) + Math.random() * (baseVal * 0.01);
+        // Generate a smooth simulated historical profile based on real base value
+        const val = baseVal + Math.sin(i / 3) * (baseVal * 0.02) + Math.random() * (baseVal * 0.005);
         return Number(val.toFixed(2));
       });
     };
