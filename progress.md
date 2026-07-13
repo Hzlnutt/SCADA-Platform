@@ -11,7 +11,7 @@ Log perkembangan dan status pengerjaan fitur untuk menjaga konteks pengerjaan te
 - **Backend Telemetry Cache (In-Memory)**: Selesai.
 - **Frontend Telemetry Subscription**: Selesai.
 - **Temperatur Baru dari API (Supply, Return, ST3 Return)**: Selesai.
-- **Formatter Temperatur (1 angka di belakang koma)**: Selesai.
+- **Formatter Angka & Temperatur (1 angka di belakang koma)**: Selesai (Dashboard Overview dan SensorCard pada diagram P&ID dibatasi desimalnya agar rapi).
 - **Status Cooling Tower Card Header (Dynamic)**: Selesai.
 - **Pemetaan Loop Temperature Lengkap (DU, PREP, ST3 Supply, Washing)**: Selesai (Memetakan 4 variabel temperatur loop baru ke tabel Matrix dan P&ID diagram canvas).
 - **Build Status**: Sukses (`0 errors` pada TypeScript & build compilation via pnpm).
