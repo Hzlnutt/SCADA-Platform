@@ -354,27 +354,43 @@ export const getElectricityAnalytics = async (
   // Carbon coefficient: ~0.82 kg CO2 per kWh
   const co2Emitted = (totalKwh * 0.82) / 1000; // in tons
 
-  // ===== ALWAYS populate full 12 months (Jan-Dec) with 0 for missing =====
+  // ===== ALWAYS populate all months in the queried range with 0 for missing =====
   const monthly: { month: string; value: number; wbp: number; lwbp: number }[] = [];
-  for (let m = 1; m <= 12; m++) {
-    const monthKey = `${selectedYear}-${String(m).padStart(2, "0")}`;
+  const startDay = new Date(from);
+  const endDay = new Date(to);
+  const startMonthCursor = new Date(startDay.getFullYear(), startDay.getMonth(), 1);
+  const endMonthCursor = new Date(endDay.getFullYear(), endDay.getMonth(), 1);
+  
+  const currentMonthCursor = new Date(startMonthCursor);
+  while (currentMonthCursor <= endMonthCursor) {
+    const y = currentMonthCursor.getFullYear();
+    const m = String(currentMonthCursor.getMonth() + 1).padStart(2, "0");
+    const monthKey = `${y}-${m}`;
     const val = monthlyMap.get(monthKey) || 0;
     const mWbp = monthlyWbpMap.get(monthKey) || 0;
     const mLwbp = monthlyLwbpMap.get(monthKey) || 0;
-    monthly.push({ month: monthKey, value: val / 1000, wbp: mWbp / 1000, lwbp: mLwbp / 1000 }); // convert to MWh
+    
+    monthly.push({ 
+      month: monthKey, 
+      value: val / 1000, 
+      wbp: mWbp / 1000, 
+      lwbp: mLwbp / 1000 
+    });
+    
+    currentMonthCursor.setMonth(currentMonthCursor.getMonth() + 1);
   }
 
-  // ===== ALWAYS populate all days in the year with 0 for missing =====
+  // ===== ALWAYS populate all days in the queried range with 0 for missing =====
   const daily: { day: string; value: number; wbp: number; lwbp: number }[] = [];
-  for (let m = 1; m <= 12; m++) {
-    const numDays = daysInMonth(selectedYear, m);
-    for (let d = 1; d <= numDays; d++) {
-      const dayKey = `${selectedYear}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      const val = dailyMap.get(dayKey) || 0;
-      const dWbp = dailyWbpMap.get(dayKey) || 0;
-      const dLwbp = dailyLwbpMap.get(dayKey) || 0;
-      daily.push({ day: dayKey, value: val, wbp: dWbp, lwbp: dLwbp });
-    }
+  const currentCursor = new Date(startDay);
+  while (currentCursor <= endDay) {
+    const dayKey = getWibDateString(currentCursor);
+    const val = dailyMap.get(dayKey) || 0;
+    const dWbp = dailyWbpMap.get(dayKey) || 0;
+    const dLwbp = dailyLwbpMap.get(dayKey) || 0;
+    daily.push({ day: dayKey, value: val, wbp: dWbp, lwbp: dLwbp });
+    
+    currentCursor.setDate(currentCursor.getDate() + 1);
   }
 
   // ===== Per-Month Summary for period selector =====
@@ -387,7 +403,8 @@ export const getElectricityAnalytics = async (
     const mLwbpCost = mLwbpKwh * lwbpRate;
     const mTotalCost = mWbpCost + mLwbpCost;
     const mPeak = monthlyPeakMap.get(monthKey) || 0;
-    const mLoadFactor = mPeak > 0 ? (mTotalKwh / (mPeak * 24 * daysInMonth(selectedYear, parseInt(monthKey.split("-")[1])))) : 0;
+    const [mYear, mMonth] = monthKey.split("-").map(Number);
+    const mLoadFactor = mPeak > 0 ? (mTotalKwh / (mPeak * 24 * daysInMonth(mYear, mMonth))) : 0;
     return {
       month: monthKey,
       totalKwh: Number(mTotalKwh.toFixed(0)),
