@@ -40,6 +40,14 @@ const ranges = [
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
+const getLocalTodayString = () => {
+  const d = new Date();
+  const yr = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const dy = String(d.getDate()).padStart(2, "0");
+  return `${yr}-${mo}-${dy}`;
+};
+
 export default function Electricity() {
   const [range, setRange] = useState<(typeof ranges)[number]["id"]>("ytd");
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
@@ -49,21 +57,13 @@ export default function Electricity() {
   const [cardPeriod, setCardPeriod] = useState<"yearly" | "monthly" | "custom">("yearly");
   const [cardMonth, setCardMonth] = useState(() => new Date().getMonth()); // 0-indexed
 
-  // Custom start and end dates for summary cards (default to 7 days ago)
-  const [summaryStartDate, setSummaryStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return d.toISOString().split("T")[0];
-  });
-  const [summaryEndDate, setSummaryEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  // Custom start and end dates for summary cards (default to today)
+  const [summaryStartDate, setSummaryStartDate] = useState(getLocalTodayString);
+  const [summaryEndDate, setSummaryEndDate] = useState(getLocalTodayString);
 
-  // Custom start and end dates for charts (default to 7 days ago)
-  const [chartStartDate, setChartStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return d.toISOString().split("T")[0];
-  });
-  const [chartEndDate, setChartEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  // Custom start and end dates for charts (default to today)
+  const [chartStartDate, setChartStartDate] = useState(getLocalTodayString);
+  const [chartEndDate, setChartEndDate] = useState(getLocalTodayString);
 
   const maxIdx = useMemo(() => getElapsedIndex(config.type), [config.type]);
 
