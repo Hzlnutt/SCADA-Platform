@@ -183,7 +183,7 @@ export const getElectricityAnalytics = async (
   const telemetryCollection = db.collection(ELECTRICITY_RAW_COLLECTION);
 
   // If year is provided, use full year range; otherwise use from/to or default to 2025
-  const selectedYear = year || 2025;
+  const selectedYear = year || (fromStr ? parseInt(fromStr.split("-")[0]) : 2025);
   const from = fromStr
     ? new Date(fromStr)
     : new Date(`${selectedYear}-01-01T00:00:00Z`);
