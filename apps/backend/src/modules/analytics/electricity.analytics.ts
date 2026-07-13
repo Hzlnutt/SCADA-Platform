@@ -275,7 +275,7 @@ export const getElectricityAnalytics = async (
 
     if (diff > maxDiff) {
       maxDiff = diff;
-      peakDemandTs = prevRecord.ts;
+      peakDemandTs = currRecord.ts;
     }
 
     const hour = getWibHour(prevRecord.ts);
@@ -318,7 +318,7 @@ export const getElectricityAnalytics = async (
     const currentMonthPeak = monthlyPeakMap.get(monthStr) || 0;
     if (diff > currentMonthPeak) {
       monthlyPeakMap.set(monthStr, diff);
-      monthlyPeakTsMap.set(monthStr, prevRecord.ts);
+      monthlyPeakTsMap.set(monthStr, currRecord.ts);
     }
 
     // Accumulate for daily hourly map (total + WBP/LWBP split)

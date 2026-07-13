@@ -62,8 +62,15 @@ const formatPeakTs = (tsStr: string) => {
 export default function Electricity() {
   const [range, setRange] = useState<(typeof ranges)[number]["id"]>("ytd");
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth()); // 0-indexed
   const config = ranges.find((item) => item.id === range) ?? ranges[0];
+
+  // Period selector for top 5 cards
+  const [cardPeriod, setCardPeriod] = useState<"yearly" | "monthly" | "custom">("yearly");
+  const [cardMonth, setCardMonth] = useState(() => new Date().getMonth()); // 0-indexed
+
+  // Custom start and end dates for summary cards (default to today)
+  const [summaryStartDate, setSummaryStartDate] = useState(getLocalTodayString);
+  const [summaryEndDate, setSummaryEndDate] = useState(getLocalTodayString);
 
   // Custom start and end dates for charts (default to today)
   const [chartStartDate, setChartStartDate] = useState(getLocalTodayString);
@@ -86,18 +93,11 @@ export default function Electricity() {
   const wbpRate = useConfigStore((state) => state.wbpRate);
   const lwbpRate = useConfigStore((state) => state.lwbpRate);
 
-  const fetchData = useCallback((showLoading = false) => {
-    if (showLoading) {
-      setSummaryLoading(true);
-      setChartLoading(true);
-    }
+  const fetchSummary = useCallback((showLoading = false) => {
+    if (showLoading) setSummaryLoading(true);
     let url = `/analytics/electricity?deviceId=Cubicle_PLN_PM8000`;
-    if (range === "custom") {
-      url += `&from=${chartStartDate}&to=${chartEndDate}`;
-    } else if (range === "hour") {
-      // Per Jam represents today's date
-      const todayStr = getLocalTodayString();
-      url += `&from=${todayStr}&to=${todayStr}`;
+    if (cardPeriod === "custom") {
+      url += `&from=${summaryStartDate}&to=${summaryEndDate}`;
     } else {
       url += `&year=${selectedYear}`;
     }
@@ -106,28 +106,46 @@ export default function Electricity() {
     getJson<{ data: any }>(url)
       .then((res) => {
         setSummaryData(res.data);
+        if (showLoading) setSummaryLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to load electricity summary data", err);
+        if (showLoading) setSummaryLoading(false);
+      });
+  }, [cardPeriod, selectedYear, summaryStartDate, summaryEndDate]);
+
+  const fetchCharts = useCallback((showLoading = false) => {
+    if (showLoading) setChartLoading(true);
+    let url = `/analytics/electricity?deviceId=Cubicle_PLN_PM8000`;
+    if (range === "custom") {
+      url += `&from=${chartStartDate}&to=${chartEndDate}`;
+    } else {
+      url += `&year=${selectedYear}`;
+    }
+    url += `&_t=${Date.now()}`;
+
+    getJson<{ data: any }>(url)
+      .then((res) => {
         setChartData(res.data);
         if (res.data?.pqData) {
           setLivePf(res.data.pqData.pf);
           setPfStatus(res.data.pqData.pfStatus || "offline");
         }
-        if (showLoading) {
-          setSummaryLoading(false);
-          setChartLoading(false);
-        }
+        if (showLoading) setChartLoading(false);
       })
       .catch((err) => {
-        console.error("Failed to load electricity data", err);
-        if (showLoading) {
-          setSummaryLoading(false);
-          setChartLoading(false);
-        }
+        console.error("Failed to load electricity chart data", err);
+        if (showLoading) setChartLoading(false);
       });
   }, [range, selectedYear, chartStartDate, chartEndDate]);
 
   useEffect(() => {
-    fetchData(true);
-  }, [fetchData]);
+    fetchSummary(true);
+  }, [fetchSummary]);
+
+  useEffect(() => {
+    fetchCharts(true);
+  }, [fetchCharts]);
 
   // Handle auto-fetch every 2 seconds and socket event handlers
   useEffect(() => {
@@ -135,7 +153,8 @@ export default function Electricity() {
 
     const interval = setInterval(() => {
       if (active) {
-        fetchData(false);
+        fetchSummary(false);
+        fetchCharts(false);
       }
     }, 2000);
 
@@ -145,7 +164,8 @@ export default function Electricity() {
       console.log("Config update event received from socket, fetching rates and data...");
       useConfigStore.getState().fetchRates().then(() => {
         if (active) {
-          fetchData(false);
+          fetchSummary(false);
+          fetchCharts(false);
         }
       });
     };
@@ -153,7 +173,8 @@ export default function Electricity() {
     const handleElectricityUpdate = () => {
       console.log("Electricity update event received from socket, re-fetching data...");
       if (active) {
-        fetchData(false);
+        fetchSummary(false);
+        fetchCharts(false);
       }
     };
 
@@ -176,15 +197,12 @@ export default function Electricity() {
       socket.off("electricity:update", handleElectricityUpdate);
       socket.off("power_factor:status", handlePowerFactorStatus);
     };
-  }, [fetchData]);
+  }, [fetchSummary, fetchCharts]);
 
   const hasSummaryData = !!summaryData;
   const hasChartData = !!chartData;
 
   const currentMonth = useMemo(() => {
-    if (range === "day") {
-      return selectedMonth + 1;
-    }
     const now = new Date();
     if (selectedYear === now.getFullYear()) {
       return now.getMonth() + 1; // 1-indexed
@@ -197,7 +215,7 @@ export default function Electricity() {
       }
     }
     return 12; // fallback to December
-  }, [hasChartData, chartData, selectedYear, range, selectedMonth]);
+  }, [hasChartData, chartData, selectedYear]);
 
   const monthlyDailyRecords = useMemo(() => {
     if (hasChartData && chartData.charts.daily) {
@@ -360,8 +378,8 @@ export default function Electricity() {
       };
     }
 
-    if (range === "day" && summaryData.summary.perMonthSummary) {
-      const monthData = summaryData.summary.perMonthSummary[selectedMonth];
+    if (cardPeriod === "monthly" && summaryData.summary.perMonthSummary) {
+      const monthData = summaryData.summary.perMonthSummary[cardMonth];
       if (monthData) {
         return {
           totalCost: monthData.totalCost,
@@ -377,7 +395,7 @@ export default function Electricity() {
       }
     }
 
-    // Yearly, Hourly or Custom: use the direct summary metrics
+    // Yearly or Custom: use the direct summary metrics
     return {
       totalCost: summaryData.summary.totalCost,
       totalKwh: summaryData.summary.totalKwh,
@@ -389,7 +407,64 @@ export default function Electricity() {
       wbpCost: summaryData.summary.wbpCost,
       lwbpCost: summaryData.summary.lwbpCost
     };
-  }, [hasSummaryData, summaryData, range, selectedMonth, config]);
+  }, [hasSummaryData, summaryData, cardPeriod, cardMonth, config]);
+
+  const chartPeakDemandInfo = useMemo(() => {
+    if (!hasChartData || !chartData) {
+      return { value: 1200, ts: null };
+    }
+
+    // 1. If range is hourly (hour, or custom single day)
+    if (range === "hour" || (range === "custom" && chartStartDate === chartEndDate)) {
+      const hourly = chartData.charts.hourly || [];
+      let maxVal = 0;
+      let maxHourIdx = -1;
+      for (let i = 0; i < hourly.length; i++) {
+        if (hourly[i] > maxVal) {
+          maxVal = hourly[i];
+          maxHourIdx = i;
+        }
+      }
+      
+      if (maxHourIdx !== -1) {
+        const targetDateStr = range === "hour" ? getLocalTodayString() : chartStartDate;
+        const peakHr = maxHourIdx + 1;
+        const peakTs = `${targetDateStr}T${String(peakHr).padStart(2, "0")}:00:00.000+07:00`;
+        return { value: maxVal, ts: peakTs };
+      }
+      return { value: 0, ts: null };
+    }
+
+    // 2. If range is day (Per Hari)
+    if (range === "day") {
+      const monthData = chartData.summary.perMonthSummary?.[currentMonth - 1];
+      if (monthData) {
+        return { value: monthData.peakDemand, ts: monthData.peakDemandTs };
+      }
+      return { value: 0, ts: null };
+    }
+
+    // 3. If range is custom (multi-day)
+    if (range === "custom") {
+      return {
+        value: chartData.pqData.activePower,
+        ts: chartData.pqData.activePowerTs
+      };
+    }
+
+    // 4. For YTD or month (Per Bulan)
+    let maxPeak = 0;
+    let peakTs = null;
+    if (chartData.summary.perMonthSummary) {
+      for (const m of chartData.summary.perMonthSummary) {
+        if (m.peakDemand > maxPeak) {
+          maxPeak = m.peakDemand;
+          peakTs = m.peakDemandTs;
+        }
+      }
+    }
+    return { value: maxPeak, ts: peakTs };
+  }, [hasChartData, chartData, range, chartStartDate, chartEndDate, currentMonth, selectedYear]);
 
   // ========== TREND PANEL DISTRIBUSI (MultiLineChart) ==========
   const mdpSeries = useMemo(() => {
@@ -625,34 +700,51 @@ export default function Electricity() {
     <div className="space-y-6">
       <PageHeader title="Listrik" description="Monitor beban listrik utama, peak demand, dan biaya energi." />
 
-      {/* Unified Period Selector Toolbar */}
-      <div className="flex flex-wrap items-center gap-3 bg-slate-50 dark:bg-slate-800/25 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800/80">
-        <span className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">Filter Periode:</span>
-        
-        {/* Range Selector Buttons */}
-        <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-0.5 text-xs">
-          {ranges.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setRange(item.id)}
-              className={`rounded-md px-3 py-1.5 font-bold transition-all ${
-                range === item.id
-                  ? "bg-cyan-500 text-white shadow-sm"
-                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
+      {/* Period Selector for Executive Summary Cards */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">Periode Ringkasan:</span>
+        <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-0.5 text-xs">
+          <button
+            type="button"
+            onClick={() => setCardPeriod("yearly")}
+            className={`rounded-md px-3 py-1.5 font-bold transition-all ${
+              cardPeriod === "yearly"
+                ? "bg-cyan-500 text-white shadow-sm"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            }`}
+          >
+            Tahunan
+          </button>
+          <button
+            type="button"
+            onClick={() => setCardPeriod("monthly")}
+            className={`rounded-md px-3 py-1.5 font-bold transition-all ${
+              cardPeriod === "monthly"
+                ? "bg-cyan-500 text-white shadow-sm"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            }`}
+          >
+            Bulanan
+          </button>
+          <button
+            type="button"
+            onClick={() => setCardPeriod("custom")}
+            className={`rounded-md px-3 py-1.5 font-bold transition-all ${
+              cardPeriod === "custom"
+                ? "bg-cyan-500 text-white shadow-sm"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            }`}
+          >
+            Kustom
+          </button>
         </div>
 
         {/* Year Selector */}
-        {(range === "ytd" || range === "day" || range === "month") && (
+        {cardPeriod !== "custom" && (
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
           >
             {AVAILABLE_YEARS.map((yr) => (
               <option key={yr} value={yr}>{yr}</option>
@@ -660,12 +752,12 @@ export default function Electricity() {
           </select>
         )}
 
-        {/* Month Selector */}
-        {range === "day" && (
+        {/* Month Selector (only shown when period is monthly) */}
+        {cardPeriod === "monthly" && (
           <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+            value={cardMonth}
+            onChange={(e) => setCardMonth(Number(e.target.value))}
+            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
           >
             {MONTH_NAMES_ID.map((name, idx) => (
               <option key={idx} value={idx}>{name}</option>
@@ -674,37 +766,33 @@ export default function Electricity() {
         )}
 
         {/* Custom Date Pickers */}
-        {range === "custom" && (
+        {cardPeriod === "custom" && (
           <div className="flex items-center gap-2">
             <input
               type="date"
-              value={chartStartDate}
-              onChange={(e) => setChartStartDate(e.target.value)}
-              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+              value={summaryStartDate}
+              onChange={(e) => setSummaryStartDate(e.target.value)}
+              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
             />
             <span className="text-xs font-bold text-slate-400">s/d</span>
             <input
               type="date"
-              value={chartEndDate}
-              onChange={(e) => setChartEndDate(e.target.value)}
-              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+              value={summaryEndDate}
+              onChange={(e) => setSummaryEndDate(e.target.value)}
+              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
             />
           </div>
         )}
 
-        {/* Period Badge Indicator */}
+        {/* Period badge indicator */}
         <div className="ml-auto flex items-center gap-1.5">
           <div className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse" />
           <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
-            {range === "ytd" || range === "month"
+            {cardPeriod === "yearly"
               ? `Tahun ${selectedYear}`
-              : range === "day"
-              ? `${MONTH_NAMES_ID[selectedMonth]} ${selectedYear}`
-              : range === "hour"
-              ? `Hari Ini (${chartStartDate})`
-              : chartStartDate === chartEndDate
-              ? `Tanggal ${chartStartDate}`
-              : `${chartStartDate} s/d ${chartEndDate}`}
+              : cardPeriod === "monthly"
+              ? `${MONTH_NAMES_ID[cardMonth]} ${selectedYear}`
+              : `${summaryStartDate} s/d ${summaryEndDate}`}
           </span>
         </div>
       </div>
@@ -737,11 +825,11 @@ export default function Electricity() {
             </div>
           </div>
           <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">
-            {summaryLoading ? "Loading..." : `${cardSummary.peakDemand.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW`}
+            {chartLoading ? "Loading..." : `${chartPeakDemandInfo.value.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW`}
           </div>
           <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-            {cardSummary.peakDemandTs ? (
-              <span>Terjadi: <strong className="text-amber-500 font-semibold">{formatPeakTs(cardSummary.peakDemandTs)}</strong></span>
+            {chartPeakDemandInfo.ts ? (
+              <span>Terjadi: <strong className="text-amber-500 font-semibold">{formatPeakTs(chartPeakDemandInfo.ts)}</strong></span>
             ) : (
               "Estimasi beban puncak"
             )}
@@ -813,6 +901,57 @@ export default function Electricity() {
                       : `Beban Incoming PLN — Periode ${chartStartDate} s/d ${chartEndDate}.`)
                   : "Beban Incoming PLN — data historis (WBP & LWBP)."}
               </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Year Selector */}
+              {range !== "custom" && (
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                >
+                  {AVAILABLE_YEARS.map((yr) => (
+                    <option key={yr} value={yr}>{yr}</option>
+                  ))}
+                </select>
+              )}
+
+              {/* Custom Date Pickers */}
+              {range === "custom" && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={chartStartDate}
+                    onChange={(e) => setChartStartDate(e.target.value)}
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                  />
+                  <span className="text-xs font-bold text-slate-400">s/d</span>
+                  <input
+                    type="date"
+                    value={chartEndDate}
+                    onChange={(e) => setChartEndDate(e.target.value)}
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                  />
+                </div>
+              )}
+
+              {/* Range Selector */}
+              <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-0.5 text-xs">
+                {ranges.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setRange(item.id)}
+                    className={`rounded-md px-3 py-1.5 font-bold transition-all ${
+                      range === item.id
+                        ? "bg-cyan-500 text-white shadow-sm"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
