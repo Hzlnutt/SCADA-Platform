@@ -464,11 +464,11 @@ function StandardMachineOverview({
   const telemetryRows = useMemo(() => {
     if (unitId === "cooling-water-1") {
       return [
-        { name: "Supply Water Temp", val: typeof liveData.supplyTemp === "number" ? `${liveData.supplyTemp} °C` : liveData.supplyTemp, avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_TEMP.toFixed(1)} °C`, alert: false },
+        { name: "Supply Water Temp", val: typeof liveData.supplyTemp === "number" ? `${liveData.supplyTemp.toFixed(1)} °C` : liveData.supplyTemp, avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_TEMP.toFixed(1)} °C`, alert: false },
         { name: "Supply Water TDS", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_TDS.toFixed(1)} µS/cm`, alert: false },
         { name: "Supply Water pH", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_PH.toFixed(1)} pH`, alert: false },
         { name: "Supply Water Flow", val: liveData.supplyFlow, avg: "API TIDAK TERKIRIM", base: `${baselines.SPLY_WTR_FLOW.toFixed(1)} m³/h`, alert: false },
-        { name: "Return Water Temp", val: typeof liveData.returnTemp === "number" ? `${liveData.returnTemp} °C` : liveData.returnTemp, avg: "API TIDAK TERKIRIM", base: `${baselines.RTN_WTR_TEMP.toFixed(1)} °C`, alert: false },
+        { name: "Return Water Temp", val: typeof liveData.returnTemp === "number" ? `${liveData.returnTemp.toFixed(1)} °C` : liveData.returnTemp, avg: "API TIDAK TERKIRIM", base: `${baselines.RTN_WTR_TEMP.toFixed(1)} °C`, alert: false },
         { name: "Makeup Water Vol", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: "—", alert: false },
         { name: "Makeup Water TDS", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.MAKEUP_WTR_TDS.toFixed(1)} µS/cm`, alert: false },
         { name: "Makeup Water pH", val: "API TIDAK TERKIRIM", avg: "API TIDAK TERKIRIM", base: `${baselines.MAKEUP_WTR_PH.toFixed(1)} pH`, alert: false },
@@ -648,23 +648,23 @@ function StandardMachineOverview({
           }] : []),
           { 
             label: "Supply Temp", 
-            val: unitId === "cooling-water-1" ? "API TIDAK TERKIRIM" : `${liveData.supplyTemp} °C`, 
+            val: typeof liveData.supplyTemp === "number" ? `${liveData.supplyTemp.toFixed(1)} °C` : liveData.supplyTemp, 
             base: `${baselines.SPLY_WTR_TEMP.toFixed(1)} °C`, 
-            color: unitId === "cooling-water-1" ? "text-rose-500 font-bold text-[13px] md:text-sm" : "text-emerald-600 dark:text-emerald-400", 
+            color: typeof liveData.supplyTemp === "number" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500 font-bold text-[13px] md:text-sm", 
             bg: "bg-emerald-500/10" 
           },
           { 
             label: "Return Temp", 
-            val: unitId === "cooling-water-1" ? "API TIDAK TERKIRIM" : `${liveData.returnTemp} °C`, 
+            val: typeof liveData.returnTemp === "number" ? `${liveData.returnTemp.toFixed(1)} °C` : liveData.returnTemp, 
             base: `${baselines.RTN_WTR_TEMP.toFixed(1)} °C`, 
-            color: unitId === "cooling-water-1" ? "text-rose-500 font-bold text-[13px] md:text-sm" : "text-blue-600 dark:text-blue-400", 
+            color: typeof liveData.returnTemp === "number" ? "text-blue-600 dark:text-blue-400" : "text-rose-500 font-bold text-[13px] md:text-sm", 
             bg: "bg-blue-500/10" 
           },
           { 
             label: "Delta T", 
-            val: unitId === "cooling-water-1" ? "API TIDAK TERKIRIM" : `${deltaT} °C`, 
+            val: typeof deltaT === "number" ? `${deltaT.toFixed(1)} °C` : deltaT, 
             base: `${(baselines.RTN_WTR_TEMP - baselines.SPLY_WTR_TEMP).toFixed(1)} °C`, 
-            color: unitId === "cooling-water-1" ? "text-rose-500 font-bold text-[13px] md:text-sm" : "text-indigo-600 dark:text-indigo-400", 
+            color: typeof deltaT === "number" ? "text-indigo-600 dark:text-indigo-400" : "text-rose-500 font-bold text-[13px] md:text-sm", 
             bg: "bg-indigo-500/10" 
           },
           { 
@@ -812,23 +812,37 @@ function StandardMachineOverview({
               { id: "CT-1", data: liveData.ct1, color: "from-emerald-500/10 to-teal-500/10" },
               { id: "CT-2", data: liveData.ct2, color: "from-blue-500/10 to-cyan-500/10" },
               { id: "CT-3", data: liveData.ct3, color: "from-indigo-500/10 to-purple-500/10" }
-            ].map((ct) => (
-              <div
-                key={ct.id}
-                className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition duration-300 flex flex-col"
-              >
-                <div className={`p-4 bg-gradient-to-r ${ct.color} border-b border-[#acd3ff]/50 dark:border-slate-800/50 flex items-center justify-between`}>
-                  <h4 className="font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-                    Cooling Tower {ct.id}
-                  </h4>
-                  <div className="flex items-center gap-1.5 text-xs text-[#087f5b] dark:text-emerald-400 font-bold bg-[#dff4ea] dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                    <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M12 2v20M2 12h20" strokeLinecap="round" />
-                    </svg>
-                    RUNNING
+            ].map((ct) => {
+              const isCtRunning = ct.data.fanStatus === "ON" || ct.data.motorStatus === "ON";
+              const isCtOffline = ct.data.fanStatus === "API TIDAK TERKIRIM" && ct.data.motorStatus === "API TIDAK TERKIRIM";
+
+              return (
+                <div
+                  key={ct.id}
+                  className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition duration-300 flex flex-col"
+                >
+                  <div className={`p-4 bg-gradient-to-r ${ct.color} border-b border-[#acd3ff]/50 dark:border-slate-800/50 flex items-center justify-between`}>
+                    <h4 className="font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${isCtOffline ? "bg-rose-500" : isCtRunning ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+                      Cooling Tower {ct.id}
+                    </h4>
+                    {isCtOffline ? (
+                      <div className="flex items-center gap-1.5 text-xs text-rose-500 font-bold bg-rose-500/10 px-2 py-0.5 rounded-full">
+                        API TIDAK TERKIRIM
+                      </div>
+                    ) : isCtRunning ? (
+                      <div className="flex items-center gap-1.5 text-xs text-[#087f5b] dark:text-emerald-400 font-bold bg-[#dff4ea] dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                        <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M12 2v20M2 12h20" strokeLinecap="round" />
+                        </svg>
+                        RUNNING
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-bold bg-amber-500/15 px-2 py-0.5 rounded-full">
+                        STOPPED
+                      </div>
+                    )}
                   </div>
-                </div>
                 <div className="p-4 grid grid-cols-2 gap-3 text-xs flex-1">
                   {[
                     { label: "Fan Status", value: typeof ct.data.fanStatus === "string" ? ct.data.fanStatus : (ct.data.fanStatus ? "ON" : "OFF"), base: "ON", highlight: ct.data.fanStatus === "ON" || ct.data.fanStatus === true ? "text-emerald-500 font-bold" : (ct.data.fanStatus === "OFF" || ct.data.fanStatus === false ? "text-slate-500 font-bold" : "text-rose-500 font-bold") },
@@ -861,8 +875,9 @@ function StandardMachineOverview({
                   ))}
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
+        </div>
           )}
         </div>
       ) : (
