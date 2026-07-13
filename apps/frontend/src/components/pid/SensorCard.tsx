@@ -43,16 +43,28 @@ const SensorCard: React.FC<SensorCardProps> = ({
   const valueY = pillY + pillHeight + 32;
   const cardHeight = valueY + 24;
 
+  const formatSensorValue = (val: string | number | undefined) => {
+    if (val === undefined || val === null) return "";
+    if (typeof val === "number") {
+      return val.toFixed(1);
+    }
+    const parsed = Number(val);
+    if (typeof val === "string" && !isNaN(parsed) && val.trim() !== "" && val.includes(".")) {
+      return parsed.toFixed(1);
+    }
+    return val;
+  };
+
   let displayContent: React.ReactNode;
   if (values && values.length > 0) {
     const parts = values.map(
-      (item) => `${item.value}${item.unit ? " " + item.unit : ""}`
+      (item) => `${formatSensorValue(item.value)}${item.unit ? " " + item.unit : ""}`
     );
     displayContent = <tspan>{parts.join(" / ")}</tspan>;
   } else {
     displayContent = (
       <tspan>
-        {value}
+        {formatSensorValue(value)}
         {unit ? " " + unit : ""}
       </tspan>
     );
