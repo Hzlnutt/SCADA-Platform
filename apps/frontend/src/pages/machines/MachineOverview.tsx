@@ -270,6 +270,11 @@ function StandardMachineOverview({
 
     const liveSupplyTemp = latest["cooling-water/supply_temp"]?.value;
     const liveReturnTemp = latest["cooling-water/return_temp"]?.value;
+    const liveST3Return = latest["cooling-water/st3_return_temp"]?.value;
+
+    const eqTempDu = latest["cooling-water/eq_temp_du03"]?.value;
+    const eqTempPrep = latest["cooling-water/eq_temp_prep03"]?.value;
+    const eqTempWashing = latest["cooling-water/eq_temp_washing"]?.value;
 
     const eqStatusDu03 = latest["cooling-water/eq_status_du03"]?.value;
     const eqStatusBp03 = latest["cooling-water/eq_status_bp03"]?.value;
@@ -375,12 +380,12 @@ function StandardMachineOverview({
           vol: "API TIDAK TERKIRIM",
         },
         equipment: [
-          { area: "DU-03", status: typeof eqStatusDu03 === "number" ? (eqStatusDu03 === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressDu03 === "number" ? eqPressDu03 : 0, curr: 0, pow: 0, vib: 0, temp: 0, hrs: 0, maint: "API TIDAK TERKIRIM" },
-          { area: "BP-03", status: typeof eqStatusBp03 === "number" ? (eqStatusBp03 === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressBp03 === "number" ? eqPressBp03 : 0, curr: 0, pow: 0, vib: 0, temp: 0, hrs: 0, maint: "API TIDAK TERKIRIM" },
-          { area: "PREP 03", status: typeof eqStatusPrep03 === "number" ? (eqStatusPrep03 === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressPrep03 === "number" ? eqPressPrep03 : 0, curr: 0, pow: 0, vib: 0, temp: 0, hrs: 0, maint: "API TIDAK TERKIRIM" },
-          { area: "S1-03", status: typeof eqStatusSt03 === "number" ? (eqStatusSt03 === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressSt03 === "number" ? eqPressSt03 : 0, curr: 0, pow: 0, vib: 0, temp: 0, hrs: 0, maint: "API TIDAK TERKIRIM" },
-          { area: "WASHING", status: typeof eqStatusWashing === "number" ? (eqStatusWashing === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressWashing === "number" ? eqPressWashing : 0, curr: 0, pow: 0, vib: 0, temp: 0, hrs: 0, maint: "API TIDAK TERKIRIM" },
-          { area: "MINI LAB", status: "API TIDAK TERKIRIM", flow: 0, press: 0, curr: 0, pow: 0, vib: 0, temp: 0, hrs: 0, maint: "API TIDAK TERKIRIM" }
+          { area: "DU-03", status: typeof eqStatusDu03 === "number" ? (eqStatusDu03 === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressDu03 === "number" ? eqPressDu03 : 0, curr: 0, pow: 0, vib: 0, temp: typeof eqTempDu === "number" ? Number(eqTempDu.toFixed(1)) : "API TIDAK TERKIRIM" as any, hrs: 0, maint: "API TIDAK TERKIRIM" },
+          { area: "BP-03", status: typeof eqStatusBp03 === "number" ? (eqStatusBp03 === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressBp03 === "number" ? eqPressBp03 : 0, curr: 0, pow: 0, vib: 0, temp: "API TIDAK TERKIRIM" as any, hrs: 0, maint: "API TIDAK TERKIRIM" },
+          { area: "PREP 03", status: typeof eqStatusPrep03 === "number" ? (eqStatusPrep03 === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressPrep03 === "number" ? eqPressPrep03 : 0, curr: 0, pow: 0, vib: 0, temp: typeof eqTempPrep === "number" ? Number(eqTempPrep.toFixed(1)) : "API TIDAK TERKIRIM" as any, hrs: 0, maint: "API TIDAK TERKIRIM" },
+          { area: "S1-03", status: typeof eqStatusSt03 === "number" ? (eqStatusSt03 === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressSt03 === "number" ? eqPressSt03 : 0, curr: 0, pow: 0, vib: 0, temp: typeof liveST3Return === "number" ? Number(liveST3Return.toFixed(1)) : "API TIDAK TERKIRIM" as any, hrs: 0, maint: "API TIDAK TERKIRIM" },
+          { area: "WASHING", status: typeof eqStatusWashing === "number" ? (eqStatusWashing === 1 ? "Running" : "Stopped") : "API TIDAK TERKIRIM", flow: 0, press: typeof eqPressWashing === "number" ? eqPressWashing : 0, curr: 0, pow: 0, vib: 0, temp: typeof eqTempWashing === "number" ? Number(eqTempWashing.toFixed(1)) : "API TIDAK TERKIRIM" as any, hrs: 0, maint: "API TIDAK TERKIRIM" },
+          { area: "MINI LAB", status: "API TIDAK TERKIRIM", flow: 0, press: 0, curr: 0, pow: 0, vib: 0, temp: "API TIDAK TERKIRIM" as any, hrs: 0, maint: "API TIDAK TERKIRIM" }
         ]
       };
     }

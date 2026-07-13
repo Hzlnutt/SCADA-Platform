@@ -1143,7 +1143,8 @@ export default function CoolingWF1U3Pid({
               y={-145}
               width={175}
               title="PROSES ST"
-              value="API TIDAK TERKIRIM"
+              value={getVal("cooling-water/eq_temp_st03_supply") as string | number}
+              unit={typeof getVal("cooling-water/eq_temp_st03_supply") === "number" ? " °C" : ""}
               colorType="blue"
               />
               <SensorCard
