@@ -11,8 +11,9 @@ Log perkembangan dan status pengerjaan fitur untuk menjaga konteks pengerjaan te
 - **Backend Telemetry Cache (In-Memory)**: Selesai.
 - **Frontend Telemetry Subscription**: Selesai.
 - **Temperatur Baru dari API (Supply, Return, ST3 Return)**: Selesai.
-- **Formatter Temperatur (1 angka di belakang koma)**: Selesai (Suhu supply, return, dan delta T hanya menampilkan 1 decimal place).
-- **Status Cooling Tower Card Header (Dynamic)**: Selesai (Badge RUNNING/STOPPED pada header card Cooling Tower 1, 2, dan 3 berubah dinamis mengikuti status fan/motor pompa).
+- **Formatter Temperatur (1 angka di belakang koma)**: Selesai.
+- **Status Cooling Tower Card Header (Dynamic)**: Selesai.
+- **Pemetaan Loop Temperature Lengkap (DU, PREP, ST3 Supply, Washing)**: Selesai (Memetakan 4 variabel temperatur loop baru ke tabel Matrix dan P&ID diagram canvas).
 - **Build Status**: Sukses (`0 errors` pada TypeScript & build compilation via pnpm).
 
 ---
@@ -29,6 +30,7 @@ Log perkembangan dan status pengerjaan fitur untuk menjaga konteks pengerjaan te
      - Menghubungkan visualisasi fan status secara dinamis untuk **FAN-1**, **FAN-2**, dan **FAN-3** menggunakan tag realtime dari store telemetry.
      - Membungkus `motorStatus` dengan boolean Proxy sehingga jika nilainya berupa string `"API TIDAK TERKIRIM"` tidak memicu animasi putaran fan atau flow pipa yang menyala (hanya boolean `true` yang dianggap ON).
      - Memetakan tag `"cooling-water/supply_temp"`, `"cooling-water/return_temp"`, dan `"cooling-water/st3_return_temp"` secara real-time ke masing-masing sensor card (Supply Temp, Return Temp, Delta Temp, dan Loop ST-3).
+     - **[UPDATE 13 Juli 2026]**: Menghubungkan sensor card `PROSES ST` di diagram ke tag `"cooling-water/eq_temp_st03_supply"` yang dikirimkan oleh API.
   3. **`apps/frontend/src/pages/machines/MachinePidDiagram.tsx`**:
      - Menghapus state `allOn` (demo flow) dan membersihkan data task/alarm dummy khusus untuk `cooling-water-1`.
   4. **`apps/frontend/src/pages/machines/PidPageTemplate.tsx`**:
@@ -36,8 +38,9 @@ Log perkembangan dan status pengerjaan fitur untuk menjaga konteks pengerjaan te
   5. **`apps/frontend/src/pages/machines/MachineOverview.tsx`**:
      - Memodifikasi `liveData` useMemo agar jika `unitId === "cooling-water-1"`, semua data yang bukan dari API (suhu return/supply, TDS supply, pH supply, makeup/blowdown volume, dosing pump rates, dsb.) di-set nilainya menjadi `"API TIDAK TERKIRIM"`.
      - Menyambungkan variabel `supplyTemp` dan `returnTemp` secara dinamis ke tag `"cooling-water/supply_temp"` dan `"cooling-water/return_temp"` yang berasal dari API.
-     - **[UPDATE 13 Juli 2026]**: Memformat nilai temperatur supply, return, dan delta T menjadi 1 angka di belakang koma (`.toFixed(1)`) di tabel telemetry dan kartu ringkasan KPI.
-     - **[UPDATE 13 Juli 2026]**: Membuat badge status Cooling Tower card (CT-1, CT-2, CT-3) berubah dinamis: **RUNNING** (jika fan atau motor ON), **STOPPED** (jika fan dan motor OFF), atau **API TIDAK TERKIRIM** (jika keduanya offline).
+     - Memformat nilai temperatur supply, return, dan delta T menjadi 1 angka di belakang koma (`.toFixed(1)`) di tabel telemetry dan kartu ringkasan KPI.
+     - Membuat badge status Cooling Tower card (CT-1, CT-2, CT-3) berubah dinamis: **RUNNING** (jika fan atau motor ON), **STOPPED** (jika fan dan motor OFF), atau **API TIDAK TERKIRIM** (jika keduanya offline).
+     - **[UPDATE 13 Juli 2026]**: Menyambungkan loop temperature (`eqTempDu`, `eqTempPrep`, `eqTempWashing`, `liveST3Return`) ke tabel *Equipment Status & Area Matrix* pada dashboard sehingga kolom **Temp (°C)** tidak lagi statis/nol melainkan menampilkan data riil dari lapangan.
      - Menangani progress bar agar jika bernilai `"API TIDAK TERKIRIM"`, progress bar diisi `0%` untuk mencegah `NaN` dan menjaga agar tampilan tidak rusak.
      - Menyembunyikan Cooling Tower Detail Grid untuk mesin selain Cooling Water (ditambahkan check `unitId.startsWith("cooling-water")`).
      - Mengamankan komparasi baris tabel status area matrix dengan typecast `(row.flow as any) === "API TIDAK TERKIRIM"` agar tidak memicu error compiler TS2367.
@@ -50,11 +53,13 @@ Log perkembangan dan status pengerjaan fitur untuk menjaga konteks pengerjaan te
   1. **`apps/frontend/src/data/industrial-tags.ts`**:
      - Menambahkan array `extraTags` yang berisi list lengkap tag cooling-water realtime (seperti fan status, motor status, sensor pressure, basin level, dsb.) ke dalam array `telemetryTagIds`. Hal ini memastikan klien frontend mengirim trigger room subscription ke websocket server.
      - Menambahkan tag temperatur baru `"cooling-water/supply_temp"`, `"cooling-water/return_temp"`, dan `"cooling-water/st3_return_temp"` ke subscription list.
+     - **[UPDATE 13 Juli 2026]**: Menambahkan tag temperatur loop baru (`"cooling-water/eq_temp_du03"`, `"cooling-water/eq_temp_prep03"`, `"cooling-water/eq_temp_washing"`, `"cooling-water/eq_temp_st03_supply"`) ke subscription list.
   2. **`apps/backend/src/services/socket.manager.ts`**:
      - Menambahkan map `telemetryCache` serta helper function `updateTelemetryCache` dan `getTelemetryFromCache` untuk menyimpan nilai realtime di memory.
   3. **`apps/backend/src/core/scheduler.ts`**:
      - Memanggil `updateTelemetryCache(points)` sesaat setelah Ignition API sukses di-poll, menyimpan nilai realtime di backend memory.
      - Memetakan tag `"Scaled_Temp_Tank_Colling3_Supp"`, `"Scaled_Temp_Tank_Colling3_Return"`, dan `"Scaled_Temp_ST3_Return"` ke tagId masing-masing.
+     - **[UPDATE 13 Juli 2026]**: Memetakan tag temperatur loop baru `"Scaled_Temp_DU"`, `"Scaled_Tempt_Prep3_Return"`, `"Scaled_Temp_Washing"`, dan `"Scaled_Temp_ST3_Supply"` ke tagId masing-masing.
   4. **`apps/backend/src/core/socket.ts`**:
      - Saat klien frontend terhubung dan melakukan subscribe ke tagIds, menggabungkan data snapshot database dengan data dari `getTelemetryFromCache` sehingga data realtime dari API cooling-water langsung dikirimkan ke web browser secara instan tanpa menunggu siklus polling berikutnya.
 
