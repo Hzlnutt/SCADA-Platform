@@ -15,6 +15,7 @@ import type {
   MachineConfig,
   MachineThreshold
 } from "../../hooks/useMachineConfig";
+import { getJson, postJson } from "../../services/api.client";
 
 const AREAS = ["Utility", "HVAC", "WWTP", "Production", "Utilities"];
 
@@ -761,12 +762,117 @@ function AnalysisConfigTab({ machines, refetch }: AnalysisConfigTabProps) {
   );
 }
 
+function PidThresholdsTab() {
+  const [savingPid, setSavingPid] = useState(false);
+  const [pidForm, setPidForm] = useState<any>({
+    basin_lvl: { warning: 75, alarm: 70 },
+    supply_temp: { warning: 28, alarm: 30 },
+    return_temp: { warning: 38, alarm: 40 },
+    pressure: { warning: 1.5, alarm: 2.0 },
+    st3_return_temp: { warning: 35, alarm: 40 },
+    chemical_357_lvl: { warning: 75, alarm: 70 },
+    chemical_327_lvl: { warning: 75, alarm: 70 }
+  });
+
+  useEffect(() => {
+    getJson<{ data: any }>("/config/pid-thresholds")
+      .then((res) => {
+        if (res && res.data) {
+          setPidForm(res.data);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  const handlePidChange = (paramKey: string, thresholdKey: "warning" | "alarm", val: number) => {
+    setPidForm((prev: any) => ({
+      ...prev,
+      [paramKey]: {
+        ...prev[paramKey],
+        [thresholdKey]: val
+      }
+    }));
+  };
+
+  const handleSavePid = async () => {
+    setSavingPid(true);
+    try {
+      await postJson("/config/pid-thresholds", pidForm);
+      alert("P&ID Thresholds saved successfully!");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save P&ID thresholds.");
+    } finally {
+      setSavingPid(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-6 space-y-6">
+      <div className="text-sm font-bold uppercase tracking-[0.2em] text-blue-400">
+        P&ID Parameter Configuration
+      </div>
+      
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {[
+          { key: "basin_lvl", label: "Basin Level", unit: "%" },
+          { key: "supply_temp", label: "Supply Temperature", unit: "°C" },
+          { key: "return_temp", label: "Return Temperature", unit: "°C" },
+          { key: "pressure", label: "System Pressure", unit: "BAR" },
+          { key: "st3_return_temp", label: "ST-3 Return Temp", unit: "°C" },
+          { key: "chemical_357_lvl", label: "Chemical 357 Level", unit: "%" },
+          { key: "chemical_327_lvl", label: "Chemical 327/317 Level", unit: "%" }
+        ].map((param) => (
+          <div key={param.key} className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-300">
+              {param.label} ({param.unit})
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-[10px] text-slate-400 block">
+                Warning Limit
+                <input
+                  type="number"
+                  step="any"
+                  value={pidForm[param.key]?.warning ?? ""}
+                  onChange={(e) => handlePidChange(param.key, "warning", Number(e.target.value))}
+                  className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-200 font-mono focus:border-blue-500 outline-none"
+                />
+              </label>
+              <label className="text-[10px] text-slate-400 block">
+                Alarm Limit
+                <input
+                  type="number"
+                  step="any"
+                  value={pidForm[param.key]?.alarm ?? ""}
+                  onChange={(e) => handlePidChange(param.key, "alarm", Number(e.target.value))}
+                  className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-200 font-mono focus:border-blue-500 outline-none"
+                />
+              </label>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-end pt-4 border-t border-slate-900">
+        <button
+          type="button"
+          onClick={handleSavePid}
+          disabled={savingPid}
+          className="rounded-full bg-blue-500 hover:bg-blue-600 disabled:opacity-60 disabled:cursor-not-allowed px-6 py-2.5 text-xs font-bold text-white shadow-md transition-colors"
+        >
+          {savingPid ? "Saving..." : "Save P&ID Thresholds"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ==========================================
 // 5. MAIN DEFAULT EXPORT: MachinesConfigPage
 // ==========================================
 export default function MachinesConfigPage() {
   const { machines, categories, isLoading, error, refetch } = useMachineConfig();
-  const [activeTab, setActiveTab] = useState<"machines" | "thresholds" | "analysis">("machines");
+  const [activeTab, setActiveTab] = useState<"machines" | "thresholds" | "analysis" | "pid">("machines");
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingMachine, setEditingMachine] = useState<MachineConfig | null>(null);
@@ -808,6 +914,12 @@ export default function MachinesConfigPage() {
         >
           Analysis Config
         </button>
+        <button
+          onClick={() => setActiveTab("pid")}
+          className={activeTab === "pid" ? "border-b-2 border-blue-500 text-blue-400 pb-2 text-sm font-medium" : "pb-2 text-sm font-medium text-slate-500 hover:text-slate-300 transition-colors"}
+        >
+          P&ID Parameters
+        </button>
       </div>
 
       {error && !isLoading && (
@@ -835,6 +947,10 @@ export default function MachinesConfigPage() {
 
         {activeTab === "analysis" && (
           <AnalysisConfigTab machines={machines} refetch={refetch} />
+        )}
+
+        {activeTab === "pid" && (
+          <PidThresholdsTab />
         )}
       </div>
 
