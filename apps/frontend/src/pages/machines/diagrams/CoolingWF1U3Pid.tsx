@@ -20,12 +20,14 @@ import { useTelemetryStore } from "../../../store/telemetry.store";
 
 interface CoolingWF1U3PidProps {
   motorStatus: Record<string, boolean>;
+  runningHours?: Record<string, number>;
   svgRef?: React.RefObject<SVGSVGElement>;
   onSvgClick?: (e: React.MouseEvent<SVGSVGElement>) => void;
 }
 
 export default function CoolingWF1U3Pid({
   motorStatus: rawMotorStatus,
+  runningHours = {},
   svgRef,
   onSvgClick,
 }: CoolingWF1U3PidProps) {
@@ -56,6 +58,32 @@ export default function CoolingWF1U3Pid({
   const deltaTVal = typeof supplyVal === "number" && typeof returnVal === "number"
     ? Number((returnVal - supplyVal).toFixed(2))
     : "XX";
+
+  const getStProcessStatus = () => {
+    const val = latest["cooling-water/eq_status_st03"]?.value;
+    if (val === undefined || val === null || val === "XX") return "XX";
+    if (val === 2 || val === "2" || String(val).toUpperCase() === "STANDBY") return "STANDBY";
+    if (val === 1 || val === true || String(val).toUpperCase() === "ON" || val === "1") return "ON";
+    return "OFF";
+  };
+
+  const getChem357Lvl = () => {
+    const val = latest["cooling-water/chemical_357_lvl"]?.value;
+    if (val === undefined || val === null || val === "XX") return 0;
+    return typeof val === "number" ? val : parseFloat(String(val)) || 0;
+  };
+
+  const getChem327Lvl = () => {
+    const val = latest["cooling-water/chemical_327_lvl"]?.value;
+    if (val === undefined || val === null || val === "XX") return 0;
+    return typeof val === "number" ? val : parseFloat(String(val)) || 0;
+  };
+
+  const getRh = (tagId: string) => {
+    const val = runningHours[tagId];
+    if (val === undefined || val === null) return "XX";
+    return val.toFixed(1);
+  };
 
 
   return (
@@ -294,7 +322,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={860} y={530} 
                 w={75} h={30}
-                value={getVal("cooling-water/basin_temp")} unit=" °C" 
+                value={getVal("cooling-water/supply_temp")} unit=" °C" 
                 warningThreshold={28} alarmThreshold={30}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -302,7 +330,7 @@ export default function CoolingWF1U3Pid({
               <SensorIndicator 
                 x={731} y={530} 
                 w={75} h={30}
-                value={getVal("cooling-water/warm_basin_temp")} unit=" °C" 
+                value={getVal("cooling-water/return_temp")} unit=" °C" 
                 warningThreshold={38} alarmThreshold={40}
                 decimalPlaces={1}
                 thresholdDirection="above" 
@@ -395,8 +423,8 @@ export default function CoolingWF1U3Pid({
               <ChemicalDosingTank x={932}  y={685} width={67} height={65} id="tankA" />
               <ChemicalDosingTank x={1094}  y={685} width={67} height={65} id="tankB" />
 
-              <LevelIndicator x={940} y={700} value={50} w={51} h={51} type="cold" />
-              <LevelIndicator x={1102} y={700} value={80} w={51} h={51} type="cold" />
+              <LevelIndicator x={940} y={700} value={getChem357Lvl()} w={51} h={51} type="cold" />
+              <LevelIndicator x={1102} y={700} value={getChem327Lvl()} w={51} h={51} type="cold" />
 
               {/* Gauge */}
               <PipeGauge x={946} y={287} size={60} />
@@ -464,8 +492,8 @@ export default function CoolingWF1U3Pid({
               y={812}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getRh("cooling-water/motor_status_1")}
+              unit=" h"
               />
               <SensorIndicator
               x={70}
@@ -506,8 +534,8 @@ export default function CoolingWF1U3Pid({
               y={812}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getRh("cooling-water/motor_status_2")}
+              unit=" h"
               />
               <SensorIndicator
               x={238}
@@ -548,8 +576,8 @@ export default function CoolingWF1U3Pid({
               y={812}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getRh("cooling-water/motor_status_3")}
+              unit=" h"
               />
               <SensorIndicator
               x={406}
@@ -654,8 +682,8 @@ export default function CoolingWF1U3Pid({
               y={851}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getVal("cooling-water/chemical_357_lvl")}
+              unit=" %"
               warningThreshold={75}
               alarmThreshold={70}
               thresholdDirection="below"
@@ -666,7 +694,7 @@ export default function CoolingWF1U3Pid({
               y={879}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value={getVal("cooling-water/chemical_357_pump")}
               mode="onoff"
               />
                <SensorIndicator
@@ -674,8 +702,8 @@ export default function CoolingWF1U3Pid({
               y={907}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getVal("cooling-water/chemical_357_vol")}
+              unit=" L"
               />
 
               {/* CHEMICAL 327 */}
@@ -692,8 +720,8 @@ export default function CoolingWF1U3Pid({
               y={851}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getVal("cooling-water/chemical_327_lvl")}
+              unit=" %"
               warningThreshold={75}
               alarmThreshold={70}
               thresholdDirection="below"
@@ -704,7 +732,7 @@ export default function CoolingWF1U3Pid({
               y={879}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value={getVal("cooling-water/chemical_327_pump")}
               mode="onoff"
               />
                <SensorIndicator
@@ -712,8 +740,8 @@ export default function CoolingWF1U3Pid({
               y={907}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getVal("cooling-water/chemical_327_vol")}
+              unit=" L"
               />
 
               {/* MTR 4 */}
@@ -730,8 +758,8 @@ export default function CoolingWF1U3Pid({
               y={632}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getRh("cooling-water/eq_status_du03")}
+              unit=" h"
               />
               <SensorIndicator
               x={1285}
@@ -764,8 +792,8 @@ export default function CoolingWF1U3Pid({
               y={632}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getRh("cooling-water/eq_status_bp03")}
+              unit=" h"
               />
               <SensorIndicator
               x={1460}
@@ -798,8 +826,8 @@ export default function CoolingWF1U3Pid({
               y={632}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getRh("cooling-water/eq_status_prep03")}
+              unit=" h"
               />
               <SensorIndicator
               x={1635}
@@ -832,8 +860,8 @@ export default function CoolingWF1U3Pid({
               y={822}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getRh("cooling-water/eq_status_st03")}
+              unit=" h"
               />
               <SensorIndicator
               x={1405}
@@ -867,8 +895,8 @@ export default function CoolingWF1U3Pid({
               y={822}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getRh("cooling-water/eq_status_washing")}
+              unit=" h"
               />
               <SensorIndicator
               x={1580}
@@ -901,8 +929,8 @@ export default function CoolingWF1U3Pid({
               y={822}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getRh("cooling-water/eq_status_minilab")}
+              unit=" h"
               />
               <SensorIndicator
               x={1755}
@@ -977,8 +1005,8 @@ export default function CoolingWF1U3Pid({
               y={-79}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getRh("cooling-water/fan_status_1")}
+              unit=" h"
               />
               <SensorIndicator
               x={130}
@@ -1019,8 +1047,8 @@ export default function CoolingWF1U3Pid({
               y={-79}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getRh("cooling-water/fan_status_2")}
+              unit=" h"
               />
               <SensorIndicator
               x={344}
@@ -1061,8 +1089,8 @@ export default function CoolingWF1U3Pid({
               y={-79}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
-              unit=""
+              value={getRh("cooling-water/fan_status_3")}
+              unit=" h"
               />
               <SensorIndicator
               x={563}
@@ -1143,8 +1171,7 @@ export default function CoolingWF1U3Pid({
               y={-145}
               width={175}
               title="PROSES ST"
-              value={getVal("cooling-water/eq_temp_st03_supply") as string | number}
-              unit={typeof getVal("cooling-water/eq_temp_st03_supply") === "number" ? " °C" : ""}
+              value={getStProcessStatus()}
               colorType="blue"
               />
               <SensorCard

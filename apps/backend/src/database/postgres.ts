@@ -70,7 +70,17 @@ export const ensurePostgresTables = async () => {
         status_mtr_bp BOOLEAN
       );
     `);
-    logger.info("cooling_tower_telemetry postgres table ensured");
+    
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS equipment_running_hours (
+        tag_id VARCHAR(100) PRIMARY KEY,
+        total_running_hours NUMERIC NOT NULL DEFAULT 0.0,
+        last_state BOOLEAN NOT NULL DEFAULT FALSE,
+        last_changed_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    logger.info("postgres tables (telemetry & running hours) ensured");
   } catch (err: any) {
     logger.error({ err }, "failed to ensure postgres tables");
   }

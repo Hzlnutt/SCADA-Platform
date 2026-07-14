@@ -12,6 +12,8 @@ import {
 } from "../modules/analytics/electricity.analytics";
 
 
+import { updateRunningHours } from "../modules/telemetry/running-hours.service";
+
 let lastElectricityTs: Date | null = null;
 let pollingInterval: NodeJS.Timeout | null = null;
 let pfPollingInterval: NodeJS.Timeout | null = null;
@@ -159,6 +161,15 @@ export const startCoolingTowerPolling = () => {
 
         // Update in-memory cache
         updateTelemetryCache(points);
+
+        // Update running hours
+        const statusPoints = points.filter(p => p.meta.tagId.includes("status"));
+        for (const p of statusPoints) {
+          const isRunning = p.value === 1 || p.value === true;
+          updateRunningHours(p.meta.tagId, isRunning, ts).catch((err) => {
+            logger.error({ err, tagId: p.meta.tagId }, "Failed to update running hours from scheduler");
+          });
+        }
 
         // Emit directly via WebSocket (no database, instant real-time)
         if (io) {
