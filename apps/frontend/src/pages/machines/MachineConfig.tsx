@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
+import { getJson, postJson } from "../../services/api.client";
 import { DEFAULT_EQ_CONFIGS, DEFAULT_HVAC_CONFIG, DEFAULT_HVAC_EQ_CONFIGS, getDefaultEqConfigs } from "../../data/equipment";
 import type { ConfigEqRow, HvacConfig } from "../../data/equipment";
 import type { MachineOutletContext } from "./MachineLayout";
@@ -36,11 +37,41 @@ export default function MachineConfig() {
   }
 
   // Tabs for the configuration categories
-  const [configTab, setConfigTab] = useState<"sensors" | "equipment">("sensors");
+  const [configTab, setConfigTab] = useState<"sensors" | "equipment" | "pid">("sensors");
 
   const [sensorRows, setSensorRows] = useState<ConfigTagRow[]>([]);
   const [eqRows, setEqRows] = useState<ConfigEqRow[]>([]);
   const [successMsg, setSuccessMsg] = useState(false);
+
+  const [pidForm, setPidForm] = useState<any>({
+    basin_lvl: { warning: 75, alarm: 70 },
+    supply_temp: { warning: 28, alarm: 30 },
+    return_temp: { warning: 38, alarm: 40 },
+    pressure: { warning: 1.5, alarm: 2.0 },
+    st3_return_temp: { warning: 35, alarm: 40 },
+    chemical_357_lvl: { warning: 75, alarm: 70 },
+    chemical_327_lvl: { warning: 75, alarm: 70 }
+  });
+
+  const handlePidChange = (paramKey: string, thresholdKey: "warning" | "alarm", val: number) => {
+    setPidForm((prev: any) => ({
+      ...prev,
+      [paramKey]: {
+        ...prev[paramKey],
+        [thresholdKey]: val
+      }
+    }));
+  };
+
+  useEffect(() => {
+    getJson<{ data: any }>("/config/pid-thresholds")
+      .then((res) => {
+        if (res && res.data) {
+          setPidForm(res.data);
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   // Load configuration from localStorage or defaults
   useEffect(() => {
@@ -126,11 +157,22 @@ export default function MachineConfig() {
   };
 
   // Save configurations to localStorage
-  const handleSave = () => {
-    localStorage.setItem(`scada.config.${unitId}`, JSON.stringify(sensorRows));
-    localStorage.setItem(`scada.config.eq.${unitId}`, JSON.stringify(eqRows));
-    setSuccessMsg(true);
-    setTimeout(() => setSuccessMsg(false), 3000);
+  const handleSave = async () => {
+    if (configTab === "pid") {
+      try {
+        await postJson("/config/pid-thresholds", pidForm);
+        setSuccessMsg(true);
+        setTimeout(() => setSuccessMsg(false), 3000);
+      } catch (err) {
+        console.error(err);
+        alert("Failed to save P&ID thresholds.");
+      }
+    } else {
+      localStorage.setItem(`scada.config.${unitId}`, JSON.stringify(sensorRows));
+      localStorage.setItem(`scada.config.eq.${unitId}`, JSON.stringify(eqRows));
+      setSuccessMsg(true);
+      setTimeout(() => setSuccessMsg(false), 3000);
+    }
   };
 
   if (!machine) return null;
@@ -189,13 +231,85 @@ export default function MachineConfig() {
           >
             Equipment Running Hours (P&ID Specs)
           </button>
+          <button
+            onClick={() => setConfigTab("pid")}
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+              configTab === "pid"
+                ? "bg-[#1f6fb5] text-white shadow-sm"
+                : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-200"
+            }`}
+          >
+            P&ID Threshold
+          </button>
         </div>
       )}
 
       {/* Configuration Inputs Table */}
       <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
         <div className="overflow-x-auto">
-          {configTab === "sensors" ? (
+          {configTab === "pid" ? (
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
+                  <th className="pb-3 px-3">P&ID Parameter</th>
+                  <th className="pb-3 px-3 text-center w-64">Limit Rule (Direction)</th>
+                  <th className="pb-3 px-3 text-center w-36">Warning Limit (Yellow)</th>
+                  <th className="pb-3 px-3 text-center w-36">Alarm Limit (Red)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-[#002b5c] dark:text-slate-300">
+                {[
+                  { key: "basin_lvl", name: "Basin Level", unit: "%", direction: "below" },
+                  { key: "supply_temp", name: "Supply Temperature", unit: "°C", direction: "above" },
+                  { key: "return_temp", name: "Return Temperature", unit: "°C", direction: "above" },
+                  { key: "pressure", name: "System Pressure", unit: "BAR", direction: "above" },
+                  { key: "st3_return_temp", name: "ST-3 Return Temp", unit: "°C", direction: "above" },
+                  { key: "chemical_357_lvl", name: "Chemical 357 Level", unit: "%", direction: "below" },
+                  { key: "chemical_327_lvl", name: "Chemical 327/317 Level", unit: "%", direction: "below" },
+                ].map((row) => (
+                  <tr key={row.key} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
+                    <td className="py-4 px-3">
+                      <div className="font-bold text-[#002b5c] dark:text-slate-200">{row.name}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Unit: {row.unit}</div>
+                    </td>
+                    <td className="py-4 px-3 text-center">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold ${
+                        row.direction === "above"
+                          ? "bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20"
+                          : "bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"
+                      }`}>
+                        {row.direction === "above"
+                          ? "Semakin di atas semakin buruk (Above)"
+                          : "Semakin di bawah semakin buruk (Below)"}
+                      </span>
+                    </td>
+                    <td className="py-4 px-3 text-center">
+                      <div className="inline-flex items-center gap-1.5 border border-[#acd3ff] dark:border-slate-700 rounded px-2.5 py-1 bg-yellow-500/5 dark:bg-slate-900/80 w-28 mx-auto">
+                        <input
+                          type="number"
+                          step="any"
+                          value={pidForm[row.key]?.warning ?? ""}
+                          onChange={(e) => handlePidChange(row.key, "warning", Number(e.target.value))}
+                          className="w-full text-center font-bold font-mono bg-transparent outline-none focus:ring-0 focus:border-transparent text-xs text-yellow-600 dark:text-yellow-400"
+                        />
+                      </div>
+                    </td>
+                    <td className="py-4 px-3 text-center">
+                      <div className="inline-flex items-center gap-1.5 border border-[#acd3ff] dark:border-slate-700 rounded px-2.5 py-1 bg-red-500/5 dark:bg-slate-900/80 w-28 mx-auto">
+                        <input
+                          type="number"
+                          step="any"
+                          value={pidForm[row.key]?.alarm ?? ""}
+                          onChange={(e) => handlePidChange(row.key, "alarm", Number(e.target.value))}
+                          className="w-full text-center font-bold font-mono bg-transparent outline-none focus:ring-0 focus:border-transparent text-xs text-red-600 dark:text-red-400"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : configTab === "sensors" ? (
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
