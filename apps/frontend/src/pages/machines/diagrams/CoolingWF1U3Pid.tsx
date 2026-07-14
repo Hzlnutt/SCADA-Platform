@@ -509,6 +509,7 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/motor_status_1")}
               unit=" h"
+              color="#ffffff"
               />
               <SensorIndicator
               x={70}
@@ -551,6 +552,7 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/motor_status_2")}
               unit=" h"
+              color="#ffffff"
               />
               <SensorIndicator
               x={238}
@@ -593,6 +595,7 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/motor_status_3")}
               unit=" h"
+              color="#ffffff"
               />
               <SensorIndicator
               x={406}
@@ -775,6 +778,7 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/eq_status_du03")}
               unit=" h"
+              color="#ffffff"
               />
               <SensorIndicator
               x={1285}
@@ -809,6 +813,7 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/eq_status_bp03")}
               unit=" h"
+              color="#ffffff"
               />
               <SensorIndicator
               x={1460}
@@ -843,6 +848,7 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/eq_status_prep03")}
               unit=" h"
+              color="#ffffff"
               />
               <SensorIndicator
               x={1635}
@@ -877,6 +883,7 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/eq_status_st03")}
               unit=" h"
+              color="#ffffff"
               />
               <SensorIndicator
               x={1405}
@@ -912,6 +919,7 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/eq_status_washing")}
               unit=" h"
+              color="#ffffff"
               />
               <SensorIndicator
               x={1580}
@@ -946,6 +954,7 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/eq_status_minilab")}
               unit=" h"
+              color="#ffffff"
               />
               <SensorIndicator
               x={1755}
@@ -1022,6 +1031,7 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/fan_status_1")}
               unit=" h"
+              color="#ffffff"
               />
               <SensorIndicator
               x={130}
@@ -1064,6 +1074,7 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/fan_status_2")}
               unit=" h"
+              color="#ffffff"
               />
               <SensorIndicator
               x={344}
@@ -1106,6 +1117,7 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/fan_status_3")}
               unit=" h"
+              color="#ffffff"
               />
               <SensorIndicator
               x={563}

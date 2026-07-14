@@ -15,6 +15,7 @@ interface SensorIndicatorProps {
   padding?: number;
   thresholdDirection?: 'above' | 'below';
   mode?: 'numeric' | 'onoff';
+  color?: string;
 }
 
 export function SensorIndicator({
@@ -30,6 +31,7 @@ export function SensorIndicator({
   padding = 5,
   thresholdDirection = 'above',
   mode = 'numeric',
+  color: customColor,
 }: SensorIndicatorProps) {
   const cx = x + w / 2;
   const cy = y + h / 2;
@@ -38,6 +40,12 @@ export function SensorIndicator({
     // ── Jika value null ────────────────────────────────────────────────
     if (value === null) {
       return { color: "#444444", display: "--" };
+    }
+
+    // ── Jika customColor diberikan (berguna untuk info non-threshold seperti running hours) ──
+    if (customColor) {
+      const display = unit ? `${value}${unit}` : String(value);
+      return { color: customColor, display };
     }
 
     // ── Jika value adalah string info status (seperti "API TIDAK TERKIRIM" atau "XX") ──
@@ -70,7 +78,15 @@ export function SensorIndicator({
     }
 
     // ── Mode NUMERIC ──────────────────────────────────────────────────
-    const numValue = typeof value === 'number' ? value : 0;
+    let numValue = 0;
+    if (typeof value === 'number') {
+      numValue = value;
+    } else if (typeof value === 'string') {
+      const parsed = parseFloat(value);
+      if (!isNaN(parsed)) {
+        numValue = parsed;
+      }
+    }
     
     // Jika warningThreshold dan alarmThreshold TIDAK diberikan, warna tetap hijau
     if (warningThreshold === undefined || alarmThreshold === undefined) {
