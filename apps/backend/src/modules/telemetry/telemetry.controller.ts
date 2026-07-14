@@ -5,6 +5,7 @@ import {
 } from "./telemetry.validation";
 import {
   getLatestTelemetry,
+  getLatestTelemetryByTags,
   ingestTelemetry,
   queryTelemetryRange
 } from "./telemetry.service";
@@ -38,12 +39,20 @@ export const getLatestTelemetryHandler = async (
   next: NextFunction
 ) => {
   try {
-    const parsed = telemetryRangeQuerySchema
-      .pick({ tagId: true })
-      .parse(req.query);
-    const doc = await getLatestTelemetry(parsed.tagId);
+    const { tagId, tagIds } = req.query;
 
-    res.json({ data: doc ?? null });
+    if (tagIds) {
+      const ids = String(tagIds).split(",");
+      const docs = await getLatestTelemetryByTags(ids);
+      return res.json({ data: docs });
+    }
+
+    if (tagId) {
+      const doc = await getLatestTelemetry(String(tagId));
+      return res.json({ data: doc ?? null });
+    }
+
+    return res.json({ data: [] });
   } catch (err) {
     next(err);
   }

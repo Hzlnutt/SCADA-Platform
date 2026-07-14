@@ -40,9 +40,9 @@ export function SensorIndicator({
       return { color: "#444444", display: "--" };
     }
 
-    // ── Jika value adalah string info status (seperti "API TIDAK TERKIRIM") ──
-    if (typeof value === 'string' && (value.includes("API") || value.includes("TIDAK"))) {
-      return { color: "#ff2222", display: value };
+    // ── Jika value adalah string info status (seperti "API TIDAK TERKIRIM" atau "XX") ──
+    if (typeof value === 'string' && (value.includes("API") || value.includes("TIDAK") || value === "XX")) {
+      return { color: "#ff2222", display: "XX" };
     }
 
 

@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
 import type { MachineOutletContext } from "./MachineLayout";
 import PidPageTemplate from "./PidPageTemplate";
 import type { Task, Alarm } from "./PidPageTemplate";
 import { useTelemetryStore } from "../../store/telemetry.store";
+import { getJson } from "../../services/api.client";
+import { telemetryTagIds } from "../../data/industrial-tags";
 import CoolingWF1U3Pid from "./diagrams/CoolingWF1U3Pid";
 import MachineAHU01Pid from "./diagrams/MachineAHU01Pid";
 import MachineAHU02Pid from "./diagrams/MachineAHU02Pid";
@@ -75,11 +77,35 @@ export default function MachinePidDiagram() {
 
   const latest = useTelemetryStore((state) => state.latest);
 
+  useEffect(() => {
+    const fetchLatestTelemetry = async () => {
+      try {
+        const res = await getJson<{ data: any[] }>(`/telemetry/latest?tagIds=${telemetryTagIds.join(",")}`);
+        if (res && Array.isArray(res.data)) {
+          const points = res.data.map((doc: any) => ({
+            ts: doc.ts,
+            value: doc.value,
+            quality: doc.quality,
+            meta: doc.meta
+          }));
+          useTelemetryStore.getState().addPoints(points);
+        }
+      } catch (err) {
+        console.error("Failed to fetch initial telemetry data:", err);
+      }
+    };
+
+    fetchLatestTelemetry();
+
+    const interval = setInterval(fetchLatestTelemetry, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   const getStatus = (tagId: string) => {
     const val = latest[tagId]?.value;
     if (typeof val === "number") return val === 1;
     if (typeof val === "boolean") return val;
-    return "API TIDAK TERKIRIM";
+    return "XX";
   };
 
   const motorStatus = {

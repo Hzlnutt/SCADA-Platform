@@ -41,7 +41,7 @@ export default function CoolingWF1U3Pid({
   // Helper to extract numerical telemetry values or display custom offline indicator
   const getVal = (tagId: string, unit = "") => {
     const pt = latest[tagId];
-    if (!pt || pt.value === undefined) return "API TIDAK TERKIRIM";
+    if (!pt || pt.value === undefined) return "XX";
     return pt.value;
   };
 
@@ -55,7 +55,7 @@ export default function CoolingWF1U3Pid({
   const returnVal = latest["cooling-water/return_temp"]?.value;
   const deltaTVal = typeof supplyVal === "number" && typeof returnVal === "number"
     ? Number((returnVal - supplyVal).toFixed(2))
-    : "API TIDAK TERKIRIM";
+    : "XX";
 
 
   return (
