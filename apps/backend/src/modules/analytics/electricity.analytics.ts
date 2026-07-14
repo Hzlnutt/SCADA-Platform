@@ -363,11 +363,17 @@ export const getElectricityAnalytics = async (
   const monthly: { month: string; value: number; wbp: number; lwbp: number }[] = [];
   const startDay = new Date(from);
   const endDay = new Date(to);
-  const startMonthCursor = new Date(startDay.getFullYear(), startDay.getMonth(), 1);
-  const endMonthCursor = new Date(endDay.getFullYear(), endDay.getMonth(), 1);
+
+  // Timezone-safe year/month/day extraction using WIB date strings
+  const startWibStr = getWibDateString(startDay);
+  const endWibStr = getWibDateString(endDay);
+  const [startY, startM, startD] = startWibStr.split("-").map(Number);
+  const [endY, endM, endD] = endWibStr.split("-").map(Number);
+
+  const currentMonthCursor = new Date(startY, startM - 1, 1);
+  const wibEndMonthCursor = new Date(endY, endM - 1, 1);
   
-  const currentMonthCursor = new Date(startMonthCursor);
-  while (currentMonthCursor <= endMonthCursor) {
+  while (currentMonthCursor <= wibEndMonthCursor) {
     const y = currentMonthCursor.getFullYear();
     const m = String(currentMonthCursor.getMonth() + 1).padStart(2, "0");
     const monthKey = `${y}-${m}`;
@@ -387,9 +393,16 @@ export const getElectricityAnalytics = async (
 
   // ===== ALWAYS populate all days in the queried range with 0 for missing =====
   const daily: { day: string; value: number; wbp: number; lwbp: number }[] = [];
-  const currentCursor = new Date(startDay);
-  while (currentCursor <= endDay) {
-    const dayKey = getWibDateString(currentCursor);
+  const wibStartCursor = new Date(startY, startM - 1, startD);
+  const wibEndCursor = new Date(endY, endM - 1, endD);
+  const currentCursor = new Date(wibStartCursor);
+
+  while (currentCursor <= wibEndCursor) {
+    const yr = currentCursor.getFullYear();
+    const mo = String(currentCursor.getMonth() + 1).padStart(2, "0");
+    const dy = String(currentCursor.getDate()).padStart(2, "0");
+    const dayKey = `${yr}-${mo}-${dy}`;
+
     const val = dailyMap.get(dayKey) || 0;
     const dWbp = dailyWbpMap.get(dayKey) || 0;
     const dLwbp = dailyLwbpMap.get(dayKey) || 0;
