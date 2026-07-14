@@ -10,7 +10,9 @@ import {
   upsertThresholdsHandler,
   testBindingHandler,
   getUtilityConfigHandler,
-  updateUtilityConfigHandler
+  updateUtilityConfigHandler,
+  getPidThresholdsHandler,
+  updatePidThresholdsHandler
 } from "./config.controller";
 
 export const configRouter = Router();
@@ -25,3 +27,5 @@ configRouter.post("/config/thresholds", authenticate, authorize(["admin"]), upse
 configRouter.post("/config/machines/:id/bind", authenticate, authorize(["admin"]), testBindingHandler);
 configRouter.get("/config/utility", authenticate, getUtilityConfigHandler);
 configRouter.post("/config/utility", authenticate, updateUtilityConfigHandler);
+configRouter.get("/config/pid-thresholds", authenticate, getPidThresholdsHandler);
+configRouter.post("/config/pid-thresholds", authenticate, authorize(["admin"]), updatePidThresholdsHandler);

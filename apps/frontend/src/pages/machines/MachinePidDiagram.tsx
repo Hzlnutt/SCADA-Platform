@@ -78,13 +78,15 @@ export default function MachinePidDiagram() {
   const latest = useTelemetryStore((state) => state.latest);
 
   const [runningHours, setRunningHours] = useState<Record<string, number>>({});
+  const [pidThresholds, setPidThresholds] = useState<any>(null);
 
   useEffect(() => {
     const fetchLatestTelemetry = async () => {
       try {
-        const [telRes, rhRes] = await Promise.all([
+        const [telRes, rhRes, thRes] = await Promise.all([
           getJson<{ data: any[] }>(`/telemetry/latest?tagIds=${telemetryTagIds.join(",")}`),
-          getJson<{ data: Record<string, number> }>("/analytics/running-hours")
+          getJson<{ data: Record<string, number> }>("/analytics/running-hours"),
+          getJson<{ data: any }>("/config/pid-thresholds")
         ]);
 
         if (telRes && Array.isArray(telRes.data)) {
@@ -100,8 +102,12 @@ export default function MachinePidDiagram() {
         if (rhRes && rhRes.data) {
           setRunningHours(rhRes.data);
         }
+
+        if (thRes && thRes.data) {
+          setPidThresholds(thRes.data);
+        }
       } catch (err) {
-        console.error("Failed to fetch initial telemetry/running hours data:", err);
+        console.error("Failed to fetch initial telemetry/running hours/threshold data:", err);
       }
     };
 
@@ -176,7 +182,7 @@ export default function MachinePidDiagram() {
           <div className="flex-1 rounded-lg border border-slate-600 bg-slate-900/70 relative overflow-hidden">
             <div className="absolute inset-0 overflow-auto">
               {PidDiagram ? (
-                <PidDiagram motorStatus={motorStatus} runningHours={runningHours} />
+                <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} />
               ) : (
                 <div className="flex items-center justify-center h-full text-slate-400">
                   Diagram untuk {machine.name} belum tersedia.
@@ -245,7 +251,7 @@ export default function MachinePidDiagram() {
       alarms={alarmInfo}
     >
       {PidDiagram ? (
-        <PidDiagram motorStatus={motorStatus} runningHours={runningHours} />
+        <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} />
       ) : (
         <div className="flex items-center justify-center h-full text-slate-400">
           Diagram untuk {unitId} belum tersedia.

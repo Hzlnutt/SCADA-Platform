@@ -21,6 +21,7 @@ import { useTelemetryStore } from "../../../store/telemetry.store";
 interface CoolingWF1U3PidProps {
   motorStatus: Record<string, boolean>;
   runningHours?: Record<string, number>;
+  pidThresholds?: any;
   svgRef?: React.RefObject<SVGSVGElement>;
   onSvgClick?: (e: React.MouseEvent<SVGSVGElement>) => void;
 }
@@ -28,6 +29,7 @@ interface CoolingWF1U3PidProps {
 export default function CoolingWF1U3Pid({
   motorStatus: rawMotorStatus,
   runningHours = {},
+  pidThresholds,
   svgRef,
   onSvgClick,
 }: CoolingWF1U3PidProps) {
@@ -316,14 +318,16 @@ export default function CoolingWF1U3Pid({
                 x={860} y={492} 
                 w={75} h={30}
                 value={getVal("cooling-water/basin_lvl")} unit=" %" 
-                warningThreshold={75} alarmThreshold={70} 
+                warningThreshold={pidThresholds?.basin_lvl?.warning ?? 75} 
+                alarmThreshold={pidThresholds?.basin_lvl?.alarm ?? 70} 
                 thresholdDirection="below" 
               />
               <SensorIndicator 
                 x={860} y={530} 
                 w={75} h={30}
                 value={getVal("cooling-water/supply_temp")} unit=" °C" 
-                warningThreshold={28} alarmThreshold={30}
+                warningThreshold={pidThresholds?.supply_temp?.warning ?? 28} 
+                alarmThreshold={pidThresholds?.supply_temp?.alarm ?? 30} 
                 decimalPlaces={1}
                 thresholdDirection="above" 
               />
@@ -331,7 +335,8 @@ export default function CoolingWF1U3Pid({
                 x={731} y={530} 
                 w={75} h={30}
                 value={getVal("cooling-water/return_temp")} unit=" °C" 
-                warningThreshold={38} alarmThreshold={40}
+                warningThreshold={pidThresholds?.return_temp?.warning ?? 38} 
+                alarmThreshold={pidThresholds?.return_temp?.alarm ?? 40} 
                 decimalPlaces={1}
                 thresholdDirection="above" 
               />
@@ -341,7 +346,8 @@ export default function CoolingWF1U3Pid({
                 x={118} y={273} 
                 w={75} h={30}
                 value={getVal("cooling-water/pressure_1")} unit=" BAR" 
-                warningThreshold={1.5} alarmThreshold={2.0}
+                warningThreshold={pidThresholds?.pressure?.warning ?? 1.5} 
+                alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
               />
@@ -349,7 +355,8 @@ export default function CoolingWF1U3Pid({
                 x={333} y={273} 
                 w={75} h={30}
                 value={getVal("cooling-water/pressure_2")} unit=" BAR" 
-                warningThreshold={1.5} alarmThreshold={2.0}
+                warningThreshold={pidThresholds?.pressure?.warning ?? 1.5} 
+                alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
               />
@@ -357,7 +364,8 @@ export default function CoolingWF1U3Pid({
                 x={552} y={273} 
                 w={75} h={30}
                 value={getVal("cooling-water/pressure_3")} unit=" BAR" 
-                warningThreshold={1.5} alarmThreshold={2.0}
+                warningThreshold={pidThresholds?.pressure?.warning ?? 1.5} 
+                alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
               />
@@ -365,7 +373,8 @@ export default function CoolingWF1U3Pid({
                 x={1177} y={273} 
                 w={75} h={30}
                 value={getVal("cooling-water/eq_press_du03")} unit=" BAR" 
-                warningThreshold={1.5} alarmThreshold={2.0}
+                warningThreshold={pidThresholds?.pressure?.warning ?? 1.5} 
+                alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
               />
@@ -373,7 +382,8 @@ export default function CoolingWF1U3Pid({
                 x={1282} y={273} 
                 w={75} h={30}
                 value={getVal("cooling-water/eq_press_bp03")} unit=" BAR" 
-                warningThreshold={1.5} alarmThreshold={2.0}
+                warningThreshold={pidThresholds?.pressure?.warning ?? 1.5} 
+                alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
               />
@@ -381,7 +391,8 @@ export default function CoolingWF1U3Pid({
                 x={1390} y={273} 
                 w={75} h={30}
                 value={getVal("cooling-water/eq_press_prep03")} unit=" BAR" 
-                warningThreshold={1.5} alarmThreshold={2.0}
+                warningThreshold={pidThresholds?.pressure?.warning ?? 1.5} 
+                alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
               />
@@ -389,7 +400,8 @@ export default function CoolingWF1U3Pid({
                 x={1495} y={273} 
                 w={75} h={30}
                 value={getVal("cooling-water/eq_press_st03")} unit=" BAR" 
-                warningThreshold={1.5} alarmThreshold={2.0}
+                warningThreshold={pidThresholds?.pressure?.warning ?? 1.5} 
+                alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
               />
@@ -397,7 +409,8 @@ export default function CoolingWF1U3Pid({
                 x={1599} y={273} 
                 w={75} h={30}
                 value={getVal("cooling-water/eq_press_washing")} unit=" BAR" 
-                warningThreshold={1.5} alarmThreshold={2.0}
+                warningThreshold={pidThresholds?.pressure?.warning ?? 1.5} 
+                alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
               />
@@ -405,7 +418,8 @@ export default function CoolingWF1U3Pid({
                 x={1705} y={273} 
                 w={75} h={30}
                 value={getVal("cooling-water/eq_press_minilab")} unit=" BAR" 
-                warningThreshold={1.5} alarmThreshold={2.0}
+                warningThreshold={pidThresholds?.pressure?.warning ?? 1.5} 
+                alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
                 decimalPlaces={1}
                 thresholdDirection="above" 
               />
@@ -414,7 +428,8 @@ export default function CoolingWF1U3Pid({
                 x={1496} y={147} 
                 w={75} h={30}
                 value={getVal("cooling-water/st3_return_temp")} unit=" °C" 
-                warningThreshold={35} alarmThreshold={40}
+                warningThreshold={pidThresholds?.st3_return_temp?.warning ?? 35} 
+                alarmThreshold={pidThresholds?.st3_return_temp?.alarm ?? 40}
                 decimalPlaces={1}
                 thresholdDirection="above" 
               />
@@ -684,8 +699,8 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getVal("cooling-water/chemical_357_lvl")}
               unit=" %"
-              warningThreshold={75}
-              alarmThreshold={70}
+              warningThreshold={pidThresholds?.chemical_357_lvl?.warning ?? 75}
+              alarmThreshold={pidThresholds?.chemical_357_lvl?.alarm ?? 70}
               thresholdDirection="below"
               decimalPlaces={1}
               />
@@ -722,8 +737,8 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getVal("cooling-water/chemical_327_lvl")}
               unit=" %"
-              warningThreshold={75}
-              alarmThreshold={70}
+              warningThreshold={pidThresholds?.chemical_327_lvl?.warning ?? 75}
+              alarmThreshold={pidThresholds?.chemical_327_lvl?.alarm ?? 70}
               thresholdDirection="below"
               decimalPlaces={1}
               />

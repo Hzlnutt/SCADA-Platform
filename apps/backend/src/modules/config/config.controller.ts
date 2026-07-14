@@ -336,3 +336,54 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
     next(err);
   }
 };
+
+const defaultPidThresholds = {
+  basin_lvl: { warning: 75, alarm: 70 },
+  supply_temp: { warning: 28, alarm: 30 },
+  return_temp: { warning: 38, alarm: 40 },
+  pressure: { warning: 1.5, alarm: 2.0 },
+  st3_return_temp: { warning: 35, alarm: 40 },
+  chemical_357_lvl: { warning: 75, alarm: 70 },
+  chemical_327_lvl: { warning: 75, alarm: 70 }
+};
+
+export const getPidThresholdsHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const db = getMongoDb();
+    const config = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "pid_thresholds" });
+    if (config) {
+      const { _id, key, updatedAt, ...thresholds } = config;
+      res.json({ data: thresholds });
+    } else {
+      res.json({ data: defaultPidThresholds });
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updatePidThresholdsHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const db = getMongoDb();
+    const doc = {
+      key: "pid_thresholds",
+      ...req.body,
+      updatedAt: new Date()
+    };
+    
+    await db.collection(GLOBAL_CONFIG_COLLECTION).updateOne(
+      { key: "pid_thresholds" },
+      { $set: doc },
+      { upsert: true }
+    );
+    
+    const io = getSocketServer();
+    if (io) {
+      io.emit("config:pid-thresholds:update", doc);
+    }
+    
+    res.json({ success: true, data: req.body });
+  } catch (err) {
+    next(err);
+  }
+};
