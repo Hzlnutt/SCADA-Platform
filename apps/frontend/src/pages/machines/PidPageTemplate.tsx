@@ -4,7 +4,7 @@ import { useRef, useState, type ReactNode } from "react";
 export interface Task {
   id: number;
   title: string;
-  status: "open" | "close";
+  status: "open" | "close" | "overdue";
   openedMonth: boolean;
   createdDate: string;
   taskKey?: string;
@@ -18,7 +18,7 @@ export interface Alarm {
 }
 
 export interface TaskInfo {
-  openThisMonth: number;
+  taskOverdue: number;
   taskOpen: number;
   taskClose: number;
 }
@@ -28,8 +28,8 @@ interface PidPageTemplateProps {
   allOn: boolean;
   onToggleAllOn: () => void;
   tasks: Task[];
-  selectedTaskFilter: "all" | "open_month" | "open" | "close";
-  onFilterChange: (filter: "all" | "open_month" | "open" | "close") => void;
+  selectedTaskFilter: "all" | "overdue" | "open" | "close";
+  onFilterChange: (filter: "all" | "overdue" | "open" | "close") => void;
   taskInfo: TaskInfo;
   alarms: Alarm[];
   children: ReactNode;
@@ -69,8 +69,8 @@ export default function PidPageTemplate({
   const filteredTasks =
     selectedTaskFilter === "all"
       ? tasks
-      : selectedTaskFilter === "open_month"
-      ? tasks.filter((t) => t.openedMonth && t.status === "open")
+      : selectedTaskFilter === "overdue"
+      ? tasks.filter((t) => t.status === "overdue")
       : selectedTaskFilter === "open"
       ? tasks.filter((t) => t.status === "open")
       : tasks.filter((t) => t.status === "close");
@@ -117,16 +117,16 @@ export default function PidPageTemplate({
           </div>
           <div className="space-y-1.5 mb-2">
             <button
-              onClick={() => onFilterChange("open_month")}
+              onClick={() => onFilterChange("overdue")}
               className={`w-full text-left flex justify-between items-center px-2 py-1.5 rounded border-2 transition-colors ${
-                selectedTaskFilter === "open_month"
-                  ? "bg-white dark:bg-slate-700 border-cyan-500 dark:border-cyan-400 text-slate-900 dark:text-slate-100"
-                  : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-200 hover:border-cyan-400 dark:hover:border-cyan-400"
+                selectedTaskFilter === "overdue"
+                  ? "bg-white dark:bg-slate-700 border-rose-500 dark:border-rose-400 text-slate-900 dark:text-slate-100"
+                  : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-200 hover:border-rose-400 dark:hover:border-rose-400"
               }`}
             >
-              <span className="text-xs font-medium">Task Open (Bulan Ini)</span>
-              <span className={`text-base font-semibold ${selectedTaskFilter === "open_month" ? "text-cyan-500 dark:text-cyan-400" : "text-cyan-500 dark:text-cyan-400"}`}>
-                {taskInfo.openThisMonth}
+              <span className="text-xs font-semibold">Task Overdue</span>
+              <span className="text-base font-bold text-rose-500 dark:text-rose-450">
+                {taskInfo.taskOverdue}
               </span>
             </button>
             <button
@@ -137,8 +137,8 @@ export default function PidPageTemplate({
                   : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-200 hover:border-yellow-400 dark:hover:border-yellow-400"
               }`}
             >
-              <span className="text-xs font-medium">Task Open</span>
-              <span className={`text-base font-semibold ${selectedTaskFilter === "open" ? "text-yellow-500 dark:text-yellow-400" : "text-yellow-500 dark:text-yellow-400"}`}>
+              <span className="text-xs font-semibold">Task Open</span>
+              <span className="text-base font-bold text-yellow-500 dark:text-yellow-400">
                 {taskInfo.taskOpen}
               </span>
             </button>
@@ -150,8 +150,8 @@ export default function PidPageTemplate({
                   : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-200 hover:border-green-400 dark:hover:border-green-400"
               }`}
             >
-              <span className="text-xs font-medium">Task Close</span>
-              <span className={`text-base font-semibold ${selectedTaskFilter === "close" ? "text-green-500 dark:text-green-400" : "text-green-500 dark:text-green-400"}`}>
+              <span className="text-xs font-semibold">Task Close</span>
+              <span className="text-base font-bold text-green-500 dark:text-green-400">
                 {taskInfo.taskClose}
               </span>
             </button>
@@ -165,7 +165,9 @@ export default function PidPageTemplate({
                 <div
                   key={task.id}
                   className={`rounded border-2 p-2 text-xs bg-white dark:bg-slate-800 ${
-                    task.status === "open"
+                    task.status === "overdue"
+                      ? "border-rose-400 dark:border-rose-500"
+                      : task.status === "open"
                       ? "border-yellow-400 dark:border-yellow-500"
                       : "border-green-400 dark:border-green-500"
                   }`}
@@ -174,14 +176,16 @@ export default function PidPageTemplate({
                   <div className="text-slate-600 dark:text-slate-400 mt-1.5 flex items-center justify-between">
                     <span
                       className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                        task.status === "open"
+                        task.status === "overdue"
+                          ? "bg-rose-500/10 text-rose-500 border border-rose-500/25"
+                          : task.status === "open"
                           ? "bg-yellow-500/10 text-yellow-500 border border-yellow-500/25"
                           : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/25"
                       }`}
                     >
-                      {task.status === "open" ? "OPEN" : "CLOSE"}
+                      {task.status === "overdue" ? "OVERDUE" : task.status === "open" ? "OPEN" : "CLOSE"}
                     </span>
-                    {task.status === "open" && onToggleCompleteTask && task.taskKey && (
+                    {(task.status === "open" || task.status === "overdue") && onToggleCompleteTask && task.taskKey && (
                       <button
                         onClick={() => onToggleCompleteTask(task.taskKey!)}
                         className="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-[9px] uppercase tracking-wide transition duration-150"
@@ -275,6 +279,10 @@ export default function PidPageTemplate({
             <div className="flex flex-wrap gap-4 items-center justify-between bg-slate-50 dark:bg-slate-950/60 p-4 border border-slate-200/60 dark:border-slate-800 rounded-lg mb-4">
               <div className="flex items-center gap-6">
                 <div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Overdue Tasks</span>
+                  <span className="text-xl font-bold text-rose-500">{taskInfo.taskOverdue}</span>
+                </div>
+                <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Open Tasks</span>
                   <span className="text-xl font-bold text-yellow-500">{taskInfo.taskOpen}</span>
                 </div>
@@ -293,18 +301,22 @@ export default function PidPageTemplate({
                     <div
                       key={task.id}
                       className={`border border-slate-250 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between gap-3 transition-colors ${
-                        task.status === "open"
+                        task.status === "overdue"
+                          ? "bg-rose-500/[0.02] border-rose-500/30"
+                          : task.status === "open"
                           ? "bg-amber-500/[0.02] border-yellow-500/30"
                           : "bg-emerald-500/[0.01] border-emerald-500/30"
                       }`}
                     >
                       <div className="space-y-1">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider ${
-                          task.status === "open"
+                          task.status === "overdue"
+                            ? "bg-rose-500/10 text-rose-500"
+                            : task.status === "open"
                             ? "bg-yellow-500/10 text-yellow-500"
                             : "bg-emerald-500/10 text-emerald-500"
                         }`}>
-                          {task.status === "open" ? "PENDING / OPEN" : "COMPLETED / CLOSED"}
+                          {task.status === "overdue" ? "OVERDUE" : task.status === "open" ? "PENDING / OPEN" : "COMPLETED / CLOSED"}
                         </span>
                         <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed">
                           {task.title}
@@ -319,12 +331,12 @@ export default function PidPageTemplate({
                           <button
                             onClick={() => onToggleCompleteTask(task.taskKey!)}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition duration-200 shadow-sm ${
-                              task.status === "open"
+                              task.status === "overdue" || task.status === "open"
                                 ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20"
                                 : "bg-slate-200 hover:bg-slate-350 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700/80 shadow-slate-200/20"
                             }`}
                           >
-                            {task.status === "open" ? "Mark Done" : "Reopen Task"}
+                            {task.status === "overdue" || task.status === "open" ? "Mark Done" : "Reopen Task"}
                           </button>
                         )}
                       </div>

@@ -172,7 +172,7 @@ export default function MachinePidDiagram() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
   const [selectedTaskFilter, setSelectedTaskFilter] = useState<
-    "all" | "open_month" | "open" | "close"
+    "all" | "overdue" | "open" | "close"
   >("all");
 
   if (!machine) return null;
@@ -231,18 +231,25 @@ export default function MachinePidDiagram() {
       const tagId = MOTOR_KEY_TO_TAG_ID[rule.motorKey];
       const actualRh = runningHours[tagId] || 0;
       
-      // Trigger task only when approaching target (1 week = 168 hours before target)
-      const isTriggered = actualRh >= (rule.targetHours - 168);
+      const warningBuffer = typeof rule.warningHours === "number" ? rule.warningHours : 168;
+      const isTriggered = actualRh >= (rule.targetHours - warningBuffer);
       if (isTriggered) {
         const taskKey = `${rule.motorKey}_${rule.targetHours}_${rule.taskName}`;
         const isCompleted = completedTaskKeys.includes(taskKey);
         
+        let status: "open" | "close" | "overdue" = "open";
+        if (isCompleted) {
+          status = "close";
+        } else if (actualRh >= rule.targetHours) {
+          status = "overdue";
+        }
+
         activeTasks.push({
           id: idx + 1,
           taskKey,
           title: `${rule.motorKey} (Running: ${actualRh.toFixed(1)}h) - ${rule.taskName} (Target: ${rule.targetHours}h)`,
-          status: isCompleted ? "close" : "open",
-          openedMonth: !isCompleted,
+          status,
+          openedMonth: !isCompleted && status === "open",
           createdDate: "Live Telemetry"
         });
       }
@@ -326,9 +333,7 @@ export default function MachinePidDiagram() {
   };
 
   const taskInfo = {
-    openThisMonth: allTasks.filter(
-      (t) => t.openedMonth && t.status === "open"
-    ).length,
+    taskOverdue: allTasks.filter((t) => t.status === "overdue").length,
     taskOpen: allTasks.filter((t) => t.status === "open").length,
     taskClose: allTasks.filter((t) => t.status === "close").length,
   };

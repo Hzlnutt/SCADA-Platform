@@ -149,7 +149,7 @@ export default function MachineConfig() {
   const [eqTaskConfigs, setEqTaskConfigs] = useState<{
     itemKey: string;
     displayName: string;
-    rules: { targetHours: number; tasks: string[] }[];
+    rules: { targetHours: number; warningHours: number; tasks: string[] }[];
   }[]>([]);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
 
@@ -168,7 +168,7 @@ export default function MachineConfig() {
           ...config,
           rules: [
             ...config.rules,
-            { targetHours: 1000, tasks: [""] }
+            { targetHours: 1000, warningHours: 168, tasks: [""] }
           ]
         };
       })
@@ -184,6 +184,21 @@ export default function MachineConfig() {
         nextRules[ruleIdx] = {
           ...nextRules[ruleIdx],
           targetHours: isNaN(hours) ? nextRules[ruleIdx].targetHours : hours
+        };
+        return { ...config, rules: nextRules };
+      })
+    );
+  };
+
+  const handleUpdateWarningHours = (itemKey: string, ruleIdx: number, warnVal: string) => {
+    const warn = warnVal === "" ? 0 : parseFloat(warnVal);
+    setEqTaskConfigs((prev) =>
+      prev.map((config) => {
+        if (config.itemKey !== itemKey) return config;
+        const nextRules = [...config.rules];
+        nextRules[ruleIdx] = {
+          ...nextRules[ruleIdx],
+          warningHours: isNaN(warn) ? nextRules[ruleIdx].warningHours : warn
         };
         return { ...config, rules: nextRules };
       })
@@ -391,7 +406,7 @@ export default function MachineConfig() {
             await postJson("/config/rh-task-rules", eqTaskConfigs);
             
             // Map to flat rules array for client-side evaluation on P&ID page
-            const flatRules: { id: string; motorKey: string; targetHours: number; taskName: string }[] = [];
+            const flatRules: { id: string; motorKey: string; targetHours: number; warningHours: number; taskName: string }[] = [];
             let ruleIdCounter = 1;
             
             const GENERIC_TO_SPECIFIC_MAP: Record<string, string[]> = {
@@ -414,6 +429,7 @@ export default function MachineConfig() {
                         id: String(ruleIdCounter++),
                         motorKey: specKey,
                         targetHours: rule.targetHours,
+                        warningHours: rule.warningHours || 168,
                         taskName: `${specKey} - ${task.trim()}`
                       });
                     }
@@ -705,18 +721,36 @@ export default function MachineConfig() {
                                 className="p-4 rounded-xl border border-slate-150 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/10 space-y-3 relative"
                               >
                                 <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Trigger at:</span>
-                                    <div className="inline-flex items-center gap-1 border border-[#acd3ff] dark:border-slate-700 rounded px-2 py-0.5 bg-white dark:bg-slate-900 w-28">
-                                      <input
-                                        type="number"
-                                        value={rule.targetHours}
-                                        disabled={!isUnlocked}
-                                        onChange={(e) => handleUpdateRuleHours(config.itemKey, ruleIdx, e.target.value)}
-                                        className="w-full text-center font-bold font-mono bg-transparent outline-none text-xs text-slate-800 dark:text-slate-100 disabled:opacity-50"
-                                        placeholder="Hours"
-                                      />
-                                      <span className="text-[10px] text-slate-400 font-bold">h</span>
+                                  <div className="flex flex-wrap items-center gap-4">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Trigger at:</span>
+                                      <div className="inline-flex items-center gap-1 border border-[#acd3ff] dark:border-slate-700 rounded px-2 py-0.5 bg-white dark:bg-slate-900 w-24">
+                                        <input
+                                          type="number"
+                                          value={rule.targetHours}
+                                          disabled={!isUnlocked}
+                                          onChange={(e) => handleUpdateRuleHours(config.itemKey, ruleIdx, e.target.value)}
+                                          className="w-full text-center font-bold font-mono bg-transparent outline-none text-xs text-slate-800 dark:text-slate-100 disabled:opacity-50"
+                                          placeholder="Hours"
+                                        />
+                                        <span className="text-[10px] text-slate-400 font-bold">h</span>
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Warning buffer:</span>
+                                      <div className="inline-flex items-center gap-1 border border-[#acd3ff] dark:border-slate-700 rounded px-2 py-0.5 bg-white dark:bg-slate-900 w-24">
+                                        <input
+                                          type="number"
+                                          value={rule.warningHours ?? 168}
+                                          disabled={!isUnlocked}
+                                          onChange={(e) => handleUpdateWarningHours(config.itemKey, ruleIdx, e.target.value)}
+                                          className="w-full text-center font-bold font-mono bg-transparent outline-none text-xs text-slate-800 dark:text-slate-100 disabled:opacity-50"
+                                          placeholder="168"
+                                        />
+                                        <span className="text-[10px] text-slate-400 font-bold">h</span>
+                                      </div>
+                                      <span className="text-[10px] text-slate-400 font-semibold">before target</span>
                                     </div>
                                   </div>
                                   <button

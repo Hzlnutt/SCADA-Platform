@@ -394,52 +394,52 @@ export const defaultRhTaskRules = [
     itemKey: "FAN",
     displayName: "Motor Fan (FAN-1..3)",
     rules: [
-      { targetHours: 500, tasks: ["Check V-Belt Tension", "Visual Inspection"] },
-      { targetHours: 1000, tasks: ["Clean Fan Blades"] }
+      { targetHours: 500, warningHours: 168, tasks: ["Check V-Belt Tension", "Visual Inspection"] },
+      { targetHours: 1000, warningHours: 168, tasks: ["Clean Fan Blades"] }
     ]
   },
   {
     itemKey: "MTR",
     displayName: "Motor Sirkulasi (MTR-1..9)",
     rules: [
-      { targetHours: 500, tasks: ["Strainer Inspection", "Pump Bearing Lubrication"] },
-      { targetHours: 1000, tasks: ["Seal/Bearing Inspection"] }
+      { targetHours: 500, warningHours: 168, tasks: ["Strainer Inspection", "Pump Bearing Lubrication"] },
+      { targetHours: 1000, warningHours: 168, tasks: ["Seal/Bearing Inspection"] }
     ]
   },
   {
     itemKey: "Dosing Pump",
     displayName: "Dosing Pump (DP-1..2)",
     rules: [
-      { targetHours: 500, tasks: ["Strainer Inspection"] }
+      { targetHours: 500, warningHours: 168, tasks: ["Strainer Inspection"] }
     ]
   },
   {
     itemKey: "Strainer",
     displayName: "Strainer (Strainer 1..9)",
     rules: [
-      { targetHours: 200, tasks: ["Check Cleanliness"] },
-      { targetHours: 600, tasks: ["Clean Filter Element"] }
+      { targetHours: 200, warningHours: 168, tasks: ["Check Cleanliness"] },
+      { targetHours: 600, warningHours: 168, tasks: ["Clean Filter Element"] }
     ]
   },
   {
     itemKey: "Cooling Tower",
     displayName: "Cooling Tower (CT 1..3)",
     rules: [
-      { targetHours: 600, tasks: ["Basin Debris Clean", "Float Valve Inspection"] }
+      { targetHours: 600, warningHours: 168, tasks: ["Basin Debris Clean", "Float Valve Inspection"] }
     ]
   },
   {
     itemKey: "Cooling Tank",
     displayName: "Cooling Tank",
     rules: [
-      { targetHours: 1000, tasks: ["Basin Sediment Cleaning", "Flushing & Corrosion Inspect"] }
+      { targetHours: 1000, warningHours: 168, tasks: ["Basin Sediment Cleaning", "Flushing & Corrosion Inspect"] }
     ]
   },
   {
     itemKey: "Panel",
     displayName: "Panel",
     rules: [
-      { targetHours: 1000, tasks: ["Inverter Cleaning", "Wiring Inspection"] }
+      { targetHours: 1000, warningHours: 168, tasks: ["Inverter Cleaning", "Wiring Inspection"] }
     ]
   }
 ];
