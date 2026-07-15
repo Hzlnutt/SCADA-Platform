@@ -448,11 +448,38 @@ export const getRhTaskRulesHandler = async (req: Request, res: Response, next: N
   try {
     const pool = getPostgresPool();
     const result = await pool.query("SELECT value FROM global_configs WHERE key = $1", ["rh_task_rules"]);
+    
+    let rules = defaultRhTaskRules;
+    
     if (result.rows.length > 0) {
-      res.json({ data: result.rows[0].value });
+      const dbValue = result.rows[0].value;
+      const hasOldKeys = Array.isArray(dbValue) && dbValue.some(item => 
+        item.itemKey.includes("-") || 
+        item.itemKey.includes("Pump 1") || 
+        item.itemKey.includes("Strainer 1")
+      );
+      if (!hasOldKeys && Array.isArray(dbValue) && dbValue.length === 7) {
+        rules = dbValue;
+      } else {
+        await pool.query(
+          `INSERT INTO global_configs (key, value, updated_at) 
+           VALUES ($1, $2, CURRENT_TIMESTAMP) 
+           ON CONFLICT (key) 
+           DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
+          ["rh_task_rules", JSON.stringify(defaultRhTaskRules)]
+        );
+      }
     } else {
-      res.json({ data: defaultRhTaskRules });
+      await pool.query(
+        `INSERT INTO global_configs (key, value, updated_at) 
+         VALUES ($1, $2, CURRENT_TIMESTAMP) 
+         ON CONFLICT (key) 
+         DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
+        ["rh_task_rules", JSON.stringify(defaultRhTaskRules)]
+      );
     }
+    
+    res.json({ data: rules });
   } catch (err) {
     next(err);
   }
