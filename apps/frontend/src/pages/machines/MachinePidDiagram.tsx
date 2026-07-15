@@ -28,22 +28,80 @@ const machineDataMap: Record<
   // Mesin non-HVAC lainnya...
 };
 
-const DEFAULT_TASK_RULES = [
-  { id: "1", motorKey: "FAN-1", targetHours: 500, taskName: "Check V-Belt Tension" },
-  { id: "2", motorKey: "FAN-1", targetHours: 500, taskName: "Visual Inspection" },
-  { id: "3", motorKey: "FAN-1", targetHours: 1000, taskName: "Clean Fan Blades" },
-  { id: "4", motorKey: "FAN-2", targetHours: 500, taskName: "Check V-Belt Tension" },
-  { id: "5", motorKey: "FAN-2", targetHours: 500, taskName: "Visual Inspection" },
-  { id: "6", motorKey: "FAN-2", targetHours: 1000, taskName: "Clean Fan Blades" },
-  { id: "7", motorKey: "FAN-3", targetHours: 500, taskName: "Check V-Belt Tension" },
-  { id: "8", motorKey: "FAN-3", targetHours: 500, taskName: "Visual Inspection" },
-  { id: "9", motorKey: "FAN-3", targetHours: 1000, taskName: "Clean Fan Blades" },
-  { id: "10", motorKey: "MTR-1", targetHours: 500, taskName: "Strainer Inspection" },
-  { id: "11", motorKey: "MTR-1", targetHours: 500, taskName: "Pump Bearing Lubrication" },
-  { id: "12", motorKey: "MTR-1", targetHours: 1000, taskName: "Seal Inspection" },
-  { id: "13", motorKey: "MTR-2", targetHours: 1000, taskName: "Motor Overhaul/Bearing Inspection" },
-  { id: "14", motorKey: "MTR-3", targetHours: 1000, taskName: "Motor Overhaul/Bearing Inspection" }
+const defaultTemplates = [
+  {
+    itemKey: "FAN",
+    specificKeys: ["FAN-1", "FAN-2", "FAN-3"],
+    rules: [
+      { targetHours: 500, task: "Check V-Belt Tension" },
+      { targetHours: 500, task: "Visual Inspection" },
+      { targetHours: 1000, task: "Clean Fan Blades" }
+    ]
+  },
+  {
+    itemKey: "MTR",
+    specificKeys: ["MTR-1", "MTR-2", "MTR-3", "MTR-4", "MTR-5", "MTR-6", "MTR-7", "MTR-8", "MTR-9"],
+    rules: [
+      { targetHours: 500, task: "Strainer Inspection" },
+      { targetHours: 500, task: "Pump Bearing Lubrication" },
+      { targetHours: 1000, task: "Seal/Bearing Inspection" }
+    ]
+  },
+  {
+    itemKey: "Dosing Pump",
+    specificKeys: ["Dosing Pump 1", "Dosing Pump 2"],
+    rules: [
+      { targetHours: 500, task: "Strainer Inspection" }
+    ]
+  },
+  {
+    itemKey: "Strainer",
+    specificKeys: ["Strainer 1", "Strainer 2", "Strainer 3", "Strainer 4", "Strainer 5", "Strainer 6", "Strainer 7", "Strainer 8", "Strainer 9"],
+    rules: [
+      { targetHours: 200, task: "Check Cleanliness" },
+      { targetHours: 600, task: "Clean Filter Element" }
+    ]
+  },
+  {
+    itemKey: "Cooling Tower",
+    specificKeys: ["CT 1", "CT 2", "CT 3"],
+    rules: [
+      { targetHours: 600, task: "Basin Debris Clean" },
+      { targetHours: 600, task: "Float Valve Inspection" }
+    ]
+  },
+  {
+    itemKey: "Cooling Tank",
+    specificKeys: ["Cooling Tank"],
+    rules: [
+      { targetHours: 1000, task: "Basin Sediment Cleaning" },
+      { targetHours: 1000, task: "Flushing & Corrosion Inspect" }
+    ]
+  },
+  {
+    itemKey: "Panel",
+    specificKeys: ["Panel"],
+    rules: [
+      { targetHours: 1000, task: "Inverter Cleaning" },
+      { targetHours: 1000, task: "Wiring Inspection" }
+    ]
+  }
 ];
+
+const DEFAULT_TASK_RULES: { id: string; motorKey: string; targetHours: number; taskName: string }[] = [];
+let ruleCounter = 1;
+defaultTemplates.forEach((tpl) => {
+  tpl.specificKeys.forEach((specKey) => {
+    tpl.rules.forEach((rule) => {
+      DEFAULT_TASK_RULES.push({
+        id: String(ruleCounter++),
+        motorKey: specKey,
+        targetHours: rule.targetHours,
+        taskName: `${specKey} - ${rule.task}`
+      });
+    });
+  });
+});
 
 const MOTOR_KEY_TO_TAG_ID: Record<string, string> = {
   "FAN-1": "cooling-water/fan_status_1",

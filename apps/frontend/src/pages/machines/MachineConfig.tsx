@@ -393,17 +393,31 @@ export default function MachineConfig() {
             // Map to flat rules array for client-side evaluation on P&ID page
             const flatRules: { id: string; motorKey: string; targetHours: number; taskName: string }[] = [];
             let ruleIdCounter = 1;
+            
+            const GENERIC_TO_SPECIFIC_MAP: Record<string, string[]> = {
+              "FAN": ["FAN-1", "FAN-2", "FAN-3"],
+              "MTR": ["MTR-1", "MTR-2", "MTR-3", "MTR-4", "MTR-5", "MTR-6", "MTR-7", "MTR-8", "MTR-9"],
+              "Dosing Pump": ["Dosing Pump 1", "Dosing Pump 2"],
+              "Strainer": ["Strainer 1", "Strainer 2", "Strainer 3", "Strainer 4", "Strainer 5", "Strainer 6", "Strainer 7", "Strainer 8", "Strainer 9"],
+              "Cooling Tower": ["CT 1", "CT 2", "CT 3"],
+              "Cooling Tank": ["Cooling Tank"],
+              "Panel": ["Panel"]
+            };
+
             eqTaskConfigs.forEach((config) => {
-              config.rules.forEach((rule) => {
-                rule.tasks.forEach((task) => {
-                  if (task.trim()) {
-                    flatRules.push({
-                      id: String(ruleIdCounter++),
-                      motorKey: config.itemKey,
-                      targetHours: rule.targetHours,
-                      taskName: task.trim()
-                    });
-                  }
+              const specificKeys = GENERIC_TO_SPECIFIC_MAP[config.itemKey] || [config.itemKey];
+              specificKeys.forEach((specKey) => {
+                config.rules.forEach((rule) => {
+                  rule.tasks.forEach((task) => {
+                    if (task.trim()) {
+                      flatRules.push({
+                        id: String(ruleIdCounter++),
+                        motorKey: specKey,
+                        targetHours: rule.targetHours,
+                        taskName: `${specKey} - ${task.trim()}`
+                      });
+                    }
+                  });
                 });
               });
             });
