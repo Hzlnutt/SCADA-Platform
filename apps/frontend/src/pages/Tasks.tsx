@@ -1,89 +1,139 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PageHeader } from "../components/ui/PageHeader";
 import { StatCard } from "../components/cards/StatCard";
-import { useTaskStore, type TaskItem } from "../store/task.store";
+import { getJson, postJson } from "../services/api.client";
 
 export default function Tasks() {
-  const tasks = useTaskStore((state) => state.tasks);
-  const addTask = useTaskStore((state) => state.addTask);
-
-  const [formOpen, setFormOpen] = useState(false);
-  const [newTask, setNewTask] = useState({
-    title: "",
-    assignedTo: "",
-    runningHours: "0",
-    limitHours: "100",
-    priority: "Medium" as TaskItem["priority"],
-    machineName: "",
-    groupId: "cooling-water-system"
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [unitFilter, setUnitFilter] = useState<string>("all");
+  const [componentFilter, setComponentFilter] = useState<string>("all");
+  
+  const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string }>(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const formatDate = (d: Date) => d.toISOString().split("T")[0];
+    return { startDate: formatDate(start), endDate: formatDate(end) };
   });
 
-  const pendingCount = tasks.filter((t) => t.status === "Pending").length;
-  const activeCount = tasks.filter((t) => t.status === "Active").length;
-  const completedCount = tasks.filter((t) => t.status === "Completed").length;
-
-  const handleCreateTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    addTask({
-      title: newTask.title,
-      assignedTo: newTask.assignedTo,
-      runningHours: Number(newTask.runningHours),
-      limitHours: Number(newTask.limitHours),
-      status: "Pending",
-      priority: newTask.priority,
-      machineName: newTask.machineName,
-      groupId: newTask.groupId
-    });
-    setFormOpen(false);
-    setNewTask({
-      title: "",
-      assignedTo: "",
-      runningHours: "0",
-      limitHours: "100",
-      priority: "Medium",
-      machineName: "",
-      groupId: "cooling-water-system"
-    });
+  const fetchTasks = async () => {
+    try {
+      const query = `status=${statusFilter}&unitId=${unitFilter}&motorKey=${componentFilter}&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
+      const res = await getJson<{ data: any[] }>(`/config/rh-tasks?${query}`);
+      if (res && res.data) {
+        setTasks(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch tasks list:", err);
+    }
   };
+
+  useEffect(() => {
+    fetchTasks();
+  }, [statusFilter, unitFilter, componentFilter, dateRange.startDate, dateRange.endDate]);
+
+  const handleCompleteTask = async (taskId: number) => {
+    try {
+      await postJson(`/config/rh-tasks/${taskId}/complete`, {});
+      fetchTasks();
+    } catch (err) {
+      console.error("Failed to complete task:", err);
+    }
+  };
+
+  const overdueCount = tasks.filter((t) => t.status === "overdue").length;
+  const openCount = tasks.filter((t) => t.status === "open").length;
+  const closedCount = tasks.filter((t) => t.status === "close").length;
+
+  const ALL_COMPONENTS = [
+    "FAN-1", "FAN-2", "FAN-3",
+    "MTR-1", "MTR-2", "MTR-3", "MTR-4", "MTR-5", "MTR-6", "MTR-7", "MTR-8", "MTR-9",
+    "Dosing Pump 1", "Dosing Pump 2",
+    "Strainer 1", "Strainer 2", "Strainer 3", "Strainer 4", "Strainer 5", "Strainer 6", "Strainer 7", "Strainer 8", "Strainer 9",
+    "CT 1", "CT 2", "CT 3",
+    "Cooling Tank", "Panel"
+  ];
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Task Management"
-        description="Daftar perintah kerja pemeliharaan pencegahan (preventive maintenance) dan status penugasan operator."
+        description="Preventative maintenance running hours task records & completion logs."
       />
 
       {/* Task Summary Stat Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
-          title="Tugas Menunggu (Pending)"
-          value={String(pendingCount)}
-          detail="Belum dikerjakan"
+          title="Tugas Terlambat (Overdue)"
+          value={String(overdueCount)}
+          detail="Target limit running hours terlampaui"
         />
         <StatCard
-          title="Tugas Sedang Berjalan (Active)"
-          value={String(activeCount)}
-          detail="Dalam proses pengerjaan"
+          title="Tugas Menunggu (Open)"
+          value={String(openCount)}
+          detail="Mendekati limit target"
         />
         <StatCard
           title="Tugas Selesai (Completed)"
-          value={String(completedCount)}
-          detail="Terverifikasi oleh supervisor"
+          value={String(closedCount)}
+          detail="Telah terverifikasi & reset"
         />
       </div>
 
-      {/* Action panel */}
-      <div className="flex justify-between items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-[0_4px_12px_rgba(0,0,0,0.02)]">
-        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-          Work Orders ({tasks.length} total)
-        </span>
-        <button
-          type="button"
-          onClick={() => setFormOpen(true)}
-          className="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-sm transition"
-        >
-          Create Work Order
-        </button>
+      {/* Filters Toolbar */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-[0_4px_12px_rgba(0,0,0,0.02)]">
+        {/* Date Calendar Filter */}
+        <div className="flex flex-col gap-1.5 col-span-1 md:col-span-2">
+          <label className="text-[10px] font-bold text-slate-400 uppercase">Date Range Filter</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={dateRange.startDate}
+              onChange={(e) => setDateRange((prev) => ({ ...prev, startDate: e.target.value }))}
+              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none w-full font-semibold"
+            />
+            <span className="text-slate-400 text-xs">to</span>
+            <input
+              type="date"
+              value={dateRange.endDate}
+              onChange={(e) => setDateRange((prev) => ({ ...prev, endDate: e.target.value }))}
+              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none w-full font-semibold"
+            />
+          </div>
+        </div>
+
+        {/* Machine select filter */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] font-bold text-slate-400 uppercase">Machine / Unit</label>
+          <select
+            value={unitFilter}
+            onChange={(e) => setUnitFilter(e.target.value)}
+            className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none font-semibold"
+          >
+            <option value="all">All Machines</option>
+            <option value="cooling-water-1">Cooling Water 1</option>
+            <option value="cooling-water-2">Cooling Water 2</option>
+            <option value="cooling-water-3">Cooling Water 3</option>
+          </select>
+        </div>
+
+        {/* Component filter */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] font-bold text-slate-400 uppercase">Component</label>
+          <select
+            value={componentFilter}
+            onChange={(e) => setComponentFilter(e.target.value)}
+            className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none font-semibold"
+          >
+            <option value="all">All Components</option>
+            {ALL_COMPONENTS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Task List Table */}
@@ -94,220 +144,106 @@ export default function Tasks() {
               <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 <th className="px-5 py-3.5">ID</th>
                 <th className="px-5 py-3.5">Task Description</th>
-                <th className="px-5 py-3.5">Machine</th>
-                <th className="px-5 py-3.5">Running Hours / Target</th>
-                <th className="px-5 py-3.5">Assigned Operator</th>
-                <th className="px-5 py-3.5">Priority</th>
+                <th className="px-5 py-3.5">Machine / Component</th>
+                <th className="px-5 py-3.5">Trigger Baseline / Target</th>
+                <th className="px-5 py-3.5">Completion Status</th>
                 <th className="px-5 py-3.5">Status</th>
+                <th className="px-5 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-              {tasks.map((task) => {
-                const ratio = Math.min(task.runningHours / task.limitHours, 1);
-                const progressPct = Math.round(ratio * 100);
-                
-                return (
-                  <tr key={task.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10 text-sm text-slate-700 dark:text-slate-300 transition-colors">
-                    <td className="px-5 py-4 font-mono font-medium text-xs text-blue-600 dark:text-blue-400">
-                      {task.id}
-                    </td>
-                    <td className="px-5 py-4 font-medium text-slate-900 dark:text-slate-100">
-                      {task.title}
-                    </td>
-                    <td className="px-5 py-4 text-xs text-slate-500 dark:text-slate-400">
-                      {task.machineName}
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex flex-col gap-1 w-44">
-                        <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 font-mono">
-                          <span>{task.runningHours}h</span>
-                          <span>{task.limitHours}h</span>
+              {tasks.length > 0 ? (
+                tasks.map((task) => {
+                  const baseline = parseFloat(task.trigger_base_hours);
+                  const limit = baseline + parseFloat(task.target_hours);
+                  const actual = parseFloat(task.actual_hours_at_trigger);
+                  const ratio = Math.min((actual - baseline) / parseFloat(task.target_hours), 1);
+                  const progressPct = Math.round(ratio * 100);
+                  
+                  return (
+                    <tr key={task.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10 text-sm text-slate-700 dark:text-slate-300 transition-colors">
+                      <td className="px-5 py-4 font-mono font-medium text-xs text-blue-600 dark:text-blue-400">
+                        TSK-{String(task.id).padStart(3, "0")}
+                      </td>
+                      <td className="px-5 py-4 font-medium text-slate-900 dark:text-slate-100">
+                        {task.task_name}
+                      </td>
+                      <td className="px-5 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        <div>{task.unit_id === "cooling-water-1" ? "Cooling Water 1" : task.unit_id === "cooling-water-2" ? "Cooling Water 2" : "Cooling Water 3"}</div>
+                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">{task.motor_key}</div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex flex-col gap-1 w-44">
+                          <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 font-mono">
+                            <span>Base: {baseline.toFixed(1)}h</span>
+                            <span>Target: {limit.toFixed(1)}h</span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-slate-100/40 dark:bg-slate-700/20 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                task.status === "overdue"
+                                  ? "bg-rose-500"
+                                  : task.status === "open"
+                                  ? "bg-amber-500"
+                                  : "bg-emerald-500"
+                              }`}
+                              style={{ width: `${progressPct}%` }}
+                            />
+                          </div>
                         </div>
-                        {/* Task Progress Bar: Unfilled track is very faint, inner filled bar remains */}
-                        <div className="h-1.5 w-full rounded-full bg-slate-100/40 dark:bg-slate-700/20 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${
-                              progressPct >= 90
-                                ? "bg-rose-500"
-                                : progressPct >= 75
-                                ? "bg-amber-500"
-                                : "bg-emerald-500"
-                            }`}
-                            style={{ width: `${progressPct}%` }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-xs text-slate-600 dark:text-slate-400">
-                      {task.assignedTo}
-                    </td>
-                    <td className="px-5 py-4 text-xs">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
-                          task.priority === "Critical"
-                            ? "bg-rose-100 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50"
-                            : task.priority === "High"
-                            ? "bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50"
-                            : task.priority === "Medium"
-                            ? "bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50"
-                            : "bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
-                        }`}
-                      >
-                        {task.priority}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-xs">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
-                          task.status === "Completed"
-                            ? "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400"
-                            : task.status === "Active"
-                            ? "bg-sky-100 dark:bg-sky-950/20 text-sky-700 dark:text-sky-400 animate-pulse"
-                            : "bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400"
-                        }`}
-                      >
-                        {task.status}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
+                      </td>
+                      <td className="px-5 py-4 text-xs">
+                        {task.status === "close" && task.completion_status && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                            task.completion_status === "Overdue"
+                              ? "bg-red-500/10 text-red-500 border border-red-500/20"
+                              : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-450 border border-emerald-500/20"
+                          }`}>
+                            {task.completion_status === "Overdue" ? "⚠️ Overdue" : "✓ On Time"}
+                          </span>
+                        )}
+                        {task.status !== "close" && (
+                          <span className="text-slate-400 font-mono text-[10px]">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-xs">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
+                            task.status === "overdue"
+                              ? "bg-rose-100 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400"
+                              : task.status === "open"
+                              ? "bg-yellow-100 dark:bg-yellow-950/20 text-yellow-700 dark:text-yellow-450 animate-pulse"
+                              : "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-450"
+                          }`}
+                        >
+                          {task.status === "overdue" ? "Overdue" : task.status === "open" ? "Open" : "Closed"}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        {(task.status === "open" || task.status === "overdue") && (
+                          <button
+                            type="button"
+                            onClick={() => handleCompleteTask(task.id)}
+                            className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition"
+                          >
+                            Done
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-5 py-10 text-center text-slate-400 dark:text-slate-500">
+                    No preventative maintenance tasks found for this selection.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
-
-      {/* Task Creation Modal: Support Dark Mode */}
-      {formOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
-          <div className="relative w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-2xl transition">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-700">
-              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                Create New Work Order
-              </h3>
-              <button
-                type="button"
-                onClick={() => setFormOpen(false)}
-                className="rounded-lg p-1 text-slate-400 hover:text-slate-500 dark:hover:text-slate-300"
-              >
-                ✕
-              </button>
-            </div>
-            <form onSubmit={handleCreateTask} className="mt-4 space-y-4">
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                Task Description
-                <input
-                  type="text"
-                  value={newTask.title}
-                  onChange={(e) => setNewTask((p) => ({ ...p, title: e.target.value }))}
-                  className="mt-2 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  required
-                />
-              </label>
-
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                Machine / Equipment
-                <input
-                  type="text"
-                  value={newTask.machineName}
-                  onChange={(e) => setNewTask((p) => ({ ...p, machineName: e.target.value }))}
-                  className="mt-2 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  placeholder="e.g. Boiler-3"
-                  required
-                />
-              </label>
-
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                Machine Group / Area
-                <select
-                  value={newTask.groupId}
-                  onChange={(e) => setNewTask((p) => ({ ...p, groupId: e.target.value }))}
-                  className="mt-2 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                >
-                  <option value="cooling-water-system">Cooling Water System</option>
-                  <option value="boiler-plant">Boiler Plant</option>
-                  <option value="water-treatment">Water Treatment</option>
-                  <option value="compressor-house">Compressor House</option>
-                  <option value="chiller-system">Chiller System</option>
-                  <option value="distillate-unit">Distillate Unit</option>
-                  <option value="purified-water-loop">Purified Water Loop</option>
-                  <option value="pure-steam-generator">Pure Steam Generator</option>
-                  <option value="wfi-loop">WFI Loop</option>
-                  <option value="compressed-air">Compressed Air</option>
-                  <option value="hvac">HVAC</option>
-                </select>
-              </label>
-
-              <div className="grid gap-4 grid-cols-2">
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                  Assigned Operator
-                  <input
-                    type="text"
-                    value={newTask.assignedTo}
-                    onChange={(e) => setNewTask((p) => ({ ...p, assignedTo: e.target.value }))}
-                    className="mt-2 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    required
-                  />
-                </label>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                  Priority
-                  <select
-                    value={newTask.priority}
-                    onChange={(e) => setNewTask((p) => ({ ...p, priority: e.target.value as TaskItem["priority"] }))}
-                    className="mt-2 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                    <option value="Critical">Critical</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="grid gap-4 grid-cols-2">
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                  Current Running Hours
-                  <input
-                    type="number"
-                    value={newTask.runningHours}
-                    onChange={(e) => setNewTask((p) => ({ ...p, runningHours: e.target.value }))}
-                    className="mt-2 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    min="0"
-                    required
-                  />
-                </label>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                  Limit/Target Hours
-                  <input
-                    type="number"
-                    value={newTask.limitHours}
-                    onChange={(e) => setNewTask((p) => ({ ...p, limitHours: e.target.value }))}
-                    className="mt-2 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    min="1"
-                    required
-                  />
-                </label>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={() => setFormOpen(false)}
-                  className="rounded-lg border border-slate-300 dark:border-slate-600 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-sm transition"
-                >
-                  Save Work Order
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

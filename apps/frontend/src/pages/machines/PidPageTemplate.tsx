@@ -8,6 +8,7 @@ export interface Task {
   openedMonth: boolean;
   createdDate: string;
   taskKey?: string;
+  completionStatus?: string;
 }
 
 export interface Alarm {
@@ -34,6 +35,8 @@ interface PidPageTemplateProps {
   alarms: Alarm[];
   children: ReactNode;
   onToggleCompleteTask?: (taskKey: string) => void;
+  dateRange?: { startDate: string; endDate: string };
+  onChangeDateRange?: (range: { startDate: string; endDate: string }) => void;
 }
 
 const PID_CANVAS_WIDTH = 1836;
@@ -51,6 +54,8 @@ export default function PidPageTemplate({
   alarms,
   children,
   onToggleCompleteTask,
+  dateRange,
+  onChangeDateRange,
 }: PidPageTemplateProps) {
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -65,6 +70,17 @@ export default function PidPageTemplate({
   };
 
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [modalStatusFilter, setModalStatusFilter] = useState<"all" | "open" | "overdue" | "close">("all");
+  const [modalComponentFilter, setModalComponentFilter] = useState<string>("all");
+
+  const ALL_COMPONENTS = [
+    "FAN-1", "FAN-2", "FAN-3",
+    "MTR-1", "MTR-2", "MTR-3", "MTR-4", "MTR-5", "MTR-6", "MTR-7", "MTR-8", "MTR-9",
+    "Dosing Pump 1", "Dosing Pump 2",
+    "Strainer 1", "Strainer 2", "Strainer 3", "Strainer 4", "Strainer 5", "Strainer 6", "Strainer 7", "Strainer 8", "Strainer 9",
+    "CT 1", "CT 2", "CT 3",
+    "Cooling Tank", "Panel"
+  ];
 
   const filteredTasks =
     selectedTaskFilter === "all"
@@ -74,6 +90,16 @@ export default function PidPageTemplate({
       : selectedTaskFilter === "open"
       ? tasks.filter((t) => t.status === "open")
       : tasks.filter((t) => t.status === "close");
+
+  const modalFilteredTasks = tasks.filter((t) => {
+    if (modalStatusFilter !== "all" && t.status !== modalStatusFilter) return false;
+    if (modalComponentFilter !== "all") {
+      const titleLower = t.title.toLowerCase();
+      const compLower = modalComponentFilter.toLowerCase();
+      if (!titleLower.includes(compLower)) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="relative flex gap-4">
@@ -275,29 +301,102 @@ export default function PidPageTemplate({
               </button>
             </div>
 
+            {/* Calendar & Filters Bar */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 dark:bg-slate-950/60 p-4 border border-slate-200/60 dark:border-slate-800 rounded-lg mb-4">
+              {/* Date range picker */}
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] text-slate-450 dark:text-slate-400 font-bold uppercase">Date Range (Calendar)</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={dateRange?.startDate}
+                    onChange={(e) => onChangeDateRange && onChangeDateRange({ startDate: e.target.value, endDate: dateRange?.endDate || "" })}
+                    className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 rounded px-2.5 py-1.5 focus:outline-none w-full font-semibold"
+                  />
+                  <span className="text-slate-400 text-xs">to</span>
+                  <input
+                    type="date"
+                    value={dateRange?.endDate}
+                    onChange={(e) => onChangeDateRange && onChangeDateRange({ startDate: dateRange?.startDate || "", endDate: e.target.value })}
+                    className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 rounded px-2.5 py-1.5 focus:outline-none w-full font-semibold"
+                  />
+                </div>
+              </div>
+
+              {/* Component filter */}
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] text-slate-450 dark:text-slate-400 font-bold uppercase">Filter by Component</span>
+                <select
+                  value={modalComponentFilter}
+                  onChange={(e) => setModalComponentFilter(e.target.value)}
+                  className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 rounded px-2.5 py-1.5 focus:outline-none w-full font-semibold"
+                >
+                  <option value="all">All Components</option>
+                  {ALL_COMPONENTS.map((comp) => (
+                    <option key={comp} value={comp}>
+                      {comp}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status filter tabs */}
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] text-slate-450 dark:text-slate-400 font-bold uppercase">Filter by Status</span>
+                <div className="flex items-center gap-1 mt-1">
+                  {(["all", "overdue", "open", "close"] as const).map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setModalStatusFilter(st)}
+                      className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase transition flex-1 text-center ${
+                        modalStatusFilter === st
+                          ? st === "overdue"
+                            ? "bg-rose-500 text-white shadow"
+                            : st === "open"
+                            ? "bg-yellow-500 text-white shadow"
+                            : st === "close"
+                            ? "bg-emerald-500 text-white shadow"
+                            : "bg-blue-600 text-white shadow"
+                          : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-750"
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {/* Stats Summary */}
-            <div className="flex flex-wrap gap-4 items-center justify-between bg-slate-50 dark:bg-slate-950/60 p-4 border border-slate-200/60 dark:border-slate-800 rounded-lg mb-4">
+            <div className="flex flex-wrap gap-4 items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
               <div className="flex items-center gap-6">
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Overdue Tasks</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Overdue</span>
                   <span className="text-xl font-bold text-rose-500">{taskInfo.taskOverdue}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Open Tasks</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Open</span>
                   <span className="text-xl font-bold text-yellow-500">{taskInfo.taskOpen}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Closed Tasks</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Closed</span>
                   <span className="text-xl font-bold text-green-500">{taskInfo.taskClose}</span>
+                </div>
+                <div className="border-l border-slate-200 dark:border-slate-700 pl-6">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Viewing</span>
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    {modalFilteredTasks.length} task{modalFilteredTasks.length !== 1 ? "s" : ""}
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* List Header and Content */}
             <div className="flex-1 overflow-y-auto min-h-0 pr-1 space-y-3">
-              {tasks.length > 0 ? (
+              {modalFilteredTasks.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {tasks.map((task) => (
+                  {modalFilteredTasks.map((task) => (
                     <div
                       key={task.id}
                       className={`border border-slate-250 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between gap-3 transition-colors ${
@@ -308,35 +407,43 @@ export default function PidPageTemplate({
                           : "bg-emerald-500/[0.01] border-emerald-500/30"
                       }`}
                     >
-                      <div className="space-y-1">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider ${
-                          task.status === "overdue"
-                            ? "bg-rose-500/10 text-rose-500"
-                            : task.status === "open"
-                            ? "bg-yellow-500/10 text-yellow-500"
-                            : "bg-emerald-500/10 text-emerald-500"
-                        }`}>
-                          {task.status === "overdue" ? "OVERDUE" : task.status === "open" ? "PENDING / OPEN" : "COMPLETED / CLOSED"}
-                        </span>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider ${
+                            task.status === "overdue"
+                              ? "bg-rose-500/10 text-rose-500"
+                              : task.status === "open"
+                              ? "bg-yellow-500/10 text-yellow-500"
+                              : "bg-emerald-500/10 text-emerald-500"
+                          }`}>
+                            {task.status === "overdue" ? "OVERDUE" : task.status === "open" ? "PENDING / OPEN" : "COMPLETED / CLOSED"}
+                          </span>
+                          
+                          {task.status === "close" && task.completionStatus && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider ${
+                              task.completionStatus === "Overdue"
+                                ? "bg-red-500/10 text-red-500 border border-red-500/20"
+                                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                            }`}>
+                              {task.completionStatus === "Overdue" ? "⚠️ Overdue at Completion" : "✓ Completed On Time"}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed">
                           {task.title}
                         </p>
                       </div>
 
                       <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-2.5">
-                        <span className="text-[10px] text-slate-400 font-bold font-mono">
-                          Source: {task.createdDate}
+                        <span className="text-[10px] text-slate-400 font-semibold">
+                          Created: {task.createdDate}
                         </span>
-                        {onToggleCompleteTask && task.taskKey && (
+                        {(task.status === "overdue" || task.status === "open") && onToggleCompleteTask && task.taskKey && (
                           <button
                             onClick={() => onToggleCompleteTask(task.taskKey!)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition duration-200 shadow-sm ${
-                              task.status === "overdue" || task.status === "open"
-                                ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20"
-                                : "bg-slate-200 hover:bg-slate-350 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700/80 shadow-slate-200/20"
-                            }`}
+                            className="px-3.5 py-1.5 rounded-lg text-xs font-bold transition duration-200 shadow-sm bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20"
                           >
-                            {task.status === "overdue" || task.status === "open" ? "Mark Done" : "Reopen Task"}
+                            Mark Done
                           </button>
                         )}
                       </div>
@@ -345,7 +452,7 @@ export default function PidPageTemplate({
                 </div>
               ) : (
                 <div className="text-center text-slate-400 dark:text-slate-500 py-10 font-bold text-xs uppercase tracking-wide bg-slate-50 dark:bg-slate-950/20 border border-dashed border-slate-200 dark:border-slate-850 rounded-xl">
-                  No running hours maintenance tasks triggered yet.
+                  No matching tasks found for the current filter criteria.
                 </div>
               )}
             </div>

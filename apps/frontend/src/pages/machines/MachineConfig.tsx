@@ -430,7 +430,7 @@ export default function MachineConfig() {
                         motorKey: specKey,
                         targetHours: rule.targetHours,
                         warningHours: rule.warningHours || 168,
-                        taskName: `${specKey} - ${task.trim()}`
+                        taskName: task.trim()
                       });
                     }
                   });

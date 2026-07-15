@@ -88,6 +88,34 @@ export const ensurePostgresTables = async () => {
       );
     `);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS running_hours_baselines (
+        unit_id VARCHAR(50) NOT NULL,
+        motor_key VARCHAR(50) NOT NULL,
+        target_hours DOUBLE PRECISION NOT NULL,
+        task_name VARCHAR(255) NOT NULL,
+        baseline_hours DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+        PRIMARY KEY (unit_id, motor_key, target_hours, task_name)
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS running_hours_tasks (
+        id SERIAL PRIMARY KEY,
+        unit_id VARCHAR(50) NOT NULL,
+        motor_key VARCHAR(50) NOT NULL,
+        target_hours DOUBLE PRECISION NOT NULL,
+        warning_hours DOUBLE PRECISION NOT NULL,
+        task_name VARCHAR(255) NOT NULL,
+        status VARCHAR(20) NOT NULL,
+        trigger_base_hours DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+        actual_hours_at_trigger DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+        completed_at TIMESTAMP WITHOUT TIME ZONE,
+        completion_status VARCHAR(50),
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     logger.info("postgres tables (telemetry, running hours & global configs) ensured");
   } catch (err: any) {
     logger.error({ err }, "failed to ensure postgres tables");

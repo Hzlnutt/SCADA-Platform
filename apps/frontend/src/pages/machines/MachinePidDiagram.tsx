@@ -5,7 +5,7 @@ import type { MachineOutletContext } from "./MachineLayout";
 import PidPageTemplate from "./PidPageTemplate";
 import type { Task, Alarm } from "./PidPageTemplate";
 import { useTelemetryStore } from "../../store/telemetry.store";
-import { getJson } from "../../services/api.client";
+import { getJson, postJson } from "../../services/api.client";
 import { telemetryTagIds } from "../../data/industrial-tags";
 import CoolingWF1U3Pid from "./diagrams/CoolingWF1U3Pid";
 import MachineAHU01Pid from "./diagrams/MachineAHU01Pid";
@@ -186,75 +186,62 @@ export default function MachinePidDiagram() {
   const [runningHours, setRunningHours] = useState<Record<string, number>>({});
   const [pidThresholds, setPidThresholds] = useState<any>(null);
 
-  const [completedTaskKeys, setCompletedTaskKeys] = useState<string[]>(() => {
-    const saved = localStorage.getItem("scada.config.rh.completedTasks");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return [];
-      }
-    }
-    return [];
+  const [dbTasks, setDbTasks] = useState<any[]>([]);
+  const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string }>(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const formatDate = (d: Date) => d.toISOString().split("T")[0];
+    return { startDate: formatDate(start), endDate: formatDate(end) };
   });
 
-  const handleToggleCompleteTask = (taskKey: string) => {
-    setCompletedTaskKeys((prev) => {
-      let next;
-      if (prev.includes(taskKey)) {
-        next = prev.filter((k) => k !== taskKey);
-      } else {
-        next = [...prev, taskKey];
+  const isCooling = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
+
+  const fetchTasks = async () => {
+    try {
+      const query = `unitId=${unitId}&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
+      const res = await getJson<{ data: any[] }>(`/config/rh-tasks?${query}`);
+      if (res && res.data) {
+        setDbTasks(res.data);
       }
-      localStorage.setItem("scada.config.rh.completedTasks", JSON.stringify(next));
-      return next;
-    });
+    } catch (err) {
+      console.error("Failed to fetch running hours tasks:", err);
+    }
   };
 
-  const isCooling = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
+  const handleToggleCompleteTask = async (taskId: string) => {
+    try {
+      await postJson(`/config/rh-tasks/${taskId}/complete`, {});
+      fetchTasks();
+      const rhRes = await getJson<{ data: Record<string, number> }>("/analytics/running-hours");
+      if (rhRes && rhRes.data) {
+        setRunningHours(rhRes.data);
+      }
+    } catch (err) {
+      console.error("Failed to complete task:", err);
+    }
+  };
+
   let allTasks: Task[] = [];
   if (isCooling) {
-    const savedRules = localStorage.getItem("scada.config.rh.tasks");
-    let rules: any[] = [];
-    if (savedRules) {
-      try {
-        rules = JSON.parse(savedRules);
-      } catch (e) {
-        rules = DEFAULT_TASK_RULES;
-      }
-    } else {
-      rules = DEFAULT_TASK_RULES;
-    }
-
-    const activeTasks: Task[] = [];
-    rules.forEach((rule, idx) => {
-      const tagId = MOTOR_KEY_TO_TAG_ID[rule.motorKey];
-      const actualRh = runningHours[tagId] || 0;
+    allTasks = dbTasks.map((task) => {
+      const isClosed = task.status === "close";
+      const actualHoursStr = isClosed 
+        ? `${parseFloat(task.actual_hours_at_trigger).toFixed(1)}h`
+        : `${(runningHours[MOTOR_KEY_TO_TAG_ID[task.motor_key]] || parseFloat(task.actual_hours_at_trigger) || 0.0).toFixed(1)}h`;
       
-      const warningBuffer = typeof rule.warningHours === "number" ? rule.warningHours : 168;
-      const isTriggered = actualRh >= (rule.targetHours - warningBuffer);
-      if (isTriggered) {
-        const taskKey = `${rule.motorKey}_${rule.targetHours}_${rule.taskName}`;
-        const isCompleted = completedTaskKeys.includes(taskKey);
-        
-        let status: "open" | "close" | "overdue" = "open";
-        if (isCompleted) {
-          status = "close";
-        } else if (actualRh >= rule.targetHours) {
-          status = "overdue";
-        }
+      const title = `${task.motor_key} (Running: ${actualHoursStr}) - ${task.task_name} (Target: ${task.target_hours}h)`;
 
-        activeTasks.push({
-          id: idx + 1,
-          taskKey,
-          title: `${rule.motorKey} (Running: ${actualRh.toFixed(1)}h) - ${rule.taskName} (Target: ${rule.targetHours}h)`,
-          status,
-          openedMonth: !isCompleted && status === "open",
-          createdDate: "Live Telemetry"
-        });
-      }
+      return {
+        id: task.id,
+        title,
+        status: task.status,
+        openedMonth: task.status !== "close",
+        createdDate: new Date(task.created_at).toLocaleDateString(),
+        taskKey: String(task.id),
+        completionStatus: task.completion_status
+      };
     });
-    allTasks = activeTasks;
   } else {
     allTasks = data.tasks;
   }
@@ -309,6 +296,14 @@ export default function MachinePidDiagram() {
     const telInterval = setInterval(fetchLatestTelemetry, 3000);
     return () => clearInterval(telInterval);
   }, []);
+
+  useEffect(() => {
+    if (isCooling) {
+      fetchTasks();
+      const interval = setInterval(fetchTasks, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [unitId, dateRange.startDate, dateRange.endDate]);
 
   const getStatus = (tagId: string) => {
     const val = latest[tagId]?.value;
@@ -441,6 +436,8 @@ export default function MachinePidDiagram() {
       taskInfo={taskInfo}
       alarms={alarmInfo}
       onToggleCompleteTask={handleToggleCompleteTask}
+      dateRange={dateRange}
+      onChangeDateRange={setDateRange}
     >
       {PidDiagram ? (
         <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} />
