@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { PipeDefs } from "../../../components/pid/PipeDefs";
 import { PipeH, PipeV } from "../../../components/pid/Pipe";
 import { SensorIndicator } from "../../../components/pid/SensorIndicator";
@@ -16,6 +17,7 @@ import InfoCard from "../../../components/pid/InfoCard";
 import SensorCard from "../../../components/pid/SensorCard";
 import DashedLine from "../../../components/pid/DashedLine";
 import { useTelemetryStore } from "../../../store/telemetry.store";
+import { getDefaultEqConfigs } from "../../../data/equipment";
 
 
 interface CoolingWF1U3PidProps {
@@ -81,11 +83,98 @@ export default function CoolingWF1U3Pid({
     return typeof val === "number" ? val : parseFloat(String(val)) || 0;
   };
 
+  const getEqThresholds = (tagKey: string, fallbackUnitId: string) => {
+    const saved = localStorage.getItem(`scada.config.eq.${fallbackUnitId}`);
+    if (saved) {
+      try {
+        const list = JSON.parse(saved);
+        const item = list.find((x: any) => x.tagKey === tagKey);
+        if (item) {
+          return { warning: item.baseline, alarm: item.highLimit };
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    const defaults = getDefaultEqConfigs(fallbackUnitId);
+    const item = defaults.find((x: any) => x.tagKey === tagKey);
+    return item ? { warning: item.baseline, alarm: item.highLimit } : { warning: 5000, alarm: 10000 };
+  };
+
+  const getRhConfig = (motorId: string) => {
+    switch (motorId) {
+      case "MTR-1": return getEqThresholds("M1_PUMP_MOTOR_OVERHAUL", "cooling-water-1");
+      case "MTR-2": return getEqThresholds("M2_SUPPLY_MOTOR_OVERHAUL", "cooling-water-1");
+      case "MTR-3": return getEqThresholds("M3_SUPPLY_MOTOR_OVERHAUL", "cooling-water-1");
+      case "MTR-4": return getEqThresholds("M4_PUMP_MOTOR_OVERHAUL", "cooling-water-2");
+      case "MTR-5": return getEqThresholds("M5_SUPPLY_MOTOR_OVERHAUL", "cooling-water-2");
+      case "MTR-6": return getEqThresholds("M6_SUPPLY_MOTOR_OVERHAUL", "cooling-water-2");
+      case "MTR-7": return getEqThresholds("M7_PUMP_MOTOR_OVERHAUL", "cooling-water-3");
+      case "MTR-8": return getEqThresholds("M8_SUPPLY_MOTOR_OVERHAUL", "cooling-water-3");
+      case "MTR-9": return getEqThresholds("M9_SUPPLY_MOTOR_OVERHAUL", "cooling-water-3");
+      case "FAN-1": return getEqThresholds("F1_MOTOR_OVERHAUL", "cooling-water-1");
+      case "FAN-2": return getEqThresholds("F2_MOTOR_OVERHAUL", "cooling-water-2");
+      case "FAN-3": return getEqThresholds("F3_MOTOR_OVERHAUL", "cooling-water-3");
+      default: return { warning: 5000, alarm: 10000 };
+    }
+  };
+
   const getRh = (tagId: string) => {
     const val = runningHours[tagId];
     if (val === undefined || val === null) return "XX";
     return val.toFixed(1);
   };
+
+
+  const dashedLines = useMemo(() => (
+    <>
+      <DashedLine x={95} y={430} w={0} h={300} />
+      <DashedLine x={95} y={430} w={50} h={0} />
+
+      <DashedLine x={260} y={430} w={0} h={300} />
+      <DashedLine x={260} y={430} w={100} h={0} />
+
+      <DashedLine x={430} y={430} w={0} h={300} />
+      <DashedLine x={430} y={430} w={140} h={0} />
+
+      <DashedLine x={637} y={650} w={0} h={30} />
+
+      <DashedLine x={782} y={650} w={0} h={30} />
+      <DashedLine x={782} y={650} w={100} h={0} />
+      <DashedLine x={882} y={580} w={0} h={70} />
+
+      <DashedLine x={965} y={760} w={0} h={30} />
+      <DashedLine x={1126} y={760} w={0} h={30} />
+
+      <DashedLine x={1265} y={428} w={0} h={153} />
+      <DashedLine x={1240} y={428} w={30} h={0} />
+
+      <DashedLine x={1438} y={500} w={0} h={80} />
+      <DashedLine x={1370} y={500} w={70} h={0} />
+      <DashedLine x={1370} y={428} w={0} h={73} />
+      <DashedLine x={1340} y={428} w={30} h={0} />
+
+      <DashedLine x={1613} y={500} w={0} h={80} />
+      <DashedLine x={1480} y={500} w={134} h={0} />
+      <DashedLine x={1480} y={428} w={0} h={73} />
+      <DashedLine x={1450} y={428} w={30} h={0} />
+
+      <DashedLine x={1387} y={745} w={0} h={30} />
+      <DashedLine x={1387} y={745} w={200} h={0} />
+      <DashedLine x={1582} y={428} w={0} h={320} />
+      <DashedLine x={1555} y={428} w={30} h={0} />
+
+      <DashedLine x={1600} y={745} w={0} h={30} />
+      <DashedLine x={1600} y={745} w={130} h={0} />
+      <DashedLine x={1725} y={500} w={0} h={245} />
+      <DashedLine x={1660} y={428} w={30} h={0} />
+      <DashedLine x={1690} y={500} w={35} h={0} />
+      <DashedLine x={1687} y={430} w={0} h={70} />
+
+      <DashedLine x={1800} y={430} w={0} h={340} />
+      <DashedLine x={1770} y={430} w={30} h={0} />
+    </>
+  ), []);
 
 
   return (
@@ -99,52 +188,8 @@ export default function CoolingWF1U3Pid({
     >
       <PipeDefs />
 
-{/* Dashed Line */}
-              <DashedLine x={95} y={430} w={0} h={300} />
-              <DashedLine x={95} y={430} w={50} h={0} />
-
-              <DashedLine x={260} y={430} w={0} h={300} />
-              <DashedLine x={260} y={430} w={100} h={0} />
-
-              <DashedLine x={430} y={430} w={0} h={300} />
-              <DashedLine x={430} y={430} w={140} h={0} />
-
-              <DashedLine x={637} y={650} w={0} h={30} />
-
-              <DashedLine x={782} y={650} w={0} h={30} />
-              <DashedLine x={782} y={650} w={100} h={0} />
-              <DashedLine x={882} y={580} w={0} h={70} />
-
-              <DashedLine x={965} y={760} w={0} h={30} />
-              <DashedLine x={1126} y={760} w={0} h={30} />
-
-              <DashedLine x={1265} y={428} w={0} h={153} />
-              <DashedLine x={1240} y={428} w={30} h={0} />
-
-              <DashedLine x={1438} y={500} w={0} h={80} />
-              <DashedLine x={1370} y={500} w={70} h={0} />
-              <DashedLine x={1370} y={428} w={0} h={73} />
-              <DashedLine x={1340} y={428} w={30} h={0} />
-
-              <DashedLine x={1613} y={500} w={0} h={80} />
-              <DashedLine x={1480} y={500} w={134} h={0} />
-              <DashedLine x={1480} y={428} w={0} h={73} />
-              <DashedLine x={1450} y={428} w={30} h={0} />
-
-              <DashedLine x={1387} y={745} w={0} h={30} />
-              <DashedLine x={1387} y={745} w={200} h={0} />
-              <DashedLine x={1582} y={428} w={0} h={320} />
-              <DashedLine x={1555} y={428} w={30} h={0} />
-
-              <DashedLine x={1600} y={745} w={0} h={30} />
-              <DashedLine x={1600} y={745} w={130} h={0} />
-              <DashedLine x={1725} y={500} w={0} h={245} />
-              <DashedLine x={1660} y={428} w={30} h={0} />
-              <DashedLine x={1690} y={500} w={35} h={0} />
-              <DashedLine x={1687} y={430} w={0} h={70} />
-
-              <DashedLine x={1800} y={430} w={0} h={340} />
-              <DashedLine x={1770} y={430} w={30} h={0} />
+      {/* Dashed Line */}
+      {dashedLines}
 
               {/* ── PIPE ─────────────────────────────────────────────────── */}
 
@@ -192,56 +237,56 @@ export default function CoolingWF1U3Pid({
 
               {/* Pipe Area to Tank*/}
               <PipeV x={1210} y={166} w={7} h={30} 
-                on={true} dir="up" type="return" />
+                on={motorStatus["MTR-4"]} dir="up" type="return" />
               <PipeH x={820} y={145} w={377} h={6} 
-                on={true} dir="left" type="return" />
+                on={motorStatus["MTR-4"]} dir="left" type="return" />
               <PipeV x={800} y={168} w={7} h={238} 
-                on={true} dir="down" type="return" />
+                on={motorStatus["MTR-4"]} dir="down" type="return" />
               <PipeBend x={1195} y={143} size={25} angle={180} />
               <PipeBend x={798} y={143} size={25} angle={90} />
 
               <PipeV x={1314} y={153} w={7} h={45} 
-                on={true} dir="up" type="return" />
+                on={motorStatus["MTR-5"]} dir="up" type="return" />
               <PipeH x={810} y={133} w={488} h={6} 
-                on={true} dir="left" type="return" />
+                on={motorStatus["MTR-5"]} dir="left" type="return" />
               <PipeV x={788} y={156} w={7} h={250} 
-                on={true} dir="down" type="return" />
+                on={motorStatus["MTR-5"]} dir="down" type="return" />
               <PipeBend x={1298} y={130} size={25} angle={180} />
               <PipeBend x={786} y={131} size={25} angle={90} />
 
               <PipeV x={1422} y={141} w={7} h={57} 
-                on={true} dir="up" type="return" />
+                on={motorStatus["MTR-6"]} dir="up" type="return" />
               <PipeH x={795} y={121} w={615} h={6} 
-                on={true} dir="left" type="return" />
+                on={motorStatus["MTR-6"]} dir="left" type="return" />
               <PipeV x={776} y={144} w={7} h={262} 
-                on={true} dir="down" type="return" />
+                on={motorStatus["MTR-6"]} dir="down" type="return" />
               <PipeBend x={1406} y={118} size={25} angle={180} />
               <PipeBend x={774} y={119} size={25} angle={90} />
 
               <PipeV x={1527} y={129} w={7} h={69} 
-                on={true} dir="up" type="return" />
+                on={motorStatus["MTR-7"]} dir="up" type="return" />
               <PipeH x={783} y={109} w={730} h={6} 
-                on={true} dir="left" type="return" />
+                on={motorStatus["MTR-7"]} dir="left" type="return" />
               <PipeV x={764} y={132} w={7} h={274} 
-                on={true} dir="down" type="return" />
+                on={motorStatus["MTR-7"]} dir="down" type="return" />
               <PipeBend x={1511} y={106} size={25} angle={180} />
               <PipeBend x={762} y={107} size={25} angle={90} />
 
               <PipeV x={1632} y={117} w={7} h={81} 
-                on={true} dir="up" type="return" />
+                on={motorStatus["MTR-8"]} dir="up" type="return" />
               <PipeH x={771} y={97} w={850} h={6} 
-                on={true} dir="left" type="return" />
+                on={motorStatus["MTR-8"]} dir="left" type="return" />
               <PipeV x={752} y={120} w={7} h={286} 
-                on={true} dir="down" type="return" />
+                on={motorStatus["MTR-8"]} dir="down" type="return" />
               <PipeBend x={1616} y={94} size={25} angle={180} />
               <PipeBend x={750} y={95} size={25} angle={90} />
 
               <PipeV x={1738} y={105} w={7} h={93} 
-                on={true} dir="up" type="return" />
+                on={motorStatus["MTR-9"]} dir="up" type="return" />
               <PipeH x={759} y={85} w={965} h={6} 
-                on={true} dir="left" type="return" />
+                on={motorStatus["MTR-9"]} dir="left" type="return" />
               <PipeV x={740} y={108} w={7} h={298} 
-                on={true} dir="down" type="return" />
+                on={motorStatus["MTR-9"]} dir="down" type="return" />
               <PipeBend x={1722} y={82} size={25} angle={180} />
               <PipeBend x={738} y={83} size={25} angle={90} />
 
@@ -509,14 +554,16 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/motor_status_1")}
               unit=" h"
-              color="#ffffff"
+              warningThreshold={getRhConfig("MTR-1").warning}
+              alarmThreshold={getRhConfig("MTR-1").alarm}
+              thresholdDirection="above"
               />
               <SensorIndicator
               x={70}
               y={840}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -524,7 +571,7 @@ export default function CoolingWF1U3Pid({
               y={868}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -552,14 +599,16 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/motor_status_2")}
               unit=" h"
-              color="#ffffff"
+              warningThreshold={getRhConfig("MTR-2").warning}
+              alarmThreshold={getRhConfig("MTR-2").alarm}
+              thresholdDirection="above"
               />
               <SensorIndicator
               x={238}
               y={840}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -567,7 +616,7 @@ export default function CoolingWF1U3Pid({
               y={868}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -595,14 +644,16 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/motor_status_3")}
               unit=" h"
-              color="#ffffff"
+              warningThreshold={getRhConfig("MTR-3").warning}
+              alarmThreshold={getRhConfig("MTR-3").alarm}
+              thresholdDirection="above"
               />
               <SensorIndicator
               x={406}
               y={840}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -610,7 +661,7 @@ export default function CoolingWF1U3Pid({
               y={868}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -628,7 +679,7 @@ export default function CoolingWF1U3Pid({
               y={756}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               mode="onoff"
               />
               <SensorIndicator
@@ -636,7 +687,7 @@ export default function CoolingWF1U3Pid({
               y={784}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -778,14 +829,16 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/eq_status_du03")}
               unit=" h"
-              color="#ffffff"
+              warningThreshold={getRhConfig("MTR-4").warning}
+              alarmThreshold={getRhConfig("MTR-4").alarm}
+              thresholdDirection="above"
               />
               <SensorIndicator
               x={1285}
               y={660}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -793,7 +846,7 @@ export default function CoolingWF1U3Pid({
               y={688}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -813,14 +866,16 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/eq_status_bp03")}
               unit=" h"
-              color="#ffffff"
+              warningThreshold={getRhConfig("MTR-5").warning}
+              alarmThreshold={getRhConfig("MTR-5").alarm}
+              thresholdDirection="above"
               />
               <SensorIndicator
               x={1460}
               y={660}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -828,7 +883,7 @@ export default function CoolingWF1U3Pid({
               y={688}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -848,14 +903,16 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/eq_status_prep03")}
               unit=" h"
-              color="#ffffff"
+              warningThreshold={getRhConfig("MTR-6").warning}
+              alarmThreshold={getRhConfig("MTR-6").alarm}
+              thresholdDirection="above"
               />
               <SensorIndicator
               x={1635}
               y={660}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -863,7 +920,7 @@ export default function CoolingWF1U3Pid({
               y={688}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -883,14 +940,16 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/eq_status_st03")}
               unit=" h"
-              color="#ffffff"
+              warningThreshold={getRhConfig("MTR-7").warning}
+              alarmThreshold={getRhConfig("MTR-7").alarm}
+              thresholdDirection="above"
               />
               <SensorIndicator
               x={1405}
               y={850}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -898,7 +957,7 @@ export default function CoolingWF1U3Pid({
               y={878}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -919,14 +978,16 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/eq_status_washing")}
               unit=" h"
-              color="#ffffff"
+              warningThreshold={getRhConfig("MTR-8").warning}
+              alarmThreshold={getRhConfig("MTR-8").alarm}
+              thresholdDirection="above"
               />
               <SensorIndicator
               x={1580}
               y={850}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -934,7 +995,7 @@ export default function CoolingWF1U3Pid({
               y={878}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -954,14 +1015,16 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/eq_status_minilab")}
               unit=" h"
-              color="#ffffff"
+              warningThreshold={getRhConfig("MTR-9").warning}
+              alarmThreshold={getRhConfig("MTR-9").alarm}
+              thresholdDirection="above"
               />
               <SensorIndicator
               x={1755}
               y={850}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -969,7 +1032,7 @@ export default function CoolingWF1U3Pid({
               y={878}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -987,7 +1050,7 @@ export default function CoolingWF1U3Pid({
               y={322}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -995,7 +1058,7 @@ export default function CoolingWF1U3Pid({
               y={350}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -1003,7 +1066,7 @@ export default function CoolingWF1U3Pid({
               y={378}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -1031,14 +1094,16 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/fan_status_1")}
               unit=" h"
-              color="#ffffff"
+              warningThreshold={getRhConfig("FAN-1").warning}
+              alarmThreshold={getRhConfig("FAN-1").alarm}
+              thresholdDirection="above"
               />
               <SensorIndicator
               x={130}
               y={-50}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -1046,7 +1111,7 @@ export default function CoolingWF1U3Pid({
               y={-22}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -1074,14 +1139,16 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/fan_status_2")}
               unit=" h"
-              color="#ffffff"
+              warningThreshold={getRhConfig("FAN-2").warning}
+              alarmThreshold={getRhConfig("FAN-2").alarm}
+              thresholdDirection="above"
               />
               <SensorIndicator
               x={344}
               y={-50}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -1089,7 +1156,7 @@ export default function CoolingWF1U3Pid({
               y={-22}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -1117,14 +1184,16 @@ export default function CoolingWF1U3Pid({
               h={25.5}
               value={getRh("cooling-water/fan_status_3")}
               unit=" h"
-              color="#ffffff"
+              warningThreshold={getRhConfig("FAN-3").warning}
+              alarmThreshold={getRhConfig("FAN-3").alarm}
+              thresholdDirection="above"
               />
               <SensorIndicator
               x={563}
               y={-50}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
               <SensorIndicator
@@ -1132,7 +1201,7 @@ export default function CoolingWF1U3Pid({
               y={-22}
               w={63.75}
               h={25.5}
-              value="API TIDAK TERKIRIM"
+              value="XX"
               unit=""
               />
 
@@ -1181,7 +1250,7 @@ export default function CoolingWF1U3Pid({
               width={175}
               title="AMBIENT"
               values={[
-              { value: "API TIDAK TERKIRIM", unit: "" }
+              { value: "XX", unit: "" }
               ]}
               colorType="green"
               />
@@ -1190,7 +1259,7 @@ export default function CoolingWF1U3Pid({
               y={-145}
               width={175}
               title="HEATING"
-              value="API TIDAK TERKIRIM"
+              value="XX"
               colorType="blue"
               />
               <SensorCard
@@ -1206,7 +1275,7 @@ export default function CoolingWF1U3Pid({
               y={-35}
               width={175}
               title="COOLING"
-              value="API TIDAK TERKIRIM"
+              value="XX"
               colorType="blue"
               />
               <SensorCard
@@ -1214,7 +1283,7 @@ export default function CoolingWF1U3Pid({
               y={-35}
               width={175}
               title="LOT"
-              value="API TIDAK TERKIRIM"
+              value="XX"
               colorType="blue"
               />
 

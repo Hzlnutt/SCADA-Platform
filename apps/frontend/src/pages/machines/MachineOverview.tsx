@@ -95,6 +95,10 @@ function StandardMachineOverview({
   // Sub-tab selection: 'telemetry' or 'process'
   const [subTab, setSubTab] = useState<"telemetry" | "process">("telemetry");
 
+  useEffect(() => {
+    setSubTab("telemetry");
+  }, [unitId]);
+
   // Load alarms and eqConfigs to compute active alarms
   const alarms = useMemo(() => {
     const saved = localStorage.getItem(`scada.alarm_logs.${unitId}`);

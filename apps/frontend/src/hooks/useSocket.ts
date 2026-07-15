@@ -8,6 +8,8 @@ import { useTelemetryStore, type TelemetryPoint } from "../store/telemetry.store
 export const useSocket = (enabled = true) => {
   const addPoints = useTelemetryStore((state) => state.addPoints);
   const pushEvents = useAlarmStore((state) => state.pushEvents);
+  const updatePidAlarms = useAlarmStore((state) => state.updatePidAlarms);
+  const reEvaluateAllAlarms = useAlarmStore((state) => state.reEvaluateAllAlarms);
   const setSocketStatus = useSystemStore((state) => state.setSocketStatus);
 
   useEffect(() => {
@@ -29,10 +31,14 @@ export const useSocket = (enabled = true) => {
     const handleTelemetry = (payload: { points?: TelemetryPoint[] }) => {
       const points = Array.isArray(payload?.points) ? payload.points : [];
       addPoints(points);
+      updatePidAlarms(points);
     };
     const handleAlarms = (payload: { events?: AlarmEvent[] }) => {
       const events = Array.isArray(payload?.events) ? payload.events : [];
       pushEvents(events);
+    };
+    const handleStorageChange = () => {
+      reEvaluateAllAlarms();
     };
 
     socket.on("connect", handleConnect);
@@ -41,6 +47,7 @@ export const useSocket = (enabled = true) => {
     socket.on("telemetry:snapshot", handleTelemetry);
     socket.on("telemetry:update", handleTelemetry);
     socket.on("alarm:event", handleAlarms);
+    window.addEventListener("storage", handleStorageChange);
 
     if (socket.connected) {
       handleConnect();
@@ -53,6 +60,7 @@ export const useSocket = (enabled = true) => {
       socket.off("telemetry:snapshot", handleTelemetry);
       socket.off("telemetry:update", handleTelemetry);
       socket.off("alarm:event", handleAlarms);
+      window.removeEventListener("storage", handleStorageChange);
     };
-  }, [addPoints, enabled, pushEvents, setSocketStatus]);
+  }, [addPoints, enabled, pushEvents, updatePidAlarms, reEvaluateAllAlarms, setSocketStatus]);
 };

@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { getMongoDb } from "../../database/mongo";
+import { getPostgresPool } from "../../database/postgres";
 import {
   MACHINE_CATEGORIES_COLLECTION,
   MACHINE_CONFIGS_COLLECTION,
@@ -383,6 +384,256 @@ export const updatePidThresholdsHandler = async (req: Request, res: Response, ne
     }
     
     res.json({ success: true, data: req.body });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const defaultRhTaskRules = [
+  {
+    itemKey: "FAN-1",
+    displayName: "FAN-1 (Motor Fan 1)",
+    rules: [
+      { targetHours: 500, tasks: ["Check V-Belt Tension", "Visual Inspection"] },
+      { targetHours: 1000, tasks: ["Clean Fan Blades"] }
+    ]
+  },
+  {
+    itemKey: "FAN-2",
+    displayName: "FAN-2 (Motor Fan 2)",
+    rules: [
+      { targetHours: 500, tasks: ["Check V-Belt Tension", "Visual Inspection"] },
+      { targetHours: 1000, tasks: ["Clean Fan Blades"] }
+    ]
+  },
+  {
+    itemKey: "FAN-3",
+    displayName: "FAN-3 (Motor Fan 3)",
+    rules: [
+      { targetHours: 500, tasks: ["Check V-Belt Tension", "Visual Inspection"] },
+      { targetHours: 1000, tasks: ["Clean Fan Blades"] }
+    ]
+  },
+  {
+    itemKey: "MTR-1",
+    displayName: "MTR-1 (Motor Sirkulasi 1)",
+    rules: [
+      { targetHours: 500, tasks: ["Strainer Inspection", "Pump Bearing Lubrication"] },
+      { targetHours: 1000, tasks: ["Seal Inspection"] }
+    ]
+  },
+  {
+    itemKey: "MTR-2",
+    displayName: "MTR-2 (Motor Sirkulasi 2)",
+    rules: [
+      { targetHours: 1000, tasks: ["Motor Overhaul/Bearing Inspection"] }
+    ]
+  },
+  {
+    itemKey: "MTR-3",
+    displayName: "MTR-3 (Motor Sirkulasi 3)",
+    rules: [
+      { targetHours: 1000, tasks: ["Motor Overhaul/Bearing Inspection"] }
+    ]
+  },
+  {
+    itemKey: "MTR-4",
+    displayName: "MTR-4 (Motor DU-3)",
+    rules: [
+      { targetHours: 1000, tasks: ["Motor Overhaul/Bearing Inspection"] }
+    ]
+  },
+  {
+    itemKey: "MTR-5",
+    displayName: "MTR-5 (Motor BP-3)",
+    rules: [
+      { targetHours: 1000, tasks: ["Motor Overhaul/Bearing Inspection"] }
+    ]
+  },
+  {
+    itemKey: "MTR-6",
+    displayName: "MTR-6 (Motor SP-3)",
+    rules: [
+      { targetHours: 1000, tasks: ["Motor Overhaul/Bearing Inspection"] }
+    ]
+  },
+  {
+    itemKey: "MTR-7",
+    displayName: "MTR-7 (Motor ST-3)",
+    rules: [
+      { targetHours: 1000, tasks: ["Motor Overhaul/Bearing Inspection"] }
+    ]
+  },
+  {
+    itemKey: "MTR-8",
+    displayName: "MTR-8 (Motor Washing)",
+    rules: [
+      { targetHours: 1000, tasks: ["Motor Overhaul/Bearing Inspection"] }
+    ]
+  },
+  {
+    itemKey: "MTR-9",
+    displayName: "MTR-9 (Motor Mini Lab)",
+    rules: [
+      { targetHours: 1000, tasks: ["Motor Overhaul/Bearing Inspection"] }
+    ]
+  },
+  {
+    itemKey: "Dosing Pump 1",
+    displayName: "Dosing Pump 1",
+    rules: [
+      { targetHours: 500, tasks: ["Strainer Inspection"] }
+    ]
+  },
+  {
+    itemKey: "Dosing Pump 2",
+    displayName: "Dosing Pump 2",
+    rules: [
+      { targetHours: 500, tasks: ["Strainer Inspection"] }
+    ]
+  },
+  {
+    itemKey: "Strainer 1",
+    displayName: "Strainer 1",
+    rules: [
+      { targetHours: 200, tasks: ["Check Cleanliness"] },
+      { targetHours: 600, tasks: ["Clean Filter Element"] }
+    ]
+  },
+  {
+    itemKey: "Strainer 2",
+    displayName: "Strainer 2",
+    rules: [
+      { targetHours: 200, tasks: ["Check Cleanliness"] },
+      { targetHours: 600, tasks: ["Clean Filter Element"] }
+    ]
+  },
+  {
+    itemKey: "Strainer 3",
+    displayName: "Strainer 3",
+    rules: [
+      { targetHours: 200, tasks: ["Check Cleanliness"] },
+      { targetHours: 600, tasks: ["Clean Filter Element"] }
+    ]
+  },
+  {
+    itemKey: "Strainer 4",
+    displayName: "Strainer 4",
+    rules: [
+      { targetHours: 200, tasks: ["Check Cleanliness"] },
+      { targetHours: 600, tasks: ["Clean Filter Element"] }
+    ]
+  },
+  {
+    itemKey: "Strainer 5",
+    displayName: "Strainer 5",
+    rules: [
+      { targetHours: 200, tasks: ["Check Cleanliness"] },
+      { targetHours: 600, tasks: ["Clean Filter Element"] }
+    ]
+  },
+  {
+    itemKey: "Strainer 6",
+    displayName: "Strainer 6",
+    rules: [
+      { targetHours: 200, tasks: ["Check Cleanliness"] },
+      { targetHours: 600, tasks: ["Clean Filter Element"] }
+    ]
+  },
+  {
+    itemKey: "Strainer 7",
+    displayName: "Strainer 7",
+    rules: [
+      { targetHours: 200, tasks: ["Check Cleanliness"] },
+      { targetHours: 600, tasks: ["Clean Filter Element"] }
+    ]
+  },
+  {
+    itemKey: "Strainer 8",
+    displayName: "Strainer 8",
+    rules: [
+      { targetHours: 200, tasks: ["Check Cleanliness"] },
+      { targetHours: 600, tasks: ["Clean Filter Element"] }
+    ]
+  },
+  {
+    itemKey: "Strainer 9",
+    displayName: "Strainer 9",
+    rules: [
+      { targetHours: 200, tasks: ["Check Cleanliness"] },
+      { targetHours: 600, tasks: ["Clean Filter Element"] }
+    ]
+  },
+  {
+    itemKey: "CT 1",
+    displayName: "CT 1",
+    rules: [
+      { targetHours: 600, tasks: ["Basin Debris Clean", "Float Valve Inspection"] }
+    ]
+  },
+  {
+    itemKey: "CT 2",
+    displayName: "CT 2",
+    rules: [
+      { targetHours: 600, tasks: ["Basin Debris Clean", "Float Valve Inspection"] }
+    ]
+  },
+  {
+    itemKey: "CT 3",
+    displayName: "CT 3",
+    rules: [
+      { targetHours: 600, tasks: ["Basin Debris Clean", "Float Valve Inspection"] }
+    ]
+  },
+  {
+    itemKey: "Cooling Tank",
+    displayName: "Cooling Tank",
+    rules: [
+      { targetHours: 1000, tasks: ["Basin Sediment Cleaning", "Flushing & Corrosion Inspect"] }
+    ]
+  },
+  {
+    itemKey: "Panel",
+    displayName: "Panel",
+    rules: [
+      { targetHours: 1000, tasks: ["Inverter Cleaning", "Wiring Inspection"] }
+    ]
+  }
+];
+
+export const getRhTaskRulesHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pool = getPostgresPool();
+    const result = await pool.query("SELECT value FROM global_configs WHERE key = $1", ["rh_task_rules"]);
+    if (result.rows.length > 0) {
+      res.json({ data: result.rows[0].value });
+    } else {
+      res.json({ data: defaultRhTaskRules });
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateRhTaskRulesHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pool = getPostgresPool();
+    const rules = req.body;
+    
+    await pool.query(
+      `INSERT INTO global_configs (key, value, updated_at) 
+       VALUES ($1, $2, CURRENT_TIMESTAMP) 
+       ON CONFLICT (key) 
+       DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
+      ["rh_task_rules", JSON.stringify(rules)]
+    );
+    
+    const io = getSocketServer();
+    if (io) {
+      io.emit("config:rh-task-rules:update", { key: "rh_task_rules", rules });
+    }
+    
+    res.json({ success: true, data: rules });
   } catch (err) {
     next(err);
   }

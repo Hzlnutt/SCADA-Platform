@@ -12,7 +12,9 @@ import {
   getUtilityConfigHandler,
   updateUtilityConfigHandler,
   getPidThresholdsHandler,
-  updatePidThresholdsHandler
+  updatePidThresholdsHandler,
+  getRhTaskRulesHandler,
+  updateRhTaskRulesHandler
 } from "./config.controller";
 
 export const configRouter = Router();
@@ -29,3 +31,5 @@ configRouter.get("/config/utility", authenticate, getUtilityConfigHandler);
 configRouter.post("/config/utility", authenticate, updateUtilityConfigHandler);
 configRouter.get("/config/pid-thresholds", authenticate, getPidThresholdsHandler);
 configRouter.post("/config/pid-thresholds", authenticate, authorize(["admin"]), updatePidThresholdsHandler);
+configRouter.get("/config/rh-task-rules", authenticate, getRhTaskRulesHandler);
+configRouter.post("/config/rh-task-rules", authenticate, authorize(["admin"]), updateRhTaskRulesHandler);

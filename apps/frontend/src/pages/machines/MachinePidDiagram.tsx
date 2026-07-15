@@ -28,6 +28,54 @@ const machineDataMap: Record<
   // Mesin non-HVAC lainnya...
 };
 
+const DEFAULT_TASK_RULES = [
+  { id: "1", motorKey: "FAN-1", targetHours: 500, taskName: "Check V-Belt Tension" },
+  { id: "2", motorKey: "FAN-1", targetHours: 500, taskName: "Visual Inspection" },
+  { id: "3", motorKey: "FAN-1", targetHours: 1000, taskName: "Clean Fan Blades" },
+  { id: "4", motorKey: "FAN-2", targetHours: 500, taskName: "Check V-Belt Tension" },
+  { id: "5", motorKey: "FAN-2", targetHours: 500, taskName: "Visual Inspection" },
+  { id: "6", motorKey: "FAN-2", targetHours: 1000, taskName: "Clean Fan Blades" },
+  { id: "7", motorKey: "FAN-3", targetHours: 500, taskName: "Check V-Belt Tension" },
+  { id: "8", motorKey: "FAN-3", targetHours: 500, taskName: "Visual Inspection" },
+  { id: "9", motorKey: "FAN-3", targetHours: 1000, taskName: "Clean Fan Blades" },
+  { id: "10", motorKey: "MTR-1", targetHours: 500, taskName: "Strainer Inspection" },
+  { id: "11", motorKey: "MTR-1", targetHours: 500, taskName: "Pump Bearing Lubrication" },
+  { id: "12", motorKey: "MTR-1", targetHours: 1000, taskName: "Seal Inspection" },
+  { id: "13", motorKey: "MTR-2", targetHours: 1000, taskName: "Motor Overhaul/Bearing Inspection" },
+  { id: "14", motorKey: "MTR-3", targetHours: 1000, taskName: "Motor Overhaul/Bearing Inspection" }
+];
+
+const MOTOR_KEY_TO_TAG_ID: Record<string, string> = {
+  "FAN-1": "cooling-water/fan_status_1",
+  "FAN-2": "cooling-water/fan_status_2",
+  "FAN-3": "cooling-water/fan_status_3",
+  "MTR-1": "cooling-water/motor_status_1",
+  "MTR-2": "cooling-water/motor_status_2",
+  "MTR-3": "cooling-water/motor_status_3",
+  "MTR-4": "cooling-water/eq_status_du03",
+  "MTR-5": "cooling-water/eq_status_bp03",
+  "MTR-6": "cooling-water/eq_status_prep03",
+  "MTR-7": "cooling-water/eq_status_st03",
+  "MTR-8": "cooling-water/eq_status_washing",
+  "MTR-9": "cooling-water/eq_status_minilab",
+  "Dosing Pump 1": "cooling-water/dosing_pump_1",
+  "Dosing Pump 2": "cooling-water/dosing_pump_2",
+  "Strainer 1": "cooling-water/strainer_1",
+  "Strainer 2": "cooling-water/strainer_2",
+  "Strainer 3": "cooling-water/strainer_3",
+  "Strainer 4": "cooling-water/strainer_4",
+  "Strainer 5": "cooling-water/strainer_5",
+  "Strainer 6": "cooling-water/strainer_6",
+  "Strainer 7": "cooling-water/strainer_7",
+  "Strainer 8": "cooling-water/strainer_8",
+  "Strainer 9": "cooling-water/strainer_9",
+  "CT 1": "cooling-water/ct_1",
+  "CT 2": "cooling-water/ct_2",
+  "CT 3": "cooling-water/ct_3",
+  "Cooling Tank": "cooling-water/cooling_tank",
+  "Panel": "cooling-water/panel"
+};
+
 // ── Data default jika unitId tidak ditemukan ────────────
 const defaultData: { tasks: Task[]; alarms: Alarm[] } = {
   tasks: [],
@@ -73,24 +121,79 @@ export default function MachinePidDiagram() {
 
   // ── Ambil task & alarm khusus untuk mesin ini ──────────
   const data = machineDataMap[unitId] ?? defaultData;
-  const { tasks: allTasks, alarms: alarmInfo } = data;
+  const alarmInfo = data.alarms;
 
   const latest = useTelemetryStore((state) => state.latest);
 
   const [runningHours, setRunningHours] = useState<Record<string, number>>({});
   const [pidThresholds, setPidThresholds] = useState<any>(null);
 
+  const isCooling = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
+  let allTasks: Task[] = [];
+  if (isCooling) {
+    const savedRules = localStorage.getItem("scada.config.rh.tasks");
+    let rules: any[] = [];
+    if (savedRules) {
+      try {
+        rules = JSON.parse(savedRules);
+      } catch (e) {
+        rules = DEFAULT_TASK_RULES;
+      }
+    } else {
+      rules = DEFAULT_TASK_RULES;
+    }
+
+    allTasks = rules.map((rule, idx) => {
+      const tagId = MOTOR_KEY_TO_TAG_ID[rule.motorKey];
+      const actualRh = runningHours[tagId] || 0;
+      const isOpen = actualRh >= rule.targetHours;
+      return {
+        id: idx + 1,
+        title: `${rule.motorKey} (Running: ${actualRh.toFixed(1)}h) - ${rule.taskName} (Target: ${rule.targetHours}h)`,
+        status: isOpen ? "open" : "close",
+        openedMonth: isOpen,
+        createdDate: "Live Telemetry"
+      };
+    });
+  } else {
+    allTasks = data.tasks;
+  }
+
+  // 1. Fetch thresholds once on mount
+  useEffect(() => {
+    getJson<{ data: any }>("/config/pid-thresholds")
+      .then((res) => {
+        if (res && res.data) {
+          setPidThresholds(res.data);
+        }
+      })
+      .catch((err) => console.error("Failed to fetch initial threshold data:", err));
+  }, []);
+
+  // 2. Poll running hours every 15 seconds
+  useEffect(() => {
+    const fetchRH = async () => {
+      try {
+        const res = await getJson<{ data: Record<string, number> }>("/analytics/running-hours");
+        if (res && res.data) {
+          setRunningHours(res.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch running hours data:", err);
+      }
+    };
+    fetchRH();
+    const rhInterval = setInterval(fetchRH, 15000);
+    return () => clearInterval(rhInterval);
+  }, []);
+
+  // 3. Poll latest telemetry every 3 seconds
   useEffect(() => {
     const fetchLatestTelemetry = async () => {
       try {
-        const [telRes, rhRes, thRes] = await Promise.all([
-          getJson<{ data: any[] }>(`/telemetry/latest?tagIds=${telemetryTagIds.join(",")}`),
-          getJson<{ data: Record<string, number> }>("/analytics/running-hours"),
-          getJson<{ data: any }>("/config/pid-thresholds")
-        ]);
-
-        if (telRes && Array.isArray(telRes.data)) {
-          const points = telRes.data.map((doc: any) => ({
+        const res = await getJson<{ data: any[] }>(`/telemetry/latest?tagIds=${telemetryTagIds.join(",")}`);
+        if (res && Array.isArray(res.data)) {
+          const points = res.data.map((doc: any) => ({
             ts: doc.ts,
             value: doc.value,
             quality: doc.quality,
@@ -98,23 +201,13 @@ export default function MachinePidDiagram() {
           }));
           useTelemetryStore.getState().addPoints(points);
         }
-
-        if (rhRes && rhRes.data) {
-          setRunningHours(rhRes.data);
-        }
-
-        if (thRes && thRes.data) {
-          setPidThresholds(thRes.data);
-        }
       } catch (err) {
-        console.error("Failed to fetch initial telemetry/running hours/threshold data:", err);
+        console.error("Failed to fetch latest telemetry:", err);
       }
     };
-
     fetchLatestTelemetry();
-
-    const interval = setInterval(fetchLatestTelemetry, 3000);
-    return () => clearInterval(interval);
+    const telInterval = setInterval(fetchLatestTelemetry, 3000);
+    return () => clearInterval(telInterval);
   }, []);
 
   const getStatus = (tagId: string) => {

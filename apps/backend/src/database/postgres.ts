@@ -80,7 +80,15 @@ export const ensurePostgresTables = async () => {
       );
     `);
 
-    logger.info("postgres tables (telemetry & running hours) ensured");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS global_configs (
+        key VARCHAR(100) PRIMARY KEY,
+        value JSONB NOT NULL,
+        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    logger.info("postgres tables (telemetry, running hours & global configs) ensured");
   } catch (err: any) {
     logger.error({ err }, "failed to ensure postgres tables");
   }
