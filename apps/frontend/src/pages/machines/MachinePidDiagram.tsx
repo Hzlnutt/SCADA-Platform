@@ -186,6 +186,31 @@ export default function MachinePidDiagram() {
   const [runningHours, setRunningHours] = useState<Record<string, number>>({});
   const [pidThresholds, setPidThresholds] = useState<any>(null);
 
+  const [completedTaskKeys, setCompletedTaskKeys] = useState<string[]>(() => {
+    const saved = localStorage.getItem("scada.config.rh.completedTasks");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const handleToggleCompleteTask = (taskKey: string) => {
+    setCompletedTaskKeys((prev) => {
+      let next;
+      if (prev.includes(taskKey)) {
+        next = prev.filter((k) => k !== taskKey);
+      } else {
+        next = [...prev, taskKey];
+      }
+      localStorage.setItem("scada.config.rh.completedTasks", JSON.stringify(next));
+      return next;
+    });
+  };
+
   const isCooling = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
   let allTasks: Task[] = [];
   if (isCooling) {
@@ -201,18 +226,28 @@ export default function MachinePidDiagram() {
       rules = DEFAULT_TASK_RULES;
     }
 
-    allTasks = rules.map((rule, idx) => {
+    const activeTasks: Task[] = [];
+    rules.forEach((rule, idx) => {
       const tagId = MOTOR_KEY_TO_TAG_ID[rule.motorKey];
       const actualRh = runningHours[tagId] || 0;
-      const isOpen = actualRh >= rule.targetHours;
-      return {
-        id: idx + 1,
-        title: `${rule.motorKey} (Running: ${actualRh.toFixed(1)}h) - ${rule.taskName} (Target: ${rule.targetHours}h)`,
-        status: isOpen ? "open" : "close",
-        openedMonth: isOpen,
-        createdDate: "Live Telemetry"
-      };
+      
+      // Trigger task only when approaching target (1 week = 168 hours before target)
+      const isTriggered = actualRh >= (rule.targetHours - 168);
+      if (isTriggered) {
+        const taskKey = `${rule.motorKey}_${rule.targetHours}_${rule.taskName}`;
+        const isCompleted = completedTaskKeys.includes(taskKey);
+        
+        activeTasks.push({
+          id: idx + 1,
+          taskKey,
+          title: `${rule.motorKey} (Running: ${actualRh.toFixed(1)}h) - ${rule.taskName} (Target: ${rule.targetHours}h)`,
+          status: isCompleted ? "close" : "open",
+          openedMonth: !isCompleted,
+          createdDate: "Live Telemetry"
+        });
+      }
     });
+    allTasks = activeTasks;
   } else {
     allTasks = data.tasks;
   }
@@ -400,6 +435,7 @@ export default function MachinePidDiagram() {
       onFilterChange={setSelectedTaskFilter}
       taskInfo={taskInfo}
       alarms={alarmInfo}
+      onToggleCompleteTask={handleToggleCompleteTask}
     >
       {PidDiagram ? (
         <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} />
