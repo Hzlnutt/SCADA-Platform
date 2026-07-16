@@ -124,11 +124,28 @@ export default function Alarms() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const latest = useTelemetryStore((state) => state.latest);
   const [thresholds, setThresholds] = useState<ThresholdItem[]>([]);
+  const [selectedMachine, setSelectedMachine] = useState<string>("all");
+  const [machines, setMachines] = useState<{ id: string; name: string; unitLabel?: string }[]>([]);
+
+  useEffect(() => {
+    getJson<{ data: any[] }>("/config/machines")
+      .then((res) => {
+        if (res && res.data) {
+          setMachines(res.data);
+        }
+      })
+      .catch((err) => console.error("Failed to load machines list:", err));
+  }, []);
 
   useEffect(() => {
     let mounted = true;
+    setLoading(true);
 
-    getJson<AlarmActiveResponse>("/alarms/active?limit=200")
+    const url = selectedMachine !== "all"
+      ? `/alarms/active?limit=200&unit=${selectedMachine}`
+      : "/alarms/active?limit=200";
+
+    getJson<AlarmActiveResponse>(url)
       .then((result) => {
         if (!mounted) return;
         const items: AlarmItem[] = result.data.map((alarm) => ({
@@ -153,7 +170,7 @@ export default function Alarms() {
     return () => {
       mounted = false;
     };
-  }, [setActive]);
+  }, [setActive, selectedMachine]);
 
   useEffect(() => {
     getJson<ThresholdListResponse>("/thresholds")
@@ -259,8 +276,25 @@ export default function Alarms() {
           </div>
         </div>
       ) : null}
-      <div className="mb-4 text-xs text-slate-400">
-        Active alarms: <span className="text-slate-200">{totalActive}</span>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="text-xs text-slate-400">
+          Active alarms: <span className="text-slate-200 font-bold">{totalActive}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-slate-400">Filter Machine:</span>
+          <select
+            value={selectedMachine}
+            onChange={(e) => setSelectedMachine(e.target.value)}
+            className="bg-slate-900 border border-slate-800 text-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500 transition-colors"
+          >
+            <option value="all">All Machines</option>
+            {machines.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.unitLabel || m.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       <div className="rounded-2xl border border-slate-900 bg-slate-950/60 p-4">
         {loading ? (

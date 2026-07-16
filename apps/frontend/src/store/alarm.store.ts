@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useTelemetryStore, type TelemetryPoint } from "./telemetry.store";
 
 export type AlarmEvent = {
   alarmKey: string;
@@ -29,6 +30,12 @@ type AlarmState = {
   activeList: AlarmItem[];
   setActive: (alarms: AlarmItem[]) => void;
   pushEvents: (events: AlarmEvent[]) => void;
+  updatePidAlarms: (points: TelemetryPoint[]) => void;
+  reEvaluateAllAlarms: () => void;
+};
+
+const runEvaluation = (next: Record<string, AlarmItem>, points: TelemetryPoint[]): boolean => {
+  return false;
 };
 
 export const useAlarmStore = create<AlarmState>((set) => ({
@@ -74,6 +81,30 @@ export const useAlarmStore = create<AlarmState>((set) => ({
         (a, b) => new Date(b.lastTs).getTime() - new Date(a.lastTs).getTime()
       );
 
+      return { activeByKey: next, activeList };
+    }),
+  updatePidAlarms: (points) =>
+    set((state) => {
+      const next = { ...state.activeByKey };
+      const changed = runEvaluation(next, points);
+      if (!changed) return {};
+
+      const activeList = Object.values(next).sort(
+        (a, b) => new Date(b.lastTs).getTime() - new Date(a.lastTs).getTime()
+      );
+      return { activeByKey: next, activeList };
+    }),
+  reEvaluateAllAlarms: () =>
+    set((state) => {
+      const next = { ...state.activeByKey };
+      const latest = useTelemetryStore.getState().latest;
+      const points = Object.values(latest);
+      const changed = runEvaluation(next, points);
+      if (!changed) return {};
+
+      const activeList = Object.values(next).sort(
+        (a, b) => new Date(b.lastTs).getTime() - new Date(a.lastTs).getTime()
+      );
       return { activeByKey: next, activeList };
     })
 }));

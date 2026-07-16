@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
 import type { MachineOutletContext } from "./MachineLayout";
 import PidPageTemplate from "./PidPageTemplate";
 import type { Task, Alarm } from "./PidPageTemplate";
 import { useTelemetryStore } from "../../store/telemetry.store";
+import { getJson, postJson } from "../../services/api.client";
+import { telemetryTagIds } from "../../data/industrial-tags";
 import CoolingWF1U3Pid from "./diagrams/CoolingWF1U3Pid";
 import MachineAHU01Pid from "./diagrams/MachineAHU01Pid";
 import MachineAHU02Pid from "./diagrams/MachineAHU02Pid";
@@ -24,6 +26,112 @@ const machineDataMap: Record<
     alarms: [],
   },
   // Mesin non-HVAC lainnya...
+};
+
+const defaultTemplates = [
+  {
+    itemKey: "FAN",
+    specificKeys: ["FAN-1", "FAN-2", "FAN-3"],
+    rules: [
+      { targetHours: 500, task: "Check V-Belt Tension" },
+      { targetHours: 500, task: "Visual Inspection" },
+      { targetHours: 1000, task: "Clean Fan Blades" }
+    ]
+  },
+  {
+    itemKey: "MTR",
+    specificKeys: ["MTR-1", "MTR-2", "MTR-3", "MTR-4", "MTR-5", "MTR-6", "MTR-7", "MTR-8", "MTR-9"],
+    rules: [
+      { targetHours: 500, task: "Strainer Inspection" },
+      { targetHours: 500, task: "Pump Bearing Lubrication" },
+      { targetHours: 1000, task: "Seal/Bearing Inspection" }
+    ]
+  },
+  {
+    itemKey: "Dosing Pump",
+    specificKeys: ["Dosing Pump 1", "Dosing Pump 2"],
+    rules: [
+      { targetHours: 500, task: "Strainer Inspection" }
+    ]
+  },
+  {
+    itemKey: "Strainer",
+    specificKeys: ["Strainer 1", "Strainer 2", "Strainer 3", "Strainer 4", "Strainer 5", "Strainer 6", "Strainer 7", "Strainer 8", "Strainer 9"],
+    rules: [
+      { targetHours: 200, task: "Check Cleanliness" },
+      { targetHours: 600, task: "Clean Filter Element" }
+    ]
+  },
+  {
+    itemKey: "Cooling Tower",
+    specificKeys: ["CT 1", "CT 2", "CT 3"],
+    rules: [
+      { targetHours: 600, task: "Basin Debris Clean" },
+      { targetHours: 600, task: "Float Valve Inspection" }
+    ]
+  },
+  {
+    itemKey: "Cooling Tank",
+    specificKeys: ["Cooling Tank"],
+    rules: [
+      { targetHours: 1000, task: "Basin Sediment Cleaning" },
+      { targetHours: 1000, task: "Flushing & Corrosion Inspect" }
+    ]
+  },
+  {
+    itemKey: "Panel",
+    specificKeys: ["Panel"],
+    rules: [
+      { targetHours: 1000, task: "Inverter Cleaning" },
+      { targetHours: 1000, task: "Wiring Inspection" }
+    ]
+  }
+];
+
+const DEFAULT_TASK_RULES: { id: string; motorKey: string; targetHours: number; taskName: string }[] = [];
+let ruleCounter = 1;
+defaultTemplates.forEach((tpl) => {
+  tpl.specificKeys.forEach((specKey) => {
+    tpl.rules.forEach((rule) => {
+      DEFAULT_TASK_RULES.push({
+        id: String(ruleCounter++),
+        motorKey: specKey,
+        targetHours: rule.targetHours,
+        taskName: `${specKey} - ${rule.task}`
+      });
+    });
+  });
+});
+
+const MOTOR_KEY_TO_TAG_ID: Record<string, string> = {
+  "FAN-1": "cooling-water/fan_status_1",
+  "FAN-2": "cooling-water/fan_status_2",
+  "FAN-3": "cooling-water/fan_status_3",
+  "MTR-1": "cooling-water/motor_status_1",
+  "MTR-2": "cooling-water/motor_status_2",
+  "MTR-3": "cooling-water/motor_status_3",
+  "MTR-4": "cooling-water/eq_status_du03",
+  "MTR-5": "cooling-water/eq_status_bp03",
+  "MTR-6": "cooling-water/eq_status_prep03",
+  "MTR-7": "cooling-water/eq_status_st03",
+  "MTR-8": "cooling-water/eq_status_washing",
+  "MTR-9": "cooling-water/eq_status_minilab",
+  "Dosing Pump 1": "cooling-water/dosing_pump_1",
+  "Dosing Pump 2": "cooling-water/dosing_pump_2",
+  "Strainer 1": "cooling-water/strainer_1",
+  "Strainer 2": "cooling-water/strainer_2",
+  "Strainer 3": "cooling-water/strainer_3",
+  "Strainer 4": "cooling-water/strainer_4",
+  "Strainer 5": "cooling-water/strainer_5",
+  "Strainer 6": "cooling-water/strainer_6",
+  "Strainer 7": "cooling-water/strainer_7",
+  "Strainer 8": "cooling-water/strainer_8",
+  "Strainer 9": "cooling-water/strainer_9",
+  "CT 1": "cooling-water/ct_1",
+  "CT 2": "cooling-water/ct_2",
+  "CT 3": "cooling-water/ct_3",
+  "Cooling Tank": "cooling-water/cooling_tank",
+  "Panel": "cooling-water/panel"
 };
 
 // ── Data default jika unitId tidak ditemukan ────────────
@@ -64,22 +172,144 @@ export default function MachinePidDiagram() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
   const [selectedTaskFilter, setSelectedTaskFilter] = useState<
-    "all" | "open_month" | "open" | "close"
+    "all" | "overdue" | "open" | "close"
   >("all");
 
   if (!machine) return null;
 
   // ── Ambil task & alarm khusus untuk mesin ini ──────────
   const data = machineDataMap[unitId] ?? defaultData;
-  const { tasks: allTasks, alarms: alarmInfo } = data;
+  const alarmInfo = data.alarms;
 
   const latest = useTelemetryStore((state) => state.latest);
+
+  const [runningHours, setRunningHours] = useState<Record<string, number>>({});
+  const [pidThresholds, setPidThresholds] = useState<any>(null);
+
+  const [dbTasks, setDbTasks] = useState<any[]>([]);
+  const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string }>(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const formatDate = (d: Date) => d.toISOString().split("T")[0];
+    return { startDate: formatDate(start), endDate: formatDate(end) };
+  });
+
+  const isCooling = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
+
+  const fetchTasks = async () => {
+    try {
+      const query = `unitId=${unitId}&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
+      const res = await getJson<{ data: any[] }>(`/config/rh-tasks?${query}`);
+      if (res && res.data) {
+        setDbTasks(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch running hours tasks:", err);
+    }
+  };
+
+  const handleToggleCompleteTask = async (taskId: string) => {
+    try {
+      await postJson(`/config/rh-tasks/${taskId}/complete`, {});
+      fetchTasks();
+      const rhRes = await getJson<{ data: Record<string, number> }>("/analytics/running-hours");
+      if (rhRes && rhRes.data) {
+        setRunningHours(rhRes.data);
+      }
+    } catch (err) {
+      console.error("Failed to complete task:", err);
+    }
+  };
+
+  let allTasks: Task[] = [];
+  if (isCooling) {
+    allTasks = dbTasks.map((task) => {
+      const isClosed = task.status === "close";
+      const actualHoursStr = isClosed 
+        ? `${parseFloat(task.actual_hours_at_trigger).toFixed(1)}h`
+        : `${(runningHours[MOTOR_KEY_TO_TAG_ID[task.motor_key]] || parseFloat(task.actual_hours_at_trigger) || 0.0).toFixed(1)}h`;
+      
+      const title = `${task.motor_key} (Running: ${actualHoursStr}) - ${task.task_name} (Target: ${task.target_hours}h)`;
+
+      return {
+        id: task.id,
+        title,
+        status: task.status,
+        openedMonth: task.status !== "close",
+        createdDate: new Date(task.created_at).toLocaleDateString(),
+        taskKey: String(task.id),
+        completionStatus: task.completion_status
+      };
+    });
+  } else {
+    allTasks = data.tasks;
+  }
+
+  // 1. Fetch thresholds once on mount
+  useEffect(() => {
+    getJson<{ data: any }>("/config/pid-thresholds")
+      .then((res) => {
+        if (res && res.data) {
+          setPidThresholds(res.data);
+        }
+      })
+      .catch((err) => console.error("Failed to fetch initial threshold data:", err));
+  }, []);
+
+  // 2. Poll running hours every 15 seconds
+  useEffect(() => {
+    const fetchRH = async () => {
+      try {
+        const res = await getJson<{ data: Record<string, number> }>("/analytics/running-hours");
+        if (res && res.data) {
+          setRunningHours(res.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch running hours data:", err);
+      }
+    };
+    fetchRH();
+    const rhInterval = setInterval(fetchRH, 15000);
+    return () => clearInterval(rhInterval);
+  }, []);
+
+  // 3. Poll latest telemetry every 3 seconds
+  useEffect(() => {
+    const fetchLatestTelemetry = async () => {
+      try {
+        const res = await getJson<{ data: any[] }>(`/telemetry/latest?tagIds=${telemetryTagIds.join(",")}`);
+        if (res && Array.isArray(res.data)) {
+          const points = res.data.map((doc: any) => ({
+            ts: doc.ts,
+            value: doc.value,
+            quality: doc.quality,
+            meta: doc.meta
+          }));
+          useTelemetryStore.getState().addPoints(points);
+        }
+      } catch (err) {
+        console.error("Failed to fetch latest telemetry:", err);
+      }
+    };
+    fetchLatestTelemetry();
+    const telInterval = setInterval(fetchLatestTelemetry, 3000);
+    return () => clearInterval(telInterval);
+  }, []);
+
+  useEffect(() => {
+    if (isCooling) {
+      fetchTasks();
+      const interval = setInterval(fetchTasks, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [unitId, dateRange.startDate, dateRange.endDate]);
 
   const getStatus = (tagId: string) => {
     const val = latest[tagId]?.value;
     if (typeof val === "number") return val === 1;
     if (typeof val === "boolean") return val;
-    return "API TIDAK TERKIRIM";
+    return "XX";
   };
 
   const motorStatus = {
@@ -98,9 +328,7 @@ export default function MachinePidDiagram() {
   };
 
   const taskInfo = {
-    openThisMonth: allTasks.filter(
-      (t) => t.openedMonth && t.status === "open"
-    ).length,
+    taskOverdue: allTasks.filter((t) => t.status === "overdue").length,
     taskOpen: allTasks.filter((t) => t.status === "open").length,
     taskClose: allTasks.filter((t) => t.status === "close").length,
   };
@@ -140,7 +368,7 @@ export default function MachinePidDiagram() {
           <div className="flex-1 rounded-lg border border-slate-600 bg-slate-900/70 relative overflow-hidden">
             <div className="absolute inset-0 overflow-auto">
               {PidDiagram ? (
-                <PidDiagram motorStatus={motorStatus} />
+                <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} />
               ) : (
                 <div className="flex items-center justify-center h-full text-slate-400">
                   Diagram untuk {machine.name} belum tersedia.
@@ -207,9 +435,12 @@ export default function MachinePidDiagram() {
       onFilterChange={setSelectedTaskFilter}
       taskInfo={taskInfo}
       alarms={alarmInfo}
+      onToggleCompleteTask={handleToggleCompleteTask}
+      dateRange={dateRange}
+      onChangeDateRange={setDateRange}
     >
       {PidDiagram ? (
-        <PidDiagram motorStatus={motorStatus} />
+        <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} />
       ) : (
         <div className="flex items-center justify-center h-full text-slate-400">
           Diagram untuk {unitId} belum tersedia.

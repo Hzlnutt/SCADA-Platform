@@ -12,6 +12,10 @@ import {
 } from "../modules/analytics/electricity.analytics";
 
 
+import { updateRunningHours } from "../modules/telemetry/running-hours.service";
+import { ingestAlarmEvents } from "../modules/alarms/alarms.service";
+import { publishAlarmEvents } from "../services/alarms.publisher";
+
 let lastElectricityTs: Date | null = null;
 let pollingInterval: NodeJS.Timeout | null = null;
 let pfPollingInterval: NodeJS.Timeout | null = null;
@@ -160,6 +164,19 @@ export const startCoolingTowerPolling = () => {
         // Update in-memory cache
         updateTelemetryCache(points);
 
+        evaluateSensorRulesForPoints(points).catch((err) => {
+          logger.error({ err }, "Failed to evaluate sensor rules for polled points");
+        });
+
+        // Update running hours
+        const statusPoints = points.filter(p => p.meta.tagId.includes("status"));
+        for (const p of statusPoints) {
+          const isRunning = p.value === 1 || p.value === true;
+          updateRunningHours(p.meta.tagId, isRunning, ts).catch((err) => {
+            logger.error({ err, tagId: p.meta.tagId }, "Failed to update running hours from scheduler");
+          });
+        }
+
         // Emit directly via WebSocket (no database, instant real-time)
         if (io) {
           io.to(TELEMETRY_ALL_ROOM).emit("telemetry:update", { points });
@@ -284,4 +301,91 @@ export const startScheduler = () => {
 
   logger.info({ minuteIntervalMs, hourlyIntervalMs }, "scheduler started");
 };
+export const evaluateSensorRulesForPoints = async (points: any[]) => {
+  const pool = getPostgresPool();
+  try {
+    const rulesRes = await pool.query(
+      `SELECT unit_id, tag_key, tag_name, low_limit, baseline, high_limit, unit, enable_alert, suppress_alert, direction 
+       FROM sensor_rules`
+    );
+    const rules = rulesRes.rows;
 
+    const activeEvents: any[] = [];
+    const clearEvents: any[] = [];
+
+    for (const rule of rules) {
+      if (!rule.enable_alert || rule.suppress_alert) continue;
+
+      const point = points.find(p => p.meta.tagId === rule.tag_key);
+      if (!point || typeof point.value !== "number") continue;
+
+      const value = point.value;
+      const warning = rule.baseline ? parseFloat(rule.baseline) : null;
+      const alarm = rule.high_limit ? parseFloat(rule.high_limit) : null;
+      const direction = rule.direction || "above";
+
+      let status: "active" | "cleared" = "cleared";
+      let severity: "medium" | "high" = "medium";
+      let msg = "";
+
+      if (direction === "above") {
+        if (alarm !== null && value >= alarm) {
+          status = "active";
+          severity = "high";
+          msg = `[${rule.tag_name}] exceeds Alarm Limit of ${alarm} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
+        } else if (warning !== null && value >= warning) {
+          status = "active";
+          severity = "medium";
+          msg = `[${rule.tag_name}] exceeds Warning Limit of ${warning} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
+        }
+      } else {
+        if (alarm !== null && value <= alarm) {
+          status = "active";
+          severity = "high";
+          msg = `[${rule.tag_name}] is below Alarm Limit of ${alarm} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
+        } else if (warning !== null && value <= warning) {
+          status = "active";
+          severity = "medium";
+          msg = `[${rule.tag_name}] is below Warning Limit of ${warning} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
+        }
+      }
+
+      const alarmKey = `pid-threshold:${rule.tag_key}`;
+
+      if (status === "active") {
+        activeEvents.push({
+          alarmKey,
+          tagId: rule.tag_key,
+          deviceId: point.meta.deviceId || "plc-sim",
+          unit: rule.unit_id,
+          area: point.meta.area || "Utilities",
+          message: msg,
+          severity,
+          status: "active"
+        });
+      } else {
+        clearEvents.push({
+          alarmKey,
+          tagId: rule.tag_key,
+          deviceId: point.meta.deviceId || "plc-sim",
+          unit: rule.unit_id,
+          area: point.meta.area || "Utilities",
+          message: `Cleared: Telemetry parameter for tag ${rule.tag_key} has returned to normal range.`,
+          severity: "low",
+          status: "cleared"
+        });
+      }
+    }
+
+    if (activeEvents.length > 0) {
+      const res = await ingestAlarmEvents(activeEvents);
+      publishAlarmEvents(res.events);
+    }
+    if (clearEvents.length > 0) {
+      const res = await ingestAlarmEvents(clearEvents);
+      publishAlarmEvents(res.events);
+    }
+  } catch (err) {
+    logger.error({ err }, "Failed to evaluate sensor rules for points");
+  }
+};

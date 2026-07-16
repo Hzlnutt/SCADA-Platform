@@ -1,14 +1,17 @@
 import { Router } from "express";
+import { authenticate } from "../auth/auth.middleware";
 import {
-  ackAlarmHandler,
   getActiveAlarmsHandler,
   getAlarmHistoryHandler,
-  ingestAlarmHandler
+  ingestAlarmHandler,
+  fixAlarmHandler,
+  approveAlarmHandler
 } from "./alarms.controller";
 
 export const alarmRouter = Router();
 
 alarmRouter.post("/alarms/ingest", ingestAlarmHandler);
-alarmRouter.get("/alarms/active", getActiveAlarmsHandler);
-alarmRouter.get("/alarms/history", getAlarmHistoryHandler);
-alarmRouter.post("/alarms/ack", ackAlarmHandler);
+alarmRouter.get("/alarms/active", authenticate, getActiveAlarmsHandler);
+alarmRouter.get("/alarms/history", authenticate, getAlarmHistoryHandler);
+alarmRouter.post("/alarms/:id/fix", authenticate, fixAlarmHandler);
+alarmRouter.post("/alarms/:id/approve", authenticate, approveAlarmHandler);

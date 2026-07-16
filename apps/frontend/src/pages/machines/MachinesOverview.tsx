@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { machineGroups } from "../../data/machines";
 import { useAlarmStore } from "../../store/alarm.store";
-import { useTaskStore } from "../../store/task.store";
+import { getJson } from "../../services/api.client";
 
 const getGroupStats = (groupId: string) => {
   switch (groupId) {
@@ -44,8 +44,18 @@ const getGroupStats = (groupId: string) => {
 
 export default function MachinesOverview() {
   const activeAlarms = useAlarmStore((state) => state.activeList);
-  const tasks = useTaskStore((state) => state.tasks);
+  const [tasks, setTasks] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    getJson<{ data: any[] }>("/config/rh-tasks?status=all")
+      .then((res: { data: any[] }) => {
+        if (res && res.data) {
+          setTasks(res.data);
+        }
+      })
+      .catch((err: any) => console.error("Failed to fetch overview tasks:", err));
+  }, []);
 
   const utilityGroups = useMemo(
     () => machineGroups.filter((g) => g.area !== "HVAC"),
@@ -91,7 +101,7 @@ export default function MachinesOverview() {
     const groupUnitTags = new Set(group.units.map((u: any) => u.tagId));
     const groupAlarms = activeAlarms.filter((alarm) => groupUnitTags.has(alarm.tagId));
     const groupTasks = tasks.filter(
-      (task) => task.groupId === group.id && task.status !== "Completed"
+      (task) => group.id === "cooling-water-system" && task.status !== "close"
     );
 
     return (

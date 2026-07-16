@@ -6,10 +6,11 @@ import {
   alarmIngestSchema
 } from "./alarms.validation";
 import {
-  ackAlarm,
   getActiveAlarms,
   getAlarmHistory,
-  ingestAlarmEvents
+  ingestAlarmEvents,
+  fixAlarmPostgres,
+  approveAlarmPostgres
 } from "./alarms.service";
 import { publishAlarmEvents } from "../../services/alarms.publisher";
 import { recordAudit } from "../../services/audit.service";
@@ -41,7 +42,7 @@ export const getActiveAlarmsHandler = async (
 ) => {
   try {
     const parsed = alarmActiveQuerySchema.parse(req.query);
-    const data = await getActiveAlarms(parsed);
+    const data = await getActiveAlarms({ ...parsed, unit: req.query.unit as string });
 
     res.json({ data });
   } catch (err) {
@@ -56,7 +57,7 @@ export const getAlarmHistoryHandler = async (
 ) => {
   try {
     const parsed = alarmHistoryQuerySchema.parse(req.query);
-    const data = await getAlarmHistory(parsed);
+    const data = await getAlarmHistory({ ...parsed, unit: req.query.unit as string });
 
     res.json({ data });
   } catch (err) {
@@ -64,25 +65,69 @@ export const getAlarmHistoryHandler = async (
   }
 };
 
-export const ackAlarmHandler = async (
+export const fixAlarmHandler = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const parsed = alarmAckSchema.parse(req.body);
-    const eventDoc = await ackAlarm(parsed);
+    const id = parseInt(req.params.id);
+    const { operatorName, operatorAction } = req.body;
+    if (isNaN(id) || !operatorName || !operatorAction) {
+      return res.status(400).json({ error: "Missing required parameters" });
+    }
 
-    await recordAudit({
-      actorId: parsed.userId,
-      action: "alarm.ack",
-      resourceType: "alarm",
-      resourceId: parsed.alarmKey,
-      meta: { note: parsed.note }
-    });
+    const updated = await fixAlarmPostgres(id, operatorName, operatorAction);
+    
+    publishAlarmEvents([{
+      alarmKey: updated.alarm_key,
+      tagId: updated.tag_id,
+      deviceId: updated.device_id,
+      unit: updated.unit_id,
+      area: updated.area,
+      message: updated.message,
+      severity: updated.severity,
+      eventType: "ack",
+      ts: new Date(updated.t_stamp),
+      source: "operator"
+    }]);
 
-    publishAlarmEvents([eventDoc]);
-    res.json({ status: "ack", alarmKey: parsed.alarmKey, ts: eventDoc.ts });
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const approveAlarmHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const id = parseInt(req.params.id);
+    const user = (req as unknown as { user?: { name: string } }).user;
+    const approverName = user?.name || "Ka. Shift";
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ error: "Invalid alarm ID" });
+    }
+
+    const updated = await approveAlarmPostgres(id, approverName);
+
+    publishAlarmEvents([{
+      alarmKey: updated.alarm_key,
+      tagId: updated.tag_id,
+      deviceId: updated.device_id,
+      unit: updated.unit_id,
+      area: updated.area,
+      message: updated.message,
+      severity: updated.severity,
+      eventType: "clear",
+      ts: new Date(updated.t_stamp),
+      source: "supervisor"
+    }]);
+
+    res.json({ success: true, data: updated });
   } catch (err) {
     next(err);
   }

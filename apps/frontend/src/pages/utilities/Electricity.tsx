@@ -40,30 +40,34 @@ const ranges = [
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
+const getLocalTodayString = () => {
+  const d = new Date();
+  const yr = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const dy = String(d.getDate()).padStart(2, "0");
+  return `${yr}-${mo}-${dy}`;
+};
+
+const formatPeakTs = (tsStr: string) => {
+  if (!tsStr) return "";
+  const dateObj = new Date(tsStr);
+  const day = dateObj.getDate();
+  const month = MONTH_SHORT_ID[dateObj.getMonth()];
+  const year = dateObj.getFullYear();
+  const hrs = String(dateObj.getHours()).padStart(2, "0");
+  const mins = String(dateObj.getMinutes()).padStart(2, "0");
+  return `${day} ${month} ${year}, ${hrs}:${mins} WIB`;
+};
+
 export default function Electricity() {
   const [range, setRange] = useState<(typeof ranges)[number]["id"]>("ytd");
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth()); // 0-indexed
   const config = ranges.find((item) => item.id === range) ?? ranges[0];
 
-  // Period selector for top 5 cards
-  const [cardPeriod, setCardPeriod] = useState<"yearly" | "monthly" | "custom">("yearly");
-  const [cardMonth, setCardMonth] = useState(() => new Date().getMonth()); // 0-indexed
-
-  // Custom start and end dates for summary cards (default to 7 days ago)
-  const [summaryStartDate, setSummaryStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return d.toISOString().split("T")[0];
-  });
-  const [summaryEndDate, setSummaryEndDate] = useState(() => new Date().toISOString().split("T")[0]);
-
-  // Custom start and end dates for charts (default to 7 days ago)
-  const [chartStartDate, setChartStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return d.toISOString().split("T")[0];
-  });
-  const [chartEndDate, setChartEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  // Custom start and end dates for charts (default to today)
+  const [chartStartDate, setChartStartDate] = useState(getLocalTodayString);
+  const [chartEndDate, setChartEndDate] = useState(getLocalTodayString);
 
   const maxIdx = useMemo(() => getElapsedIndex(config.type), [config.type]);
 
@@ -82,11 +86,17 @@ export default function Electricity() {
   const wbpRate = useConfigStore((state) => state.wbpRate);
   const lwbpRate = useConfigStore((state) => state.lwbpRate);
 
-  const fetchSummary = useCallback((showLoading = false) => {
-    if (showLoading) setSummaryLoading(true);
+  const fetchData = useCallback((showLoading = false) => {
+    if (showLoading) {
+      setSummaryLoading(true);
+      setChartLoading(true);
+    }
     let url = `/analytics/electricity?deviceId=Cubicle_PLN_PM8000`;
-    if (cardPeriod === "custom") {
-      url += `&from=${summaryStartDate}&to=${summaryEndDate}`;
+    if (range === "custom") {
+      url += `&from=${chartStartDate}&to=${chartEndDate}`;
+    } else if (range === "hour") {
+      const todayStr = getLocalTodayString();
+      url += `&from=${todayStr}&to=${todayStr}`;
     } else {
       url += `&year=${selectedYear}`;
     }
@@ -95,46 +105,28 @@ export default function Electricity() {
     getJson<{ data: any }>(url)
       .then((res) => {
         setSummaryData(res.data);
-        if (showLoading) setSummaryLoading(false);
-      })
-      .catch((err) => {
-        console.error("Failed to load electricity summary data", err);
-        if (showLoading) setSummaryLoading(false);
-      });
-  }, [cardPeriod, selectedYear, summaryStartDate, summaryEndDate]);
-
-  const fetchCharts = useCallback((showLoading = false) => {
-    if (showLoading) setChartLoading(true);
-    let url = `/analytics/electricity?deviceId=Cubicle_PLN_PM8000`;
-    if (range === "custom") {
-      url += `&from=${chartStartDate}&to=${chartEndDate}`;
-    } else {
-      url += `&year=${selectedYear}`;
-    }
-    url += `&_t=${Date.now()}`;
-
-    getJson<{ data: any }>(url)
-      .then((res) => {
         setChartData(res.data);
         if (res.data?.pqData) {
           setLivePf(res.data.pqData.pf);
           setPfStatus(res.data.pqData.pfStatus || "offline");
         }
-        if (showLoading) setChartLoading(false);
+        if (showLoading) {
+          setSummaryLoading(false);
+          setChartLoading(false);
+        }
       })
       .catch((err) => {
-        console.error("Failed to load electricity chart data", err);
-        if (showLoading) setChartLoading(false);
+        console.error("Failed to load electricity data", err);
+        if (showLoading) {
+          setSummaryLoading(false);
+          setChartLoading(false);
+        }
       });
   }, [range, selectedYear, chartStartDate, chartEndDate]);
 
   useEffect(() => {
-    fetchSummary(true);
-  }, [fetchSummary]);
-
-  useEffect(() => {
-    fetchCharts(true);
-  }, [fetchCharts]);
+    fetchData(true);
+  }, [fetchData]);
 
   // Handle auto-fetch every 2 seconds and socket event handlers
   useEffect(() => {
@@ -142,8 +134,7 @@ export default function Electricity() {
 
     const interval = setInterval(() => {
       if (active) {
-        fetchSummary(false);
-        fetchCharts(false);
+        fetchData(false);
       }
     }, 2000);
 
@@ -153,8 +144,7 @@ export default function Electricity() {
       console.log("Config update event received from socket, fetching rates and data...");
       useConfigStore.getState().fetchRates().then(() => {
         if (active) {
-          fetchSummary(false);
-          fetchCharts(false);
+          fetchData(false);
         }
       });
     };
@@ -162,8 +152,7 @@ export default function Electricity() {
     const handleElectricityUpdate = () => {
       console.log("Electricity update event received from socket, re-fetching data...");
       if (active) {
-        fetchSummary(false);
-        fetchCharts(false);
+        fetchData(false);
       }
     };
 
@@ -186,12 +175,15 @@ export default function Electricity() {
       socket.off("electricity:update", handleElectricityUpdate);
       socket.off("power_factor:status", handlePowerFactorStatus);
     };
-  }, [fetchSummary, fetchCharts]);
+  }, [fetchData]);
 
   const hasSummaryData = !!summaryData;
   const hasChartData = !!chartData;
 
   const currentMonth = useMemo(() => {
+    if (range === "day") {
+      return selectedMonth + 1;
+    }
     const now = new Date();
     if (selectedYear === now.getFullYear()) {
       return now.getMonth() + 1; // 1-indexed
@@ -204,7 +196,7 @@ export default function Electricity() {
       }
     }
     return 12; // fallback to December
-  }, [hasChartData, chartData, selectedYear]);
+  }, [hasChartData, chartData, selectedYear, range, selectedMonth]);
 
   const monthlyDailyRecords = useMemo(() => {
     if (hasChartData && chartData.charts.daily) {
@@ -353,11 +345,12 @@ export default function Electricity() {
 
   // ========== CARD PERIOD VALUES (top 5 summary cards) ==========
   const cardSummary = useMemo(() => {
-    if (!hasSummaryData) {
+    if (!hasSummaryData || !summaryData) {
       return {
         totalCost: dailyEnergyTotal * config.scale * electricityRate,
         totalKwh: dailyEnergyTotal * config.scale,
         peakDemand: 1200,
+        peakDemandTs: null,
         loadFactor: 88.5,
         wbpKwh: 0,
         lwbpKwh: 0,
@@ -366,13 +359,14 @@ export default function Electricity() {
       };
     }
 
-    if (cardPeriod === "monthly" && summaryData.summary.perMonthSummary) {
-      const monthData = summaryData.summary.perMonthSummary[cardMonth];
+    if (range === "day" && summaryData.summary.perMonthSummary) {
+      const monthData = summaryData.summary.perMonthSummary[selectedMonth];
       if (monthData) {
         return {
           totalCost: monthData.totalCost,
           totalKwh: monthData.totalKwh,
           peakDemand: monthData.peakDemand,
+          peakDemandTs: monthData.peakDemandTs,
           loadFactor: summaryData.pqData.pf ? summaryData.pqData.pf * 100 : 88.5,
           wbpKwh: monthData.wbpKwh,
           lwbpKwh: monthData.lwbpKwh,
@@ -382,18 +376,76 @@ export default function Electricity() {
       }
     }
 
-    // Yearly or Custom: use the direct summary metrics
+    // Yearly, Hourly, or Custom: use the direct summary metrics
     return {
       totalCost: summaryData.summary.totalCost,
       totalKwh: summaryData.summary.totalKwh,
       peakDemand: summaryData.pqData.activePower,
+      peakDemandTs: summaryData.pqData.activePowerTs,
       loadFactor: summaryData.pqData.pf ? summaryData.pqData.pf * 100 : 0,
       wbpKwh: summaryData.summary.wbpKwh,
       lwbpKwh: summaryData.summary.lwbpKwh,
       wbpCost: summaryData.summary.wbpCost,
       lwbpCost: summaryData.summary.lwbpCost
     };
-  }, [hasSummaryData, summaryData, cardPeriod, cardMonth, config]);
+  }, [hasSummaryData, summaryData, range, selectedMonth, config]);
+
+  const chartPeakDemandInfo = useMemo(() => {
+    if (!hasChartData || !chartData) {
+      return { value: 1200, ts: null };
+    }
+
+    // 1. If range is hourly (hour, or custom single day)
+    if (range === "hour" || (range === "custom" && chartStartDate === chartEndDate)) {
+      const hourly = chartData.charts.hourly || [];
+      let maxVal = 0;
+      let maxHourIdx = -1;
+      for (let i = 0; i < hourly.length; i++) {
+        if (hourly[i] > maxVal) {
+          maxVal = hourly[i];
+          maxHourIdx = i;
+        }
+      }
+      
+      if (maxHourIdx !== -1) {
+        const targetDateStr = range === "hour" ? getLocalTodayString() : chartStartDate;
+        const peakHr = maxHourIdx + 1;
+        const peakTs = `${targetDateStr}T${String(peakHr).padStart(2, "0")}:00:00.000+07:00`;
+        return { value: maxVal, ts: peakTs };
+      }
+      return { value: 0, ts: null };
+    }
+
+    // 2. If range is day (Per Hari)
+    if (range === "day") {
+      const monthData = chartData.summary.perMonthSummary?.[currentMonth - 1];
+      if (monthData) {
+        return { value: monthData.peakDemand, ts: monthData.peakDemandTs };
+      }
+      return { value: 0, ts: null };
+    }
+
+    // 3. If range is custom (multi-day)
+    if (range === "custom") {
+      return {
+        value: chartData.pqData.activePower,
+        ts: chartData.pqData.activePowerTs
+      };
+    }
+
+    // 4. For YTD or month (Per Bulan)
+    let maxPeak = 0;
+    let peakTs = null;
+    if (chartData.summary.perMonthSummary) {
+      for (const m of chartData.summary.perMonthSummary) {
+        if (m.peakDemand > maxPeak) {
+          maxPeak = m.peakDemand;
+          peakTs = m.peakDemandTs;
+        }
+      }
+    }
+    return { value: maxPeak, ts: peakTs };
+  }, [hasChartData, chartData, range, chartStartDate, chartEndDate, currentMonth, selectedYear]);
 
   // ========== TREND PANEL DISTRIBUSI (MultiLineChart) ==========
   const mdpSeries = useMemo(() => {
@@ -629,101 +681,20 @@ export default function Electricity() {
     <div className="space-y-6">
       <PageHeader title="Listrik" description="Monitor beban listrik utama, peak demand, dan biaya energi." />
 
-      {/* Period Selector for Executive Summary Cards */}
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">Periode Ringkasan:</span>
-        <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-0.5 text-xs">
-          <button
-            type="button"
-            onClick={() => setCardPeriod("yearly")}
-            className={`rounded-md px-3 py-1.5 font-bold transition-all ${
-              cardPeriod === "yearly"
-                ? "bg-cyan-500 text-white shadow-sm"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-            }`}
-          >
-            Tahunan
-          </button>
-          <button
-            type="button"
-            onClick={() => setCardPeriod("monthly")}
-            className={`rounded-md px-3 py-1.5 font-bold transition-all ${
-              cardPeriod === "monthly"
-                ? "bg-cyan-500 text-white shadow-sm"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-            }`}
-          >
-            Bulanan
-          </button>
-          <button
-            type="button"
-            onClick={() => setCardPeriod("custom")}
-            className={`rounded-md px-3 py-1.5 font-bold transition-all ${
-              cardPeriod === "custom"
-                ? "bg-cyan-500 text-white shadow-sm"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-            }`}
-          >
-            Kustom
-          </button>
-        </div>
-
-        {/* Year Selector */}
-        {cardPeriod !== "custom" && (
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
-          >
-            {AVAILABLE_YEARS.map((yr) => (
-              <option key={yr} value={yr}>{yr}</option>
-            ))}
-          </select>
-        )}
-
-        {/* Month Selector (only shown when period is monthly) */}
-        {cardPeriod === "monthly" && (
-          <select
-            value={cardMonth}
-            onChange={(e) => setCardMonth(Number(e.target.value))}
-            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
-          >
-            {MONTH_NAMES_ID.map((name, idx) => (
-              <option key={idx} value={idx}>{name}</option>
-            ))}
-          </select>
-        )}
-
-        {/* Custom Date Pickers */}
-        {cardPeriod === "custom" && (
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={summaryStartDate}
-              onChange={(e) => setSummaryStartDate(e.target.value)}
-              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
-            />
-            <span className="text-xs font-bold text-slate-400">s/d</span>
-            <input
-              type="date"
-              value={summaryEndDate}
-              onChange={(e) => setSummaryEndDate(e.target.value)}
-              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
-            />
-          </div>
-        )}
-
-        {/* Period badge indicator */}
-        <div className="ml-auto flex items-center gap-1.5">
-          <div className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse" />
-          <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
-            {cardPeriod === "yearly"
-              ? `Tahun ${selectedYear}`
-              : cardPeriod === "monthly"
-              ? `${MONTH_NAMES_ID[cardMonth]} ${selectedYear}`
-              : `${summaryStartDate} s/d ${summaryEndDate}`}
-          </span>
-        </div>
+      {/* Active Period Indicator */}
+      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/20 px-3.5 py-2 rounded-xl w-fit border border-slate-200/50 dark:border-slate-800/50">
+        <span className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse" />
+        <span>
+          Periode Aktif: {range === "ytd" || range === "month"
+            ? `Tahun ${selectedYear}`
+            : range === "day"
+            ? `${MONTH_NAMES_ID[selectedMonth]} ${selectedYear}`
+            : range === "hour"
+            ? `Hari Ini (${chartStartDate})`
+            : chartStartDate === chartEndDate
+            ? `Tanggal ${chartStartDate}`
+            : `${chartStartDate} s/d ${chartEndDate}`}
+        </span>
       </div>
 
       {/* Executive Summary */}
@@ -754,9 +725,15 @@ export default function Electricity() {
             </div>
           </div>
           <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">
-            {summaryLoading ? "Loading..." : `${cardSummary.peakDemand.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW`}
+            {chartLoading ? "Loading..." : `${chartPeakDemandInfo.value.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW`}
           </div>
-          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Estimasi beban puncak</div>
+          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            {chartPeakDemandInfo.ts ? (
+              <span>Terjadi: <strong className="text-amber-500 font-semibold">{formatPeakTs(chartPeakDemandInfo.ts)}</strong></span>
+            ) : (
+              "Estimasi beban puncak"
+            )}
+          </div>
         </div>
 
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-500">
@@ -827,7 +804,7 @@ export default function Electricity() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {/* Year Selector */}
-              {range !== "custom" && (
+              {(range === "ytd" || range === "day" || range === "month") && (
                 <select
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(Number(e.target.value))}
@@ -835,6 +812,19 @@ export default function Electricity() {
                 >
                   {AVAILABLE_YEARS.map((yr) => (
                     <option key={yr} value={yr}>{yr}</option>
+                  ))}
+                </select>
+              )}
+
+              {/* Month Selector */}
+              {range === "day" && (
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                >
+                  {MONTH_NAMES_ID.map((name, idx) => (
+                    <option key={idx} value={idx}>{name}</option>
                   ))}
                 </select>
               )}

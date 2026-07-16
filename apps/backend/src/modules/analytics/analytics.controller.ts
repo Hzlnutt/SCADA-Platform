@@ -4,6 +4,7 @@ import { getElectricityAnalytics } from "./electricity.analytics";
 import { getWaterAnalytics } from "./water.analytics";
 import { getMongoDb } from "../../database/mongo";
 import { GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
+import { getPostgresPool } from "../../database/postgres";
 
 export const getAnalyticsSummaryHandler = async (
   _req: Request,
@@ -59,3 +60,20 @@ export const getWaterAnalyticsHandler = async (
   }
 };
 
+export const getRunningHoursHandler = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const pool = getPostgresPool();
+    const result = await pool.query("SELECT tag_id, total_running_hours FROM equipment_running_hours");
+    const runningHoursMap = result.rows.reduce((acc, row) => {
+      acc[row.tag_id] = parseFloat(row.total_running_hours);
+      return acc;
+    }, {} as Record<string, number>);
+    res.json({ data: runningHoursMap });
+  } catch (err) {
+    next(err);
+  }
+};

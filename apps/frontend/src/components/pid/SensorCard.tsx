@@ -70,10 +70,20 @@ const SensorCard: React.FC<SensorCardProps> = ({
     );
   }
 
-  const isApiNotSent = (value && typeof value === "string" && (value.includes("API") || value.includes("TIDAK"))) || 
-                       (values && values.some(v => typeof v.value === "string" && (v.value.includes("API") || v.value.includes("TIDAK"))));
-  const displayFontSize = isApiNotSent ? "11" : "28";
-  const displayTextColor = isApiNotSent ? "#ff2222" : valueTextColor;
+  const isOffline = (value && typeof value === "string" && (value.includes("API") || value.includes("TIDAK") || value === "XX")) || 
+                    (values && values.some(v => typeof v.value === "string" && (v.value.includes("API") || v.value.includes("TIDAK") || v.value === "XX")));
+  const isOff = value === "OFF";
+  const isOn = value === "ON";
+  const isStandby = value === "STANDBY";
+
+  const displayFontSize = isOffline ? "12" : "28";
+  const displayTextColor = isOffline || isOff
+    ? "#ff2222"
+    : isOn
+    ? "#00cc00"
+    : isStandby
+    ? "#ffaa00"
+    : valueTextColor;
 
   return (
     <g transform={`translate(${x}, ${y})`}>

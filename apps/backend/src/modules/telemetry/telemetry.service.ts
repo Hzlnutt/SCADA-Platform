@@ -2,6 +2,7 @@ import { getMongoDb } from "../../database/mongo";
 import { getPostgresPool } from "../../database/postgres";
 import { TELEMETRY_COLLECTION } from "../../database/collections";
 import type { TelemetryPointInput } from "./telemetry.validation";
+import { updateRunningHours } from "./running-hours.service";
 
 type RangeQuery = {
   tagId: string;
@@ -96,6 +97,17 @@ export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
     } catch (err: any) {
       console.error("Failed to sync water telemetry to PostgreSQL:", err.message);
     }
+  }
+
+  // Update running hours for status points
+  const statusPoints = points.filter(p => p.tagId && p.tagId.includes("status"));
+  for (const p of statusPoints) {
+    const isRunning = p.value === 1 || p.value === true || String(p.value).toLowerCase() === "on";
+    const ts = p.ts ? new Date(p.ts) : new Date();
+    // Use background promise, don't block request response cycle
+    updateRunningHours(p.tagId, isRunning, ts).catch((err) => {
+      console.error(`Failed to update running hours during ingest for ${p.tagId}:`, err);
+    });
   }
 
   return { inserted: result.insertedCount, docs };
