@@ -277,16 +277,22 @@ export default function MachineConfig() {
   // Load configuration from localStorage or defaults
   useEffect(() => {
     // Sensor parameters load
-    const savedSensors = localStorage.getItem(`scada.config.${unitId}`);
-    if (savedSensors) {
-      try {
-        setSensorRows(JSON.parse(savedSensors));
-      } catch (e) {
+    getJson<{ data: ConfigTagRow[] }>(`/config/sensor-rules?unitId=${unitId}`)
+      .then((res) => {
+        if (res && res.data && res.data.length > 0) {
+          setSensorRows(res.data);
+        } else {
+          const defaults = getDefaultSensorConfigs(unitId);
+          setSensorRows(defaults);
+          postJson("/config/sensor-rules", { unitId, rules: defaults }).catch(err =>
+            console.error("Failed to auto-save default sensor rules:", err)
+          );
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load sensor rules:", err);
         setSensorRows(getDefaultSensorConfigs(unitId));
-      }
-    } else {
-      setSensorRows(getDefaultSensorConfigs(unitId));
-    }
+      });
 
     // Equipment configurations load
     if (isCoolingTower) {
@@ -400,7 +406,8 @@ export default function MachineConfig() {
           setShowPasswordModal(false);
         } else {
           if (isCoolingTower) {
-            // Save sensor thresholds
+            // Save sensor thresholds to backend database
+            await postJson("/config/sensor-rules", { unitId, rules: sensorRows });
             localStorage.setItem(`scada.config.${unitId}`, JSON.stringify(sensorRows));
             // Save custom task rules to database!
             await postJson("/config/rh-task-rules", eqTaskConfigs);
@@ -439,6 +446,7 @@ export default function MachineConfig() {
             });
             localStorage.setItem("scada.config.rh.tasks", JSON.stringify(flatRules));
           } else {
+            await postJson("/config/sensor-rules", { unitId, rules: sensorRows });
             localStorage.setItem(`scada.config.${unitId}`, JSON.stringify(sensorRows));
             localStorage.setItem(`scada.config.eq.${unitId}`, JSON.stringify(eqRows));
           }

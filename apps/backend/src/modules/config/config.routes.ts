@@ -16,7 +16,10 @@ import {
   getRhTaskRulesHandler,
   updateRhTaskRulesHandler,
   getRhTasksHandler,
-  completeRhTaskHandler
+  completeRhTaskHandler,
+  getSensorRulesHandler,
+  updateSensorRulesHandler,
+  getRhBaselinesHandler
 } from "./config.controller";
 
 export const configRouter = Router();
@@ -37,3 +40,6 @@ configRouter.get("/config/rh-task-rules", authenticate, getRhTaskRulesHandler);
 configRouter.post("/config/rh-task-rules", authenticate, authorize(["admin"]), updateRhTaskRulesHandler);
 configRouter.get("/config/rh-tasks", authenticate, getRhTasksHandler);
 configRouter.post("/config/rh-tasks/:id/complete", authenticate, completeRhTaskHandler);
+configRouter.get("/config/sensor-rules", authenticate, getSensorRulesHandler);
+configRouter.post("/config/sensor-rules", authenticate, authorize(["admin"]), updateSensorRulesHandler);
+configRouter.get("/config/rh-baselines", authenticate, getRhBaselinesHandler);

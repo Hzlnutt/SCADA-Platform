@@ -116,7 +116,44 @@ export const ensurePostgresTables = async () => {
       );
     `);
 
-    logger.info("postgres tables (telemetry, running hours & global configs) ensured");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sensor_rules (
+        unit_id VARCHAR(50) NOT NULL,
+        tag_key VARCHAR(100) NOT NULL,
+        tag_name VARCHAR(100) NOT NULL,
+        low_limit NUMERIC,
+        baseline NUMERIC,
+        high_limit NUMERIC,
+        unit VARCHAR(20),
+        enable_alert BOOLEAN NOT NULL DEFAULT TRUE,
+        suppress_alert BOOLEAN NOT NULL DEFAULT FALSE,
+        direction VARCHAR(20) NOT NULL DEFAULT 'above',
+        PRIMARY KEY (unit_id, tag_key)
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS alarms (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        alarm_key VARCHAR(100) NOT NULL,
+        tag_id VARCHAR(100) NOT NULL,
+        device_id VARCHAR(100),
+        unit_id VARCHAR(50),
+        area VARCHAR(100),
+        message VARCHAR(255) NOT NULL,
+        severity VARCHAR(20) NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'Active',
+        operator_name VARCHAR(100),
+        operator_action VARCHAR(255),
+        approver VARCHAR(100),
+        rtn VARCHAR(50),
+        cleared_at TIMESTAMP WITHOUT TIME ZONE,
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    logger.info("postgres tables (telemetry, running hours, global configs, sensor rules, alarms) ensured");
   } catch (err: any) {
     logger.error({ err }, "failed to ensure postgres tables");
   }

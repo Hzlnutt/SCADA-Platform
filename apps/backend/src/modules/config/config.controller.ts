@@ -509,6 +509,104 @@ export const updateRhTaskRulesHandler = async (req: Request, res: Response, next
   }
 };
 
+export const getSensorRulesHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pool = getPostgresPool();
+    const unitId = req.query.unitId as string;
+    if (!unitId) {
+      return res.status(400).json({ error: "Missing unitId query parameter" });
+    }
+    const result = await pool.query(
+      `SELECT tag_key, tag_name, low_limit, baseline, high_limit, unit, enable_alert, suppress_alert, direction 
+       FROM sensor_rules 
+       WHERE unit_id = $1`,
+      [unitId]
+    );
+
+    const rows = result.rows.map((row) => ({
+      tagKey: row.tag_key,
+      tagName: row.tag_name,
+      lowLimit: row.low_limit !== null ? parseFloat(row.low_limit) : null,
+      baseline: row.baseline !== null ? parseFloat(row.baseline) : null,
+      highLimit: row.high_limit !== null ? parseFloat(row.high_limit) : null,
+      unit: row.unit,
+      enableAlert: row.enable_alert,
+      suppressAlert: row.suppress_alert,
+      direction: row.direction
+    }));
+
+    res.json({ data: rows });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateSensorRulesHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pool = getPostgresPool();
+    const { unitId, rules } = req.body;
+    if (!unitId || !Array.isArray(rules)) {
+      return res.status(400).json({ error: "Missing unitId or rules array in body" });
+    }
+
+    await pool.query("BEGIN");
+    await pool.query("DELETE FROM sensor_rules WHERE unit_id = $1", [unitId]);
+
+    for (const rule of rules) {
+      await pool.query(
+        `INSERT INTO sensor_rules (unit_id, tag_key, tag_name, low_limit, baseline, high_limit, unit, enable_alert, suppress_alert, direction)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          unitId,
+          rule.tagKey,
+          rule.tagName,
+          rule.lowLimit !== undefined && rule.lowLimit !== null && rule.lowLimit !== "" ? parseFloat(rule.lowLimit) : null,
+          rule.baseline !== undefined && rule.baseline !== null && rule.baseline !== "" ? parseFloat(rule.baseline) : null,
+          rule.highLimit !== undefined && rule.highLimit !== null && rule.highLimit !== "" ? parseFloat(rule.highLimit) : null,
+          rule.unit,
+          rule.enableAlert ?? true,
+          rule.suppressAlert ?? false,
+          rule.direction ?? "above"
+        ]
+      );
+    }
+    await pool.query("COMMIT");
+
+    res.json({ success: true });
+  } catch (err) {
+    const pool = getPostgresPool();
+    try {
+      await pool.query("ROLLBACK");
+    } catch (e) {}
+    next(err);
+  }
+};
+
+export const getRhBaselinesHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pool = getPostgresPool();
+    const unitId = req.query.unitId as string;
+    let query = "SELECT motor_key, target_hours, task_name, baseline_hours FROM running_hours_baselines";
+    let params: any[] = [];
+    if (unitId) {
+      query += " WHERE unit_id = $1";
+      params.push(unitId);
+    }
+    const result = await pool.query(query, params);
+    
+    const rows = result.rows.map(r => ({
+      motorKey: r.motor_key,
+      targetHours: r.target_hours,
+      taskName: r.task_name,
+      baselineHours: parseFloat(r.baseline_hours)
+    }));
+    
+    res.json({ data: rows });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const getRhTasksHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const pool = getPostgresPool();

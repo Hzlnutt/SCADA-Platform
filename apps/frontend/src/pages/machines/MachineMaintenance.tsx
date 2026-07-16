@@ -65,6 +65,31 @@ export default function MachineMaintenance() {
   });
 
   const [operators, setOperators] = useState<Array<{ id: string; name: string; role: string }>>([]);
+  const [runningHours, setRunningHours] = useState<Record<string, number>>({});
+  const [rhRules, setRhRules] = useState<any[]>([]);
+  const [baselines, setBaselines] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (unitId.startsWith("cooling-water")) {
+      getJson<{ data: Record<string, number> }>("/analytics/running-hours")
+        .then((res) => {
+          if (res && res.data) setRunningHours(res.data);
+        })
+        .catch((err) => console.error("Failed to load running hours in maintenance:", err));
+
+      getJson<{ data: any[] }>("/config/rh-task-rules")
+        .then((res) => {
+          if (res && res.data) setRhRules(res.data);
+        })
+        .catch((err) => console.error("Failed to load task rules in maintenance:", err));
+
+      getJson<{ data: any[] }>(`/config/rh-baselines?unitId=${unitId}`)
+        .then((res) => {
+          if (res && res.data) setBaselines(res.data);
+        })
+        .catch((err) => console.error("Failed to load baselines in maintenance:", err));
+    }
+  }, [unitId]);
 
   useEffect(() => {
     getJson<{ data: Array<{ id: string; name: string; role: string }> }>("/users/operators")
@@ -223,6 +248,97 @@ export default function MachineMaintenance() {
   };
 
   const healthMatrixItems = useMemo(() => {
+    if (unitId.startsWith("cooling-water")) {
+      const components28 = [
+        { key: "FAN-1", type: "FAN", tagId: "cooling-water/fan_status_1" },
+        { key: "FAN-2", type: "FAN", tagId: "cooling-water/fan_status_2" },
+        { key: "FAN-3", type: "FAN", tagId: "cooling-water/fan_status_3" },
+        { key: "MTR-1", type: "MTR", tagId: "cooling-water/motor_status_1" },
+        { key: "MTR-2", type: "MTR", tagId: "cooling-water/motor_status_2" },
+        { key: "MTR-3", type: "MTR", tagId: "cooling-water/motor_status_3" },
+        { key: "MTR-4", type: "MTR", tagId: "cooling-water/eq_status_du03" },
+        { key: "MTR-5", type: "MTR", tagId: "cooling-water/eq_status_bp03" },
+        { key: "MTR-6", type: "MTR", tagId: "cooling-water/eq_status_prep03" },
+        { key: "MTR-7", type: "MTR", tagId: "cooling-water/eq_status_st03" },
+        { key: "MTR-8", type: "MTR", tagId: "cooling-water/eq_status_washing" },
+        { key: "MTR-9", type: "MTR", tagId: "cooling-water/eq_status_minilab" },
+        { key: "Dosing Pump 1", type: "Dosing Pump", tagId: "cooling-water/dosing_pump_1" },
+        { key: "Dosing Pump 2", type: "Dosing Pump", tagId: "cooling-water/dosing_pump_2" },
+        { key: "Strainer 1", type: "Strainer", tagId: "cooling-water/strainer_1" },
+        { key: "Strainer 2", type: "Strainer", tagId: "cooling-water/strainer_2" },
+        { key: "Strainer 3", type: "Strainer", tagId: "cooling-water/strainer_3" },
+        { key: "Strainer 4", type: "Strainer", tagId: "cooling-water/strainer_4" },
+        { key: "Strainer 5", type: "Strainer", tagId: "cooling-water/strainer_5" },
+        { key: "Strainer 6", type: "Strainer", tagId: "cooling-water/strainer_6" },
+        { key: "Strainer 7", type: "Strainer", tagId: "cooling-water/strainer_7" },
+        { key: "Strainer 8", type: "Strainer", tagId: "cooling-water/strainer_8" },
+        { key: "Strainer 9", type: "Strainer", tagId: "cooling-water/strainer_9" },
+        { key: "CT 1", type: "Cooling Tower", tagId: "cooling-water/ct_1" },
+        { key: "CT 2", type: "Cooling Tower", tagId: "cooling-water/ct_2" },
+        { key: "CT 3", type: "Cooling Tower", tagId: "cooling-water/ct_3" },
+        { key: "Cooling Tank", type: "Cooling Tank", tagId: "cooling-water/cooling_tank" },
+        { key: "Panel", type: "Panel", tagId: "cooling-water/panel" }
+      ];
+
+      return components28.map((comp) => {
+        const lifetime = runningHours[comp.tagId] || 0.0;
+        const compBaselines = baselines.filter(b => b.motorKey === comp.key);
+        const ruleGroup = rhRules.find(r => r.itemKey === comp.type);
+        const rulesList = ruleGroup ? ruleGroup.rules : [];
+        
+        let limit = 1000;
+        let baselineHours = 0;
+        
+        if (rulesList.length > 0) {
+          const sortedRules = [...rulesList].sort((a, b) => a.targetHours - b.targetHours);
+          let foundActive = false;
+          
+          for (const rule of sortedRules) {
+            const taskName = rule.tasks && rule.tasks[0] ? rule.tasks[0] : "";
+            const matchedBaseline = compBaselines.find(b => b.targetHours === rule.targetHours && b.taskName === taskName);
+            const baseVal = matchedBaseline ? matchedBaseline.baselineHours : 0.0;
+            
+            const accum = lifetime - baseVal;
+            if (accum < rule.targetHours) {
+              limit = rule.targetHours;
+              baselineHours = baseVal;
+              foundActive = true;
+              break;
+            }
+          }
+          
+          if (!foundActive && sortedRules.length > 0) {
+            const maxRule = sortedRules[sortedRules.length - 1];
+            const taskName = maxRule.tasks && maxRule.tasks[0] ? maxRule.tasks[0] : "";
+            const matchedBaseline = compBaselines.find(b => b.targetHours === maxRule.targetHours && b.taskName === taskName);
+            limit = maxRule.targetHours;
+            baselineHours = matchedBaseline ? matchedBaseline.baselineHours : 0.0;
+          }
+        }
+        
+        const beforePm = Math.max(0, lifetime - baselineHours);
+        const health = limit > 0
+          ? Math.max(0, Math.min(100, Math.round(((limit - beforePm) / limit) * 100)))
+          : 100;
+          
+        let barColor = "bg-emerald-500";
+        if (health <= 50) barColor = "bg-rose-500";
+        else if (health <= 70) barColor = "bg-orange-500";
+        else if (health <= 85) barColor = "bg-amber-500";
+        
+        return {
+          tag: comp.key,
+          sub: `Accumulated: ${beforePm.toFixed(1)} h · Baseline: ${baselineHours.toFixed(1)} h`,
+          beforePm,
+          lifetime,
+          limit,
+          health,
+          barColor,
+          rem: `${Math.max(0, Math.round(limit - beforePm)).toLocaleString()} h`
+        };
+      });
+    }
+
     let eqConfigs = getDefaultEqConfigs(unitId);
     const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
     if (savedEq) {
@@ -257,7 +373,7 @@ export default function MachineMaintenance() {
         rem: `${Math.max(0, item.highLimit - beforePm).toLocaleString()} h`
       };
     });
-  }, [unitId]);
+  }, [unitId, runningHours, baselines, rhRules]);
 
   const overallHealth = useMemo(() => {
     if (healthMatrixItems.length === 0) return 100;

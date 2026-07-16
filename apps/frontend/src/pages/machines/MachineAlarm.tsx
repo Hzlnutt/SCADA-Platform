@@ -3,7 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
 import { useAuthStore } from "../../store/auth.store";
 import { getDefaultEqConfigs } from "../../data/equipment";
-import { getJson } from "../../services/api.client";
+import { getJson, postJson } from "../../services/api.client";
 import type { MachineOutletContext } from "./MachineLayout";
 
 type AlarmLogItem = {
@@ -43,7 +43,11 @@ export default function MachineAlarm() {
   const user = useAuthStore((state) => state.user);
   const userRole = user?.role ?? "user";
 
-  const [alarms, setAlarms] = useState<AlarmLogItem[]>(INITIAL_ALARMS);
+  const [dbAlarms, setDbAlarms] = useState<AlarmLogItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState<string>("All");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -107,26 +111,34 @@ export default function MachineAlarm() {
   const [editingAlarm, setEditingAlarm] = useState<AlarmLogItem | null>(null);
   const [editAction, setEditAction] = useState("");
 
-  // Load from localStorage on mount & when unitId changes
-  useEffect(() => {
-    const saved = localStorage.getItem(`scada.alarm_logs.${unitId}`);
-    if (saved) {
-      try {
-        setAlarms(JSON.parse(saved));
-      } catch (e) {
-        setAlarms(INITIAL_ALARMS);
-      }
-    } else {
-      setAlarms(INITIAL_ALARMS);
-    }
-    setSelectedIds(new Set());
-  }, [unitId]);
-
-  // Persist to localStorage whenever alarms changes
-  const saveAlarms = (updatedAlarms: AlarmLogItem[]) => {
-    setAlarms(updatedAlarms);
-    localStorage.setItem(`scada.alarm_logs.${unitId}`, JSON.stringify(updatedAlarms));
+  const fetchDbAlarms = () => {
+    getJson<{ data: any[] }>(`/alarms/history?unit=${unitId}&limit=200`)
+      .then((res) => {
+        if (res && res.data) {
+          const mapped: AlarmLogItem[] = res.data.map((item) => ({
+            id: String(item.id),
+            timestamp: new Date(item.lastTs).toLocaleString("en-US", { hour12: false }),
+            description: item.message,
+            equipment: item.tagId,
+            operatorAction: item.operatorAction || "",
+            status: item.status as "Active" | "Pending Approval" | "Resolved",
+            rtn: item.rtn || "—",
+            operatorName: item.operatorName || "",
+            approverName: item.approverName || ""
+          }));
+          setDbAlarms(mapped);
+        }
+      })
+      .catch((err) => console.error("Failed to load alarms:", err))
+      .finally(() => setLoading(false));
   };
+
+  useEffect(() => {
+    fetchDbAlarms();
+    const interval = setInterval(fetchDbAlarms, 3000);
+    setSelectedIds(new Set());
+    return () => clearInterval(interval);
+  }, [unitId]);
 
   // Load eqConfigs dynamically
   const eqConfigs = useMemo(() => {
@@ -164,7 +176,7 @@ export default function MachineAlarm() {
 
   // Filter and sort alarms based on active category and timestamp (descending)
   const processedAlarms = useMemo(() => {
-    let result = [...dynamicAlarms, ...alarms];
+    let result = [...dynamicAlarms, ...dbAlarms];
 
     // Filter by status
     if (filter !== "All") {
@@ -175,7 +187,7 @@ export default function MachineAlarm() {
     result.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
     return result;
-  }, [alarms, dynamicAlarms, filter]);
+  }, [dbAlarms, dynamicAlarms, filter]);
 
   // Handle single selection checkbox
   const handleSelectToggle = (id: string) => {
@@ -208,46 +220,61 @@ export default function MachineAlarm() {
   };
 
   // Submit Acknowledgment (Fix)
-  const handleAckSubmit = (e: React.FormEvent) => {
+  const handleAckSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const updated = alarms.map((alarm) => {
-      if (selectedIds.has(alarm.id) && alarm.status === "Active") {
-        return {
-          ...alarm,
-          status: "Pending Approval" as const,
+    setPasswordError("");
+    setSubmitting(true);
+
+    try {
+      const verifyRes = await postJson<{ valid: boolean }>("/auth/verify-password", {
+        password: passwordInput
+      });
+
+      if (!verifyRes || !verifyRes.valid) {
+        setPasswordError("Incorrect password. Please try again.");
+        setSubmitting(false);
+        return;
+      }
+
+      for (const id of selectedIds) {
+        if (id.startsWith("maint-overdue-")) continue;
+        await postJson(`/alarms/${id}/fix`, {
           operatorName: ackOperator,
           operatorAction: ackAction
-        };
+        });
       }
-      return alarm;
-    });
-    saveAlarms(updated);
-    setSelectedIds(new Set());
-    setAckModalOpen(false);
+
+      setSelectedIds(new Set());
+      setAckAction("");
+      setPasswordInput("");
+      setAckModalOpen(false);
+      fetchDbAlarms();
+    } catch (err) {
+      console.error("Failed to submit fix report:", err);
+      setPasswordError(err instanceof Error ? err.message : "Failed to verify password / submit report");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // Inline single fix trigger
   const handleSingleFix = (id: string) => {
     setSelectedIds(new Set([id]));
     setAckAction("");
+    setPasswordInput("");
+    setPasswordError("");
     setAckModalOpen(true);
   };
 
   // Inline single approval trigger
-  const handleApproveFix = (id: string) => {
-    const nowTime = new Date().toTimeString().split(" ")[0];
-    const updated = alarms.map((alarm) => {
-      if (alarm.id === id && alarm.status === "Pending Approval") {
-        return {
-          ...alarm,
-          status: "Resolved" as const,
-          rtn: nowTime,
-          approverName: user?.name || "Ka. Shift"
-        };
-      }
-      return alarm;
-    });
-    saveAlarms(updated);
+  const handleApproveFix = async (id: string) => {
+    if (id.startsWith("maint-overdue-")) return;
+    try {
+      await postJson(`/alarms/${id}/approve`, {});
+      fetchDbAlarms();
+    } catch (err) {
+      console.error("Failed to approve alarm:", err);
+    }
   };
 
   // Open Edit Finalized dialog
@@ -259,21 +286,20 @@ export default function MachineAlarm() {
   };
 
   // Submit Edit Finalized
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAlarm) return;
-    const updated = alarms.map((alarm) => {
-      if (alarm.id === editingAlarm.id) {
-        return {
-          ...alarm,
-          operatorAction: editAction
-        };
-      }
-      return alarm;
-    });
-    saveAlarms(updated);
-    setEditModalOpen(false);
-    setEditingAlarm(null);
+    try {
+      await postJson(`/alarms/${editingAlarm.id}/fix`, {
+        operatorName: editingAlarm.operatorName || user?.name || "Operator",
+        operatorAction: editAction
+      });
+      fetchDbAlarms();
+      setEditModalOpen(false);
+      setEditingAlarm(null);
+    } catch (err) {
+      console.error("Failed to edit operator action:", err);
+    }
   };
 
   // Export visible alarms list to CSV file
@@ -531,19 +557,38 @@ export default function MachineAlarm() {
                   className="mt-1 w-full h-20 rounded-md border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white focus:outline-none focus:border-[#1f6fb5]"
                 />
               </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase">Operator Password</label>
+                <input
+                  type="password"
+                  value={passwordInput}
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    setPasswordError("");
+                  }}
+                  placeholder="Enter your password to verify"
+                  required
+                  className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white focus:outline-none focus:border-[#1f6fb5]"
+                />
+                {passwordError && (
+                  <p className="mt-1 text-[10px] text-rose-500 font-semibold">{passwordError}</p>
+                )}
+              </div>
               <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-900 pt-3">
                 <button
                   type="button"
                   onClick={() => setAckModalOpen(false)}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                  disabled={submitting}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg text-xs font-bold bg-[#10b981] text-white hover:bg-emerald-700"
+                  disabled={submitting}
+                  className="px-4 py-2 rounded-lg text-xs font-bold bg-[#10b981] text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
-                  Submit Fix Report
+                  {submitting ? "Submitting..." : "Submit Fix Report"}
                 </button>
               </div>
             </form>

@@ -300,7 +300,7 @@ function StandardMachineOverview({
       return {
         supplyTemp: typeof liveSupplyTemp === "number" ? liveSupplyTemp : "API TIDAK TERKIRIM",
         returnTemp: typeof liveReturnTemp === "number" ? liveReturnTemp : "API TIDAK TERKIRIM",
-        supplyFlow: typeof latest["cooling-water/flow_1"]?.value === "number" ? `${(latest["cooling-water/flow_1"]?.value as number).toFixed(1)} m³/h` : "API TIDAK TERKIRIM",
+        supplyFlow: "API TIDAK TERKIRIM",
         supplyTds: "API TIDAK TERKIRIM",
         supplyPh: "API TIDAK TERKIRIM",
         ambientTemp: "API TIDAK TERKIRIM",
@@ -650,9 +650,9 @@ function StandardMachineOverview({
         {[
           ...(machine.tagId ? [{
             label: `${machine.unitLabel || machine.name} Telemetry`,
-            val: latest[machine.tagId]?.value !== undefined ? `${latest[machine.tagId]?.value} ${machine.unit}` : "API TIDAK TERKIRIM",
+            val: unitId === "cooling-water-1" ? "API TIDAK TERKIRIM" : (latest[machine.tagId]?.value !== undefined ? `${latest[machine.tagId]?.value} ${machine.unit}` : "API TIDAK TERKIRIM"),
             base: `${machine.dailyBase ? machine.dailyBase.toLocaleString() : "N/A"} ${machine.unit}`,
-            color: latest[machine.tagId]?.value !== undefined ? "text-[#1f6fb5] dark:text-sky-400 font-extrabold" : "text-rose-500 font-bold text-sm",
+            color: (unitId === "cooling-water-1" || latest[machine.tagId]?.value === undefined) ? "text-rose-500 font-bold text-sm" : "text-[#1f6fb5] dark:text-sky-400 font-extrabold",
             bg: "bg-[#1f6fb5]/10"
           }] : []),
           { 
@@ -1137,13 +1137,6 @@ function StandardMachineOverview({
                   ))}
                 </tbody>
               </table>
-            </div>
-          </div>
-
-          {/* pH & TDS Temp Supply 24H Line Chart */}
-          <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
-            <div className="h-64 min-h-0">
-              <Line data={processChartData} options={chartOptions} />
             </div>
           </div>
         </div>
