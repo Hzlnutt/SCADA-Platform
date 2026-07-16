@@ -92,6 +92,7 @@ function StandardMachineOverview({
   category?: any;
 }) {
   const machine = getUnitById(unitId);
+  const groupId = machine?.groupId || "cooling-water-system";
 
   // Sub-tab selection: 'telemetry' or 'process'
   const [subTab, setSubTab] = useState<"telemetry" | "process">("telemetry");
@@ -817,7 +818,7 @@ function StandardMachineOverview({
               </div>
               <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-900 text-center">
                 <Link
-                  to="../alarm"
+                  to={`/machines/${groupId}/${unitId}/alarm`}
                   className="text-xs font-bold text-[#1f6fb5] hover:text-[#002b5c] dark:hover:text-slate-200 hover:underline"
                 >
                   View All Alarms &rarr;
@@ -1180,6 +1181,9 @@ function HvacOverview({
   machineConfig?: any;
   category?: any;
 }) {
+  const machine = getUnitById(unitId);
+  const groupId = machine?.groupId || "hvac";
+
   const config = useMemo<HvacConfig>(() => {
     const saved = localStorage.getItem(`scada.config.hvac.${unitId}`);
     if (saved) {
@@ -1702,7 +1706,7 @@ function HvacOverview({
           </div>
           <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-900 text-center">
             <Link
-              to="../alarm"
+              to={`/machines/${groupId}/${unitId}/alarm`}
               className="text-xs font-bold text-[#1f6fb5] hover:text-[#002b5c] dark:hover:text-slate-200 hover:underline"
             >
               View All Alarms &rarr;
