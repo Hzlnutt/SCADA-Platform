@@ -71,6 +71,33 @@ export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
     }
   }
 
+  // PostgreSQL Sync for water telemetry
+  const waterPoints = points.filter(
+    (p) =>
+      p.tagId === "utility/water" ||
+      p.tagId.includes("/water_m3") ||
+      p.tagId.endsWith("/total_flow")
+  );
+  if (waterPoints.length > 0) {
+    try {
+      const pool = getPostgresPool();
+      for (const p of waterPoints) {
+        const water_m3 = Number(p.value);
+        if (!isNaN(water_m3)) {
+          const ts = p.ts ? new Date(p.ts) : new Date();
+          const deviceId = p.deviceId || "unknown";
+          await pool.query(
+            `INSERT INTO water_telemetry (t_stamp, water_m3, id_device) VALUES ($1, $2, $3)`,
+            [ts, water_m3, deviceId]
+          );
+          console.log(`Successfully synced water_m3 (${water_m3}) to PostgreSQL`);
+        }
+      }
+    } catch (err: any) {
+      console.error("Failed to sync water telemetry to PostgreSQL:", err.message);
+    }
+  }
+
   return { inserted: result.insertedCount, docs };
 };
 

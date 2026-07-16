@@ -70,6 +70,30 @@ Log perkembangan dan status pengerjaan fitur untuk menjaga konteks pengerjaan te
      - Mengubah value `loadFactor` pada filter "bulanan" (monthly) dari perhitungan matematis lokal menjadi live Power Factor dari API: `plnData.pqData.pf * 100` (atau fallback 88.5 jika null).
      - Menghapus batasan `cardPeriod === "yearly"` pada check offline, sehingga peringatan `"API TIDAK TERKIRIM"` muncul secara konsisten di semua filter waktu ketika status API offline.
 
+### D. Water Consumption Backend Analytics (PostgreSQL)
+- **Tujuan**: Membuat backend API untuk menarik data konsumsi air dari tabel PostgreSQL `water_telemetry` dan menyajikannya ke dashboard frontend Water (UTILITY Consumption/Water). Data berasal dari beberapa sumur air berdasarkan `id_device`.
+- **Skema Database PostgreSQL (sudah ada di server Ignition)**:
+  - Tabel: `water_telemetry`
+  - Kolom: `id` (PK serial), `t_stamp` (timestamp), `water_m3` (numeric 15,3, nilai kumulatif), `id_device` (varchar 50, contoh: `dw3`)
+  - Data masuk per jam dari Ignition SCADA
+- **File yang Diubah/Dibuat**:
+  1. **`apps/backend/src/database/postgres.ts`**: Mengubah `CREATE TABLE IF NOT EXISTS` dari `water_consumption` menjadi `water_telemetry` dengan kolom yang sesuai skema asli database (`t_stamp`, `water_m3`, `id_device`).
+  2. **`apps/backend/src/modules/historian/historian.service.ts`**: Mengembalikan mapping `"utility/water"` ke `{ table: "water_telemetry", column: "water_m3" }`.
+  3. **`apps/backend/src/modules/telemetry/telemetry.service.ts`**: Memperbarui blok sinkronisasi PostgreSQL agar insert ke tabel `water_telemetry` dengan kolom `water_m3`.
+  4. **`apps/backend/src/modules/analytics/water.analytics.ts`** [BARU]: Modul analytics baru yang:
+     - Query tabel `water_telemetry` dari PostgreSQL
+     - Menghitung konsumsi per jam dari selisih (diff) antara 2 record berurutan `water_m3` (karena nilainya kumulatif)
+     - Mengagregasi data per jam/hari/bulan, termasuk breakdown per device
+     - Mengembalikan `summary` (todayM3, monthlyM3, yearlyM3, peakHourlyM3, perDeviceSummary) dan `charts` (hourly, daily, monthly, perDeviceMonthly)
+  5. **`apps/backend/src/modules/analytics/analytics.controller.ts`**: Menambahkan `getWaterAnalyticsHandler` yang memanggil `getWaterAnalytics()`.
+  6. **`apps/backend/src/modules/analytics/analytics.routes.ts`**: Menambahkan route `GET /analytics/water`.
+  7. **`apps/backend/src/core/scheduler.ts`**: Menambahkan `startWaterPolling()` yang memantau tabel `water_telemetry` untuk data baru dan emit event `"water:update"` via socket.
+  8. **`.env`**: Menambahkan variabel PostgreSQL eksplisit (`POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`).
+- **API Endpoint Baru**:
+  - `GET /api/analytics/water` — Query parameters: `deviceId` (opsional), `from`, `to`, `year`
+  - `GET /api/analytics/water?year=2026` — Semua device, tahun 2026
+  - `GET /api/analytics/water?deviceId=dw3&year=2026` — Hanya device dw3
+
 ---
 
 ## 3. Hasil Pengujian / Kompilasi
@@ -83,3 +107,4 @@ Kompilasi build turbo repo selesai dengan status **Success** via **pnpm**:
 ## 4. Langkah Selanjutnya jika Ingin Melanjutkan Sesi
 - Tarik perubahan dari repo utama ke web server menggunakan `git pull`.
 - Jalankan service pnpm/npm dev atau build di server production/development.
+- Sesuaikan variabel `POSTGRES_HOST` di `.env` jika PostgreSQL server tidak di localhost (misalnya IP server Ignition).

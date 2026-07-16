@@ -209,6 +209,49 @@ export const startCoolingTowerPolling = () => {
   coolingPollingInterval = setInterval(poll, 3000);
 };
 
+let waterPollingInterval: NodeJS.Timeout | null = null;
+let lastWaterTs: Date | null = null;
+
+export const startWaterPolling = () => {
+  if (waterPollingInterval) return;
+
+  const poll = async () => {
+    try {
+      const pool = getPostgresPool();
+      const res = await pool.query("SELECT MAX(t_stamp) AS max_ts FROM water_telemetry;");
+      const maxTs = res.rows[0]?.max_ts;
+
+      if (maxTs) {
+        const currentDateObj = new Date(maxTs);
+        if (lastWaterTs === null) {
+          lastWaterTs = currentDateObj;
+        } else if (currentDateObj.getTime() !== lastWaterTs.getTime()) {
+          lastWaterTs = currentDateObj;
+          const io = getSocketServer();
+          if (io) {
+            io.emit("water:update");
+            logger.info("Detected new water telemetry in Postgres, broadcasting water:update");
+          }
+        }
+      } else if (lastWaterTs !== null) {
+        lastWaterTs = null;
+        const io = getSocketServer();
+        if (io) {
+          io.emit("water:update");
+          logger.info("Detected water telemetry cleared in Postgres, broadcasting water:update");
+        }
+      }
+    } catch (err) {
+      logger.error({ err }, "Water Postgres polling failed");
+    }
+  };
+
+  // Initial poll
+  poll();
+  // Poll every 5 seconds (water data comes in hourly, no need for faster)
+  waterPollingInterval = setInterval(poll, 5000);
+};
+
 
 export const startScheduler = () => {
   const minuteIntervalMs = env.rollupIntervalMs;
@@ -225,6 +268,7 @@ export const startScheduler = () => {
   startPostgresPolling();
   startPowerFactorPolling();
   startCoolingTowerPolling();
+  startWaterPolling();
 
   setInterval(() => {
     rollupTelemetryMinute().catch((err) => {
@@ -240,3 +284,4 @@ export const startScheduler = () => {
 
   logger.info({ minuteIntervalMs, hourlyIntervalMs }, "scheduler started");
 };
+

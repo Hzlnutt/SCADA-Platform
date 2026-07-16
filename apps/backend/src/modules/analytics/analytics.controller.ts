@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { getAnalyticsSummary } from "./analytics.service";
 import { getElectricityAnalytics } from "./electricity.analytics";
+import { getWaterAnalytics } from "./water.analytics";
 import { getMongoDb } from "../../database/mongo";
 import { GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
 
@@ -39,3 +40,22 @@ export const getElectricityAnalyticsHandler = async (
     next(err);
   }
 };
+
+export const getWaterAnalyticsHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const deviceId = req.query.deviceId as string | undefined;
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+    const year = req.query.year ? Number(req.query.year) : undefined;
+
+    const data = await getWaterAnalytics(deviceId, from, to, year);
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+};
+

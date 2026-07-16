@@ -71,6 +71,16 @@ export const ensurePostgresTables = async () => {
       );
     `);
     logger.info("cooling_tower_telemetry postgres table ensured");
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS water_telemetry (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        water_m3 NUMERIC(15,3),
+        id_device VARCHAR(50) NOT NULL
+      );
+    `);
+    logger.info("water_telemetry postgres table ensured");
   } catch (err: any) {
     logger.error({ err }, "failed to ensure postgres tables");
   }
