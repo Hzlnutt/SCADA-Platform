@@ -75,6 +75,11 @@ export const ingestAlarmEvents = async (events: AlarmEventInput[]) => {
         [event.alarmKey]
       );
       if (activeAlarm.rows.length === 0) {
+        let defaultUnit = "cooling-water-1";
+        if (event.tagId.startsWith("boiler/")) defaultUnit = "boiler-3w1";
+        else if (event.tagId.startsWith("compressor/")) defaultUnit = "ale-30";
+        else if (event.tagId.startsWith("hvac/")) defaultUnit = "qc-lab";
+
         // Insert new active alarm
         await pool.query(
           `INSERT INTO alarms (t_stamp, alarm_key, tag_id, device_id, unit_id, area, message, severity, status)
@@ -84,7 +89,7 @@ export const ingestAlarmEvents = async (events: AlarmEventInput[]) => {
             event.alarmKey,
             event.tagId,
             event.deviceId || "plc-sim",
-            event.unit || "cooling-water-1",
+            event.unit || defaultUnit,
             event.area || "Utilities",
             event.message,
             event.severity
@@ -97,11 +102,16 @@ export const ingestAlarmEvents = async (events: AlarmEventInput[]) => {
 
   const eventDocs: AlarmEventDoc[] = events.map((event) => {
     const ts = event.ts ?? new Date();
+    let defaultUnit = "cooling-water-1";
+    if (event.tagId.startsWith("boiler/")) defaultUnit = "boiler-3w1";
+    else if (event.tagId.startsWith("compressor/")) defaultUnit = "ale-30";
+    else if (event.tagId.startsWith("hvac/")) defaultUnit = "qc-lab";
+
     return {
       alarmKey: event.alarmKey,
       tagId: event.tagId,
       deviceId: event.deviceId,
-      unit: event.unit,
+      unit: event.unit || defaultUnit,
       area: event.area,
       message: event.message,
       severity: event.severity,

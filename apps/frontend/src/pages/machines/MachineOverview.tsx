@@ -11,6 +11,7 @@ import type { HvacConfig } from "../../data/equipment";
 
 import { useMachineConfig } from "../../hooks/useMachineConfig";
 import { getSocket } from "../../services/socket.service";
+import { getJson } from "../../services/api.client";
 
 export default function MachineOverview() {
   const { unitId } = useOutletContext<MachineOutletContext>();
@@ -94,20 +95,32 @@ function StandardMachineOverview({
 
   // Sub-tab selection: 'telemetry' or 'process'
   const [subTab, setSubTab] = useState<"telemetry" | "process">("telemetry");
+  const [dbAlarms, setDbAlarms] = useState<any[]>([]);
 
   useEffect(() => {
     setSubTab("telemetry");
   }, [unitId]);
 
-  // Load alarms and eqConfigs to compute active alarms
-  const alarms = useMemo(() => {
-    const saved = localStorage.getItem(`scada.alarm_logs.${unitId}`);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return INITIAL_ALARMS;
+  const fetchDbAlarms = () => {
+    getJson<{ data: any[] }>(`/alarms/active?unit=${unitId}&limit=5`)
+      .then((res: { data: any[] }) => {
+        if (res && res.data) {
+          setDbAlarms(res.data.map((item: any) => ({
+            id: String(item.id),
+            timestamp: new Date(item.lastTs).toLocaleTimeString("en-US", { hour12: false }),
+            description: item.message,
+            equipment: item.tagId,
+            status: item.status
+          })));
+        }
+      })
+      .catch((err: Error) => console.error("Failed to load active alarms for overview:", err));
+  };
+
+  useEffect(() => {
+    fetchDbAlarms();
+    const interval = setInterval(fetchDbAlarms, 3000);
+    return () => clearInterval(interval);
   }, [unitId]);
 
   const eqConfigs = useMemo(() => {
@@ -138,9 +151,8 @@ function StandardMachineOverview({
   }, [eqConfigs]);
 
   const allActiveAlarms = useMemo(() => {
-    const staticActive = alarms.filter((item: any) => item.status === "Active");
-    return [...dynamicAlarms, ...staticActive];
-  }, [alarms, dynamicAlarms]);
+    return [...dynamicAlarms, ...dbAlarms];
+  }, [dbAlarms, dynamicAlarms]);
 
   // Dynamic baselines from config (localStorage)
   const baselines = useMemo(() => {
@@ -523,9 +535,9 @@ function StandardMachineOverview({
       return `${h.toString().padStart(2, "0")}:00`;
     });
 
-    const tempSeries = hours.map((_, i) => 28.5 + Math.sin(i / 3) * 1.2 + Math.random() * 0.2);
-    const phSeries = hours.map((_, i) => 7.0 + Math.sin(i / 5) * 0.15 + Math.random() * 0.05);
-    const tdsSeries = hours.map((_, i) => 260 + Math.cos(i / 4) * 12 + Math.random() * 3);
+    const tempSeries = hours.map(() => null);
+    const phSeries = hours.map(() => null);
+    const tdsSeries = hours.map(() => null);
 
     return {
       labels: hours,
@@ -652,7 +664,7 @@ function StandardMachineOverview({
             label: `${machine.unitLabel || machine.name} Telemetry`,
             val: unitId === "cooling-water-1" ? "API TIDAK TERKIRIM" : (latest[machine.tagId]?.value !== undefined ? `${latest[machine.tagId]?.value} ${machine.unit}` : "API TIDAK TERKIRIM"),
             base: `${machine.dailyBase ? machine.dailyBase.toLocaleString() : "N/A"} ${machine.unit}`,
-            color: (unitId === "cooling-water-1" || latest[machine.tagId]?.value === undefined) ? "text-rose-500 font-bold text-sm" : "text-[#1f6fb5] dark:text-sky-400 font-extrabold",
+            color: (unitId === "cooling-water-1" || latest[machine.tagId]?.value === undefined) ? "text-rose-500 font-bold text-[13px] md:text-sm" : "text-[#1f6fb5] dark:text-sky-400 font-extrabold",
             bg: "bg-[#1f6fb5]/10"
           }] : []),
           { 
@@ -1063,6 +1075,16 @@ function StandardMachineOverview({
                   );
                 })}
               </div>
+            </div>
+          </div>
+
+          {/* pH & TDS Temp Supply 24H Line Chart */}
+          <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
+            <h4 className="text-sm font-extrabold text-[#002b5c] dark:text-slate-100 mb-4 border-b border-[#acd3ff]/30 pb-2">
+              pH, TDS Supply, Supply Water Temp Trend
+            </h4>
+            <div className="h-64 min-h-0">
+              <Line data={processChartData} options={chartOptions} />
             </div>
           </div>
 
