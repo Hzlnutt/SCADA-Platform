@@ -11,8 +11,9 @@ import { TimeRangeControls } from "../components/ui/TimeRangeControls";
 import { machineGroups } from "../data/machines";
 import { hvacEquipment, utilityEquipment } from "../data/equipment";
 import { getJson } from "../services/api.client";
-import { getSocket } from "../services/socket.service";
-import { useTimeRangeStore } from "../store/timeRange.store";
+import { getSocket } from "../../services/socket.service";
+import { useConfigStore } from "../../store/config.store";
+import { calculateWaterCost } from "../../utils/water";
 import { useTelemetryStore } from "../store/telemetry.store";
 import { useAlarmStore } from "../store/alarm.store";
 import {
@@ -111,6 +112,7 @@ export default function Dashboard() {
   const [thresholds, setThresholds] = useState<ThresholdItem[]>([]);
   const [ytdChecks, setYtdChecks] = useState({ electricity: true, gas: true, water: true, solar: false });
   const [electricityData, setElectricityData] = useState<any>(null);
+  const [waterData, setWaterData] = useState<any>(null);
 
   useEffect(() => {
     let active = true;
@@ -127,8 +129,21 @@ export default function Dashboard() {
         });
     };
 
+    const fetchWater = () => {
+      const currentYear = new Date().getFullYear();
+      getJson<{ data: any }>(`/analytics/water?year=${currentYear}&_t=${Date.now()}`)
+        .then((res) => {
+          if (active) setWaterData(res.data);
+        })
+        .catch((err) => console.error("Dashboard failed to fetch water data", err));
+    };
+
     fetchElectricity();
-    const interval = setInterval(fetchElectricity, 30000); // auto-fetch every 30 seconds
+    fetchWater();
+    const interval = setInterval(() => {
+      fetchElectricity();
+      fetchWater();
+    }, 30000); // auto-fetch every 30 seconds
 
     const socket = getSocket();
 
@@ -143,14 +158,21 @@ export default function Dashboard() {
       if (active) fetchElectricity();
     };
 
+    const handleWaterUpdate = () => {
+      console.log("Dashboard: water telemetry updated, reloading water...");
+      if (active) fetchWater();
+    };
+
     socket.on("config:update", handleConfigUpdate);
     socket.on("electricity:update", handleElectricityUpdate);
+    socket.on("water:update", handleWaterUpdate);
 
     return () => {
       active = false;
       clearInterval(interval);
       socket.off("config:update", handleConfigUpdate);
       socket.off("electricity:update", handleElectricityUpdate);
+      socket.off("water:update", handleWaterUpdate);
     };
   }, []);
 
@@ -226,6 +248,7 @@ export default function Dashboard() {
 
   const wbpRate = useConfigStore((state) => state.wbpRate);
   const lwbpRate = useConfigStore((state) => state.lwbpRate);
+  const waterConfig = useConfigStore((state) => state.waterConfig);
 
   const period = periods[periodIndex];
 
@@ -253,10 +276,27 @@ export default function Dashboard() {
   }, [electricityData, period.id, electricityKwh]);
 
   const gasSm3 = utilityBase.gasSm3 * period.scale;
-  const waterM3 = utilityBase.waterM3 * period.scale;
-  const monthlyWaterVolume = utilityBase.waterM3 * 30;
+  
+  const waterM3 = useMemo(() => {
+    if (!waterData) return utilityBase.waterM3 * period.scale;
+    if (period.id === "daily") return waterData.summary.todayM3;
+    if (period.id === "monthly") return waterData.summary.monthlyM3;
+    return waterData.summary.yearlyM3;
+  }, [waterData, period.id, utilityBase.waterM3, period.scale]);
 
-  const waterCost = waterM3 * utilityRates.waterIdr;
+  const monthlyWaterVolume = useMemo(() => {
+    if (waterData) return waterData.summary.monthlyM3;
+    return utilityBase.waterM3 * 30;
+  }, [waterData, utilityBase.waterM3]);
+
+  const waterCost = useMemo(() => {
+    const fullMonthCost = calculateWaterCost(monthlyWaterVolume, waterConfig);
+    if (!waterData) return calculateWaterCost(waterM3, waterConfig);
+    if (period.id === "monthly") return fullMonthCost;
+    if (monthlyWaterVolume === 0) return 0;
+    return (waterM3 / monthlyWaterVolume) * fullMonthCost;
+  }, [monthlyWaterVolume, waterM3, waterData, period.id, waterConfig]);
+
   const gasCostUsd = gasSm3 * utilityRates.gasUsd;
   const gasCostIdr = gasCostUsd * usdToIdr;
   const totalCostIdr = electricityCost + waterCost + gasCostIdr;
@@ -275,7 +315,7 @@ export default function Dashboard() {
     if (consumptionRange === "hour") {
       const elec = electricityData ? electricityData.summary.todayKwh : utilityBase.electricityKwh;
       const gas = utilityBase.gasSm3 * gasEnergyFactor;
-      const water = utilityBase.waterM3 * waterEnergyFactor;
+      const water = waterData ? waterData.summary.todayM3 : utilityBase.waterM3;
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
@@ -285,7 +325,7 @@ export default function Dashboard() {
     } else if (consumptionRange === "day") {
       const elec = electricityData ? electricityData.summary.monthlyMwh * 1000 : utilityBase.electricityKwh * 30;
       const gas = utilityBase.gasSm3 * 30 * gasEnergyFactor;
-      const water = utilityBase.waterM3 * 30 * waterEnergyFactor;
+      const water = waterData ? waterData.summary.monthlyM3 : utilityBase.waterM3 * 30;
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
@@ -295,7 +335,7 @@ export default function Dashboard() {
     } else {
       const elec = electricityData ? electricityData.summary.totalKwh : utilityBase.electricityKwh * 365;
       const gas = utilityBase.gasSm3 * 365 * gasEnergyFactor;
-      const water = utilityBase.waterM3 * 365 * waterEnergyFactor;
+      const water = waterData ? waterData.summary.yearlyM3 : utilityBase.waterM3 * 365;
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
@@ -303,7 +343,7 @@ export default function Dashboard() {
         currentEnergyLabel: "This Year"
       };
     }
-  }, [consumptionRange, electricityData, utilityBase]);
+  }, [consumptionRange, electricityData, waterData, utilityBase]);
 
   const totalCurrentEnergy = currentElectric + currentGasEnergy + currentWaterEnergy;
   const co2Emission = totalCurrentEnergy * emissionFactor;
@@ -370,8 +410,36 @@ export default function Dashboard() {
   }, [electricitySeries.length]);
 
   const waterSeries = useMemo(() => {
+    if (waterData) {
+      if (consumptionRange === "hour") {
+        return waterData.charts.hourly;
+      } else if (consumptionRange === "day") {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
+        const monthPrefix = `${currentYear}-${currentMonth}`;
+        const days = waterData.charts.daily.filter((d: any) => d.day.startsWith(monthPrefix));
+        return days.map((d: any) => d.value);
+      } else {
+        return waterData.charts.monthly.map((m: any) => m.value);
+      }
+    }
     return Array.from({ length: electricitySeries.length }, () => 0);
-  }, [electricitySeries.length]);
+  }, [electricitySeries.length, waterData, consumptionRange]);
+
+  const consumptionWaterCost = useMemo(() => {
+    const totalM3 = waterSeries.reduce((sum: number, v: number) => sum + v, 0);
+    if (!waterData) return calculateWaterCost(totalM3, waterConfig);
+    
+    const currentMonthTotal = waterData.summary.monthlyM3 || utilityBase.waterM3 * 30;
+    const fullMonthCost = calculateWaterCost(currentMonthTotal, waterConfig);
+
+    if (currentMonthTotal === 0 && totalM3 === 0) return 0;
+    if (consumptionRange === "month") {
+      return calculateWaterCost(totalM3, waterConfig); 
+    }
+    return currentMonthTotal > 0 ? (totalM3 / currentMonthTotal) * fullMonthCost : 0;
+  }, [waterSeries, waterData, waterConfig, consumptionRange, utilityBase.waterM3]);
 
   const solarSeries = useMemo(() => {
     return electricitySeries.map(() => 0);
@@ -414,8 +482,14 @@ export default function Dashboard() {
   }, []);
 
   const ytdWaterSeries = useMemo(() => {
+    if (waterData) {
+      return waterData.charts.monthly.map((m: any, i: number) => {
+        if (i > ytdMonthIndex) return null as unknown as number;
+        return m.value;
+      });
+    }
     return Array.from({ length: 12 }, () => 0);
-  }, []);
+  }, [waterData, ytdMonthIndex]);
 
   const ytdElectricityTotal = useMemo(
     () => ytdElectricitySeries.reduce((sum: number, v: number | null) => sum + (v ?? 0), 0),
@@ -916,7 +990,7 @@ export default function Dashboard() {
                 <div>
                   <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Water</div>
                   <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-                    {formatCurrency(waterCost, "IDR")}
+                    {formatCurrency(consumptionWaterCost, "IDR")}
                   </div>
                   <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
                     {waterSeries.reduce((sum, v) => sum + v, 0).toFixed(1)} m³

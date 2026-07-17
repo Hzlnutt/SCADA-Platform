@@ -8,6 +8,8 @@ import { buildTimeAwareSeries, buildTimeLabels, getElapsedIndex } from "../../ut
 import { getJson } from "../../services/api.client";
 import { getSocket } from "../../services/socket.service";
 import { useSystemStore } from "../../store/system.store";
+import { useConfigStore } from "../../store/config.store";
+import { calculateWaterCost } from "../../utils/water";
 
 const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
   const energy = group.summaryCards.find((card) => card.label === "Total Energy")?.value ?? 0;
@@ -15,7 +17,6 @@ const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
 }, 0);
 
 const waterBase = dailyEnergyTotal / 25;
-const waterRate = 12000; // Rp 12.000 per m3
 
 const MONTH_NAMES_ID = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -169,7 +170,28 @@ export default function Water() {
     return waterBase * config.scale;
   }, [hasChartData, chartData, range, monthlyDailyRecords, customDailyRecords, chartStartDate, chartEndDate, config.scale]);
 
-  const cost = total * waterRate;
+  const waterConfig = useConfigStore((state) => state.waterConfig);
+  
+  // Calculate cost based on current month's total usage to get the progressive rate correct
+  const currentMonthTotal = useMemo(() => {
+    if (hasChartData && chartData.summary) {
+      return chartData.summary.monthlyM3 || 0;
+    }
+    return waterBase * 30; // fallback
+  }, [hasChartData, chartData]);
+
+  const fullMonthCost = useMemo(() => calculateWaterCost(currentMonthTotal, waterConfig), [currentMonthTotal, waterConfig]);
+  
+  // Calculate proportional cost for the selected view
+  const cost = useMemo(() => {
+    if (currentMonthTotal === 0 && total === 0) return 0;
+    
+    if (range === "ytd" || range === "month") {
+      return calculateWaterCost(total, waterConfig); 
+    }
+    // For smaller ranges (day, hour), proportion of the month's cost
+    return currentMonthTotal > 0 ? (total / currentMonthTotal) * fullMonthCost : 0;
+  }, [total, currentMonthTotal, fullMonthCost, range, waterConfig]);
 
   // Max value of selected range
   const peak = useMemo(() => {

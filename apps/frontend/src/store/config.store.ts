@@ -1,24 +1,51 @@
 import { create } from "zustand";
 import { getJson, postJson } from "../services/api.client";
 
+export type WaterTier = {
+  maxVolume: number | null;
+  rate: number;
+};
+
+export type WaterConfig = {
+  taxRate: number;
+  ar: number;
+  tiers: WaterTier[];
+};
+
 type ConfigState = {
   wbpRate: number;
   lwbpRate: number;
+  waterConfig: WaterConfig;
   loading: boolean;
   fetchRates: () => Promise<void>;
-  setRates: (wbp: number, lwbp: number) => Promise<void>;
+  setRates: (wbp: number, lwbp: number, waterConfig?: WaterConfig) => Promise<void>;
 };
 
 export const useConfigStore = create<ConfigState>((set) => ({
   wbpRate: 1600,
   lwbpRate: 1112,
+  waterConfig: {
+    taxRate: 0.20,
+    ar: 0.18,
+    tiers: [
+      { maxVolume: 50, rate: 5900 },
+      { maxVolume: 500, rate: 6600 },
+      { maxVolume: 1000, rate: 7550 },
+      { maxVolume: 2500, rate: 9050 },
+      { maxVolume: null, rate: 11300 }
+    ]
+  },
   loading: false,
   fetchRates: async () => {
     try {
       set({ loading: true });
-      const res = await getJson<{ data: { wbpRate: number; lwbpRate: number } }>("/config/utility");
+      const res = await getJson<{ data: { wbpRate: number; lwbpRate: number; waterConfig?: WaterConfig } }>("/config/utility");
       if (res && res.data) {
-        set({ wbpRate: res.data.wbpRate, lwbpRate: res.data.lwbpRate });
+        set({ 
+          wbpRate: res.data.wbpRate, 
+          lwbpRate: res.data.lwbpRate,
+          ...(res.data.waterConfig ? { waterConfig: res.data.waterConfig } : {})
+        });
       }
     } catch (err) {
       console.error("Failed to fetch utility rates config:", err);
@@ -26,15 +53,23 @@ export const useConfigStore = create<ConfigState>((set) => ({
       set({ loading: false });
     }
   },
-  setRates: async (wbp, lwbp) => {
+  setRates: async (wbp, lwbp, waterConfig) => {
     try {
       set({ loading: true });
-      const res = await postJson<{ data: { wbpRate: number; lwbpRate: number } }>("/config/utility", {
+      const payload: any = {
         wbpRate: wbp,
         lwbpRate: lwbp
-      });
+      };
+      if (waterConfig) {
+        payload.waterConfig = waterConfig;
+      }
+      const res = await postJson<{ data: { wbpRate: number; lwbpRate: number; waterConfig?: WaterConfig } }>("/config/utility", payload);
       if (res && res.data) {
-        set({ wbpRate: res.data.wbpRate, lwbpRate: res.data.lwbpRate });
+        set({ 
+          wbpRate: res.data.wbpRate, 
+          lwbpRate: res.data.lwbpRate,
+          ...(res.data.waterConfig ? { waterConfig: res.data.waterConfig } : {})
+        });
       }
     } catch (err) {
       console.error("Failed to update utility rates config:", err);

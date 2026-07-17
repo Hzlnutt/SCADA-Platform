@@ -263,10 +263,34 @@ export const testBindingHandler = async (req: Request, res: Response, next: Next
   }
 };
 
+const waterTierSchema = z.object({
+  maxVolume: z.number().nullable(),
+  rate: z.number()
+});
+
+const waterConfigSchema = z.object({
+  taxRate: z.number(),
+  ar: z.number(),
+  tiers: z.array(waterTierSchema)
+});
+
 const utilityConfigSchema = z.object({
   wbpRate: z.number().nonnegative(),
-  lwbpRate: z.number().nonnegative()
+  lwbpRate: z.number().nonnegative(),
+  waterConfig: waterConfigSchema.optional()
 });
+
+export const defaultWaterConfig = {
+  taxRate: 0.20,
+  ar: 0.18,
+  tiers: [
+    { maxVolume: 50, rate: 5900 },
+    { maxVolume: 500, rate: 6600 },
+    { maxVolume: 1000, rate: 7550 },
+    { maxVolume: 2500, rate: 9050 },
+    { maxVolume: null, rate: 11300 }
+  ]
+};
 
 export const getUtilityConfigHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -276,14 +300,16 @@ export const getUtilityConfigHandler = async (req: Request, res: Response, next:
       res.json({
         data: {
           wbpRate: config.wbpRate,
-          lwbpRate: config.lwbpRate
+          lwbpRate: config.lwbpRate,
+          waterConfig: config.waterConfig || defaultWaterConfig
         }
       });
     } else {
       res.json({
         data: {
           wbpRate: 1600,
-          lwbpRate: 1112
+          lwbpRate: 1112,
+          waterConfig: defaultWaterConfig
         }
       });
     }
@@ -300,11 +326,13 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
     const beforeDoc = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
     const oldWbpRate = beforeDoc ? beforeDoc.wbpRate : 1600;
     const oldLwbpRate = beforeDoc ? beforeDoc.lwbpRate : 1112;
+    const oldWaterConfig = beforeDoc?.waterConfig || defaultWaterConfig;
 
     const doc = {
       key: "utility",
       wbpRate: parsed.wbpRate,
       lwbpRate: parsed.lwbpRate,
+      waterConfig: parsed.waterConfig || oldWaterConfig,
       updatedAt: new Date()
     };
 
@@ -327,8 +355,8 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
       resourceId: "utility",
       ip: getClientIp(req),
       meta: {
-        before: { wbpRate: oldWbpRate, lwbpRate: oldLwbpRate },
-        after: { wbpRate: parsed.wbpRate, lwbpRate: parsed.lwbpRate }
+        before: { wbpRate: oldWbpRate, lwbpRate: oldLwbpRate, waterConfig: oldWaterConfig },
+        after: { wbpRate: parsed.wbpRate, lwbpRate: parsed.lwbpRate, waterConfig: parsed.waterConfig }
       }
     });
 
