@@ -1,7 +1,26 @@
 import { getMongoDb } from "../../database/mongo";
 import { getPostgresPool } from "../../database/postgres";
-import { ELECTRICITY_RAW_COLLECTION, ELECTRICITY_1M_COLLECTION, ELECTRICITY_1H_COLLECTION } from "../../database/collections";
+import { ELECTRICITY_RAW_COLLECTION, ELECTRICITY_1M_COLLECTION, ELECTRICITY_1H_COLLECTION, GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
 import { env } from "../../config/env.config";
+
+export interface ElectricityTariff {
+  validFrom: string; // "YYYY-MM"
+  wbpRate: number;
+  lwbpRate: number;
+}
+
+export function getTariffForDate(dateStr: string, tariffs: ElectricityTariff[]): { wbpRate: number, lwbpRate: number } {
+  const sorted = [...tariffs].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
+  const recordMonth = dateStr.substring(0, 7); // "YYYY-MM"
+  const match = sorted.find(t => t.validFrom <= recordMonth);
+  if (match) {
+    return { wbpRate: match.wbpRate, lwbpRate: match.lwbpRate };
+  }
+  if (sorted.length > 0) {
+    return { wbpRate: sorted[sorted.length - 1].wbpRate, lwbpRate: sorted[sorted.length - 1].lwbpRate };
+  }
+  return { wbpRate: 1600, lwbpRate: 1112 };
+}
 
 function parsePowerFactor(data: any): number | null {
   if (typeof data === "number") {
@@ -238,10 +257,23 @@ export const getElectricityAnalytics = async (
   const todayStr = getWibDateString(new Date());
   const currentMonthStr = todayStr.substring(0, 7);
 
+  // Fetch electricity tariffs from config
+  const configDoc = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
+  const tariffs: ElectricityTariff[] = configDoc?.electricityTariffs || [
+    { validFrom: "2024-01", wbpRate: wbpRate, lwbpRate: lwbpRate }
+  ];
+
   let wbpKwh = 0;
   let lwbpKwh = 0;
   let maxDiff = 0;
   let peakDemandTs: Date | null = null;
+
+  let totalWbpCost = 0;
+  let totalLwbpCost = 0;
+  let todayWbpCost = 0;
+  let todayLwbpCost = 0;
+  let monthlyWbpCost = 0;
+  let monthlyLwbpCost = 0;
 
   let todayWbpKwh = 0;
   let todayLwbpKwh = 0;
@@ -256,6 +288,9 @@ export const getElectricityAnalytics = async (
   const monthlyLwbpMap = new Map<string, number>();
   const monthlyPeakMap = new Map<string, number>();
   const monthlyPeakTsMap = new Map<string, Date>();
+
+  const monthlyWbpCostMap = new Map<string, number>();
+  const monthlyLwbpCostMap = new Map<string, number>();
 
   const dailyHourlyMap = new Map<string, number[]>();
   const dailyHourlyWbpMap = new Map<string, number[]>();
@@ -285,17 +320,38 @@ export const getElectricityAnalytics = async (
     const isToday = dateStr === todayStr;
     const isCurrentMonth = monthStr === currentMonthStr;
 
+    // Get matching tariff for this date
+    const recordTariff = getTariffForDate(dateStr, tariffs);
+
     // If the hourly interval ends at 18:00 to 22:00 WIB, it started at WBP hours (17:00-21:00)
     const endHour = getWibHour(currRecord.ts);
     const isWbp = endHour >= 18 && endHour <= 22;
     if (isWbp) {
+      const cost = diff * recordTariff.wbpRate;
       wbpKwh += diff;
-      if (isToday) todayWbpKwh += diff;
-      if (isCurrentMonth) monthlyWbpKwh += diff;
+      totalWbpCost += cost;
+      if (isToday) {
+        todayWbpKwh += diff;
+        todayWbpCost += cost;
+      }
+      if (isCurrentMonth) {
+        monthlyWbpKwh += diff;
+        monthlyWbpCost += cost;
+      }
+      monthlyWbpCostMap.set(monthStr, (monthlyWbpCostMap.get(monthStr) || 0) + cost);
     } else {
+      const cost = diff * recordTariff.lwbpRate;
       lwbpKwh += diff;
-      if (isToday) todayLwbpKwh += diff;
-      if (isCurrentMonth) monthlyLwbpKwh += diff;
+      totalLwbpCost += cost;
+      if (isToday) {
+        todayLwbpKwh += diff;
+        todayLwbpCost += cost;
+      }
+      if (isCurrentMonth) {
+        monthlyLwbpKwh += diff;
+        monthlyLwbpCost += cost;
+      }
+      monthlyLwbpCostMap.set(monthStr, (monthlyLwbpCostMap.get(monthStr) || 0) + cost);
     }
 
     // Group by Day (total + WBP/LWBP split)
@@ -349,12 +405,12 @@ export const getElectricityAnalytics = async (
   const prevHourlyValues = dbPrevHourly || Array.from({ length: 24 }, () => 0);
 
   const totalKwh = wbpKwh + lwbpKwh;
-  const wbpCost = wbpKwh * wbpRate;
-  const lwbpCost = lwbpKwh * lwbpRate;
-  const totalCost = wbpCost + lwbpCost;
+  const wbpCost = totalWbpCost;
+  const lwbpCost = totalLwbpCost;
+  const totalCost = totalWbpCost + totalLwbpCost;
 
-  const todayCost = todayWbpKwh * wbpRate + todayLwbpKwh * lwbpRate;
-  const monthlyCost = monthlyWbpKwh * wbpRate + monthlyLwbpKwh * lwbpRate;
+  const todayCost = todayWbpCost + todayLwbpCost;
+  const monthlyCost = monthlyWbpCost + monthlyLwbpCost;
 
   // Carbon coefficient: ~0.82 kg CO2 per kWh
   const co2Emitted = (totalKwh * 0.82) / 1000; // in tons
@@ -417,8 +473,8 @@ export const getElectricityAnalytics = async (
     const mTotalKwh = (monthlyMap.get(monthKey) || 0);
     const mWbpKwh = (monthlyWbpMap.get(monthKey) || 0);
     const mLwbpKwh = (monthlyLwbpMap.get(monthKey) || 0);
-    const mWbpCost = mWbpKwh * wbpRate;
-    const mLwbpCost = mLwbpKwh * lwbpRate;
+    const mWbpCost = monthlyWbpCostMap.get(monthKey) || 0;
+    const mLwbpCost = monthlyLwbpCostMap.get(monthKey) || 0;
     const mTotalCost = mWbpCost + mLwbpCost;
     const mPeak = monthlyPeakMap.get(monthKey) || 0;
     const mPeakTs = monthlyPeakTsMap.get(monthKey);

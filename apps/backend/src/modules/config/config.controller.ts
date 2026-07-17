@@ -274,10 +274,17 @@ const waterConfigSchema = z.object({
   tiers: z.array(waterTierSchema)
 });
 
+const electricityTariffSchema = z.object({
+  validFrom: z.string().regex(/^\d{4}-\d{2}$/, "Must be YYYY-MM format"),
+  wbpRate: z.number().nonnegative(),
+  lwbpRate: z.number().nonnegative()
+});
+
 const utilityConfigSchema = z.object({
   wbpRate: z.number().nonnegative(),
   lwbpRate: z.number().nonnegative(),
-  waterConfig: waterConfigSchema.optional()
+  waterConfig: waterConfigSchema.optional(),
+  electricityTariffs: z.array(electricityTariffSchema).optional()
 });
 
 export const defaultWaterConfig = {
@@ -292,6 +299,10 @@ export const defaultWaterConfig = {
   ]
 };
 
+export const defaultElectricityTariffs = [
+  { validFrom: "2024-01", wbpRate: 1600, lwbpRate: 1112 }
+];
+
 export const getUtilityConfigHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const db = getMongoDb();
@@ -301,7 +312,10 @@ export const getUtilityConfigHandler = async (req: Request, res: Response, next:
         data: {
           wbpRate: config.wbpRate,
           lwbpRate: config.lwbpRate,
-          waterConfig: config.waterConfig || defaultWaterConfig
+          waterConfig: config.waterConfig || defaultWaterConfig,
+          electricityTariffs: config.electricityTariffs || [
+            { validFrom: "2024-01", wbpRate: config.wbpRate || 1600, lwbpRate: config.lwbpRate || 1112 }
+          ]
         }
       });
     } else {
@@ -309,7 +323,8 @@ export const getUtilityConfigHandler = async (req: Request, res: Response, next:
         data: {
           wbpRate: 1600,
           lwbpRate: 1112,
-          waterConfig: defaultWaterConfig
+          waterConfig: defaultWaterConfig,
+          electricityTariffs: defaultElectricityTariffs
         }
       });
     }
@@ -327,12 +342,26 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
     const oldWbpRate = beforeDoc ? beforeDoc.wbpRate : 1600;
     const oldLwbpRate = beforeDoc ? beforeDoc.lwbpRate : 1112;
     const oldWaterConfig = beforeDoc?.waterConfig || defaultWaterConfig;
+    const oldElectricityTariffs = beforeDoc?.electricityTariffs || [
+      { validFrom: "2024-01", wbpRate: oldWbpRate, lwbpRate: oldLwbpRate }
+    ];
+
+    // Determine latest rates for top-level backward compatibility
+    let wbpRate = parsed.wbpRate;
+    let lwbpRate = parsed.lwbpRate;
+    const tariffs = parsed.electricityTariffs || [];
+    if (tariffs.length > 0) {
+      const sorted = [...tariffs].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
+      wbpRate = sorted[0].wbpRate;
+      lwbpRate = sorted[0].lwbpRate;
+    }
 
     const doc = {
       key: "utility",
-      wbpRate: parsed.wbpRate,
-      lwbpRate: parsed.lwbpRate,
+      wbpRate,
+      lwbpRate,
       waterConfig: parsed.waterConfig || oldWaterConfig,
+      electricityTariffs: tariffs.length > 0 ? tariffs : oldElectricityTariffs,
       updatedAt: new Date()
     };
 
@@ -355,8 +384,8 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
       resourceId: "utility",
       ip: getClientIp(req),
       meta: {
-        before: { wbpRate: oldWbpRate, lwbpRate: oldLwbpRate, waterConfig: oldWaterConfig },
-        after: { wbpRate: parsed.wbpRate, lwbpRate: parsed.lwbpRate, waterConfig: parsed.waterConfig }
+        before: { wbpRate: oldWbpRate, lwbpRate: oldLwbpRate, waterConfig: oldWaterConfig, electricityTariffs: oldElectricityTariffs },
+        after: { wbpRate: doc.wbpRate, lwbpRate: doc.lwbpRate, waterConfig: doc.waterConfig, electricityTariffs: doc.electricityTariffs }
       }
     });
 

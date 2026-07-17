@@ -12,13 +12,20 @@ export type WaterConfig = {
   tiers: WaterTier[];
 };
 
+export type ElectricityTariff = {
+  validFrom: string; // "YYYY-MM"
+  wbpRate: number;
+  lwbpRate: number;
+};
+
 type ConfigState = {
   wbpRate: number;
   lwbpRate: number;
   waterConfig: WaterConfig;
+  electricityTariffs: ElectricityTariff[];
   loading: boolean;
   fetchRates: () => Promise<void>;
-  setRates: (wbp: number, lwbp: number, waterConfig?: WaterConfig) => Promise<void>;
+  setRates: (wbp: number, lwbp: number, waterConfig?: WaterConfig, electricityTariffs?: ElectricityTariff[]) => Promise<void>;
 };
 
 export const useConfigStore = create<ConfigState>((set) => ({
@@ -35,16 +42,22 @@ export const useConfigStore = create<ConfigState>((set) => ({
       { maxVolume: null, rate: 11300 }
     ]
   },
+  electricityTariffs: [
+    { validFrom: "2024-01", wbpRate: 1600, lwbpRate: 1112 }
+  ],
   loading: false,
   fetchRates: async () => {
     try {
       set({ loading: true });
-      const res = await getJson<{ data: { wbpRate: number; lwbpRate: number; waterConfig?: WaterConfig } }>("/config/utility");
+      const res = await getJson<{ data: { wbpRate: number; lwbpRate: number; waterConfig?: WaterConfig; electricityTariffs?: ElectricityTariff[] } }>("/config/utility");
       if (res && res.data) {
         set({ 
           wbpRate: res.data.wbpRate, 
           lwbpRate: res.data.lwbpRate,
-          ...(res.data.waterConfig ? { waterConfig: res.data.waterConfig } : {})
+          ...(res.data.waterConfig ? { waterConfig: res.data.waterConfig } : {}),
+          electricityTariffs: res.data.electricityTariffs || [
+            { validFrom: "2024-01", wbpRate: res.data.wbpRate, lwbpRate: res.data.lwbpRate }
+          ]
         });
       }
     } catch (err) {
@@ -53,7 +66,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
       set({ loading: false });
     }
   },
-  setRates: async (wbp, lwbp, waterConfig) => {
+  setRates: async (wbp, lwbp, waterConfig, electricityTariffs) => {
     try {
       set({ loading: true });
       const payload: any = {
@@ -63,12 +76,18 @@ export const useConfigStore = create<ConfigState>((set) => ({
       if (waterConfig) {
         payload.waterConfig = waterConfig;
       }
-      const res = await postJson<{ data: { wbpRate: number; lwbpRate: number; waterConfig?: WaterConfig } }>("/config/utility", payload);
+      if (electricityTariffs) {
+        payload.electricityTariffs = electricityTariffs;
+      }
+      const res = await postJson<{ data: { wbpRate: number; lwbpRate: number; waterConfig?: WaterConfig; electricityTariffs?: ElectricityTariff[] } }>("/config/utility", payload);
       if (res && res.data) {
         set({ 
           wbpRate: res.data.wbpRate, 
           lwbpRate: res.data.lwbpRate,
-          ...(res.data.waterConfig ? { waterConfig: res.data.waterConfig } : {})
+          ...(res.data.waterConfig ? { waterConfig: res.data.waterConfig } : {}),
+          electricityTariffs: res.data.electricityTariffs || [
+            { validFrom: "2024-01", wbpRate: res.data.wbpRate, lwbpRate: res.data.lwbpRate }
+          ]
         });
       }
     } catch (err) {
@@ -84,3 +103,4 @@ export const useConfigStore = create<ConfigState>((set) => ({
 if (typeof window !== "undefined") {
   useConfigStore.getState().fetchRates();
 }
+

@@ -39,6 +39,7 @@ import Hvac from "../pages/utilities/Hvac";
 import Wwtp from "../pages/utilities/Wwtp";
 import UtilityConfig from "../pages/utilities/UtilityConfig";
 import UtilityOverview from "../pages/utilities/UtilityOverview";
+import Billing from "../pages/utilities/Billing";
 import Tasks from "../pages/Tasks";
 
 // ✅ IMPORT KOMPONEN CUSTOM TAB
@@ -91,6 +92,7 @@ export const AppRouter = () => {
             <Route path="hvac" element={<Hvac />} />
             <Route path="wwtp" element={<Wwtp />} />
             <Route path="utility-config" element={<UtilityConfig />} />
+            <Route path="utility-billing" element={<Billing />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/machines" element={<MachinesConfigPage />} />
             <Route path="approvals" element={<Approvals />} />
