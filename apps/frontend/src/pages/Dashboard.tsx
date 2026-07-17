@@ -11,9 +11,9 @@ import { TimeRangeControls } from "../components/ui/TimeRangeControls";
 import { machineGroups } from "../data/machines";
 import { hvacEquipment, utilityEquipment } from "../data/equipment";
 import { getJson } from "../services/api.client";
-import { getSocket } from "../../services/socket.service";
-import { useConfigStore } from "../../store/config.store";
-import { calculateWaterCost } from "../../utils/water";
+import { getSocket } from "../services/socket.service";
+import { useConfigStore } from "../store/config.store";
+import { calculateWaterCost } from "../utils/water";
 import { useTelemetryStore } from "../store/telemetry.store";
 import { useAlarmStore } from "../store/alarm.store";
 import {
@@ -24,7 +24,6 @@ import {
   getElapsedIndex
 } from "../utils/series";
 import { useMachineConfig } from "../hooks/useMachineConfig";
-import { useConfigStore } from "../store/config.store";
 
 const staticDailyEnergyTotal = machineGroups.reduce((sum, group) => {
   const energy = group.summaryCards.find((card) => card.label === "Total Energy")?.value ?? 0;
