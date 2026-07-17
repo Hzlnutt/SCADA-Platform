@@ -147,7 +147,11 @@ export const startCoolingTowerPolling = () => {
           { tagId: "cooling-water/eq_temp_du03", value: data.Scaled_Temp_DU, unit: "C" },
           { tagId: "cooling-water/eq_temp_prep03", value: data.Scaled_Tempt_Prep3_Return, unit: "C" },
           { tagId: "cooling-water/eq_temp_washing", value: data.Scaled_Temp_Washing, unit: "C" },
-          { tagId: "cooling-water/eq_temp_st03_supply", value: data.Scaled_Temp_ST3_Supply, unit: "C" }
+          { tagId: "cooling-water/eq_temp_st03_supply", value: data.Scaled_Temp_ST3_Supply, unit: "C" },
+          { tagId: "cooling-water/st3_heating", value: data.Status_Machine__Heating_ST3 ? 1 : 0, unit: "status" },
+          { tagId: "cooling-water/st3_cooling", value: data.Status_Machine__Cooling_ST3 ? 1 : 0, unit: "status" },
+          { tagId: "cooling-water/st3_steril", value: data.Status_Machine__Steril_ST3 ? 1 : 0, unit: "status" },
+          { tagId: "cooling-water/jumo_pieces", value: data.Jumo_Pieces || "", unit: "" }
         ].map((p) => ({
           ts: ts.toISOString(),
           value: p.value,

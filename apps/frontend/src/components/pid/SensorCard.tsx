@@ -73,7 +73,7 @@ const SensorCard: React.FC<SensorCardProps> = ({
   const isOffline = (value && typeof value === "string" && (value.includes("API") || value.includes("TIDAK") || value === "XX")) || 
                     (values && values.some(v => typeof v.value === "string" && (v.value.includes("API") || v.value.includes("TIDAK") || v.value === "XX")));
   const isOff = value === "OFF";
-  const isOn = value === "ON";
+  const isOn = value === "ON" || value === "HEATING" || value === "COOLING" || value === "STERIL";
   const isStandby = value === "STANDBY";
 
   const displayFontSize = isOffline ? "12" : "28";

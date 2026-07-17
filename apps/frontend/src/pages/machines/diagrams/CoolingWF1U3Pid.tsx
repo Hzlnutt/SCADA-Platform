@@ -64,11 +64,29 @@ export default function CoolingWF1U3Pid({
     : "XX";
 
   const getStProcessStatus = () => {
-    const val = latest["cooling-water/eq_status_st03"]?.value;
+    const isHeating = latest["cooling-water/st3_heating"]?.value === 1;
+    const isCooling = latest["cooling-water/st3_cooling"]?.value === 1;
+    const isSteril = latest["cooling-water/st3_steril"]?.value === 1;
+
+    const hasHeating = latest["cooling-water/st3_heating"] !== undefined;
+    const hasCooling = latest["cooling-water/st3_cooling"] !== undefined;
+    const hasSteril = latest["cooling-water/st3_steril"] !== undefined;
+    if (!hasHeating && !hasCooling && !hasSteril) return "XX";
+
+    if (isHeating) return "HEATING";
+    if (isCooling) return "COOLING";
+    if (isSteril) return "STERIL";
+    return "STANDBY";
+  };
+
+  const getLotValue = () => {
+    const val = latest["cooling-water/jumo_pieces"]?.value;
     if (val === undefined || val === null || val === "XX") return "XX";
-    if (val === 2 || val === "2" || String(val).toUpperCase() === "STANDBY") return "STANDBY";
-    if (val === 1 || val === true || String(val).toUpperCase() === "ON" || val === "1") return "ON";
-    return "OFF";
+    const str = String(val);
+    if (str.includes("/")) {
+      return str.split("/")[1].trim();
+    }
+    return str.trim();
   };
 
   const getChem357Lvl = () => {
@@ -1259,7 +1277,7 @@ export default function CoolingWF1U3Pid({
               y={-145}
               width={175}
               title="HEATING"
-              value="XX"
+              value={latest["cooling-water/st3_heating"]?.value === 1 ? "ON" : (latest["cooling-water/st3_heating"] !== undefined ? "OFF" : "XX")}
               colorType="blue"
               />
               <SensorCard
@@ -1275,7 +1293,7 @@ export default function CoolingWF1U3Pid({
               y={-35}
               width={175}
               title="COOLING"
-              value="XX"
+              value={latest["cooling-water/st3_cooling"]?.value === 1 ? "ON" : (latest["cooling-water/st3_cooling"] !== undefined ? "OFF" : "XX")}
               colorType="blue"
               />
               <SensorCard
@@ -1283,7 +1301,7 @@ export default function CoolingWF1U3Pid({
               y={-35}
               width={175}
               title="LOT"
-              value="XX"
+              value={getLotValue()}
               colorType="blue"
               />
 
