@@ -1,4 +1,4 @@
-import { WaterConfig } from "../store/config.store";
+import type { WaterConfig } from "../store/config.store";
 
 export function calculateWaterCost(monthlyVolume: number, config: WaterConfig): number {
   if (!config || !config.tiers) return 0;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
-import { useConfigStore, WaterConfig } from "../../store/config.store";
+import { useConfigStore, type WaterConfig } from "../../store/config.store";
 
 export default function UtilityConfig() {
   const storeWbpRate = useConfigStore((state) => state.wbpRate);

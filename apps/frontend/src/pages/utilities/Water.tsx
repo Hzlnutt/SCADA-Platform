@@ -193,6 +193,8 @@ export default function Water() {
     return currentMonthTotal > 0 ? (total / currentMonthTotal) * fullMonthCost : 0;
   }, [total, currentMonthTotal, fullMonthCost, range, waterConfig]);
 
+  const avgRate = total > 0 ? cost / total : 0;
+
   // Max value of selected range
   const peak = useMemo(() => {
     if (hasChartData) {
@@ -490,11 +492,11 @@ export default function Water() {
 
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition hover:shadow-md hover:border-cyan-400 dark:hover:border-cyan-500">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Tarif</span>
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Tarif Rata-rata</span>
             <span className="text-lg">🏷️</span>
           </div>
-          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{formatCurrency(waterRate)}</div>
-          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Per m³</div>
+          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{formatCurrency(avgRate)}</div>
+          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Per m³ (Progresif)</div>
         </div>
       </section>
 

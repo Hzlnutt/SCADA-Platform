@@ -12,6 +12,7 @@ import { machineGroups } from "../data/machines";
 import { hvacEquipment, utilityEquipment } from "../data/equipment";
 import { getJson } from "../services/api.client";
 import { getSocket } from "../services/socket.service";
+import { useTimeRangeStore } from "../store/timeRange.store";
 import { useConfigStore } from "../store/config.store";
 import { calculateWaterCost } from "../utils/water";
 import { useTelemetryStore } from "../store/telemetry.store";
@@ -967,7 +968,7 @@ export default function Dashboard() {
                     {formatCurrency(gasCostUsd, "USD")}
                   </div>
                   <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                    {formatCurrency(gasCostIdr, "IDR")} &middot; {gasSeries.reduce((sum, v) => sum + v, 0).toFixed(1)} Sm³
+                    {formatCurrency(gasCostIdr, "IDR")} &middot; {gasSeries.reduce((sum: number, v: number) => sum + v, 0).toFixed(1)} Sm³
                   </div>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-[#f4c542]" />
@@ -992,7 +993,7 @@ export default function Dashboard() {
                     {formatCurrency(consumptionWaterCost, "IDR")}
                   </div>
                   <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                    {waterSeries.reduce((sum, v) => sum + v, 0).toFixed(1)} m³
+                    {waterSeries.reduce((sum: number, v: number) => sum + v, 0).toFixed(1)} m³
                   </div>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-[#3bb77e]" />
@@ -1226,8 +1227,8 @@ export default function Dashboard() {
             <EnergyTrendStackedChart
               labels={ytdLabels}
               electricity={ytdChecks.electricity ? ytdElectricitySeries : ytdElectricitySeries.map(() => 0)}
-              gas={ytdChecks.gas ? ytdGasSeries.map((v) => (v ?? 0) * gasEnergyFactor) : ytdGasSeries.map(() => 0)}
-              water={ytdChecks.water ? ytdWaterSeries.map((v) => (v ?? 0) * waterEnergyFactor) : ytdWaterSeries.map(() => 0)}
+              gas={ytdChecks.gas ? ytdGasSeries.map((v: number | null) => (v ?? 0) * gasEnergyFactor) : ytdGasSeries.map(() => 0)}
+              water={ytdChecks.water ? ytdWaterSeries.map((v: number | null) => (v ?? 0) * waterEnergyFactor) : ytdWaterSeries.map(() => 0)}
             />
           </div>
         </div>
