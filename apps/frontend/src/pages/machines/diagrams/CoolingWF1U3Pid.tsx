@@ -1277,7 +1277,7 @@ export default function CoolingWF1U3Pid({
               y={-145}
               width={175}
               title="HEATING"
-              value={latest["cooling-water/st3_heating"]?.value === 1 ? "ON" : (latest["cooling-water/st3_heating"] !== undefined ? "OFF" : "XX")}
+              value="XX"
               colorType="blue"
               />
               <SensorCard
@@ -1293,7 +1293,7 @@ export default function CoolingWF1U3Pid({
               y={-35}
               width={175}
               title="COOLING"
-              value={latest["cooling-water/st3_cooling"]?.value === 1 ? "ON" : (latest["cooling-water/st3_cooling"] !== undefined ? "OFF" : "XX")}
+              value="XX"
               colorType="blue"
               />
               <SensorCard

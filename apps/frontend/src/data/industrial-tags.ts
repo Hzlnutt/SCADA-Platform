@@ -89,7 +89,11 @@ const extraTags = [
   "cooling-water/eq_temp_du03",
   "cooling-water/eq_temp_prep03",
   "cooling-water/eq_temp_washing",
-  "cooling-water/eq_temp_st03_supply"
+  "cooling-water/eq_temp_st03_supply",
+  "cooling-water/st3_heating",
+  "cooling-water/st3_cooling",
+  "cooling-water/st3_steril",
+  "cooling-water/jumo_pieces"
 ];
 
 export const telemetryTagIds = [
