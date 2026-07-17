@@ -50,6 +50,16 @@ export interface WaterAnalyticsResult {
       deviceId: string;
       monthly: { month: string; value: number }[];
     }[];
+    /** Per-device daily breakdown */
+    perDeviceDaily: {
+      deviceId: string;
+      daily: { day: string; value: number }[];
+    }[];
+    /** Per-device hourly breakdown for latest day */
+    perDeviceHourly: {
+      deviceId: string;
+      hourly: number[];
+    }[];
   };
   devices: string[];
 }
@@ -126,6 +136,8 @@ export const getWaterAnalytics = async (
   // Per-device tracking
   const perDeviceTotal = new Map<string, number>();
   const perDeviceMonthly = new Map<string, Map<string, number>>();
+  const perDeviceDaily = new Map<string, Map<string, number>>();
+  const perDeviceHourly = new Map<string, Map<string, number[]>>();
   const perDeviceToday = new Map<string, number>();
   const perDeviceCurrentMonth = new Map<string, number>();
 
@@ -138,6 +150,8 @@ export const getWaterAnalytics = async (
   for (const [devId, devRecords] of recordsByDevice) {
     perDeviceTotal.set(devId, 0);
     perDeviceMonthly.set(devId, new Map<string, number>());
+    perDeviceDaily.set(devId, new Map<string, number>());
+    perDeviceHourly.set(devId, new Map<string, number[]>());
     perDeviceToday.set(devId, 0);
     perDeviceCurrentMonth.set(devId, 0);
 
@@ -181,6 +195,19 @@ export const getWaterAnalytics = async (
       perDeviceTotal.set(devId, (perDeviceTotal.get(devId) || 0) + diff);
       const devMonthMap = perDeviceMonthly.get(devId)!;
       devMonthMap.set(monthStr, (devMonthMap.get(monthStr) || 0) + diff);
+      
+      const devDayMap = perDeviceDaily.get(devId)!;
+      devDayMap.set(dateStr, (devDayMap.get(dateStr) || 0) + diff);
+
+      const devHourMap = perDeviceHourly.get(devId)!;
+      if (!devHourMap.has(dateStr)) {
+        devHourMap.set(dateStr, Array.from({ length: 24 }, () => 0));
+      }
+      const devDayHours = devHourMap.get(dateStr)!;
+      if (hour >= 0 && hour < 24) {
+        devDayHours[hour] += diff;
+      }
+
       if (isToday) {
         perDeviceToday.set(devId, (perDeviceToday.get(devId) || 0) + diff);
       }
@@ -240,6 +267,30 @@ export const getWaterAnalytics = async (
     return { deviceId: devId, monthly: devMonthly };
   });
 
+  // ── Build per-device daily breakdown ───────────────────────────────────
+  const perDeviceDailyChart = devices.map((devId) => {
+    const devDayMap = perDeviceDaily.get(devId)!;
+    const devDaily: { day: string; value: number }[] = [];
+    for (let m = 1; m <= 12; m++) {
+      const numDays = daysInMonth(selectedYear, m);
+      for (let d = 1; d <= numDays; d++) {
+        const dayKey = `${selectedYear}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        devDaily.push({
+          day: dayKey,
+          value: devDayMap.get(dayKey) || 0
+        });
+      }
+    }
+    return { deviceId: devId, daily: devDaily };
+  });
+
+  // ── Build per-device hourly breakdown ──────────────────────────────────
+  const perDeviceHourlyChart = devices.map((devId) => {
+    const devHourMap = perDeviceHourly.get(devId)!;
+    const devHourly = devHourMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
+    return { deviceId: devId, hourly: devHourly };
+  });
+
   // ── Build per-device summary ───────────────────────────────────────────
   const perDeviceSummary = devices.map((devId) => ({
     deviceId: devId,
@@ -262,7 +313,9 @@ export const getWaterAnalytics = async (
       prevHourly: prevHourlyValues,
       daily,
       monthly,
-      perDeviceMonthly: perDeviceMonthlyChart
+      perDeviceMonthly: perDeviceMonthlyChart,
+      perDeviceDaily: perDeviceDailyChart,
+      perDeviceHourly: perDeviceHourlyChart
     },
     devices
   };

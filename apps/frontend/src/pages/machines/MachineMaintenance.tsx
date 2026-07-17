@@ -127,24 +127,31 @@ export default function MachineMaintenance() {
     };
   }, [unitId]);
 
-  const [nameplate, setNameplate] = useState(defaultNameplate);
+  const [nameplates, setNameplates] = useState<any[]>([defaultNameplate]);
   const [nameplateOpen, setNameplateOpen] = useState(false);
-  const [nameplateForm, setNameplateForm] = useState(defaultNameplate);
+  const [nameplateForm, setNameplateForm] = useState<any>(defaultNameplate);
+  const [editIndex, setEditIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem(`scada.nameplate.${unitId}`);
+    const saved = localStorage.getItem(`scada.nameplates.${unitId}`);
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
-        setNameplate(parsed);
-        setNameplateForm(parsed);
+        setNameplates(JSON.parse(saved));
       } catch (e) {
-        setNameplate(defaultNameplate);
-        setNameplateForm(defaultNameplate);
+        setNameplates([defaultNameplate]);
       }
     } else {
-      setNameplate(defaultNameplate);
-      setNameplateForm(defaultNameplate);
+      // fallback to old single nameplate format
+      const oldSaved = localStorage.getItem(`scada.nameplate.${unitId}`);
+      if (oldSaved) {
+        try {
+          setNameplates([JSON.parse(oldSaved)]);
+        } catch (e) {
+          setNameplates([defaultNameplate]);
+        }
+      } else {
+        setNameplates([defaultNameplate]);
+      }
     }
   }, [unitId, defaultNameplate]);
 
@@ -242,9 +249,23 @@ export default function MachineMaintenance() {
 
   const handleNameplateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem(`scada.nameplate.${unitId}`, JSON.stringify(nameplateForm));
-    setNameplate(nameplateForm);
+    let updated = [...nameplates];
+    if (editIndex !== null) {
+      updated[editIndex] = nameplateForm;
+    } else {
+      updated.push(nameplateForm);
+    }
+    localStorage.setItem(`scada.nameplates.${unitId}`, JSON.stringify(updated));
+    setNameplates(updated);
     setNameplateOpen(false);
+  };
+
+  const deleteNameplate = (index: number) => {
+    if (confirm("Are you sure you want to delete this nameplate?")) {
+      const updated = nameplates.filter((_, i) => i !== index);
+      localStorage.setItem(`scada.nameplates.${unitId}`, JSON.stringify(updated));
+      setNameplates(updated);
+    }
   };
 
   const healthMatrixItems = useMemo(() => {
@@ -515,61 +536,94 @@ export default function MachineMaintenance() {
         </div>
 
         {/* Service & Name Plate */}
-        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300 flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center border-b border-[#acd3ff]/30 pb-2 mb-3">
-              <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
-                Service & Name Plate
-              </h3>
-              {canEditNameplate && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNameplateForm(nameplate);
-                    setNameplateOpen(true);
-                  }}
-                  className="px-2.5 py-1 text-[10px] font-bold text-white bg-[#1f6fb5] hover:bg-[#155c99] rounded transition"
-                >
-                  Edit Plate
-                </button>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-xs text-[#002b5c] dark:text-slate-300 font-medium">
-              <div>
-                <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Model Number</span>
-                <span className="font-bold font-mono text-slate-900 dark:text-white">{nameplate.model}</span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Serial Number</span>
-                <span className="font-bold font-mono text-slate-900 dark:text-white">{nameplate.serial}</span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Manufacturer</span>
-                <span className="font-bold text-slate-900 dark:text-white">{nameplate.manufacturer}</span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Manufactured Date</span>
-                <span className="font-bold font-mono text-slate-900 dark:text-white">{nameplate.mfgDate}</span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Electrical Rating</span>
-                <span className="font-bold font-mono text-slate-900 dark:text-white">{nameplate.electrical}</span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Capacity</span>
-                <span className="font-bold font-mono text-slate-900 dark:text-white">{nameplate.capacity}</span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Flow Capacity</span>
-                <span className="font-bold font-mono text-slate-900 dark:text-white">{nameplate.flow}</span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Refrigerant / Loop</span>
-                <span className="font-bold text-slate-900 dark:text-white">{nameplate.refrigerant}</span>
-              </div>
-            </div>
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300 flex flex-col">
+          <div className="flex justify-between items-center border-b border-[#acd3ff]/30 pb-2 mb-3">
+            <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
+              Service & Name Plates
+            </h3>
+            {canEditNameplate && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNameplateForm(defaultNameplate);
+                  setEditIndex(null);
+                  setNameplateOpen(true);
+                }}
+                className="px-2.5 py-1 text-[10px] font-bold text-white bg-[#1f6fb5] hover:bg-[#155c99] rounded transition flex items-center gap-1"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Plate
+              </button>
+            )}
           </div>
-          <div className="text-[9px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-900 mt-4 pt-2 flex items-center justify-between">
+          
+          <div className="space-y-4 max-h-[260px] overflow-y-auto pr-1">
+            {nameplates.map((plate, idx) => (
+              <div key={idx} className="relative p-3 bg-slate-50/50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-lg group">
+                {canEditNameplate && (
+                  <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => {
+                        setNameplateForm(plate);
+                        setEditIndex(idx);
+                        setNameplateOpen(true);
+                      }}
+                      className="text-[10px] bg-slate-200 dark:bg-slate-800 hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-slate-700 px-2 py-0.5 rounded font-bold transition"
+                    >
+                      Edit
+                    </button>
+                    {nameplates.length > 1 && (
+                      <button
+                        onClick={() => deleteNameplate(idx)}
+                        className="text-[10px] bg-slate-200 dark:bg-slate-800 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-slate-700 px-2 py-0.5 rounded font-bold transition"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-xs text-[#002b5c] dark:text-slate-300 font-medium mt-1">
+                  <div>
+                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Model Number</span>
+                    <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.model}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Serial Number</span>
+                    <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.serial}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Manufacturer</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{plate.manufacturer}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Manufactured Date</span>
+                    <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.mfgDate}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Electrical Rating</span>
+                    <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.electrical}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Capacity</span>
+                    <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.capacity}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Flow Capacity</span>
+                    <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.flow}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Refrigerant / Loop</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{plate.refrigerant}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <div className="text-[9px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-900 mt-auto pt-2 flex items-center justify-between">
             <span>QC Stamp Approved</span>
             <span>Support: +62 21-883-WIDATRA</span>
           </div>

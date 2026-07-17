@@ -4,7 +4,6 @@ import { Bar, Doughnut, Line } from "react-chartjs-2";
 import { getUnitById } from "../../data/machines";
 import { useSystemStore } from "../../store/system.store";
 import type { MachineOutletContext } from "./MachineLayout";
-import "../../components/charts/chartjs";
 import { getJson } from "../../services/api.client";
 
 // Canvas-based Power Demand real-time scrolling wave
@@ -205,10 +204,6 @@ export default function MachineEnergy() {
     const saved = localStorage.getItem(`scada.tariff.electricity_wbp.${unitId}`);
     return saved ? Number(saved) : 1600;
   });
-  const [gasRate, setGasRate] = useState(() => {
-    const saved = localStorage.getItem(`scada.tariff.gas.${unitId}`);
-    return saved ? Number(saved) : 120000;
-  });
   const [waterRate, setWaterRate] = useState(() => {
     const saved = localStorage.getItem(`scada.tariff.water.${unitId}`);
     return saved ? Number(saved) : 9000;
@@ -246,9 +241,6 @@ export default function MachineEnergy() {
     } else if (type === "electricity_wbp") {
       setElectricityWbpRate(val);
       localStorage.setItem(`scada.tariff.electricity_wbp.${unitId}`, val.toString());
-    } else if (type === "gas") {
-      setGasRate(val);
-      localStorage.setItem(`scada.tariff.gas.${unitId}`, val.toString());
     } else if (type === "water") {
       setWaterRate(val);
       localStorage.setItem(`scada.tariff.water.${unitId}`, val.toString());
@@ -280,7 +272,7 @@ export default function MachineEnergy() {
     }
   }, [analyticsData, isElectricityMeter]);
 
-  // 1. Hourly Energy (Line Chart)
+  // 1. Hourly Energy (Bar Chart)
   const hourlyChartData = useMemo(() => {
     const labels = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
     const values = isElectricityMeter && analyticsData
@@ -291,12 +283,8 @@ export default function MachineEnergy() {
       datasets: [{
         label: "Energy (kWh)",
         data: values,
-        borderColor: "rgba(16, 185, 129, 0.85)", // Emerald
-        backgroundColor: "rgba(16, 185, 129, 0.15)",
-        fill: true,
-        borderWidth: 2,
-        tension: 0.35,
-        pointRadius: 0
+        backgroundColor: "rgba(16, 185, 129, 0.85)", // Emerald
+        borderRadius: 3
       }]
     };
   }, [analyticsData, isElectricityMeter]);
@@ -364,6 +352,21 @@ export default function MachineEnergy() {
         }]
       };
     }
+    if (unitId === "cooling-water-1") {
+      return {
+        labels: ["CT1", "CT2", "CT3"],
+        datasets: [
+          {
+            data: [42, 35, 23],
+            backgroundColor: [
+              "rgba(59, 130, 246, 0.8)", // blue
+              "rgba(16, 185, 129, 0.8)", // emerald
+              "rgba(251, 191, 36, 0.8)"  // amber
+            ]
+          }
+        ]
+      };
+    }
     return {
       labels: ["Chiller Plant", "Air Handling Unit", "Lighting", "Lite", "Other"],
       datasets: [
@@ -379,7 +382,7 @@ export default function MachineEnergy() {
         }
       ]
     };
-  }, [analyticsData, isElectricityMeter]);
+  }, [analyticsData, isElectricityMeter, unitId]);
 
   // 5. Fan & Motor daily breakdown charts over 30 days
   const fanBreakdownData = useMemo(() => {
@@ -452,7 +455,7 @@ export default function MachineEnergy() {
     }
   };
 
-  const donutOptions = {
+  const donutOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -462,9 +465,32 @@ export default function MachineEnergy() {
           color: isDark ? "#cbd5e1" : "#47729f",
           font: { family: "Plus Jakarta Sans", size: 10 }
         }
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: any) => {
+            const label = context.label || '';
+            const total = context.raw || 0;
+            
+            if (unitId === "cooling-water-1" && ["CT1", "CT2", "CT3"].includes(label)) {
+              let fan = 0;
+              if (label === "CT1") fan = Math.round(total * 0.4);
+              else if (label === "CT2") fan = Math.round(total * 0.45);
+              else if (label === "CT3") fan = Math.round(total * 0.42);
+              const sirkulasi = total - fan;
+
+              return [
+                `${label} Total: ${total} kWh`,
+                ` • Motor Fan: ${fan} kWh`,
+                ` • Motor Sirkulasi: ${sirkulasi} kWh`
+              ];
+            }
+            return `${label}: ${total} kWh`;
+          }
+        }
       }
     }
-  };
+  }), [isDark, unitId]);
 
   if (!machine) return null;
 
@@ -475,7 +501,6 @@ export default function MachineEnergy() {
     ? (analyticsData.summary.totalKwh / analyticsData.charts.daily.length)
     : (machine.dailyBase ?? 3000);
 
-  const dailyGas = (machine.groupId === "boiler-plant" || machine.id.includes("boiler")) ? (dailyElectricity * 0.8) : 0;
   const dailyWater = (
     machine.groupId === "cooling-water-system" ||
     machine.groupId === "water-treatment" ||
@@ -498,21 +523,15 @@ export default function MachineEnergy() {
     ? (analyticsData.summary.totalCost / analyticsData.charts.daily.length)
     : ((lwbpKwh * electricityLwbpRate) + (wbpKwh * electricityWbpRate));
 
-  // Gas consumption in Sm3 and converted to MMBtu
-  const gasSm3 = dailyGas;
-  const gasMmbtu = gasSm3 * 0.035315;
-  const dailyGasCost = gasMmbtu * gasRate; // gasRate is Rp/MMBtu
-
   // Water consumption in m3
   const dailyWaterCost = dailyWater * waterRate; // waterRate is Rp/m³
 
   // Equivalent Energy (kWh Setara)
   const electricityKwhSetara = dailyElectricity;
-  const gasKwhSetara = gasMmbtu * 293.07;
   const waterKwhSetara = dailyWater * 0.5;
-  const totalKwhSetara = electricityKwhSetara + gasKwhSetara + waterKwhSetara;
+  const totalKwhSetara = electricityKwhSetara + waterKwhSetara;
 
-  const totalDailyCost = dailyElectricityCost + dailyGasCost + dailyWaterCost;
+  const totalDailyCost = dailyElectricityCost + dailyWaterCost;
   const totalMonthlyCost = hasDbData ? analyticsData.summary.totalCost : (totalDailyCost * 30.437);
   const totalYearlyCost = hasDbData ? (analyticsData.summary.totalCost * 12) : (totalDailyCost * 365);
 
@@ -524,8 +543,7 @@ export default function MachineEnergy() {
 
   // Carbon emissions split
   const carbonElectricityDaily = dailyElectricity * 0.82;
-  const carbonGasDaily = gasSm3 * 1.88;
-  const totalCarbonDaily = carbonElectricityDaily + carbonGasDaily;
+  const totalCarbonDaily = carbonElectricityDaily;
   const totalCarbonMonthly = hasDbData ? analyticsData.summary.co2Emitted : (totalCarbonDaily * 30.437 / 1000);
   const totalCarbonYearly = totalCarbonMonthly * 12;
   const co2Emitted = totalCarbonMonthly;
@@ -679,7 +697,7 @@ export default function MachineEnergy() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm">
           <h4 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-3">Hourly Energy Consumption</h4>
-          <div className="h-44"><Line data={hourlyChartData} options={simpleChartOptions} /></div>
+          <div className="h-44"><Bar data={hourlyChartData} options={simpleChartOptions} /></div>
         </div>
         <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm">
           <h4 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-3">Daily Energy Consumption</h4>
@@ -702,7 +720,7 @@ export default function MachineEnergy() {
         </h3>
         <div className="space-y-6">
           <div>
-            <h4 className="text-xs font-extrabold text-slate-500 uppercase mb-2">Fan Load Distribution (kWh)</h4>
+            <h4 className="text-xs font-extrabold text-slate-500 uppercase mb-2">Cooling Tower Distribution (kWh)</h4>
             <div className="h-52"><Bar data={fanBreakdownData} options={stackChartOptions} /></div>
           </div>
           <div>
@@ -741,17 +759,6 @@ export default function MachineEnergy() {
                 min="0"
                 value={electricityWbpRate}
                 onChange={(e) => handleRateChange("electricity_wbp", Number(e.target.value))}
-                className="mt-1 w-full rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1 text-xs text-[#002b5c] dark:text-white focus:outline-none font-bold font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-[8px] font-bold text-slate-400 uppercase">Gas (Rp/MMBtu)</label>
-              <input
-                type="number"
-                step="1000"
-                min="0"
-                value={gasRate}
-                onChange={(e) => handleRateChange("gas", Number(e.target.value))}
                 className="mt-1 w-full rounded border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1 text-xs text-[#002b5c] dark:text-white focus:outline-none font-bold font-mono"
               />
             </div>
@@ -807,18 +814,6 @@ export default function MachineEnergy() {
                 </div>
               </div>
             </div>
-
-            <div className="flex justify-between items-center py-2.5 border-b border-slate-100 dark:border-slate-900">
-              <span className="text-slate-500 font-extrabold uppercase text-[10px]">3. Gas MMBtu</span>
-              <div className="text-right">
-                <div className="font-bold text-sm text-[#002b5c] dark:text-slate-200">
-                  {gasMmbtu.toFixed(4)} mmbtu | Cost: Rp. {dailyGasCost.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                </div>
-                <div className="text-[10px] text-slate-400 font-semibold font-mono">
-                  {gasSm3.toLocaleString()} Sm³ | {gasKwhSetara.toLocaleString(undefined, {maximumFractionDigits: 1})} kWh Setara
-                </div>
-              </div>
-            </div>
             
             {/* SUMMED TOTAL PROJECTION CALCULATOR */}
             <div className="mt-4 pt-3 border-t border-[#acd3ff]/40 dark:border-slate-800 space-y-2">
@@ -864,22 +859,6 @@ export default function MachineEnergy() {
               <div className="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-900">
                 <span className="text-slate-500">Monthly CO₂ Emissions</span>
                 <span className="font-bold font-mono text-rose-500">{(carbonElectricityDaily * 30.437 / 1000).toFixed(2)} tCO₂</span>
-              </div>
-            </div>
-
-            <div className="py-1 mt-2">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">2. Gas</span>
-              <div className="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-900">
-                <span className="text-slate-500">Gas Emission Factor</span>
-                <span className="font-bold font-mono text-slate-600 dark:text-slate-300">1.88 kgCO₂ / Sm³</span>
-              </div>
-              <div className="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-900">
-                <span className="text-slate-500">Daily CO₂ Emissions</span>
-                <span className="font-bold font-mono text-rose-500">{carbonGasDaily.toFixed(1)} kgCO₂</span>
-              </div>
-              <div className="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-900">
-                <span className="text-slate-500">Monthly CO₂ Emissions</span>
-                <span className="font-bold font-mono text-rose-500">{(carbonGasDaily * 30.437 / 1000).toFixed(2)} tCO₂</span>
               </div>
             </div>
 

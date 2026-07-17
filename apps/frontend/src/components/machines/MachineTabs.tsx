@@ -54,8 +54,6 @@ export const MachineTabs = ({
             />
           ))}
 
-          {/* Tab standar (seperti di utility/cooling-system) */}
-          <NavItem to={`${basePath}/historian`} label="Historian" tone="tabs" />
           <NavItem to={`${basePath}/statistics`} label="Trend Analysis" tone="tabs" />
           <NavItem to={`${basePath}/alarm`} label="Alarms" tone="tabs" />
           <NavItem to={`${basePath}/maintenance`} label="Maintenance" tone="tabs" />
@@ -75,11 +73,6 @@ export const MachineTabs = ({
         <NavItem
           to={`${basePath}/pid-diagram`}
           label="P&ID"
-          tone="tabs"
-        />
-        <NavItem
-          to={`${basePath}/historian`}
-          label="Historian"
           tone="tabs"
         />
         <NavItem

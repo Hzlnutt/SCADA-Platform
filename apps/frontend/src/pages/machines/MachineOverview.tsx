@@ -662,7 +662,7 @@ function StandardMachineOverview({
       <div className={`grid grid-cols-2 md:grid-cols-3 ${machine.tagId ? "lg:grid-cols-7" : "lg:grid-cols-6"} gap-4`}>
         {[
           ...(machine.tagId ? [{
-            label: `${machine.unitLabel || machine.name} Telemetry`,
+            label: unitId.startsWith("cooling-water") ? "Makeup Water" : `${machine.unitLabel || machine.name} Telemetry`,
             val: unitId === "cooling-water-1" ? "API TIDAK TERKIRIM" : (latest[machine.tagId]?.value !== undefined ? `${latest[machine.tagId]?.value} ${machine.unit}` : "API TIDAK TERKIRIM"),
             base: `${machine.dailyBase ? machine.dailyBase.toLocaleString() : "N/A"} ${machine.unit}`,
             color: (unitId === "cooling-water-1" || latest[machine.tagId]?.value === undefined) ? "text-rose-500 font-bold text-[13px] md:text-sm" : "text-[#1f6fb5] dark:text-sky-400 font-extrabold",
@@ -870,14 +870,12 @@ function StandardMachineOverview({
                     { label: "Fan Status", value: typeof ct.data.fanStatus === "string" ? ct.data.fanStatus : (ct.data.fanStatus ? "ON" : "OFF"), base: "ON", highlight: ct.data.fanStatus === "ON" || ct.data.fanStatus === true ? "text-emerald-500 font-bold" : (ct.data.fanStatus === "OFF" || ct.data.fanStatus === false ? "text-slate-500 font-bold" : "text-rose-500 font-bold") },
                     { label: "Fan Speed", value: ct.data.fanSpeed === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.fanSpeed} RPM`, base: "1400 RPM", highlight: ct.data.fanSpeed === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
                     { label: "Motor Status", value: typeof ct.data.motorStatus === "string" ? ct.data.motorStatus : (ct.data.motorStatus ? "ON" : "OFF"), base: "ON", highlight: ct.data.motorStatus === "ON" || ct.data.motorStatus === true ? "text-emerald-500 font-bold" : (ct.data.motorStatus === "OFF" || ct.data.motorStatus === false ? "text-slate-500 font-bold" : "text-rose-500 font-bold") },
-                    { label: "Motor Current", value: ct.data.motorCurrent === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.motorCurrent} A`, base: "40.0 A", highlight: ct.data.motorCurrent === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
+                    { label: "Motor Current (Fan)", value: ct.data.motorCurrent === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.motorCurrent} A`, base: "40.0 A", highlight: ct.data.motorCurrent === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
+                    { label: "Motor Current (Sirkulasi)", value: "API TIDAK TERKIRIM", base: "20.0 A", highlight: "text-rose-500 font-bold" },
                     { label: "Motor Power", value: ct.data.motorPower === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.motorPower} kW`, base: "22.0 kW", highlight: ct.data.motorPower === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
-                    { label: "Flow Rate", value: ct.data.flow === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.flow} m³/h`, base: "120 m³/h", highlight: ct.data.flow === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
                     { label: "Discharge Press", value: ct.data.pressure === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.pressure}`, base: "2.20 bar", highlight: ct.data.pressure === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
-                    { label: "Overall Vibra", value: ct.data.vibration === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.vibration} mm/s`, base: "2.00 mm/s", highlight: ct.data.vibration === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
                     { label: "Vibra Fan", value: ct.data.vibraFan === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.vibraFan} mm/s`, base: "2.00 mm/s", highlight: ct.data.vibraFan === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
                     { label: "Vibra Motor Sirk", value: ct.data.vibraMotor === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.vibraMotor} mm/s`, base: "2.00 mm/s", highlight: ct.data.vibraMotor === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
-                    { label: "Basin Temp", value: ct.data.basinTemp === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.basinTemp} °C`, base: "28.0 °C", highlight: ct.data.basinTemp === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" },
                     { label: "Running Hours", value: ct.data.runningHours === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : `${ct.data.runningHours.toLocaleString()} hrs`, base: "—", highlight: ct.data.runningHours === "API TIDAK TERKIRIM" ? "text-rose-500 font-bold" : "" }
                   ].map((row, rIdx) => (
                     <div
@@ -1056,7 +1054,6 @@ function StandardMachineOverview({
                   </span>
                 </div>
                 {[
-                  { label: "Flow Rate", rawVal: liveData.blowdown.flow, suffix: " m³/h", max: 5, barColor: "bg-amber-500" },
                   { label: "Accumulated Vol", rawVal: liveData.blowdown.vol, suffix: " m³", max: 50, barColor: "bg-amber-600" }
                 ].map((item, idx) => {
                   const isOffline = item.rawVal === "API TIDAK TERKIRIM";

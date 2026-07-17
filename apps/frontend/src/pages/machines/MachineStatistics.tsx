@@ -682,7 +682,7 @@ export default function MachineStatistics() {
                 onChange={(e) => setSelectedEq(e.target.value)}
                 className="bg-slate-50 dark:bg-slate-900 text-xs font-bold border border-slate-200 dark:border-slate-800 text-[#002b5c] dark:text-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1f6fb5]"
               >
-                {["CT-1 Fan", "CT-1 Motor", "CT-2 Fan", "CT-2 Motor", "CT-3 Fan", "CT-3 Motor", "DU-03 Pump", "BP-03 Pump", "PREP-03 Pump"].map((eq) => (
+                {["CT-1 Fan", "CT-1 Motor", "CT-2 Fan", "CT-2 Motor", "CT-3 Fan", "CT-3 Motor", "DU-03 Pump", "BP-03 Pump", "PREP-03 Pump", "ST-03 Motor", "Washing Motor", "Minilab Motor"].map((eq) => (
                   <option key={eq} value={eq}>
                     {eq}
                   </option>

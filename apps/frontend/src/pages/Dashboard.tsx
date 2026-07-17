@@ -380,7 +380,7 @@ export default function Dashboard() {
   const consumptionLabels = useMemo(() => {
     if (electricityData) {
       if (consumptionRange === "hour") {
-        return Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
+        return Array.from({ length: 24 }, (_, i) => `${(i + 1).toString().padStart(2, "0")}:00`);
       } else if (consumptionRange === "day") {
         return monthlyDailyRecords.map((d: any) => {
           const parts = d.day.split("-");
@@ -478,7 +478,7 @@ export default function Dashboard() {
       const hourly = electricityData.charts.hourly || [];
       const prevHourly = electricityData.charts.prevHourly || [];
       for (let h = 0; h < 24; h++) {
-        labels.push(`${h.toString().padStart(2, "0")}:00`);
+        labels.push(`${(h + 1).toString().padStart(2, "0")}:00`);
         current.push(hourly[h] ?? 0);
         previous.push(prevHourly[h] ?? 0);
       }
@@ -680,7 +680,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Utility & Energy Monitoring Dashboard"
+        title="Energy Monitoring Dashboard"
         description="Summary of energy consumption, costs, and key utility status."
       />
 
@@ -712,7 +712,8 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
-        </div>        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {/* Total Energy */}
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <ProgressRing
@@ -798,6 +799,28 @@ export default function Dashboard() {
             </div>
             <div className="mt-2 text-[10px] text-emerald-600 dark:text-emerald-400/80 font-medium">
               Independent Green Certification
+            </div>
+          </div>
+
+          {/* Fuel (Solar) */}
+          <div className="rounded-xl border border-amber-500/30 dark:border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/10 p-4 transition-colors duration-300">
+            <div className="text-xs uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400 font-semibold">
+              Fuel (Solar)
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-amber-700 dark:text-amber-300">
+              0 L
+            </div>
+            <div className="mt-1 text-xs text-[#47729f] dark:text-slate-400">
+              Forklift fuel usage
+            </div>
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-900">
+              <div
+                className="h-full rounded-full bg-amber-500"
+                style={{ width: "0%" }}
+              />
+            </div>
+            <div className="mt-2 text-[10px] text-amber-600 dark:text-amber-400/80 font-medium">
+              Awaiting Ignition Flow Meter API
             </div>
           </div>
         </div>
