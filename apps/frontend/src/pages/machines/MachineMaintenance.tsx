@@ -693,7 +693,7 @@ export default function MachineMaintenance() {
                     type="text"
                     value={(nameplateForm as any)[inputItem.field] || ""}
                     onChange={(e) =>
-                      setNameplateForm((prev) => ({ ...prev, [inputItem.field]: e.target.value }))
+                      setNameplateForm((prev: any) => ({ ...prev, [inputItem.field]: e.target.value }))
                     }
                     required
                     className="mt-1 w-full rounded-md border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
