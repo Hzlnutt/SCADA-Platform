@@ -49,15 +49,16 @@ export default function UtilityConfig() {
         description="Pengaturan parameter manual untuk kalkulasi konsumsi utilitas."
       />
 
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <h3 className="text-base font-bold text-slate-800 dark:text-white mb-4">
-          Parameter Tarif Listrik PLN
-        </h3>
-        
-        <form onSubmit={handleSave} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">
-              Tarif Beban Puncak (WBP) / kWh
+      <form onSubmit={handleSave} className="space-y-6">
+        {/* Electricity Card */}
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
+          <h3 className="text-base font-bold text-slate-800 dark:text-white mb-4">
+            Parameter Tarif Listrik PLN
+          </h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">
+                Tarif Beban Puncak (WBP) / kWh
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">Rp</span>
@@ -96,12 +97,15 @@ export default function UtilityConfig() {
               Tarif LWBP berlaku untuk penggunaan listrik di luar jam WBP.
             </span>
           </div>
+          </div>
+        </div>
 
-          {waterConfig && (
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/30 p-6 mt-6">
-              <h3 className="text-sm font-bold text-slate-800 dark:text-white mb-4">
-                Parameter Pajak Air Permukaan (PDAM)
-              </h3>
+        {/* Water Card */}
+        {waterConfig && (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
+            <h3 className="text-base font-bold text-slate-800 dark:text-white mb-4">
+              Parameter Pajak Air Permukaan (PDAM)
+            </h3>
               
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div>
@@ -200,8 +204,7 @@ export default function UtilityConfig() {
               </span>
             )}
           </div>
-        </form>
-      </div>
+      </form>
     </div>
   );
 }
