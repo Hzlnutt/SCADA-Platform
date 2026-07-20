@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import { verifyPassword } from "../../services/auth.service";
 
 // --- Type Definitions (bisa dipindah ke file types.ts) ---
 export interface Task {
@@ -72,6 +73,50 @@ export default function PidPageTemplate({
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [modalStatusFilter, setModalStatusFilter] = useState<"all" | "open" | "overdue" | "close">("all");
   const [modalComponentFilter, setModalComponentFilter] = useState<string>("all");
+
+  // State untuk Modal Verifikasi Password saat Mark Done
+  const [pendingTaskKey, setPendingTaskKey] = useState<string | null>(null);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [verifyPasswordInput, setVerifyPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
+
+  const handleOpenPasswordVerification = (taskKey: string) => {
+    setPendingTaskKey(taskKey);
+    setVerifyPasswordInput("");
+    setPasswordError("");
+    setShowPasswordModal(true);
+  };
+
+  const handleConfirmCompleteTask = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!verifyPasswordInput.trim()) {
+      setPasswordError("Password tidak boleh kosong.");
+      return;
+    }
+
+    setIsVerifyingPassword(true);
+    setPasswordError("");
+
+    try {
+      const res = await verifyPassword(verifyPasswordInput);
+      if (res && res.valid) {
+        if (pendingTaskKey && onToggleCompleteTask) {
+          await onToggleCompleteTask(pendingTaskKey);
+        }
+        setShowPasswordModal(false);
+        setPendingTaskKey(null);
+        setVerifyPasswordInput("");
+      } else {
+        setPasswordError("Password yang Anda masukkan salah. Silakan coba lagi.");
+      }
+    } catch (err) {
+      console.error("Password verification error:", err);
+      setPasswordError("Gagal memverifikasi password. Periksa koneksi atau coba lagi.");
+    } finally {
+      setIsVerifyingPassword(false);
+    }
+  };
 
   const ALL_COMPONENTS = [
     "FAN-1", "FAN-2", "FAN-3",
@@ -438,8 +483,8 @@ export default function PidPageTemplate({
                         </span>
                         {(task.status === "overdue" || task.status === "open") && onToggleCompleteTask && task.taskKey && (
                           <button
-                            onClick={() => onToggleCompleteTask(task.taskKey!)}
-                            className="px-3.5 py-1.5 rounded-lg text-xs font-bold transition duration-200 shadow-sm bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20"
+                            onClick={() => handleOpenPasswordVerification(task.taskKey!)}
+                            className="px-3.5 py-1.5 rounded-lg text-xs font-bold transition duration-200 shadow-sm bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white shadow-emerald-500/20"
                           >
                             Mark Done
                           </button>
@@ -464,6 +509,86 @@ export default function PidPageTemplate({
                 Close Task Manager
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password Verification Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-6 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-500 flex items-center justify-center font-bold text-lg">
+                  🔒
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
+                    Verifikasi Password Operator
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Masukkan password akun Anda untuk mengonfirmasi
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPendingTaskKey(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-base font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmCompleteTask} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">
+                  Password Akun
+                </label>
+                <input
+                  type="password"
+                  autoFocus
+                  value={verifyPasswordInput}
+                  onChange={(e) => setVerifyPasswordInput(e.target.value)}
+                  placeholder="Masukkan password akun Anda..."
+                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-medium"
+                />
+                {passwordError && (
+                  <p className="text-xs text-rose-500 font-semibold mt-1.5 flex items-center gap-1">
+                    <span>⚠️</span> {passwordError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setPendingTaskKey(null);
+                  }}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isVerifyingPassword}
+                  className="px-4 py-2 text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 disabled:opacity-50 rounded-lg transition shadow-sm flex items-center gap-1.5"
+                >
+                  {isVerifyingPassword ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Memverifikasi...</span>
+                    </>
+                  ) : (
+                    <span>Konfirmasi Selesai</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
