@@ -242,6 +242,12 @@ export default function MachinePidDiagram() {
             message: formatAlarmMessage(item.message || ""),
             severity,
             timestamp: ts,
+            status: item.status || "Active",
+            clearedAt: item.clearedAt ? new Date(item.clearedAt).toLocaleTimeString("en-US", { hour12: false }) : "—",
+            rtn: item.rtn || "—",
+            operatorName: item.operatorName || "—",
+            operatorAction: item.operatorAction || "—",
+            approverName: item.approverName || "—"
           };
         });
         setDbAlarms(mapped);
