@@ -217,7 +217,7 @@ const InfoCard: React.FC<InfoCardProps> = ({
           const colonIndex = line.indexOf(":");
           if (colonIndex !== -1) {
             const labelText = line.substring(0, colonIndex).trim();
-            const colonX = paddingX + (width <= 145 ? 42 : width >= 175 ? 64 : width >= 170 ? 60 : 58);
+            const colonX = paddingX + (width <= 145 ? 44 : width >= 175 ? 68 : width >= 170 ? 64 : 63);
 
             return (
               <g key={`content-${index}`}>
