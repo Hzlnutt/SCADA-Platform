@@ -44,6 +44,28 @@ export default function CoolingWF1U3Pid({
     }
   }) as Record<string, boolean>;
 
+  const isBlowdownOn = Boolean(
+    latest["cooling-water/blowdown_status"]?.value === true ||
+    latest["cooling-water/blowdown_status"]?.value === 1 ||
+    latest["cooling-water/blowdown_status"]?.value === "ON" ||
+    latest["cooling-water/blowdown_status"]?.value === "RUNNING" ||
+    (typeof latest["cooling-water/blowdown_flow"]?.value === "number" && latest["cooling-water/blowdown_flow"].value > 0)
+  );
+
+  const isDosing357On = Boolean(
+    latest["cooling-water/chemical_357_pump"]?.value === true ||
+    latest["cooling-water/chemical_357_pump"]?.value === 1 ||
+    latest["cooling-water/chemical_357_pump"]?.value === "ON" ||
+    latest["cooling-water/chemical_357_pump"]?.value === "RUNNING"
+  );
+
+  const isDosing327On = Boolean(
+    latest["cooling-water/chemical_327_pump"]?.value === true ||
+    latest["cooling-water/chemical_327_pump"]?.value === 1 ||
+    latest["cooling-water/chemical_327_pump"]?.value === "ON" ||
+    latest["cooling-water/chemical_327_pump"]?.value === "RUNNING"
+  );
+
   // Helper to extract numerical telemetry values or display custom offline indicator
   const getVal = (tagId: string, unit = "") => {
     const pt = latest[tagId];
@@ -155,9 +177,9 @@ export default function CoolingWF1U3Pid({
       <DashedLine x={430} y={430} w={0} h={300} />
       <DashedLine x={430} y={430} w={140} h={0} />
 
-      <DashedLine x={637} y={650} w={0} h={30} />
+      <DashedLine x={637} y={650} w={0} h={80} />
 
-      <DashedLine x={782} y={650} w={0} h={30} />
+      <DashedLine x={782} y={650} w={0} h={80} />
       <DashedLine x={782} y={650} w={100} h={0} />
       <DashedLine x={882} y={580} w={0} h={70} />
 
@@ -199,7 +221,7 @@ export default function CoolingWF1U3Pid({
     <svg
       ref={svgRef}
       className="absolute inset-0 h-full w-full"
-      viewBox="0 -160 1836 1110"
+      viewBox="0 -160 1900 1110"
       preserveAspectRatio="xMidYMid meet"
       style={{ pointerEvents: "auto" }}
       onClick={onSvgClick}
@@ -341,28 +363,28 @@ export default function CoolingWF1U3Pid({
 
               {/* Pipe Tank to Blowdown */}
               <PipeV x={767} y={578} w={7} h={42.5} 
-                on={motorStatus["FAN-3"]} dir="down" type="warm" />
+                on={isBlowdownOn} dir="down" type="warm" />
               <PipeH x={435} y={636} w={320} h={6} 
-                on={motorStatus["FAN-3"]} dir="left" type="warm" />
+                on={isBlowdownOn} dir="left" type="warm" />
               <PipeBend x={752} y={620} size={25} angle={270} />
               <LabelComponent text="Jalur Limbah Industri" x={270} y={615} w={165} h={50} hasBorder={true} fontSize={13}/>
 
               {/* Pipe Dosing to Tank */}
               <PipeV x={892} y={575} w={7} h={33} 
-                on={motorStatus["FAN-3"]} dir="up" />
+                on={isDosing357On} dir="up" />
               <PipeV x={961} y={640} w={7} h={24} 
-                on={motorStatus["FAN-3"]} dir="up" />
+                on={isDosing357On} dir="up" />
               <PipeH x={916} y={621} w={32} h={7} 
-                on={motorStatus["FAN-3"]} dir="left" />
+                on={isDosing357On} dir="left" />
               <PipeBend x={892} y={607} size={25} angle={0} />
               <PipeBend x={946} y={619} size={25} angle={180} />
 
               <PipeV x={912} y={575} w={7} h={20} 
-                on={motorStatus["FAN-3"]} dir="up" />
+                on={isDosing327On} dir="up" />
               <PipeV x={1123} y={630} w={7} h={34} 
-                on={motorStatus["FAN-3"]} dir="up" />
+                on={isDosing327On} dir="up" />
               <PipeH x={935} y={609} w={175} h={7} 
-                on={motorStatus["FAN-3"]} dir="left" />
+                on={isDosing327On} dir="left" />
               <PipeBend x={911} y={594} size={25} angle={0} />
               <PipeBend x={1107} y={607} size={25} angle={180} />
 
@@ -686,41 +708,41 @@ export default function CoolingWF1U3Pid({
               {/* BLOWDOWN */}
               <InfoCard
               x={525}
-              y={680}
+              y={730}
               width={170}
-              height={150}
+              height={180}
               title="BLOWDOWN WATER"
               lines={["STATUS :", "VOL :"]}
               />
               <SensorIndicator
               x={625}
-              y={756}
+              y={806}
               w={63.75}
               h={25.5}
-              value="XX"
+              value={isBlowdownOn ? "ON" : (latest["cooling-water/blowdown_status"]?.value ?? "XX")}
               mode="onoff"
               />
               <SensorIndicator
               x={593}
-              y={784}
+              y={834}
               w={63.75}
               h={25.5}
-              value="XX"
+              value={getVal("cooling-water/blowdown_vol")}
               unit=""
               />
 
               {/* COOLING TANK */}
               <InfoCard
               x={698}
-              y={680}
+              y={730}
               width={170}
-              height={170}
+              height={180}
               title="COOLING  TANK"
               lines={["TDS :", "PH :", "LEVEL :"]}
               />
               <SensorIndicator
               x={765}
-              y={752}
+              y={802}
               w={63.75}
               h={25.5}
               value={getVal("cooling-water/cooling_tank_tds")}
@@ -732,7 +754,7 @@ export default function CoolingWF1U3Pid({
               />
               <SensorIndicator
               x={755}
-              y={780}
+              y={830}
               w={63.75}
               h={25.5}
               value={getVal("cooling-water/cooling_tank_ph")}
@@ -744,7 +766,7 @@ export default function CoolingWF1U3Pid({
               />
               <SensorIndicator
               x={785}
-              y={808}
+              y={858}
               w={63.75}
               h={25.5}
               value={getVal("cooling-water/basin_lvl")}
@@ -1294,6 +1316,14 @@ export default function CoolingWF1U3Pid({
               width={175}
               title="COOLING"
               value="XX"
+              colorType="blue"
+              />
+              <SensorCard
+              x={1710}
+              y={-35}
+              width={175}
+              title="STERIL"
+              value={latest["cooling-water/st3_steril"]?.value === 1 ? "ON" : latest["cooling-water/st3_steril"]?.value === 0 ? "OFF" : "XX"}
               colorType="blue"
               />
               <SensorCard
