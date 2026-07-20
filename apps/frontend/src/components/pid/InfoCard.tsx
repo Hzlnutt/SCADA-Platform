@@ -82,7 +82,7 @@ const InfoCard: React.FC<InfoCardProps> = ({
   // Base font sizes
   const baseTitleFontSize = titleFontSize ?? 18;
   const baseSubtitleFontSize = 14;
-  const baseContentFontSize = contentFontSize ?? (width <= 145 ? 11.5 : 12.5);
+  const baseContentFontSize = contentFontSize ?? (width <= 145 ? 10.5 : 11.5);
 
   // Base line heights & spacings
   const baseTitleLineHeight = baseTitleFontSize * 1.1;
@@ -217,7 +217,7 @@ const InfoCard: React.FC<InfoCardProps> = ({
           const colonIndex = line.indexOf(":");
           if (colonIndex !== -1) {
             const labelText = line.substring(0, colonIndex).trim();
-            const colonX = paddingX + (width <= 145 ? 34 : 44);
+            const colonX = paddingX + (width <= 145 ? 38 : width >= 170 ? 54 : 48);
 
             return (
               <g key={`content-${index}`}>
