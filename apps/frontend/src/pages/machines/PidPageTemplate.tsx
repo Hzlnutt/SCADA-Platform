@@ -12,7 +12,7 @@ export interface Task {
 }
 
 export interface Alarm {
-  id: number;
+  id: number | string;
   code: string;
   message: string;
   severity: "warning" | "critical" | "info";
@@ -237,44 +237,50 @@ export default function PidPageTemplate({
             Alarms
           </h3>
           <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
-            {alarms.map((alarm) => (
-              <div
-                key={alarm.id}
-                className={`border-2 rounded p-3 bg-white dark:bg-slate-800 ${
-                  alarm.severity === "critical"
-                    ? "border-red-500 dark:border-red-400"
-                    : alarm.severity === "warning"
-                    ? "border-yellow-500 dark:border-yellow-400"
-                    : "border-slate-300 dark:border-slate-600"
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  <div
-                    className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${
-                      alarm.severity === "critical"
-                        ? "bg-red-500 dark:bg-red-400"
-                        : alarm.severity === "warning"
-                        ? "bg-yellow-500 dark:bg-yellow-400"
-                        : "bg-blue-500 dark:bg-blue-400"
-                    }`}
-                  />
-                  <div className="flex-1 min-w-0">
+            {alarms.length > 0 ? (
+              alarms.map((alarm) => (
+                <div
+                  key={alarm.id}
+                  className={`border-2 rounded p-3 bg-white dark:bg-slate-800 ${
+                    alarm.severity === "critical"
+                      ? "border-red-500 dark:border-red-400"
+                      : alarm.severity === "warning"
+                      ? "border-yellow-500 dark:border-yellow-400"
+                      : "border-slate-300 dark:border-slate-600"
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
                     <div
-                      className={`text-xs font-mono font-semibold ${
+                      className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${
                         alarm.severity === "critical"
-                          ? "text-red-600 dark:text-red-400"
-                          : "text-yellow-600 dark:text-yellow-400"
+                          ? "bg-red-500 dark:bg-red-400"
+                          : alarm.severity === "warning"
+                          ? "bg-yellow-500 dark:bg-yellow-400"
+                          : "bg-blue-500 dark:bg-blue-400"
                       }`}
-                    >
-                      {alarm.code}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div
+                        className={`text-xs font-mono font-semibold ${
+                          alarm.severity === "critical"
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-yellow-600 dark:text-yellow-400"
+                        }`}
+                      >
+                        {alarm.code}
+                      </div>
+                      <p className="text-xs leading-snug mt-1 text-slate-700 dark:text-slate-300">
+                        {alarm.message}
+                      </p>
                     </div>
-                    <p className="text-xs leading-snug mt-1 text-slate-700 dark:text-slate-300">
-                      {alarm.message}
-                    </p>
                   </div>
                 </div>
+              ))
+            ) : (
+              <div className="text-center text-slate-400 dark:text-slate-500 py-6 text-xs font-medium">
+                Tidak ada alarm aktif saat ini
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

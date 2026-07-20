@@ -179,7 +179,44 @@ export default function MachinePidDiagram() {
 
   // ── Ambil task & alarm khusus untuk mesin ini ──────────
   const data = machineDataMap[unitId] ?? defaultData;
-  const alarmInfo = data.alarms;
+  const [dbAlarms, setDbAlarms] = useState<Alarm[]>([]);
+
+  const fetchActiveAlarms = async () => {
+    try {
+      const res = await getJson<{ data: any[] }>(`/alarms/active?unit=${unitId}&limit=20`);
+      if (res && Array.isArray(res.data)) {
+        const mapped: Alarm[] = res.data.map((item: any) => {
+          const severity: "critical" | "warning" | "info" =
+            item.severity === "critical" || item.severity === "high"
+              ? "critical"
+              : item.severity === "warning" || item.severity === "medium"
+              ? "warning"
+              : "info";
+
+          const ts = item.lastTs
+            ? new Date(item.lastTs).toLocaleTimeString("en-US", { hour12: false })
+            : new Date().toLocaleTimeString("en-US", { hour12: false });
+
+          return {
+            id: Number(item.id) || item.id,
+            code: item.alarmKey || item.tagId || "ALM",
+            message: item.message,
+            severity,
+            timestamp: ts,
+          };
+        });
+        setDbAlarms(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to fetch active alarms from DB:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchActiveAlarms();
+    const alarmInterval = setInterval(fetchActiveAlarms, 3000);
+    return () => clearInterval(alarmInterval);
+  }, [unitId]);
 
   const latest = useTelemetryStore((state) => state.latest);
 
@@ -434,7 +471,7 @@ export default function MachinePidDiagram() {
       selectedTaskFilter={selectedTaskFilter}
       onFilterChange={setSelectedTaskFilter}
       taskInfo={taskInfo}
-      alarms={alarmInfo}
+      alarms={dbAlarms}
       onToggleCompleteTask={handleToggleCompleteTask}
       dateRange={dateRange}
       onChangeDateRange={setDateRange}
