@@ -715,16 +715,16 @@ export default function CoolingWF1U3Pid({
               lines={["STATUS :", "VOL :"]}
               />
               <SensorIndicator
-              x={625}
-              y={806}
+              x={618}
+              y={802}
               w={63.75}
               h={25.5}
               value={isBlowdownOn ? "ON" : (latest["cooling-water/blowdown_status"]?.value ?? "XX")}
               mode="onoff"
               />
               <SensorIndicator
-              x={593}
-              y={834}
+              x={618}
+              y={830}
               w={63.75}
               h={25.5}
               value={getVal("cooling-water/blowdown_vol")}
@@ -741,7 +741,7 @@ export default function CoolingWF1U3Pid({
               lines={["TDS :", "PH :", "LEVEL :"]}
               />
               <SensorIndicator
-              x={765}
+              x={790}
               y={802}
               w={63.75}
               h={25.5}
@@ -753,7 +753,7 @@ export default function CoolingWF1U3Pid({
               decimalPlaces={1}
               />
               <SensorIndicator
-              x={755}
+              x={790}
               y={830}
               w={63.75}
               h={25.5}
@@ -765,7 +765,7 @@ export default function CoolingWF1U3Pid({
               decimalPlaces={1}
               />
               <SensorIndicator
-              x={785}
+              x={790}
               y={858}
               w={63.75}
               h={25.5}
@@ -1323,7 +1323,7 @@ export default function CoolingWF1U3Pid({
               y={-35}
               width={175}
               title="STERIL"
-              value={latest["cooling-water/st3_steril"]?.value === 1 ? "ON" : latest["cooling-water/st3_steril"]?.value === 0 ? "OFF" : "XX"}
+              value="XX"
               colorType="blue"
               />
               <SensorCard
