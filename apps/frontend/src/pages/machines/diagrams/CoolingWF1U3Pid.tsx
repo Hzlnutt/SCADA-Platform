@@ -580,7 +580,7 @@ export default function CoolingWF1U3Pid({
         lines={["STATUS :", "RH :", "HZ :", "KW :"]}
       />
       <SensorIndicator
-        x={108}
+        x={98}
         y={824}
         w={63.75}
         h={25.5}
@@ -588,7 +588,7 @@ export default function CoolingWF1U3Pid({
         mode="onoff"
       />
       <SensorIndicator
-        x={70}
+        x={98}
         y={852}
         w={63.75}
         h={25.5}
@@ -599,7 +599,7 @@ export default function CoolingWF1U3Pid({
         thresholdDirection="above"
       />
       <SensorIndicator
-        x={70}
+        x={98}
         y={880}
         w={63.75}
         h={25.5}
@@ -607,7 +607,7 @@ export default function CoolingWF1U3Pid({
         unit=""
       />
       <SensorIndicator
-        x={70}
+        x={98}
         y={908}
         w={63.75}
         h={25.5}
@@ -625,7 +625,7 @@ export default function CoolingWF1U3Pid({
         lines={["STATUS :", "RH :", "HZ :", "KW :"]}
       />
       <SensorIndicator
-        x={276}
+        x={266}
         y={824}
         w={63.75}
         h={25.5}
@@ -633,7 +633,7 @@ export default function CoolingWF1U3Pid({
         mode="onoff"
       />
       <SensorIndicator
-        x={238}
+        x={266}
         y={852}
         w={63.75}
         h={25.5}
@@ -644,7 +644,7 @@ export default function CoolingWF1U3Pid({
         thresholdDirection="above"
       />
       <SensorIndicator
-        x={238}
+        x={266}
         y={880}
         w={63.75}
         h={25.5}
@@ -652,7 +652,7 @@ export default function CoolingWF1U3Pid({
         unit=""
       />
       <SensorIndicator
-        x={238}
+        x={266}
         y={908}
         w={63.75}
         h={25.5}
@@ -670,7 +670,7 @@ export default function CoolingWF1U3Pid({
         lines={["STATUS :", "RH :", "HZ :", "KW :"]}
       />
       <SensorIndicator
-        x={444}
+        x={434}
         y={824}
         w={63.75}
         h={25.5}
@@ -678,7 +678,7 @@ export default function CoolingWF1U3Pid({
         mode="onoff"
       />
       <SensorIndicator
-        x={406}
+        x={434}
         y={852}
         w={63.75}
         h={25.5}
@@ -689,7 +689,7 @@ export default function CoolingWF1U3Pid({
         thresholdDirection="above"
       />
       <SensorIndicator
-        x={406}
+        x={434}
         y={880}
         w={63.75}
         h={25.5}
@@ -697,7 +697,7 @@ export default function CoolingWF1U3Pid({
         unit=""
       />
       <SensorIndicator
-        x={406}
+        x={434}
         y={908}
         w={63.75}
         h={25.5}
@@ -717,7 +717,7 @@ export default function CoolingWF1U3Pid({
       />
       <SensorIndicator
         x={618}
-        y={822}
+        y={845}
         w={63.75}
         h={25.5}
         value={isBlowdownOn ? "ON" : (latest["cooling-water/blowdown_status"]?.value ?? "XX")}
@@ -725,7 +725,7 @@ export default function CoolingWF1U3Pid({
       />
       <SensorIndicator
         x={618}
-        y={850}
+        y={875}
         w={63.75}
         h={25.5}
         value={getVal("cooling-water/blowdown_vol")}
@@ -790,7 +790,7 @@ export default function CoolingWF1U3Pid({
         lines={["LEVEL :", "PUMP :", "VOL :"]}
       />
       <SensorIndicator
-        x={960}
+        x={965}
         y={822}
         w={63.75}
         h={25.5}
@@ -802,7 +802,7 @@ export default function CoolingWF1U3Pid({
         decimalPlaces={1}
       />
       <SensorIndicator
-        x={960}
+        x={965}
         y={850}
         w={63.75}
         h={25.5}
@@ -810,7 +810,7 @@ export default function CoolingWF1U3Pid({
         mode="onoff"
       />
       <SensorIndicator
-        x={945}
+        x={965}
         y={878}
         w={63.75}
         h={25.5}
@@ -829,7 +829,7 @@ export default function CoolingWF1U3Pid({
         lines={["LEVEL :", "PUMP :", "VOL :"]}
       />
       <SensorIndicator
-        x={1130}
+        x={1135}
         y={822}
         w={63.75}
         h={25.5}
@@ -841,7 +841,7 @@ export default function CoolingWF1U3Pid({
         decimalPlaces={1}
       />
       <SensorIndicator
-        x={1125}
+        x={1135}
         y={850}
         w={63.75}
         h={25.5}
@@ -849,7 +849,7 @@ export default function CoolingWF1U3Pid({
         mode="onoff"
       />
       <SensorIndicator
-        x={1115}
+        x={1135}
         y={878}
         w={63.75}
         h={25.5}

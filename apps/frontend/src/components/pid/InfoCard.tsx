@@ -213,6 +213,40 @@ const InfoCard: React.FC<InfoCardProps> = ({
         {contentLines.map((line, index) => {
           const yPos = currentY + scaledContentFontSize;
           currentY += scaledContentLineHeight;
+
+          const colonIndex = line.indexOf(":");
+          if (colonIndex !== -1) {
+            const labelText = line.substring(0, colonIndex).trim();
+            const colonX = paddingX + 58;
+
+            return (
+              <g key={`content-${index}`}>
+                <text
+                  x={paddingX + 4}
+                  y={yPos}
+                  textAnchor="start"
+                  fill={textColor}
+                  fontSize={scaledContentFontSize}
+                  fontWeight="bold"
+                  fontFamily="sans-serif"
+                >
+                  {labelText}
+                </text>
+                <text
+                  x={colonX}
+                  y={yPos}
+                  textAnchor="start"
+                  fill={textColor}
+                  fontSize={scaledContentFontSize}
+                  fontWeight="bold"
+                  fontFamily="sans-serif"
+                >
+                  :
+                </text>
+              </g>
+            );
+          }
+
           const lineEstWidth = getEstWidth(line, scaledContentFontSize);
           const needsSqueeze = lineEstWidth > (availableWidth - 4);
 
