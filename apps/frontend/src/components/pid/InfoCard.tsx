@@ -10,6 +10,8 @@ interface InfoCardProps {
   lines?: string[];
   color?: string;
   textColor?: string;
+  titleFontSize?: number;
+  contentFontSize?: number;
 }
 
 const InfoCard: React.FC<InfoCardProps> = ({
@@ -22,6 +24,8 @@ const InfoCard: React.FC<InfoCardProps> = ({
   lines = [],
   color = "#0B3B60",
   textColor = "#FFFFFF",
+  titleFontSize,
+  contentFontSize,
 }) => {
   // ─── Helper untuk membungkus teks dengan truncate ──────────────────────
   const wrapText = (text: string, fontSize: number, maxWidth: number): string[] => {
@@ -72,9 +76,9 @@ const InfoCard: React.FC<InfoCardProps> = ({
   const availableWidth = width - paddingX * 2;
 
   // Base font sizes
-  const baseTitleFontSize = 18;
+  const baseTitleFontSize = titleFontSize ?? 18;
   const baseSubtitleFontSize = 14;
-  const baseContentFontSize = 14;
+  const baseContentFontSize = contentFontSize ?? 14;
 
   // Base line heights & spacings
   const baseTitleLineHeight = 16;
