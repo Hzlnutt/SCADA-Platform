@@ -27,26 +27,43 @@ const InfoCard: React.FC<InfoCardProps> = ({
   titleFontSize,
   contentFontSize,
 }) => {
-  // ─── Helper untuk membungkus teks ───────────────────────────────────────
-  const wrapText = (text: string, fontSize: number, maxWidth: number): string[] => {
-    const charWidth = fontSize * 0.65;
-    const maxChars = Math.max(1, Math.floor(maxWidth / charWidth));
-    
-    if (text.length <= maxChars) return [text];
+  // ─── Helper untuk mengukur dan membungkus teks ke baris baru ────────────
+  const getEstWidth = (str: string, fontSz: number) => {
+    let w = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str[i];
+      if (char >= 'A' && char <= 'Z') w += fontSz * 0.78;
+      else if (char === ' ') w += fontSz * 0.35;
+      else if (char >= '0' && char <= '9') w += fontSz * 0.72;
+      else w += fontSz * 0.60;
+    }
+    return w;
+  };
 
-    const words = text.split(" ");
+  const wrapText = (text: string, fontSize: number, maxWidth: number): string[] => {
+    if (getEstWidth(text, fontSize) <= maxWidth) return [text];
+
+    const words = text.split(/\s+/).filter(Boolean);
     const lines: string[] = [];
     let currentLine = "";
 
     for (const word of words) {
       const testLine = currentLine ? currentLine + " " + word : word;
-      if (testLine.length > maxChars) {
+      if (getEstWidth(testLine, fontSize) > maxWidth) {
         if (currentLine) {
           lines.push(currentLine);
           currentLine = word;
         } else {
-          lines.push(word);
-          currentLine = "";
+          let chunk = "";
+          for (let i = 0; i < word.length; i++) {
+            if (getEstWidth(chunk + word[i], fontSize) > maxWidth) {
+              if (chunk) lines.push(chunk);
+              chunk = word[i];
+            } else {
+              chunk += word[i];
+            }
+          }
+          if (chunk) currentLine = chunk;
         }
       } else {
         currentLine = testLine;
@@ -139,7 +156,7 @@ const InfoCard: React.FC<InfoCardProps> = ({
         {titleLines.map((line, index) => {
           const yPos = currentY + scaledTitleFontSize;
           currentY += index === 0 ? scaledTitleFontSize : scaledTitleLineHeight;
-          const lineEstWidth = line.length * (scaledTitleFontSize * 0.65);
+          const lineEstWidth = getEstWidth(line, scaledTitleFontSize);
           const needsSqueeze = lineEstWidth > availableWidth;
 
           return (
@@ -168,7 +185,7 @@ const InfoCard: React.FC<InfoCardProps> = ({
             {subtitleLines.map((line, index) => {
               const yPos = currentY + scaledSubtitleFontSize;
               currentY += index === 0 ? scaledSubtitleFontSize : scaledSubtitleLineHeight;
-              const lineEstWidth = line.length * (scaledSubtitleFontSize * 0.65);
+              const lineEstWidth = getEstWidth(line, scaledSubtitleFontSize);
               const needsSqueeze = lineEstWidth > availableWidth;
 
               return (
@@ -196,7 +213,7 @@ const InfoCard: React.FC<InfoCardProps> = ({
         {contentLines.map((line, index) => {
           const yPos = currentY + scaledContentFontSize;
           currentY += scaledContentLineHeight;
-          const lineEstWidth = line.length * (scaledContentFontSize * 0.65);
+          const lineEstWidth = getEstWidth(line, scaledContentFontSize);
           const needsSqueeze = lineEstWidth > (availableWidth - 4);
 
           return (
