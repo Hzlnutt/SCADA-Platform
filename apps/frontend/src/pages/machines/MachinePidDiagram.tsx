@@ -181,6 +181,45 @@ export default function MachinePidDiagram() {
   const data = machineDataMap[unitId] ?? defaultData;
   const [dbAlarms, setDbAlarms] = useState<Alarm[]>([]);
 
+  const formatAlarmTitle = (code: string, rawMessage: string) => {
+    const codeStr = String(code || "");
+    const msgStr = String(rawMessage || "");
+
+    if (codeStr.includes("eq_press_bp03") || msgStr.includes("BP-3")) return "ALARM TEKANAN - MTR-5 (BP-3)";
+    if (codeStr.includes("eq_press_du03") || msgStr.includes("DU-3")) return "ALARM TEKANAN - MTR-4 (DU-3)";
+    if (codeStr.includes("eq_press_prep03") || msgStr.includes("SP-3")) return "ALARM TEKANAN - MTR-6 (SP-3)";
+    if (codeStr.includes("eq_press_st03") || msgStr.includes("ST-3")) return "ALARM TEKANAN - MTR-7 (ST-3)";
+    if (codeStr.includes("supply_temp")) return "ALARM SUHU SUPPLY WATER";
+    if (codeStr.includes("return_temp")) return "ALARM SUHU RETURN WATER";
+    if (codeStr.includes("cooling_tank_tds")) return "ALARM TDS COOLING TANK";
+    if (codeStr.includes("cooling_tank_ph")) return "ALARM PH COOLING TANK";
+    if (codeStr.includes("basin_lvl")) return "ALARM LEVEL COOLING TANK";
+    if (codeStr.includes("chemical_357")) return "ALARM CHEMICAL 357";
+    if (codeStr.includes("chemical_327")) return "ALARM CHEMICAL 327/317";
+    if (codeStr.includes("high_pressure")) return "ALARM TEKANAN TINGGI";
+    if (codeStr.includes("high_temp")) return "ALARM SUHU TINGGI";
+
+    return codeStr
+      .replace(/^(pid-threshold:|threshold:)/i, "")
+      .replace(/^cooling-water\//i, "")
+      .toUpperCase();
+  };
+
+  const formatAlarmMessage = (rawMessage: string) => {
+    if (!rawMessage) return "Terdeteksi kondisi alarm pada sensor.";
+
+    let msg = rawMessage;
+    if (msg.includes("exceeds Alarm Limit of")) {
+      msg = msg.replace(/\[(.*?)\] exceeds Alarm Limit of (.*?) \(Current: (.*?)\)/gi, (_, equip, limit, curr) => {
+        return `Tekanan pada ${equip} melebihi batas aman (${limit}). Nilai saat ini: ${curr}`;
+      });
+      msg = msg.replace(/exceeds Alarm Limit of/gi, "melebihi batas alarm");
+      msg = msg.replace(/\(Current:/gi, "(Nilai saat ini:");
+    }
+
+    return msg;
+  };
+
   const fetchActiveAlarms = async () => {
     try {
       const res = await getJson<{ data: any[] }>(`/alarms/active?unit=${unitId}&limit=20`);
@@ -199,8 +238,8 @@ export default function MachinePidDiagram() {
 
           return {
             id: Number(item.id) || item.id,
-            code: item.alarmKey || item.tagId || "ALM",
-            message: item.message,
+            code: formatAlarmTitle(item.alarmKey || item.tagId || "ALM", item.message || ""),
+            message: formatAlarmMessage(item.message || ""),
             severity,
             timestamp: ts,
           };

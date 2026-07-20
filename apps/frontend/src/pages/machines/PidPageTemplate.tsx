@@ -136,7 +136,7 @@ export default function PidPageTemplate({
             </h3>
             <button
               onClick={() => setShowTaskModal(true)}
-              className="text-[10px] font-bold text-sky-400 hover:text-sky-300 transition uppercase tracking-wider bg-sky-950 border border-sky-800 px-2 py-0.5 rounded"
+              className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md shadow-sm transition duration-150 bg-sky-600 hover:bg-sky-700 text-white dark:bg-sky-500 dark:hover:bg-sky-400 dark:text-slate-950"
             >
               Detail Tasks
             </button>
@@ -211,14 +211,6 @@ export default function PidPageTemplate({
                     >
                       {task.status === "overdue" ? "OVERDUE" : task.status === "open" ? "OPEN" : "CLOSE"}
                     </span>
-                    {(task.status === "open" || task.status === "overdue") && onToggleCompleteTask && task.taskKey && (
-                      <button
-                        onClick={() => onToggleCompleteTask(task.taskKey!)}
-                        className="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-[9px] uppercase tracking-wide transition duration-150"
-                      >
-                        CLOSE
-                      </button>
-                    )}
                   </div>
                 </div>
               ))
