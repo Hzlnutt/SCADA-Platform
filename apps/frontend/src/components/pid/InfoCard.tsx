@@ -27,16 +27,13 @@ const InfoCard: React.FC<InfoCardProps> = ({
   titleFontSize,
   contentFontSize,
 }) => {
-  // ─── Helper untuk membungkus teks dengan truncate ──────────────────────
+  // ─── Helper untuk membungkus teks ───────────────────────────────────────
   const wrapText = (text: string, fontSize: number, maxWidth: number): string[] => {
-    // Estimasi lebar karakter untuk font bold (sedikit lebih lebar dari normal)
     const charWidth = fontSize * 0.65;
-    const maxChars = Math.floor((maxWidth - 4) / charWidth);
+    const maxChars = Math.max(1, Math.floor(maxWidth / charWidth));
     
-    // Jika teks pendek, langsung return
     if (text.length <= maxChars) return [text];
 
-    // Coba wrap per kata
     const words = text.split(" ");
     const lines: string[] = [];
     let currentLine = "";
@@ -45,13 +42,10 @@ const InfoCard: React.FC<InfoCardProps> = ({
       const testLine = currentLine ? currentLine + " " + word : word;
       if (testLine.length > maxChars) {
         if (currentLine) {
-          // Jika currentLine sudah ada, simpan dulu
           lines.push(currentLine);
           currentLine = word;
         } else {
-          // Jika satu kata saja sudah melebihi, potong paksa
-          const truncated = word.slice(0, maxChars - 1) + "…";
-          lines.push(truncated);
+          lines.push(word);
           currentLine = "";
         }
       } else {
@@ -59,14 +53,7 @@ const InfoCard: React.FC<InfoCardProps> = ({
       }
     }
     if (currentLine) lines.push(currentLine);
-
-    // Jika masih ada baris yang melebihi maxChars (misal karena kata sangat panjang)
-    return lines.map(line => {
-      if (line.length > maxChars) {
-        return line.slice(0, maxChars - 1) + "…";
-      }
-      return line;
-    });
+    return lines;
   };
 
   // ─── Konfigurasi Layout (Base) ──────────────────────────────────────────
@@ -81,7 +68,7 @@ const InfoCard: React.FC<InfoCardProps> = ({
   const baseContentFontSize = contentFontSize ?? 14;
 
   // Base line heights & spacings
-  const baseTitleLineHeight = 16;
+  const baseTitleLineHeight = baseTitleFontSize * 1.1;
   const baseTitleToContentPadding = 12;
   const baseSubtitleLineHeight = 16;
   const baseSubtitleToContentPadding = 8;
@@ -121,11 +108,19 @@ const InfoCard: React.FC<InfoCardProps> = ({
   const scaledSubtitleToContentPadding = baseSubtitleToContentPadding * scale;
   const scaledContentLineHeight = baseContentLineHeight * scale;
 
+  const clipId = `card-clip-${Math.round(x)}-${Math.round(y)}-${title.replace(/[^a-zA-Z0-9]/g, "")}`;
+
   // ─── Render ─────────────────────────────────────────────────────────────
   let currentY = scaledPaddingY;
 
   return (
     <g transform={`translate(${x}, ${y})`}>
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={1} y={1} width={Math.max(0, width - 2)} height={Math.max(0, finalHeight - 2)} rx={2} />
+        </clipPath>
+      </defs>
+
       {/* ── Border / Card Background ────────────────────────────────────── */}
       <rect
         x={0}
@@ -139,74 +134,88 @@ const InfoCard: React.FC<InfoCardProps> = ({
         rx={2}
       />
 
-      {/* ── Title ────────────────────────────────────────────────────────── */}
-      {titleLines.map((line, index) => {
-        const yPos = currentY + scaledTitleFontSize;
-        currentY += index === 0 ? scaledTitleFontSize : scaledTitleLineHeight;
-        return (
-          <text
-            key={`title-${index}`}
-            x={width / 2}
-            y={yPos}
-            textAnchor="middle"
-            fill={textColor}
-            fontSize={scaledTitleFontSize}
-            fontWeight="bold"
-            fontFamily="sans-serif"
-          >
-            {line}
-          </text>
-        );
-      })}
+      <g clipPath={`url(#${clipId})`}>
+        {/* ── Title ────────────────────────────────────────────────────────── */}
+        {titleLines.map((line, index) => {
+          const yPos = currentY + scaledTitleFontSize;
+          currentY += index === 0 ? scaledTitleFontSize : scaledTitleLineHeight;
+          const lineEstWidth = line.length * (scaledTitleFontSize * 0.65);
+          const needsSqueeze = lineEstWidth > availableWidth;
 
-      {/* ── Padding setelah judul ────────────────────────────────────────── */}
-      {currentY += scaledTitleToContentPadding}
+          return (
+            <text
+              key={`title-${index}`}
+              x={width / 2}
+              y={yPos}
+              textAnchor="middle"
+              fill={textColor}
+              fontSize={scaledTitleFontSize}
+              fontWeight="bold"
+              fontFamily="sans-serif"
+              {...(needsSqueeze ? { textLength: availableWidth, lengthAdjust: "spacingAndGlyphs" } : {})}
+            >
+              {line}
+            </text>
+          );
+        })}
 
-      {/* ── Subtitle ─────────────────────────────────────────────────────── */}
-      {subtitleLines.length > 0 && (
-        <>
-          {subtitleLines.map((line, index) => {
-            const yPos = currentY + scaledSubtitleFontSize;
-            currentY += index === 0 ? scaledSubtitleFontSize : scaledSubtitleLineHeight;
-            return (
-              <text
-                key={`subtitle-${index}`}
-                x={width / 2}
-                y={yPos}
-                textAnchor="middle"
-                fill={textColor}
-                fontSize={scaledSubtitleFontSize}
-                fontWeight="bold"
-                opacity="0.85"
-                fontFamily="sans-serif"
-              >
-                {line}
-              </text>
-            );
-          })}
-          {currentY += scaledSubtitleToContentPadding}
-        </>
-      )}
+        {/* ── Padding setelah judul ────────────────────────────────────────── */}
+        {currentY += scaledTitleToContentPadding}
 
-      {/* ── Content Lines ────────────────────────────────────────────────── */}
-      {contentLines.map((line, index) => {
-        const yPos = currentY + scaledContentFontSize;
-        currentY += scaledContentLineHeight;
-        return (
-          <text
-            key={`content-${index}`}
-            x={paddingX + 4}
-            y={yPos}
-            textAnchor="start"
-            fill={textColor}
-            fontSize={scaledContentFontSize}
-            fontWeight="bold"
-            fontFamily="sans-serif"
-          >
-            {line}
-          </text>
-        );
-      })}
+        {/* ── Subtitle ─────────────────────────────────────────────────────── */}
+        {subtitleLines.length > 0 && (
+          <>
+            {subtitleLines.map((line, index) => {
+              const yPos = currentY + scaledSubtitleFontSize;
+              currentY += index === 0 ? scaledSubtitleFontSize : scaledSubtitleLineHeight;
+              const lineEstWidth = line.length * (scaledSubtitleFontSize * 0.65);
+              const needsSqueeze = lineEstWidth > availableWidth;
+
+              return (
+                <text
+                  key={`subtitle-${index}`}
+                  x={width / 2}
+                  y={yPos}
+                  textAnchor="middle"
+                  fill={textColor}
+                  fontSize={scaledSubtitleFontSize}
+                  fontWeight="bold"
+                  opacity="0.85"
+                  fontFamily="sans-serif"
+                  {...(needsSqueeze ? { textLength: availableWidth, lengthAdjust: "spacingAndGlyphs" } : {})}
+                >
+                  {line}
+                </text>
+              );
+            })}
+            {currentY += scaledSubtitleToContentPadding}
+          </>
+        )}
+
+        {/* ── Content Lines ────────────────────────────────────────────────── */}
+        {contentLines.map((line, index) => {
+          const yPos = currentY + scaledContentFontSize;
+          currentY += scaledContentLineHeight;
+          const lineEstWidth = line.length * (scaledContentFontSize * 0.65);
+          const needsSqueeze = lineEstWidth > (availableWidth - 4);
+
+          return (
+            <text
+              key={`content-${index}`}
+              x={paddingX + 4}
+              y={yPos}
+              textAnchor="start"
+              fill={textColor}
+              fontSize={scaledContentFontSize}
+              fontWeight="bold"
+              fontFamily="sans-serif"
+              {...(needsSqueeze ? { textLength: availableWidth - 4, lengthAdjust: "spacingAndGlyphs" } : {})}
+            >
+              {line}
+            </text>
+          );
+        })}
+      </g>
     </g>
   );
 };

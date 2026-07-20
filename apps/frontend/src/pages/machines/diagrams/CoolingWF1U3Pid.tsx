@@ -712,7 +712,7 @@ export default function CoolingWF1U3Pid({
         width={170}
         height={150}
         title="BLOWDOWN WATER"
-        titleFontSize={15}
+        titleFontSize={13}
         lines={["STATUS :", "VOL :"]}
       />
       <SensorIndicator
