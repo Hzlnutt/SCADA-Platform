@@ -485,7 +485,7 @@ export default function PidPageTemplate({
                         {(task.status === "overdue" || task.status === "open") && onToggleCompleteTask && task.taskKey && (
                           <button
                             onClick={() => handleOpenPasswordVerification(task.taskKey!)}
-                            className="px-3.5 py-1.5 rounded-lg text-xs font-bold transition duration-200 shadow-sm bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white shadow-emerald-500/20"
+                            className="px-3.5 py-1.5 rounded-lg text-xs font-bold transition duration-200 shadow-sm bg-blue-600 hover:bg-blue-700 active:scale-95 text-white shadow-blue-500/20"
                           >
                             Mark Done
                           </button>
