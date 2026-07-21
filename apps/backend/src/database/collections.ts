@@ -21,3 +21,4 @@ export const MACHINE_CATEGORIES_COLLECTION = "machine_config_categories";
 export const MACHINE_CONFIGS_COLLECTION = "machine_configs";
 export const MACHINE_THRESHOLDS_COLLECTION = "machine_config_thresholds";
 export const GLOBAL_CONFIG_COLLECTION = "global_configs";
+export const API_SOURCES_COLLECTION = "api_sources";

@@ -19,7 +19,12 @@ import {
   completeRhTaskHandler,
   getSensorRulesHandler,
   updateSensorRulesHandler,
-  getRhBaselinesHandler
+  getRhBaselinesHandler,
+  getApiSourcesHandler,
+  createApiSourceHandler,
+  updateApiSourceHandler,
+  deleteApiSourceHandler,
+  testApiSourceHandler
 } from "./config.controller";
 
 export const configRouter = Router();
@@ -43,3 +48,11 @@ configRouter.post("/config/rh-tasks/:id/complete", authenticate, completeRhTaskH
 configRouter.get("/config/sensor-rules", authenticate, getSensorRulesHandler);
 configRouter.post("/config/sensor-rules", authenticate, authorize(["admin"]), updateSensorRulesHandler);
 configRouter.get("/config/rh-baselines", authenticate, getRhBaselinesHandler);
+
+// API Sources management
+configRouter.get("/config/api-sources", authenticate, getApiSourcesHandler);
+configRouter.post("/config/api-sources", authenticate, createApiSourceHandler);
+configRouter.patch("/config/api-sources/:id", authenticate, updateApiSourceHandler);
+configRouter.delete("/config/api-sources/:id", authenticate, deleteApiSourceHandler);
+configRouter.post("/config/api-sources/test", authenticate, testApiSourceHandler);
+

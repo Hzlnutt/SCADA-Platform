@@ -5,8 +5,10 @@ import {
   MACHINE_CATEGORIES_COLLECTION,
   MACHINE_CONFIGS_COLLECTION,
   MACHINE_THRESHOLDS_COLLECTION,
-  GLOBAL_CONFIG_COLLECTION
+  GLOBAL_CONFIG_COLLECTION,
+  API_SOURCES_COLLECTION
 } from "../../database/collections";
+import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getSocketServer } from "../../services/socket.manager";
 import { recordAudit, getClientIp } from "../../services/audit.service";
@@ -923,5 +925,140 @@ export const completeRhTaskHandler = async (req: Request, res: Response, next: N
     res.json({ success: true });
   } catch (err) {
     next(err);
+  }
+};
+
+// ═══════════════════════════════════════════════
+// API SOURCES MANAGEMENT
+// ═══════════════════════════════════════════════
+
+export const getApiSourcesHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const db = getMongoDb();
+    const unitId = req.query.unitId as string | undefined;
+    const filter = unitId ? { unitId } : {};
+    const sources = await db.collection(API_SOURCES_COLLECTION).find(filter).sort({ createdAt: -1 }).toArray();
+    res.json({ data: sources });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const createApiSourceHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const db = getMongoDb();
+    const { name, url, method, headers, pollingIntervalMs, selectedFields, enabled, unitId, mode } = req.body;
+
+    if (!name || !url || !unitId) {
+      res.status(400).json({ error: "name, url, and unitId are required" });
+      return;
+    }
+
+    const doc = {
+      name: name || "Unnamed API",
+      url,
+      unitId,
+      method: method || "GET",
+      headers: headers || {},
+      pollingIntervalMs: pollingIntervalMs || 2000,
+      selectedFields: selectedFields || [],
+      enabled: enabled ?? false,
+      mode: mode || "test", // "test" | "polling"
+      lastTestedAt: null,
+      lastTestStatus: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const result = await db.collection(API_SOURCES_COLLECTION).insertOne(doc);
+    res.json({ data: { ...doc, _id: result.insertedId } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateApiSourceHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const db = getMongoDb();
+    const { id } = req.params;
+    const updates = { ...req.body, updatedAt: new Date() };
+    delete updates._id; // prevent overwriting _id
+
+    const result = await db.collection(API_SOURCES_COLLECTION).findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      { $set: updates },
+      { returnDocument: "after" }
+    );
+
+    if (!result) {
+      res.status(404).json({ error: "API source not found" });
+      return;
+    }
+
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteApiSourceHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const db = getMongoDb();
+    const { id } = req.params;
+    await db.collection(API_SOURCES_COLLECTION).deleteOne({ _id: new ObjectId(id) });
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const testApiSourceHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { url, method, headers: customHeaders } = req.body;
+
+    if (!url) {
+      res.status(400).json({ error: "url is required" });
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const fetchOptions: RequestInit = {
+      method: method || "GET",
+      headers: {
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        ...(customHeaders || {})
+      },
+      signal: controller.signal
+    };
+
+    const apiRes = await fetch(url, fetchOptions);
+    clearTimeout(timeoutId);
+
+    if (!apiRes.ok) {
+      res.json({
+        success: false,
+        status: apiRes.status,
+        statusText: apiRes.statusText,
+        data: null
+      });
+      return;
+    }
+
+    const data = await apiRes.json();
+    res.json({
+      success: true,
+      status: apiRes.status,
+      data
+    });
+  } catch (err: any) {
+    res.json({
+      success: false,
+      status: 0,
+      error: err.name === "AbortError" ? "Request timed out (8s)" : err.message,
+      data: null
+    });
   }
 };
