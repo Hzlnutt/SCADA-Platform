@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express";
+import os from "os";
 import { getMongoDb } from "../../database/mongo";
 import { AUDIT_COLLECTION } from "../../database/collections";
 
@@ -15,11 +16,25 @@ export const getAuditLogsHandler = async (
 
     const query: Record<string, any> = {};
 
+    // Unit / Machine specific filtering
+    if (req.query.unitId) {
+      const unitIdStr = String(req.query.unitId);
+      const unitRegex = new RegExp(unitIdStr, "i");
+      query.$or = [
+        { resourceId: unitIdStr },
+        { resourceId: unitRegex },
+        { "meta.unitId": unitIdStr },
+        { "meta.unitId": unitRegex },
+        { "meta.machineId": unitIdStr },
+        { "meta.machineId": unitRegex }
+      ];
+    }
+
     // Search by actorId, action, resourceType, resourceId, or meta fields
     if (req.query.search) {
       const searchStr = String(req.query.search);
       const searchRegex = new RegExp(searchStr, "i");
-      query.$or = [
+      const searchConditions = [
         { actorId: searchRegex },
         { action: searchRegex },
         { resourceType: searchRegex },
@@ -31,6 +46,13 @@ export const getAuditLogsHandler = async (
         { "meta.before": searchRegex },
         { "meta.after": searchRegex }
       ];
+
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, { $or: searchConditions }];
+        delete query.$or;
+      } else {
+        query.$or = searchConditions;
+      }
     }
 
     if (req.query.action) {
@@ -54,6 +76,49 @@ export const getAuditLogsHandler = async (
         total,
         totalPages: Math.ceil(total / limit)
       }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getNetworkInfoHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const interfaces = os.networkInterfaces();
+    let serverIp = "127.0.0.1";
+
+    for (const name of Object.keys(interfaces)) {
+      const ifaceList = interfaces[name];
+      if (!ifaceList) continue;
+      for (const iface of ifaceList) {
+        if (iface.family === "IPv4" && !iface.internal) {
+          serverIp = iface.address;
+          break;
+        }
+      }
+      if (serverIp !== "127.0.0.1") break;
+    }
+
+    const forwarded = req.headers["x-forwarded-for"];
+    let clientIp = req.ip || req.socket.remoteAddress || "127.0.0.1";
+    if (forwarded) {
+      clientIp = String(forwarded).split(",")[0].trim();
+    }
+    if (clientIp.startsWith("::ffff:")) {
+      clientIp = clientIp.substring(7);
+    }
+    if (clientIp === "::1") {
+      clientIp = "127.0.0.1";
+    }
+
+    res.json({
+      serverIp,
+      clientIp,
+      hostname: os.hostname()
     });
   } catch (err) {
     next(err);

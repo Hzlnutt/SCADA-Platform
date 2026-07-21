@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavItem } from "../navigation/NavItem";
 import { machineGroups } from "../../data/machines";
 import { useAuthStore } from "../../store/auth.store";
+import { getJson } from "../../services/api.client";
 
 const IconDashboard = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -112,6 +113,24 @@ export const Sidebar = () => {
       return next;
     });
   };
+
+  const [netInfo, setNetInfo] = useState<{ serverIp: string; clientIp: string }>({
+    serverIp: "192.168.20.81",
+    clientIp: window.location.hostname || "127.0.0.1"
+  });
+
+  useEffect(() => {
+    getJson<{ serverIp: string; clientIp: string }>("/audit-trail/network-info")
+      .then((res) => {
+        if (res && res.serverIp) {
+          setNetInfo({
+            serverIp: res.serverIp,
+            clientIp: res.clientIp
+          });
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   const hvacQcGroup = machineGroups.find((g) => g.id === "hvac-qc");
   const hvacWarehouseGroup = machineGroups.find((g) => g.id === "hvac-warehouse");
@@ -319,9 +338,15 @@ export const Sidebar = () => {
         </nav>
       )}
 
-      <div className="mt-auto rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-[#eef6ff] dark:bg-slate-950 p-4 text-xs text-[#47729f] dark:text-[#9dccf5] transition-colors duration-300">
-        Local server
-        <div className="mt-1 font-medium text-[#002b5c] dark:text-white">192.168.20.81</div>
+      <div className="mt-auto rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-[#eef6ff]/80 dark:bg-slate-950 p-3 text-xs transition-colors duration-300 space-y-1.5 shadow-xs">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#47729f] dark:text-slate-400">Server IP</span>
+          <span className="font-mono font-bold text-[#002b5c] dark:text-sky-300 text-[11px]">{netInfo.serverIp}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t border-[#acd3ff]/50 dark:border-slate-800/80 pt-1.5">
+          <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#47729f] dark:text-slate-400">Client IP</span>
+          <span className="font-mono font-bold text-[#002b5c] dark:text-emerald-400 text-[11px]">{netInfo.clientIp}</span>
+        </div>
       </div>
     </aside>
   );

@@ -1,12 +1,17 @@
 import { Router } from "express";
-import { authenticate, authorize } from "../auth/auth.middleware";
-import { getAuditLogsHandler } from "./audit.controller";
+import { authenticate } from "../auth/auth.middleware";
+import { getAuditLogsHandler, getNetworkInfoHandler } from "./audit.controller";
 
 export const auditRouter = Router();
 
 auditRouter.get(
   "/audit-trail",
   authenticate,
-  authorize(["admin"]),
   getAuditLogsHandler
+);
+
+auditRouter.get(
+  "/audit-trail/network-info",
+  authenticate,
+  getNetworkInfoHandler
 );

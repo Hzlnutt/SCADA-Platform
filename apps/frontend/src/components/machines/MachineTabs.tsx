@@ -60,6 +60,7 @@ export const MachineTabs = ({
           <NavItem to={`${basePath}/shift-report`} label="Shift Report" tone="tabs" />
           <NavItem to={`${basePath}/energy`} label="Energy" tone="tabs" />
           <NavItem to={`${basePath}/configuration`} label="Configuration" tone="tabs" />
+          <NavItem to={`${basePath}/audit-trail`} label="Audit Trail" tone="tabs" />
         </nav>
       </div>
     );
@@ -103,6 +104,11 @@ export const MachineTabs = ({
         <NavItem
           to={`${basePath}/configuration`}
           label="Configuration"
+          tone="tabs"
+        />
+        <NavItem
+          to={`${basePath}/audit-trail`}
+          label="Audit Trail"
           tone="tabs"
         />
       </nav>
