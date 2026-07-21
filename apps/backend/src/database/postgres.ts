@@ -162,7 +162,26 @@ export const ensurePostgresTables = async () => {
       );
     `);
 
-    logger.info("postgres tables (telemetry, running hours, global configs, sensor rules, alarms) ensured");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS api_sources (
+        id SERIAL PRIMARY KEY,
+        unit_id VARCHAR(50) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        url TEXT NOT NULL,
+        method VARCHAR(10) NOT NULL DEFAULT 'GET',
+        headers JSONB DEFAULT '{}'::jsonb,
+        polling_interval_ms INT NOT NULL DEFAULT 2000,
+        selected_fields JSONB DEFAULT '[]'::jsonb,
+        enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        mode VARCHAR(20) NOT NULL DEFAULT 'test',
+        last_tested_at TIMESTAMP WITHOUT TIME ZONE,
+        last_test_status INT,
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    logger.info("postgres tables (telemetry, running hours, global configs, sensor rules, alarms, api sources) ensured");
   } catch (err: any) {
     logger.error({ err }, "failed to ensure postgres tables");
   }

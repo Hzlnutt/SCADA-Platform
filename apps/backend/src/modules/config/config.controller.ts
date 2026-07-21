@@ -934,8 +934,21 @@ export const completeRhTaskHandler = async (req: Request, res: Response, next: N
 
 export const getApiSourcesHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const db = getMongoDb();
     const unitId = req.query.unitId as string | undefined;
+    try {
+      const pool = getPostgresPool();
+      const queryStr = unitId
+        ? `SELECT id as _id, unit_id as "unitId", name, url, method, headers, polling_interval_ms as "pollingIntervalMs", selected_fields as "selectedFields", enabled, mode, last_tested_at as "lastTestedAt", last_test_status as "lastTestStatus", created_at as "createdAt", updated_at as "updatedAt" FROM api_sources WHERE unit_id = $1 ORDER BY id DESC`
+        : `SELECT id as _id, unit_id as "unitId", name, url, method, headers, polling_interval_ms as "pollingIntervalMs", selected_fields as "selectedFields", enabled, mode, last_tested_at as "lastTestedAt", last_test_status as "lastTestStatus", created_at as "createdAt", updated_at as "updatedAt" FROM api_sources ORDER BY id DESC`;
+      const values = unitId ? [unitId] : [];
+      const pgRes = await pool.query(queryStr, values);
+      res.json({ data: pgRes.rows });
+      return;
+    } catch (pgErr) {
+      console.warn("PostgreSQL query failed for API sources, falling back to Mongo:", pgErr);
+    }
+
+    const db = getMongoDb();
     const filter = unitId ? { unitId } : {};
     const sources = await db.collection(API_SOURCES_COLLECTION).find(filter).sort({ createdAt: -1 }).toArray();
     res.json({ data: sources });
@@ -946,7 +959,6 @@ export const getApiSourcesHandler = async (req: Request, res: Response, next: Ne
 
 export const createApiSourceHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const db = getMongoDb();
     const { name, url, method, headers, pollingIntervalMs, selectedFields, enabled, unitId, mode } = req.body;
 
     if (!name || !url || !unitId) {
@@ -954,7 +966,7 @@ export const createApiSourceHandler = async (req: Request, res: Response, next: 
       return;
     }
 
-    const doc = {
+    const sourceObj = {
       name: name || "Unnamed API",
       url,
       unitId,
@@ -963,7 +975,37 @@ export const createApiSourceHandler = async (req: Request, res: Response, next: 
       pollingIntervalMs: pollingIntervalMs || 2000,
       selectedFields: selectedFields || [],
       enabled: enabled ?? false,
-      mode: mode || "test", // "test" | "polling"
+      mode: mode || "test"
+    };
+
+    try {
+      const pool = getPostgresPool();
+      const pgRes = await pool.query(
+        `INSERT INTO api_sources (unit_id, name, url, method, headers, polling_interval_ms, selected_fields, enabled, mode)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING id as _id, unit_id as "unitId", name, url, method, headers, polling_interval_ms as "pollingIntervalMs", selected_fields as "selectedFields", enabled, mode, created_at as "createdAt", updated_at as "updatedAt"`,
+        [
+          sourceObj.unitId,
+          sourceObj.name,
+          sourceObj.url,
+          sourceObj.method,
+          JSON.stringify(sourceObj.headers),
+          sourceObj.pollingIntervalMs,
+          JSON.stringify(sourceObj.selectedFields),
+          sourceObj.enabled,
+          sourceObj.mode
+        ]
+      );
+
+      res.json({ data: pgRes.rows[0] });
+      return;
+    } catch (pgErr) {
+      console.warn("PostgreSQL insert failed for API sources, falling back to Mongo:", pgErr);
+    }
+
+    const db = getMongoDb();
+    const doc = {
+      ...sourceObj,
       lastTestedAt: null,
       lastTestStatus: null,
       createdAt: new Date(),
@@ -979,23 +1021,61 @@ export const createApiSourceHandler = async (req: Request, res: Response, next: 
 
 export const updateApiSourceHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const db = getMongoDb();
     const { id } = req.params;
-    const updates = { ...req.body, updatedAt: new Date() };
-    delete updates._id; // prevent overwriting _id
+    const updates = { ...req.body };
+    delete updates._id;
 
-    const result = await db.collection(API_SOURCES_COLLECTION).findOneAndUpdate(
+    if (!isNaN(Number(id))) {
+      try {
+        const pool = getPostgresPool();
+        const pgRes = await pool.query(
+          `UPDATE api_sources 
+           SET name = COALESCE($1, name),
+               url = COALESCE($2, url),
+               method = COALESCE($3, method),
+               headers = COALESCE($4, headers),
+               polling_interval_ms = COALESCE($5, polling_interval_ms),
+               selected_fields = COALESCE($6, selected_fields),
+               enabled = COALESCE($7, enabled),
+               mode = COALESCE($8, mode),
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $9
+           RETURNING id as _id, unit_id as "unitId", name, url, method, headers, polling_interval_ms as "pollingIntervalMs", selected_fields as "selectedFields", enabled, mode, created_at as "createdAt", updated_at as "updatedAt"`,
+          [
+            updates.name || null,
+            updates.url || null,
+            updates.method || null,
+            updates.headers ? JSON.stringify(updates.headers) : null,
+            updates.pollingIntervalMs || null,
+            updates.selectedFields ? JSON.stringify(updates.selectedFields) : null,
+            updates.enabled !== undefined ? updates.enabled : null,
+            updates.mode || null,
+            Number(id)
+          ]
+        );
+
+        if (pgRes.rowCount && pgRes.rowCount > 0) {
+          res.json({ data: pgRes.rows[0] });
+          return;
+        }
+      } catch (pgErr) {
+        console.warn("PostgreSQL update failed for API sources, falling back to Mongo:", pgErr);
+      }
+    }
+
+    const db = getMongoDb();
+    const mongoResult = await db.collection(API_SOURCES_COLLECTION).findOneAndUpdate(
       { _id: new ObjectId(id) },
-      { $set: updates },
+      { $set: { ...updates, updatedAt: new Date() } },
       { returnDocument: "after" }
     );
 
-    if (!result) {
+    if (!mongoResult) {
       res.status(404).json({ error: "API source not found" });
       return;
     }
 
-    res.json({ data: result });
+    res.json({ data: mongoResult });
   } catch (err) {
     next(err);
   }
@@ -1003,8 +1083,20 @@ export const updateApiSourceHandler = async (req: Request, res: Response, next: 
 
 export const deleteApiSourceHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const db = getMongoDb();
     const { id } = req.params;
+
+    if (!isNaN(Number(id))) {
+      try {
+        const pool = getPostgresPool();
+        await pool.query(`DELETE FROM api_sources WHERE id = $1`, [Number(id)]);
+        res.json({ success: true });
+        return;
+      } catch (pgErr) {
+        console.warn("PostgreSQL delete failed for API sources, falling back to Mongo:", pgErr);
+      }
+    }
+
+    const db = getMongoDb();
     await db.collection(API_SOURCES_COLLECTION).deleteOne({ _id: new ObjectId(id) });
     res.json({ success: true });
   } catch (err) {
