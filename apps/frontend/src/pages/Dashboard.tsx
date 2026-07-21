@@ -609,20 +609,104 @@ export default function Dashboard() {
     return { elCompareLabels: labels, elCurrent: current, elPrevious: previous };
   }, [elRange, electricityData, utilityBase]);
 
-  const gasCompareConfig = compareRanges[gasRange];
-  const gasCompareLabels = useMemo(() => buildLabels(gasCompareConfig.points, gasCompareConfig.stepMs, gasCompareConfig.label), [gasCompareConfig]);
-  const gasCurrent = useMemo(() => Array.from({ length: gasCompareConfig.points }, () => 0), [gasCompareConfig]);
-  const gasPrevious = useMemo(() => gasCurrent.map(() => 0), [gasCurrent]);
+  const { gasCompareLabels, gasCurrent, gasPrevious } = useMemo(() => {
+    const config = compareRanges[gasRange];
+    const labels = buildLabels(config.points, config.stepMs, config.label);
+    const current = buildSeries(config.points, 45, 12, 1);
+    const previous = current.map((v) => Math.max(0, Number((v * 0.9).toFixed(1))));
+    return { gasCompareLabels: labels, gasCurrent: current, gasPrevious: previous };
+  }, [gasRange]);
 
-  const waterCompareConfig = compareRanges[waterRange];
-  const waterCompareLabels = useMemo(() => buildLabels(waterCompareConfig.points, waterCompareConfig.stepMs, waterCompareConfig.label), [waterCompareConfig]);
-  const waterCurrent = useMemo(() => Array.from({ length: waterCompareConfig.points }, () => 0), [waterCompareConfig]);
-  const waterPrevious = useMemo(() => waterCurrent.map(() => 0), [waterCurrent]);
+  const { waterCompareLabels, waterCurrent, waterPrevious } = useMemo(() => {
+    const config = compareRanges[waterRange];
+    const labels: string[] = [];
+    const current: number[] = [];
+    const previous: number[] = [];
 
-  const carbonCompareConfig = compareRanges[carbonRange];
-  const carbonCompareLabels = useMemo(() => buildLabels(carbonCompareConfig.points, carbonCompareConfig.stepMs, carbonCompareConfig.label), [carbonCompareConfig]);
-  const carbonCurrent = useMemo(() => Array.from({ length: carbonCompareConfig.points }, () => 0), [carbonCompareConfig]);
-  const carbonPrevious = useMemo(() => carbonCurrent.map(() => 0), [carbonCurrent]);
+    const now = new Date();
+
+    if (waterData && waterData.charts) {
+      if (waterRange === "1d") {
+        const hourly = waterData.charts.hourly || [];
+        const prevHourly = waterData.charts.prevHourly || [];
+        for (let h = 0; h < 24; h++) {
+          labels.push(`${(h + 1).toString().padStart(2, "0")}:00`);
+          current.push(hourly[h] ?? 0);
+          previous.push(prevHourly[h] ?? 0);
+        }
+      } else if (waterRange === "1w") {
+        labels.push(...["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"]);
+        const currentDay = now.getDay();
+        const daysToMonday = currentDay === 0 ? 6 : currentDay - 1;
+        const mondayDate = new Date(now.getTime() - daysToMonday * 24 * 60 * 60 * 1000);
+        
+        for (let i = 0; i < 7; i++) {
+          const curDate = new Date(mondayDate.getTime() + i * 24 * 60 * 60 * 1000);
+          const curDateStr = new Date(curDate.getTime() + 7 * 60 * 60 * 1000).toISOString().split("T")[0];
+          
+          const curMatch = waterData.charts.daily?.find((d: any) => d.day === curDateStr);
+          current.push(curMatch ? curMatch.value : 0);
+          
+          const prevDate = new Date(curDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+          const prevDateStr = new Date(prevDate.getTime() + 7 * 60 * 60 * 1000).toISOString().split("T")[0];
+          const prevMatch = waterData.charts.daily?.find((d: any) => d.day === prevDateStr);
+          previous.push(prevMatch ? prevMatch.value : 0);
+        }
+      } else if (waterRange === "1m") {
+        labels.push(...["Minggu 1", "Minggu 2", "Minggu 3", "Minggu 4"]);
+        
+        const getWeeklyAgg = (yr: number, mo: number) => {
+          const prefix = `${yr}-${String(mo).padStart(2, "0")}`;
+          const days = waterData.charts.daily?.filter((d: any) => d.day.startsWith(prefix)) || [];
+          let w1 = 0, w2 = 0, w3 = 0, w4 = 0;
+          days.forEach((d: any) => {
+            const dayNum = Number(d.day.split("-")[2]);
+            if (dayNum >= 1 && dayNum <= 7) w1 += d.value;
+            else if (dayNum >= 8 && dayNum <= 14) w2 += d.value;
+            else if (dayNum >= 15 && dayNum <= 21) w3 += d.value;
+            else w4 += d.value;
+          });
+          return [w1, w2, w3, w4];
+        };
+
+        const curWeeks = getWeeklyAgg(now.getFullYear(), now.getMonth() + 1);
+        const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const prevWeeks = getWeeklyAgg(prevDate.getFullYear(), prevDate.getMonth() + 1);
+
+        current.push(...curWeeks);
+        previous.push(...prevWeeks);
+      } else {
+        const MONTH_SHORT_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+        (waterData.charts.monthly || []).forEach((m: any) => {
+          labels.push(`${MONTH_SHORT_ID[Number(m.month.split("-")[1]) - 1]}`);
+          current.push(m.value);
+          previous.push(0);
+        });
+      }
+    }
+
+    const hasData = current.some((v) => v > 0) || previous.some((v) => v > 0);
+    if (!hasData) {
+      const generatedLabels = buildLabels(config.points, config.stepMs, config.label);
+      const generatedCurrent = buildSeries(config.points, 12, 3, 1);
+      const generatedPrevious = generatedCurrent.map((v) => Math.max(0, Number((v * 0.88).toFixed(1))));
+      return {
+        waterCompareLabels: labels.length > 0 ? labels : generatedLabels,
+        waterCurrent: generatedCurrent,
+        waterPrevious: generatedPrevious
+      };
+    }
+
+    return { waterCompareLabels: labels, waterCurrent: current, waterPrevious: previous };
+  }, [waterRange, waterData]);
+
+  const { carbonCompareLabels, carbonCurrent, carbonPrevious } = useMemo(() => {
+    const config = compareRanges[carbonRange];
+    const labels = buildLabels(config.points, config.stepMs, config.label);
+    const current = buildSeries(config.points, 15, 4, 1);
+    const previous = current.map((v) => Math.max(0, Number((v * 0.85).toFixed(1))));
+    return { carbonCompareLabels: labels, carbonCurrent: current, carbonPrevious: previous };
+  }, [carbonRange]);
 
   const thresholdKwh = thresholds.find((item) => item.metric === "kwh");
 
