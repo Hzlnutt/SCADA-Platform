@@ -9,6 +9,7 @@ import type { MachineOutletContext } from "./MachineLayout";
 type AlarmLogItem = {
   id: string;
   timestamp: string;
+  rawTs?: string;
   description: string;
   equipment: string;
   operatorAction: string;
@@ -49,6 +50,10 @@ export default function MachineAlarm() {
   const [passwordError, setPasswordError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState<string>("All");
+  const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string }>({
+    startDate: "",
+    endDate: ""
+  });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Role permissions checks
@@ -117,6 +122,7 @@ export default function MachineAlarm() {
         if (res && res.data) {
           const mapped: AlarmLogItem[] = res.data.map((item) => ({
             id: String(item.id),
+            rawTs: item.lastTs,
             timestamp: new Date(item.lastTs).toLocaleString("en-US", { hour12: false }),
             description: item.message,
             equipment: item.tagId,
@@ -158,12 +164,13 @@ export default function MachineAlarm() {
     return `${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
   });
 
-  const dynamicAlarms = useMemo(() => {
+  const dynamicAlarms = useMemo((): AlarmLogItem[] => {
     return eqConfigs
       .filter((item) => item.enableAlert && (item.runHoursBeforeMaintenance ?? item.baseline) >= item.highLimit)
       .map((item) => ({
         id: `maint-overdue-${item.tagKey}`,
         timestamp: loadTime,
+        rawTs: new Date().toISOString(),
         description: `Maintenance Overdue: ${item.tagName} (${(item.runHoursBeforeMaintenance ?? item.baseline).toLocaleString()} / ${item.highLimit.toLocaleString()} hrs)`,
         equipment: item.tagKey,
         operatorAction: "",
@@ -174,7 +181,7 @@ export default function MachineAlarm() {
       }));
   }, [eqConfigs, loadTime]);
 
-  // Filter and sort alarms based on active category and timestamp (descending)
+  // Filter and sort alarms based on active category, date range, and timestamp (descending)
   const processedAlarms = useMemo(() => {
     let result = [...dynamicAlarms, ...dbAlarms];
 
@@ -183,11 +190,28 @@ export default function MachineAlarm() {
       result = result.filter((item) => item.status === filter);
     }
 
+    // Filter by Date Range (Calendar)
+    if (dateRange.startDate) {
+      const startMs = new Date(dateRange.startDate + "T00:00:00").getTime();
+      result = result.filter((item) => {
+        const itemTime = item.rawTs ? new Date(item.rawTs).getTime() : new Date(item.timestamp).getTime();
+        return !isNaN(itemTime) && itemTime >= startMs;
+      });
+    }
+
+    if (dateRange.endDate) {
+      const endMs = new Date(dateRange.endDate + "T23:59:59").getTime();
+      result = result.filter((item) => {
+        const itemTime = item.rawTs ? new Date(item.rawTs).getTime() : new Date(item.timestamp).getTime();
+        return !isNaN(itemTime) && itemTime <= endMs;
+      });
+    }
+
     // Sort descending by timestamp (newest first)
     result.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
     return result;
-  }, [dbAlarms, dynamicAlarms, filter]);
+  }, [dbAlarms, dynamicAlarms, filter, dateRange]);
 
   // Handle single selection checkbox
   const handleSelectToggle = (id: string) => {
@@ -358,6 +382,38 @@ export default function MachineAlarm() {
               {p}
             </button>
           ))}
+        </div>
+
+        {/* Date Range Calendar Filter */}
+        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg shadow-sm">
+          <span className="text-xs font-bold text-[#47729f] dark:text-slate-400 uppercase flex items-center gap-1.5">
+            <svg className="w-4 h-4 text-[#1f6fb5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            CALENDAR:
+          </span>
+          <input
+            type="date"
+            value={dateRange.startDate}
+            onChange={(e) => setDateRange((prev) => ({ ...prev, startDate: e.target.value }))}
+            className="bg-transparent text-xs text-[#002b5c] dark:text-slate-200 outline-none font-semibold cursor-pointer"
+          />
+          <span className="text-slate-400 text-xs font-semibold">to</span>
+          <input
+            type="date"
+            value={dateRange.endDate}
+            onChange={(e) => setDateRange((prev) => ({ ...prev, endDate: e.target.value }))}
+            className="bg-transparent text-xs text-[#002b5c] dark:text-slate-200 outline-none font-semibold cursor-pointer"
+          />
+          {(dateRange.startDate || dateRange.endDate) && (
+            <button
+              onClick={() => setDateRange({ startDate: "", endDate: "" })}
+              className="text-[10px] text-rose-500 hover:text-rose-600 font-bold hover:underline ml-1"
+              title="Reset Date Filter"
+            >
+              Reset
+            </button>
+          )}
         </div>
 
         {/* Action Buttons */}
