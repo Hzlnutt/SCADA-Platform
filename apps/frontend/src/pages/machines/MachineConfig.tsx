@@ -1013,7 +1013,6 @@ export default function MachineConfig() {
                   <th className="pb-3 px-3">API Endpoint URL</th>
                   <th className="pb-3 px-3 text-center">Status Endpoint</th>
                   <th className="pb-3 px-3 text-right">Live API Value</th>
-                  <th className="pb-3 px-3 text-center w-28">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-[#002b5c] dark:text-slate-300">
@@ -1078,12 +1077,14 @@ export default function MachineConfig() {
                       <td className="py-3 px-3 text-center">
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
-                            hasUrl
+                            isValPresent
                               ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                              : hasUrl
+                              ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
                               : "bg-slate-500/10 text-slate-400 border-slate-500/20"
                           }`}
                         >
-                          {hasUrl ? "⚡ API Active" : "⏳ Belum Ada API"}
+                          {isValPresent ? "⚡ API Active" : hasUrl ? "⏳ No Data" : "⏳ Belum Ada API"}
                         </span>
                       </td>
                       <td className="py-3 px-3 text-right font-mono font-bold text-xs">
@@ -1095,29 +1096,6 @@ export default function MachineConfig() {
                         ) : (
                           <span className="text-slate-400 italic font-mono">xx {sensor.unit}</span>
                         )}
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!isUnlocked) {
-                              triggerUnlock();
-                            } else {
-                              const inputEl = document.getElementById(`api-url-input-${sensor.tagKey}`);
-                              if (inputEl) inputEl.focus();
-                            }
-                          }}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm ${
-                            isUnlocked
-                              ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20"
-                              : "bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30"
-                          }`}
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                          {isUnlocked ? "Edit URL" : "Edit API"}
-                        </button>
                       </td>
                     </tr>
                   );
