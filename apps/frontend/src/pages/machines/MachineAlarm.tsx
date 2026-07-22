@@ -49,6 +49,14 @@ export default function MachineAlarm() {
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Approval modal state
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
+  const [approvingAlarmId, setApprovingAlarmId] = useState<string | null>(null);
+  const [approvePasswordInput, setApprovePasswordInput] = useState("");
+  const [approvePasswordError, setApprovePasswordError] = useState("");
+  const [approveSubmitting, setApproveSubmitting] = useState(false);
+
   const [filter, setFilter] = useState<string>("All");
   const [selectedEquipment, setSelectedEquipment] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -331,7 +339,7 @@ export default function MachineAlarm() {
       });
 
       if (!verifyRes || !verifyRes.valid) {
-        setPasswordError("Incorrect password. Please try again.");
+        setPasswordError("Password salah. Silakan coba lagi.");
         setSubmitting(false);
         return;
       }
@@ -351,7 +359,7 @@ export default function MachineAlarm() {
       fetchDbAlarms();
     } catch (err) {
       console.error("Failed to submit fix report:", err);
-      setPasswordError(err instanceof Error ? err.message : "Failed to verify password / submit report");
+      setPasswordError(err instanceof Error ? err.message : "Gagal memverifikasi password / mengirim laporan");
     } finally {
       setSubmitting(false);
     }
@@ -366,14 +374,43 @@ export default function MachineAlarm() {
     setAckModalOpen(true);
   };
 
-  // Inline single approval trigger
-  const handleApproveFix = async (id: string) => {
+  // Open approval password verification modal
+  const handleOpenApproveModal = (id: string) => {
     if (id.startsWith("maint-overdue-")) return;
+    setApprovingAlarmId(id);
+    setApprovePasswordInput("");
+    setApprovePasswordError("");
+    setApproveModalOpen(true);
+  };
+
+  // Submit Approval with Password Verification
+  const handleApproveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!approvingAlarmId) return;
+    setApprovePasswordError("");
+    setApproveSubmitting(true);
+
     try {
-      await postJson(`/alarms/${id}/approve`, {});
+      const verifyRes = await postJson<{ valid: boolean }>("/auth/verify-password", {
+        password: approvePasswordInput
+      });
+
+      if (!verifyRes || !verifyRes.valid) {
+        setApprovePasswordError("Password supervisor salah. Silakan coba lagi.");
+        setApproveSubmitting(false);
+        return;
+      }
+
+      await postJson(`/alarms/${approvingAlarmId}/approve`, {});
       fetchDbAlarms();
+      setApproveModalOpen(false);
+      setApprovingAlarmId(null);
+      setApprovePasswordInput("");
     } catch (err) {
       console.error("Failed to approve alarm:", err);
+      setApprovePasswordError(err instanceof Error ? err.message : "Gagal menyetujui alarm");
+    } finally {
+      setApproveSubmitting(false);
     }
   };
 
@@ -666,7 +703,7 @@ export default function MachineAlarm() {
                       )}
                       {row.status === "Pending Approval" && isKaShiftOrAbove && (
                         <button
-                          onClick={() => handleApproveFix(row.id)}
+                          onClick={() => handleOpenApproveModal(row.id)}
                           className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-[10px] font-bold shadow-sm transition"
                         >
                           Approve
@@ -694,27 +731,34 @@ export default function MachineAlarm() {
       {/* Acknowledge (Fix) Alarms Modal Overlay */}
       {ackModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
-          <div className="relative w-[450px] rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
+          <div className="relative w-[450px] rounded-2xl border border-blue-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
             <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
               <div>
-                <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100">Submit Operator Fix Report</h4>
-                <p className="text-[10px] text-slate-500">Report details of corrective actions taken to resolve active alarms.</p>
+                <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                  Verifikasi Password & Laporan Fix Alarm
+                </h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Masukkan password akun Anda untuk memverifikasi tindakan perbaikan alarm ini.
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => setAckModalOpen(false)}
                 className="text-xs text-slate-400 hover:text-slate-200"
               >
-                Cancel
+                ✕
               </button>
             </div>
             <form onSubmit={handleAckSubmit} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase">Operator Name</label>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">
+                  Nama Operator
+                </label>
                 <select
                   value={ackOperator}
                   onChange={(e) => setAckOperator(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white focus:outline-none focus:border-[#1f6fb5]"
+                  className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white font-semibold outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 >
                   {displayOperators.map((op) => (
                     <option key={op} value={op}>
@@ -724,17 +768,21 @@ export default function MachineAlarm() {
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase">Operator Action taken</label>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">
+                  Tindakan Perbaikan (Operator Action Taken)
+                </label>
                 <textarea
                   value={ackAction}
                   onChange={(e) => setAckAction(e.target.value)}
-                  placeholder="Type operator corrective actions taken (e.g. Cleared filter blockage, restarted VFD)..."
+                  placeholder="Tuliskan perbaikan yang telah dilakukan (misal: Reset VFD, pembersihan blockage filter, penggantian sparepart)..."
                   required
-                  className="mt-1 w-full h-20 rounded-md border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white focus:outline-none focus:border-[#1f6fb5]"
+                  className="mt-1 w-full h-20 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase">Operator Password</label>
+                <label className="block text-[10px] font-bold text-[#002b5c] dark:text-slate-300 uppercase">
+                  Verifikasi Password Operator <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="password"
                   value={passwordInput}
@@ -742,12 +790,14 @@ export default function MachineAlarm() {
                     setPasswordInput(e.target.value);
                     setPasswordError("");
                   }}
-                  placeholder="Enter your password to verify"
+                  placeholder="Masukkan password akun Anda..."
                   required
-                  className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white focus:outline-none focus:border-[#1f6fb5]"
+                  className="mt-1 w-full rounded-lg border border-blue-500/50 dark:border-blue-500/40 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white font-semibold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/30"
                 />
                 {passwordError && (
-                  <p className="mt-1 text-[10px] text-rose-500 font-semibold">{passwordError}</p>
+                  <p className="mt-1.5 text-[11px] text-rose-500 font-bold flex items-center gap-1">
+                    <span>⚠️</span> {passwordError}
+                  </p>
                 )}
               </div>
               <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-900 pt-3">
@@ -755,16 +805,102 @@ export default function MachineAlarm() {
                   type="button"
                   onClick={() => setAckModalOpen(false)}
                   disabled={submitting}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition"
                 >
-                  Cancel
+                  Batal
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 rounded-lg text-xs font-bold bg-[#10b981] text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="px-5 py-2 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition disabled:opacity-50 flex items-center gap-2"
                 >
-                  {submitting ? "Submitting..." : "Submit Fix Report"}
+                  {submitting ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Memverifikasi...
+                    </>
+                  ) : (
+                    "Verifikasi & Selesaikan"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Approve Alarm Password Verification Modal Overlay */}
+      {approveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
+          <div className="relative w-[420px] rounded-2xl border border-emerald-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
+              <div>
+                <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Verifikasi Password Persetujuan (Approve)
+                </h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Masukkan password KaShift/Supervisor Anda untuk menyetujui penyelesaian alarm ini.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setApproveModalOpen(false)}
+                className="text-xs text-slate-400 hover:text-slate-200"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleApproveSubmit} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-[#002b5c] dark:text-slate-300 uppercase">
+                  Password Supervisor <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={approvePasswordInput}
+                  onChange={(e) => {
+                    setApprovePasswordInput(e.target.value);
+                    setApprovePasswordError("");
+                  }}
+                  placeholder="Masukkan password akun Anda..."
+                  required
+                  className="mt-1 w-full rounded-lg border border-blue-500/50 dark:border-blue-500/40 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white font-semibold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/30"
+                />
+                {approvePasswordError && (
+                  <p className="mt-1.5 text-[11px] text-rose-500 font-bold flex items-center gap-1">
+                    <span>⚠️</span> {approvePasswordError}
+                  </p>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-900 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setApproveModalOpen(false)}
+                  disabled={approveSubmitting}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={approveSubmitting}
+                  className="px-5 py-2 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition disabled:opacity-50 flex items-center gap-2"
+                >
+                  {approveSubmitting ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Memverifikasi...
+                    </>
+                  ) : (
+                    "Verifikasi & Setujui"
+                  )}
                 </button>
               </div>
             </form>
