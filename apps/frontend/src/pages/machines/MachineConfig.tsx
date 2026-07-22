@@ -51,11 +51,15 @@ const TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
   "cooling-water/eq_press_prep03": "Scaled_Press_PrepU3",
   "cooling-water/eq_temp_prep03": "Scaled_Tempt_Prep3_Return",
   "cooling-water/eq_press_st03": "Scaled_Press_ST3",
-  "cooling-water/eq_press_wash03": "Scaled_Press_Washing",
+  "cooling-water/eq_press_washing": "Scaled_Press_Washing",
   "cooling-water/eq_temp_wash03": "Scaled_Temp_Washing",
   "cooling-water/eq_temp_st03_supp": "Scaled_Temp_ST3_Supply",
+  "cooling-water/st3_return_temp": "Scaled_Temp_ST3_Return",
   "cooling-water/eq_temp_st03_ret": "Scaled_Temp_ST3_Return",
-  "cooling-water/cooling_tank_level": "Scaled_Level_tank_cooling3"
+  "cooling-water/basin_lvl": "Scaled_Level_tank_cooling3",
+  "cooling-water/cooling_tank_level": "Scaled_Level_tank_cooling3",
+  "cooling-water/ambient_temp": "Scaled_Temp_Washing",
+  "cooling-water/ambient_humidity": "Scaled_Level_tank_cooling3"
 };
 
 const DEFAULT_TASK_RULES = [
@@ -95,13 +99,14 @@ export default function MachineConfig() {
   const [eqRows, setEqRows] = useState<ConfigEqRow[]>([]);
   
   const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>(() => {
-    const defaultMap: Record<string, string> = {
-      "cooling-water/supply_temp": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3",
-      "cooling-water/return_temp": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3",
-      "cooling-water/pressure_1": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3",
-      "cooling-water/pressure_2": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3",
-      "cooling-water/pressure_3": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3"
-    };
+    const defaultMap: Record<string, string> = {};
+    if (unitId.startsWith("cooling-water")) {
+      const defaultUrl = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3";
+      const sensorList = getDefaultSensorConfigs(unitId);
+      sensorList.forEach((s) => {
+        defaultMap[s.tagKey] = defaultUrl;
+      });
+    }
     const saved = localStorage.getItem(`scada.config.api_sources.${unitId}`);
     if (saved) {
       try {
@@ -981,9 +986,20 @@ export default function MachineConfig() {
                   const hasUrl = Boolean(url.trim());
                   
                   const apiFieldKey = TAG_KEY_TO_API_JSON_KEY[sensor.tagKey];
-                  const rawVal = apiFieldKey ? apiLiveData[apiFieldKey] : undefined;
+                  let rawVal = apiFieldKey ? apiLiveData[apiFieldKey] : undefined;
+
+                  // Delta Temp fallback calculation if needed
+                  if (
+                    sensor.tagKey === "cooling-water/delta_temp" &&
+                    apiLiveData["Scaled_Temp_Tank_Cooling3_Return"] !== undefined &&
+                    apiLiveData["Scaled_Temp_Tank_Cooling3_Supp"] !== undefined
+                  ) {
+                    rawVal = apiLiveData["Scaled_Temp_Tank_Cooling3_Return"] - apiLiveData["Scaled_Temp_Tank_Cooling3_Supp"];
+                  }
+
                   let liveValStr = "xx";
-                  if (hasUrl && rawVal !== undefined && rawVal !== null) {
+                  const isValPresent = rawVal !== undefined && rawVal !== null;
+                  if (hasUrl && isValPresent) {
                     liveValStr = typeof rawVal === "number" ? rawVal.toFixed(2) : String(rawVal);
                   }
 
@@ -1035,10 +1051,17 @@ export default function MachineConfig() {
                       </td>
                       <td className="py-3 px-3 text-right font-mono font-bold text-xs">
                         {hasUrl ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 font-mono font-extrabold text-xs">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            {liveValStr} {sensor.unit}
-                          </span>
+                          isValPresent ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 font-mono font-extrabold text-xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              {liveValStr} {sensor.unit}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-500 font-mono text-[11px]">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
+                              Memuat API...
+                            </span>
+                          )
                         ) : (
                           <span className="text-slate-400 italic font-mono">xx {sensor.unit}</span>
                         )}
