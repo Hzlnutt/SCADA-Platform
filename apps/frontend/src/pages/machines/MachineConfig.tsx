@@ -963,8 +963,43 @@ export default function MachineConfig() {
                 </span>
               </h4>
               <p className="text-xs text-slate-400 mt-0.5">
-                Konfigurasi API Endpoint untuk {sensorRows.length} item sensor parameter. Komponen yang belum memiliki API (data xx) dibiarkan kosong (&quot;&quot;). Lakukan <strong>Unlock to Edit</strong> untuk mengisi API Endpoint URL.
+                Konfigurasi API Endpoint untuk {sensorRows.length} item sensor parameter. Komponen yang belum memiliki API (data xx) dibiarkan kosong (&quot;&quot;). Klik <strong>Edit API</strong> untuk mengubah URL Endpoint.
               </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {!isUnlocked ? (
+                <button
+                  type="button"
+                  onClick={triggerUnlock}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-md shadow-blue-600/20 transition flex items-center gap-1.5"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  Unlock to Edit API
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsUnlocked(false)}
+                    className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveTrigger}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                    Simpan Konfigurasi API
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -978,6 +1013,7 @@ export default function MachineConfig() {
                   <th className="pb-3 px-3">API Endpoint URL</th>
                   <th className="pb-3 px-3 text-center">Status Endpoint</th>
                   <th className="pb-3 px-3 text-right">Live API Value</th>
+                  <th className="pb-3 px-3 text-center w-28">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-[#002b5c] dark:text-slate-300">
@@ -998,8 +1034,8 @@ export default function MachineConfig() {
                   }
 
                   let liveValStr = "xx";
-                  const isValPresent = rawVal !== undefined && rawVal !== null;
-                  if (hasUrl && isValPresent) {
+                  const isValPresent = hasUrl && rawVal !== undefined && rawVal !== null;
+                  if (isValPresent) {
                     liveValStr = typeof rawVal === "number" ? rawVal.toFixed(2) : String(rawVal);
                   }
 
@@ -1020,11 +1056,12 @@ export default function MachineConfig() {
                       <td className="py-3 px-3">
                         {isUnlocked ? (
                           <input
+                            id={`api-url-input-${sensor.tagKey}`}
                             type="text"
                             value={url}
                             onChange={(e) => handleApiUrlChange(sensor.tagKey, e.target.value)}
                             placeholder="Masukkan API Endpoint URL (kosongkan jika belum ada API / data xx)..."
-                            className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-xs font-mono text-[#002b5c] dark:text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400 placeholder:font-sans"
+                            className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-blue-500/50 dark:border-blue-500/40 rounded text-xs font-mono text-[#002b5c] dark:text-white outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400 placeholder:font-sans"
                           />
                         ) : (
                           <div className="font-mono text-[11px] truncate max-w-md">
@@ -1050,21 +1087,37 @@ export default function MachineConfig() {
                         </span>
                       </td>
                       <td className="py-3 px-3 text-right font-mono font-bold text-xs">
-                        {hasUrl ? (
-                          isValPresent ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 font-mono font-extrabold text-xs">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              {liveValStr} {sensor.unit}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-500 font-mono text-[11px]">
-                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
-                              Memuat API...
-                            </span>
-                          )
+                        {isValPresent ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 font-mono font-extrabold text-xs">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            {liveValStr} {sensor.unit}
+                          </span>
                         ) : (
                           <span className="text-slate-400 italic font-mono">xx {sensor.unit}</span>
                         )}
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isUnlocked) {
+                              triggerUnlock();
+                            } else {
+                              const inputEl = document.getElementById(`api-url-input-${sensor.tagKey}`);
+                              if (inputEl) inputEl.focus();
+                            }
+                          }}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm ${
+                            isUnlocked
+                              ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20"
+                              : "bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30"
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                          {isUnlocked ? "Edit URL" : "Edit API"}
+                        </button>
                       </td>
                     </tr>
                   );
