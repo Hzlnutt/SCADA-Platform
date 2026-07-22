@@ -39,6 +39,25 @@ const PID_EQ_TAG_KEYS = [
   "M9_SUPPLY_MOTOR_OVERHAUL"
 ];
 
+const TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
+  "cooling-water/supply_temp": "Scaled_Temp_Tank_Cooling3_Supp",
+  "cooling-water/return_temp": "Scaled_Temp_Tank_Cooling3_Return",
+  "cooling-water/pressure_1": "Scaled_Press_CT_P1",
+  "cooling-water/pressure_2": "Scaled_Press_CT_P2",
+  "cooling-water/pressure_3": "Scaled_Press_CT3_P11",
+  "cooling-water/eq_press_bp03": "Scaled_Press_BP",
+  "cooling-water/eq_press_du03": "Scaled_Press_DU3",
+  "cooling-water/eq_temp_du03": "Scaled_Temp_DU3",
+  "cooling-water/eq_press_prep03": "Scaled_Press_PrepU3",
+  "cooling-water/eq_temp_prep03": "Scaled_Tempt_Prep3_Return",
+  "cooling-water/eq_press_st03": "Scaled_Press_ST3",
+  "cooling-water/eq_press_wash03": "Scaled_Press_Washing",
+  "cooling-water/eq_temp_wash03": "Scaled_Temp_Washing",
+  "cooling-water/eq_temp_st03_supp": "Scaled_Temp_ST3_Supply",
+  "cooling-water/eq_temp_st03_ret": "Scaled_Temp_ST3_Return",
+  "cooling-water/cooling_tank_level": "Scaled_Level_tank_cooling3"
+};
+
 const DEFAULT_TASK_RULES = [
   { id: "1", motorKey: "FAN-CT-1", targetHours: 150, taskName: "F-1 V-Belt Tension" },
   { id: "2", motorKey: "FAN-CT-1", targetHours: 420, taskName: "F-1 Fan & Motor Visual Inspection" },
@@ -99,6 +118,35 @@ export default function MachineConfig() {
       [tagKey]: value
     }));
   };
+
+  const [apiLiveData, setApiLiveData] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchActiveApiData = async () => {
+      const activeUrls = Object.values(apiSourceUrls).filter((u) => u.trim());
+      if (activeUrls.length === 0) return;
+      const targetUrl = activeUrls[0];
+      try {
+        const res = await postJson<{ success: boolean; data?: any }>("/config/api-sources/test", {
+          url: targetUrl,
+          method: "GET"
+        });
+        if (isMounted && res && res.success && res.data) {
+          setApiLiveData(res.data);
+        }
+      } catch (err) {
+        console.error("Live API poll error:", err);
+      }
+    };
+
+    fetchActiveApiData();
+    const interval = setInterval(fetchActiveApiData, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [apiSourceUrls]);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -910,7 +958,7 @@ export default function MachineConfig() {
                 </span>
               </h4>
               <p className="text-xs text-slate-400 mt-0.5">
-                Konfigurasi API Endpoint untuk {sensorRows.length} item sensor parameter. Komponen yang belum memiliki sensor fisik (data xx) dibiarkan kosong (&quot;&quot;). Lakukan <strong>Unlock to Edit</strong> untuk mengisi API Endpoint URL.
+                Konfigurasi API Endpoint untuk {sensorRows.length} item sensor parameter. Komponen yang belum memiliki API (data xx) dibiarkan kosong (&quot;&quot;). Lakukan <strong>Unlock to Edit</strong> untuk mengisi API Endpoint URL.
               </p>
             </div>
           </div>
@@ -924,13 +972,20 @@ export default function MachineConfig() {
                   <th className="pb-3 px-3">SCADA Tag Key</th>
                   <th className="pb-3 px-3">API Endpoint URL</th>
                   <th className="pb-3 px-3 text-center">Status Endpoint</th>
-                  <th className="pb-3 px-3 text-right">Status Data</th>
+                  <th className="pb-3 px-3 text-right">Live API Value</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-[#002b5c] dark:text-slate-300">
                 {sensorRows.map((sensor, idx) => {
                   const url = apiSourceUrls[sensor.tagKey] || "";
                   const hasUrl = Boolean(url.trim());
+                  
+                  const apiFieldKey = TAG_KEY_TO_API_JSON_KEY[sensor.tagKey];
+                  const rawVal = apiFieldKey ? apiLiveData[apiFieldKey] : undefined;
+                  let liveValStr = "xx";
+                  if (hasUrl && rawVal !== undefined && rawVal !== null) {
+                    liveValStr = typeof rawVal === "number" ? rawVal.toFixed(2) : String(rawVal);
+                  }
 
                   return (
                     <tr key={sensor.tagKey} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
@@ -952,7 +1007,7 @@ export default function MachineConfig() {
                             type="text"
                             value={url}
                             onChange={(e) => handleApiUrlChange(sensor.tagKey, e.target.value)}
-                            placeholder="Masukkan API Endpoint URL (kosongkan jika sensor belum ada / data xx)..."
+                            placeholder="Masukkan API Endpoint URL (kosongkan jika belum ada API / data xx)..."
                             className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-xs font-mono text-[#002b5c] dark:text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400 placeholder:font-sans"
                           />
                         ) : (
@@ -961,7 +1016,7 @@ export default function MachineConfig() {
                               <span className="text-blue-600 dark:text-blue-400 font-semibold">{url}</span>
                             ) : (
                               <span className="text-slate-400 italic text-[11px]">
-                                (Belum Ada API Endpoint — Sensor Belum Terpasang / Data xx)
+                                (Belum Ada API Endpoint — Data xx)
                               </span>
                             )}
                           </div>
@@ -975,14 +1030,17 @@ export default function MachineConfig() {
                               : "bg-slate-500/10 text-slate-400 border-slate-500/20"
                           }`}
                         >
-                          {hasUrl ? "⚡ API Active" : "⏳ Belum Ada Sensor (xx)"}
+                          {hasUrl ? "⚡ API Active" : "⏳ Belum Ada API"}
                         </span>
                       </td>
                       <td className="py-3 px-3 text-right font-mono font-bold text-xs">
                         {hasUrl ? (
-                          <span className="text-emerald-500">Telemetry Ready</span>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 font-mono font-extrabold text-xs">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            {liveValStr} {sensor.unit}
+                          </span>
                         ) : (
-                          <span className="text-slate-400 italic">xx {sensor.unit}</span>
+                          <span className="text-slate-400 italic font-mono">xx {sensor.unit}</span>
                         )}
                       </td>
                     </tr>
