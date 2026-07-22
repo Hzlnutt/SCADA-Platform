@@ -963,43 +963,8 @@ export default function MachineConfig() {
                 </span>
               </h4>
               <p className="text-xs text-slate-400 mt-0.5">
-                Konfigurasi API Endpoint untuk {sensorRows.length} item sensor parameter. Komponen yang belum memiliki API (data xx) dibiarkan kosong (&quot;&quot;). Klik <strong>Edit API</strong> untuk mengubah URL Endpoint.
+                Konfigurasi API Endpoint untuk {sensorRows.length} item sensor parameter. Komponen yang belum memiliki API (data xx) dibiarkan kosong (&quot;&quot;). Gunakan tombol <strong>Unlock to Edit</strong> di atas untuk mengisi API Endpoint URL.
               </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {!isUnlocked ? (
-                <button
-                  type="button"
-                  onClick={triggerUnlock}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-md shadow-blue-600/20 transition flex items-center gap-1.5"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                  Unlock to Edit API
-                </button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsUnlocked(false)}
-                    className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveTrigger}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                    </svg>
-                    Simpan Konfigurasi API
-                  </button>
-                </div>
-              )}
             </div>
           </div>
 
