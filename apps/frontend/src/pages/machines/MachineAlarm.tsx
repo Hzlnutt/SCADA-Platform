@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
 import { useAuthStore } from "../../store/auth.store";
-import { getDefaultEqConfigs } from "../../data/equipment";
+import { getDefaultEqConfigs, getDefaultSensorConfigs } from "../../data/equipment";
 import { getJson, postJson } from "../../services/api.client";
 import type { MachineOutletContext } from "./MachineLayout";
 
@@ -183,12 +183,46 @@ export default function MachineAlarm() {
       }));
   }, [eqConfigs, loadTime]);
 
-  // Extract unique equipment/item options for per-item filtering
-  const equipmentOptions = useMemo(() => {
-    const allItems = [...dynamicAlarms, ...dbAlarms];
-    const uniqueEq = Array.from(new Set(allItems.map((item) => item.equipment).filter(Boolean)));
-    return uniqueEq.sort();
-  }, [dynamicAlarms, dbAlarms]);
+  // Load sensor configurations from Configuration page (local storage or default)
+  const sensorConfigs = useMemo(() => {
+    let configs = getDefaultSensorConfigs(unitId);
+    const savedSensor = localStorage.getItem(`scada.config.sensor.${unitId}`);
+    if (savedSensor) {
+      try {
+        configs = JSON.parse(savedSensor);
+      } catch (e) {}
+    }
+    return configs;
+  }, [unitId]);
+
+  // Options list for per-item filtering based on Configuration Sensor Parameters
+  const itemOptions = useMemo(() => {
+    const list: Array<{ key: string; label: string }> = sensorConfigs.map((s) => ({
+      key: s.tagKey,
+      label: s.tagName
+    }));
+
+    // Include any extra equipment tags present in log history not in config
+    const configuredKeys = new Set(sensorConfigs.map((s) => s.tagKey));
+    const configuredNames = new Set(sensorConfigs.map((s) => s.tagName.toLowerCase()));
+    const allLogItems = [...dynamicAlarms, ...dbAlarms];
+
+    allLogItems.forEach((item) => {
+      if (
+        item.equipment &&
+        !configuredKeys.has(item.equipment) &&
+        !configuredNames.has(item.equipment.toLowerCase())
+      ) {
+        configuredKeys.add(item.equipment);
+        list.push({
+          key: item.equipment,
+          label: item.equipment
+        });
+      }
+    });
+
+    return list;
+  }, [sensorConfigs, dynamicAlarms, dbAlarms]);
 
   // Filter and sort alarms based on active category, item/equipment, date range, search query, and timestamp (descending)
   const processedAlarms = useMemo(() => {
@@ -199,9 +233,25 @@ export default function MachineAlarm() {
       result = result.filter((item) => item.status === filter);
     }
 
-    // Filter by Item / Equipment
+    // Filter by Item / Sensor Parameter (Matching Configuration Sensor Parameter)
     if (selectedEquipment !== "All") {
-      result = result.filter((item) => item.equipment === selectedEquipment);
+      const selectedObj = itemOptions.find((opt) => opt.key === selectedEquipment);
+      const selectedLabel = selectedObj ? selectedObj.label.toLowerCase() : "";
+      const selectedKey = selectedEquipment.toLowerCase();
+      const selectedCleanKey = selectedEquipment.replace(/^cooling-water\//i, "").toLowerCase();
+
+      result = result.filter((item) => {
+        if (!item.equipment && !item.description) return false;
+        const eqLower = (item.equipment || "").toLowerCase();
+        const descLower = (item.description || "").toLowerCase();
+
+        return (
+          eqLower === selectedKey ||
+          eqLower.includes(selectedCleanKey) ||
+          (selectedObj && descLower.includes(selectedLabel)) ||
+          (selectedObj && descLower.includes(selectedKey.replace(/^cooling-water\//i, "")))
+        );
+      });
     }
 
     // Filter by Search Query
@@ -237,7 +287,7 @@ export default function MachineAlarm() {
     result.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
     return result;
-  }, [dbAlarms, dynamicAlarms, filter, selectedEquipment, searchQuery, dateRange]);
+  }, [dbAlarms, dynamicAlarms, filter, selectedEquipment, searchQuery, dateRange, itemOptions]);
 
   // Handle single selection checkbox
   const handleSelectToggle = (id: string) => {
@@ -421,12 +471,12 @@ export default function MachineAlarm() {
           <select
             value={selectedEquipment}
             onChange={(e) => setSelectedEquipment(e.target.value)}
-            className="bg-transparent text-xs text-[#002b5c] dark:text-slate-200 outline-none font-semibold cursor-pointer max-w-[190px] truncate"
+            className="bg-transparent text-xs text-[#002b5c] dark:text-slate-200 outline-none font-semibold cursor-pointer max-w-[220px] truncate"
           >
-            <option value="All">All Items ({equipmentOptions.length})</option>
-            {equipmentOptions.map((eq) => (
-              <option key={eq} value={eq}>
-                {eq}
+            <option value="All">All Items / Sensor Parameters ({itemOptions.length})</option>
+            {itemOptions.map((opt) => (
+              <option key={opt.key} value={opt.key}>
+                {opt.label}
               </option>
             ))}
           </select>
