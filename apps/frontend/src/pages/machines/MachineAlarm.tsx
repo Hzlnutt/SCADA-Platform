@@ -50,6 +50,8 @@ export default function MachineAlarm() {
   const [passwordError, setPasswordError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState<string>("All");
+  const [selectedEquipment, setSelectedEquipment] = useState<string>("All");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string }>({
     startDate: "",
     endDate: ""
@@ -181,13 +183,37 @@ export default function MachineAlarm() {
       }));
   }, [eqConfigs, loadTime]);
 
-  // Filter and sort alarms based on active category, date range, and timestamp (descending)
+  // Extract unique equipment/item options for per-item filtering
+  const equipmentOptions = useMemo(() => {
+    const allItems = [...dynamicAlarms, ...dbAlarms];
+    const uniqueEq = Array.from(new Set(allItems.map((item) => item.equipment).filter(Boolean)));
+    return uniqueEq.sort();
+  }, [dynamicAlarms, dbAlarms]);
+
+  // Filter and sort alarms based on active category, item/equipment, date range, search query, and timestamp (descending)
   const processedAlarms = useMemo(() => {
     let result = [...dynamicAlarms, ...dbAlarms];
 
     // Filter by status
     if (filter !== "All") {
       result = result.filter((item) => item.status === filter);
+    }
+
+    // Filter by Item / Equipment
+    if (selectedEquipment !== "All") {
+      result = result.filter((item) => item.equipment === selectedEquipment);
+    }
+
+    // Filter by Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (item) =>
+          item.description.toLowerCase().includes(q) ||
+          item.equipment.toLowerCase().includes(q) ||
+          (item.operatorName && item.operatorName.toLowerCase().includes(q)) ||
+          (item.operatorAction && item.operatorAction.toLowerCase().includes(q))
+      );
     }
 
     // Filter by Date Range (Calendar)
@@ -211,7 +237,7 @@ export default function MachineAlarm() {
     result.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
     return result;
-  }, [dbAlarms, dynamicAlarms, filter, dateRange]);
+  }, [dbAlarms, dynamicAlarms, filter, selectedEquipment, searchQuery, dateRange]);
 
   // Handle single selection checkbox
   const handleSelectToggle = (id: string) => {
@@ -382,6 +408,50 @@ export default function MachineAlarm() {
               {p}
             </button>
           ))}
+        </div>
+
+        {/* Item / Equipment Filter */}
+        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg shadow-sm">
+          <span className="text-xs font-bold text-[#47729f] dark:text-slate-400 uppercase flex items-center gap-1.5">
+            <svg className="w-4 h-4 text-[#1f6fb5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            ITEM:
+          </span>
+          <select
+            value={selectedEquipment}
+            onChange={(e) => setSelectedEquipment(e.target.value)}
+            className="bg-transparent text-xs text-[#002b5c] dark:text-slate-200 outline-none font-semibold cursor-pointer max-w-[190px] truncate"
+          >
+            <option value="All">All Items ({equipmentOptions.length})</option>
+            {equipmentOptions.map((eq) => (
+              <option key={eq} value={eq}>
+                {eq}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Search Input Box */}
+        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg shadow-sm">
+          <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search description / tag / operator..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="bg-transparent text-xs text-[#002b5c] dark:text-slate-200 outline-none font-semibold w-48 placeholder:text-slate-400 placeholder:font-normal"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         {/* Date Range Calendar Filter */}
