@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { verifyPassword } from "../../services/auth.service";
 import { getJson } from "../../services/api.client";
 
@@ -66,6 +67,7 @@ export default function PidPageTemplate({
   dateRange,
   onChangeDateRange,
 }: PidPageTemplateProps) {
+  const navigate = useNavigate();
   const svgRef = useRef<SVGSVGElement>(null);
 
   const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -90,30 +92,7 @@ export default function PidPageTemplate({
   const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
   const [showPasswordText, setShowPasswordText] = useState(false);
 
-  // State untuk Modal Detail Record Alarm & History Log
-  const [selectedAlarmRecord, setSelectedAlarmRecord] = useState<Alarm | null>(null);
-  const [showAlarmHistoryModal, setShowAlarmHistoryModal] = useState(false);
-  const [alarmHistoryData, setAlarmHistoryData] = useState<any[]>([]);
-  const [loadingAlarmHistory, setLoadingAlarmHistory] = useState(false);
 
-  const fetchAlarmHistory = async () => {
-    setLoadingAlarmHistory(true);
-    try {
-      const res = await getJson<{ data: any[] }>("/alarms/history?limit=100");
-      if (res && Array.isArray(res.data)) {
-        setAlarmHistoryData(res.data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch alarm history:", err);
-    } finally {
-      setLoadingAlarmHistory(false);
-    }
-  };
-
-  const handleOpenAlarmHistory = () => {
-    fetchAlarmHistory();
-    setShowAlarmHistoryModal(true);
-  };
 
   const handleOpenPasswordVerification = (taskKey: string) => {
     setPendingTaskKey(taskKey);
@@ -309,7 +288,7 @@ export default function PidPageTemplate({
               Alarms
             </h3>
             <button
-              onClick={handleOpenAlarmHistory}
+              onClick={() => navigate("../alarm")}
               className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md shadow-sm transition duration-150 bg-sky-600 hover:bg-sky-700 text-white dark:bg-sky-500 dark:hover:bg-sky-400 dark:text-slate-950"
             >
               Detail Records
@@ -320,8 +299,7 @@ export default function PidPageTemplate({
               alarms.map((alarm) => (
                 <div
                   key={alarm.id}
-                  onClick={() => setSelectedAlarmRecord(alarm)}
-                  className={`border-2 rounded p-3 bg-white dark:bg-slate-800 cursor-pointer hover:shadow-md transition group ${
+                  className={`border-2 rounded p-3 bg-white dark:bg-slate-800 ${
                     alarm.severity === "critical"
                       ? "border-red-500 dark:border-red-400"
                       : alarm.severity === "warning"
@@ -340,19 +318,14 @@ export default function PidPageTemplate({
                       }`}
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <div
-                          className={`text-xs font-mono font-bold ${
-                            alarm.severity === "critical"
-                              ? "text-red-600 dark:text-red-400"
-                              : "text-yellow-600 dark:text-yellow-400"
-                          }`}
-                        >
-                          {alarm.code}
-                        </div>
-                        <span className="text-[9px] font-bold text-sky-600 dark:text-sky-400 group-hover:underline">
-                          Record Detail →
-                        </span>
+                      <div
+                        className={`text-xs font-mono font-bold ${
+                          alarm.severity === "critical"
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-yellow-600 dark:text-yellow-400"
+                        }`}
+                      >
+                        {alarm.code}
                       </div>
                       <p className="text-xs leading-snug mt-1 text-slate-700 dark:text-slate-300">
                         {alarm.message}
@@ -632,217 +605,7 @@ export default function PidPageTemplate({
         </div>
       )}
 
-      {/* Detail Alarm Record Modal */}
-      {selectedAlarmRecord && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
-              <div className="flex items-center gap-2">
-                <span className={`w-3 h-3 rounded-full ${
-                  selectedAlarmRecord.status === "Resolved"
-                    ? "bg-emerald-500"
-                    : "bg-rose-500 animate-pulse"
-                }`} />
-                <h3 className="text-base font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
-                  Detail Record Alarm
-                </h3>
-              </div>
-              <button
-                onClick={() => setSelectedAlarmRecord(null)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
-              >
-                ✕
-              </button>
-            </div>
 
-            <div className="space-y-4">
-              {/* Parameter & Status */}
-              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Parameter / Code</span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                    selectedAlarmRecord.status === "Resolved"
-                      ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30"
-                      : "bg-rose-500/10 text-rose-500 border border-rose-500/30 animate-pulse"
-                  }`}>
-                    {selectedAlarmRecord.status || "Active"}
-                  </span>
-                </div>
-                <div className="text-sm font-bold text-[#002b5c] dark:text-slate-100">
-                  {selectedAlarmRecord.code}
-                </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                  {selectedAlarmRecord.message}
-                </p>
-              </div>
-
-              {/* Timestamps Grid */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Jam Active (Triggered)</span>
-                  <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 mt-1 block">
-                    {selectedAlarmRecord.timestamp || "—"}
-                  </span>
-                </div>
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Jam Ter-resolve (Cleared)</span>
-                  <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 mt-1 block">
-                    {selectedAlarmRecord.clearedAt && selectedAlarmRecord.clearedAt !== "—"
-                      ? selectedAlarmRecord.clearedAt
-                      : selectedAlarmRecord.status === "Resolved"
-                      ? "Resolved"
-                      : "Masih Aktif"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Duration & Operator PIC */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Durasi Terjadi (RTN)</span>
-                  <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300 mt-1 block">
-                    {selectedAlarmRecord.rtn || "—"}
-                  </span>
-                </div>
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Operator PIC</span>
-                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 mt-1 block">
-                    {selectedAlarmRecord.operatorName || "—"}
-                  </span>
-                </div>
-              </div>
-
-              {selectedAlarmRecord.operatorAction && selectedAlarmRecord.operatorAction !== "—" && (
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Tindakan Operator</span>
-                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mt-1">
-                    {selectedAlarmRecord.operatorAction}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
-              <button
-                onClick={() => setSelectedAlarmRecord(null)}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-sm transition"
-              >
-                Tutup Detail
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Alarm History Log Modal */}
-      {showAlarmHistoryModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-4xl bg-white dark:bg-slate-900 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
-              <div>
-                <h3 className="text-base font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
-                  PostgreSQL Alarm Records History
-                </h3>
-                <p className="text-xs text-[#47729f] dark:text-slate-400 mt-0.5">
-                  Rekam jejak alarm aktif & ter-resolve dari database PostgreSQL (Data disimpan permanen).
-                </p>
-              </div>
-              <button
-                onClick={() => setShowAlarmHistoryModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto min-h-0 pr-1">
-              {loadingAlarmHistory ? (
-                <div className="text-center py-12 text-slate-400 font-semibold text-xs flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                  Memuat data rekam jejak alarm dari PostgreSQL...
-                </div>
-              ) : alarmHistoryData.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                        <th className="pb-2">Status</th>
-                        <th className="pb-2">Parameter / Deskripsi</th>
-                        <th className="pb-2">Jam Active</th>
-                        <th className="pb-2">Jam Ter-resolve</th>
-                        <th className="pb-2">Durasi (RTN)</th>
-                        <th className="pb-2 text-right">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                      {alarmHistoryData.map((item: any) => {
-                        const activeTs = item.lastTs ? new Date(item.lastTs).toLocaleString("en-US", { hour12: false }) : "—";
-                        const clearedTs = item.clearedAt ? new Date(item.clearedAt).toLocaleString("en-US", { hour12: false }) : item.status === "Resolved" ? "Resolved" : "—";
-
-                        return (
-                          <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
-                            <td className="py-2.5">
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                item.status === "Resolved"
-                                  ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30"
-                                  : "bg-rose-500/10 text-rose-500 border border-rose-500/30 animate-pulse"
-                              }`}>
-                                {item.status}
-                              </span>
-                            </td>
-                            <td className="py-2.5 max-w-xs pr-2">
-                              <div className="font-bold text-slate-800 dark:text-slate-200">{item.alarmKey || item.tagId}</div>
-                              <div className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">{item.message}</div>
-                            </td>
-                            <td className="py-2.5 font-mono text-[11px] text-slate-700 dark:text-slate-300">{activeTs}</td>
-                            <td className="py-2.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-400">{clearedTs}</td>
-                            <td className="py-2.5 font-mono text-[11px] text-slate-600 dark:text-slate-400">{item.rtn || "—"}</td>
-                            <td className="py-2.5 text-right">
-                              <button
-                                onClick={() => {
-                                  setSelectedAlarmRecord({
-                                    id: item.id,
-                                    code: item.alarmKey || item.tagId,
-                                    message: item.message,
-                                    severity: item.severity === "high" || item.severity === "critical" ? "critical" : "warning",
-                                    timestamp: activeTs,
-                                    status: item.status,
-                                    clearedAt: clearedTs,
-                                    rtn: item.rtn || "—",
-                                    operatorName: item.operatorName || "—",
-                                    operatorAction: item.operatorAction || "—",
-                                    approverName: item.approverName || "—"
-                                  });
-                                }}
-                                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded transition"
-                              >
-                                Detail
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-10 text-slate-400 text-xs font-semibold">
-                  Tidak ada rekam jejak alarm di PostgreSQL.
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-slate-100 dark:border-slate-800 pt-3 mt-4 flex justify-end">
-              <button
-                onClick={() => setShowAlarmHistoryModal(false)}
-                className="px-5 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-lg transition"
-              >
-                Close Records History
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
