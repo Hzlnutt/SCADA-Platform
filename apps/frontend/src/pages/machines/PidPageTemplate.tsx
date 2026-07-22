@@ -405,34 +405,34 @@ export default function PidPageTemplate({
             </div>
 
             {/* Calendar & Filters Bar */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 dark:bg-slate-950/60 p-4 border border-slate-200/60 dark:border-slate-800 rounded-lg mb-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end bg-slate-50 dark:bg-slate-950/60 p-4 border border-slate-200/60 dark:border-slate-800 rounded-lg mb-4">
               {/* Date range picker */}
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1 lg:col-span-5 min-w-0">
                 <span className="text-[10px] text-slate-450 dark:text-slate-400 font-bold uppercase">Date Range (Calendar)</span>
                 <div className="flex items-center gap-2">
                   <input
                     type="date"
                     value={dateRange?.startDate}
                     onChange={(e) => onChangeDateRange && onChangeDateRange({ startDate: e.target.value, endDate: dateRange?.endDate || "" })}
-                    className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 rounded px-2.5 py-1.5 focus:outline-none w-full font-semibold"
+                    className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 rounded px-2.5 py-1.5 focus:outline-none w-full min-w-0 font-semibold h-[34px]"
                   />
-                  <span className="text-slate-400 text-xs">to</span>
+                  <span className="text-slate-400 text-xs flex-shrink-0">to</span>
                   <input
                     type="date"
                     value={dateRange?.endDate}
                     onChange={(e) => onChangeDateRange && onChangeDateRange({ startDate: dateRange?.startDate || "", endDate: e.target.value })}
-                    className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 rounded px-2.5 py-1.5 focus:outline-none w-full font-semibold"
+                    className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 rounded px-2.5 py-1.5 focus:outline-none w-full min-w-0 font-semibold h-[34px]"
                   />
                 </div>
               </div>
 
               {/* Component filter */}
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1 lg:col-span-3 min-w-0">
                 <span className="text-[10px] text-slate-450 dark:text-slate-400 font-bold uppercase">Filter by Component</span>
                 <select
                   value={modalComponentFilter}
                   onChange={(e) => setModalComponentFilter(e.target.value)}
-                  className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 rounded px-2.5 py-1.5 focus:outline-none w-full font-semibold"
+                  className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 rounded px-2.5 py-1.5 focus:outline-none w-full font-semibold h-[34px]"
                 >
                   <option value="all">All Components</option>
                   {ALL_COMPONENTS.map((comp) => (
@@ -444,15 +444,15 @@ export default function PidPageTemplate({
               </div>
 
               {/* Status filter tabs */}
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1 lg:col-span-4 min-w-0">
                 <span className="text-[10px] text-slate-450 dark:text-slate-400 font-bold uppercase">Filter by Status</span>
-                <div className="flex items-center gap-1 mt-1">
+                <div className="flex items-center gap-1">
                   {(["all", "overdue", "open", "close"] as const).map((st) => (
                     <button
                       key={st}
                       type="button"
                       onClick={() => setModalStatusFilter(st)}
-                      className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase transition flex-1 text-center ${
+                      className={`px-2.5 py-1.5 rounded text-[10px] font-bold uppercase transition flex-1 text-center h-[34px] flex items-center justify-center ${
                         modalStatusFilter === st
                           ? st === "overdue"
                             ? "bg-rose-500 text-white shadow"
