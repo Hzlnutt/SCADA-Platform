@@ -48,9 +48,15 @@ export function SensorIndicator({
       return { color: customColor, display };
     }
 
-    // ── Jika value adalah string info status (seperti "API TIDAK TERKIRIM" atau "XX") ──
-    if (typeof value === 'string' && (value.includes("API") || value.includes("TIDAK") || value === "XX")) {
-      return { color: "#ff2222", display: "XX" };
+    // ── Jika value adalah string info status (seperti "Belum Ada API" atau "XX") ──
+    if (typeof value === 'string') {
+      const upper = value.toUpperCase();
+      if (upper.includes("BELUM") || upper.includes("NO API")) {
+        return { color: "#ffaa00", display: "belum ada api" };
+      }
+      if (upper === "XX" || upper.includes("TIDAK")) {
+        return { color: "#ff2222", display: "xx" };
+      }
     }
 
 

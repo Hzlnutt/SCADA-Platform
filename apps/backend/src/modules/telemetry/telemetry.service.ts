@@ -87,11 +87,12 @@ export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
         if (!isNaN(water_m3)) {
           const ts = p.ts ? new Date(p.ts) : new Date();
           const deviceId = p.deviceId || "unknown";
+          const water_kwh = water_m3 * 0.4;
           await pool.query(
-            `INSERT INTO water_telemetry (t_stamp, water_m3, id_device) VALUES ($1, $2, $3)`,
-            [ts, water_m3, deviceId]
+            `INSERT INTO water_telemetry (t_stamp, water_m3, water_kwh, id_device) VALUES ($1, $2, $3, $4)`,
+            [ts, water_m3, water_kwh, deviceId]
           );
-          console.log(`Successfully synced water_m3 (${water_m3}) to PostgreSQL`);
+          console.log(`Successfully synced water_m3 (${water_m3}) and water_kwh (${water_kwh}) to PostgreSQL`);
         }
       }
     } catch (err: any) {

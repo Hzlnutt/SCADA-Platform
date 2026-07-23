@@ -48,9 +48,17 @@ const SensorCard: React.FC<SensorCardProps> = ({
     if (typeof val === "number") {
       return val.toFixed(1);
     }
-    const parsed = Number(val);
-    if (typeof val === "string" && !isNaN(parsed) && val.trim() !== "" && val.includes(".")) {
+    const valStr = String(val);
+    const parsed = Number(valStr);
+    if (!isNaN(parsed) && valStr.trim() !== "" && valStr.includes(".")) {
       return parsed.toFixed(1);
+    }
+    const lower = valStr.toLowerCase();
+    if (lower === "belum ada api") {
+      return "belum ada api";
+    }
+    if (lower === "xx") {
+      return "xx";
     }
     return val;
   };
@@ -70,20 +78,30 @@ const SensorCard: React.FC<SensorCardProps> = ({
     );
   }
 
-  const isOffline = (value && typeof value === "string" && (value.includes("API") || value.includes("TIDAK") || value === "XX")) || 
-                    (values && values.some(v => typeof v.value === "string" && (v.value.includes("API") || v.value.includes("TIDAK") || v.value === "XX")));
+  const isOffline = (value && typeof value === "string" && (value.toUpperCase().includes("API") || value.toUpperCase().includes("TIDAK") || value.toUpperCase() === "XX")) || 
+                    (values && values.some(v => typeof v.value === "string" && (v.value.toUpperCase().includes("API") || v.value.toUpperCase().includes("TIDAK") || v.value.toUpperCase() === "XX")));
   const isOff = value === "OFF";
   const isOn = value === "ON" || value === "HEATING" || value === "COOLING" || value === "STERIL";
   const isStandby = value === "STANDBY";
 
   const displayFontSize = isOffline ? "12" : "28";
-  const displayTextColor = isOffline || isOff
-    ? "#ff2222"
-    : isOn
-    ? "#00cc00"
-    : isStandby
-    ? "#ffaa00"
-    : valueTextColor;
+  
+  let displayTextColor = valueTextColor;
+  if (isOffline) {
+    const valStr = String(value || "").toLowerCase();
+    const hasValsOffline = values && values.some(v => String(v.value).toLowerCase().includes("belum") || String(v.value).toLowerCase().includes("no api"));
+    if (valStr.includes("belum") || valStr.includes("no api") || hasValsOffline) {
+      displayTextColor = "#ffaa00"; // Orange color for unconfigured API
+    } else {
+      displayTextColor = "#ff2222"; // Red color for missing/dead API data
+    }
+  } else if (isOff) {
+    displayTextColor = "#ff2222";
+  } else if (isOn) {
+    displayTextColor = "#00cc00";
+  } else if (isStandby) {
+    displayTextColor = "#ffaa00";
+  }
 
   return (
     <g transform={`translate(${x}, ${y})`}>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
 import type { MachineOutletContext } from "./MachineLayout";
@@ -7,11 +7,163 @@ import type { Task, Alarm } from "./PidPageTemplate";
 import { useTelemetryStore } from "../../store/telemetry.store";
 import { getJson, postJson } from "../../services/api.client";
 import { telemetryTagIds } from "../../data/industrial-tags";
+import { getDefaultSensorConfigs } from "../../data/equipment";
 import CoolingWF1U3Pid from "./diagrams/CoolingWF1U3Pid";
 import MachineAHU01Pid from "./diagrams/MachineAHU01Pid";
 import MachineAHU02Pid from "./diagrams/MachineAHU02Pid";
 import MachineAHU03Pid from "./diagrams/MachineAHU03Pid";
 import MachineUtilityPid from "./diagrams/MachineUtilityPid";
+
+const TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
+  // Main
+  "cooling-water/supply_temp": "Scaled_Temp_Tank_Cooling3_Supp",
+  "cooling-water/return_temp": "Scaled_Temp_Tank_Cooling3_Return",
+  "cooling-water/delta_temp": "delta_temp",
+  "cooling-water/ambient_temp": "Scaled_Temp_Washing",
+  "cooling-water/ambient_humidity": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct_efficiency": "Scaled_Level_tank_cooling3",
+  "cooling-water/total_energy": "Scaled_Level_tank_cooling3",
+
+  // CT-1
+  "cooling-water/fan_status_1": "Status_Fan_CT1",
+  "cooling-water/ct1_fan_speed": "Scaled_Level_tank_cooling3",
+  "cooling-water/motor_status_1": "Status_MTR_CT_P1",
+  "cooling-water/ct1_motor_current": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct1_sirk_current": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct1_motor_power": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct1_flow": "Scaled_Level_tank_cooling3",
+  "cooling-water/pressure_1": "Scaled_Press_CT_P1",
+  "cooling-water/ct1_vibra_fan": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct1_vibra_motor": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct1_basin_temp": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct1_running_hours": "Scaled_Level_tank_cooling3",
+
+  // CT-2
+  "cooling-water/fan_status_2": "Status_Fan_CT2",
+  "cooling-water/ct2_fan_speed": "Scaled_Level_tank_cooling3",
+  "cooling-water/motor_status_2": "Status_MTR_CT_P2",
+  "cooling-water/ct2_motor_current": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct2_sirk_current": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct2_motor_power": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct2_flow": "Scaled_Level_tank_cooling3",
+  "cooling-water/pressure_2": "Scaled_Press_CT_P2",
+  "cooling-water/ct2_vibra_fan": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct2_vibra_motor": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct2_basin_temp": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct2_running_hours": "Scaled_Level_tank_cooling3",
+
+  // CT-3
+  "cooling-water/fan_status_3": "Status_Fan_CT3",
+  "cooling-water/ct3_fan_speed": "Scaled_Level_tank_cooling3",
+  "cooling-water/motor_status_3": "Status_MTR_CT_P11",
+  "cooling-water/ct3_motor_current": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct3_sirk_current": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct3_motor_power": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct3_flow": "Scaled_Level_tank_cooling3",
+  "cooling-water/pressure_3": "Scaled_Press_CT3_P11",
+  "cooling-water/ct3_vibra_fan": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct3_vibra_motor": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct3_basin_temp": "Scaled_Level_tank_cooling3",
+  "cooling-water/ct3_running_hours": "Scaled_Level_tank_cooling3",
+
+  // Tanks & Dosing
+  "cooling-water/cooling_tank_tds": "Scaled_Level_tank_cooling3",
+  "cooling-water/cooling_tank_ph": "Scaled_Level_tank_cooling3",
+  "cooling-water/supply_wtr_cond": "Scaled_Level_tank_cooling3",
+  "cooling-water/basin_lvl": "Scaled_Level_tank_cooling3",
+  "cooling-water/makeup_wtr_ph": "Scaled_Level_tank_cooling3",
+  "cooling-water/makeup_wtr_tds": "Scaled_Level_tank_cooling3",
+  "cooling-water/makeup_wtr_flow": "Scaled_Level_tank_cooling3",
+  "cooling-water/makeup_wtr_vol": "Scaled_Level_tank_cooling3",
+  "cooling-water/chemical_357_pump": "Scaled_Level_tank_cooling3",
+  "cooling-water/chemical_357_lvl": "Scaled_Level_tank_cooling3",
+  "cooling-water/chemical_357_vol": "Scaled_Level_tank_cooling3",
+  "cooling-water/chemical_327_pump": "Scaled_Level_tank_cooling3",
+  "cooling-water/chemical_327_lvl": "Scaled_Level_tank_cooling3",
+  "cooling-water/chemical_327_vol": "Scaled_Level_tank_cooling3",
+  "cooling-water/blowdown_status": "Scaled_Level_tank_cooling3",
+  "cooling-water/blowdown_flow": "Scaled_Level_tank_cooling3",
+  "cooling-water/blowdown_vol": "Scaled_Level_tank_cooling3",
+
+  // ST-3 Return Temp / Process
+  "cooling-water/st3_return_temp": "Scaled_Temp_ST3_Return",
+  "cooling-water/eq_temp_st03_supply": "Scaled_Temp_ST3_Supply",
+  "cooling-water/st3_heating": "Status_Machine__Heating_ST3",
+  "cooling-water/st3_cooling": "Status_Machine__Cooling_ST3",
+  "cooling-water/st3_steril": "Status_Machine__Steril_ST3",
+  "cooling-water/jumo_pieces": "Jumo_Pieces",
+
+  // Motor 1, 2, 3 Extra
+  "cooling-water/mtr1_running_hours": "Scaled_Level_tank_cooling3",
+  "cooling-water/mtr1_hz": "Scaled_Level_tank_cooling3",
+  "cooling-water/mtr1_kw": "Scaled_Level_tank_cooling3",
+  "cooling-water/mtr2_running_hours": "Scaled_Level_tank_cooling3",
+  "cooling-water/mtr2_hz": "Scaled_Level_tank_cooling3",
+  "cooling-water/mtr2_kw": "Scaled_Level_tank_cooling3",
+  "cooling-water/mtr3_running_hours": "Scaled_Level_tank_cooling3",
+  "cooling-water/mtr3_hz": "Scaled_Level_tank_cooling3",
+  "cooling-water/mtr3_kw": "Scaled_Level_tank_cooling3",
+
+  // Equipment Status Matrix details
+  "cooling-water/eq_status_du03": "Status_MTR_DU45",
+  "cooling-water/eq_flow_du03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_press_du03": "Scaled_Press_DUU3",
+  "cooling-water/eq_curr_du03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_pow_du03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_vib_du03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_temp_du03": "Scaled_Temp_DU",
+  "cooling-water/eq_hrs_du03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_maint_du03": "Scaled_Level_tank_cooling3",
+
+  "cooling-water/eq_status_bp03": "Status_MTR_BP",
+  "cooling-water/eq_flow_bp03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_press_bp03": "Scaled_Press_BP",
+  "cooling-water/eq_curr_bp03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_pow_bp03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_vib_bp03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_temp_bp03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_hrs_bp03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_maint_bp03": "Scaled_Level_tank_cooling3",
+
+  "cooling-water/eq_status_prep03": "Status_MTR_Prep3",
+  "cooling-water/eq_flow_prep03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_press_prep03": "Scaled_Press_PrepU3",
+  "cooling-water/eq_curr_prep03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_pow_prep03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_vib_prep03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_temp_prep03": "Scaled_Tempt_Prep3_Return",
+  "cooling-water/eq_hrs_prep03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_maint_prep03": "Scaled_Level_tank_cooling3",
+
+  "cooling-water/eq_status_st03": "Status_MTR_ST3_P3",
+  "cooling-water/eq_flow_st03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_press_st03": "Scaled_Press_ST3",
+  "cooling-water/eq_curr_st03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_pow_st03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_vib_st03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_hrs_st03": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_maint_st03": "Scaled_Level_tank_cooling3",
+
+  "cooling-water/eq_status_washing": "Status_MTR_Washing",
+  "cooling-water/eq_flow_washing": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_press_washing": "Scaled_Press_Washing",
+  "cooling-water/eq_curr_washing": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_pow_washing": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_vib_washing": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_temp_washing": "Scaled_Temp_Washing",
+  "cooling-water/eq_hrs_washing": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_maint_washing": "Scaled_Level_tank_cooling3",
+
+  "cooling-water/eq_status_minilab": "Status_MTR_MiniLab",
+  "cooling-water/eq_flow_minilab": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_press_minilab": "Scaled_Press_MiniLab",
+  "cooling-water/eq_curr_minilab": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_pow_minilab": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_vib_minilab": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_temp_minilab": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_hrs_minilab": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_maint_minilab": "Scaled_Level_tank_cooling3"
+};
 
 // ═══════════════════════════════════════════════
 // DATA TASK & ALARM PER MESIN (dummy, nanti dari API)
@@ -171,6 +323,137 @@ const isHvacTarget = (unitId: string) => {
 export default function MachinePidDiagram() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
+
+  const [apiSourceUrls] = useState<Record<string, string>>(() => {
+    const defaultMap: Record<string, string> = {};
+    if (unitId.startsWith("cooling-water")) {
+      const defaultUrl = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3";
+      const sensorList = getDefaultSensorConfigs(unitId);
+      sensorList.forEach((s) => {
+        defaultMap[s.tagKey] = defaultUrl;
+      });
+    }
+    const saved = localStorage.getItem(`scada.config.api_sources.${unitId}`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { ...defaultMap, ...parsed };
+      } catch (e) {}
+    }
+    return defaultMap;
+  });
+
+  const [apiLiveData, setApiLiveData] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchActiveApiData = async () => {
+      const activeUrls = Object.values(apiSourceUrls).filter((u) => u.trim());
+      if (activeUrls.length === 0) return;
+      const targetUrl = activeUrls[0];
+      try {
+        const res = await postJson<{ success: boolean; data?: any }>("/config/api-sources/test", {
+          url: targetUrl,
+          method: "GET"
+        });
+        if (isMounted && res && res.success && res.data) {
+          setApiLiveData(res.data);
+        }
+      } catch (err) {
+        console.error("Live API poll error on P&ID diagram:", err);
+      }
+    };
+
+    fetchActiveApiData();
+    const interval = setInterval(fetchActiveApiData, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [apiSourceUrls]);
+
+  const latest = useTelemetryStore((state) => state.latest);
+
+  const mergedLatest = useMemo(() => {
+    const merged = { ...latest };
+    if (unitId.startsWith("cooling-water")) {
+      Object.entries(apiSourceUrls).forEach(([tagKey, url]) => {
+        if (!url.trim()) {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: "Belum Ada API",
+            quality: "bad",
+            meta: { tagId: tagKey }
+          };
+          return;
+        }
+
+        if (tagKey === "cooling-water/delta_temp") {
+          const retVal = apiLiveData["Scaled_Temp_Tank_Colling3_Return"] !== undefined
+            ? apiLiveData["Scaled_Temp_Tank_Colling3_Return"]
+            : apiLiveData["Scaled_Temp_Tank_Cooling3_Return"];
+          const suppVal = apiLiveData["Scaled_Temp_Tank_Colling3_Supp"] !== undefined
+            ? apiLiveData["Scaled_Temp_Tank_Colling3_Supp"]
+            : apiLiveData["Scaled_Temp_Tank_Cooling3_Supp"];
+
+          if (typeof retVal === "number" && typeof suppVal === "number") {
+            merged[tagKey] = {
+              ts: new Date().toISOString(),
+              value: Number((retVal - suppVal).toFixed(2)),
+              quality: "good",
+              meta: { tagId: tagKey }
+            };
+          } else {
+            merged[tagKey] = {
+              ts: new Date().toISOString(),
+              value: "xx",
+              quality: "bad",
+              meta: { tagId: tagKey }
+            };
+          }
+          return;
+        }
+
+        const jsonKey = TAG_KEY_TO_API_JSON_KEY[tagKey];
+        if (!jsonKey) {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: "xx",
+            quality: "bad",
+            meta: { tagId: tagKey }
+          };
+          return;
+        }
+
+        let val = apiLiveData[jsonKey];
+        if (val === undefined || val === null) {
+          if (tagKey === "cooling-water/supply_temp") {
+            val = apiLiveData["Scaled_Temp_Tank_Colling3_Supp"];
+          } else if (tagKey === "cooling-water/return_temp") {
+            val = apiLiveData["Scaled_Temp_Tank_Colling3_Return"];
+          }
+        }
+
+        if (val === undefined || val === null) {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: "xx",
+            quality: "bad",
+            meta: { tagId: tagKey }
+          };
+        } else {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: val,
+            quality: "good",
+            meta: { tagId: tagKey }
+          };
+        }
+      });
+    }
+    return merged;
+  }, [latest, apiSourceUrls, apiLiveData, unitId]);
+
   const [selectedTaskFilter, setSelectedTaskFilter] = useState<
     "all" | "overdue" | "open" | "close"
   >("all");
@@ -262,8 +545,6 @@ export default function MachinePidDiagram() {
     const alarmInterval = setInterval(fetchActiveAlarms, 3000);
     return () => clearInterval(alarmInterval);
   }, [unitId]);
-
-  const latest = useTelemetryStore((state) => state.latest);
 
   const [runningHours, setRunningHours] = useState<Record<string, number>>({});
   const [pidThresholds, setPidThresholds] = useState<any>(null);
@@ -388,10 +669,14 @@ export default function MachinePidDiagram() {
   }, [unitId, dateRange.startDate, dateRange.endDate]);
 
   const getStatus = (tagId: string) => {
-    const val = latest[tagId]?.value;
+    const val = mergedLatest[tagId]?.value;
     if (typeof val === "number") return val === 1;
     if (typeof val === "boolean") return val;
-    return "XX";
+    if (typeof val === "string") {
+      const upper = val.toUpperCase();
+      return upper === "ON" || upper === "RUNNING" || upper === "1" || upper === "TRUE";
+    }
+    return false;
   };
 
   const motorStatus = {
@@ -450,7 +735,7 @@ export default function MachinePidDiagram() {
           <div className="flex-1 rounded-lg border border-slate-600 bg-slate-900/70 relative overflow-hidden">
             <div className="absolute inset-0 overflow-auto">
               {PidDiagram ? (
-                <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} />
+                <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} latest={mergedLatest} />
               ) : (
                 <div className="flex items-center justify-center h-full text-slate-400">
                   Diagram untuk {machine.name} belum tersedia.
@@ -522,7 +807,7 @@ export default function MachinePidDiagram() {
       onChangeDateRange={setDateRange}
     >
       {PidDiagram ? (
-        <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} />
+        <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} latest={mergedLatest} />
       ) : (
         <div className="flex items-center justify-center h-full text-slate-400">
           Diagram untuk {unitId} belum tersedia.

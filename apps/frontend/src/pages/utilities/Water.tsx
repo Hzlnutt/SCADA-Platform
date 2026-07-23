@@ -54,6 +54,7 @@ export default function Water() {
   const [selectedDevice, setSelectedDevice] = useState<string>("all");
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth()); // 0-indexed
+  const [unitFilter, setUnitFilter] = useState<"m3" | "kwh">("m3");
   const config = ranges.find((item) => item.id === range) ?? ranges[0];
 
   // Custom start and end dates for charts (default to today)
@@ -193,8 +194,6 @@ export default function Water() {
     return currentMonthTotal > 0 ? (total / currentMonthTotal) * fullMonthCost : 0;
   }, [total, currentMonthTotal, fullMonthCost, range, waterConfig]);
 
-  const avgRate = total > 0 ? cost / total : 0;
-
   // Max value of selected range
   const peak = useMemo(() => {
     if (hasChartData) {
@@ -214,6 +213,10 @@ export default function Water() {
     }
     return 15.5;
   }, [hasChartData, chartData, range, monthlyDailyRecords, customDailyRecords, chartStartDate, chartEndDate]);
+
+  const totalVal = unitFilter === "kwh" ? total * 0.4 : total;
+  const peakVal = unitFilter === "kwh" ? peak * 0.4 : peak;
+  const avgRateVal = totalVal > 0 ? cost / totalVal : 0;
 
   const recycleRatio = 32;
 
@@ -249,10 +252,10 @@ export default function Water() {
   // ========== BAR CHART DATA + OPTIONS ==========
   const barDatasets = useMemo(() => {
     if (!hasChartData) {
-      const base = waterBase * config.scale;
+      const base = waterBase * config.scale * (unitFilter === "kwh" ? 0.4 : 1.0);
       const data = buildTimeAwareSeries(config.points, base, base * 0.25, 3, maxIdx).map((v) => v ?? 0);
       return [{
-        label: "Konsumsi Air (m³)",
+        label: `Konsumsi Air (${unitFilter === "kwh" ? "kWh" : "m³"})`,
         data,
         backgroundColor: "rgba(14, 165, 233, 0.8)",
         hoverBackgroundColor: "rgba(14, 165, 233, 1)",
@@ -302,8 +305,13 @@ export default function Water() {
         dataValues = devData ? devData.monthly.map((m: any) => m.value) : [];
       }
 
+      // Convert values if unitFilter is kwh
+      if (unitFilter === "kwh") {
+        dataValues = dataValues.map(v => v * 0.4);
+      }
+
       return {
-        label: deviceId.toUpperCase(),
+        label: `${deviceId.toUpperCase()} (${unitFilter === "kwh" ? "kWh" : "m³"})`,
         data: dataValues,
         backgroundColor: color.bg,
         hoverBackgroundColor: color.hover,
@@ -312,7 +320,7 @@ export default function Water() {
         barPercentage: 0.65
       };
     });
-  }, [hasChartData, range, config, chartData, maxIdx, selectedDevice, chartStartDate, chartEndDate, selectedYear, currentMonth]);
+  }, [hasChartData, range, config, chartData, maxIdx, selectedDevice, chartStartDate, chartEndDate, selectedYear, currentMonth, unitFilter]);
 
   const barChartData = {
     labels: barLabels,
@@ -348,11 +356,15 @@ export default function Water() {
         bodyFont: { family: "IBM Plex Mono, monospace", size: 11 },
         titleFont: { family: "Plus Jakarta Sans", size: 11, weight: "600" as const },
         callbacks: {
-          label: (context: any) => `${context.dataset.label}: ${Number(context.raw).toLocaleString("id-ID", { maximumFractionDigits: 1 })} m³`,
+          label: (context: any) => {
+            const unit = unitFilter === "kwh" ? "kWh" : "m³";
+            return `${context.dataset.label.split(" (")[0]}: ${Number(context.raw).toLocaleString("id-ID", { maximumFractionDigits: 1 })} ${unit}`;
+          },
           footer: (tooltipItems: any) => {
             if (tooltipItems.length > 1) {
               const total = tooltipItems.reduce((acc: number, item: any) => acc + item.raw, 0);
-              return `\nTotal: ${total.toLocaleString("id-ID", { maximumFractionDigits: 1 })} m³`;
+              const unit = unitFilter === "kwh" ? "kWh" : "m³";
+              return `\nTotal: ${total.toLocaleString("id-ID", { maximumFractionDigits: 1 })} ${unit}`;
             }
             return "";
           }
@@ -375,7 +387,10 @@ export default function Water() {
         ticks: {
           color: isDark ? "rgba(148, 163, 184, 0.7)" : "rgba(71, 85, 105, 0.7)",
           font: { size: 9, family: "IBM Plex Mono" },
-          callback: (value: any) => `${value.toLocaleString("id-ID")} m³`
+          callback: (value: any) => {
+            const unit = unitFilter === "kwh" ? "kWh" : "m³";
+            return `${value.toLocaleString("id-ID")} ${unit}`;
+          }
         }
       }
     }
@@ -401,6 +416,32 @@ export default function Water() {
 
         {/* Global Toolbar */}
         <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5 rounded-xl shadow-sm">
+          {/* Unit Selection Toggle */}
+          <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-0.5 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setUnitFilter("m3")}
+              className={`rounded-md px-2.5 py-1.5 transition-all ${
+                unitFilter === "m3"
+                  ? "bg-cyan-500 text-white shadow-sm"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              }`}
+            >
+              m³
+            </button>
+            <button
+              type="button"
+              onClick={() => setUnitFilter("kwh")}
+              className={`rounded-md px-2.5 py-1.5 transition-all ${
+                unitFilter === "kwh"
+                  ? "bg-cyan-500 text-white shadow-sm"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              }`}
+            >
+              kWh Setara
+            </button>
+          </div>
+
           {/* Device Selection Dropdown */}
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Sumur</span>
@@ -466,7 +507,7 @@ export default function Water() {
             {chartLoading ? "Loading..." : formatCurrency(cost)}
           </div>
           <div className="mt-1 text-xs font-semibold text-sky-600 dark:text-sky-400">
-            {chartLoading ? "..." : total.toLocaleString("id-ID", { maximumFractionDigits: 1 })} m³
+            {chartLoading ? "..." : `${totalVal.toLocaleString("id-ID", { maximumFractionDigits: 1 })} ${unitFilter === "kwh" ? "kWh" : "m³"}`}
           </div>
         </div>
 
@@ -476,7 +517,7 @@ export default function Water() {
             <span className="text-lg">🌊</span>
           </div>
           <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">
-            {chartLoading ? "Loading..." : `${peak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} m³`}
+            {chartLoading ? "Loading..." : `${peakVal.toLocaleString("id-ID", { maximumFractionDigits: 1 })} ${unitFilter === "kwh" ? "kWh" : "m³"}`}
           </div>
           <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Kebutuhan puncak aliran air</div>
         </div>
@@ -495,8 +536,8 @@ export default function Water() {
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Tarif Rata-rata</span>
             <span className="text-lg">🏷️</span>
           </div>
-          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{formatCurrency(avgRate)}</div>
-          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Per m³ (Progresif)</div>
+          <div className="mt-3 text-2xl font-extrabold text-slate-800 dark:text-white font-mono">{formatCurrency(avgRateVal)}</div>
+          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Per {unitFilter === "kwh" ? "kWh" : "m³"} (Progresif)</div>
         </div>
       </section>
 
@@ -594,7 +635,9 @@ export default function Water() {
           </div>
           <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-cyan-400">
             <div className="text-xs text-slate-400 dark:text-slate-500">Daily Limit Quota</div>
-            <div className="mt-1 text-lg font-bold text-slate-800 dark:text-white font-mono">850 m³/day</div>
+            <div className="mt-1 text-lg font-bold text-slate-800 dark:text-white font-mono">
+              {unitFilter === "kwh" ? "340 kWh/day" : "850 m³/day"}
+            </div>
           </div>
           <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4 transition hover:border-cyan-400">
             <div className="text-xs text-slate-400 dark:text-slate-500">Quality Standard</div>
@@ -612,18 +655,24 @@ export default function Water() {
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">
                   <th className="py-2.5 px-3">ID Device</th>
-                  <th className="py-2.5 px-3">Hari Ini (m³)</th>
-                  <th className="py-2.5 px-3">Bulan Ini (m³)</th>
-                  <th className="py-2.5 px-3">Total Akumulasi (m³)</th>
+                  <th className="py-2.5 px-3">Hari Ini ({unitFilter === "kwh" ? "kWh" : "m³"})</th>
+                  <th className="py-2.5 px-3">Bulan Ini ({unitFilter === "kwh" ? "kWh" : "m³"})</th>
+                  <th className="py-2.5 px-3">Total Akumulasi ({unitFilter === "kwh" ? "kWh" : "m³"})</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
                 {chartData.summary.perDeviceSummary.map((dev: any) => (
                   <tr key={dev.deviceId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition">
                     <td className="py-3 px-3 font-bold text-slate-800 dark:text-slate-200">{dev.deviceId.toUpperCase()}</td>
-                    <td className="py-3 px-3 font-mono text-slate-600 dark:text-slate-400">{dev.todayM3.toLocaleString("id-ID")} m³</td>
-                    <td className="py-3 px-3 font-mono text-slate-600 dark:text-slate-400">{dev.monthlyM3.toLocaleString("id-ID")} m³</td>
-                    <td className="py-3 px-3 font-mono font-bold text-slate-800 dark:text-white">{dev.totalM3.toLocaleString("id-ID")} m³</td>
+                    <td className="py-3 px-3 font-mono text-slate-600 dark:text-slate-400">
+                      {unitFilter === "kwh" ? (dev.todayKwh || 0).toLocaleString("id-ID") : dev.todayM3.toLocaleString("id-ID")} {unitFilter === "kwh" ? "kWh" : "m³"}
+                    </td>
+                    <td className="py-3 px-3 font-mono text-slate-600 dark:text-slate-400">
+                      {unitFilter === "kwh" ? (dev.monthlyKwh || 0).toLocaleString("id-ID") : dev.monthlyM3.toLocaleString("id-ID")} {unitFilter === "kwh" ? "kWh" : "m³"}
+                    </td>
+                    <td className="py-3 px-3 font-mono font-bold text-slate-800 dark:text-white">
+                      {unitFilter === "kwh" ? (dev.totalKwh || 0).toLocaleString("id-ID") : dev.totalM3.toLocaleString("id-ID")} {unitFilter === "kwh" ? "kWh" : "m³"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

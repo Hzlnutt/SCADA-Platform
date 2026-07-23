@@ -163,7 +163,8 @@ export const getActiveAlarms = async (query: ActiveQuery & { unit?: string }) =>
     operatorName: row.operator_name,
     operatorAction: row.operator_action,
     approverName: row.approver,
-    rtn: row.rtn || "—"
+    rtn: row.rtn || "—",
+    clearedAt: row.cleared_at ? row.cleared_at.toISOString() : null
   }));
 };
 
@@ -206,7 +207,8 @@ export const getAlarmHistory = async (query: HistoryQuery & { unit?: string }) =
     operatorName: row.operator_name,
     operatorAction: row.operator_action,
     approverName: row.approver,
-    rtn: row.rtn || "—"
+    rtn: row.rtn || "—",
+    clearedAt: row.cleared_at ? row.cleared_at.toISOString() : null
   }));
 };
 

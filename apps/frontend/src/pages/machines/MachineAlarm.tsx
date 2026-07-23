@@ -17,6 +17,7 @@ type AlarmLogItem = {
   rtn: string;
   operatorName?: string;
   approverName?: string;
+  clearedAt?: string | null;
 };
 
 const INITIAL_ALARMS: AlarmLogItem[] = [
@@ -56,6 +57,10 @@ export default function MachineAlarm() {
   const [approvePasswordInput, setApprovePasswordInput] = useState("");
   const [approvePasswordError, setApprovePasswordError] = useState("");
   const [approveSubmitting, setApproveSubmitting] = useState(false);
+
+  // Detail modal state
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [selectedDetailAlarm, setSelectedDetailAlarm] = useState<AlarmLogItem | null>(null);
 
   const [filter, setFilter] = useState<string>("All");
   const [selectedEquipment, setSelectedEquipment] = useState<string>("All");
@@ -140,7 +145,8 @@ export default function MachineAlarm() {
             status: item.status as "Active" | "Pending Approval" | "Resolved",
             rtn: item.rtn || "—",
             operatorName: item.operatorName || "",
-            approverName: item.approverName || ""
+            approverName: item.approverName || "",
+            clearedAt: item.clearedAt ? new Date(item.clearedAt).toLocaleString("en-US", { hour12: false }) : null
           }));
           setDbAlarms(mapped);
         }
@@ -687,7 +693,22 @@ export default function MachineAlarm() {
                     {row.rtn}
                   </td>
                   <td className="py-3 px-3 text-center">
-                    <div className="flex justify-center gap-1.5">
+                    <div className="flex justify-center items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedDetailAlarm(row);
+                          setDetailModalOpen(true);
+                        }}
+                        className="px-2 py-1 bg-[#1f6fb5]/10 hover:bg-[#1f6fb5]/20 text-[#1f6fb5] dark:text-sky-400 rounded text-[10px] font-extrabold shadow-sm transition flex items-center gap-1"
+                        title="Lihat Detail Alarm"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Detail
+                      </button>
+
                       {row.status === "Active" && row.id.startsWith("maint-overdue-") && (
                         <span className="text-[10px] text-amber-555 font-extrabold bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded">
                           Reset Hours
@@ -710,7 +731,7 @@ export default function MachineAlarm() {
                         </button>
                       )}
                       {row.status === "Resolved" && (
-                        <span className="text-[10px] text-slate-400 dark:text-slate-650 font-bold font-mono">Resolved</span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold font-mono">Resolved</span>
                       )}
                     </div>
                   </td>
@@ -958,6 +979,110 @@ export default function MachineAlarm() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Detail Alarm Modal Overlay */}
+      {detailModalOpen && selectedDetailAlarm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
+          <div className="relative w-[500px] rounded-2xl border border-blue-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
+              <div>
+                <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${selectedDetailAlarm.status === "Active" ? "bg-rose-500 animate-pulse" : (selectedDetailAlarm.status === "Pending Approval" ? "bg-amber-500" : "bg-emerald-500")}`} />
+                  Detail Informasi Alarm
+                </h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Informasi riwayat aktif dan penyelesaian alarm (ISA-18.2 Standard)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailModalOpen(false);
+                  setSelectedDetailAlarm(null);
+                }}
+                className="text-xs text-slate-400 hover:text-slate-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Deskripsi & Equipment */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Peralatan (Equipment)</span>
+                  <span className="font-mono text-[#002b5c] dark:text-slate-200">{selectedDetailAlarm.equipment}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Status Saat Ini</span>
+                  <span className={`inline-block text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md ${badgeStyle[selectedDetailAlarm.status]}`}>
+                    {selectedDetailAlarm.status}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Deskripsi Alarm</span>
+                <span className="text-[#002b5c] dark:text-slate-200 font-bold block bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                  {selectedDetailAlarm.description}
+                </span>
+              </div>
+
+              {/* Tanda Waktu Aktif & Selesai */}
+              <div className="grid grid-cols-2 gap-4 bg-blue-50/20 dark:bg-slate-900/30 p-3 rounded-lg border border-[#acd3ff]/20 dark:border-slate-800">
+                <div>
+                  <span className="block text-[10px] font-bold text-[#1f6fb5] dark:text-sky-400 uppercase tracking-wide">Jam Alarm Aktif (Triggered)</span>
+                  <span className="font-mono font-bold text-rose-600 dark:text-rose-400">{selectedDetailAlarm.timestamp}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Jam Alarm Resolved (Cleared)</span>
+                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    {selectedDetailAlarm.clearedAt || (selectedDetailAlarm.status === "Resolved" && selectedDetailAlarm.timestamp) || "— (Belum Selesai)"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Respons & Durasi */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Durasi Penyelesaian (RTN)</span>
+                  <span className="font-mono text-[#002b5c] dark:text-slate-200 font-bold">{selectedDetailAlarm.rtn}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Supervisor Pengesah (Approver)</span>
+                  <span className="text-[#002b5c] dark:text-slate-200">{selectedDetailAlarm.approverName || "—"}</span>
+                </div>
+              </div>
+
+              {/* Tindakan Operator */}
+              <div className="border-t border-slate-100 dark:border-slate-900 pt-3">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tindakan Perbaikan (Operator Action)</span>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between mb-1.5 border-b border-slate-100 dark:border-slate-800 pb-1">
+                    <span className="text-[10px] text-slate-500 font-bold">Operator: {selectedDetailAlarm.operatorName || "—"}</span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-300 italic">
+                    {selectedDetailAlarm.operatorAction || "Belum ada tindakan perbaikan yang dilaporkan."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end border-t border-slate-100 dark:border-slate-900 pt-3 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailModalOpen(false);
+                  setSelectedDetailAlarm(null);
+                }}
+                className="px-5 py-2 rounded-lg text-xs font-bold bg-[#0b3b60] hover:bg-[#092e4e] text-white shadow-md transition"
+              >
+                Tutup Detail
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -302,7 +302,12 @@ export default function Dashboard() {
   const totalCostIdr = electricityCost + waterCost + gasCostIdr;
 
   const gasEnergyKwh = gasSm3 * gasEnergyFactor;
-  const waterEnergyKwh = waterM3 * waterEnergyFactor;
+  const waterEnergyKwh = useMemo(() => {
+    if (!waterData) return (utilityBase.waterM3 * period.scale) * waterEnergyFactor;
+    if (period.id === "daily") return waterData.summary.todayKwh;
+    if (period.id === "monthly") return waterData.summary.monthlyKwh;
+    return waterData.summary.yearlyKwh;
+  }, [waterData, period.id, utilityBase.waterM3, period.scale]);
   const totalEnergyKwh = electricityKwh + gasEnergyKwh + waterEnergyKwh;
   const energyTarget = totalEnergyKwh * 1.12;
   const costTarget = totalCostIdr * 1.08;
@@ -315,7 +320,7 @@ export default function Dashboard() {
     if (consumptionRange === "hour") {
       const elec = electricityData ? electricityData.summary.todayKwh : utilityBase.electricityKwh;
       const gas = utilityBase.gasSm3 * gasEnergyFactor;
-      const water = waterData ? waterData.summary.todayM3 : utilityBase.waterM3;
+      const water = waterData ? waterData.summary.todayKwh : utilityBase.waterM3 * waterEnergyFactor;
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
@@ -325,7 +330,7 @@ export default function Dashboard() {
     } else if (consumptionRange === "day") {
       const elec = electricityData ? electricityData.summary.monthlyMwh * 1000 : utilityBase.electricityKwh * 30;
       const gas = utilityBase.gasSm3 * 30 * gasEnergyFactor;
-      const water = waterData ? waterData.summary.monthlyM3 : utilityBase.waterM3 * 30;
+      const water = waterData ? waterData.summary.monthlyKwh : (utilityBase.waterM3 * 30) * waterEnergyFactor;
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
@@ -335,7 +340,7 @@ export default function Dashboard() {
     } else {
       const elec = electricityData ? electricityData.summary.totalKwh : utilityBase.electricityKwh * 365;
       const gas = utilityBase.gasSm3 * 365 * gasEnergyFactor;
-      const water = waterData ? waterData.summary.yearlyM3 : utilityBase.waterM3 * 365;
+      const water = waterData ? waterData.summary.yearlyKwh : (utilityBase.waterM3 * 365) * waterEnergyFactor;
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
@@ -427,6 +432,24 @@ export default function Dashboard() {
     return Array.from({ length: electricitySeries.length }, () => 0);
   }, [electricitySeries.length, waterData, consumptionRange]);
 
+  const waterSeriesKwh = useMemo(() => {
+    if (waterData) {
+      if (consumptionRange === "hour") {
+        return waterData.charts.hourlyKwh || waterData.charts.hourly.map((v: number) => v * waterEnergyFactor);
+      } else if (consumptionRange === "day") {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
+        const monthPrefix = `${currentYear}-${currentMonth}`;
+        const days = waterData.charts.daily.filter((d: any) => d.day.startsWith(monthPrefix));
+        return days.map((d: any) => d.valueKwh !== undefined ? d.valueKwh : d.value * waterEnergyFactor);
+      } else {
+        return waterData.charts.monthly.map((m: any) => m.valueKwh !== undefined ? m.valueKwh : m.value * waterEnergyFactor);
+      }
+    }
+    return Array.from({ length: electricitySeries.length }, () => 0);
+  }, [electricitySeries.length, waterData, consumptionRange]);
+
   const consumptionWaterCost = useMemo(() => {
     const totalM3 = waterSeries.reduce((sum: number, v: number) => sum + v, 0);
     if (!waterData) return calculateWaterCost(totalM3, waterConfig);
@@ -485,7 +508,7 @@ export default function Dashboard() {
     if (waterData) {
       return waterData.charts.monthly.map((m: any, i: number) => {
         if (i > ytdMonthIndex) return null as unknown as number;
-        return m.value;
+        return m.valueKwh !== undefined ? m.valueKwh : m.value * waterEnergyFactor;
       });
     }
     return Array.from({ length: 12 }, () => 0);
@@ -523,7 +546,7 @@ export default function Dashboard() {
       let total = 0;
       if (ytdChecks.electricity) total += (ytdElectricitySeries[i] ?? 0);
       if (ytdChecks.gas) total += (ytdGasSeries[i] ?? 0) * gasEnergyFactor;
-      if (ytdChecks.water) total += (ytdWaterSeries[i] ?? 0) * waterEnergyFactor;
+      if (ytdChecks.water) total += (ytdWaterSeries[i] ?? 0);
       if (ytdChecks.solar) total += (ytdSolarSeries[i] ?? 0);
       return Number(total.toFixed(2));
     });
@@ -1077,7 +1100,7 @@ export default function Dashboard() {
                     {formatCurrency(consumptionWaterCost, "IDR")}
                   </div>
                   <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                    {waterSeries.reduce((sum: number, v: number) => sum + v, 0).toFixed(1)} m³
+                    {waterSeriesKwh.reduce((sum: number, v: number) => sum + v, 0).toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh
                   </div>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-[#3bb77e]" />
@@ -1085,8 +1108,8 @@ export default function Dashboard() {
               <div className="mt-3">
                 <UtilityBarChart
                   labels={consumptionLabels}
-                  values={waterSeries}
-                  unit="m³"
+                  values={waterSeriesKwh}
+                  unit="kWh"
                   color="#3bb77e"
                   height={160}
                 />
@@ -1263,16 +1286,16 @@ export default function Dashboard() {
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
             <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Water YTD</div>
             <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-              {formatCurrency(ytdWaterTotal * utilityRates.waterIdr, "IDR")}
+              {formatCurrency((ytdWaterTotal / waterEnergyFactor) * utilityRates.waterIdr, "IDR")}
             </div>
             <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-              {ytdWaterTotal.toFixed(0)} m³
+              {ytdWaterTotal.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh
             </div>
             <div className="mt-3">
               <UtilityBarChart
                 labels={ytdLabels}
                 values={ytdWaterSeries}
-                unit="m³"
+                unit="kWh"
                 color="#3bb77e"
                 height={140}
               />
@@ -1312,7 +1335,7 @@ export default function Dashboard() {
               labels={ytdLabels}
               electricity={ytdChecks.electricity ? ytdElectricitySeries : ytdElectricitySeries.map(() => 0)}
               gas={ytdChecks.gas ? ytdGasSeries.map((v: number | null) => (v ?? 0) * gasEnergyFactor) : ytdGasSeries.map(() => 0)}
-              water={ytdChecks.water ? ytdWaterSeries.map((v: number | null) => (v ?? 0) * waterEnergyFactor) : ytdWaterSeries.map(() => 0)}
+              water={ytdChecks.water ? ytdWaterSeries.map((v: number | null) => (v ?? 0)) : ytdWaterSeries.map(() => 0)}
             />
           </div>
         </div>
