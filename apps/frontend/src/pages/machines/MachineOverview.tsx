@@ -138,7 +138,7 @@ function StandardMachineOverview({
   const [subTab, setSubTab] = useState<"telemetry" | "process">("telemetry");
   const [dbAlarms, setDbAlarms] = useState<any[]>([]);
 
-  const [apiSourceUrls] = useState<Record<string, string>>(() => {
+  const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>(() => {
     const defaultMap: Record<string, string> = {};
     if (unitId.startsWith("cooling-water")) {
       const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
@@ -152,18 +152,38 @@ function StandardMachineOverview({
       try {
         const parsed = JSON.parse(saved);
         const healed: Record<string, string> = {};
+        let modified = false;
         Object.entries(parsed).forEach(([key, val]) => {
           if (typeof val === "string") {
-            healed[key] = val.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+            const newVal = val.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+            if (newVal !== val) modified = true;
+            healed[key] = newVal;
           } else {
             healed[key] = val as string;
           }
         });
+        if (modified) {
+          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(healed));
+        }
         return { ...defaultMap, ...healed };
       } catch (e) {}
     }
     return defaultMap;
   });
+
+  // Sync API sources from Postgres database on mount
+  useEffect(() => {
+    getJson<{ success: boolean; sources: Record<string, string> | null }>(
+      `/config/api-sources-map?unitId=${unitId}`
+    )
+      .then((res) => {
+        if (res && res.success && res.sources) {
+          setApiSourceUrls((prev) => ({ ...prev, ...res.sources }));
+          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(res.sources));
+        }
+      })
+      .catch((err) => console.error("Failed to load API sources map from DB:", err));
+  }, [unitId]);
 
   const [apiLiveData, setApiLiveData] = useState<Record<string, any>>({});
 

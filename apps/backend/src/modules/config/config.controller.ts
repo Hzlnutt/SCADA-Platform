@@ -1192,3 +1192,35 @@ export const upsertApiSourcesMapHandler = async (
     next(err);
   }
 };
+
+export const getApiSourcesMapHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { unitId } = req.query;
+    if (!unitId) {
+      res.status(400).json({ error: "unitId is required" });
+      return;
+    }
+
+    const pool = getPostgresPool();
+    const listRes = await pool.query(
+      "SELECT value FROM global_configs WHERE key = $1",
+      [`api_sources_list_${unitId}`]
+    );
+    const mapRes = await pool.query(
+      "SELECT value FROM global_configs WHERE key = $1",
+      [`api_sources_map_${unitId}`]
+    );
+
+    res.json({
+      success: true,
+      rows: listRes.rows[0]?.value || null,
+      sources: mapRes.rows[0]?.value || null
+    });
+  } catch (err) {
+    next(err);
+  }
+};

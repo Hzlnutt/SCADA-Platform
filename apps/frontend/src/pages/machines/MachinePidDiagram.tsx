@@ -207,7 +207,7 @@ export default function MachinePidDiagram() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
 
-  const [apiSourceUrls] = useState<Record<string, string>>(() => {
+  const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>(() => {
     const defaultMap: Record<string, string> = {};
     if (unitId.startsWith("cooling-water")) {
       const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
@@ -239,6 +239,20 @@ export default function MachinePidDiagram() {
     }
     return defaultMap;
   });
+
+  // Sync API sources from Postgres database on mount
+  useEffect(() => {
+    getJson<{ success: boolean; sources: Record<string, string> | null }>(
+      `/config/api-sources-map?unitId=${unitId}`
+    )
+      .then((res) => {
+        if (res && res.success && res.sources) {
+          setApiSourceUrls((prev) => ({ ...prev, ...res.sources }));
+          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(res.sources));
+        }
+      })
+      .catch((err) => console.error("Failed to load API sources map from DB:", err));
+  }, [unitId]);
 
   const [apiLiveData, setApiLiveData] = useState<Record<string, any>>({});
 

@@ -791,6 +791,25 @@ export default function MachineConfig() {
     }
   }, [unitId, isCoolingTower]);
 
+  // Load API sources list from database on mount to sync with Postgres global_configs
+  useEffect(() => {
+    getJson<{ success: boolean; rows: ApiSourceRow[] | null; sources: Record<string, string> | null }>(
+      `/config/api-sources-map?unitId=${unitId}`
+    )
+      .then((res) => {
+        if (res && res.success) {
+          if (res.rows && res.rows.length > 0) {
+            setApiSourceRows(res.rows);
+            localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(res.rows));
+            if (res.sources) {
+              localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(res.sources));
+            }
+          }
+        }
+      })
+      .catch((err) => console.error("Failed to load API sources map from DB:", err));
+  }, [unitId]);
+
   // Handle number input changes for sensors
   const handleSensorNumChange = (tagKey: string, field: "lowLimit" | "baseline" | "highLimit", value: string) => {
     const parsedVal = value === "" ? 0 : parseFloat(value);
