@@ -366,20 +366,37 @@ export default function MachineConfig() {
       try {
         const parsed = JSON.parse(savedList);
         if (Array.isArray(parsed)) {
-          return parsed.map((row: any) => {
+          let modified = false;
+          const healed = parsed.map((row: any) => {
             let healedUrl = typeof row.url === "string" ? row.url : "";
-            healedUrl = healedUrl.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+            const newUrl = healedUrl.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+            if (newUrl !== healedUrl) modified = true;
             
             let healedJsonKey = row.jsonKey;
-            if (healedJsonKey === "Scaled_Temp_Tank_Cooling3_Supp") healedJsonKey = "Scaled_Temp_Tank_Colling3_Supp";
-            if (healedJsonKey === "Scaled_Temp_Tank_Cooling3_Return") healedJsonKey = "Scaled_Temp_Tank_Colling3_Return";
+            if (healedJsonKey === "Scaled_Temp_Tank_Cooling3_Supp") {
+              healedJsonKey = "Scaled_Temp_Tank_Colling3_Supp";
+              modified = true;
+            }
+            if (healedJsonKey === "Scaled_Temp_Tank_Cooling3_Return") {
+              healedJsonKey = "Scaled_Temp_Tank_Colling3_Return";
+              modified = true;
+            }
             
             return {
               ...row,
-              url: healedUrl,
+              url: newUrl,
               jsonKey: healedJsonKey || DEFAULT_JSON_KEYS[row.tagKey] || row.tagKey.split("/")[1] || ""
             };
           });
+          if (modified) {
+            localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(healed));
+            const flatMap: Record<string, string> = {};
+            healed.forEach(r => {
+              flatMap[r.tagKey] = r.url;
+            });
+            localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(flatMap));
+          }
+          return healed;
         }
       } catch (e) {}
     }
@@ -388,16 +405,30 @@ export default function MachineConfig() {
     if (savedUrlsStr) {
       try {
         const savedUrls = JSON.parse(savedUrlsStr);
-        return defaults.map(d => {
+        let modified = false;
+        const healed = defaults.map(d => {
           let url = savedUrls[d.tagKey] !== undefined ? savedUrls[d.tagKey] : d.url;
           if (typeof url === "string") {
-            url = url.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+            const newUrl = url.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+            if (newUrl !== url) {
+              modified = true;
+              url = newUrl;
+            }
           }
           return {
             ...d,
             url
           };
         });
+        if (modified) {
+          const flatMap: Record<string, string> = {};
+          healed.forEach(r => {
+            flatMap[r.tagKey] = r.url;
+          });
+          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(flatMap));
+          localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(healed));
+        }
+        return healed;
       } catch (e) {}
     }
     return defaults;

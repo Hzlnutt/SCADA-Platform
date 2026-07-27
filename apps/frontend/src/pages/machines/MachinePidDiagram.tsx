@@ -221,13 +221,19 @@ export default function MachinePidDiagram() {
       try {
         const parsed = JSON.parse(saved);
         const healed: Record<string, string> = {};
+        let modified = false;
         Object.entries(parsed).forEach(([key, val]) => {
-          if (typeof val === "string" && val.includes("10.3.164.3")) {
-            healed[key] = val.replace("10.3.164.3", "10.3.161.3");
+          if (typeof val === "string") {
+            const newVal = val.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+            if (newVal !== val) modified = true;
+            healed[key] = newVal;
           } else {
             healed[key] = val as string;
           }
         });
+        if (modified) {
+          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(healed));
+        }
         return { ...defaultMap, ...healed };
       } catch (e) {}
     }
