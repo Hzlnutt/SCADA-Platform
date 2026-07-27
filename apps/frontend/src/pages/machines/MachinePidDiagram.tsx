@@ -259,19 +259,31 @@ export default function MachinePidDiagram() {
   useEffect(() => {
     let isMounted = true;
     const fetchActiveApiData = async () => {
-      const activeUrls = Object.values(apiSourceUrls).filter((u) => u.trim());
-      if (activeUrls.length === 0) return;
-      const targetUrl = activeUrls[0];
-      try {
-        const res = await postJson<{ success: boolean; data?: any }>("/config/api-sources/test", {
-          url: targetUrl,
-          method: "GET"
-        });
-        if (isMounted && res && res.success && res.data) {
-          setApiLiveData(res.data);
-        }
-      } catch (err) {
-        console.error("Live API poll error on P&ID diagram:", err);
+      const uniqueUrls = Array.from(new Set(Object.values(apiSourceUrls).filter((u) => u.trim())));
+      if (uniqueUrls.length === 0) {
+        if (isMounted) setApiLiveData({});
+        return;
+      }
+
+      const aggregatedData: Record<string, any> = {};
+      await Promise.all(
+        uniqueUrls.map(async (url) => {
+          try {
+            const res = await postJson<{ success: boolean; data?: any }>("/config/api-sources/test", {
+              url,
+              method: "GET"
+            });
+            if (res && res.success && res.data) {
+              Object.assign(aggregatedData, res.data);
+            }
+          } catch (err) {
+            console.error(`Live API poll error on P&ID diagram for URL ${url}:`, err);
+          }
+        })
+      );
+
+      if (isMounted) {
+        setApiLiveData(aggregatedData);
       }
     };
 
