@@ -15,8 +15,8 @@ export type ApiSourceRow = {
 };
 
 const DEFAULT_JSON_KEYS: Record<string, string> = {
-  "cooling-water/supply_temp": "Scaled_Temp_Tank_Cooling3_Supp",
-  "cooling-water/return_temp": "Scaled_Temp_Tank_Cooling3_Return",
+  "cooling-water/supply_temp": "Scaled_Temp_Tank_Colling3_Supp",
+  "cooling-water/return_temp": "Scaled_Temp_Tank_Colling3_Return",
   "cooling-water/st3_return_temp": "Scaled_Temp_ST3_Return",
   "cooling-water/eq_temp_st03_supply": "Scaled_Temp_ST3_Supply",
   "cooling-water/eq_press_du03": "Scaled_Press_DUU3",
@@ -280,154 +280,37 @@ const PID_EQ_TAG_KEYS = [
 ];
 
 const TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
-  // Main
-  "cooling-water/supply_temp": "Scaled_Temp_Tank_Cooling3_Supp",
-  "cooling-water/return_temp": "Scaled_Temp_Tank_Cooling3_Return",
-  "cooling-water/delta_temp": "delta_temp",
-  "cooling-water/ambient_temp": "Scaled_Temp_Washing",
-  "cooling-water/ambient_humidity": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct_efficiency": "Scaled_Level_tank_cooling3",
-  "cooling-water/total_energy": "Scaled_Level_tank_cooling3",
-
-  // CT-1
-  "cooling-water/fan_status_1": "Status_Fan_CT1",
-  "cooling-water/ct1_fan_speed": "Scaled_Level_tank_cooling3",
-  "cooling-water/motor_status_1": "Status_MTR_CT_P1",
-  "cooling-water/ct1_motor_current": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct1_sirk_current": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct1_motor_power": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct1_flow": "Scaled_Level_tank_cooling3",
-  "cooling-water/pressure_1": "Scaled_Press_CT_P1",
-  "cooling-water/ct1_vibra_fan": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct1_vibra_motor": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct1_basin_temp": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct1_running_hours": "Scaled_Level_tank_cooling3",
-
-  // CT-2
-  "cooling-water/fan_status_2": "Status_Fan_CT2",
-  "cooling-water/ct2_fan_speed": "Scaled_Level_tank_cooling3",
-  "cooling-water/motor_status_2": "Status_MTR_CT_P2",
-  "cooling-water/ct2_motor_current": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct2_sirk_current": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct2_motor_power": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct2_flow": "Scaled_Level_tank_cooling3",
-  "cooling-water/pressure_2": "Scaled_Press_CT_P2",
-  "cooling-water/ct2_vibra_fan": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct2_vibra_motor": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct2_basin_temp": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct2_running_hours": "Scaled_Level_tank_cooling3",
-
-  // CT-3
-  "cooling-water/fan_status_3": "Status_Fan_CT3",
-  "cooling-water/ct3_fan_speed": "Scaled_Level_tank_cooling3",
-  "cooling-water/motor_status_3": "Status_MTR_CT_P11",
-  "cooling-water/ct3_motor_current": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct3_sirk_current": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct3_motor_power": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct3_flow": "Scaled_Level_tank_cooling3",
-  "cooling-water/pressure_3": "Scaled_Press_CT3_P11",
-  "cooling-water/ct3_vibra_fan": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct3_vibra_motor": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct3_basin_temp": "Scaled_Level_tank_cooling3",
-  "cooling-water/ct3_running_hours": "Scaled_Level_tank_cooling3",
-
-  // Tanks & Dosing
-  "cooling-water/cooling_tank_tds": "Scaled_Level_tank_cooling3",
-  "cooling-water/cooling_tank_ph": "Scaled_Level_tank_cooling3",
-  "cooling-water/supply_wtr_cond": "Scaled_Level_tank_cooling3",
-  "cooling-water/basin_lvl": "Scaled_Level_tank_cooling3",
-  "cooling-water/makeup_wtr_ph": "Scaled_Level_tank_cooling3",
-  "cooling-water/makeup_wtr_tds": "Scaled_Level_tank_cooling3",
-  "cooling-water/makeup_wtr_flow": "Scaled_Level_tank_cooling3",
-  "cooling-water/makeup_wtr_vol": "Scaled_Level_tank_cooling3",
-  "cooling-water/chemical_357_pump": "Scaled_Level_tank_cooling3",
-  "cooling-water/chemical_357_lvl": "Scaled_Level_tank_cooling3",
-  "cooling-water/chemical_357_vol": "Scaled_Level_tank_cooling3",
-  "cooling-water/chemical_327_pump": "Scaled_Level_tank_cooling3",
-  "cooling-water/chemical_327_lvl": "Scaled_Level_tank_cooling3",
-  "cooling-water/chemical_327_vol": "Scaled_Level_tank_cooling3",
-  "cooling-water/blowdown_status": "Scaled_Level_tank_cooling3",
-  "cooling-water/blowdown_flow": "Scaled_Level_tank_cooling3",
-  "cooling-water/blowdown_vol": "Scaled_Level_tank_cooling3",
-
-  // ST-3 Return Temp / Process
+  "cooling-water/supply_temp": "Scaled_Temp_Tank_Colling3_Supp",
+  "cooling-water/return_temp": "Scaled_Temp_Tank_Colling3_Return",
   "cooling-water/st3_return_temp": "Scaled_Temp_ST3_Return",
   "cooling-water/eq_temp_st03_supply": "Scaled_Temp_ST3_Supply",
-  "cooling-water/st3_heating": "Status_Machine__Heating_ST3",
-  "cooling-water/st3_cooling": "Status_Machine__Cooling_ST3",
-  "cooling-water/st3_steril": "Status_Machine__Steril_ST3",
-  "cooling-water/jumo_pieces": "Jumo_Pieces",
-
-  // Motor 1, 2, 3 Extra
-  "cooling-water/mtr1_running_hours": "Scaled_Level_tank_cooling3",
-  "cooling-water/mtr1_hz": "Scaled_Level_tank_cooling3",
-  "cooling-water/mtr1_kw": "Scaled_Level_tank_cooling3",
-  "cooling-water/mtr2_running_hours": "Scaled_Level_tank_cooling3",
-  "cooling-water/mtr2_hz": "Scaled_Level_tank_cooling3",
-  "cooling-water/mtr2_kw": "Scaled_Level_tank_cooling3",
-  "cooling-water/mtr3_running_hours": "Scaled_Level_tank_cooling3",
-  "cooling-water/mtr3_hz": "Scaled_Level_tank_cooling3",
-  "cooling-water/mtr3_kw": "Scaled_Level_tank_cooling3",
-
-  // Equipment Status Matrix details
-  "cooling-water/eq_status_du03": "Status_MTR_DU45",
-  "cooling-water/eq_flow_du03": "Scaled_Level_tank_cooling3",
   "cooling-water/eq_press_du03": "Scaled_Press_DUU3",
-  "cooling-water/eq_curr_du03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_pow_du03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_vib_du03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_temp_du03": "Scaled_Temp_DU",
-  "cooling-water/eq_hrs_du03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_maint_du03": "Scaled_Level_tank_cooling3",
-
-  "cooling-water/eq_status_bp03": "Status_MTR_BP",
-  "cooling-water/eq_flow_bp03": "Scaled_Level_tank_cooling3",
   "cooling-water/eq_press_bp03": "Scaled_Press_BP",
-  "cooling-water/eq_curr_bp03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_pow_bp03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_vib_bp03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_temp_bp03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_hrs_bp03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_maint_bp03": "Scaled_Level_tank_cooling3",
-
-  "cooling-water/eq_status_prep03": "Status_MTR_Prep3",
-  "cooling-water/eq_flow_prep03": "Scaled_Level_tank_cooling3",
   "cooling-water/eq_press_prep03": "Scaled_Press_PrepU3",
-  "cooling-water/eq_curr_prep03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_pow_prep03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_vib_prep03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_temp_prep03": "Scaled_Tempt_Prep3_Return",
-  "cooling-water/eq_hrs_prep03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_maint_prep03": "Scaled_Level_tank_cooling3",
-
-  "cooling-water/eq_status_st03": "Status_MTR_ST3_P3",
-  "cooling-water/eq_flow_st03": "Scaled_Level_tank_cooling3",
   "cooling-water/eq_press_st03": "Scaled_Press_ST3",
-  "cooling-water/eq_curr_st03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_pow_st03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_vib_st03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_hrs_st03": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_maint_st03": "Scaled_Level_tank_cooling3",
-
-  "cooling-water/eq_status_washing": "Status_MTR_Washing",
-  "cooling-water/eq_flow_washing": "Scaled_Level_tank_cooling3",
   "cooling-water/eq_press_washing": "Scaled_Press_Washing",
-  "cooling-water/eq_curr_washing": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_pow_washing": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_vib_washing": "Scaled_Level_tank_cooling3",
+  "cooling-water/eq_temp_du03": "Scaled_Temp_DU",
+  "cooling-water/eq_temp_prep03": "Scaled_Tempt_Prep3_Return",
   "cooling-water/eq_temp_washing": "Scaled_Temp_Washing",
-  "cooling-water/eq_hrs_washing": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_maint_washing": "Scaled_Level_tank_cooling3",
-
-  "cooling-water/eq_status_minilab": "Status_MTR_MiniLab",
-  "cooling-water/eq_flow_minilab": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_press_minilab": "Scaled_Press_MiniLab",
-  "cooling-water/eq_curr_minilab": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_pow_minilab": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_vib_minilab": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_temp_minilab": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_hrs_minilab": "Scaled_Level_tank_cooling3",
-  "cooling-water/eq_maint_minilab": "Scaled_Level_tank_cooling3"
+  "cooling-water/basin_lvl": "Scaled_Level_tank_cooling3",
+  "cooling-water/fan_status_1": "Status_Fan_C11",
+  "cooling-water/fan_status_2": "Status_Fan_CT2",
+  "cooling-water/fan_status_3": "Status_Fan_CT3",
+  "cooling-water/motor_status_1": "Status_MTR_CT_P1",
+  "cooling-water/motor_status_2": "Status_MTR_CT_P2",
+  "cooling-water/motor_status_3": "Status_MTR_CI_P11",
+  "cooling-water/eq_status_du03": "Status_MTR_DU45",
+  "cooling-water/eq_status_bp03": "Status_MTR_BP",
+  "cooling-water/eq_status_prep03": "Status_MTR_Prep3",
+  "cooling-water/eq_status_st03": "Status_MTR_ST3_P3",
+  "cooling-water/eq_status_washing": "Status_MTR_Washing",
+  "cooling-water/st3_heating": "Status_Machine_Heating_ST3",
+  "cooling-water/st3_cooling": "Status_Machine_Cooling_ST3",
+  "cooling-water/st3_steril": "Status_Machine_Steril_ST3",
+  "cooling-water/jumo_pieces": "Jumo Pieces",
+  "cooling-water/pressure_1": "Scaled_Press_CT_P1",
+  "cooling-water/pressure_2": "Scaled_Press_CT_P2",
+  "cooling-water/pressure_3": "Scaled_Press_CT3_P11"
 };
 
 const DEFAULT_TASK_RULES = [
@@ -484,13 +367,17 @@ export default function MachineConfig() {
         const parsed = JSON.parse(savedList);
         if (Array.isArray(parsed)) {
           return parsed.map((row: any) => {
-            const healedUrl = typeof row.url === "string" && row.url.includes("10.3.164.3")
-              ? row.url.replace("10.3.164.3", "10.3.161.3")
-              : row.url;
+            let healedUrl = typeof row.url === "string" ? row.url : "";
+            healedUrl = healedUrl.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+            
+            let healedJsonKey = row.jsonKey;
+            if (healedJsonKey === "Scaled_Temp_Tank_Cooling3_Supp") healedJsonKey = "Scaled_Temp_Tank_Colling3_Supp";
+            if (healedJsonKey === "Scaled_Temp_Tank_Cooling3_Return") healedJsonKey = "Scaled_Temp_Tank_Colling3_Return";
+            
             return {
               ...row,
               url: healedUrl,
-              jsonKey: row.jsonKey || DEFAULT_JSON_KEYS[row.tagKey] || row.tagKey.split("/")[1] || ""
+              jsonKey: healedJsonKey || DEFAULT_JSON_KEYS[row.tagKey] || row.tagKey.split("/")[1] || ""
             };
           });
         }
@@ -503,8 +390,8 @@ export default function MachineConfig() {
         const savedUrls = JSON.parse(savedUrlsStr);
         return defaults.map(d => {
           let url = savedUrls[d.tagKey] !== undefined ? savedUrls[d.tagKey] : d.url;
-          if (typeof url === "string" && url.includes("10.3.164.3")) {
-            url = url.replace("10.3.164.3", "10.3.161.3");
+          if (typeof url === "string") {
+            url = url.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
           }
           return {
             ...d,

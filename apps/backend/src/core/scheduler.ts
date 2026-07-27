@@ -100,10 +100,9 @@ export const startPowerFactorPolling = () => {
 };
 
 let coolingPollingInterval: NodeJS.Timeout | null = null;
-
 const DEFAULT_TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
-  "cooling-water/supply_temp": "Scaled_Temp_Tank_Cooling3_Supp",
-  "cooling-water/return_temp": "Scaled_Temp_Tank_Cooling3_Return",
+  "cooling-water/supply_temp": "Scaled_Temp_Tank_Colling3_Supp",
+  "cooling-water/return_temp": "Scaled_Temp_Tank_Colling3_Return",
   "cooling-water/st3_return_temp": "Scaled_Temp_ST3_Return",
   "cooling-water/eq_temp_st03_supply": "Scaled_Temp_ST3_Supply",
   "cooling-water/eq_press_du03": "Scaled_Press_DUU3",
@@ -152,7 +151,9 @@ export const startCoolingTowerPolling = () => {
           const map = mapRes.rows[0].value;
           const firstConfiguredUrl = Object.values(map).find((u: any) => typeof u === "string" && u.trim());
           if (firstConfiguredUrl) {
-            targetUrl = firstConfiguredUrl as string;
+            let url = firstConfiguredUrl as string;
+            url = url.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+            targetUrl = url;
           }
         }
       } catch (e) {
@@ -166,7 +167,10 @@ export const startCoolingTowerPolling = () => {
           if (Array.isArray(list)) {
             list.forEach((row: any) => {
               if (row.tagKey && row.jsonKey) {
-                jsonKeyMap[row.tagKey] = row.jsonKey;
+                let jk = row.jsonKey;
+                if (jk === "Scaled_Temp_Tank_Cooling3_Supp") jk = "Scaled_Temp_Tank_Colling3_Supp";
+                if (jk === "Scaled_Temp_Tank_Cooling3_Return") jk = "Scaled_Temp_Tank_Colling3_Return";
+                jsonKeyMap[row.tagKey] = jk;
               }
             });
           }

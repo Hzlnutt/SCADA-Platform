@@ -79,8 +79,8 @@ const INITIAL_ALARMS = [
 ];
 
 const TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
-  "cooling-water/supply_temp": "Scaled_Temp_Tank_Cooling3_Supp",
-  "cooling-water/return_temp": "Scaled_Temp_Tank_Cooling3_Return",
+  "cooling-water/supply_temp": "Scaled_Temp_Tank_Colling3_Supp",
+  "cooling-water/return_temp": "Scaled_Temp_Tank_Colling3_Return",
   "cooling-water/pressure_1": "Scaled_Press_CT_P1",
   "cooling-water/pressure_2": "Scaled_Press_CT_P2",
   "cooling-water/pressure_3": "Scaled_Press_CT3_P11",
@@ -153,8 +153,8 @@ function StandardMachineOverview({
         const parsed = JSON.parse(saved);
         const healed: Record<string, string> = {};
         Object.entries(parsed).forEach(([key, val]) => {
-          if (typeof val === "string" && val.includes("10.3.164.3")) {
-            healed[key] = val.replace("10.3.164.3", "10.3.161.3");
+          if (typeof val === "string") {
+            healed[key] = val.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
           } else {
             healed[key] = val as string;
           }
