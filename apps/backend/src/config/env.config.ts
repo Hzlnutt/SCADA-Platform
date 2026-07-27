@@ -46,7 +46,7 @@ const envSchema = z.object({
   POSTGRES_USER: z.string().default("test_user"),
   POSTGRES_PASSWORD: z.string().default("Pandaan1"),
   POSTGRES_DB: z.string().default("scada_test"),
-  POWER_FACTOR_API_URL: z.string().default("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln"),
+  POWER_FACTOR_API_URL: z.string().default("http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_pln"),
   POWER_FACTOR_API_USER: z.string().default(""),
   POWER_FACTOR_API_PASS: z.string().default("")
 });

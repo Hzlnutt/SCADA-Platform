@@ -85,20 +85,34 @@ const TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
   "cooling-water/pressure_2": "Scaled_Press_CT_P2",
   "cooling-water/pressure_3": "Scaled_Press_CT3_P11",
   "cooling-water/eq_press_bp03": "Scaled_Press_BP",
-  "cooling-water/eq_press_du03": "Scaled_Press_DU3",
-  "cooling-water/eq_temp_du03": "Scaled_Temp_DU3",
+  "cooling-water/eq_press_du03": "Scaled_Press_DUU3",
+  "cooling-water/eq_temp_du03": "Scaled_Temp_DU",
   "cooling-water/eq_press_prep03": "Scaled_Press_PrepU3",
   "cooling-water/eq_temp_prep03": "Scaled_Tempt_Prep3_Return",
   "cooling-water/eq_press_st03": "Scaled_Press_ST3",
   "cooling-water/eq_press_washing": "Scaled_Press_Washing",
-  "cooling-water/eq_temp_wash03": "Scaled_Temp_Washing",
-  "cooling-water/eq_temp_st03_supp": "Scaled_Temp_ST3_Supply",
+  "cooling-water/eq_temp_washing": "Scaled_Temp_Washing",
+  "cooling-water/eq_temp_st03_supply": "Scaled_Temp_ST3_Supply",
   "cooling-water/st3_return_temp": "Scaled_Temp_ST3_Return",
-  "cooling-water/eq_temp_st03_ret": "Scaled_Temp_ST3_Return",
+  "cooling-water/st3_heating": "Status_Machine_Heating_ST3",
+  "cooling-water/st3_cooling": "Status_Machine_Cooling_ST3",
+  "cooling-water/st3_steril": "Status_Machine_Steril_ST3",
+  "cooling-water/jumo_pieces": "Jumo Pieces",
   "cooling-water/basin_lvl": "Scaled_Level_tank_cooling3",
   "cooling-water/cooling_tank_level": "Scaled_Level_tank_cooling3",
-  "cooling-water/ambient_temp": "Scaled_Temp_Washing",
-  "cooling-water/ambient_humidity": "Scaled_Level_tank_cooling3"
+  "cooling-water/ambient_temp": "ambient_temp",
+  "cooling-water/ambient_humidity": "ambient_humidity",
+  "cooling-water/fan_status_1": "Status_Fan_C11",
+  "cooling-water/fan_status_2": "Status_Fan_CT2",
+  "cooling-water/fan_status_3": "Status_Fan_CT3",
+  "cooling-water/motor_status_1": "Status_MTR_CT_P1",
+  "cooling-water/motor_status_2": "Status_MTR_CT_P2",
+  "cooling-water/motor_status_3": "Status_MTR_CT_P11",
+  "cooling-water/eq_status_du03": "Status_MTR_DU45",
+  "cooling-water/eq_status_bp03": "Status_MTR_BP",
+  "cooling-water/eq_status_prep03": "Status_MTR_Prep3",
+  "cooling-water/eq_status_st03": "Status_MTR_ST3_P3",
+  "cooling-water/eq_status_washing": "Status_MTR_Washing"
 };
 
 function StandardMachineOverview({
@@ -127,7 +141,7 @@ function StandardMachineOverview({
   const [apiSourceUrls] = useState<Record<string, string>>(() => {
     const defaultMap: Record<string, string> = {};
     if (unitId.startsWith("cooling-water")) {
-      const defaultUrl = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3";
+      const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
       const sensorList = getDefaultSensorConfigs(unitId);
       sensorList.forEach((s) => {
         defaultMap[s.tagKey] = defaultUrl;
@@ -137,7 +151,15 @@ function StandardMachineOverview({
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        return { ...defaultMap, ...parsed };
+        const healed: Record<string, string> = {};
+        Object.entries(parsed).forEach(([key, val]) => {
+          if (typeof val === "string" && val.includes("10.3.164.3")) {
+            healed[key] = val.replace("10.3.164.3", "10.3.161.3");
+          } else {
+            healed[key] = val as string;
+          }
+        });
+        return { ...defaultMap, ...healed };
       } catch (e) {}
     }
     return defaultMap;
@@ -300,20 +322,38 @@ function StandardMachineOverview({
   const latest = useTelemetryStore((state) => state.latest);
   const liveData = useMemo(() => {
     if (unitId.startsWith("cooling-water")) {
+      const jsonKeyMap = (() => {
+        const map: Record<string, string> = {};
+        const savedList = localStorage.getItem(`scada.config.api_sources_list.${unitId}`);
+        if (savedList) {
+          try {
+            const parsed = JSON.parse(savedList);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((row: any) => {
+                if (row.tagKey && row.jsonKey) {
+                  map[row.tagKey] = row.jsonKey;
+                }
+              });
+            }
+          } catch (e) {}
+        }
+        return map;
+      })();
+
       const getApiVal = (tagKey: string) => {
         const url = apiSourceUrls[tagKey] || "";
         if (!url.trim()) return "Belum Ada API";
 
         if (tagKey === "cooling-water/delta_temp") {
-          const retVal = apiLiveData["Scaled_Temp_Tank_Cooling3_Return"];
-          const suppVal = apiLiveData["Scaled_Temp_Tank_Cooling3_Supp"];
+          const retVal = apiLiveData[jsonKeyMap["cooling-water/return_temp"] || "Scaled_Temp_Tank_Cooling3_Return"];
+          const suppVal = apiLiveData[jsonKeyMap["cooling-water/supply_temp"] || "Scaled_Temp_Tank_Cooling3_Supp"];
           if (typeof retVal === "number" && typeof suppVal === "number") {
             return retVal - suppVal;
           }
           return "xx";
         }
 
-        const jsonKey = TAG_KEY_TO_API_JSON_KEY[tagKey];
+        const jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
         if (!jsonKey) return "xx";
 
         const val = apiLiveData[jsonKey];

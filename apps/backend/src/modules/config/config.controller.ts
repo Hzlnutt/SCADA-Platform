@@ -1154,3 +1154,41 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
     });
   }
 };
+
+export const upsertApiSourcesMapHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { unitId, sources, rows } = req.body;
+    if (!unitId) {
+      res.status(400).json({ error: "unitId is required" });
+      return;
+    }
+
+    const pool = getPostgresPool();
+    
+    if (sources) {
+      await pool.query(
+        `INSERT INTO global_configs (key, value)
+         VALUES ($1, $2::jsonb)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+        [`api_sources_map_${unitId}`, JSON.stringify(sources)]
+      );
+    }
+
+    if (rows) {
+      await pool.query(
+        `INSERT INTO global_configs (key, value)
+         VALUES ($1, $2::jsonb)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+        [`api_sources_list_${unitId}`, JSON.stringify(rows)]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+};

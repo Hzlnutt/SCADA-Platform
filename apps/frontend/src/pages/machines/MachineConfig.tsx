@@ -11,10 +11,45 @@ export type ApiSourceRow = {
   tagName: string;
   url: string;
   unit: string;
+  jsonKey?: string;
+};
+
+const DEFAULT_JSON_KEYS: Record<string, string> = {
+  "cooling-water/supply_temp": "Scaled_Temp_Tank_Cooling3_Supp",
+  "cooling-water/return_temp": "Scaled_Temp_Tank_Cooling3_Return",
+  "cooling-water/st3_return_temp": "Scaled_Temp_ST3_Return",
+  "cooling-water/eq_temp_st03_supply": "Scaled_Temp_ST3_Supply",
+  "cooling-water/eq_press_du03": "Scaled_Press_DUU3",
+  "cooling-water/eq_press_bp03": "Scaled_Press_BP",
+  "cooling-water/eq_press_prep03": "Scaled_Press_PrepU3",
+  "cooling-water/eq_press_st03": "Scaled_Press_ST3",
+  "cooling-water/eq_press_washing": "Scaled_Press_Washing",
+  "cooling-water/eq_temp_du03": "Scaled_Temp_DU",
+  "cooling-water/eq_temp_prep03": "Scaled_Tempt_Prep3_Return",
+  "cooling-water/eq_temp_washing": "Scaled_Temp_Washing",
+  "cooling-water/basin_lvl": "Scaled_Level_tank_cooling3",
+  "cooling-water/fan_status_1": "Status_Fan_C11",
+  "cooling-water/fan_status_2": "Status_Fan_CT2",
+  "cooling-water/fan_status_3": "Status_Fan_CT3",
+  "cooling-water/motor_status_1": "Status_MTR_CT_P1",
+  "cooling-water/motor_status_2": "Status_MTR_CT_P2",
+  "cooling-water/motor_status_3": "Status_MTR_CT_P11",
+  "cooling-water/eq_status_du03": "Status_MTR_DU45",
+  "cooling-water/eq_status_bp03": "Status_MTR_BP",
+  "cooling-water/eq_status_prep03": "Status_MTR_Prep3",
+  "cooling-water/eq_status_st03": "Status_MTR_ST3_P3",
+  "cooling-water/eq_status_washing": "Status_MTR_Washing",
+  "cooling-water/st3_heating": "Status_Machine_Heating_ST3",
+  "cooling-water/st3_cooling": "Status_Machine_Cooling_ST3",
+  "cooling-water/st3_steril": "Status_Machine_Steril_ST3",
+  "cooling-water/jumo_pieces": "Jumo Pieces",
+  "cooling-water/pressure_1": "Scaled_Press_CT_P1",
+  "cooling-water/pressure_2": "Scaled_Press_CT_P2",
+  "cooling-water/pressure_3": "Scaled_Press_CT3_P11"
 };
 
 const getDefaultApiSourceConfigs = (unitId: string): ApiSourceRow[] => {
-  const defaultUrl = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3";
+  const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
   const isCooling = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
   
   if (!isCooling) {
@@ -22,11 +57,12 @@ const getDefaultApiSourceConfigs = (unitId: string): ApiSourceRow[] => {
       tagKey: s.tagKey,
       tagName: s.tagName,
       url: "",
-      unit: s.unit
+      unit: s.unit,
+      jsonKey: ""
     }));
   }
 
-  return [
+  const rawList: Omit<ApiSourceRow, "jsonKey">[] = [
     // Part : Main Information
     { tagKey: "cooling-water/supply_temp", tagName: "Supply Temp", url: defaultUrl, unit: "°C" },
     { tagKey: "cooling-water/return_temp", tagName: "Return Temp", url: defaultUrl, unit: "°C" },
@@ -203,6 +239,11 @@ const getDefaultApiSourceConfigs = (unitId: string): ApiSourceRow[] => {
     { tagKey: "cooling-water/eq_hrs_minilab", tagName: "MTR-9 Run Hours MINI LAB", url: defaultUrl, unit: "hrs" },
     { tagKey: "cooling-water/eq_maint_minilab", tagName: "MTR-9 Maint Status MINI LAB", url: defaultUrl, unit: "status" }
   ];
+
+  return rawList.map(r => ({
+    ...r,
+    jsonKey: DEFAULT_JSON_KEYS[r.tagKey] || r.tagKey.split("/")[1] || ""
+  }));
 };
 
 const getEqDisplayTagKey = (tagKey: string) => {
@@ -440,7 +481,19 @@ export default function MachineConfig() {
     const savedList = localStorage.getItem(`scada.config.api_sources_list.${unitId}`);
     if (savedList) {
       try {
-        return JSON.parse(savedList);
+        const parsed = JSON.parse(savedList);
+        if (Array.isArray(parsed)) {
+          return parsed.map((row: any) => {
+            const healedUrl = typeof row.url === "string" && row.url.includes("10.3.164.3")
+              ? row.url.replace("10.3.164.3", "10.3.161.3")
+              : row.url;
+            return {
+              ...row,
+              url: healedUrl,
+              jsonKey: row.jsonKey || DEFAULT_JSON_KEYS[row.tagKey] || row.tagKey.split("/")[1] || ""
+            };
+          });
+        }
       } catch (e) {}
     }
     const defaults = getDefaultApiSourceConfigs(unitId);
@@ -448,10 +501,16 @@ export default function MachineConfig() {
     if (savedUrlsStr) {
       try {
         const savedUrls = JSON.parse(savedUrlsStr);
-        return defaults.map(d => ({
-          ...d,
-          url: savedUrls[d.tagKey] !== undefined ? savedUrls[d.tagKey] : d.url
-        }));
+        return defaults.map(d => {
+          let url = savedUrls[d.tagKey] !== undefined ? savedUrls[d.tagKey] : d.url;
+          if (typeof url === "string" && url.includes("10.3.164.3")) {
+            url = url.replace("10.3.164.3", "10.3.161.3");
+          }
+          return {
+            ...d,
+            url
+          };
+        });
       } catch (e) {}
     }
     return defaults;
@@ -507,6 +566,14 @@ export default function MachineConfig() {
     });
   };
 
+  const handleApiSourceJsonKeyChange = (idx: number, value: string) => {
+    setApiSourceRows((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], jsonKey: value };
+      return next;
+    });
+  };
+
   const handleDeleteApiSourceRow = (idx: number) => {
     setDeleteTarget({ type: "api-source", apiIdx: idx });
     setPasswordInput("");
@@ -522,7 +589,8 @@ export default function MachineConfig() {
         tagKey: `cooling-water/new_api_tag_${Date.now()}`,
         tagName: "New API Source",
         url: "",
-        unit: ""
+        unit: "",
+        jsonKey: ""
       }
     ]);
   };
@@ -984,7 +1052,7 @@ export default function MachineConfig() {
           // Save API sources map to localStorage and backend
           localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(apiSourceUrls));
           localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(apiSourceRows));
-          await postJson("/config/api-sources-map", { unitId, sources: apiSourceUrls }).catch((err) =>
+          await postJson("/config/api-sources-map", { unitId, sources: apiSourceUrls, rows: apiSourceRows }).catch((err) =>
             console.error("Failed to save API sources map to backend:", err)
           );
 
@@ -1772,6 +1840,7 @@ export default function MachineConfig() {
                   <th className="pb-3 px-3 text-center w-12">#</th>
                   <th className="pb-3 px-3">Sensor Parameter Item</th>
                   <th className="pb-3 px-3">SCADA Tag Key</th>
+                  <th className="pb-3 px-3">JSON Key (Ignition)</th>
                   <th className="pb-3 px-3">API Endpoint URL</th>
                   <th className="pb-3 px-3 text-center">Status Endpoint</th>
                   <th className="pb-3 px-3 text-right">Live API Value</th>
@@ -1783,7 +1852,7 @@ export default function MachineConfig() {
                   const url = sensor.url || "";
                   const hasUrl = Boolean(url.trim());
                   
-                  const apiFieldKey = TAG_KEY_TO_API_JSON_KEY[sensor.tagKey];
+                  const apiFieldKey = sensor.jsonKey || TAG_KEY_TO_API_JSON_KEY[sensor.tagKey] || sensor.tagKey.split("/")[1];
                   let rawVal = apiFieldKey ? apiLiveData[apiFieldKey] : undefined;
 
                   // Delta Temp fallback calculation if needed
@@ -1846,6 +1915,19 @@ export default function MachineConfig() {
                           sensor.tagKey
                         )}
                       </td>
+                      <td className="py-3 px-3 font-mono text-[11px] text-[#47729f] dark:text-slate-400 font-bold">
+                        {isUnlocked ? (
+                          <input
+                            type="text"
+                            value={sensor.jsonKey || ""}
+                            onChange={(e) => handleApiSourceJsonKeyChange(idx, e.target.value)}
+                            className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-blue-500/30 rounded text-xs font-mono text-[#002b5c] dark:text-white outline-none focus:border-blue-500 w-full font-bold"
+                            placeholder="Ignition JSON Key"
+                          />
+                        ) : (
+                          sensor.jsonKey || <span className="text-slate-400 italic font-normal">sama dengan tag</span>
+                        )}
+                      </td>
                       <td className="py-3 px-3">
                         {isUnlocked ? (
                           <input
@@ -1856,7 +1938,7 @@ export default function MachineConfig() {
                             className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-blue-500/50 dark:border-blue-500/40 rounded text-xs font-mono text-[#002b5c] dark:text-white outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400 placeholder:font-sans"
                           />
                         ) : (
-                          <div className="font-mono text-[11px] truncate max-w-md">
+                          <div className="font-mono text-[11px] truncate max-w-[200px]">
                             {hasUrl ? (
                               <span className="text-blue-600 dark:text-blue-400 font-semibold">{url}</span>
                             ) : (
