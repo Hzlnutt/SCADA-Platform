@@ -536,6 +536,73 @@ export const DEFAULT_CT3_EQ_CONFIGS: ConfigEqRow[] = [
   { tagKey: "CT3_FASTENERS_TIGHT", tagName: "CT-3 Fasteners & Bolts Tightening", baseline: 3400, lowLimit: 0, highLimit: 4000, unit: "h", enableAlert: true, suppressAlert: false, status: "—" }
 ];
 
+export type ConfigTagRow = {
+  tagKey: string;
+  tagName: string;
+  lowLimit: number;
+  baseline: number;
+  highLimit: number;
+  unit: string;
+  enableAlert: boolean;
+  suppressAlert: boolean;
+  direction?: "above" | "below";
+};
+
+export const getDefaultSensorConfigs = (unitId: string): ConfigTagRow[] => {
+  const isCooling = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
+  if (!isCooling) {
+    return [
+      { tagKey: "SPLY_WTR_TEMP", tagName: "Supply Water Temp", lowLimit: 25.0, baseline: 31.0, highLimit: 35.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "SPLY_WTR_TDS", tagName: "Supply Water TDS", lowLimit: 100.0, baseline: 300.0, highLimit: 400.0, unit: "µS/cm", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "SPLY_WTR_PH", tagName: "Supply Water pH", lowLimit: 6.5, baseline: 7.0, highLimit: 8.5, unit: "pH", enableAlert: true, suppressAlert: true, direction: "above" },
+      { tagKey: "SPLY_WTR_FLOW", tagName: "Supply Water Flow", lowLimit: 300.0, baseline: 400.0, highLimit: 500.0, unit: "m³/h", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "RTN_WTR_TEMP", tagName: "Return Water Temp", lowLimit: 30.0, baseline: 40.0, highLimit: 45.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "MAKEUP_WTR_TDS", tagName: "Makeup Water TDS", lowLimit: 50.0, baseline: 150.0, highLimit: 200.0, unit: "µS/cm", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "MAKEUP_WTR_PH", tagName: "Makeup Water pH", lowLimit: 6.5, baseline: 7.0, highLimit: 8.0, unit: "pH", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "AMBIENT_HUMIDITY", tagName: "Ambient Humidity", lowLimit: 50.0, baseline: 70.0, highLimit: 90.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "above" }
+    ];
+  }
+
+  return [
+    // Part : Main Information
+    { tagKey: "cooling-water/supply_temp", tagName: "Supply Temp", lowLimit: 25.0, baseline: 31.0, highLimit: 35.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/return_temp", tagName: "Return Temp", lowLimit: 30.0, baseline: 40.0, highLimit: 45.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/delta_temp", tagName: "Delta Temp", lowLimit: 0, baseline: 5.0, highLimit: 8.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/ambient_temp", tagName: "Ambient Temp", lowLimit: 20.0, baseline: 32.0, highLimit: 35.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/ambient_humidity", tagName: "Ambient Humidity", lowLimit: 50.0, baseline: 70.0, highLimit: 90.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "above" },
+
+    // Part: MTR Pressure
+    { tagKey: "cooling-water/pressure_1", tagName: "MTR-1 Press Bar (CT-1)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/pressure_2", tagName: "MTR-2 Press Bar (CT-2)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/pressure_3", tagName: "MTR-3 Press Bar (CT-3)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/eq_press_du03", tagName: "MTR-4 Press Bar (DU-3)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/eq_press_bp03", tagName: "MTR-5 Press Bar (BP-3)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/eq_press_prep03", tagName: "MTR-6 Press Bar (SP-3)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/eq_press_st03", tagName: "MTR-7 Press Bar (ST-3)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/eq_press_washing", tagName: "MTR-8 Press Bar (WASHING)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/eq_press_minilab", tagName: "MTR-9 Press Bar (MINI LAB)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
+
+    // Part: Makeup Water
+    { tagKey: "cooling-water/makeup_wtr_tds", tagName: "Makeup Water TDS", lowLimit: 50.0, baseline: 150.0, highLimit: 200.0, unit: "µS/cm", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/makeup_wtr_ph", tagName: "Makeup Water pH", lowLimit: 6.5, baseline: 7.5, highLimit: 8.5, unit: "pH", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/makeup_wtr_vol", tagName: "Makeup Water VOL", lowLimit: 100.0, baseline: 500.0, highLimit: 1000.0, unit: "L/h", enableAlert: true, suppressAlert: false, direction: "above" },
+
+    // Part: Cooling Tank
+    { tagKey: "cooling-water/basin_lvl", tagName: "Cooling Tank Water Level", lowLimit: 50.0, baseline: 75.0, highLimit: 70.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "below" },
+    { tagKey: "cooling-water/supply_wtr_tds", tagName: "Cooling Tank TDS", lowLimit: 100.0, baseline: 300.0, highLimit: 400.0, unit: "µS/cm", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/supply_wtr_ph", tagName: "Cooling Tank pH", lowLimit: 6.5, baseline: 7.0, highLimit: 8.5, unit: "pH", enableAlert: true, suppressAlert: false, direction: "above" },
+
+    // Part: Chemical 357
+    { tagKey: "cooling-water/chemical_357_lvl", tagName: "Chemical 357 Level", lowLimit: 50.0, baseline: 75.0, highLimit: 70.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "below" },
+
+    // Part: Chemical 327/317
+    { tagKey: "cooling-water/chemical_327_lvl", tagName: "Chemical 327/317 Level", lowLimit: 50.0, baseline: 75.0, highLimit: 70.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "below" },
+
+    // ST-3 Return Temp
+    { tagKey: "cooling-water/st3_return_temp", tagName: "ST-3 Return Temp", lowLimit: 25.0, baseline: 35.0, highLimit: 40.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" }
+  ];
+};
+
 export const getDefaultEqConfigs = (unitId: string): ConfigEqRow[] => {
   if (unitId === "cooling-water-1") return DEFAULT_CT1_EQ_CONFIGS;
   if (unitId === "cooling-water-2") return DEFAULT_CT2_EQ_CONFIGS;

@@ -2,75 +2,248 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
 import { postJson, getJson, deleteJson, patchJson } from "../../services/api.client";
-import { DEFAULT_EQ_CONFIGS, DEFAULT_HVAC_CONFIG, DEFAULT_HVAC_EQ_CONFIGS, getDefaultEqConfigs } from "../../data/equipment";
-import type { ConfigEqRow, HvacConfig } from "../../data/equipment";
+import { DEFAULT_EQ_CONFIGS, DEFAULT_HVAC_CONFIG, DEFAULT_HVAC_EQ_CONFIGS, getDefaultEqConfigs, getDefaultSensorConfigs } from "../../data/equipment";
+import type { ConfigEqRow, ConfigTagRow, HvacConfig } from "../../data/equipment";
 import type { MachineOutletContext } from "./MachineLayout";
 
-type ConfigTagRow = {
+export type ApiSourceRow = {
   tagKey: string;
   tagName: string;
-  lowLimit: number;
-  baseline: number;
-  highLimit: number;
+  url: string;
   unit: string;
-  enableAlert: boolean;
-  suppressAlert: boolean;
-  direction?: "above" | "below";
+  jsonKey?: string;
 };
 
-const getDefaultSensorConfigs = (unitId: string): ConfigTagRow[] => {
+const DEFAULT_JSON_KEYS: Record<string, string> = {
+  "cooling-water/supply_temp": "Scaled_Temp_Tank_Colling3_Supp",
+  "cooling-water/return_temp": "Scaled_Temp_Tank_Colling3_Return",
+  "cooling-water/st3_return_temp": "Scaled_Temp_ST3_Return",
+  "cooling-water/eq_temp_st03_supply": "Scaled_Temp_ST3_Supply",
+  "cooling-water/eq_press_du03": "Scaled_Press_DUU3",
+  "cooling-water/eq_press_bp03": "Scaled_Press_BP",
+  "cooling-water/eq_press_prep03": "Scaled_Press_PrepU3",
+  "cooling-water/eq_press_st03": "Scaled_Press_ST3",
+  "cooling-water/eq_press_washing": "Scaled_Press_Washing",
+  "cooling-water/eq_temp_du03": "Scaled_Temp_DU",
+  "cooling-water/eq_temp_prep03": "Scaled_Tempt_Prep3_Return",
+  "cooling-water/eq_temp_washing": "Scaled_Temp_Washing",
+  "cooling-water/basin_lvl": "Scaled_Level_tank_cooling3",
+  "cooling-water/fan_status_1": "Status_Fan_C11",
+  "cooling-water/fan_status_2": "Status_Fan_CT2",
+  "cooling-water/fan_status_3": "Status_Fan_CT3",
+  "cooling-water/motor_status_1": "Status_MTR_CT_P1",
+  "cooling-water/motor_status_2": "Status_MTR_CT_P2",
+  "cooling-water/motor_status_3": "Status_MTR_CT_P11",
+  "cooling-water/eq_status_du03": "Status_MTR_DU45",
+  "cooling-water/eq_status_bp03": "Status_MTR_BP",
+  "cooling-water/eq_status_prep03": "Status_MTR_Prep3",
+  "cooling-water/eq_status_st03": "Status_MTR_ST3_P3",
+  "cooling-water/eq_status_washing": "Status_MTR_Washing",
+  "cooling-water/st3_heating": "Status_Machine_Heating_ST3",
+  "cooling-water/st3_cooling": "Status_Machine_Cooling_ST3",
+  "cooling-water/st3_steril": "Status_Machine_Steril_ST3",
+  "cooling-water/jumo_pieces": "Jumo Pieces",
+  "cooling-water/pressure_1": "Scaled_Press_CT_P1",
+  "cooling-water/pressure_2": "Scaled_Press_CT_P2",
+  "cooling-water/pressure_3": "Scaled_Press_CT3_P11"
+};
+
+const getDefaultApiSourceConfigs = (unitId: string): ApiSourceRow[] => {
+  const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
   const isCooling = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
+  
   if (!isCooling) {
-    return [
-      { tagKey: "SPLY_WTR_TEMP", tagName: "Supply Water Temp", lowLimit: 25.0, baseline: 31.0, highLimit: 35.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
-      { tagKey: "SPLY_WTR_TDS", tagName: "Supply Water TDS", lowLimit: 100.0, baseline: 300.0, highLimit: 400.0, unit: "µS/cm", enableAlert: true, suppressAlert: false, direction: "above" },
-      { tagKey: "SPLY_WTR_PH", tagName: "Supply Water pH", lowLimit: 6.5, baseline: 7.0, highLimit: 8.5, unit: "pH", enableAlert: true, suppressAlert: true, direction: "above" },
-      { tagKey: "SPLY_WTR_FLOW", tagName: "Supply Water Flow", lowLimit: 300.0, baseline: 400.0, highLimit: 500.0, unit: "m³/h", enableAlert: true, suppressAlert: false, direction: "above" },
-      { tagKey: "RTN_WTR_TEMP", tagName: "Return Water Temp", lowLimit: 30.0, baseline: 40.0, highLimit: 45.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
-      { tagKey: "MAKEUP_WTR_TDS", tagName: "Makeup Water TDS", lowLimit: 50.0, baseline: 150.0, highLimit: 200.0, unit: "µS/cm", enableAlert: true, suppressAlert: false, direction: "above" },
-      { tagKey: "MAKEUP_WTR_PH", tagName: "Makeup Water pH", lowLimit: 6.5, baseline: 7.0, highLimit: 8.0, unit: "pH", enableAlert: true, suppressAlert: false, direction: "above" },
-      { tagKey: "AMBIENT_HUMIDITY", tagName: "Ambient Humidity", lowLimit: 50.0, baseline: 70.0, highLimit: 90.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "above" }
-    ];
+    return getDefaultSensorConfigs(unitId).map(s => ({
+      tagKey: s.tagKey,
+      tagName: s.tagName,
+      url: "",
+      unit: s.unit,
+      jsonKey: ""
+    }));
   }
 
-  return [
+  const rawList: Omit<ApiSourceRow, "jsonKey">[] = [
     // Part : Main Information
-    { tagKey: "cooling-water/supply_temp", tagName: "Supply Temp", lowLimit: 25.0, baseline: 31.0, highLimit: 35.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/return_temp", tagName: "Return Temp", lowLimit: 30.0, baseline: 40.0, highLimit: 45.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/delta_temp", tagName: "Delta Temp", lowLimit: 0, baseline: 5.0, highLimit: 8.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/ambient_temp", tagName: "Ambient Temp", lowLimit: 20.0, baseline: 32.0, highLimit: 35.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/ambient_humidity", tagName: "Ambient Humidity", lowLimit: 50.0, baseline: 70.0, highLimit: 90.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/supply_temp", tagName: "Supply Temp", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/return_temp", tagName: "Return Temp", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/delta_temp", tagName: "Delta Temp", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/ambient_temp", tagName: "Ambient Temp", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/ambient_humidity", tagName: "Ambient Humidity", url: defaultUrl, unit: "%" },
 
     // Part: MTR Pressure
-    { tagKey: "cooling-water/pressure_1", tagName: "MTR-1 Press Bar (CT-1)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/pressure_2", tagName: "MTR-2 Press Bar (CT-2)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/pressure_3", tagName: "MTR-3 Press Bar (CT-3)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/eq_press_du03", tagName: "MTR-4 Press Bar (DU-3)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/eq_press_bp03", tagName: "MTR-5 Press Bar (BP-3)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/eq_press_prep03", tagName: "MTR-6 Press Bar (SP-3)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/eq_press_st03", tagName: "MTR-7 Press Bar (ST-3)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/eq_press_washing", tagName: "MTR-8 Press Bar (WASHING)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/eq_press_minilab", tagName: "MTR-9 Press Bar (MINI LAB)", lowLimit: 0.5, baseline: 1.5, highLimit: 2.0, unit: "BAR", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/pressure_1", tagName: "MTR-1 Press Bar (CT-1)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/pressure_2", tagName: "MTR-2 Press Bar (CT-2)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/pressure_3", tagName: "MTR-3 Press Bar (CT-3)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/eq_press_du03", tagName: "MTR-4 Press Bar (DU-3)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/eq_press_bp03", tagName: "MTR-5 Press Bar (BP-3)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/eq_press_prep03", tagName: "MTR-6 Press Bar (SP-3)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/eq_press_st03", tagName: "MTR-7 Press Bar (ST-3)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/eq_press_washing", tagName: "MTR-8 Press Bar (WASHING)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/eq_press_minilab", tagName: "MTR-9 Press Bar (MINI LAB)", url: defaultUrl, unit: "BAR" },
 
     // Part: Makeup Water
-    { tagKey: "cooling-water/makeup_wtr_tds", tagName: "Makeup Water TDS", lowLimit: 50.0, baseline: 150.0, highLimit: 200.0, unit: "µS/cm", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/makeup_wtr_ph", tagName: "Makeup Water pH", lowLimit: 6.5, baseline: 7.5, highLimit: 8.5, unit: "pH", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/makeup_wtr_vol", tagName: "Makeup Water VOL", lowLimit: 100.0, baseline: 500.0, highLimit: 1000.0, unit: "L/h", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/makeup_wtr_tds", tagName: "Makeup Water TDS", url: defaultUrl, unit: "µS/cm" },
+    { tagKey: "cooling-water/makeup_wtr_ph", tagName: "Makeup Water pH", url: defaultUrl, unit: "pH" },
+    { tagKey: "cooling-water/makeup_wtr_flow", tagName: "Makeup Water Flow Rate", url: defaultUrl, unit: "m³/h" },
+    { tagKey: "cooling-water/makeup_wtr_vol", tagName: "Makeup Water VOL", url: defaultUrl, unit: "L/h" },
 
     // Part: Cooling Tank
-    { tagKey: "cooling-water/basin_lvl", tagName: "Cooling Tank Water Level", lowLimit: 50.0, baseline: 75.0, highLimit: 70.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "below" },
-    { tagKey: "cooling-water/supply_wtr_tds", tagName: "Cooling Tank TDS", lowLimit: 100.0, baseline: 300.0, highLimit: 400.0, unit: "µS/cm", enableAlert: true, suppressAlert: false, direction: "above" },
-    { tagKey: "cooling-water/supply_wtr_ph", tagName: "Cooling Tank pH", lowLimit: 6.5, baseline: 7.0, highLimit: 8.5, unit: "pH", enableAlert: true, suppressAlert: false, direction: "above" },
+    { tagKey: "cooling-water/basin_lvl", tagName: "Cooling Tank Water Level", url: defaultUrl, unit: "%" },
+    { tagKey: "cooling-water/cooling_tank_tds", tagName: "Cooling Tank TDS", url: defaultUrl, unit: "µS/cm" },
+    { tagKey: "cooling-water/cooling_tank_ph", tagName: "Cooling Tank pH", url: defaultUrl, unit: "pH" },
+    { tagKey: "cooling-water/supply_wtr_cond", tagName: "Cooling Tank Conductivity", url: defaultUrl, unit: "µS/cm" },
 
     // Part: Chemical 357
-    { tagKey: "cooling-water/chemical_357_lvl", tagName: "Chemical 357 Level", lowLimit: 50.0, baseline: 75.0, highLimit: 70.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "below" },
+    { tagKey: "cooling-water/chemical_357_lvl", tagName: "Chemical 357 Level", url: defaultUrl, unit: "%" },
+    { tagKey: "cooling-water/chemical_357_pump", tagName: "Chemical 357 Pump Status", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/chemical_357_vol", tagName: "Chemical 357 Volume", url: defaultUrl, unit: "L" },
 
     // Part: Chemical 327/317
-    { tagKey: "cooling-water/chemical_327_lvl", tagName: "Chemical 327/317 Level", lowLimit: 50.0, baseline: 75.0, highLimit: 70.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "below" },
+    { tagKey: "cooling-water/chemical_327_lvl", tagName: "Chemical 327/317 Level", url: defaultUrl, unit: "%" },
+    { tagKey: "cooling-water/chemical_327_pump", tagName: "Chemical 327/317 Pump Status", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/chemical_327_vol", tagName: "Chemical 327/317 Volume", url: defaultUrl, unit: "L" },
 
-    // ST-3 Return Temp
-    { tagKey: "cooling-water/st3_return_temp", tagName: "ST-3 Return Temp", lowLimit: 25.0, baseline: 35.0, highLimit: 40.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" }
+    // ST-3 Return Temp / Process
+    { tagKey: "cooling-water/st3_return_temp", tagName: "ST-3 Return Temp", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/eq_temp_st03_supply", tagName: "ST-3 Supply Temp", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/st3_heating", tagName: "ST-3 Heating Status", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/st3_cooling", tagName: "ST-3 Cooling Status", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/st3_steril", tagName: "ST-3 Steril Status", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/jumo_pieces", tagName: "Jumo Pieces (LOT)", url: defaultUrl, unit: "pcs" },
+
+    // Part: Additional Dashboard Metrics
+    { tagKey: "cooling-water/ct_efficiency", tagName: "Cooling Tower Efficiency", url: defaultUrl, unit: "%" },
+    { tagKey: "cooling-water/total_energy", tagName: "Total Energy Consumption", url: defaultUrl, unit: "kWh" },
+
+    // Part: Cooling Tower 1 details
+    { tagKey: "cooling-water/fan_status_1", tagName: "CT-1 Fan Status (ON/OFF)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/ct1_fan_speed", tagName: "CT-1 Fan Speed", url: defaultUrl, unit: "RPM" },
+    { tagKey: "cooling-water/motor_status_1", tagName: "CT-1 Motor Status (ON/OFF)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/ct1_motor_current", tagName: "CT-1 Motor Current (Fan)", url: defaultUrl, unit: "A" },
+    { tagKey: "cooling-water/ct1_sirk_current", tagName: "CT-1 Motor Current (Sirkulasi)", url: defaultUrl, unit: "A" },
+    { tagKey: "cooling-water/ct1_motor_power", tagName: "CT-1 Motor Power", url: defaultUrl, unit: "kW" },
+    { tagKey: "cooling-water/ct1_flow", tagName: "CT-1 Flow Rate", url: defaultUrl, unit: "m³/h" },
+    { tagKey: "cooling-water/ct1_vibra_fan", tagName: "CT-1 Vibration Fan", url: defaultUrl, unit: "mm/s" },
+    { tagKey: "cooling-water/ct1_vibra_motor", tagName: "CT-1 Vibration Motor Sirk", url: defaultUrl, unit: "mm/s" },
+    { tagKey: "cooling-water/ct1_basin_temp", tagName: "CT-1 Basin Temp", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/ct1_running_hours", tagName: "CT-1 Running Hours", url: defaultUrl, unit: "hrs" },
+
+    // Part: Cooling Tower 2 details
+    { tagKey: "cooling-water/fan_status_2", tagName: "CT-2 Fan Status (ON/OFF)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/ct2_fan_speed", tagName: "CT-2 Fan Speed", url: defaultUrl, unit: "RPM" },
+    { tagKey: "cooling-water/motor_status_2", tagName: "CT-2 Motor Status (ON/OFF)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/ct2_motor_current", tagName: "CT-2 Motor Current (Fan)", url: defaultUrl, unit: "A" },
+    { tagKey: "cooling-water/ct2_sirk_current", tagName: "CT-2 Motor Current (Sirkulasi)", url: defaultUrl, unit: "A" },
+    { tagKey: "cooling-water/ct2_motor_power", tagName: "CT-2 Motor Power", url: defaultUrl, unit: "kW" },
+    { tagKey: "cooling-water/ct2_flow", tagName: "CT-2 Flow Rate", url: defaultUrl, unit: "m³/h" },
+    { tagKey: "cooling-water/ct2_vibra_fan", tagName: "CT-2 Vibration Fan", url: defaultUrl, unit: "mm/s" },
+    { tagKey: "cooling-water/ct2_vibra_motor", tagName: "CT-2 Vibration Motor Sirk", url: defaultUrl, unit: "mm/s" },
+    { tagKey: "cooling-water/ct2_basin_temp", tagName: "CT-2 Basin Temp", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/ct2_running_hours", tagName: "CT-2 Running Hours", url: defaultUrl, unit: "hrs" },
+
+    // Part: Cooling Tower 3 details
+    { tagKey: "cooling-water/fan_status_3", tagName: "CT-3 Fan Status (ON/OFF)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/ct3_fan_speed", tagName: "CT-3 Fan Speed", url: defaultUrl, unit: "RPM" },
+    { tagKey: "cooling-water/motor_status_3", tagName: "CT-3 Motor Status (ON/OFF)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/ct3_motor_current", tagName: "CT-3 Motor Current (Fan)", url: defaultUrl, unit: "A" },
+    { tagKey: "cooling-water/ct3_sirk_current", tagName: "CT-3 Motor Current (Sirkulasi)", url: defaultUrl, unit: "A" },
+    { tagKey: "cooling-water/ct3_motor_power", tagName: "CT-3 Motor Power", url: defaultUrl, unit: "kW" },
+    { tagKey: "cooling-water/ct3_flow", tagName: "CT-3 Flow Rate", url: defaultUrl, unit: "m³/h" },
+    { tagKey: "cooling-water/ct3_vibra_fan", tagName: "CT-3 Vibration Fan", url: defaultUrl, unit: "mm/s" },
+    { tagKey: "cooling-water/ct3_vibra_motor", tagName: "CT-3 Vibration Motor Sirk", url: defaultUrl, unit: "mm/s" },
+    { tagKey: "cooling-water/ct3_basin_temp", tagName: "CT-3 Basin Temp", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/ct3_running_hours", tagName: "CT-3 Running Hours", url: defaultUrl, unit: "hrs" },
+
+    // Part: Additional Tanks & Water details
+    { tagKey: "cooling-water/dosing_a_status", tagName: "Dosing Pump A Status (ON/OFF)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/dosing_a_flow", tagName: "Dosing Pump A Flow Rate", url: defaultUrl, unit: "L/h" },
+    { tagKey: "cooling-water/dosing_a_hrs", tagName: "Dosing Pump A Run Hours", url: defaultUrl, unit: "h" },
+    { tagKey: "cooling-water/dosing_a_cons", tagName: "Dosing Pump A Daily Cons", url: defaultUrl, unit: "L/d" },
+    { tagKey: "cooling-water/dosing_b_status", tagName: "Dosing Pump B Status (ON/OFF)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/dosing_b_flow", tagName: "Dosing Pump B Flow Rate", url: defaultUrl, unit: "L/h" },
+    { tagKey: "cooling-water/dosing_b_hrs", tagName: "Dosing Pump B Run Hours", url: defaultUrl, unit: "h" },
+    { tagKey: "cooling-water/dosing_b_cons", tagName: "Dosing Pump B Daily Cons", url: defaultUrl, unit: "L/d" },
+    { tagKey: "cooling-water/blowdown_status", tagName: "Blowdown Operation Status (ON/OFF)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/blowdown_flow", tagName: "Blowdown Flow Rate", url: defaultUrl, unit: "L/h" },
+    { tagKey: "cooling-water/blowdown_vol", tagName: "Blowdown Accumulated Volume", url: defaultUrl, unit: "m³" },
+
+    // Part: Motor 1, 2, 3 Extra parameters
+    { tagKey: "cooling-water/mtr1_running_hours", tagName: "MTR-1 Running Hours", url: defaultUrl, unit: "hrs" },
+    { tagKey: "cooling-water/mtr1_hz", tagName: "MTR-1 Frequency", url: defaultUrl, unit: "Hz" },
+    { tagKey: "cooling-water/mtr1_kw", tagName: "MTR-1 Power", url: defaultUrl, unit: "kW" },
+    { tagKey: "cooling-water/mtr2_running_hours", tagName: "MTR-2 Running Hours", url: defaultUrl, unit: "hrs" },
+    { tagKey: "cooling-water/mtr2_hz", tagName: "MTR-2 Frequency", url: defaultUrl, unit: "Hz" },
+    { tagKey: "cooling-water/mtr2_kw", tagName: "MTR-2 Power", url: defaultUrl, unit: "kW" },
+    { tagKey: "cooling-water/mtr3_running_hours", tagName: "MTR-3 Running Hours", url: defaultUrl, unit: "hrs" },
+    { tagKey: "cooling-water/mtr3_hz", tagName: "MTR-3 Frequency", url: defaultUrl, unit: "Hz" },
+    { tagKey: "cooling-water/mtr3_kw", tagName: "MTR-3 Power", url: defaultUrl, unit: "kW" },
+
+    // Part: Equipment Status Matrix details
+    { tagKey: "cooling-water/eq_status_du03", tagName: "MTR-4 Status (DU-3) (Running/Stopped)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/eq_flow_du03", tagName: "MTR-4 Flow DU-3", url: defaultUrl, unit: "m³/h" },
+    { tagKey: "cooling-water/eq_press_du03", tagName: "MTR-4 Press Bar (DU-3)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/eq_curr_du03", tagName: "MTR-4 Current DU-3", url: defaultUrl, unit: "A" },
+    { tagKey: "cooling-water/eq_pow_du03", tagName: "MTR-4 Power DU-3", url: defaultUrl, unit: "kW" },
+    { tagKey: "cooling-water/eq_vib_du03", tagName: "MTR-4 Vibration DU-3", url: defaultUrl, unit: "mm/s" },
+    { tagKey: "cooling-water/eq_temp_du03", tagName: "MTR-4 Temp DU-3", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/eq_hrs_du03", tagName: "MTR-4 Run Hours DU-3", url: defaultUrl, unit: "hrs" },
+    { tagKey: "cooling-water/eq_maint_du03", tagName: "MTR-4 Maint Status DU-3", url: defaultUrl, unit: "status" },
+
+    { tagKey: "cooling-water/eq_status_bp03", tagName: "MTR-5 Status (BP-3) (Running/Stopped)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/eq_flow_bp03", tagName: "MTR-5 Flow BP-3", url: defaultUrl, unit: "m³/h" },
+    { tagKey: "cooling-water/eq_press_bp03", tagName: "MTR-5 Press Bar (BP-3)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/eq_curr_bp03", tagName: "MTR-5 Current BP-3", url: defaultUrl, unit: "A" },
+    { tagKey: "cooling-water/eq_pow_bp03", tagName: "MTR-5 Power BP-3", url: defaultUrl, unit: "kW" },
+    { tagKey: "cooling-water/eq_vib_bp03", tagName: "MTR-5 Vibration BP-3", url: defaultUrl, unit: "mm/s" },
+    { tagKey: "cooling-water/eq_temp_bp03", tagName: "MTR-5 Temp BP-3", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/eq_hrs_bp03", tagName: "MTR-5 Run Hours BP-3", url: defaultUrl, unit: "hrs" },
+    { tagKey: "cooling-water/eq_maint_bp03", tagName: "MTR-5 Maint Status BP-3", url: defaultUrl, unit: "status" },
+
+    { tagKey: "cooling-water/eq_status_prep03", tagName: "MTR-6 Status (SP-3) (Running/Stopped)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/eq_flow_prep03", tagName: "MTR-6 Flow SP-3", url: defaultUrl, unit: "m³/h" },
+    { tagKey: "cooling-water/eq_press_prep03", tagName: "MTR-6 Press Bar (SP-3)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/eq_curr_prep03", tagName: "MTR-6 Current SP-3", url: defaultUrl, unit: "A" },
+    { tagKey: "cooling-water/eq_pow_prep03", tagName: "MTR-6 Power SP-3", url: defaultUrl, unit: "kW" },
+    { tagKey: "cooling-water/eq_vib_prep03", tagName: "MTR-6 Vibration SP-3", url: defaultUrl, unit: "mm/s" },
+    { tagKey: "cooling-water/eq_temp_prep03", tagName: "MTR-6 Temp SP-3", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/eq_hrs_prep03", tagName: "MTR-6 Run Hours SP-3", url: defaultUrl, unit: "hrs" },
+    { tagKey: "cooling-water/eq_maint_prep03", tagName: "MTR-6 Maint Status SP-3", url: defaultUrl, unit: "status" },
+
+    { tagKey: "cooling-water/eq_status_st03", tagName: "MTR-7 Status (ST-3) (Running/Stopped)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/eq_flow_st03", tagName: "MTR-7 Flow ST-3", url: defaultUrl, unit: "m³/h" },
+    { tagKey: "cooling-water/eq_press_st03", tagName: "MTR-7 Press Bar (ST-3)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/eq_curr_st03", tagName: "MTR-7 Current ST-3", url: defaultUrl, unit: "A" },
+    { tagKey: "cooling-water/eq_pow_st03", tagName: "MTR-7 Power ST-3", url: defaultUrl, unit: "kW" },
+    { tagKey: "cooling-water/eq_vib_st03", tagName: "MTR-7 Vibration ST-3", url: defaultUrl, unit: "mm/s" },
+    { tagKey: "cooling-water/eq_temp_st03", tagName: "MTR-7 Temp ST-3", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/eq_hrs_st03", tagName: "MTR-7 Run Hours ST-3", url: defaultUrl, unit: "hrs" },
+    { tagKey: "cooling-water/eq_maint_st03", tagName: "MTR-7 Maint Status ST-3", url: defaultUrl, unit: "status" },
+
+    { tagKey: "cooling-water/eq_status_washing", tagName: "MTR-8 Status (WASHING) (Running/Stopped)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/eq_flow_washing", tagName: "MTR-8 Flow WASHING", url: defaultUrl, unit: "m³/h" },
+    { tagKey: "cooling-water/eq_press_washing", tagName: "MTR-8 Press Bar (WASHING)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/eq_curr_washing", tagName: "MTR-8 Current WASHING", url: defaultUrl, unit: "A" },
+    { tagKey: "cooling-water/eq_pow_washing", tagName: "MTR-8 Power WASHING", url: defaultUrl, unit: "kW" },
+    { tagKey: "cooling-water/eq_vib_washing", tagName: "MTR-8 Vibration WASHING", url: defaultUrl, unit: "mm/s" },
+    { tagKey: "cooling-water/eq_temp_washing", tagName: "MTR-8 Temp WASHING", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/eq_hrs_washing", tagName: "MTR-8 Run Hours WASHING", url: defaultUrl, unit: "hrs" },
+    { tagKey: "cooling-water/eq_maint_washing", tagName: "MTR-8 Maint Status WASHING", url: defaultUrl, unit: "status" },
+
+    { tagKey: "cooling-water/eq_status_minilab", tagName: "MTR-9 Status (MINI LAB) (Running/Stopped)", url: defaultUrl, unit: "status" },
+    { tagKey: "cooling-water/eq_flow_minilab", tagName: "MTR-9 Flow MINI LAB", url: defaultUrl, unit: "m³/h" },
+    { tagKey: "cooling-water/eq_press_minilab", tagName: "MTR-9 Press Bar (MINI LAB)", url: defaultUrl, unit: "BAR" },
+    { tagKey: "cooling-water/eq_curr_minilab", tagName: "MTR-9 Current MINI LAB", url: defaultUrl, unit: "A" },
+    { tagKey: "cooling-water/eq_pow_minilab", tagName: "MTR-9 Power MINI LAB", url: defaultUrl, unit: "kW" },
+    { tagKey: "cooling-water/eq_vib_minilab", tagName: "MTR-9 Vibration MINI LAB", url: defaultUrl, unit: "mm/s" },
+    { tagKey: "cooling-water/eq_temp_minilab", tagName: "MTR-9 Temp MINI LAB", url: defaultUrl, unit: "°C" },
+    { tagKey: "cooling-water/eq_hrs_minilab", tagName: "MTR-9 Run Hours MINI LAB", url: defaultUrl, unit: "hrs" },
+    { tagKey: "cooling-water/eq_maint_minilab", tagName: "MTR-9 Maint Status MINI LAB", url: defaultUrl, unit: "status" }
   ];
+
+  return rawList.map(r => ({
+    ...r,
+    jsonKey: DEFAULT_JSON_KEYS[r.tagKey] || r.tagKey.split("/")[1] || ""
+  }));
 };
 
 const getEqDisplayTagKey = (tagKey: string) => {
@@ -105,6 +278,40 @@ const PID_EQ_TAG_KEYS = [
   "M8_SUPPLY_MOTOR_OVERHAUL",
   "M9_SUPPLY_MOTOR_OVERHAUL"
 ];
+
+const TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
+  "cooling-water/supply_temp": "Scaled_Temp_Tank_Colling3_Supp",
+  "cooling-water/return_temp": "Scaled_Temp_Tank_Colling3_Return",
+  "cooling-water/st3_return_temp": "Scaled_Temp_ST3_Return",
+  "cooling-water/eq_temp_st03_supply": "Scaled_Temp_ST3_Supply",
+  "cooling-water/eq_press_du03": "Scaled_Press_DUU3",
+  "cooling-water/eq_press_bp03": "Scaled_Press_BP",
+  "cooling-water/eq_press_prep03": "Scaled_Press_PrepU3",
+  "cooling-water/eq_press_st03": "Scaled_Press_ST3",
+  "cooling-water/eq_press_washing": "Scaled_Press_Washing",
+  "cooling-water/eq_temp_du03": "Scaled_Temp_DU",
+  "cooling-water/eq_temp_prep03": "Scaled_Tempt_Prep3_Return",
+  "cooling-water/eq_temp_washing": "Scaled_Temp_Washing",
+  "cooling-water/basin_lvl": "Scaled_Level_tank_cooling3",
+  "cooling-water/fan_status_1": "Status_Fan_C11",
+  "cooling-water/fan_status_2": "Status_Fan_CT2",
+  "cooling-water/fan_status_3": "Status_Fan_CT3",
+  "cooling-water/motor_status_1": "Status_MTR_CT_P1",
+  "cooling-water/motor_status_2": "Status_MTR_CT_P2",
+  "cooling-water/motor_status_3": "Status_MTR_CI_P11",
+  "cooling-water/eq_status_du03": "Status_MTR_DU45",
+  "cooling-water/eq_status_bp03": "Status_MTR_BP",
+  "cooling-water/eq_status_prep03": "Status_MTR_Prep3",
+  "cooling-water/eq_status_st03": "Status_MTR_ST3_P3",
+  "cooling-water/eq_status_washing": "Status_MTR_Washing",
+  "cooling-water/st3_heating": "Status_Machine_Heating_ST3",
+  "cooling-water/st3_cooling": "Status_Machine_Cooling_ST3",
+  "cooling-water/st3_steril": "Status_Machine_Steril_ST3",
+  "cooling-water/jumo_pieces": "Jumo Pieces",
+  "cooling-water/pressure_1": "Scaled_Press_CT_P1",
+  "cooling-water/pressure_2": "Scaled_Press_CT_P2",
+  "cooling-water/pressure_3": "Scaled_Press_CT3_P11"
+};
 
 const DEFAULT_TASK_RULES = [
   { id: "1", motorKey: "FAN-CT-1", targetHours: 150, taskName: "F-1 V-Belt Tension" },
@@ -141,7 +348,222 @@ export default function MachineConfig() {
 
   const [sensorRows, setSensorRows] = useState<ConfigTagRow[]>([]);
   const [eqRows, setEqRows] = useState<ConfigEqRow[]>([]);
-  
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredSensorRows = useMemo(() => {
+    if (!searchQuery.trim()) return sensorRows;
+    const q = searchQuery.toLowerCase();
+    return sensorRows.filter(
+      (s) =>
+        s.tagName.toLowerCase().includes(q) ||
+        s.tagKey.toLowerCase().includes(q)
+    );
+  }, [sensorRows, searchQuery]);
+
+  const [apiSourceRows, setApiSourceRows] = useState<ApiSourceRow[]>(() => {
+    const savedList = localStorage.getItem(`scada.config.api_sources_list.${unitId}`);
+    if (savedList) {
+      try {
+        const parsed = JSON.parse(savedList);
+        if (Array.isArray(parsed)) {
+          let modified = false;
+          const healed = parsed.map((row: any) => {
+            let healedUrl = typeof row.url === "string" ? row.url : "";
+            const newUrl = healedUrl.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+            if (newUrl !== healedUrl) modified = true;
+            
+            let healedJsonKey = row.jsonKey;
+            if (healedJsonKey === "Scaled_Temp_Tank_Cooling3_Supp") {
+              healedJsonKey = "Scaled_Temp_Tank_Colling3_Supp";
+              modified = true;
+            }
+            if (healedJsonKey === "Scaled_Temp_Tank_Cooling3_Return") {
+              healedJsonKey = "Scaled_Temp_Tank_Colling3_Return";
+              modified = true;
+            }
+            
+            return {
+              ...row,
+              url: newUrl,
+              jsonKey: healedJsonKey || DEFAULT_JSON_KEYS[row.tagKey] || row.tagKey.split("/")[1] || ""
+            };
+          });
+          if (modified) {
+            localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(healed));
+            const flatMap: Record<string, string> = {};
+            healed.forEach(r => {
+              flatMap[r.tagKey] = r.url;
+            });
+            localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(flatMap));
+          }
+          return healed;
+        }
+      } catch (e) {}
+    }
+    const defaults = getDefaultApiSourceConfigs(unitId);
+    const savedUrlsStr = localStorage.getItem(`scada.config.api_sources.${unitId}`);
+    if (savedUrlsStr) {
+      try {
+        const savedUrls = JSON.parse(savedUrlsStr);
+        let modified = false;
+        const healed = defaults.map(d => {
+          let url = savedUrls[d.tagKey] !== undefined ? savedUrls[d.tagKey] : d.url;
+          if (typeof url === "string") {
+            const newUrl = url.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+            if (newUrl !== url) {
+              modified = true;
+              url = newUrl;
+            }
+          }
+          return {
+            ...d,
+            url
+          };
+        });
+        if (modified) {
+          const flatMap: Record<string, string> = {};
+          healed.forEach(r => {
+            flatMap[r.tagKey] = r.url;
+          });
+          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(flatMap));
+          localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(healed));
+        }
+        return healed;
+      } catch (e) {}
+    }
+    return defaults;
+  });
+
+  const apiSourceUrls = useMemo(() => {
+    const map: Record<string, string> = {};
+    apiSourceRows.forEach((r) => {
+      map[r.tagKey] = r.url;
+    });
+    return map;
+  }, [apiSourceRows]);
+
+  const filteredApiSourceRows = useMemo(() => {
+    if (!searchQuery.trim()) return apiSourceRows;
+    const q = searchQuery.toLowerCase();
+    return apiSourceRows.filter(
+      (s) =>
+        s.tagName.toLowerCase().includes(q) ||
+        s.tagKey.toLowerCase().includes(q)
+    );
+  }, [apiSourceRows, searchQuery]);
+
+  const handleApiSourceTagKeyChange = (idx: number, value: string) => {
+    setApiSourceRows((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], tagKey: value };
+      return next;
+    });
+  };
+
+  const handleApiSourceTagNameChange = (idx: number, value: string) => {
+    setApiSourceRows((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], tagName: value };
+      return next;
+    });
+  };
+
+  const handleApiSourceUnitChange = (idx: number, value: string) => {
+    setApiSourceRows((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], unit: value };
+      return next;
+    });
+  };
+
+  const handleApiSourceUrlChange = (idx: number, value: string) => {
+    setApiSourceRows((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], url: value };
+      return next;
+    });
+  };
+
+  const handleApiSourceJsonKeyChange = (idx: number, value: string) => {
+    setApiSourceRows((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], jsonKey: value };
+      return next;
+    });
+  };
+
+  const handleDeleteApiSourceRow = (idx: number) => {
+    setDeleteTarget({ type: "api-source", apiIdx: idx });
+    setPasswordInput("");
+    setPasswordError("");
+    setPasswordAction("delete");
+    setShowPasswordModal(true);
+  };
+
+  const handleAddApiSourceRow = () => {
+    setApiSourceRows((prev) => [
+      ...prev,
+      {
+        tagKey: `cooling-water/new_api_tag_${Date.now()}`,
+        tagName: "New API Source",
+        url: "",
+        unit: "",
+        jsonKey: ""
+      }
+    ]);
+  };
+
+  const handleResetApiSourcesToDefault = () => {
+    if (window.confirm("Apakah Anda yakin ingin menyetel ulang seluruh API Sources ke data default? Tindakan ini akan menimpa perubahan Anda saat ini.")) {
+      setApiSourceRows(getDefaultApiSourceConfigs(unitId));
+    }
+  };
+
+  const [apiLiveData, setApiLiveData] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    setSearchQuery("");
+  }, [configTab]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchActiveApiData = async () => {
+      const uniqueUrls = Array.from(new Set(Object.values(apiSourceUrls).filter((u) => u.trim())));
+      if (uniqueUrls.length === 0) {
+        if (isMounted) setApiLiveData({});
+        return;
+      }
+
+      const aggregatedData: Record<string, any> = {};
+      await Promise.all(
+        uniqueUrls.map(async (url) => {
+          try {
+            const res = await postJson<{ success: boolean; data?: any }>("/config/api-sources/test", {
+              url,
+              method: "GET"
+            });
+            if (res && res.success && res.data) {
+              Object.assign(aggregatedData, res.data);
+            }
+          } catch (err) {
+            console.error(`Live API poll error for URL ${url}:`, err);
+          }
+        })
+      );
+
+      if (isMounted) {
+        setApiLiveData(aggregatedData);
+      }
+    };
+
+    fetchActiveApiData();
+    const interval = setInterval(fetchActiveApiData, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [apiSourceUrls]);
+
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -206,15 +628,11 @@ export default function MachineConfig() {
   };
 
   const handleDeleteRule = (itemKey: string, ruleIdx: number) => {
-    setEqTaskConfigs((prev) =>
-      prev.map((config) => {
-        if (config.itemKey !== itemKey) return config;
-        return {
-          ...config,
-          rules: config.rules.filter((_, idx) => idx !== ruleIdx)
-        };
-      })
-    );
+    setDeleteTarget({ type: "preventive-rule", itemKey, ruleIdx });
+    setPasswordInput("");
+    setPasswordError("");
+    setPasswordAction("delete");
+    setShowPasswordModal(true);
   };
 
   const handleAddTaskDesc = (itemKey: string, ruleIdx: number) => {
@@ -248,30 +666,96 @@ export default function MachineConfig() {
   };
 
   const handleDeleteTaskDesc = (itemKey: string, ruleIdx: number, taskIdx: number) => {
-    setEqTaskConfigs((prev) =>
-      prev.map((config) => {
-        if (config.itemKey !== itemKey) return config;
-        const nextRules = [...config.rules];
-        nextRules[ruleIdx] = {
-          ...nextRules[ruleIdx],
-          tasks: nextRules[ruleIdx].tasks.filter((_, idx) => idx !== taskIdx)
-        };
-        return { ...config, rules: nextRules };
-      })
-    );
+    setDeleteTarget({ type: "preventive-task", itemKey, ruleIdx, taskIdx });
+    setPasswordInput("");
+    setPasswordError("");
+    setPasswordAction("delete");
+    setShowPasswordModal(true);
+  };
+
+  const handleAddEqTaskConfig = () => {
+    setEqTaskConfigs((prev) => [
+      ...prev,
+      {
+        itemKey: `NEW_EQ_${Date.now()}`,
+        displayName: "New Equipment Maintenance",
+        rules: [
+          { targetHours: 1000, warningHours: 168, tasks: ["Lakukan inspeksi visual"] }
+        ]
+      }
+    ]);
+  };
+
+  const handleDeleteEqTaskConfig = (itemKey: string, displayName: string) => {
+    setDeleteTarget({ type: "preventive-category", itemKey, displayName });
+    setPasswordInput("");
+    setPasswordError("");
+    setPasswordAction("delete");
+    setShowPasswordModal(true);
   };
 
   const [successMsg, setSuccessMsg] = useState(false);
 
-  const handleSensorSelectChange = (index: number, field: "direction", value: "above" | "below") => {
+  const handleSensorSelectChange = (tagKey: string, field: "direction", value: "above" | "below") => {
     setSensorRows((prev) => {
+      const idx = prev.findIndex((r) => r.tagKey === tagKey);
+      if (idx === -1) return prev;
       const next = [...prev];
-      next[index] = {
-        ...next[index],
+      next[idx] = {
+        ...next[idx],
         [field]: value
       };
       return next;
     });
+  };
+
+  const handleDeleteSensorRow = (tagKey: string) => {
+    setDeleteTarget({ type: "sensor", sensorTagKey: tagKey });
+    setPasswordInput("");
+    setPasswordError("");
+    setPasswordAction("delete");
+    setShowPasswordModal(true);
+  };
+
+  const handleSensorTagKeyChange = (oldTagKey: string, newTagKey: string) => {
+    setSensorRows((prev) =>
+      prev.map((r) => (r.tagKey === oldTagKey ? { ...r, tagKey: newTagKey } : r))
+    );
+  };
+
+  const handleSensorTagNameChange = (tagKey: string, newTagName: string) => {
+    setSensorRows((prev) =>
+      prev.map((r) => (r.tagKey === tagKey ? { ...r, tagName: newTagName } : r))
+    );
+  };
+
+  const handleSensorUnitChange = (tagKey: string, newUnit: string) => {
+    setSensorRows((prev) =>
+      prev.map((r) => (r.tagKey === tagKey ? { ...r, unit: newUnit } : r))
+    );
+  };
+
+  const handleAddSensorRow = () => {
+    setSensorRows((prev) => [
+      ...prev,
+      {
+        tagKey: `cooling-water/new_parameter_${Date.now()}`,
+        tagName: "New Parameter Name",
+        lowLimit: 0,
+        baseline: 0,
+        highLimit: 0,
+        unit: "°C",
+        enableAlert: true,
+        suppressAlert: false,
+        direction: "above"
+      }
+    ]);
+  };
+
+  const handleResetSensorsToDefault = () => {
+    if (window.confirm("Apakah Anda yakin ingin menyetel ulang seluruh parameter sensor ke 105 data default? Tindakan ini akan menimpa perubahan Anda saat ini.")) {
+      setSensorRows(getDefaultSensorConfigs(unitId));
+    }
   };
 
   // Load configuration from localStorage or defaults
@@ -319,26 +803,49 @@ export default function MachineConfig() {
     }
   }, [unitId, isCoolingTower]);
 
+  // Load API sources list from database on mount to sync with Postgres global_configs
+  useEffect(() => {
+    getJson<{ success: boolean; rows: ApiSourceRow[] | null; sources: Record<string, string> | null }>(
+      `/config/api-sources-map?unitId=${unitId}`
+    )
+      .then((res) => {
+        if (res && res.success) {
+          if (res.rows && res.rows.length > 0) {
+            setApiSourceRows(res.rows);
+            localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(res.rows));
+            if (res.sources) {
+              localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(res.sources));
+            }
+          }
+        }
+      })
+      .catch((err) => console.error("Failed to load API sources map from DB:", err));
+  }, [unitId]);
+
   // Handle number input changes for sensors
-  const handleSensorNumChange = (index: number, field: "lowLimit" | "baseline" | "highLimit", value: string) => {
+  const handleSensorNumChange = (tagKey: string, field: "lowLimit" | "baseline" | "highLimit", value: string) => {
     const parsedVal = value === "" ? 0 : parseFloat(value);
     setSensorRows((prev) => {
+      const idx = prev.findIndex((r) => r.tagKey === tagKey);
+      if (idx === -1) return prev;
       const next = [...prev];
-      next[index] = {
-        ...next[index],
-        [field]: isNaN(parsedVal) ? next[index][field] : parsedVal
+      next[idx] = {
+        ...next[idx],
+        [field]: isNaN(parsedVal) ? next[idx][field] : parsedVal
       };
       return next;
     });
   };
 
   // Handle check changes for sensors
-  const handleSensorCheckChange = (index: number, field: "enableAlert" | "suppressAlert") => {
+  const handleSensorCheckChange = (tagKey: string, field: "enableAlert" | "suppressAlert") => {
     setSensorRows((prev) => {
+      const idx = prev.findIndex((r) => r.tagKey === tagKey);
+      if (idx === -1) return prev;
       const next = [...prev];
-      next[index] = {
-        ...next[index],
-        [field]: !next[index][field]
+      next[idx] = {
+        ...next[idx],
+        [field]: !next[idx][field]
       };
       return next;
     });
@@ -369,8 +876,59 @@ export default function MachineConfig() {
     });
   };
 
+  const handleDeleteEqRow = (idx: number) => {
+    setDeleteTarget({ type: "eq-row", eqIdx: idx });
+    setPasswordInput("");
+    setPasswordError("");
+    setPasswordAction("delete");
+    setShowPasswordModal(true);
+  };
+
+  const handleEqTagKeyChange = (idx: number, value: string) => {
+    setEqRows((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], tagKey: value };
+      return next;
+    });
+  };
+
+  const handleEqTagNameChange = (idx: number, value: string) => {
+    setEqRows((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], tagName: value };
+      return next;
+    });
+  };
+
+  const handleAddEqRow = () => {
+    setEqRows((prev) => [
+      ...prev,
+      {
+        tagKey: `M10_MOTOR_OVERHAUL`,
+        tagName: "New Equipment Maintenance",
+        baseline: 0,
+        lowLimit: 0,
+        highLimit: 10000,
+        unit: "hours",
+        enableAlert: true,
+        suppressAlert: false,
+        status: "—"
+      }
+    ]);
+  };
+
   const [isUnlocked, setIsUnlocked] = useState(false);
-  const [passwordAction, setPasswordAction] = useState<"unlock" | "save" | null>(null);
+  const [passwordAction, setPasswordAction] = useState<"unlock" | "save" | "delete" | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: "sensor" | "api-source" | "eq-row" | "preventive-rule" | "preventive-task" | "preventive-category";
+    sensorTagKey?: string;
+    apiIdx?: number;
+    eqIdx?: number;
+    itemKey?: string;
+    ruleIdx?: number;
+    taskIdx?: number;
+    displayName?: string;
+  } | null>(null);
 
   // Trigger password prompt to unlock
   const triggerUnlock = () => {
@@ -392,7 +950,7 @@ export default function MachineConfig() {
   const handleConfirmSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passwordInput) {
-      setPasswordError("Password is required");
+      setPasswordError("Password wajib diisi.");
       return;
     }
     setVerifyingPassword(true);
@@ -404,7 +962,49 @@ export default function MachineConfig() {
         if (passwordAction === "unlock") {
           setIsUnlocked(true);
           setShowPasswordModal(false);
+        } else if (passwordAction === "delete" && deleteTarget) {
+          if (deleteTarget.type === "sensor" && deleteTarget.sensorTagKey) {
+            setSensorRows((prev) => prev.filter((r) => r.tagKey !== deleteTarget.sensorTagKey));
+          } else if (deleteTarget.type === "api-source" && deleteTarget.apiIdx !== undefined) {
+            setApiSourceRows((prev) => prev.filter((_, i) => i !== deleteTarget.apiIdx));
+          } else if (deleteTarget.type === "eq-row" && deleteTarget.eqIdx !== undefined) {
+            setEqRows((prev) => prev.filter((_, i) => i !== deleteTarget.eqIdx));
+          } else if (deleteTarget.type === "preventive-rule" && deleteTarget.itemKey && deleteTarget.ruleIdx !== undefined) {
+            setEqTaskConfigs((prev) =>
+              prev.map((config) => {
+                if (config.itemKey !== deleteTarget.itemKey) return config;
+                return {
+                  ...config,
+                  rules: config.rules.filter((_, idx) => idx !== deleteTarget.ruleIdx)
+                };
+              })
+            );
+          } else if (deleteTarget.type === "preventive-task" && deleteTarget.itemKey && deleteTarget.ruleIdx !== undefined && deleteTarget.taskIdx !== undefined) {
+            setEqTaskConfigs((prev) =>
+              prev.map((config) => {
+                if (config.itemKey !== deleteTarget.itemKey) return config;
+                const nextRules = [...config.rules];
+                nextRules[deleteTarget.ruleIdx!] = {
+                  ...nextRules[deleteTarget.ruleIdx!],
+                  tasks: nextRules[deleteTarget.ruleIdx!].tasks.filter((_, idx) => idx !== deleteTarget.taskIdx)
+                };
+                return { ...config, rules: nextRules };
+              })
+            );
+          } else if (deleteTarget.type === "preventive-category" && deleteTarget.itemKey) {
+            setEqTaskConfigs((prev) => prev.filter((c) => c.itemKey !== deleteTarget.itemKey));
+          }
+
+          setDeleteTarget(null);
+          setShowPasswordModal(false);
         } else {
+          // Save API sources map to localStorage and backend
+          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(apiSourceUrls));
+          localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(apiSourceRows));
+          await postJson("/config/api-sources-map", { unitId, sources: apiSourceUrls, rows: apiSourceRows }).catch((err) =>
+            console.error("Failed to save API sources map to backend:", err)
+          );
+
           if (isCoolingTower) {
             // Save sensor thresholds to backend database
             await postJson("/config/sensor-rules", { unitId, rules: sensorRows });
@@ -460,11 +1060,11 @@ export default function MachineConfig() {
           setTimeout(() => setSuccessMsg(false), 3000);
         }
       } else {
-        setPasswordError("Incorrect password. Please try again.");
+        setPasswordError("Password salah. Silakan coba lagi.");
       }
     } catch (err) {
       console.error(err);
-      setPasswordError("Error verifying password. Please try again.");
+      setPasswordError("Gagal memverifikasi password. Silakan coba lagi.");
     } finally {
       setVerifyingPassword(false);
     }
@@ -524,41 +1124,41 @@ export default function MachineConfig() {
             Save Configuration
           </button>
         </div>
-      </div>
-
-      {/* Internal configuration section sub-tabs */}
+      </div>      {/* Internal configuration section sub-tabs */}
       {isCoolingTower && (
-        <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 rounded-xl w-fit">
-          <button
-            onClick={() => setConfigTab("sensors")}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
-              configTab === "sensors"
-                ? "bg-[#1f6fb5] text-white shadow-sm"
-                : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-200"
-            }`}
-          >
-            Sensor parameters (TDS, pH, Flow, etc.)
-          </button>
-          <button
-            onClick={() => setConfigTab("equipment")}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
-              configTab === "equipment"
-                ? "bg-[#1f6fb5] text-white shadow-sm"
-                : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-200"
-            }`}
-          >
-            Equipment Running Hours (P&ID Specs)
-          </button>
-          <button
-            onClick={() => setConfigTab("api-sources")}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
-              configTab === "api-sources"
-                ? "bg-[#1f6fb5] text-white shadow-sm"
-                : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-200"
-            }`}
-          >
-            API Sources
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 rounded-xl w-fit">
+            <button
+              onClick={() => setConfigTab("sensors")}
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+                configTab === "sensors"
+                  ? "bg-[#1f6fb5] text-white shadow-sm"
+                  : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-200"
+              }`}
+            >
+              Sensor parameters (TDS, pH, Flow, etc.)
+            </button>
+            <button
+              onClick={() => setConfigTab("equipment")}
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+                configTab === "equipment"
+                  ? "bg-[#1f6fb5] text-white shadow-sm"
+                  : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-200"
+              }`}
+            >
+              Equipment Running Hours (P&ID Specs)
+            </button>
+            <button
+              onClick={() => setConfigTab("api-sources")}
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+                configTab === "api-sources"
+                  ? "bg-[#1f6fb5] text-white shadow-sm"
+                  : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-200"
+              }`}
+            >
+              API Sources
+            </button>
+          </div>
         </div>
       )}
 
@@ -575,6 +1175,46 @@ export default function MachineConfig() {
             </p>
           </div>
         )}
+        {configTab === "sensors" && (
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            {/* Search Input on the Left */}
+            <div className="relative w-64">
+              <input
+                type="text"
+                placeholder="Cari tag atau parameter..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition font-medium"
+              />
+              <svg className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+
+            {/* Reset and Add Buttons on the Right */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                disabled={!isUnlocked}
+                onClick={handleResetSensorsToDefault}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-[#0b3b60]/10 hover:bg-[#0b3b60]/20 text-[#0b3b60] dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 shadow-sm transition border border-[#0b3b60]/20 dark:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Reset ke Parameter Default
+              </button>
+              <button
+                type="button"
+                disabled={!isUnlocked}
+                onClick={handleAddSensorRow}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Tambah Parameter Sensor
+              </button>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           {configTab === "sensors" ? (
             <table className="w-full text-left text-xs border-collapse">
@@ -587,14 +1227,44 @@ export default function MachineConfig() {
                   <th className="pb-3 px-3 text-center w-28">Limit Rule</th>
                   <th className="pb-3 px-3 text-center w-28">Enable Alert</th>
                   <th className="pb-3 px-3 text-center w-28">Suppress Alert</th>
+                  <th className="pb-3 px-3 text-center w-24">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-[#002b5c] dark:text-slate-300">
-                {sensorRows.map((row, idx) => (
+                {filteredSensorRows.map((row) => (
                   <tr key={row.tagKey} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                     <td className="py-4 px-3">
-                      <div className="font-bold text-[#002b5c] dark:text-slate-200">{row.tagKey}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">{row.tagName} ({row.unit})</div>
+                      {isUnlocked ? (
+                        <div className="space-y-1.5">
+                          <input
+                            type="text"
+                            value={row.tagKey}
+                            onChange={(e) => handleSensorTagKeyChange(row.tagKey, e.target.value)}
+                            className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-blue-500/30 rounded text-xs font-mono text-[#002b5c] dark:text-white outline-none focus:border-blue-500"
+                          />
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={row.tagName}
+                              onChange={(e) => handleSensorTagNameChange(row.tagKey, e.target.value)}
+                              className="w-full px-2 py-0.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-[10px] text-slate-600 dark:text-slate-300 outline-none placeholder:text-slate-400"
+                              placeholder="Sensor Name"
+                            />
+                            <input
+                              type="text"
+                              value={row.unit}
+                              onChange={(e) => handleSensorUnitChange(row.tagKey, e.target.value)}
+                              className="w-20 px-2 py-0.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-[10px] text-slate-600 dark:text-slate-300 outline-none placeholder:text-slate-400"
+                              placeholder="Unit"
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="font-bold text-[#002b5c] dark:text-slate-200">{row.tagKey}</div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">{row.tagName} ({row.unit})</div>
+                        </>
+                      )}
                     </td>
                     
                     <td className="py-4 px-3 text-center">
@@ -604,7 +1274,7 @@ export default function MachineConfig() {
                           step="0.01"
                           value={row.lowLimit}
                           disabled={!isUnlocked}
-                          onChange={(e) => handleSensorNumChange(idx, "lowLimit", e.target.value)}
+                          onChange={(e) => handleSensorNumChange(row.tagKey, "lowLimit", e.target.value)}
                           className="w-full text-center font-bold font-mono bg-transparent outline-none focus:ring-0 focus:border-transparent text-xs disabled:opacity-50"
                         />
                       </div>
@@ -617,7 +1287,7 @@ export default function MachineConfig() {
                           step="0.01"
                           value={row.baseline}
                           disabled={!isUnlocked}
-                          onChange={(e) => handleSensorNumChange(idx, "baseline", e.target.value)}
+                          onChange={(e) => handleSensorNumChange(row.tagKey, "baseline", e.target.value)}
                           className="w-full text-center font-bold font-mono bg-transparent outline-none focus:ring-0 focus:border-transparent text-xs text-[#1f6fb5] dark:text-sky-400 disabled:opacity-50"
                         />
                       </div>
@@ -630,7 +1300,7 @@ export default function MachineConfig() {
                           step="0.01"
                           value={row.highLimit}
                           disabled={!isUnlocked}
-                          onChange={(e) => handleSensorNumChange(idx, "highLimit", e.target.value)}
+                          onChange={(e) => handleSensorNumChange(row.tagKey, "highLimit", e.target.value)}
                           className="w-full text-center font-bold font-mono bg-transparent outline-none focus:ring-0 focus:border-transparent text-xs disabled:opacity-50"
                         />
                       </div>
@@ -640,7 +1310,7 @@ export default function MachineConfig() {
                       <select
                         value={row.direction || "above"}
                         disabled={!isUnlocked}
-                        onChange={(e) => handleSensorSelectChange(idx, "direction", e.target.value as "above" | "below")}
+                        onChange={(e) => handleSensorSelectChange(row.tagKey, "direction", e.target.value as "above" | "below")}
                         className="rounded border border-[#acd3ff] dark:border-slate-800 bg-transparent text-[#002b5c] dark:text-slate-300 px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-blue-500 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <option value="above" className="bg-white dark:bg-slate-950">Above</option>
@@ -652,7 +1322,7 @@ export default function MachineConfig() {
                       <button
                         type="button"
                         disabled={!isUnlocked}
-                        onClick={() => handleSensorCheckChange(idx, "enableAlert")}
+                        onClick={() => handleSensorCheckChange(row.tagKey, "enableAlert")}
                         className={`inline-flex items-center gap-1 px-3 py-1 rounded text-[10px] font-extrabold uppercase border transition disabled:opacity-50 disabled:cursor-not-allowed ${
                           row.enableAlert
                             ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/25"
@@ -667,7 +1337,7 @@ export default function MachineConfig() {
                       <button
                         type="button"
                         disabled={!isUnlocked}
-                        onClick={() => handleSensorCheckChange(idx, "suppressAlert")}
+                        onClick={() => handleSensorCheckChange(row.tagKey, "suppressAlert")}
                         className={`inline-flex items-center gap-1 px-3 py-1 rounded text-[10px] font-extrabold uppercase border transition disabled:opacity-50 disabled:cursor-not-allowed ${
                           row.suppressAlert
                             ? "bg-rose-500/15 text-rose-500 border-rose-500/30 font-bold"
@@ -677,6 +1347,17 @@ export default function MachineConfig() {
                         {row.suppressAlert ? "YES" : "NO"}
                       </button>
                     </td>
+
+                    <td className="py-4 px-3 text-center">
+                      <button
+                        type="button"
+                        disabled={!isUnlocked}
+                        onClick={() => handleDeleteSensorRow(row.tagKey)}
+                        className="px-2.5 py-1 text-[10px] font-bold rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 transition border border-rose-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Hapus
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -684,6 +1365,28 @@ export default function MachineConfig() {
           ) : isCoolingTower ? (
             /* NEW NESTED EQUIPMENT RUNNING HOURS CONSOLE */
             <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                {/* Info Text on the Left */}
+                <div className="text-xs text-slate-400">
+                  Kelola rule jam kerja dan instruksi perawatan preventif secara independen.
+                </div>
+
+                {/* Add Equipment Category Button on the Right */}
+                <div>
+                  <button
+                    type="button"
+                    disabled={!isUnlocked}
+                    onClick={handleAddEqTaskConfig}
+                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Tambah Equipment
+                  </button>
+                </div>
+              </div>
+
               {eqTaskConfigs.map((config) => {
                 const isExpanded = !!expandedItems[config.itemKey];
                 const totalRules = config.rules.length;
@@ -698,9 +1401,22 @@ export default function MachineConfig() {
                       className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-900/30 transition select-none"
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-xs font-extrabold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
-                          {config.displayName}
-                        </span>
+                        {isUnlocked ? (
+                          <input
+                            type="text"
+                            value={config.displayName}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setEqTaskConfigs(prev => prev.map(c => c.itemKey === config.itemKey ? { ...c, displayName: val } : c));
+                            }}
+                            className="px-2 py-0.5 bg-slate-50 dark:bg-slate-900 border border-blue-500/35 rounded text-xs font-bold text-[#002b5c] dark:text-white outline-none w-48"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span className="text-xs font-extrabold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
+                            {config.displayName}
+                          </span>
+                        )}
                         <span className="px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 text-[10px] font-bold">
                           {totalRules} {totalRules === 1 ? "Rule" : "Rules"}
                         </span>
@@ -711,6 +1427,17 @@ export default function MachineConfig() {
                             Hours: {config.rules.map((r) => `${r.targetHours}h`).join(", ")}
                           </span>
                         )}
+                        <button
+                          type="button"
+                          disabled={!isUnlocked}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteEqTaskConfig(config.itemKey, config.displayName);
+                          }}
+                          className="px-2 py-1 text-[10px] font-bold rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 border border-rose-500/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Hapus
+                        </button>
                         <svg
                           className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
                             isExpanded ? "transform rotate-180" : ""
@@ -849,83 +1576,148 @@ export default function MachineConfig() {
             </div>
           ) : (
             /* STANDARD NON-COOLING EQUIPMENT RUNNING HOURS TABLE */
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
-                  <th className="pb-3 px-3">Equipment SCADA Tag</th>
-                  <th className="pb-3 px-3 text-center">P&ID Status</th>
-                  <th className="pb-3 px-3 text-center w-24">Max Hours</th>
-                  <th className="pb-3 px-3 text-center w-28">Enable Alert</th>
-                  <th className="pb-3 px-3 text-center w-28">Suppress Alert</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-[#002b5c] dark:text-slate-300">
-                {eqRows.map((row, idx) => (
-                  <tr key={row.tagKey} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
-                    <td className="py-3 px-3">
-                      <div className="font-bold text-[#002b5c] dark:text-slate-200">{getEqDisplayTagKey(row.tagKey)}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">{row.tagName}</div>
-                    </td>
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                {/* Search Input on the Left */}
+                <div className="relative w-64">
+                  <input
+                    type="text"
+                    placeholder="Cari tag atau parameter..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition font-medium"
+                  />
+                  <svg className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
 
-                    <td className="py-3 px-3 text-center">
-                      {row.status !== "—" ? (
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[9px] font-extrabold tracking-wider ${
-                          row.status === "ON"
-                            ? "bg-sky-500/10 text-sky-500 border border-sky-500/20"
-                            : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
-                        }`}>
-                          {row.status}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 font-semibold">—</span>
-                      )}
-                    </td>
+                {/* Add Button on the Right */}
+                <div>
+                  <button
+                    type="button"
+                    disabled={!isUnlocked}
+                    onClick={handleAddEqRow}
+                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Tambah Parameter Equipment
+                  </button>
+                </div>
+              </div>
 
-                    <td className="py-3 px-3 text-center">
-                      <div className="inline-flex items-center gap-1.5 border border-[#d6e9fb] dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-900 w-24">
-                        <input
-                          type="number"
-                          value={row.highLimit}
-                          disabled={!isUnlocked}
-                          onChange={(e) => handleEqNumChange(idx, "highLimit", e.target.value)}
-                          className="w-full text-center font-bold font-mono bg-transparent outline-none focus:ring-0 focus:border-transparent text-xs disabled:opacity-50"
-                        />
-                      </div>
-                    </td>
-
-                    <td className="py-3 px-3 text-center">
-                      <button
-                        type="button"
-                        disabled={!isUnlocked}
-                        onClick={() => handleEqCheckChange(idx, "enableAlert")}
-                        className={`inline-flex items-center gap-1 px-3 py-1 rounded text-[10px] font-extrabold uppercase border transition disabled:opacity-50 disabled:cursor-not-allowed ${
-                          row.enableAlert
-                            ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/25"
-                            : "bg-slate-100 dark:bg-slate-900/40 text-slate-400 border-slate-200 dark:border-slate-800"
-                        }`}
-                      >
-                        {row.enableAlert ? "YES" : "NO"}
-                      </button>
-                    </td>
-
-                    <td className="py-3 px-3 text-center">
-                      <button
-                        type="button"
-                        disabled={!isUnlocked}
-                        onClick={() => handleEqCheckChange(idx, "suppressAlert")}
-                        className={`inline-flex items-center gap-1 px-3 py-1 rounded text-[10px] font-extrabold uppercase border transition disabled:opacity-50 disabled:cursor-not-allowed ${
-                          row.suppressAlert
-                            ? "bg-rose-500/15 text-rose-500 border-rose-500/30 font-bold"
-                            : "bg-slate-100 dark:bg-slate-900/40 text-slate-400 border-slate-200 dark:border-slate-800"
-                        }`}
-                      >
-                        {row.suppressAlert ? "YES" : "NO"}
-                      </button>
-                    </td>
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
+                    <th className="pb-3 px-3">Equipment SCADA Tag</th>
+                    <th className="pb-3 px-3 text-center">P&ID Status</th>
+                    <th className="pb-3 px-3 text-center w-24">Max Hours</th>
+                    <th className="pb-3 px-3 text-center w-28">Enable Alert</th>
+                    <th className="pb-3 px-3 text-center w-28">Suppress Alert</th>
+                    <th className="pb-3 px-3 text-center w-24">Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-[#002b5c] dark:text-slate-300">
+                  {eqRows.map((row, idx) => (
+                    <tr key={row.tagKey} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
+                      <td className="py-3 px-3">
+                        {isUnlocked ? (
+                          <div className="space-y-1.5">
+                            <input
+                              type="text"
+                              value={row.tagKey}
+                              onChange={(e) => handleEqTagKeyChange(idx, e.target.value)}
+                              className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-blue-500/30 rounded text-xs font-mono text-[#002b5c] dark:text-white outline-none focus:border-blue-500"
+                            />
+                            <input
+                              type="text"
+                              value={row.tagName}
+                              onChange={(e) => handleEqTagNameChange(idx, e.target.value)}
+                              className="w-full px-2 py-0.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-[10px] text-slate-600 dark:text-slate-300 outline-none placeholder:text-slate-400"
+                              placeholder="Equipment Name"
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="font-bold text-[#002b5c] dark:text-slate-200">{getEqDisplayTagKey(row.tagKey)}</div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">{row.tagName}</div>
+                          </>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-3 text-center">
+                        {row.status !== "—" ? (
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[9px] font-extrabold tracking-wider ${
+                            row.status === "ON"
+                              ? "bg-sky-500/10 text-sky-500 border border-sky-500/20"
+                              : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                          }`}>
+                            {row.status}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-semibold">—</span>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-3 text-center">
+                        <div className="inline-flex items-center gap-1.5 border border-[#d6e9fb] dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-900 w-24">
+                          <input
+                            type="number"
+                            value={row.highLimit}
+                            disabled={!isUnlocked}
+                            onChange={(e) => handleEqNumChange(idx, "highLimit", e.target.value)}
+                            className="w-full text-center font-bold font-mono bg-transparent outline-none focus:ring-0 focus:border-transparent text-xs disabled:opacity-50"
+                          />
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          type="button"
+                          disabled={!isUnlocked}
+                          onClick={() => handleEqCheckChange(idx, "enableAlert")}
+                          className={`inline-flex items-center gap-1 px-3 py-1 rounded text-[10px] font-extrabold uppercase border transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                            row.enableAlert
+                              ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/25"
+                              : "bg-slate-100 dark:bg-slate-900/40 text-slate-400 border-slate-200 dark:border-slate-800"
+                          }`}
+                        >
+                          {row.enableAlert ? "YES" : "NO"}
+                        </button>
+                      </td>
+
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          type="button"
+                          disabled={!isUnlocked}
+                          onClick={() => handleEqCheckChange(idx, "suppressAlert")}
+                          className={`inline-flex items-center gap-1 px-3 py-1 rounded text-[10px] font-extrabold uppercase border transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                            row.suppressAlert
+                              ? "bg-rose-500/15 text-rose-500 border-rose-500/30 font-bold"
+                              : "bg-slate-100 dark:bg-slate-900/40 text-slate-400 border-slate-200 dark:border-slate-800"
+                          }`}
+                        >
+                          {row.suppressAlert ? "YES" : "NO"}
+                        </button>
+                      </td>
+
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          type="button"
+                          disabled={!isUnlocked}
+                          onClick={() => handleDeleteEqRow(idx)}
+                          className="px-2.5 py-1 text-[10px] font-bold rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 transition border border-rose-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Hapus
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
         </div>
       </div>
@@ -934,46 +1726,282 @@ export default function MachineConfig() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* API SOURCES MANAGEMENT PANEL                               */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      {configTab === "api-sources" && <ApiSourcesPanel unitId={unitId} />}
+      {/* API SOURCES CONFIGURATION PANEL (24 ITEMS MATCHING SENSOR PARAMETERS) */}
+      {configTab === "api-sources" && (
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h4 className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide flex items-center gap-2">
+                Configuration API Sources ({filteredApiSourceRows.length} / {apiSourceRows.length} Items)
+                <span className="px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 text-[10px] font-bold">
+                  {Object.values(apiSourceUrls).filter((u) => u.trim()).length} Active APIs
+                </span>
+              </h4>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Konfigurasi API Endpoint secara independen untuk {apiSourceRows.length} item source. Gunakan tombol <strong>Unlock to Edit</strong> di atas untuk mengelola tag dan API Endpoint URL.
+              </p>
+            </div>
+          </div>
 
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Search Input on the Left */}
+            <div className="relative w-64">
+              <input
+                type="text"
+                placeholder="Cari tag atau parameter..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition font-medium"
+              />
+              <svg className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+
+            {/* Reset and Add Buttons on the Right */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                disabled={!isUnlocked}
+                onClick={handleResetApiSourcesToDefault}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-[#0b3b60]/10 hover:bg-[#0b3b60]/20 text-[#0b3b60] dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 shadow-sm transition border border-[#0b3b60]/20 dark:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Reset ke Default API Sources
+              </button>
+              <button
+                type="button"
+                disabled={!isUnlocked}
+                onClick={handleAddApiSourceRow}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Tambah API Source
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
+                  <th className="pb-3 px-3 text-center w-12">#</th>
+                  <th className="pb-3 px-3">Sensor Parameter Item</th>
+                  <th className="pb-3 px-3">SCADA Tag Key</th>
+                  <th className="pb-3 px-3">JSON Key (Ignition)</th>
+                  <th className="pb-3 px-3">API Endpoint URL</th>
+                  <th className="pb-3 px-3 text-center">Status Endpoint</th>
+                  <th className="pb-3 px-3 text-right">Live API Value</th>
+                  <th className="pb-3 px-3 text-center w-24">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-[#002b5c] dark:text-slate-300">
+                {filteredApiSourceRows.map((sensor, idx) => {
+                  const url = sensor.url || "";
+                  const hasUrl = Boolean(url.trim());
+                  
+                  const apiFieldKey = sensor.jsonKey || TAG_KEY_TO_API_JSON_KEY[sensor.tagKey] || sensor.tagKey.split("/")[1];
+                  let rawVal = apiFieldKey ? apiLiveData[apiFieldKey] : undefined;
+
+                  // Delta Temp fallback calculation if needed
+                  if (
+                    sensor.tagKey === "cooling-water/delta_temp" &&
+                    apiLiveData["Scaled_Temp_Tank_Cooling3_Return"] !== undefined &&
+                    apiLiveData["Scaled_Temp_Tank_Cooling3_Supp"] !== undefined
+                  ) {
+                    rawVal = apiLiveData["Scaled_Temp_Tank_Cooling3_Return"] - apiLiveData["Scaled_Temp_Tank_Cooling3_Supp"];
+                  }
+
+                  let liveValStr = "xx";
+                  const isValPresent = hasUrl && rawVal !== undefined && rawVal !== null;
+                  if (isValPresent) {
+                    liveValStr = typeof rawVal === "number" ? rawVal.toFixed(2) : String(rawVal);
+                  }
+
+                  return (
+                    <tr key={sensor.tagKey || idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
+                      <td className="py-3 px-3 text-center font-mono text-slate-400 font-bold">
+                        {idx + 1}
+                      </td>
+                      <td className="py-3 px-3">
+                        {isUnlocked ? (
+                          <div className="space-y-1">
+                            <input
+                              type="text"
+                              value={sensor.tagName}
+                              onChange={(e) => handleApiSourceTagNameChange(idx, e.target.value)}
+                              className="px-2 py-0.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-[11px] font-bold text-[#002b5c] dark:text-slate-200 outline-none w-full"
+                              placeholder="Name"
+                            />
+                            <input
+                              type="text"
+                              value={sensor.unit}
+                              onChange={(e) => handleApiSourceUnitChange(idx, e.target.value)}
+                              className="px-2 py-0.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-[10px] text-slate-500 outline-none w-20"
+                              placeholder="Unit"
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="font-bold text-[#002b5c] dark:text-slate-200">
+                              {sensor.tagName}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono">{sensor.unit}</div>
+                          </>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[11px] text-[#47729f] dark:text-slate-400">
+                        {isUnlocked ? (
+                          <input
+                            type="text"
+                            value={sensor.tagKey}
+                            onChange={(e) => handleApiSourceTagKeyChange(idx, e.target.value)}
+                            className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-blue-500/30 rounded text-xs font-mono text-[#002b5c] dark:text-white outline-none focus:border-blue-500 w-full"
+                            placeholder="Tag Key"
+                          />
+                        ) : (
+                          sensor.tagKey
+                        )}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[11px] text-[#47729f] dark:text-slate-400 font-bold">
+                        {isUnlocked ? (
+                          <input
+                            type="text"
+                            value={sensor.jsonKey || ""}
+                            onChange={(e) => handleApiSourceJsonKeyChange(idx, e.target.value)}
+                            className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-blue-500/30 rounded text-xs font-mono text-[#002b5c] dark:text-white outline-none focus:border-blue-500 w-full font-bold"
+                            placeholder="Ignition JSON Key"
+                          />
+                        ) : (
+                          sensor.jsonKey || <span className="text-slate-400 italic font-normal">sama dengan tag</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3">
+                        {isUnlocked ? (
+                          <input
+                            type="text"
+                            value={url}
+                            onChange={(e) => handleApiSourceUrlChange(idx, e.target.value)}
+                            placeholder="Masukkan API Endpoint URL (kosongkan jika belum ada API / data xx)..."
+                            className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-blue-500/50 dark:border-blue-500/40 rounded text-xs font-mono text-[#002b5c] dark:text-white outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400 placeholder:font-sans"
+                          />
+                        ) : (
+                          <div className="font-mono text-[11px] truncate max-w-[200px]">
+                            {hasUrl ? (
+                              <span className="text-blue-600 dark:text-blue-400 font-semibold">{url}</span>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">
+                                belum ada api
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
+                            isValPresent
+                              ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                              : hasUrl
+                              ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                              : "bg-slate-500/10 text-slate-400 border-slate-500/20"
+                          }`}
+                        >
+                          {isValPresent ? "⚡ API Active" : hasUrl ? "⏳ No Data" : "⏳ belum ada api"}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono font-bold text-xs">
+                        {isValPresent ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 font-mono font-extrabold text-xs">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            {liveValStr} {sensor.unit}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic font-mono">xx {sensor.unit}</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          type="button"
+                          disabled={!isUnlocked}
+                          onClick={() => handleDeleteApiSourceRow(idx)}
+                          className="px-2.5 py-1 text-[10px] font-bold rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 transition border border-rose-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Hapus
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* PASSWORD VERIFICATION MODAL OVERLAY */}
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="text-base font-bold text-[#002b5c] dark:text-slate-100 mb-2">
-              {passwordAction === "unlock" ? "Unlock Configuration Editing" : "Confirm Configuration Change"}
-            </h3>
-            <p className="text-xs text-[#47729f] dark:text-slate-400 mb-4">
-              {passwordAction === "unlock"
-                ? "Unlocking edit mode requires administrator password verification. Please enter your password."
-                : "Updating setpoints and rules requires administrator password verification. Please enter your password."}
-            </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
+          <div className="relative w-[420px] rounded-2xl border border-blue-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
+              <div>
+                <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                  Verifikasi Password Konfigurasi
+                </h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  {passwordAction === "unlock"
+                    ? "Masukkan password akun Anda untuk membuka kunci mode edit konfigurasi."
+                    : passwordAction === "delete"
+                    ? "Masukkan password akun Anda untuk memverifikasi tindakan HAPUS item."
+                    : "Masukkan password akun Anda untuk menyimpan seluruh perubahan konfigurasi."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPasswordModal(false)}
+                className="text-xs text-slate-400 hover:text-slate-200"
+              >
+                ✕
+              </button>
+            </div>
             <form onSubmit={handleConfirmSave} className="space-y-4">
               <div>
+                <label className="block text-[10px] font-bold text-[#002b5c] dark:text-slate-300 uppercase">
+                  Password Operator / Administrator <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="password"
-                  placeholder="Enter Password"
                   value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#acd3ff] dark:border-slate-700 rounded-lg bg-transparent text-sm text-[#002b5c] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    setPasswordError("");
+                  }}
+                  placeholder="Masukkan password akun Anda..."
+                  required
                   autoFocus
+                  className="mt-1 w-full rounded-lg border border-blue-500/50 dark:border-blue-500/40 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white font-semibold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/30"
                 />
                 {passwordError && (
-                  <p className="text-xs text-red-500 font-semibold mt-1.5">{passwordError}</p>
+                  <p className="mt-1.5 text-[11px] text-rose-500 font-bold flex items-center gap-1">
+                    <span>⚠️</span> {passwordError}
+                  </p>
                 )}
               </div>
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-900 pt-3">
                 <button
                   type="button"
                   onClick={() => setShowPasswordModal(false)}
                   disabled={verifyingPassword}
-                  className="px-4 py-2 text-xs font-bold text-[#47729f] hover:text-[#002b5c] dark:text-slate-400 dark:hover:text-slate-200 transition"
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition"
                 >
-                  Cancel
+                  Batal
                 </button>
                 <button
                   type="submit"
                   disabled={verifyingPassword}
-                  className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-1.5 shadow-md transition disabled:opacity-50"
+                  className="px-5 py-2 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition disabled:opacity-50 flex items-center gap-2"
                 >
                   {verifyingPassword ? (
                     <>
@@ -981,10 +2009,12 @@ export default function MachineConfig() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      Verifying...
+                      Memverifikasi...
                     </>
+                  ) : passwordAction === "unlock" ? (
+                    "Verifikasi & Buka Edit"
                   ) : (
-                    "Verify & Save"
+                    "Verifikasi & Simpan"
                   )}
                 </button>
               </div>
@@ -1560,479 +2590,6 @@ function HvacConfigConsole({ unitId, machine }: { unitId: string; machine: any }
         </div>
       )}
 
-      {activeTab === "api-sources" && (
-        <ApiSourcesPanel unitId={unitId} />
-      )}
-    </div>
-  );
-}
-
-export function ApiSourcesPanel({ unitId }: { unitId: string }) {
-  const [sources, setSources] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  
-  // Form State
-  const [nameInput, setNameInput] = useState("");
-  const [urlInput, setUrlInput] = useState(
-    unitId.startsWith("cooling-water")
-      ? "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3"
-      : unitId === "hvac-qc-retained-sample"
-      ? "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/ahu_sample"
-      : ""
-  );
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<any | null>(null);
-  const [testError, setTestError] = useState<string | null>(null);
-  const [testStatus, setTestStatus] = useState<number | null>(null);
-  
-  // Selection State
-  const [selectedFields, setSelectedFields] = useState<Record<string, boolean>>({});
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
-  const [saveLoading, setSaveLoading] = useState(false);
-  const [rawJsonOpen, setRawJsonOpen] = useState(false);
-
-  // Fetch registered API sources for this unitId
-  const loadSources = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await getJson<{ data: any[] }>(`/config/api-sources?unitId=${unitId}`);
-      if (res && res.data) {
-        setSources(res.data);
-      }
-    } catch (err: any) {
-      console.error("Failed to load API sources:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [unitId]);
-
-  useEffect(() => {
-    loadSources();
-  }, [loadSources]);
-
-  // Test Fetch handler
-  const handleTestFetch = async (targetUrl?: string) => {
-    const url = targetUrl || urlInput;
-    if (!url.trim()) {
-      setTestError("Please enter a valid API URL endpoint.");
-      return;
-    }
-    setTesting(true);
-    setTestError(null);
-    setTestResult(null);
-    setTestStatus(null);
-
-    try {
-      const res = await postJson<{ success: boolean; status: number; data?: any; error?: string }>("/config/api-sources/test", {
-        url: url.trim(),
-        method: "GET"
-      });
-      setTestStatus(res.status);
-      if (res.success && res.data) {
-        setTestResult(res.data);
-        // Pre-select keys
-        if (typeof res.data === "object" && res.data !== null) {
-          const keysMap: Record<string, boolean> = { ...selectedFields };
-          Object.keys(res.data).forEach(k => {
-            if (keysMap[k] === undefined) {
-              keysMap[k] = true;
-            }
-          });
-          setSelectedFields(keysMap);
-        }
-      } else {
-        setTestError(res.error || `HTTP Status ${res.status}`);
-      }
-    } catch (err: any) {
-      setTestError(err.message || "Failed to fetch from API target.");
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const handleSelectAll = (select: boolean) => {
-    if (!testResult || typeof testResult !== "object") return;
-    const updated: Record<string, boolean> = {};
-    Object.keys(testResult).forEach(k => {
-      updated[k] = select;
-    });
-    setSelectedFields(updated);
-  };
-
-  const handleToggleField = (key: string) => {
-    setSelectedFields(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
-
-  // Save handler (saveMode: "test" | "polling")
-  const handleSaveApiSource = async (saveMode: "test" | "polling") => {
-    if (!urlInput.trim()) {
-      setTestError("URL Endpoint is required.");
-      return;
-    }
-
-    setSaveLoading(true);
-    setTestError(null);
-
-    const fields = Object.keys(selectedFields).filter(k => selectedFields[k]);
-    const name = nameInput.trim() || `API Source (${urlInput.split("/").pop() || "Endpoint"})`;
-
-    const payload = {
-      name,
-      url: urlInput.trim(),
-      unitId,
-      method: "GET",
-      headers: {},
-      pollingIntervalMs: 2000,
-      selectedFields: fields,
-      enabled: saveMode === "polling",
-      mode: saveMode
-    };
-
-    try {
-      if (editingId) {
-        await patchJson(`/config/api-sources/${editingId}`, payload);
-        setSaveSuccess(`API Source "${name}" updated successfully (${saveMode === "polling" ? "Polling Active" : "Test Mode Only"})!`);
-      } else {
-        await postJson("/config/api-sources", payload);
-        setSaveSuccess(`API Source "${name}" registered successfully (${saveMode === "polling" ? "Polling Active" : "Test Mode Only"})!`);
-      }
-      
-      setTimeout(() => setSaveSuccess(null), 4000);
-      setNameInput("");
-      setEditingId(null);
-      setTestResult(null);
-      setSelectedFields({});
-      loadSources();
-    } catch (err: any) {
-      setTestError("Failed to save API source: " + (err.message || "Unknown error"));
-    } finally {
-      setSaveLoading(false);
-    }
-  };
-
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete API Source "${name}"?`)) return;
-    try {
-      await deleteJson(`/config/api-sources/${id}`);
-      loadSources();
-    } catch (err: any) {
-      alert("Failed to delete: " + err.message);
-    }
-  };
-
-  const handleEdit = (source: any) => {
-    setEditingId(source._id);
-    setNameInput(source.name);
-    setUrlInput(source.url);
-    const selMap: Record<string, boolean> = {};
-    (source.selectedFields || []).forEach((f: string) => {
-      selMap[f] = true;
-    });
-    setSelectedFields(selMap);
-    handleTestFetch(source.url);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    setNameInput("");
-    setTestResult(null);
-    setSelectedFields({});
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Registered API Sources Table */}
-      <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
-          <div>
-            <h4 className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide flex items-center gap-2">
-              Registered Backend API Sources
-              <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 text-[10px] font-bold">
-                {sources.length} Configured
-              </span>
-            </h4>
-            <p className="text-xs text-slate-400 mt-0.5">
-              List of registered HTTP API endpoints for machine telemetry integration.
-            </p>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="py-8 text-center text-xs text-slate-400">Loading API sources...</div>
-        ) : sources.length === 0 ? (
-          <div className="py-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-            <p className="text-xs text-slate-400 font-semibold mb-1">No API sources registered for this machine yet.</p>
-            <p className="text-[11px] text-slate-500">Use the form below to test and register an API endpoint.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
-                  <th className="pb-3 px-3">API Source Name</th>
-                  <th className="pb-3 px-3">Endpoint URL</th>
-                  <th className="pb-3 px-3 text-center">Status / Mode</th>
-                  <th className="pb-3 px-3 text-center">Selected Variables</th>
-                  <th className="pb-3 px-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-[#002b5c] dark:text-slate-300">
-                {sources.map((s) => (
-                  <tr key={s._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
-                    <td className="py-3 px-3 font-bold text-[#002b5c] dark:text-slate-200">
-                      {s.name}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-[11px] text-blue-600 dark:text-blue-400 truncate max-w-xs" title={s.url}>
-                      {s.url}
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
-                        s.mode === "polling" || s.enabled
-                          ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                          : "bg-amber-500/10 text-amber-500 border-amber-500/20"
-                      }`}>
-                        {s.mode === "polling" || s.enabled ? "⚡ Polling Active" : "🧪 Test Mode"}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300">
-                        {(s.selectedFields || []).length} Keys Selected
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleTestFetch(s.url)}
-                          className="px-2.5 py-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-500 rounded text-[10px] font-bold transition"
-                        >
-                          Test Fetch
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleEdit(s)}
-                          className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 rounded text-[10px] font-bold transition"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(s._id, s.name)}
-                          className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 rounded text-[10px] font-bold transition"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* API Configuration & Testing Form Card */}
-      <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300 space-y-5">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-          <div>
-            <h4 className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">
-              {editingId ? "Edit Registered API Source" : "Register New API Endpoint"}
-            </h4>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Input URL, test JSON fetch response, select variables to extract, and configure storage/polling behavior.
-            </p>
-          </div>
-          {editingId && (
-            <button
-              onClick={handleCancelEdit}
-              className="text-xs font-bold text-slate-400 hover:text-slate-200 transition"
-            >
-              Cancel Edit
-            </button>
-          )}
-        </div>
-
-        {saveSuccess && (
-          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs font-bold text-emerald-500 animate-in fade-in">
-            {saveSuccess}
-          </div>
-        )}
-
-        {testError && (
-          <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-xs font-semibold text-rose-500">
-            {testError}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-bold text-[#002b5c] dark:text-slate-300 mb-1">
-              API Source Name <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
-              placeholder="e.g. Cooling Tower WF1-U3 Status & LOT API"
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 font-semibold text-slate-800 dark:text-slate-200"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-[#002b5c] dark:text-slate-300 mb-1">
-              Endpoint URL <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              placeholder="http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3"
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 font-mono text-slate-800 dark:text-slate-200"
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between pt-1">
-          <button
-            type="button"
-            disabled={testing || !urlInput.trim()}
-            onClick={() => handleTestFetch()}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-lg shadow-md shadow-blue-600/20 transition flex items-center gap-2"
-          >
-            {testing ? (
-              <>
-                <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Fetching API Data...
-              </>
-            ) : (
-              <>
-                🧪 Test Fetch & Read Variables
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* JSON RESPONSE & VARIABLE SELECTION TABLE */}
-        {testResult && typeof testResult === "object" && (
-          <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-900/40 space-y-4 animate-in fade-in duration-200">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 text-[10px] font-bold rounded border border-emerald-500/20">
-                  HTTP {testStatus || 200} OK
-                </span>
-                <span className="text-xs font-bold text-[#002b5c] dark:text-slate-200">
-                  Detected {Object.keys(testResult).length} JSON Keys
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSelectAll(true)}
-                  className="px-2.5 py-1 text-[10px] font-bold text-blue-500 bg-blue-500/10 rounded hover:bg-blue-500/20 transition"
-                >
-                  Select All
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSelectAll(false)}
-                  className="px-2.5 py-1 text-[10px] font-bold text-slate-500 bg-slate-500/10 rounded hover:bg-slate-500/20 transition"
-                >
-                  Deselect All
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRawJsonOpen(!rawJsonOpen)}
-                  className="px-2.5 py-1 text-[10px] font-bold text-purple-500 bg-purple-500/10 rounded hover:bg-purple-500/20 transition"
-                >
-                  {rawJsonOpen ? "Hide Raw JSON" : "View Raw JSON"}
-                </button>
-              </div>
-            </div>
-
-            {/* RAW JSON PREVIEW */}
-            {rawJsonOpen && (
-              <div className="p-3 bg-slate-900 text-emerald-400 font-mono text-[11px] rounded-lg overflow-x-auto max-h-60 border border-slate-800">
-                <pre>{JSON.stringify(testResult, null, 2)}</pre>
-              </div>
-            )}
-
-            {/* VARIABLE SELECTION TABLE */}
-            <div className="overflow-x-auto max-h-80">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                    <th className="pb-2 px-3 text-center w-12">Select</th>
-                    <th className="pb-2 px-3">JSON Variable Key</th>
-                    <th className="pb-2 px-3">Sample Value</th>
-                    <th className="pb-2 px-3 text-center">Data Type</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200/50 dark:divide-slate-800/50 font-medium">
-                  {Object.keys(testResult).map((key) => {
-                    const val = testResult[key];
-                    const valType = typeof val;
-                    const isSelected = !!selectedFields[key];
-
-                    return (
-                      <tr key={key} className={`hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition ${isSelected ? "bg-blue-500/5" : ""}`}>
-                        <td className="py-2.5 px-3 text-center">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleToggleField(key)}
-                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
-                          />
-                        </td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800 dark:text-slate-100">
-                          {key}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-emerald-600 dark:text-emerald-400 truncate max-w-xs">
-                          {val === null ? "null" : typeof val === "object" ? JSON.stringify(val) : String(val)}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                            {valType}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* DUAL ACTION BUTTONS (TESTING vs POLLING) */}
-            <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-              <button
-                type="button"
-                disabled={saveLoading}
-                onClick={() => handleSaveApiSource("test")}
-                className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold rounded-lg transition disabled:opacity-50"
-              >
-                🧪 Simpan untuk Testing Saja
-              </button>
-
-              <button
-                type="button"
-                disabled={saveLoading}
-                onClick={() => handleSaveApiSource("polling")}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-md shadow-emerald-600/20 transition disabled:opacity-50 flex items-center gap-1.5"
-              >
-                ⚡ Simpan untuk Polling Backend
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

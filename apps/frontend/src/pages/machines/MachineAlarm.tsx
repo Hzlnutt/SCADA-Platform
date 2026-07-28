@@ -2,13 +2,14 @@ import { useState, useMemo, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
 import { useAuthStore } from "../../store/auth.store";
-import { getDefaultEqConfigs } from "../../data/equipment";
+import { getDefaultEqConfigs, getDefaultSensorConfigs } from "../../data/equipment";
 import { getJson, postJson } from "../../services/api.client";
 import type { MachineOutletContext } from "./MachineLayout";
 
 type AlarmLogItem = {
   id: string;
   timestamp: string;
+  rawTs?: string;
   description: string;
   equipment: string;
   operatorAction: string;
@@ -16,6 +17,7 @@ type AlarmLogItem = {
   rtn: string;
   operatorName?: string;
   approverName?: string;
+  clearedAt?: string | null;
 };
 
 const INITIAL_ALARMS: AlarmLogItem[] = [
@@ -48,7 +50,25 @@ export default function MachineAlarm() {
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Approval modal state
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
+  const [approvingAlarmId, setApprovingAlarmId] = useState<string | null>(null);
+  const [approvePasswordInput, setApprovePasswordInput] = useState("");
+  const [approvePasswordError, setApprovePasswordError] = useState("");
+  const [approveSubmitting, setApproveSubmitting] = useState(false);
+
+  // Detail modal state
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [selectedDetailAlarm, setSelectedDetailAlarm] = useState<AlarmLogItem | null>(null);
+
   const [filter, setFilter] = useState<string>("All");
+  const [selectedEquipment, setSelectedEquipment] = useState<string>("All");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string }>({
+    startDate: "",
+    endDate: ""
+  });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Role permissions checks
@@ -117,6 +137,7 @@ export default function MachineAlarm() {
         if (res && res.data) {
           const mapped: AlarmLogItem[] = res.data.map((item) => ({
             id: String(item.id),
+            rawTs: item.lastTs,
             timestamp: new Date(item.lastTs).toLocaleString("en-US", { hour12: false }),
             description: item.message,
             equipment: item.tagId,
@@ -124,7 +145,8 @@ export default function MachineAlarm() {
             status: item.status as "Active" | "Pending Approval" | "Resolved",
             rtn: item.rtn || "—",
             operatorName: item.operatorName || "",
-            approverName: item.approverName || ""
+            approverName: item.approverName || "",
+            clearedAt: item.clearedAt ? new Date(item.clearedAt).toLocaleString("en-US", { hour12: false }) : null
           }));
           setDbAlarms(mapped);
         }
@@ -158,12 +180,13 @@ export default function MachineAlarm() {
     return `${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
   });
 
-  const dynamicAlarms = useMemo(() => {
+  const dynamicAlarms = useMemo((): AlarmLogItem[] => {
     return eqConfigs
       .filter((item) => item.enableAlert && (item.runHoursBeforeMaintenance ?? item.baseline) >= item.highLimit)
       .map((item) => ({
         id: `maint-overdue-${item.tagKey}`,
         timestamp: loadTime,
+        rawTs: new Date().toISOString(),
         description: `Maintenance Overdue: ${item.tagName} (${(item.runHoursBeforeMaintenance ?? item.baseline).toLocaleString()} / ${item.highLimit.toLocaleString()} hrs)`,
         equipment: item.tagKey,
         operatorAction: "",
@@ -174,7 +197,48 @@ export default function MachineAlarm() {
       }));
   }, [eqConfigs, loadTime]);
 
-  // Filter and sort alarms based on active category and timestamp (descending)
+  // Load sensor configurations from Configuration page (local storage or default)
+  const sensorConfigs = useMemo(() => {
+    let configs = getDefaultSensorConfigs(unitId);
+    const savedSensor = localStorage.getItem(`scada.config.sensor.${unitId}`);
+    if (savedSensor) {
+      try {
+        configs = JSON.parse(savedSensor);
+      } catch (e) {}
+    }
+    return configs;
+  }, [unitId]);
+
+  // Options list for per-item filtering based on Configuration Sensor Parameters
+  const itemOptions = useMemo(() => {
+    const list: Array<{ key: string; label: string }> = sensorConfigs.map((s) => ({
+      key: s.tagKey,
+      label: s.tagName
+    }));
+
+    // Include any extra equipment tags present in log history not in config
+    const configuredKeys = new Set(sensorConfigs.map((s) => s.tagKey));
+    const configuredNames = new Set(sensorConfigs.map((s) => s.tagName.toLowerCase()));
+    const allLogItems = [...dynamicAlarms, ...dbAlarms];
+
+    allLogItems.forEach((item) => {
+      if (
+        item.equipment &&
+        !configuredKeys.has(item.equipment) &&
+        !configuredNames.has(item.equipment.toLowerCase())
+      ) {
+        configuredKeys.add(item.equipment);
+        list.push({
+          key: item.equipment,
+          label: item.equipment
+        });
+      }
+    });
+
+    return list;
+  }, [sensorConfigs, dynamicAlarms, dbAlarms]);
+
+  // Filter and sort alarms based on active category, item/equipment, date range, search query, and timestamp (descending)
   const processedAlarms = useMemo(() => {
     let result = [...dynamicAlarms, ...dbAlarms];
 
@@ -183,11 +247,61 @@ export default function MachineAlarm() {
       result = result.filter((item) => item.status === filter);
     }
 
+    // Filter by Item / Sensor Parameter (Matching Configuration Sensor Parameter)
+    if (selectedEquipment !== "All") {
+      const selectedObj = itemOptions.find((opt) => opt.key === selectedEquipment);
+      const selectedLabel = selectedObj ? selectedObj.label.toLowerCase() : "";
+      const selectedKey = selectedEquipment.toLowerCase();
+      const selectedCleanKey = selectedEquipment.replace(/^cooling-water\//i, "").toLowerCase();
+
+      result = result.filter((item) => {
+        if (!item.equipment && !item.description) return false;
+        const eqLower = (item.equipment || "").toLowerCase();
+        const descLower = (item.description || "").toLowerCase();
+
+        return (
+          eqLower === selectedKey ||
+          eqLower.includes(selectedCleanKey) ||
+          (selectedObj && descLower.includes(selectedLabel)) ||
+          (selectedObj && descLower.includes(selectedKey.replace(/^cooling-water\//i, "")))
+        );
+      });
+    }
+
+    // Filter by Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (item) =>
+          item.description.toLowerCase().includes(q) ||
+          item.equipment.toLowerCase().includes(q) ||
+          (item.operatorName && item.operatorName.toLowerCase().includes(q)) ||
+          (item.operatorAction && item.operatorAction.toLowerCase().includes(q))
+      );
+    }
+
+    // Filter by Date Range (Calendar)
+    if (dateRange.startDate) {
+      const startMs = new Date(dateRange.startDate + "T00:00:00").getTime();
+      result = result.filter((item) => {
+        const itemTime = item.rawTs ? new Date(item.rawTs).getTime() : new Date(item.timestamp).getTime();
+        return !isNaN(itemTime) && itemTime >= startMs;
+      });
+    }
+
+    if (dateRange.endDate) {
+      const endMs = new Date(dateRange.endDate + "T23:59:59").getTime();
+      result = result.filter((item) => {
+        const itemTime = item.rawTs ? new Date(item.rawTs).getTime() : new Date(item.timestamp).getTime();
+        return !isNaN(itemTime) && itemTime <= endMs;
+      });
+    }
+
     // Sort descending by timestamp (newest first)
     result.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
     return result;
-  }, [dbAlarms, dynamicAlarms, filter]);
+  }, [dbAlarms, dynamicAlarms, filter, selectedEquipment, searchQuery, dateRange, itemOptions]);
 
   // Handle single selection checkbox
   const handleSelectToggle = (id: string) => {
@@ -231,7 +345,7 @@ export default function MachineAlarm() {
       });
 
       if (!verifyRes || !verifyRes.valid) {
-        setPasswordError("Incorrect password. Please try again.");
+        setPasswordError("Password salah. Silakan coba lagi.");
         setSubmitting(false);
         return;
       }
@@ -251,7 +365,7 @@ export default function MachineAlarm() {
       fetchDbAlarms();
     } catch (err) {
       console.error("Failed to submit fix report:", err);
-      setPasswordError(err instanceof Error ? err.message : "Failed to verify password / submit report");
+      setPasswordError(err instanceof Error ? err.message : "Gagal memverifikasi password / mengirim laporan");
     } finally {
       setSubmitting(false);
     }
@@ -266,14 +380,43 @@ export default function MachineAlarm() {
     setAckModalOpen(true);
   };
 
-  // Inline single approval trigger
-  const handleApproveFix = async (id: string) => {
+  // Open approval password verification modal
+  const handleOpenApproveModal = (id: string) => {
     if (id.startsWith("maint-overdue-")) return;
+    setApprovingAlarmId(id);
+    setApprovePasswordInput("");
+    setApprovePasswordError("");
+    setApproveModalOpen(true);
+  };
+
+  // Submit Approval with Password Verification
+  const handleApproveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!approvingAlarmId) return;
+    setApprovePasswordError("");
+    setApproveSubmitting(true);
+
     try {
-      await postJson(`/alarms/${id}/approve`, {});
+      const verifyRes = await postJson<{ valid: boolean }>("/auth/verify-password", {
+        password: approvePasswordInput
+      });
+
+      if (!verifyRes || !verifyRes.valid) {
+        setApprovePasswordError("Password supervisor salah. Silakan coba lagi.");
+        setApproveSubmitting(false);
+        return;
+      }
+
+      await postJson(`/alarms/${approvingAlarmId}/approve`, {});
       fetchDbAlarms();
+      setApproveModalOpen(false);
+      setApprovingAlarmId(null);
+      setApprovePasswordInput("");
     } catch (err) {
       console.error("Failed to approve alarm:", err);
+      setApprovePasswordError(err instanceof Error ? err.message : "Gagal menyetujui alarm");
+    } finally {
+      setApproveSubmitting(false);
     }
   };
 
@@ -358,6 +501,82 @@ export default function MachineAlarm() {
               {p}
             </button>
           ))}
+        </div>
+
+        {/* Item / Equipment Filter */}
+        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg shadow-sm">
+          <span className="text-xs font-bold text-[#47729f] dark:text-slate-400 uppercase flex items-center gap-1.5">
+            <svg className="w-4 h-4 text-[#1f6fb5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            ITEM:
+          </span>
+          <select
+            value={selectedEquipment}
+            onChange={(e) => setSelectedEquipment(e.target.value)}
+            className="bg-transparent text-xs text-[#002b5c] dark:text-slate-200 outline-none font-semibold cursor-pointer max-w-[220px] truncate"
+          >
+            <option value="All">All Items / Sensor Parameters ({itemOptions.length})</option>
+            {itemOptions.map((opt) => (
+              <option key={opt.key} value={opt.key}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Search Input Box */}
+        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg shadow-sm">
+          <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search description / tag / operator..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="bg-transparent text-xs text-[#002b5c] dark:text-slate-200 outline-none font-semibold w-48 placeholder:text-slate-400 placeholder:font-normal"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Date Range Calendar Filter */}
+        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg shadow-sm">
+          <span className="text-xs font-bold text-[#47729f] dark:text-slate-400 uppercase flex items-center gap-1.5">
+            <svg className="w-4 h-4 text-[#1f6fb5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            CALENDAR:
+          </span>
+          <input
+            type="date"
+            value={dateRange.startDate}
+            onChange={(e) => setDateRange((prev) => ({ ...prev, startDate: e.target.value }))}
+            className="bg-transparent text-xs text-[#002b5c] dark:text-slate-200 outline-none font-semibold cursor-pointer"
+          />
+          <span className="text-slate-400 text-xs font-semibold">to</span>
+          <input
+            type="date"
+            value={dateRange.endDate}
+            onChange={(e) => setDateRange((prev) => ({ ...prev, endDate: e.target.value }))}
+            className="bg-transparent text-xs text-[#002b5c] dark:text-slate-200 outline-none font-semibold cursor-pointer"
+          />
+          {(dateRange.startDate || dateRange.endDate) && (
+            <button
+              onClick={() => setDateRange({ startDate: "", endDate: "" })}
+              className="text-[10px] text-rose-500 hover:text-rose-600 font-bold hover:underline ml-1"
+              title="Reset Date Filter"
+            >
+              Reset
+            </button>
+          )}
         </div>
 
         {/* Action Buttons */}
@@ -474,7 +693,22 @@ export default function MachineAlarm() {
                     {row.rtn}
                   </td>
                   <td className="py-3 px-3 text-center">
-                    <div className="flex justify-center gap-1.5">
+                    <div className="flex justify-center items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedDetailAlarm(row);
+                          setDetailModalOpen(true);
+                        }}
+                        className="px-2 py-1 bg-[#1f6fb5]/10 hover:bg-[#1f6fb5]/20 text-[#1f6fb5] dark:text-sky-400 rounded text-[10px] font-extrabold shadow-sm transition flex items-center gap-1"
+                        title="Lihat Detail Alarm"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Detail
+                      </button>
+
                       {row.status === "Active" && row.id.startsWith("maint-overdue-") && (
                         <span className="text-[10px] text-amber-555 font-extrabold bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded">
                           Reset Hours
@@ -490,14 +724,14 @@ export default function MachineAlarm() {
                       )}
                       {row.status === "Pending Approval" && isKaShiftOrAbove && (
                         <button
-                          onClick={() => handleApproveFix(row.id)}
+                          onClick={() => handleOpenApproveModal(row.id)}
                           className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-[10px] font-bold shadow-sm transition"
                         >
                           Approve
                         </button>
                       )}
                       {row.status === "Resolved" && (
-                        <span className="text-[10px] text-slate-400 dark:text-slate-650 font-bold font-mono">Resolved</span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold font-mono">Resolved</span>
                       )}
                     </div>
                   </td>
@@ -518,27 +752,34 @@ export default function MachineAlarm() {
       {/* Acknowledge (Fix) Alarms Modal Overlay */}
       {ackModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
-          <div className="relative w-[450px] rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
+          <div className="relative w-[450px] rounded-2xl border border-blue-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
             <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
               <div>
-                <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100">Submit Operator Fix Report</h4>
-                <p className="text-[10px] text-slate-500">Report details of corrective actions taken to resolve active alarms.</p>
+                <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                  Verifikasi Password & Laporan Fix Alarm
+                </h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Masukkan password akun Anda untuk memverifikasi tindakan perbaikan alarm ini.
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => setAckModalOpen(false)}
                 className="text-xs text-slate-400 hover:text-slate-200"
               >
-                Cancel
+                ✕
               </button>
             </div>
             <form onSubmit={handleAckSubmit} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase">Operator Name</label>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">
+                  Nama Operator
+                </label>
                 <select
                   value={ackOperator}
                   onChange={(e) => setAckOperator(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white focus:outline-none focus:border-[#1f6fb5]"
+                  className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white font-semibold outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 >
                   {displayOperators.map((op) => (
                     <option key={op} value={op}>
@@ -548,17 +789,21 @@ export default function MachineAlarm() {
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase">Operator Action taken</label>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">
+                  Tindakan Perbaikan (Operator Action Taken)
+                </label>
                 <textarea
                   value={ackAction}
                   onChange={(e) => setAckAction(e.target.value)}
-                  placeholder="Type operator corrective actions taken (e.g. Cleared filter blockage, restarted VFD)..."
+                  placeholder="Tuliskan perbaikan yang telah dilakukan (misal: Reset VFD, pembersihan blockage filter, penggantian sparepart)..."
                   required
-                  className="mt-1 w-full h-20 rounded-md border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white focus:outline-none focus:border-[#1f6fb5]"
+                  className="mt-1 w-full h-20 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase">Operator Password</label>
+                <label className="block text-[10px] font-bold text-[#002b5c] dark:text-slate-300 uppercase">
+                  Verifikasi Password Operator <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="password"
                   value={passwordInput}
@@ -566,12 +811,14 @@ export default function MachineAlarm() {
                     setPasswordInput(e.target.value);
                     setPasswordError("");
                   }}
-                  placeholder="Enter your password to verify"
+                  placeholder="Masukkan password akun Anda..."
                   required
-                  className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white focus:outline-none focus:border-[#1f6fb5]"
+                  className="mt-1 w-full rounded-lg border border-blue-500/50 dark:border-blue-500/40 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white font-semibold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/30"
                 />
                 {passwordError && (
-                  <p className="mt-1 text-[10px] text-rose-500 font-semibold">{passwordError}</p>
+                  <p className="mt-1.5 text-[11px] text-rose-500 font-bold flex items-center gap-1">
+                    <span>⚠️</span> {passwordError}
+                  </p>
                 )}
               </div>
               <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-900 pt-3">
@@ -579,16 +826,102 @@ export default function MachineAlarm() {
                   type="button"
                   onClick={() => setAckModalOpen(false)}
                   disabled={submitting}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition"
                 >
-                  Cancel
+                  Batal
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 rounded-lg text-xs font-bold bg-[#10b981] text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="px-5 py-2 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition disabled:opacity-50 flex items-center gap-2"
                 >
-                  {submitting ? "Submitting..." : "Submit Fix Report"}
+                  {submitting ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Memverifikasi...
+                    </>
+                  ) : (
+                    "Verifikasi & Selesaikan"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Approve Alarm Password Verification Modal Overlay */}
+      {approveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
+          <div className="relative w-[420px] rounded-2xl border border-emerald-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
+              <div>
+                <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Verifikasi Password Persetujuan (Approve)
+                </h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Masukkan password KaShift/Supervisor Anda untuk menyetujui penyelesaian alarm ini.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setApproveModalOpen(false)}
+                className="text-xs text-slate-400 hover:text-slate-200"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleApproveSubmit} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-[#002b5c] dark:text-slate-300 uppercase">
+                  Password Supervisor <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={approvePasswordInput}
+                  onChange={(e) => {
+                    setApprovePasswordInput(e.target.value);
+                    setApprovePasswordError("");
+                  }}
+                  placeholder="Masukkan password akun Anda..."
+                  required
+                  className="mt-1 w-full rounded-lg border border-blue-500/50 dark:border-blue-500/40 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-[#002b5c] dark:text-white font-semibold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/30"
+                />
+                {approvePasswordError && (
+                  <p className="mt-1.5 text-[11px] text-rose-500 font-bold flex items-center gap-1">
+                    <span>⚠️</span> {approvePasswordError}
+                  </p>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-900 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setApproveModalOpen(false)}
+                  disabled={approveSubmitting}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={approveSubmitting}
+                  className="px-5 py-2 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition disabled:opacity-50 flex items-center gap-2"
+                >
+                  {approveSubmitting ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Memverifikasi...
+                    </>
+                  ) : (
+                    "Verifikasi & Setujui"
+                  )}
                 </button>
               </div>
             </form>
@@ -646,6 +979,110 @@ export default function MachineAlarm() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Detail Alarm Modal Overlay */}
+      {detailModalOpen && selectedDetailAlarm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
+          <div className="relative w-[500px] rounded-2xl border border-blue-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
+              <div>
+                <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${selectedDetailAlarm.status === "Active" ? "bg-rose-500 animate-pulse" : (selectedDetailAlarm.status === "Pending Approval" ? "bg-amber-500" : "bg-emerald-500")}`} />
+                  Detail Informasi Alarm
+                </h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Informasi riwayat aktif dan penyelesaian alarm (ISA-18.2 Standard)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailModalOpen(false);
+                  setSelectedDetailAlarm(null);
+                }}
+                className="text-xs text-slate-400 hover:text-slate-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Deskripsi & Equipment */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Peralatan (Equipment)</span>
+                  <span className="font-mono text-[#002b5c] dark:text-slate-200">{selectedDetailAlarm.equipment}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Status Saat Ini</span>
+                  <span className={`inline-block text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md ${badgeStyle[selectedDetailAlarm.status]}`}>
+                    {selectedDetailAlarm.status}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Deskripsi Alarm</span>
+                <span className="text-[#002b5c] dark:text-slate-200 font-bold block bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                  {selectedDetailAlarm.description}
+                </span>
+              </div>
+
+              {/* Tanda Waktu Aktif & Selesai */}
+              <div className="grid grid-cols-2 gap-4 bg-blue-50/20 dark:bg-slate-900/30 p-3 rounded-lg border border-[#acd3ff]/20 dark:border-slate-800">
+                <div>
+                  <span className="block text-[10px] font-bold text-[#1f6fb5] dark:text-sky-400 uppercase tracking-wide">Jam Alarm Aktif (Triggered)</span>
+                  <span className="font-mono font-bold text-rose-600 dark:text-rose-400">{selectedDetailAlarm.timestamp}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Jam Alarm Resolved (Cleared)</span>
+                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    {selectedDetailAlarm.clearedAt || (selectedDetailAlarm.status === "Resolved" && selectedDetailAlarm.timestamp) || "— (Belum Selesai)"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Respons & Durasi */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Durasi Penyelesaian (RTN)</span>
+                  <span className="font-mono text-[#002b5c] dark:text-slate-200 font-bold">{selectedDetailAlarm.rtn}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Supervisor Pengesah (Approver)</span>
+                  <span className="text-[#002b5c] dark:text-slate-200">{selectedDetailAlarm.approverName || "—"}</span>
+                </div>
+              </div>
+
+              {/* Tindakan Operator */}
+              <div className="border-t border-slate-100 dark:border-slate-900 pt-3">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tindakan Perbaikan (Operator Action)</span>
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between mb-1.5 border-b border-slate-100 dark:border-slate-800 pb-1">
+                    <span className="text-[10px] text-slate-500 font-bold">Operator: {selectedDetailAlarm.operatorName || "—"}</span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-300 italic">
+                    {selectedDetailAlarm.operatorAction || "Belum ada tindakan perbaikan yang dilaporkan."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end border-t border-slate-100 dark:border-slate-900 pt-3 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailModalOpen(false);
+                  setSelectedDetailAlarm(null);
+                }}
+                className="px-5 py-2 rounded-lg text-xs font-bold bg-[#0b3b60] hover:bg-[#092e4e] text-white shadow-md transition"
+              >
+                Tutup Detail
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -27,7 +27,9 @@ import {
   testApiSourceHandler,
   getElectricityConfigHandler,
   upsertElectricityConfigHandler,
-  deleteElectricityConfigHandler
+  deleteElectricityConfigHandler,
+  upsertApiSourcesMapHandler,
+  getApiSourcesMapHandler
 } from "./config.controller";
 
 export const configRouter = Router();
@@ -58,6 +60,8 @@ configRouter.post("/config/api-sources", authenticate, createApiSourceHandler);
 configRouter.patch("/config/api-sources/:id", authenticate, updateApiSourceHandler);
 configRouter.delete("/config/api-sources/:id", authenticate, deleteApiSourceHandler);
 configRouter.post("/config/api-sources/test", authenticate, testApiSourceHandler);
+configRouter.get("/config/api-sources-map", authenticate, getApiSourcesMapHandler);
+configRouter.post("/config/api-sources-map", authenticate, authorize(["admin"]), upsertApiSourcesMapHandler);
 
 // Electricity config management
 configRouter.get("/config/electricity", authenticate, getElectricityConfigHandler);

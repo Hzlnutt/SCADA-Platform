@@ -1155,6 +1155,7 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
   }
 };
 
+
 // ═══════════════════════════════════════════════
 // ELECTRICITY CONFIG MANAGEMENT
 // ═══════════════════════════════════════════════
@@ -1202,6 +1203,80 @@ export const deleteElectricityConfigHandler = async (req: Request, res: Response
     const pool = getPostgresPool();
     await pool.query(`DELETE FROM electricity_config WHERE id = $1`, [id]);
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ═══════════════════════════════════════════════
+// API SOURCES MAP MANAGEMENT
+// ═══════════════════════════════════════════════
+
+export const upsertApiSourcesMapHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { unitId, sources, rows } = req.body;
+    if (!unitId) {
+      res.status(400).json({ error: "unitId is required" });
+      return;
+    }
+
+    const pool = getPostgresPool();
+    
+    if (sources) {
+      await pool.query(
+        `INSERT INTO global_configs (key, value)
+         VALUES ($1, $2::jsonb)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+        [`api_sources_map_${unitId}`, JSON.stringify(sources)]
+      );
+    }
+
+    if (rows) {
+      await pool.query(
+        `INSERT INTO global_configs (key, value)
+         VALUES ($1, $2::jsonb)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+        [`api_sources_list_${unitId}`, JSON.stringify(rows)]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getApiSourcesMapHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { unitId } = req.query;
+    if (!unitId) {
+      res.status(400).json({ error: "unitId is required" });
+      return;
+    }
+
+    const pool = getPostgresPool();
+    const listRes = await pool.query(
+      "SELECT value FROM global_configs WHERE key = $1",
+      [`api_sources_list_${unitId}`]
+    );
+    const mapRes = await pool.query(
+      "SELECT value FROM global_configs WHERE key = $1",
+      [`api_sources_map_${unitId}`]
+    );
+
+    res.json({
+      success: true,
+      rows: listRes.rows[0]?.value || null,
+      sources: mapRes.rows[0]?.value || null
+    });
   } catch (err) {
     next(err);
   }

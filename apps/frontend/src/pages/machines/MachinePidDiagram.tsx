@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { getUnitById } from "../../data/machines";
 import type { MachineOutletContext } from "./MachineLayout";
@@ -7,11 +7,46 @@ import type { Task, Alarm } from "./PidPageTemplate";
 import { useTelemetryStore } from "../../store/telemetry.store";
 import { getJson, postJson } from "../../services/api.client";
 import { telemetryTagIds } from "../../data/industrial-tags";
+import { getDefaultSensorConfigs } from "../../data/equipment";
 import CoolingWF1U3Pid from "./diagrams/CoolingWF1U3Pid";
 import MachineAHU01Pid from "./diagrams/MachineAHU01Pid";
 import MachineAHU02Pid from "./diagrams/MachineAHU02Pid";
 import MachineAHU03Pid from "./diagrams/MachineAHU03Pid";
 import MachineUtilityPid from "./diagrams/MachineUtilityPid";
+
+const TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
+  "cooling-water/supply_temp": "Scaled_Temp_Tank_Cooling3_Supp",
+  "cooling-water/return_temp": "Scaled_Temp_Tank_Cooling3_Return",
+  "cooling-water/st3_return_temp": "Scaled_Temp_ST3_Return",
+  "cooling-water/eq_temp_st03_supply": "Scaled_Temp_ST3_Supply",
+  "cooling-water/eq_press_du03": "Scaled_Press_DUU3",
+  "cooling-water/eq_press_bp03": "Scaled_Press_BP",
+  "cooling-water/eq_press_prep03": "Scaled_Press_PrepU3",
+  "cooling-water/eq_press_st03": "Scaled_Press_ST3",
+  "cooling-water/eq_press_washing": "Scaled_Press_Washing",
+  "cooling-water/eq_temp_du03": "Scaled_Temp_DU",
+  "cooling-water/eq_temp_prep03": "Scaled_Tempt_Prep3_Return",
+  "cooling-water/eq_temp_washing": "Scaled_Temp_Washing",
+  "cooling-water/basin_lvl": "Scaled_Level_tank_cooling3",
+  "cooling-water/fan_status_1": "Status_Fan_C11",
+  "cooling-water/fan_status_2": "Status_Fan_CT2",
+  "cooling-water/fan_status_3": "Status_Fan_CT3",
+  "cooling-water/motor_status_1": "Status_MTR_CT_P1",
+  "cooling-water/motor_status_2": "Status_MTR_CT_P2",
+  "cooling-water/motor_status_3": "Status_MTR_CT_P11",
+  "cooling-water/eq_status_du03": "Status_MTR_DU45",
+  "cooling-water/eq_status_bp03": "Status_MTR_BP",
+  "cooling-water/eq_status_prep03": "Status_MTR_Prep3",
+  "cooling-water/eq_status_st03": "Status_MTR_ST3_P3",
+  "cooling-water/eq_status_washing": "Status_MTR_Washing",
+  "cooling-water/st3_heating": "Status_Machine_Heating_ST3",
+  "cooling-water/st3_cooling": "Status_Machine_Cooling_ST3",
+  "cooling-water/st3_steril": "Status_Machine_Steril_ST3",
+  "cooling-water/jumo_pieces": "Jumo Pieces",
+  "cooling-water/pressure_1": "Scaled_Press_CT_P1",
+  "cooling-water/pressure_2": "Scaled_Press_CT_P2",
+  "cooling-water/pressure_3": "Scaled_Press_CT3_P11"
+};
 
 // ═══════════════════════════════════════════════
 // DATA TASK & ALARM PER MESIN (dummy, nanti dari API)
@@ -171,6 +206,193 @@ const isHvacTarget = (unitId: string) => {
 export default function MachinePidDiagram() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
+
+  const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>(() => {
+    const defaultMap: Record<string, string> = {};
+    if (unitId.startsWith("cooling-water")) {
+      const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
+      const sensorList = getDefaultSensorConfigs(unitId);
+      sensorList.forEach((s) => {
+        defaultMap[s.tagKey] = defaultUrl;
+      });
+    }
+    const saved = localStorage.getItem(`scada.config.api_sources.${unitId}`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const healed: Record<string, string> = {};
+        let modified = false;
+        Object.entries(parsed).forEach(([key, val]) => {
+          if (typeof val === "string") {
+            const newVal = val.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+            if (newVal !== val) modified = true;
+            healed[key] = newVal;
+          } else {
+            healed[key] = val as string;
+          }
+        });
+        if (modified) {
+          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(healed));
+        }
+        return { ...defaultMap, ...healed };
+      } catch (e) {}
+    }
+    return defaultMap;
+  });
+
+  // Sync API sources from Postgres database on mount
+  useEffect(() => {
+    getJson<{ success: boolean; sources: Record<string, string> | null }>(
+      `/config/api-sources-map?unitId=${unitId}`
+    )
+      .then((res) => {
+        if (res && res.success && res.sources) {
+          setApiSourceUrls((prev) => ({ ...prev, ...res.sources }));
+          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(res.sources));
+        }
+      })
+      .catch((err) => console.error("Failed to load API sources map from DB:", err));
+  }, [unitId]);
+
+  const [apiLiveData, setApiLiveData] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchActiveApiData = async () => {
+      const uniqueUrls = Array.from(new Set(Object.values(apiSourceUrls).filter((u) => u.trim())));
+      if (uniqueUrls.length === 0) {
+        if (isMounted) setApiLiveData({});
+        return;
+      }
+
+      const aggregatedData: Record<string, any> = {};
+      await Promise.all(
+        uniqueUrls.map(async (url) => {
+          try {
+            const res = await postJson<{ success: boolean; data?: any }>("/config/api-sources/test", {
+              url,
+              method: "GET"
+            });
+            if (res && res.success && res.data) {
+              Object.assign(aggregatedData, res.data);
+            }
+          } catch (err) {
+            console.error(`Live API poll error on P&ID diagram for URL ${url}:`, err);
+          }
+        })
+      );
+
+      if (isMounted) {
+        setApiLiveData(aggregatedData);
+      }
+    };
+
+    fetchActiveApiData();
+    const interval = setInterval(fetchActiveApiData, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [apiSourceUrls]);
+
+  const latest = useTelemetryStore((state) => state.latest);
+
+  const mergedLatest = useMemo(() => {
+    const merged = { ...latest };
+    if (unitId.startsWith("cooling-water")) {
+      const jsonKeyMap = (() => {
+        const map: Record<string, string> = {};
+        const savedList = localStorage.getItem(`scada.config.api_sources_list.${unitId}`);
+        if (savedList) {
+          try {
+            const parsed = JSON.parse(savedList);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((row: any) => {
+                if (row.tagKey && row.jsonKey) {
+                  map[row.tagKey] = row.jsonKey;
+                }
+              });
+            }
+          } catch (e) {}
+        }
+        return map;
+      })();
+
+      Object.entries(apiSourceUrls).forEach(([tagKey, url]) => {
+        if (!url.trim()) {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: "Belum Ada API",
+            quality: "bad",
+            meta: { tagId: tagKey }
+          };
+          return;
+        }
+
+        if (tagKey === "cooling-water/delta_temp") {
+          const retKey = jsonKeyMap["cooling-water/return_temp"] || "Scaled_Temp_Tank_Cooling3_Return";
+          const suppKey = jsonKeyMap["cooling-water/supply_temp"] || "Scaled_Temp_Tank_Cooling3_Supp";
+          const retVal = apiLiveData[retKey] !== undefined ? apiLiveData[retKey] : apiLiveData["Scaled_Temp_Tank_Colling3_Return"];
+          const suppVal = apiLiveData[suppKey] !== undefined ? apiLiveData[suppKey] : apiLiveData["Scaled_Temp_Tank_Colling3_Supp"];
+
+          if (typeof retVal === "number" && typeof suppVal === "number") {
+            merged[tagKey] = {
+              ts: new Date().toISOString(),
+              value: Number((retVal - suppVal).toFixed(2)),
+              quality: "good",
+              meta: { tagId: tagKey }
+            };
+          } else {
+            merged[tagKey] = {
+              ts: new Date().toISOString(),
+              value: "xx",
+              quality: "bad",
+              meta: { tagId: tagKey }
+            };
+          }
+          return;
+        }
+
+        const jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
+        if (!jsonKey) {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: "xx",
+            quality: "bad",
+            meta: { tagId: tagKey }
+          };
+          return;
+        }
+
+        let val = apiLiveData[jsonKey];
+        if (val === undefined || val === null) {
+          if (tagKey === "cooling-water/supply_temp") {
+            val = apiLiveData["Scaled_Temp_Tank_Colling3_Supp"];
+          } else if (tagKey === "cooling-water/return_temp") {
+            val = apiLiveData["Scaled_Temp_Tank_Colling3_Return"];
+          }
+        }
+
+        if (val === undefined || val === null) {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: "xx",
+            quality: "bad",
+            meta: { tagId: tagKey }
+          };
+        } else {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: val,
+            quality: "good",
+            meta: { tagId: tagKey }
+          };
+        }
+      });
+    }
+    return merged;
+  }, [latest, apiSourceUrls, apiLiveData, unitId]);
+
   const [selectedTaskFilter, setSelectedTaskFilter] = useState<
     "all" | "overdue" | "open" | "close"
   >("all");
@@ -262,8 +484,6 @@ export default function MachinePidDiagram() {
     const alarmInterval = setInterval(fetchActiveAlarms, 3000);
     return () => clearInterval(alarmInterval);
   }, [unitId]);
-
-  const latest = useTelemetryStore((state) => state.latest);
 
   const [runningHours, setRunningHours] = useState<Record<string, number>>({});
   const [pidThresholds, setPidThresholds] = useState<any>(null);
@@ -388,10 +608,14 @@ export default function MachinePidDiagram() {
   }, [unitId, dateRange.startDate, dateRange.endDate]);
 
   const getStatus = (tagId: string) => {
-    const val = latest[tagId]?.value;
+    const val = mergedLatest[tagId]?.value;
     if (typeof val === "number") return val === 1;
     if (typeof val === "boolean") return val;
-    return "XX";
+    if (typeof val === "string") {
+      const upper = val.toUpperCase();
+      return upper === "ON" || upper === "RUNNING" || upper === "1" || upper === "TRUE";
+    }
+    return false;
   };
 
   const motorStatus = {
@@ -450,7 +674,7 @@ export default function MachinePidDiagram() {
           <div className="flex-1 rounded-lg border border-slate-600 bg-slate-900/70 relative overflow-hidden">
             <div className="absolute inset-0 overflow-auto">
               {PidDiagram ? (
-                <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} />
+                <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} latest={mergedLatest} />
               ) : (
                 <div className="flex items-center justify-center h-full text-slate-400">
                   Diagram untuk {machine.name} belum tersedia.
@@ -522,7 +746,7 @@ export default function MachinePidDiagram() {
       onChangeDateRange={setDateRange}
     >
       {PidDiagram ? (
-        <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} />
+        <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} latest={mergedLatest} />
       ) : (
         <div className="flex items-center justify-center h-full text-slate-400">
           Diagram untuk {unitId} belum tersedia.

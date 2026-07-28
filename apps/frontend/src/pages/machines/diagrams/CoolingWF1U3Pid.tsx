@@ -26,6 +26,7 @@ interface CoolingWF1U3PidProps {
   pidThresholds?: any;
   svgRef?: React.RefObject<SVGSVGElement>;
   onSvgClick?: (e: React.MouseEvent<SVGSVGElement>) => void;
+  latest?: Record<string, any>;
 }
 
 export default function CoolingWF1U3Pid({
@@ -34,8 +35,10 @@ export default function CoolingWF1U3Pid({
   pidThresholds,
   svgRef,
   onSvgClick,
+  latest: propLatest,
 }: CoolingWF1U3PidProps) {
-  const latest = useTelemetryStore((state) => state.latest);
+  const storeLatest = useTelemetryStore((state) => state.latest);
+  const latest = propLatest || storeLatest;
 
   // Keep a boolean proxy for pipes, motor icons, and cooling towers
   const motorStatus = new Proxy(rawMotorStatus, {
@@ -69,7 +72,7 @@ export default function CoolingWF1U3Pid({
   // Helper to extract numerical telemetry values or display custom offline indicator
   const getVal = (tagId: string, unit = "") => {
     const pt = latest[tagId];
-    if (!pt || pt.value === undefined) return "XX";
+    if (!pt || pt.value === undefined || pt.value === "XX" || pt.value === "xx" || pt.value === "Belum Ada API") return "xx";
     return pt.value;
   };
 
@@ -79,21 +82,32 @@ export default function CoolingWF1U3Pid({
     return pt.value;
   };
 
-  const supplyVal = latest["cooling-water/supply_temp"]?.value;
-  const returnVal = latest["cooling-water/return_temp"]?.value;
-  const deltaTVal = typeof supplyVal === "number" && typeof returnVal === "number"
-    ? Number((returnVal - supplyVal).toFixed(2))
-    : "XX";
+  const deltaTVal = getVal("cooling-water/delta_temp");
+
+  const getStatusDisplay = (tagId: string) => {
+    const raw = getVal(tagId);
+    if (raw === "XX" || raw === "xx" || raw === "Belum Ada API" || raw === undefined || raw === null) {
+      return "xx";
+    }
+    return (raw === 1 || raw === true || raw === "ON" || raw === "RUNNING") ? "ON" : "OFF";
+  };
 
   const getStProcessStatus = () => {
-    const isHeating = latest["cooling-water/st3_heating"]?.value === 1;
-    const isCooling = latest["cooling-water/st3_cooling"]?.value === 1;
-    const isSteril = latest["cooling-water/st3_steril"]?.value === 1;
+    const heatVal = latest["cooling-water/st3_heating"]?.value;
+    const coolVal = latest["cooling-water/st3_cooling"]?.value;
+    const sterilVal = latest["cooling-water/st3_steril"]?.value;
 
-    const hasHeating = latest["cooling-water/st3_heating"] !== undefined;
-    const hasCooling = latest["cooling-water/st3_cooling"] !== undefined;
-    const hasSteril = latest["cooling-water/st3_steril"] !== undefined;
-    if (!hasHeating && !hasCooling && !hasSteril) return "XX";
+    const isHeating = heatVal === 1 || heatVal === true || heatVal === "ON";
+    const isCooling = coolVal === 1 || coolVal === true || coolVal === "ON";
+    const isSteril = sterilVal === 1 || sterilVal === true || sterilVal === "ON";
+
+    const hasHeating = heatVal !== undefined && heatVal !== "XX" && heatVal !== "xx" && heatVal !== "Belum Ada API";
+    const hasCooling = coolVal !== undefined && coolVal !== "XX" && coolVal !== "xx" && coolVal !== "Belum Ada API";
+    const hasSteril = sterilVal !== undefined && sterilVal !== "XX" && sterilVal !== "xx" && sterilVal !== "Belum Ada API";
+
+    if (!hasHeating && !hasCooling && !hasSteril) return "xx";
+    if (heatVal === "Belum Ada API" || coolVal === "Belum Ada API" || sterilVal === "Belum Ada API") return "xx";
+    if (heatVal === "xx" || coolVal === "xx" || sterilVal === "xx") return "xx";
 
     if (isHeating) return "HEATING";
     if (isCooling) return "COOLING";
@@ -103,7 +117,7 @@ export default function CoolingWF1U3Pid({
 
   const getLotValue = () => {
     const val = latest["cooling-water/jumo_pieces"]?.value;
-    if (val === undefined || val === null || val === "XX") return "XX";
+    if (val === undefined || val === null || val === "XX" || val === "xx" || val === "Belum Ada API") return "xx";
     const str = String(val);
     if (str.includes("/")) {
       return str.split("/")[1].trim();
@@ -584,7 +598,7 @@ export default function CoolingWF1U3Pid({
         y={824}
         w={63.75}
         h={25.5}
-        value={rawMotorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
+        value={motorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
       />
       <SensorIndicator
@@ -592,7 +606,7 @@ export default function CoolingWF1U3Pid({
         y={852}
         w={63.75}
         h={25.5}
-        value={getRh("cooling-water/motor_status_1")}
+        value={getRh("cooling-water/mtr1_running_hours")}
         unit=" h"
         warningThreshold={getRhConfig("MTR-1").warning}
         alarmThreshold={getRhConfig("MTR-1").alarm}
@@ -603,16 +617,16 @@ export default function CoolingWF1U3Pid({
         y={880}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/mtr1_hz")}
+        unit=" Hz"
       />
       <SensorIndicator
         x={100}
         y={908}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/mtr1_kw")}
+        unit=" kW"
       />
 
       {/* MTR 2 */}
@@ -629,7 +643,7 @@ export default function CoolingWF1U3Pid({
         y={824}
         w={63.75}
         h={25.5}
-        value={rawMotorStatus["MTR-2"]} // true = ON (hijau), false = OFF (merah)
+        value={motorStatus["MTR-2"]} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
       />
       <SensorIndicator
@@ -637,7 +651,7 @@ export default function CoolingWF1U3Pid({
         y={852}
         w={63.75}
         h={25.5}
-        value={getRh("cooling-water/motor_status_2")}
+        value={getRh("cooling-water/mtr2_running_hours")}
         unit=" h"
         warningThreshold={getRhConfig("MTR-2").warning}
         alarmThreshold={getRhConfig("MTR-2").alarm}
@@ -648,16 +662,16 @@ export default function CoolingWF1U3Pid({
         y={880}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/mtr2_hz")}
+        unit=" Hz"
       />
       <SensorIndicator
         x={268}
         y={908}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/mtr2_kw")}
+        unit=" kW"
       />
 
       {/* MTR 3 */}
@@ -674,7 +688,7 @@ export default function CoolingWF1U3Pid({
         y={824}
         w={63.75}
         h={25.5}
-        value={rawMotorStatus["MTR-3"]} // true = ON (hijau), false = OFF (merah)
+        value={motorStatus["MTR-3"]} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
       />
       <SensorIndicator
@@ -682,7 +696,7 @@ export default function CoolingWF1U3Pid({
         y={852}
         w={63.75}
         h={25.5}
-        value={getRh("cooling-water/motor_status_3")}
+        value={getRh("cooling-water/mtr3_running_hours")}
         unit=" h"
         warningThreshold={getRhConfig("MTR-3").warning}
         alarmThreshold={getRhConfig("MTR-3").alarm}
@@ -693,16 +707,16 @@ export default function CoolingWF1U3Pid({
         y={880}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/mtr3_hz")}
+        unit=" Hz"
       />
       <SensorIndicator
         x={436}
         y={908}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/mtr3_kw")}
+        unit=" kW"
       />
 
       {/* BLOWDOWN */}
@@ -871,7 +885,7 @@ export default function CoolingWF1U3Pid({
         y={632}
         w={63.75}
         h={25.5}
-        value={getRh("cooling-water/eq_status_du03")}
+        value={getVal("cooling-water/eq_hrs_du03")}
         unit=" h"
         warningThreshold={getRhConfig("MTR-4").warning}
         alarmThreshold={getRhConfig("MTR-4").alarm}
@@ -882,16 +896,16 @@ export default function CoolingWF1U3Pid({
         y={660}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/eq_curr_du03")}
+        unit=" A"
       />
       <SensorIndicator
         x={1277}
         y={688}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/eq_pow_du03")}
+        unit=" kW"
       />
 
       {/* MTR 5 */}
@@ -908,7 +922,7 @@ export default function CoolingWF1U3Pid({
         y={632}
         w={63.75}
         h={25.5}
-        value={getRh("cooling-water/eq_status_bp03")}
+        value={getVal("cooling-water/eq_hrs_bp03")}
         unit=" h"
         warningThreshold={getRhConfig("MTR-5").warning}
         alarmThreshold={getRhConfig("MTR-5").alarm}
@@ -919,16 +933,16 @@ export default function CoolingWF1U3Pid({
         y={660}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/eq_curr_bp03")}
+        unit=" A"
       />
       <SensorIndicator
         x={1452}
         y={688}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/eq_pow_bp03")}
+        unit=" kW"
       />
 
       {/* MTR 6 */}
@@ -945,7 +959,7 @@ export default function CoolingWF1U3Pid({
         y={632}
         w={63.75}
         h={25.5}
-        value={getRh("cooling-water/eq_status_prep03")}
+        value={getVal("cooling-water/eq_hrs_prep03")}
         unit=" h"
         warningThreshold={getRhConfig("MTR-6").warning}
         alarmThreshold={getRhConfig("MTR-6").alarm}
@@ -956,16 +970,16 @@ export default function CoolingWF1U3Pid({
         y={660}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/eq_curr_prep03")}
+        unit=" A"
       />
       <SensorIndicator
         x={1627}
         y={688}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/eq_pow_prep03")}
+        unit=" kW"
       />
 
       {/* MTR 7 */}
@@ -982,7 +996,7 @@ export default function CoolingWF1U3Pid({
         y={822}
         w={63.75}
         h={25.5}
-        value={getRh("cooling-water/eq_status_st03")}
+        value={getVal("cooling-water/eq_hrs_st03")}
         unit=" h"
         warningThreshold={getRhConfig("MTR-7").warning}
         alarmThreshold={getRhConfig("MTR-7").alarm}
@@ -993,16 +1007,16 @@ export default function CoolingWF1U3Pid({
         y={850}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/eq_curr_st03")}
+        unit=" A"
       />
       <SensorIndicator
         x={1397}
         y={878}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/eq_pow_st03")}
+        unit=" kW"
       />
 
       {/* MTR 8 */}
@@ -1019,7 +1033,7 @@ export default function CoolingWF1U3Pid({
         y={822}
         w={63.75}
         h={25.5}
-        value={getRh("cooling-water/eq_status_washing")}
+        value={getVal("cooling-water/eq_hrs_washing")}
         unit=" h"
         warningThreshold={getRhConfig("MTR-8").warning}
         alarmThreshold={getRhConfig("MTR-8").alarm}
@@ -1030,16 +1044,16 @@ export default function CoolingWF1U3Pid({
         y={850}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/eq_curr_washing")}
+        unit=" A"
       />
       <SensorIndicator
         x={1572}
         y={878}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/eq_pow_washing")}
+        unit=" kW"
       />
 
       {/* MTR 9 */}
@@ -1056,7 +1070,7 @@ export default function CoolingWF1U3Pid({
         y={822}
         w={63.75}
         h={25.5}
-        value={getRh("cooling-water/eq_status_minilab")}
+        value={getVal("cooling-water/eq_hrs_minilab")}
         unit=" h"
         warningThreshold={getRhConfig("MTR-9").warning}
         alarmThreshold={getRhConfig("MTR-9").alarm}
@@ -1067,16 +1081,16 @@ export default function CoolingWF1U3Pid({
         y={850}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/eq_curr_minilab")}
+        unit=" A"
       />
       <SensorIndicator
         x={1747}
         y={878}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/eq_pow_minilab")}
+        unit=" kW"
       />
 
       {/* MAKEUP WATER */}
@@ -1093,24 +1107,24 @@ export default function CoolingWF1U3Pid({
         y={322}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/makeup_wtr_tds")}
+        unit=" µS/cm"
       />
       <SensorIndicator
         x={1077}
         y={350}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/makeup_wtr_ph")}
+        unit=" pH"
       />
       <SensorIndicator
         x={1077}
         y={378}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/makeup_wtr_vol")}
+        unit=" L/h"
       />
 
       {/* FAN 1 */}
@@ -1127,7 +1141,7 @@ export default function CoolingWF1U3Pid({
         y={-108}
         w={63.75}
         h={25.5}
-        value={rawMotorStatus["FAN-1"]} // true = ON (hijau), false = OFF (merah)
+        value={motorStatus["FAN-1"]} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
       />
       <SensorIndicator
@@ -1135,7 +1149,7 @@ export default function CoolingWF1U3Pid({
         y={-79}
         w={63.75}
         h={25.5}
-        value={getRh("cooling-water/fan_status_1")}
+        value={getVal("cooling-water/ct1_running_hours")}
         unit=" h"
         warningThreshold={getRhConfig("FAN-1").warning}
         alarmThreshold={getRhConfig("FAN-1").alarm}
@@ -1146,16 +1160,16 @@ export default function CoolingWF1U3Pid({
         y={-50}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/ct1_fan_speed")}
+        unit=" RPM"
       />
       <SensorIndicator
         x={161}
         y={-22}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/ct1_motor_power")}
+        unit=" kW"
       />
 
       {/* FAN 2 */}
@@ -1172,7 +1186,7 @@ export default function CoolingWF1U3Pid({
         y={-108}
         w={63.75}
         h={25.5}
-        value={rawMotorStatus["FAN-2"]} // true = ON (hijau), false = OFF (merah)
+        value={motorStatus["FAN-2"]} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
       />
       <SensorIndicator
@@ -1180,7 +1194,7 @@ export default function CoolingWF1U3Pid({
         y={-79}
         w={63.75}
         h={25.5}
-        value={getRh("cooling-water/fan_status_2")}
+        value={getVal("cooling-water/ct2_running_hours")}
         unit=" h"
         warningThreshold={getRhConfig("FAN-2").warning}
         alarmThreshold={getRhConfig("FAN-2").alarm}
@@ -1191,16 +1205,16 @@ export default function CoolingWF1U3Pid({
         y={-50}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/ct2_fan_speed")}
+        unit=" RPM"
       />
       <SensorIndicator
         x={375}
         y={-22}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/ct2_motor_power")}
+        unit=" kW"
       />
 
       {/* FAN 3 */}
@@ -1217,7 +1231,7 @@ export default function CoolingWF1U3Pid({
         y={-108}
         w={63.75}
         h={25.5}
-        value={rawMotorStatus["FAN-3"]} // true = ON (hijau), false = OFF (merah)
+        value={motorStatus["FAN-3"]} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
       />
       <SensorIndicator
@@ -1225,7 +1239,7 @@ export default function CoolingWF1U3Pid({
         y={-79}
         w={63.75}
         h={25.5}
-        value={getRh("cooling-water/fan_status_3")}
+        value={getVal("cooling-water/ct3_running_hours")}
         unit=" h"
         warningThreshold={getRhConfig("FAN-3").warning}
         alarmThreshold={getRhConfig("FAN-3").alarm}
@@ -1236,16 +1250,16 @@ export default function CoolingWF1U3Pid({
         y={-50}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/ct3_fan_speed")}
+        unit=" RPM"
       />
       <SensorIndicator
         x={594}
         y={-22}
         w={63.75}
         h={25.5}
-        value="XX"
-        unit=""
+        value={getVal("cooling-water/ct3_motor_power")}
+        unit=" kW"
       />
 
       {/* Text Label Area */}
@@ -1293,7 +1307,8 @@ export default function CoolingWF1U3Pid({
         width={175}
         title="AMBIENT"
         values={[
-          { value: "XX", unit: "" }
+          { value: getVal("cooling-water/ambient_temp") as string | number, unit: typeof getVal("cooling-water/ambient_temp") === "number" ? " °C" : "" },
+          { value: getVal("cooling-water/ambient_humidity") as string | number, unit: typeof getVal("cooling-water/ambient_humidity") === "number" ? " %" : "" }
         ]}
         colorType="green"
       />
@@ -1302,7 +1317,7 @@ export default function CoolingWF1U3Pid({
         y={-145}
         width={175}
         title="HEATING"
-        value="XX"
+        value={getStatusDisplay("cooling-water/st3_heating")}
         colorType="blue"
       />
       <SensorCard
@@ -1318,7 +1333,7 @@ export default function CoolingWF1U3Pid({
         y={-35}
         width={175}
         title="COOLING"
-        value="XX"
+        value={getStatusDisplay("cooling-water/st3_cooling")}
         colorType="blue"
       />
       <SensorCard
@@ -1326,7 +1341,7 @@ export default function CoolingWF1U3Pid({
         y={-145}
         width={175}
         title="STERIL"
-        value="XX"
+        value={getStatusDisplay("cooling-water/st3_steril")}
         colorType="blue"
       />
       <SensorCard
