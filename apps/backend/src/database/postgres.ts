@@ -181,7 +181,22 @@ export const ensurePostgresTables = async () => {
       );
     `);
 
-    logger.info("postgres tables (telemetry, running hours, global configs, sensor rules, alarms, api sources) ensured");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS electricity_config (
+        id SERIAL PRIMARY KEY,
+        config_type VARCHAR(50) NOT NULL,
+        config_key VARCHAR(100) NOT NULL,
+        label VARCHAR(255) NOT NULL,
+        value JSONB DEFAULT '{}'::jsonb,
+        sort_order INT NOT NULL DEFAULT 0,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(config_type, config_key)
+      );
+    `);
+
+    logger.info("postgres tables (telemetry, running hours, global configs, sensor rules, alarms, api sources, electricity config) ensured");
   } catch (err: any) {
     logger.error({ err }, "failed to ensure postgres tables");
   }

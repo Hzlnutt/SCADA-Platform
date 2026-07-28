@@ -102,6 +102,7 @@ export const Sidebar = () => {
       utility: true,
       hvac: false,
       penggunaanUtility: true,
+      electricity: true,
       operasional: true
     };
   });
@@ -304,7 +305,31 @@ export const Sidebar = () => {
 
       {openSections.penggunaanUtility && (
         <nav className="flex flex-col gap-0.5 mb-5 pl-2">
-          <NavItem to="/listrik" label="Electricity" icon={<IconDevice />} tone="scada" />
+          {/* Collapsible Electricity Item */}
+          <div className="mb-1">
+            <button
+              type="button"
+              onClick={() => toggleSection("electricity")}
+              className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white"
+            >
+              <span className="flex items-center gap-1.5">
+                <IconDevice />
+                <span>Electricity</span>
+              </span>
+              <IconChevron open={openSections.electricity} />
+            </button>
+            {openSections.electricity && (
+              <div className="flex flex-col gap-0.5 mt-1 border-l border-[#acd3ff] dark:border-slate-800 ml-2.5 pl-1.5">
+                <NavItem to="/listrik" label="Overview" tone="scada" />
+                <NavItem to="/listrik/incoming-pln" label="Incoming PLN" tone="scada" />
+                <NavItem to="/listrik/incoming-fact-1" label="Incoming Fact-1" tone="scada" />
+                <NavItem to="/listrik/incoming-fact-2" label="Incoming Fact-2" tone="scada" />
+                <NavItem to="/listrik/distribusi" label="Distribusi Daya" tone="scada" />
+                <NavItem to="/listrik/report" label="Report" tone="scada" />
+              </div>
+            )}
+          </div>
+
           <NavItem to="/gas" label="Gas" icon={<IconDevice />} tone="scada" />
           <NavItem to="/air" label="Water" icon={<IconDevice />} tone="scada" />
           <NavItem to="/wwtp" label="WWTP" icon={<IconDevice />} tone="scada" />

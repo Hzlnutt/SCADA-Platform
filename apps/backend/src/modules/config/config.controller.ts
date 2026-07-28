@@ -1154,3 +1154,55 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
     });
   }
 };
+
+// ═══════════════════════════════════════════════
+// ELECTRICITY CONFIG MANAGEMENT
+// ═══════════════════════════════════════════════
+
+export const getElectricityConfigHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const configType = req.query.configType as string | undefined;
+    const pool = getPostgresPool();
+    const queryStr = configType
+      ? `SELECT id, config_type, config_key, label, value, sort_order, enabled, created_at, updated_at FROM electricity_config WHERE config_type = $1 ORDER BY sort_order ASC, id ASC`
+      : `SELECT id, config_type, config_key, label, value, sort_order, enabled, created_at, updated_at FROM electricity_config ORDER BY config_type, sort_order ASC, id ASC`;
+    const values = configType ? [configType] : [];
+    const pgRes = await pool.query(queryStr, values);
+    res.json({ data: pgRes.rows });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const upsertElectricityConfigHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { config_type, config_key, label, value, sort_order, enabled } = req.body;
+    if (!config_type || !config_key || !label) {
+      res.status(400).json({ error: "config_type, config_key, and label are required" });
+      return;
+    }
+    const pool = getPostgresPool();
+    const pgRes = await pool.query(
+      `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (config_type, config_key)
+       DO UPDATE SET label = EXCLUDED.label, value = EXCLUDED.value, sort_order = EXCLUDED.sort_order, enabled = EXCLUDED.enabled, updated_at = NOW()
+       RETURNING id, config_type, config_key, label, value, sort_order, enabled`,
+      [config_type, config_key, label, JSON.stringify(value || {}), sort_order ?? 0, enabled !== false]
+    );
+    res.json({ data: pgRes.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteElectricityConfigHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const pool = getPostgresPool();
+    await pool.query(`DELETE FROM electricity_config WHERE id = $1`, [id]);
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+};

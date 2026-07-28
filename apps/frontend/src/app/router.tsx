@@ -34,6 +34,9 @@ import Approvals from "../pages/Approvals";
 import MachineHealth from "../pages/MachineHealth";
 import UtilityStatus from "../pages/UtilityStatus";
 import Electricity from "../pages/utilities/Electricity";
+import IncomingPln from "../pages/utilities/IncomingPln";
+import PowerDistribution from "../pages/utilities/PowerDistribution";
+import ElectricityReport from "../pages/utilities/ElectricityReport";
 import Gas from "../pages/utilities/Gas";
 import Water from "../pages/utilities/Water";
 import Hvac from "../pages/utilities/Hvac";
@@ -88,7 +91,14 @@ export const AppRouter = () => {
             <Route path="reports" element={<Reports />} />
             <Route path="utility-status" element={<UtilityStatus />} />
             <Route path="utility" element={<UtilityOverview />} />
-            <Route path="listrik" element={<Electricity />} />
+            <Route path="listrik">
+              <Route index element={<Electricity />} />
+              <Route path="incoming-pln" element={<IncomingPln />} />
+              <Route path="incoming-fact-1" element={<IncomingPln />} />
+              <Route path="incoming-fact-2" element={<IncomingPln />} />
+              <Route path="distribusi" element={<PowerDistribution />} />
+              <Route path="report" element={<ElectricityReport />} />
+            </Route>
             <Route path="air" element={<Water />} />
             <Route path="gas" element={<Gas />} />
             <Route path="hvac" element={<Hvac />} />
