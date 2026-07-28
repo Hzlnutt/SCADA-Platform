@@ -2594,4 +2594,114 @@ function HvacConfigConsole({ unitId, machine }: { unitId: string; machine: any }
   );
 }
 
+/* ═══════════════════════════════════════════════
+ * REUSABLE API SOURCES PANEL
+ * Used by Electricity.tsx and other utility config modals
+ * ═══════════════════════════════════════════════ */
+export function ApiSourcesPanel({ unitId }: { unitId: string }) {
+  const [sources, setSources] = useState<ApiSourceRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    setLoading(true);
+    getJson<{ rows: ApiSourceRow[] | null }>(`/api/config/api-sources-map?unitId=${unitId}`)
+      .then((res) => {
+        if (res?.rows && Array.isArray(res.rows)) {
+          setSources(res.rows);
+        } else {
+          setSources(getDefaultApiSourceConfigs(unitId));
+        }
+      })
+      .catch(() => setSources(getDefaultApiSourceConfigs(unitId)))
+      .finally(() => setLoading(false));
+  }, [unitId]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await postJson("/api/config/api-sources-map", { unitId, rows: sources });
+      alert("API Sources saved successfully!");
+    } catch (err) {
+      alert("Failed to save API Sources");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateRow = (idx: number, field: keyof ApiSourceRow, value: string) => {
+    setSources((prev) => prev.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-xs text-slate-400 font-bold animate-pulse">Loading API Sources...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            API Sources — {unitId}
+          </h4>
+          <p className="text-[10px] text-slate-400 mt-0.5">{sources.length} tag(s) configured</p>
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow transition"
+        >
+          {saving ? "Saving..." : "💾 Save All"}
+        </button>
+      </div>
+
+      <div className="overflow-x-auto max-h-96 border border-slate-200 dark:border-slate-800 rounded-lg">
+        <table className="w-full text-left text-xs border-collapse">
+          <thead>
+            <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase tracking-wider text-slate-400 font-bold bg-slate-50 dark:bg-slate-900/40 sticky top-0">
+              <th className="py-2.5 px-3 w-8">#</th>
+              <th className="py-2.5 px-3">Tag Key</th>
+              <th className="py-2.5 px-3">Tag Name</th>
+              <th className="py-2.5 px-3">Endpoint URL</th>
+              <th className="py-2.5 px-3 w-16">Unit</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium">
+            {sources.map((row, idx) => (
+              <tr key={row.tagKey + idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition">
+                <td className="py-2 px-3 text-slate-400 font-mono text-[10px]">{idx + 1}</td>
+                <td className="py-2 px-3">
+                  <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">{row.tagKey}</span>
+                </td>
+                <td className="py-2 px-3">
+                  <input
+                    type="text"
+                    value={row.tagName}
+                    onChange={(e) => updateRow(idx, "tagName", e.target.value)}
+                    className="w-full bg-transparent border-none outline-none text-xs font-semibold text-slate-700 dark:text-slate-200 focus:ring-0"
+                  />
+                </td>
+                <td className="py-2 px-3">
+                  <input
+                    type="text"
+                    value={row.url}
+                    onChange={(e) => updateRow(idx, "url", e.target.value)}
+                    className="w-full bg-transparent border-none outline-none text-xs font-mono text-slate-600 dark:text-slate-300 focus:ring-0"
+                    placeholder="http://..."
+                  />
+                </td>
+                <td className="py-2 px-3">
+                  <span className="text-[10px] font-mono text-slate-400">{row.unit}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
