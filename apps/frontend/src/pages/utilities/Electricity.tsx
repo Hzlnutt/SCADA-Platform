@@ -285,24 +285,9 @@ function DynamicSelectionChart({ isDark }: { isDark: boolean }) {
     }
   }, [machineOptions, machine]);
 
-  // Generate deterministic data based on selection so it looks realistic
-  const currentData = useMemo(() => {
-    const seed = machine.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return Array.from({ length: 31 }, (_, i) => {
-      const base = 15000 + (seed % 10) * 2000;
-      const variation = Math.sin((i + seed) / 2) * 5000;
-      return Math.max(1000, base + variation);
-    });
-  }, [machine]);
-
-  const previousData = useMemo(() => {
-    const seed = machine.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) + 123;
-    return Array.from({ length: 31 }, (_, i) => {
-      const base = 14000 + (seed % 10) * 2000;
-      const variation = Math.sin((i + seed) / 2) * 5000;
-      return Math.max(1000, base + variation);
-    });
-  }, [machine]);
+  // Empty data for integration ready state
+  const currentData = useMemo(() => [], []);
+  const previousData = useMemo(() => [], []);
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
@@ -608,9 +593,9 @@ export default function Electricity() {
     }
   };
 
-  /* ═══ DUMMY DATA FOR PLACEHOLDER SECTIONS ═══ */
-  const dummyMonthlyData = useMemo(() => Array.from({ length: 31 }, () => Math.random() * 40000 + 5000), []);
-  const dummyPreviousData = useMemo(() => Array.from({ length: 31 }, () => Math.random() * 40000 + 5000), []);
+  /* ═══ NO DATA PLACEHOLDER SECTIONS ═══ */
+  const dummyMonthlyData = useMemo(() => [], []);
+  const dummyPreviousData = useMemo(() => [], []);
 
   /* ═══ CONSUMPTION FACT EDITOR HANDLERS ═══ */
   const handleAddCategory = async () => {
@@ -709,11 +694,11 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-emerald-600/10 text-emerald-700'} flex items-center justify-center`}><IconSolar /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-emerald-950'}`}>
-              1,579<span className={`text-sm font-bold ml-1 ${isDark ? 'text-emerald-200' : 'text-emerald-700'}`}>kWh</span>
+              0<span className={`text-sm font-bold ml-1 ${isDark ? 'text-emerald-200' : 'text-emerald-700'}`}>kWh</span>
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>
-              <span>Capacity: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>1,700 kW</strong></span>
-              <span>Efficiency: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>94%</strong></span>
+              <span>Capacity: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>0 kW</strong></span>
+              <span>Efficiency: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>0%</strong></span>
             </div>
           </div>
         </div>
@@ -733,11 +718,11 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-amber-600/10 text-amber-700'} flex items-center justify-center`}><IconGenset /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-amber-950'}`}>
-              0/2 <span className={`text-sm font-bold ml-1 ${isDark ? 'text-amber-200' : 'text-amber-700'}`}>running</span>
+              0 <span className={`text-sm font-bold ml-1 ${isDark ? 'text-amber-200' : 'text-amber-700'}`}>running</span>
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
-              <span>Cap: <strong className={isDark ? 'text-white' : 'text-amber-950'}>1,500 kVA</strong></span>
-              <span>Backup: <strong className={isDark ? 'text-white' : 'text-amber-950'}>1,000 kVA</strong></span>
+              <span>Cap: <strong className={isDark ? 'text-white' : 'text-amber-950'}>0 kVA</strong></span>
+              <span>Backup: <strong className={isDark ? 'text-white' : 'text-amber-950'}>0 kVA</strong></span>
             </div>
           </div>
         </div>
@@ -757,12 +742,12 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-cyan-600/10 text-cyan-700'} flex items-center justify-center`}><IconPlant /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-cyan-950'}`}>
-              {summaryLoading ? "..." : `${((cardSummary.totalKwh + 1579) / 1000).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
+              {summaryLoading ? "..." : `${((cardSummary.totalKwh) / 1000).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
               <span className={`text-sm font-bold ml-1 ${isDark ? 'text-cyan-200' : 'text-cyan-700'}`}>kWh</span>
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-cyan-200' : 'text-cyan-800'}`}>
               <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{summaryLoading ? "..." : `${(cardSummary.totalKwh / 1000).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`} kW</strong></span>
-              <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>1,579 kW</strong></span>
+              <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>0 kW</strong></span>
             </div>
           </div>
         </div>
@@ -907,8 +892,8 @@ export default function Electricity() {
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Total Biaya</span>
               <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500"><IconMoney /></div>
             </div>
-            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">Rp 159.404.220,00</div>
-            <div className="mt-1 text-[10px] font-semibold text-emerald-500">108.640 kWh</div>
+            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono font-mono">Rp 0,00</div>
+            <div className="mt-1 text-[10px] font-semibold text-emerald-500">0 kWh</div>
           </div>
 
           <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4">
@@ -919,7 +904,7 @@ export default function Electricity() {
 
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand</span>
-            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">1.200 kW</div>
+            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kW</div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
           </div>
 
@@ -931,7 +916,7 @@ export default function Electricity() {
 
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand</span>
-            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">1.200 kW</div>
+            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kW</div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
           </div>
         </div>
