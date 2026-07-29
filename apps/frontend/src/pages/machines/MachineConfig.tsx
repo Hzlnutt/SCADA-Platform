@@ -1805,24 +1805,6 @@ export default function MachineConfig() {
                   const urlData = url ? apiLiveData[url] : undefined;
                   let rawVal = (apiFieldKey && urlData) ? urlData[apiFieldKey] : undefined;
 
-                  // Delta Temp fallback calculation if needed
-                  if (sensor.tagKey === "cooling-water/delta_temp") {
-                    const retRow = apiSourceRows.find(r => r.tagKey === "cooling-water/return_temp");
-                    const suppRow = apiSourceRows.find(r => r.tagKey === "cooling-water/supply_temp");
-                    
-                    const retKey = retRow?.jsonKey || TAG_KEY_TO_API_JSON_KEY["cooling-water/return_temp"];
-                    const suppKey = suppRow?.jsonKey || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
-                    
-                    const retUrl = retRow?.url || "";
-                    const suppUrl = suppRow?.url || "";
-                    
-                    const retVal = retKey && retUrl ? apiLiveData[retUrl]?.[retKey] : undefined;
-                    const suppVal = suppKey && suppUrl ? apiLiveData[suppUrl]?.[suppKey] : undefined;
-                    if (typeof retVal === "number" && typeof suppVal === "number") {
-                      rawVal = retVal - suppVal;
-                    }
-                  }
-
                   let liveValStr = "xx";
                   const isValPresent = hasUrl && rawVal !== undefined && rawVal !== null;
                   if (isValPresent) {
