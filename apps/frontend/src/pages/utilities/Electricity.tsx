@@ -812,6 +812,11 @@ export default function Electricity() {
               {summaryLoading ? "..." : `${cardSummary.peakDemand.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW`}
             </div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
+            {cardSummary.peakDemandTs && (
+              <div className="text-[9px] font-bold text-amber-600 dark:text-amber-400 mt-0.5 font-mono">
+                {formatPeakTs(cardSummary.peakDemandTs)}
+              </div>
+            )}
           </div>
         </div>
       </div>
