@@ -561,14 +561,17 @@ export default function Electricity() {
     plugins: {
       legend: { display: true, position: "top", align: "end", labels: { color: isDark ? "rgba(148,163,184,.9)" : "rgba(71,85,105,.9)", font: { size: 10, weight: "600" as const }, usePointStyle: true, pointStyle: "rectRounded", padding: 12 } },
       tooltip: {
-        backgroundColor: isDark ? "rgba(13, 21, 39, 0.95)" : "rgba(255, 255, 255, 0.95)",
-        titleColor: isDark ? "#f1f5f9" : "#0f172a",
-        bodyColor: isDark ? "#f1f5f9" : "#0f172a",
-        borderColor: isDark ? "rgba(51, 65, 85, 0.5)" : "rgba(203, 213, 225, 0.5)",
-        borderWidth: 1,
+        mode: "index",
+        intersect: false,
+        backgroundColor: isDark ? "rgba(15, 23, 42, 0.98)" : "rgba(255, 255, 255, 1)",
+        titleColor: isDark ? "#ffffff" : "#000000",
+        bodyColor: isDark ? "#f8fafc" : "#0f172a",
+        borderColor: isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(15, 23, 42, 0.15)",
+        borderWidth: 2,
         padding: 12,
-        bodyFont: { family: "IBM Plex Mono, monospace", size: 11 },
-        footerColor: isDark ? "#fcd34d" : "#d97706",
+        titleFont: { family: "IBM Plex Mono, monospace", size: 12, weight: "bold" as const },
+        bodyFont: { family: "IBM Plex Mono, monospace", size: 11, weight: "bold" as const },
+        footerColor: isDark ? "#fbbf24" : "#b45309",
         footerFont: { family: "IBM Plex Mono, monospace", size: 11, weight: "bold" as const },
         callbacks: {
           label: (ctx: any) => {
