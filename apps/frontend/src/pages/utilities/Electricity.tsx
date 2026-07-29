@@ -1013,7 +1013,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Peak Demand</div>
             <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {summaryLoading ? "..." : `${cardSummary.totalKwh.toLocaleString("id-ID", { maximumFractionDigits: 3 })} kWh`}
+              0 kWh
             </div>
           </div>
           {cubiclePoiView ? (
@@ -1031,21 +1031,21 @@ export default function Electricity() {
             <>
               <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4">
                 <span className="text-[10px] font-bold text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">LWBP</span>
-                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">{summaryLoading ? "..." : `${cardSummary.lwbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}</div>
+                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kWh</div>
               </div>
               <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30 p-4">
                 <span className="text-[10px] font-bold text-rose-500 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">WBP</span>
-                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">{summaryLoading ? "..." : `${cardSummary.wbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}</div>
+                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kWh</div>
               </div>
             </>
           )}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Monthly Usage</div>
-            <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">{summaryLoading ? "..." : `${cardSummary.totalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}</div>
+            <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kWh</div>
           </div>
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Estimation Cost</div>
-            <div className="mt-1 text-base font-extrabold text-slate-800 dark:text-white font-mono">{summaryLoading ? "..." : formatCurrency(cardSummary.totalCost)}</div>
+            <div className="mt-1 text-base font-extrabold text-slate-800 dark:text-white font-mono">Rp 0,00</div>
           </div>
         </div>
 
