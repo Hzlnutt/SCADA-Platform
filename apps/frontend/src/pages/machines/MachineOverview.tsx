@@ -205,7 +205,7 @@ function StandardMachineOverview({
               method: "GET"
             });
             if (res && res.success && res.data) {
-              Object.assign(aggregatedData, res.data);
+              aggregatedData[url] = res.data;
             }
           } catch (err) {
             console.error(`Live API poll error on overview for URL ${url}:`, err);
@@ -377,8 +377,12 @@ function StandardMachineOverview({
         if (!url.trim()) return "Belum Ada API";
 
         if (tagKey === "cooling-water/delta_temp") {
-          const retVal = apiLiveData[jsonKeyMap["cooling-water/return_temp"] || "Scaled_Temp_Tank_Cooling3_Return"];
-          const suppVal = apiLiveData[jsonKeyMap["cooling-water/supply_temp"] || "Scaled_Temp_Tank_Cooling3_Supp"];
+          const retKey = jsonKeyMap["cooling-water/return_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/return_temp"];
+          const suppKey = jsonKeyMap["cooling-water/supply_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
+          const retUrl = apiSourceUrls["cooling-water/return_temp"] || "";
+          const suppUrl = apiSourceUrls["cooling-water/supply_temp"] || "";
+          const retVal = retKey && retUrl ? apiLiveData[retUrl]?.[retKey] : undefined;
+          const suppVal = suppKey && suppUrl ? apiLiveData[suppUrl]?.[suppKey] : undefined;
           if (typeof retVal === "number" && typeof suppVal === "number") {
             return retVal - suppVal;
           }
@@ -388,7 +392,7 @@ function StandardMachineOverview({
         const jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
         if (!jsonKey) return "xx";
 
-        const val = apiLiveData[jsonKey];
+        const val = apiLiveData[url]?.[jsonKey];
         if (val === undefined || val === null) return "xx";
         return val;
       };

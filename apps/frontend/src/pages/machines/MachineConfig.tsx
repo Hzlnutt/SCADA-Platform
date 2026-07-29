@@ -543,7 +543,7 @@ export default function MachineConfig() {
               method: "GET"
             });
             if (res && res.success && res.data) {
-              Object.assign(aggregatedData, res.data);
+              aggregatedData[url] = res.data;
             }
           } catch (err) {
             console.error(`Live API poll error for URL ${url}:`, err);
@@ -1802,15 +1802,25 @@ export default function MachineConfig() {
                   const hasUrl = Boolean(url.trim());
                   
                   const apiFieldKey = sensor.jsonKey || TAG_KEY_TO_API_JSON_KEY[sensor.tagKey] || sensor.tagKey.split("/")[1];
-                  let rawVal = apiFieldKey ? apiLiveData[apiFieldKey] : undefined;
+                  const urlData = url ? apiLiveData[url] : undefined;
+                  let rawVal = (apiFieldKey && urlData) ? urlData[apiFieldKey] : undefined;
 
                   // Delta Temp fallback calculation if needed
-                  if (
-                    sensor.tagKey === "cooling-water/delta_temp" &&
-                    apiLiveData["Scaled_Temp_Tank_Cooling3_Return"] !== undefined &&
-                    apiLiveData["Scaled_Temp_Tank_Cooling3_Supp"] !== undefined
-                  ) {
-                    rawVal = apiLiveData["Scaled_Temp_Tank_Cooling3_Return"] - apiLiveData["Scaled_Temp_Tank_Cooling3_Supp"];
+                  if (sensor.tagKey === "cooling-water/delta_temp") {
+                    const retRow = apiSourceRows.find(r => r.tagKey === "cooling-water/return_temp");
+                    const suppRow = apiSourceRows.find(r => r.tagKey === "cooling-water/supply_temp");
+                    
+                    const retKey = retRow?.jsonKey || TAG_KEY_TO_API_JSON_KEY["cooling-water/return_temp"];
+                    const suppKey = suppRow?.jsonKey || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
+                    
+                    const retUrl = retRow?.url || "";
+                    const suppUrl = suppRow?.url || "";
+                    
+                    const retVal = retKey && retUrl ? apiLiveData[retUrl]?.[retKey] : undefined;
+                    const suppVal = suppKey && suppUrl ? apiLiveData[suppUrl]?.[suppKey] : undefined;
+                    if (typeof retVal === "number" && typeof suppVal === "number") {
+                      rawVal = retVal - suppVal;
+                    }
                   }
 
                   let liveValStr = "xx";

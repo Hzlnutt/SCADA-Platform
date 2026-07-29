@@ -461,7 +461,7 @@ export const evaluateSensorRulesForPoints = async (points: any[]) => {
       const value = point.value;
       const warning = rule.baseline ? parseFloat(rule.baseline) : null;
       const alarm = rule.high_limit ? parseFloat(rule.high_limit) : null;
-      const direction = rule.direction || "above";
+      const direction = (rule.direction || "above").toLowerCase();
 
       let status: "active" | "cleared" = "cleared";
       let severity: "medium" | "high" = "medium";

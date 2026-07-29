@@ -274,7 +274,7 @@ export default function MachinePidDiagram() {
               method: "GET"
             });
             if (res && res.success && res.data) {
-              Object.assign(aggregatedData, res.data);
+              aggregatedData[url] = res.data;
             }
           } catch (err) {
             console.error(`Live API poll error on P&ID diagram for URL ${url}:`, err);
@@ -330,10 +330,12 @@ export default function MachinePidDiagram() {
         }
 
         if (tagKey === "cooling-water/delta_temp") {
-          const retKey = jsonKeyMap["cooling-water/return_temp"] || "Scaled_Temp_Tank_Cooling3_Return";
-          const suppKey = jsonKeyMap["cooling-water/supply_temp"] || "Scaled_Temp_Tank_Cooling3_Supp";
-          const retVal = apiLiveData[retKey] !== undefined ? apiLiveData[retKey] : apiLiveData["Scaled_Temp_Tank_Colling3_Return"];
-          const suppVal = apiLiveData[suppKey] !== undefined ? apiLiveData[suppKey] : apiLiveData["Scaled_Temp_Tank_Colling3_Supp"];
+          const retKey = jsonKeyMap["cooling-water/return_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/return_temp"];
+          const suppKey = jsonKeyMap["cooling-water/supply_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
+          const retUrl = apiSourceUrls["cooling-water/return_temp"] || "";
+          const suppUrl = apiSourceUrls["cooling-water/supply_temp"] || "";
+          const retVal = retKey && retUrl ? apiLiveData[retUrl]?.[retKey] : undefined;
+          const suppVal = suppKey && suppUrl ? apiLiveData[suppUrl]?.[suppKey] : undefined;
 
           if (typeof retVal === "number" && typeof suppVal === "number") {
             merged[tagKey] = {
@@ -364,14 +366,7 @@ export default function MachinePidDiagram() {
           return;
         }
 
-        let val = apiLiveData[jsonKey];
-        if (val === undefined || val === null) {
-          if (tagKey === "cooling-water/supply_temp") {
-            val = apiLiveData["Scaled_Temp_Tank_Colling3_Supp"];
-          } else if (tagKey === "cooling-water/return_temp") {
-            val = apiLiveData["Scaled_Temp_Tank_Colling3_Return"];
-          }
-        }
+        const val = apiLiveData[url]?.[jsonKey];
 
         if (val === undefined || val === null) {
           merged[tagKey] = {
