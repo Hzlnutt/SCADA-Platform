@@ -560,7 +560,36 @@ export default function Electricity() {
     responsive: true, maintainAspectRatio: false, animation: { duration: 0 },
     plugins: {
       legend: { display: true, position: "top", align: "end", labels: { color: isDark ? "rgba(148,163,184,.9)" : "rgba(71,85,105,.9)", font: { size: 10, weight: "600" as const }, usePointStyle: true, pointStyle: "rectRounded", padding: 12 } },
-      tooltip: { backgroundColor: isDark ? "rgba(13,21,39,.95)" : "rgba(255,255,255,.95)", titleColor: isDark ? "#f1f5f9" : "#0f172a", bodyColor: isDark ? "#f1f5f9" : "#0f172a", borderColor: isDark ? "rgba(51,65,85,.5)" : "rgba(203,213,225,.5)", borderWidth: 1, padding: 12, bodyFont: { family: "IBM Plex Mono, monospace", size: 11 }, callbacks: { label: (ctx: any) => `${ctx.dataset.label}: ${Number(ctx.parsed.y).toLocaleString("id-ID", { maximumFractionDigits: 2 })}` } }
+      tooltip: {
+        backgroundColor: isDark ? "rgba(13, 21, 39, 0.95)" : "rgba(255, 255, 255, 0.95)",
+        titleColor: isDark ? "#f1f5f9" : "#0f172a",
+        bodyColor: isDark ? "#f1f5f9" : "#0f172a",
+        borderColor: isDark ? "rgba(51, 65, 85, 0.5)" : "rgba(203, 213, 225, 0.5)",
+        borderWidth: 1,
+        padding: 12,
+        bodyFont: { family: "IBM Plex Mono, monospace", size: 11 },
+        footerColor: isDark ? "#fcd34d" : "#d97706",
+        footerFont: { family: "IBM Plex Mono, monospace", size: 11, weight: "bold" as const },
+        callbacks: {
+          label: (ctx: any) => {
+            const val = ctx.parsed.y;
+            return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { maximumFractionDigits: 2 })}`;
+          },
+          footer: (tooltipItems: any[]) => {
+            if (!tooltipItems || tooltipItems.length === 0) return "";
+            const dataIndex = tooltipItems[0].dataIndex;
+            const wbp = barWbpValues[dataIndex] || 0;
+            const lwbp = barLwbpValues[dataIndex] || 0;
+            const total = wbp + lwbp;
+            const multiplier = barUnit === "MWh" ? 1000 : 1;
+            const cost = (wbp * multiplier * wbpRate) + (lwbp * multiplier * lwbpRate);
+            return [
+              `Total: ${total.toLocaleString("id-ID", { maximumFractionDigits: 2 })} ${barUnit}`,
+              `Estimasi Biaya: Rp ${cost.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+            ];
+          }
+        }
+      }
     },
     scales: {
       x: { stacked: true, grid: { display: false }, ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
