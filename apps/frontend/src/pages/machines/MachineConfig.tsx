@@ -74,12 +74,7 @@ const getDefaultApiSourceConfigs = (unitId: string): ApiSourceRow[] => {
     { tagKey: "cooling-water/pressure_1", tagName: "MTR-1 Press Bar (CT-1)", url: defaultUrl, unit: "BAR" },
     { tagKey: "cooling-water/pressure_2", tagName: "MTR-2 Press Bar (CT-2)", url: defaultUrl, unit: "BAR" },
     { tagKey: "cooling-water/pressure_3", tagName: "MTR-3 Press Bar (CT-3)", url: defaultUrl, unit: "BAR" },
-    { tagKey: "cooling-water/eq_press_du03", tagName: "MTR-4 Press Bar (DU-3)", url: defaultUrl, unit: "BAR" },
-    { tagKey: "cooling-water/eq_press_bp03", tagName: "MTR-5 Press Bar (BP-3)", url: defaultUrl, unit: "BAR" },
-    { tagKey: "cooling-water/eq_press_prep03", tagName: "MTR-6 Press Bar (SP-3)", url: defaultUrl, unit: "BAR" },
-    { tagKey: "cooling-water/eq_press_st03", tagName: "MTR-7 Press Bar (ST-3)", url: defaultUrl, unit: "BAR" },
-    { tagKey: "cooling-water/eq_press_washing", tagName: "MTR-8 Press Bar (WASHING)", url: defaultUrl, unit: "BAR" },
-    { tagKey: "cooling-water/eq_press_minilab", tagName: "MTR-9 Press Bar (MINI LAB)", url: defaultUrl, unit: "BAR" },
+
 
     // Part: Makeup Water
     { tagKey: "cooling-water/makeup_wtr_tds", tagName: "Makeup Water TDS", url: defaultUrl, unit: "µS/cm" },
@@ -360,6 +355,15 @@ export default function MachineConfig() {
     );
   }, [sensorRows, searchQuery]);
 
+  const deduplicateApiSourceRows = (rows: ApiSourceRow[]): ApiSourceRow[] => {
+    const seen = new Set<string>();
+    return rows.filter((r) => {
+      if (!r.tagKey || seen.has(r.tagKey)) return false;
+      seen.add(r.tagKey);
+      return true;
+    });
+  };
+
   const [apiSourceRows, setApiSourceRows] = useState<ApiSourceRow[]>(() => {
     const savedList = localStorage.getItem(`scada.config.api_sources_list.${unitId}`);
     if (savedList) {
@@ -396,7 +400,7 @@ export default function MachineConfig() {
             });
             localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(flatMap));
           }
-          return healed;
+          return deduplicateApiSourceRows(healed);
         }
       } catch (e) {}
     }
@@ -428,10 +432,10 @@ export default function MachineConfig() {
           localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(flatMap));
           localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(healed));
         }
-        return healed;
+        return deduplicateApiSourceRows(healed);
       } catch (e) {}
     }
-    return defaults;
+    return deduplicateApiSourceRows(defaults);
   });
 
   const apiSourceUrls = useMemo(() => {
@@ -811,8 +815,9 @@ export default function MachineConfig() {
       .then((res) => {
         if (res && res.success) {
           if (res.rows && res.rows.length > 0) {
-            setApiSourceRows(res.rows);
-            localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(res.rows));
+            const deduped = deduplicateApiSourceRows(res.rows);
+            setApiSourceRows(deduped);
+            localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(deduped));
             if (res.sources) {
               localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(res.sources));
             }
