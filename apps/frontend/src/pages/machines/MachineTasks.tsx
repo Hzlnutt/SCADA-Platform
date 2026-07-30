@@ -12,6 +12,9 @@ interface Task {
   createdDate: string;
   taskKey?: string;
   completionStatus?: string;
+  completedBy?: string;
+  completedAt?: string;
+  createdAt?: string;
 }
 
 const ALL_COMPONENTS = [
@@ -182,7 +185,10 @@ export default function MachineTasks() {
         openedMonth: task.status !== "close",
         createdDate: new Date(task.created_at).toLocaleDateString(),
         taskKey: String(task.id),
-        completionStatus: task.completion_status
+        completionStatus: task.completion_status,
+        completedBy: task.completed_by,
+        completedAt: task.completed_at ? new Date(task.completed_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }) : undefined,
+        createdAt: task.created_at ? new Date(task.created_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }) : undefined
       };
     });
   }, [dbTasks, runningHours]);
@@ -355,6 +361,14 @@ export default function MachineTasks() {
                   <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed">
                     {task.title}
                   </p>
+
+                  {task.status === "close" && (
+                    <div className="mt-2 pt-2 border-t border-dashed border-slate-200 dark:border-slate-800 text-[10px] space-y-1 text-slate-500 dark:text-slate-400 font-mono">
+                      <div><span className="font-bold text-slate-700 dark:text-slate-350">Aktif:</span> {task.createdAt || task.createdDate}</div>
+                      <div><span className="font-bold text-slate-700 dark:text-slate-350">Selesai:</span> {task.completedAt || "-"}</div>
+                      <div><span className="font-bold text-slate-700 dark:text-slate-350">Penyelesai:</span> <span className="font-bold text-emerald-600 dark:text-emerald-450">{task.completedBy || "System"}</span></div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-3">

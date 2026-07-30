@@ -568,18 +568,21 @@ export const updateRhTaskRulesHandler = async (req: Request, res: Response, next
       io.emit("config:rh-task-rules:update", { key: "rh_task_rules", rules });
     }
 
-    // Record audit trail
-    await recordAudit({
-      actorId: req.user?.name || req.user?.id || "anonymous",
-      action: "update_rh_task_rules",
-      resourceType: "rh_task_rules",
-      resourceId: "cooling-water-1",
-      ip: getClientIp(req),
-      meta: {
-        before,
-        after: rules
-      }
-    });
+    // Record audit trail only if changed
+    const isRhRulesEqual = JSON.stringify(before) === JSON.stringify(rules);
+    if (!isRhRulesEqual) {
+      await recordAudit({
+        actorId: req.user?.name || req.user?.id || "anonymous",
+        action: "update_rh_task_rules",
+        resourceType: "rh_task_rules",
+        resourceId: "cooling-water-1",
+        ip: getClientIp(req),
+        meta: {
+          before,
+          after: rules
+        }
+      });
+    }
     
     res.json({ success: true, data: rules });
   } catch (err) {
@@ -668,19 +671,33 @@ export const updateSensorRulesHandler = async (req: Request, res: Response, next
       );
     }
     await pool.query("COMMIT");
+    // Record audit trail only if changed
+    const normalizedRules = rules.map((rule: any) => ({
+      tagKey: rule.tagKey,
+      tagName: rule.tagName,
+      lowLimit: rule.lowLimit !== undefined && rule.lowLimit !== null && rule.lowLimit !== "" ? parseFloat(rule.lowLimit) : null,
+      baseline: rule.baseline !== undefined && rule.baseline !== null && rule.baseline !== "" ? parseFloat(rule.baseline) : null,
+      highLimit: rule.highLimit !== undefined && rule.highLimit !== null && rule.highLimit !== "" ? parseFloat(rule.highLimit) : null,
+      unit: rule.unit || null,
+      enableAlert: rule.enableAlert ?? true,
+      suppressAlert: rule.suppressAlert ?? false,
+      direction: rule.direction ?? "above"
+    }));
 
-    // Record audit trail
-    await recordAudit({
-      actorId: req.user?.name || req.user?.id || "anonymous",
-      action: "update_sensor_rules",
-      resourceType: "sensor_rules",
-      resourceId: unitId,
-      ip: getClientIp(req),
-      meta: {
-        before: beforeRules,
-        after: rules
-      }
-    });
+    const isRulesEqual = JSON.stringify(beforeRules) === JSON.stringify(normalizedRules);
+    if (!isRulesEqual) {
+      await recordAudit({
+        actorId: req.user?.name || req.user?.id || "anonymous",
+        action: "update_sensor_rules",
+        resourceType: "sensor_rules",
+        resourceId: unitId,
+        ip: getClientIp(req),
+        meta: {
+          before: beforeRules,
+          after: normalizedRules
+        }
+      });
+    }
 
     res.json({ success: true });
   } catch (err) {
@@ -859,7 +876,7 @@ export const getRhTasksHandler = async (req: Request, res: Response, next: NextF
     const filterEnd = endDate ? new Date((endDate as string) + " 23:59:59") : endOfMonth;
 
     let queryStr = `
-      SELECT id, unit_id, motor_key, target_hours, warning_hours, task_name, status, trigger_base_hours, actual_hours_at_trigger, completed_at, completion_status, created_at
+      SELECT id, unit_id, motor_key, target_hours, warning_hours, task_name, status, trigger_base_hours, actual_hours_at_trigger, completed_at, completion_status, completed_by, created_at
       FROM running_hours_tasks
       WHERE created_at >= $1 AND created_at <= $2
     `;
@@ -957,11 +974,12 @@ export const completeRhTaskHandler = async (req: Request, res: Response, next: N
     const completionStatus = actualRh >= limit ? "Overdue" : "On Time";
 
     // Update status to close
+    const completedBy = req.user?.name || req.user?.id || "anonymous";
     await pool.query(
       `UPDATE running_hours_tasks 
-       SET status = 'close', completed_at = CURRENT_TIMESTAMP, completion_status = $1
-       WHERE id = $2`,
-      [completionStatus, id]
+       SET status = 'close', completed_at = CURRENT_TIMESTAMP, completion_status = $1, completed_by = $2
+       WHERE id = $3`,
+      [completionStatus, completedBy, id]
     );
 
     // Save baseline
@@ -1323,18 +1341,22 @@ export const upsertApiSourcesMapHandler = async (
       );
     }
 
-    // Record audit trail
-    await recordAudit({
-      actorId: req.user?.name || req.user?.id || "anonymous",
-      action: "update_api_sources",
-      resourceType: "api_sources_map",
-      resourceId: unitId,
-      ip: getClientIp(req),
-      meta: {
-        before: { sources: beforeMap, rows: beforeList },
-        after: { sources, rows }
-      }
-    });
+    // Record audit trail only if changed
+    const isMapEqual = JSON.stringify(beforeMap) === JSON.stringify(sources);
+    const isListEqual = JSON.stringify(beforeList) === JSON.stringify(rows);
+    if (!isMapEqual || !isListEqual) {
+      await recordAudit({
+        actorId: req.user?.name || req.user?.id || "anonymous",
+        action: "update_api_sources",
+        resourceType: "api_sources_map",
+        resourceId: unitId,
+        ip: getClientIp(req),
+        meta: {
+          before: { sources: beforeMap, rows: beforeList },
+          after: { sources, rows }
+        }
+      });
+    }
 
     res.json({ success: true });
   } catch (err) {
