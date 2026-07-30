@@ -549,6 +549,12 @@ export const updateRhTaskRulesHandler = async (req: Request, res: Response, next
     const pool = getPostgresPool();
     const rules = req.body;
     
+    const beforeRes = await pool.query(
+      "SELECT value FROM global_configs WHERE key = $1",
+      ["rh_task_rules"]
+    );
+    const before = beforeRes.rows[0]?.value || null;
+    
     await pool.query(
       `INSERT INTO global_configs (key, value, updated_at) 
        VALUES ($1, $2, CURRENT_TIMESTAMP) 
@@ -561,6 +567,19 @@ export const updateRhTaskRulesHandler = async (req: Request, res: Response, next
     if (io) {
       io.emit("config:rh-task-rules:update", { key: "rh_task_rules", rules });
     }
+
+    // Record audit trail
+    await recordAudit({
+      actorId: req.user?.name || req.user?.id || "anonymous",
+      action: "update_rh_task_rules",
+      resourceType: "rh_task_rules",
+      resourceId: "cooling-water-1",
+      ip: getClientIp(req),
+      meta: {
+        before,
+        after: rules
+      }
+    });
     
     res.json({ success: true, data: rules });
   } catch (err) {
@@ -608,6 +627,25 @@ export const updateSensorRulesHandler = async (req: Request, res: Response, next
       return res.status(400).json({ error: "Missing unitId or rules array in body" });
     }
 
+    // Fetch old configuration for audit trail
+    const beforeRulesRes = await pool.query(
+      `SELECT tag_key, tag_name, low_limit, baseline, high_limit, unit, enable_alert, suppress_alert, direction 
+       FROM sensor_rules 
+       WHERE unit_id = $1`,
+      [unitId]
+    );
+    const beforeRules = beforeRulesRes.rows.map(row => ({
+      tagKey: row.tag_key,
+      tagName: row.tag_name,
+      lowLimit: row.low_limit !== null ? parseFloat(row.low_limit) : null,
+      baseline: row.baseline !== null ? parseFloat(row.baseline) : null,
+      highLimit: row.high_limit !== null ? parseFloat(row.high_limit) : null,
+      unit: row.unit,
+      enableAlert: row.enable_alert,
+      suppressAlert: row.suppress_alert,
+      direction: row.direction
+    }));
+
     await pool.query("BEGIN");
     await pool.query("DELETE FROM sensor_rules WHERE unit_id = $1", [unitId]);
 
@@ -630,6 +668,19 @@ export const updateSensorRulesHandler = async (req: Request, res: Response, next
       );
     }
     await pool.query("COMMIT");
+
+    // Record audit trail
+    await recordAudit({
+      actorId: req.user?.name || req.user?.id || "anonymous",
+      action: "update_sensor_rules",
+      resourceType: "sensor_rules",
+      resourceId: unitId,
+      ip: getClientIp(req),
+      meta: {
+        before: beforeRules,
+        after: rules
+      }
+    });
 
     res.json({ success: true });
   } catch (err) {
@@ -921,6 +972,22 @@ export const completeRhTaskHandler = async (req: Request, res: Response, next: N
        DO UPDATE SET baseline_hours = EXCLUDED.baseline_hours`,
       [task.unit_id, task.motor_key, task.target_hours, task.task_name, actualRh]
     );
+
+    // Record audit trail
+    await recordAudit({
+      actorId: req.user?.name || req.user?.id || "anonymous",
+      action: "complete_maintenance_task",
+      resourceType: "maintenance_task",
+      resourceId: task.unit_id,
+      ip: getClientIp(req),
+      meta: {
+        taskName: task.task_name,
+        motorKey: task.motor_key,
+        targetHours: task.target_hours,
+        completionStatus,
+        completedAt: new Date()
+      }
+    });
 
     res.json({ success: true });
   } catch (err) {
@@ -1225,6 +1292,18 @@ export const upsertApiSourcesMapHandler = async (
     }
 
     const pool = getPostgresPool();
+
+    // Fetch before state for audit log
+    const beforeMapRes = await pool.query(
+      "SELECT value FROM global_configs WHERE key = $1",
+      [`api_sources_map_${unitId}`]
+    );
+    const beforeListRes = await pool.query(
+      "SELECT value FROM global_configs WHERE key = $1",
+      [`api_sources_list_${unitId}`]
+    );
+    const beforeMap = beforeMapRes.rows[0]?.value || null;
+    const beforeList = beforeListRes.rows[0]?.value || null;
     
     if (sources) {
       await pool.query(
@@ -1243,6 +1322,19 @@ export const upsertApiSourcesMapHandler = async (
         [`api_sources_list_${unitId}`, JSON.stringify(rows)]
       );
     }
+
+    // Record audit trail
+    await recordAudit({
+      actorId: req.user?.name || req.user?.id || "anonymous",
+      action: "update_api_sources",
+      resourceType: "api_sources_map",
+      resourceId: unitId,
+      ip: getClientIp(req),
+      meta: {
+        before: { sources: beforeMap, rows: beforeList },
+        after: { sources, rows }
+      }
+    });
 
     res.json({ success: true });
   } catch (err) {

@@ -55,6 +55,7 @@ export const MachineTabs = ({
           ))}
 
           <NavItem to={`${basePath}/statistics`} label="Trend Analysis" tone="tabs" />
+          <NavItem to={`${basePath}/tasks`} label="Tasks" tone="tabs" />
           <NavItem to={`${basePath}/alarm`} label="Alarms" tone="tabs" />
           <NavItem to={`${basePath}/maintenance`} label="Maintenance" tone="tabs" />
           <NavItem to={`${basePath}/shift-report`} label="Shift Report" tone="tabs" />
@@ -79,6 +80,11 @@ export const MachineTabs = ({
         <NavItem
           to={`${basePath}/statistics`}
           label="Trend Analysis"
+          tone="tabs"
+        />
+        <NavItem
+          to={`${basePath}/tasks`}
+          label="Tasks"
           tone="tabs"
         />
         <NavItem

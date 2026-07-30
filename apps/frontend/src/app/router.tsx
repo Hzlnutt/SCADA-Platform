@@ -29,6 +29,7 @@ import MachineAlarm from "../pages/machines/MachineAlarm";
 import MachineEnergy from "../pages/machines/MachineEnergy";
 import MachineConfig from "../pages/machines/MachineConfig";
 import MachineAuditTrail from "../pages/machines/MachineAuditTrail";
+import MachineTasks from "../pages/machines/MachineTasks";
 import Approvals from "../pages/Approvals";
 
 import MachineHealth from "../pages/MachineHealth";
@@ -76,6 +77,7 @@ export const AppRouter = () => {
 
                 {/* Route standar */}
                 <Route path="pid-diagram" element={<MachinePidDiagram />} />
+                <Route path="tasks" element={<MachineTasks />} />
                 <Route path="historian" element={<MachineHistorian />} />
                 <Route path="statistics" element={<MachineStatistics />} />
                 <Route path="maintenance" element={<MachineMaintenance />} />

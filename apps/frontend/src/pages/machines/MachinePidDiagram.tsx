@@ -208,7 +208,11 @@ export default function MachinePidDiagram() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
 
-  const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>(() => {
+  const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>({});
+  const [jsonKeyMap, setJsonKeyMap] = useState<Record<string, string>>({});
+
+  // Reset and sync API sources from LocalStorage/Postgres when unitId changes
+  useEffect(() => {
     const defaultMap: Record<string, string> = {};
     if (unitId.startsWith("cooling-water")) {
       const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
@@ -217,36 +221,32 @@ export default function MachinePidDiagram() {
         defaultMap[s.tagKey] = defaultUrl;
       });
     }
-    const saved = localStorage.getItem(`scada.config.api_sources.${unitId}`);
-    if (saved) {
+
+    // Load URLs
+    const savedUrls = localStorage.getItem(`scada.config.api_sources.${unitId}`);
+    if (savedUrls) {
       try {
-        const parsed = JSON.parse(saved);
+        const parsed = JSON.parse(savedUrls);
         const healed: Record<string, string> = {};
-        let modified = false;
         Object.entries(parsed).forEach(([key, val]) => {
           if (typeof val === "string") {
-            const newVal = val.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
-            if (newVal !== val) modified = true;
-            healed[key] = newVal;
-          } else {
-            healed[key] = val as string;
+            healed[key] = val.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
           }
         });
-        if (modified) {
-          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(healed));
-        }
-        return { ...defaultMap, ...healed };
-      } catch (e) {}
+        setApiSourceUrls({ ...defaultMap, ...healed });
+      } catch (e) {
+        setApiSourceUrls(defaultMap);
+      }
+    } else {
+      setApiSourceUrls(defaultMap);
     }
-    return defaultMap;
-  });
 
-  const [jsonKeyMap, setJsonKeyMap] = useState<Record<string, string>>(() => {
-    const map: Record<string, string> = {};
+    // Load JSON Key map
     const savedList = localStorage.getItem(`scada.config.api_sources_list.${unitId}`);
     if (savedList) {
       try {
         const parsed = JSON.parse(savedList);
+        const map: Record<string, string> = {};
         if (Array.isArray(parsed)) {
           parsed.forEach((row: any) => {
             if (row.tagKey && row.jsonKey) {
@@ -254,13 +254,15 @@ export default function MachinePidDiagram() {
             }
           });
         }
-      } catch (e) {}
+        setJsonKeyMap(map);
+      } catch (e) {
+        setJsonKeyMap({});
+      }
+    } else {
+      setJsonKeyMap({});
     }
-    return map;
-  });
 
-  // Sync API sources from Postgres database on mount
-  useEffect(() => {
+    // Fetch fresh map from DB
     getJson<{ success: boolean; sources: Record<string, string> | null; rows?: ApiSourceRow[] | null }>(
       `/config/api-sources-map?unitId=${unitId}`
     )

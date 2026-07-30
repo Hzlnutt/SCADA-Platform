@@ -132,10 +132,11 @@ export default function MachineAuditTrail() {
             className="px-3 py-1.5 text-xs rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#002b5c] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Semua Aksi</option>
-            <option value="config_update">Config Update</option>
-            <option value="setpoint_update">Setpoint Change</option>
-            <option value="rule_update">Rule Update</option>
-            <option value="task_update">Task Update</option>
+            <option value="update_thresholds">Batas Threshold</option>
+            <option value="update_api_sources">API Source Map</option>
+            <option value="update_sensor_rules">Sensor Rules</option>
+            <option value="update_rh_task_rules">Running Hours Task Rules</option>
+            <option value="complete_maintenance_task">Penyelesaian Maintenance</option>
           </select>
           <button
             type="submit"
