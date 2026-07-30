@@ -9,13 +9,15 @@ interface SensorIndicatorProps {
   w?: number;
   h?: number;
   unit?: string;
-  warningThreshold?: number; // Tidak ada nilai default
-  alarmThreshold?: number;   // Tidak ada nilai default
+  warningThreshold?: number | null; // Tidak ada nilai default
+  alarmThreshold?: number | null;   // Tidak ada nilai default
   decimalPlaces?: number;
   padding?: number;
   thresholdDirection?: 'above' | 'below';
   mode?: 'numeric' | 'onoff';
   color?: string;
+  enableAlert?: boolean;
+  suppressAlert?: boolean;
 }
 
 export function SensorIndicator({
@@ -32,6 +34,8 @@ export function SensorIndicator({
   thresholdDirection = 'above',
   mode = 'numeric',
   color: customColor,
+  enableAlert = true,
+  suppressAlert = false,
 }: SensorIndicatorProps) {
   const cx = x + w / 2;
   const cy = y + h / 2;
@@ -91,8 +95,10 @@ export function SensorIndicator({
       }
     }
     
-    // Jika warningThreshold dan alarmThreshold TIDAK diberikan, warna tetap hijau
-    if (warningThreshold === undefined || alarmThreshold === undefined) {
+    const isAlertActive = enableAlert !== false && suppressAlert !== true;
+
+    // Jika alert tidak diaktifkan, warna tetap hijau
+    if (!isAlertActive) {
       const baseValue = numValue.toFixed(decimalPlaces);
       const display = unit ? `${baseValue}${unit}` : baseValue;
       return { color: "#00cc00", display };
@@ -101,11 +107,11 @@ export function SensorIndicator({
     // Jika threshold diberikan, jalankan logika
     let color = "#00cc00"; // default green
     if (thresholdDirection === 'above') {
-      if (numValue >= alarmThreshold)   color = "#ff2222";
-      else if (numValue >= warningThreshold) color = "#ffaa00";
+      if (alarmThreshold !== null && alarmThreshold !== undefined && numValue >= alarmThreshold) color = "#ff2222";
+      else if (warningThreshold !== null && warningThreshold !== undefined && numValue >= warningThreshold) color = "#ffaa00";
     } else {
-      if (numValue <= alarmThreshold)   color = "#ff2222";
-      else if (numValue <= warningThreshold) color = "#ffaa00";
+      if (alarmThreshold !== null && alarmThreshold !== undefined && numValue <= alarmThreshold) color = "#ff2222";
+      else if (warningThreshold !== null && warningThreshold !== undefined && numValue <= warningThreshold) color = "#ffaa00";
     }
 
     const baseValue = numValue.toFixed(decimalPlaces);

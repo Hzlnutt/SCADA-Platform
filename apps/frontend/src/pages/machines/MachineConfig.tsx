@@ -1226,9 +1226,9 @@ export default function MachineConfig() {
               <thead>
                 <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
                   <th className="pb-3 px-3">SCADA Parameter Tag</th>
-                  <th className="pb-3 px-3 text-center w-24">Low Limit</th>
-                  <th className="pb-3 px-3 text-center w-28">Baseline Setpoint</th>
-                  <th className="pb-3 px-3 text-center w-24">High Limit</th>
+                  <th className="pb-3 px-3 text-center w-28">Need Warning?</th>
+                  <th className="pb-3 px-3 text-center w-28">Warning Setpoint</th>
+                  <th className="pb-3 px-3 text-center w-28">Alarm Limit</th>
                   <th className="pb-3 px-3 text-center w-28">Limit Rule</th>
                   <th className="pb-3 px-3 text-center w-28">Enable Alert</th>
                   <th className="pb-3 px-3 text-center w-28">Suppress Alert</th>
@@ -1272,34 +1272,55 @@ export default function MachineConfig() {
                       )}
                     </td>
                     
+                    {/* Need Warning? */}
                     <td className="py-4 px-3 text-center">
-                      <div className="inline-flex items-center gap-1.5 border border-[#d6e9fb] dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-900 w-24">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={row.lowLimit}
-                          disabled={!isUnlocked}
-                          onChange={(e) => handleSensorNumChange(row.tagKey, "lowLimit", e.target.value)}
-                          className="w-full text-center font-bold font-mono bg-transparent outline-none focus:ring-0 focus:border-transparent text-xs disabled:opacity-50"
-                        />
-                      </div>
+                      <button
+                        type="button"
+                        disabled={!isUnlocked}
+                        onClick={() => {
+                          const hasWarning = row.baseline !== null && row.baseline !== undefined;
+                          setSensorRows((prev) => {
+                            const idx = prev.findIndex((r) => r.tagKey === row.tagKey);
+                            if (idx === -1) return prev;
+                            const next = [...prev];
+                            next[idx] = {
+                              ...next[idx],
+                              baseline: hasWarning ? null : (row.highLimit ? Math.round(row.highLimit * 0.8 * 10) / 10 : 0)
+                            };
+                            return next;
+                          });
+                        }}
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded text-[10px] font-extrabold uppercase border transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                          (row.baseline !== null && row.baseline !== undefined)
+                            ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/25"
+                            : "bg-slate-100 dark:bg-slate-900/40 text-slate-400 border-slate-200 dark:border-slate-800"
+                        }`}
+                      >
+                        {(row.baseline !== null && row.baseline !== undefined) ? "YES" : "NO"}
+                      </button>
                     </td>
 
+                    {/* Warning Setpoint */}
                     <td className="py-4 px-3 text-center">
-                      <div className="inline-flex items-center gap-1.5 border border-[#acd3ff] dark:border-slate-700 rounded px-2.5 py-1 bg-sky-500/5 dark:bg-slate-900/80 w-28">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={row.baseline}
-                          disabled={!isUnlocked}
-                          onChange={(e) => handleSensorNumChange(row.tagKey, "baseline", e.target.value)}
-                          className="w-full text-center font-bold font-mono bg-transparent outline-none focus:ring-0 focus:border-transparent text-xs text-[#1f6fb5] dark:text-sky-400 disabled:opacity-50"
-                        />
-                      </div>
+                      {(row.baseline !== null && row.baseline !== undefined) ? (
+                        <div className="inline-flex items-center gap-1.5 border border-[#acd3ff] dark:border-slate-700 rounded px-2.5 py-1 bg-sky-500/5 dark:bg-slate-900/80 w-28">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={row.baseline ?? ""}
+                            disabled={!isUnlocked}
+                            onChange={(e) => handleSensorNumChange(row.tagKey, "baseline", e.target.value)}
+                            className="w-full text-center font-bold font-mono bg-transparent outline-none focus:ring-0 focus:border-transparent text-xs text-[#1f6fb5] dark:text-sky-400 disabled:opacity-50"
+                          />
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 font-mono">—</span>
+                      )}
                     </td>
 
+                    {/* Alarm Limit */}
                     <td className="py-4 px-3 text-center">
-                      <div className="inline-flex items-center gap-1.5 border border-[#d6e9fb] dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-900 w-24">
+                      <div className="inline-flex items-center gap-1.5 border border-[#d6e9fb] dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-900 w-28">
                         <input
                           type="number"
                           step="0.01"

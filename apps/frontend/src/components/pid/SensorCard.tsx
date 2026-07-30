@@ -84,10 +84,7 @@ const SensorCard: React.FC<SensorCardProps> = ({
   const isOn = value === "ON" || value === "HEATING" || value === "COOLING" || value === "STERIL";
   const isStandby = value === "STANDBY";
 
-  // xx fits perfectly in size 28, but long status string like "API TIDAK TERKIRIM" needs size 12
-  const valString = String(value || "");
-  const isTextLong = valString.length > 7 || (values && values.some(v => String(v.value).length > 7));
-  const displayFontSize = isTextLong ? "12" : "28";
+  const displayFontSize = "28";
   
   let displayTextColor = valueTextColor;
   if (isOffline) {

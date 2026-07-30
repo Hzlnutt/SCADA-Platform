@@ -148,11 +148,11 @@ export const startCoolingTowerPolling = () => {
 
       try {
         const listRes = await pool.query(
-          "SELECT value FROM global_configs WHERE key = $1", 
-          ["api_sources_list_cooling-water-1"]
+          "SELECT value FROM global_configs WHERE key IN ($1, $2)", 
+          ["api_sources_list_cooling-water-1", "api_sources_list_cooling-water_1"]
         );
-        if (listRes.rows.length > 0) {
-          const list = listRes.rows[0].value;
+        listRes.rows.forEach((r) => {
+          const list = r.value;
           if (Array.isArray(list)) {
             list.forEach((row: any) => {
               if (row.tagKey) {
@@ -165,7 +165,7 @@ export const startCoolingTowerPolling = () => {
               }
             });
           }
-        }
+        });
       } catch (e) {
         logger.warn("Failed to load custom API sources list from global_configs");
       }

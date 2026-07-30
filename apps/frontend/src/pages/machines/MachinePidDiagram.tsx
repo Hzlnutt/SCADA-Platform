@@ -497,6 +497,24 @@ export default function MachinePidDiagram() {
 
   const [runningHours, setRunningHours] = useState<Record<string, number>>({});
   const [pidThresholds, setPidThresholds] = useState<any>(null);
+  const [sensorRules, setSensorRules] = useState<any[]>([]);
+
+  useEffect(() => {
+    getJson<{ data: any[] }>(`/config/sensor-rules?unitId=${unitId}`)
+      .then((res) => {
+        if (res && Array.isArray(res.data)) {
+          setSensorRules(res.data);
+        }
+      })
+      .catch((err) => console.error("Failed to load sensor rules for P&ID:", err));
+  }, [unitId]);
+
+  const sensorRulesMap = useMemo(() => {
+    return sensorRules.reduce((acc, rule) => {
+      acc[rule.tagKey] = rule;
+      return acc;
+    }, {} as Record<string, any>);
+  }, [sensorRules]);
 
   const [dbTasks, setDbTasks] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string }>(() => {
@@ -756,7 +774,13 @@ export default function MachinePidDiagram() {
       onChangeDateRange={setDateRange}
     >
       {PidDiagram ? (
-        <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} latest={mergedLatest} />
+        <PidDiagram 
+          motorStatus={motorStatus} 
+          runningHours={runningHours} 
+          pidThresholds={pidThresholds} 
+          sensorRulesMap={sensorRulesMap} 
+          latest={mergedLatest} 
+        />
       ) : (
         <div className="flex items-center justify-center h-full text-slate-400">
           Diagram untuk {unitId} belum tersedia.

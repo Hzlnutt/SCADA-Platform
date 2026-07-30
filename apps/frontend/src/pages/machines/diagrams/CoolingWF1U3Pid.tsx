@@ -24,6 +24,7 @@ interface CoolingWF1U3PidProps {
   motorStatus: Record<string, boolean>;
   runningHours?: Record<string, number>;
   pidThresholds?: any;
+  sensorRulesMap?: Record<string, any>;
   svgRef?: React.RefObject<SVGSVGElement>;
   onSvgClick?: (e: React.MouseEvent<SVGSVGElement>) => void;
   latest?: Record<string, any>;
@@ -33,6 +34,7 @@ export default function CoolingWF1U3Pid({
   motorStatus: rawMotorStatus,
   runningHours = {},
   pidThresholds,
+  sensorRulesMap = {},
   svgRef,
   onSvgClick,
   latest: propLatest,
@@ -135,6 +137,24 @@ export default function CoolingWF1U3Pid({
     const val = latest["cooling-water/chemical_327_lvl"]?.value;
     if (val === undefined || val === null || val === "XX") return 0;
     return typeof val === "number" ? val : parseFloat(String(val)) || 0;
+  };
+
+  const renderSensorIndicator = (
+    tagId: string, 
+    extraProps: Omit<React.ComponentProps<typeof SensorIndicator>, "value" | "warningThreshold" | "alarmThreshold" | "thresholdDirection" | "enableAlert" | "suppressAlert">
+  ) => {
+    const rule = sensorRulesMap[tagId] || {};
+    return (
+      <SensorIndicator
+        value={getVal(tagId)}
+        warningThreshold={rule.baseline !== undefined && rule.baseline !== null && rule.baseline !== "" ? parseFloat(rule.baseline) : undefined}
+        alarmThreshold={rule.highLimit !== undefined && rule.highLimit !== null && rule.highLimit !== "" ? parseFloat(rule.highLimit) : undefined}
+        thresholdDirection={rule.direction || "above"}
+        enableAlert={rule.enableAlert}
+        suppressAlert={rule.suppressAlert}
+        {...extraProps}
+      />
+    );
   };
 
   const getEqThresholds = (tagKey: string, fallbackUnitId: string) => {
@@ -413,125 +433,86 @@ export default function CoolingWF1U3Pid({
       <LevelIndicator x={714} y={416} value={getLvl("cooling-water/basin_lvl")} w={108} h={151} type="warm" />
       <LevelIndicator x={843} y={416} value={getLvl("cooling-water/basin_lvl")} w={108} h={151} type="cold" />
 
-      <SensorIndicator
-        x={860} y={492}
-        w={75} h={30}
-        value={getVal("cooling-water/basin_lvl")} unit=" %"
-        warningThreshold={pidThresholds?.basin_lvl?.warning ?? 75}
-        alarmThreshold={pidThresholds?.basin_lvl?.alarm ?? 70}
-        thresholdDirection="below"
-      />
-      <SensorIndicator
-        x={860} y={530}
-        w={75} h={30}
-        value={getVal("cooling-water/supply_temp")} unit=" °C"
-        warningThreshold={pidThresholds?.supply_temp?.warning ?? 28}
-        alarmThreshold={pidThresholds?.supply_temp?.alarm ?? 30}
-        decimalPlaces={1}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={731} y={530}
-        w={75} h={30}
-        value={getVal("cooling-water/return_temp")} unit=" °C"
-        warningThreshold={pidThresholds?.return_temp?.warning ?? 38}
-        alarmThreshold={pidThresholds?.return_temp?.alarm ?? 40}
-        decimalPlaces={1}
-        thresholdDirection="above"
-      />
+      {renderSensorIndicator("cooling-water/basin_lvl", {
+        x: 860, y: 492,
+        w: 75, h: 30,
+        unit: " %"
+      })}
+      {renderSensorIndicator("cooling-water/supply_temp", {
+        x: 860, y: 530,
+        w: 75, h: 30,
+        unit: " °C",
+        decimalPlaces: 1
+      })}
+      {renderSensorIndicator("cooling-water/return_temp", {
+        x: 731, y: 530,
+        w: 75, h: 30,
+        unit: " °C",
+        decimalPlaces: 1
+      })}
 
       {/* Sensor Indicator Pipe MTR-1 to MTR-9 */}
-      <SensorIndicator
-        x={118} y={273}
-        w={75} h={30}
-        value={getVal("cooling-water/pressure_1")} unit=" BAR"
-        warningThreshold={pidThresholds?.pressure?.warning ?? 1.5}
-        alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
-        decimalPlaces={1}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={333} y={273}
-        w={75} h={30}
-        value={getVal("cooling-water/pressure_2")} unit=" BAR"
-        warningThreshold={pidThresholds?.pressure?.warning ?? 1.5}
-        alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
-        decimalPlaces={1}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={552} y={273}
-        w={75} h={30}
-        value={getVal("cooling-water/pressure_3")} unit=" BAR"
-        warningThreshold={pidThresholds?.pressure?.warning ?? 1.5}
-        alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
-        decimalPlaces={1}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={1177} y={273}
-        w={75} h={30}
-        value={getVal("cooling-water/eq_press_du03")} unit=" BAR"
-        warningThreshold={pidThresholds?.pressure?.warning ?? 1.5}
-        alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
-        decimalPlaces={1}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={1282} y={273}
-        w={75} h={30}
-        value={getVal("cooling-water/eq_press_bp03")} unit=" BAR"
-        warningThreshold={pidThresholds?.pressure?.warning ?? 1.5}
-        alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
-        decimalPlaces={1}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={1390} y={273}
-        w={75} h={30}
-        value={getVal("cooling-water/eq_press_prep03")} unit=" BAR"
-        warningThreshold={pidThresholds?.pressure?.warning ?? 1.5}
-        alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
-        decimalPlaces={1}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={1495} y={273}
-        w={75} h={30}
-        value={getVal("cooling-water/eq_press_st03")} unit=" BAR"
-        warningThreshold={pidThresholds?.pressure?.warning ?? 1.5}
-        alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
-        decimalPlaces={1}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={1599} y={273}
-        w={75} h={30}
-        value={getVal("cooling-water/eq_press_washing")} unit=" BAR"
-        warningThreshold={pidThresholds?.pressure?.warning ?? 1.5}
-        alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
-        decimalPlaces={1}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={1705} y={273}
-        w={75} h={30}
-        value={getVal("cooling-water/eq_press_minilab")} unit=" BAR"
-        warningThreshold={pidThresholds?.pressure?.warning ?? 1.5}
-        alarmThreshold={pidThresholds?.pressure?.alarm ?? 2.0}
-        decimalPlaces={1}
-        thresholdDirection="above"
-      />
+      {renderSensorIndicator("cooling-water/pressure_1", {
+        x: 118, y: 273,
+        w: 75, h: 30,
+        unit: " BAR",
+        decimalPlaces: 1
+      })}
+      {renderSensorIndicator("cooling-water/pressure_2", {
+        x: 333, y: 273,
+        w: 75, h: 30,
+        unit: " BAR",
+        decimalPlaces: 1
+      })}
+      {renderSensorIndicator("cooling-water/pressure_3", {
+        x: 552, y: 273,
+        w: 75, h: 30,
+        unit: " BAR",
+        decimalPlaces: 1
+      })}
+      {renderSensorIndicator("cooling-water/eq_press_du03", {
+        x: 1177, y: 273,
+        w: 75, h: 30,
+        unit: " BAR",
+        decimalPlaces: 1
+      })}
+      {renderSensorIndicator("cooling-water/eq_press_bp03", {
+        x: 1282, y: 273,
+        w: 75, h: 30,
+        unit: " BAR",
+        decimalPlaces: 1
+      })}
+      {renderSensorIndicator("cooling-water/eq_press_prep03", {
+        x: 1390, y: 273,
+        w: 75, h: 30,
+        unit: " BAR",
+        decimalPlaces: 1
+      })}
+      {renderSensorIndicator("cooling-water/eq_press_st03", {
+        x: 1495, y: 273,
+        w: 75, h: 30,
+        unit: " BAR",
+        decimalPlaces: 1
+      })}
+      {renderSensorIndicator("cooling-water/eq_press_washing", {
+        x: 1599, y: 273,
+        w: 75, h: 30,
+        unit: " BAR",
+        decimalPlaces: 1
+      })}
+      {renderSensorIndicator("cooling-water/eq_press_minilab", {
+        x: 1705, y: 273,
+        w: 75, h: 30,
+        unit: " BAR",
+        decimalPlaces: 1
+      })}
 
-      <SensorIndicator
-        x={1496} y={147}
-        w={75} h={30}
-        value={getVal("cooling-water/st3_return_temp")} unit=" °C"
-        warningThreshold={pidThresholds?.st3_return_temp?.warning ?? 35}
-        alarmThreshold={pidThresholds?.st3_return_temp?.alarm ?? 40}
-        decimalPlaces={1}
-        thresholdDirection="above"
-      />
+      {renderSensorIndicator("cooling-water/st3_return_temp", {
+        x: 1496, y: 147,
+        w: 75, h: 30,
+        unit: " °C",
+        decimalPlaces: 1
+      })}
 
       {/* Chemical Dosing Tank */}
       <ChemicalDosingTank x={932} y={685} width={67} height={65} id="tankA" />
@@ -803,18 +784,14 @@ export default function CoolingWF1U3Pid({
         titleFontSize={15}
         lines={["LEVEL :", "PUMP :", "VOL :"]}
       />
-      <SensorIndicator
-        x={967}
-        y={822}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/chemical_357_lvl")}
-        unit=" %"
-        warningThreshold={pidThresholds?.chemical_357_lvl?.warning ?? 75}
-        alarmThreshold={pidThresholds?.chemical_357_lvl?.alarm ?? 70}
-        thresholdDirection="below"
-        decimalPlaces={1}
-      />
+      {renderSensorIndicator("cooling-water/chemical_357_lvl", {
+        x: 967,
+        y: 822,
+        w: 63.75,
+        h: 25.5,
+        unit: " %",
+        decimalPlaces: 1
+      })}
       <SensorIndicator
         x={967}
         y={850}
@@ -842,18 +819,14 @@ export default function CoolingWF1U3Pid({
         titleFontSize={14}
         lines={["LEVEL :", "PUMP :", "VOL :"]}
       />
-      <SensorIndicator
-        x={1137}
-        y={822}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/chemical_327_lvl")}
-        unit=" %"
-        warningThreshold={pidThresholds?.chemical_327_lvl?.warning ?? 75}
-        alarmThreshold={pidThresholds?.chemical_327_lvl?.alarm ?? 70}
-        thresholdDirection="below"
-        decimalPlaces={1}
-      />
+      {renderSensorIndicator("cooling-water/chemical_327_lvl", {
+        x: 1137,
+        y: 822,
+        w: 63.75,
+        h: 25.5,
+        unit: " %",
+        decimalPlaces: 1
+      })}
       <SensorIndicator
         x={1137}
         y={850}
