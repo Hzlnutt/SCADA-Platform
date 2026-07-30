@@ -9,13 +9,15 @@ type DonutChartProps = {
   size?: number;
   thickness?: number;
   centerLabel?: string;
+  centerLabelSize?: string;
 };
 
 export const DonutChart = ({
   segments,
   size = 160,
   thickness = 18,
-  centerLabel
+  centerLabel,
+  centerLabelSize = "text-base"
 }: DonutChartProps) => {
   const radius = (size - thickness) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -65,8 +67,8 @@ export const DonutChart = ({
         })}
       </svg>
       {centerLabel ? (
-        <div className="absolute text-center text-[10px] text-[#47729f] dark:text-slate-400 font-medium">
-          <div className="text-base font-bold text-[#002b5c] dark:text-slate-100 leading-tight">
+        <div className="absolute text-center text-[10px] text-[#47729f] dark:text-slate-400 font-medium px-2">
+          <div className={`${centerLabelSize} font-bold text-[#002b5c] dark:text-slate-100 leading-tight`}>
             {centerLabel}
           </div>
           <div className="mt-0.5">Total</div>

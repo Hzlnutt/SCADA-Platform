@@ -205,7 +205,164 @@ export const ensurePostgresTables = async () => {
       );
     `);
 
-    logger.info("postgres tables (telemetry, running hours, global configs, sensor rules, alarms, api sources, electricity config) ensured");
+    // --- ELECTRICITY TELEMETRY RAW TABLES ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS electric_pln_telemetry (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        status_pm8000 BOOLEAN,
+        volt_ab NUMERIC(10,2),
+        volt_bc NUMERIC(10,2),
+        volt_ca NUMERIC(10,2),
+        volt_ll NUMERIC(10,2),
+        current_a NUMERIC(10,3),
+        current_b NUMERIC(10,3),
+        current_c NUMERIC(10,3),
+        frequency NUMERIC(6,3),
+        active_power NUMERIC(15,3),
+        reactive_power_total NUMERIC(15,3),
+        apparent_power_total NUMERIC(15,3),
+        power_factor NUMERIC,
+        voltage_unbalance NUMERIC,
+        current_unbalance NUMERIC,
+        thd_volt_a NUMERIC,
+        thd_volt_b NUMERIC,
+        thd_volt_c NUMERIC,
+        thd_current_a NUMERIC,
+        thd_current_b NUMERIC,
+        thd_current_c NUMERIC,
+        active_energy NUMERIC(15,3)
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS electric_wf1_telemetry (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        status_pm5500 BOOLEAN,
+        volt_ab NUMERIC(10,2),
+        volt_bc NUMERIC(10,2),
+        volt_ca NUMERIC(10,2),
+        volt_ll NUMERIC(10,2),
+        current_a NUMERIC(10,3),
+        current_b NUMERIC(10,3),
+        current_c NUMERIC(10,3),
+        frequency NUMERIC(6,3),
+        active_power_total NUMERIC(15,3),
+        reactive_power_total NUMERIC(15,3),
+        apparent_power_total NUMERIC(15,3),
+        power_factor NUMERIC,
+        voltage_unbalance NUMERIC,
+        current_unbalance NUMERIC,
+        thd_volt_a NUMERIC,
+        thd_volt_b NUMERIC,
+        thd_volt_c NUMERIC,
+        thd_current_a NUMERIC,
+        thd_current_b NUMERIC,
+        thd_current_c NUMERIC,
+        active_energy NUMERIC(15,3)
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS electric_wf2_telemetry (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        status_pm5500 BOOLEAN,
+        volt_ab NUMERIC(10,2),
+        volt_bc NUMERIC(10,2),
+        volt_ca NUMERIC(10,2),
+        volt_ll NUMERIC(10,2),
+        current_a NUMERIC(10,3),
+        current_b NUMERIC(10,3),
+        current_c NUMERIC(10,3),
+        frequency NUMERIC(6,3),
+        active_power_total NUMERIC(15,3),
+        reactive_power_total NUMERIC(15,3),
+        apparent_power_total NUMERIC(15,3),
+        power_factor NUMERIC,
+        voltage_unbalance NUMERIC,
+        current_unbalance NUMERIC,
+        thd_volt_a NUMERIC,
+        thd_volt_b NUMERIC,
+        thd_volt_c NUMERIC,
+        thd_current_a NUMERIC,
+        thd_current_b NUMERIC,
+        thd_current_c NUMERIC,
+        active_energy NUMERIC(15,3)
+      );
+    `);
+
+    // --- ELECTRICITY TELEMETRY MONTHLY TABLES ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS electric_pln_monthly (
+        year_month VARCHAR(7) PRIMARY KEY,
+        energy_start NUMERIC(15,3),
+        energy_end NUMERIC(15,3),
+        kwh_consumed NUMERIC(15,3),
+        active_power_peak NUMERIC(15,3),
+        volt_ll_avg NUMERIC(10,2),
+        current_avg NUMERIC(10,3),
+        power_factor_avg NUMERIC,
+        power_factor_min NUMERIC,
+        frequency_avg NUMERIC(6,3),
+        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS electric_wf1_monthly (
+        year_month VARCHAR(7) PRIMARY KEY,
+        energy_start NUMERIC(15,3),
+        energy_end NUMERIC(15,3),
+        kwh_consumed NUMERIC(15,3),
+        active_power_peak NUMERIC(15,3),
+        volt_ll_avg NUMERIC(10,2),
+        current_avg NUMERIC(10,3),
+        power_factor_avg NUMERIC,
+        power_factor_min NUMERIC,
+        frequency_avg NUMERIC(6,3),
+        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS electric_wf2_monthly (
+        year_month VARCHAR(7) PRIMARY KEY,
+        energy_start NUMERIC(15,3),
+        energy_end NUMERIC(15,3),
+        kwh_consumed NUMERIC(15,3),
+        active_power_peak NUMERIC(15,3),
+        volt_ll_avg NUMERIC(10,2),
+        current_avg NUMERIC(10,3),
+        power_factor_avg NUMERIC,
+        power_factor_min NUMERIC,
+        frequency_avg NUMERIC(6,3),
+        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Alter existing columns to avoid numeric field overflow
+    const tablesToAlter = ["electric_pln_telemetry", "electric_wf1_telemetry", "electric_wf2_telemetry"];
+    for (const table of tablesToAlter) {
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN voltage_unbalance TYPE NUMERIC;`);
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN current_unbalance TYPE NUMERIC;`);
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN thd_volt_a TYPE NUMERIC;`);
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN thd_volt_b TYPE NUMERIC;`);
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN thd_volt_c TYPE NUMERIC;`);
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN thd_current_a TYPE NUMERIC;`);
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN thd_current_b TYPE NUMERIC;`);
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN thd_current_c TYPE NUMERIC;`);
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN power_factor TYPE NUMERIC;`);
+    }
+
+    const monthlyTablesToAlter = ["electric_pln_monthly", "electric_wf1_monthly", "electric_wf2_monthly"];
+    for (const table of monthlyTablesToAlter) {
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN power_factor_avg TYPE NUMERIC;`);
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN power_factor_min TYPE NUMERIC;`);
+    }
+
+    logger.info("postgres tables ensured and migrated to NUMERIC successfully");
   } catch (err: any) {
     logger.error({ err }, "failed to ensure postgres tables");
   }

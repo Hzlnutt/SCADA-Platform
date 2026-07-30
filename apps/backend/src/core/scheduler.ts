@@ -21,6 +21,424 @@ let lastElectricityTs: Date | null = null;
 let pollingInterval: NodeJS.Timeout | null = null;
 let pfPollingInterval: NodeJS.Timeout | null = null;
 
+let incomingElectricityPollingInterval: NodeJS.Timeout | null = null;
+let incomingElectricityRollupInterval: NodeJS.Timeout | null = null;
+
+const parsePlnApi = (data: any, ts: Date) => {
+  return {
+    t_stamp: ts,
+    status_pm8000: data.Status_PM8000 !== undefined ? !!data.Status_PM8000 : null,
+    volt_ab: typeof data.VoltAB === "number" ? data.VoltAB : null,
+    volt_bc: typeof data.VoltBC === "number" ? data.VoltBC : null,
+    volt_ca: typeof data.VoltCA === "number" ? data.VoltCA : null,
+    volt_ll: typeof data.Volt_LL === "number" ? data.Volt_LL : null,
+    current_a: typeof data.Current_A === "number" ? data.Current_A : null,
+    current_b: typeof data.Current_B === "number" ? data.Current_B : null,
+    current_c: typeof data.Current_C === "number" ? data.Current_C : null,
+    frequency: typeof data.Frequency === "number" ? data.Frequency : null,
+    active_power: typeof data.Active_Power === "number" ? data.Active_Power : null,
+    reactive_power_total: typeof data.Reactive_Power_Total === "number" ? data.Reactive_Power_Total : null,
+    apparent_power_total: typeof data.Apparent_Power_Total === "number" ? data.Apparent_Power_Total : null,
+    power_factor: typeof data.Power_Factor === "number" ? data.Power_Factor : null,
+    voltage_unbalance: typeof data.Volatage_Unbalance === "number" ? data.Volatage_Unbalance : null,
+    current_unbalance: typeof data.Current_Umbalance === "number" ? data.Current_Umbalance : null,
+    thd_volt_a: typeof data.THD_Volt_A === "number" ? data.THD_Volt_A : null,
+    thd_volt_b: typeof data.THD_Volt_B === "number" ? data.THD_Volt_B : null,
+    thd_volt_c: typeof data.THD_Volt_C === "number" ? data.THD_Volt_C : null,
+    thd_current_a: typeof data.THD_Current_A === "number" ? data.THD_Current_A : null,
+    thd_current_b: typeof data.THD_Current_B === "number" ? data.THD_Current_B : null,
+    thd_current_c: typeof data.THD_Current_C === "number" ? data.THD_Current_C : null,
+    active_energy: typeof data.ActiveEnergy === "number" ? data.ActiveEnergy : null,
+  };
+};
+
+const parseWfApi = (data: any, ts: Date) => {
+  return {
+    t_stamp: ts,
+    status_pm5500: data.Status_PM5500_WF1 !== undefined ? !!data.Status_PM5500_WF1 : null,
+    volt_ab: typeof data.VoltAB === "number" ? data.VoltAB : null,
+    volt_bc: typeof data.VoltBC === "number" ? data.VoltBC : null,
+    volt_ca: typeof data.VoltCA === "number" ? data.VoltCA : null,
+    volt_ll: typeof data.Volt_LL === "number" ? data.Volt_LL : null,
+    current_a: typeof data.Current_A === "number" ? data.Current_A : null,
+    current_b: typeof data.Current_B === "number" ? data.Current_B : null,
+    current_c: typeof data.Current_C === "number" ? data.Current_C : null,
+    frequency: typeof data.Frequency === "number" ? data.Frequency : null,
+    active_power_total: typeof data.Active_Power_Total === "number" ? data.Active_Power_Total : null,
+    reactive_power_total: typeof data.Reactive_Power_Total === "number" ? data.Reactive_Power_Total : null,
+    apparent_power_total: typeof data.Apparent_Power_Total === "number" ? data.Apparent_Power_Total : null,
+    power_factor: typeof data.Power_Factor === "number" ? data.Power_Factor : null,
+    voltage_unbalance: typeof data.Volatage_Unbalance === "number" ? data.Volatage_Unbalance : null,
+    current_unbalance: typeof data.Current_Umbalance === "number" ? data.Current_Umbalance : null,
+    thd_volt_a: typeof data.THD_Volt_A === "number" ? data.THD_Volt_A : null,
+    thd_volt_b: typeof data.THD_Volt_B === "number" ? data.THD_Volt_B : null,
+    thd_volt_c: typeof data.THD_Volt_C === "number" ? data.THD_Volt_C : null,
+    thd_current_a: typeof data.THD_Current_A === "number" ? data.THD_Current_A : null,
+    thd_current_b: typeof data.THD_Current_B === "number" ? data.THD_Current_B : null,
+    thd_current_c: typeof data.THD_Current_C === "number" ? data.THD_Current_C : null,
+    active_energy: typeof data.ActiveEnergy === "number" ? data.ActiveEnergy : null,
+  };
+};
+
+const insertPlnTelemetry = async (payload: ReturnType<typeof parsePlnApi>) => {
+  const pool = getPostgresPool();
+  await pool.query(`
+    INSERT INTO electric_pln_telemetry (
+      t_stamp, status_pm8000, volt_ab, volt_bc, volt_ca, volt_ll,
+      current_a, current_b, current_c, frequency, active_power,
+      reactive_power_total, apparent_power_total, power_factor,
+      voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+      thd_current_a, thd_current_b, thd_current_c, active_energy
+    ) VALUES (
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+    )
+  `, [
+    payload.t_stamp, payload.status_pm8000, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
+    payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power,
+    payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
+    payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
+    payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy
+  ]);
+};
+
+const insertWfTelemetry = async (table: "electric_wf1_telemetry" | "electric_wf2_telemetry", payload: ReturnType<typeof parseWfApi>) => {
+  const pool = getPostgresPool();
+  await pool.query(`
+    INSERT INTO ${table} (
+      t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
+      current_a, current_b, current_c, frequency, active_power_total,
+      reactive_power_total, apparent_power_total, power_factor,
+      voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+      thd_current_a, thd_current_b, thd_current_c, active_energy
+    ) VALUES (
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+    )
+  `, [
+    payload.t_stamp, payload.status_pm5500, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
+    payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power_total,
+    payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
+    payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
+    payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy
+  ]);
+};
+
+const fetchJsonWithTimeout = async (url: string, timeoutMs: number = 800): Promise<any> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+};
+
+const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
+  const io = getSocketServer();
+  if (!io) return;
+
+  const isPln = deviceId === "Cubicle_PLN_PM8000";
+  const rawActive = pgPq.active_power !== undefined ? pgPq.active_power : pgPq.active_power_total;
+  const activePowerVal = rawActive !== null ? Number(rawActive) / 1000.0 : 0;
+  const reactivePowerVal = pgPq.reactive_power_total !== null ? Number(pgPq.reactive_power_total) / 1000.0 : 0;
+  const apparentPowerVal = pgPq.apparent_power_total !== null ? Number(pgPq.apparent_power_total) / 1000.0 : 0;
+  const pfVal = pgPq.power_factor !== null ? Math.abs(Number(pgPq.power_factor)) : 1.0;
+  const freqVal = pgPq.frequency !== null ? Number(pgPq.frequency) : 50.0;
+  const voltLAvg = pgPq.volt_ll !== null ? Number(pgPq.volt_ll) / 1000.0 : 20.0;
+  const voltABVal = pgPq.volt_ab !== null ? Number(pgPq.volt_ab) / 1000.0 : 20.0;
+  const voltBCVal = pgPq.volt_bc !== null ? Number(pgPq.volt_bc) / 1000.0 : 20.0;
+  const voltCAVal = pgPq.volt_ca !== null ? Number(pgPq.volt_ca) / 1000.0 : 20.0;
+  const currentAVal = pgPq.current_a !== null ? Number(pgPq.current_a) : 0;
+  const currentBVal = pgPq.current_b !== null ? Number(pgPq.current_b) : 0;
+  const currentCVal = pgPq.current_c !== null ? Number(pgPq.current_c) : 0;
+  
+  let vUnbVal = 0;
+  const rawVUnb = pgPq.voltage_unbalance !== null ? Number(pgPq.voltage_unbalance) : null;
+  if (rawVUnb !== null) {
+    vUnbVal = rawVUnb < 1.0 ? rawVUnb * 100.0 : rawVUnb;
+  }
+  let iUnbVal = 0;
+  const rawIUnb = pgPq.current_unbalance !== null ? Number(pgPq.current_unbalance) : null;
+  if (rawIUnb !== null) {
+    iUnbVal = rawIUnb < 1.0 ? rawIUnb * 100.0 : rawIUnb;
+  }
+
+  let thdVR = 0, thdVS = 0, thdVT = 0;
+  const rawThdVA = pgPq.thd_volt_a !== null ? Number(pgPq.thd_volt_a) : null;
+  const rawThdVB = pgPq.thd_volt_b !== null ? Number(pgPq.thd_volt_b) : null;
+  const rawThdVC = pgPq.thd_volt_c !== null ? Number(pgPq.thd_volt_c) : null;
+  if (rawThdVA !== null) thdVR = rawThdVA < 1.0 ? rawThdVA * 100.0 : rawThdVA;
+  if (rawThdVB !== null) thdVS = rawThdVB < 1.0 ? rawThdVB * 100.0 : rawThdVB;
+  if (rawThdVC !== null) thdVT = rawThdVC < 1.0 ? rawThdVC * 100.0 : rawThdVC;
+  const thdVVVal = (thdVR + thdVS + thdVT) / 3.0;
+
+  let thdIR = 0, thdIS = 0, thdIT = 0;
+  const rawThdIA = pgPq.thd_current_a !== null ? Number(pgPq.thd_current_a) : null;
+  const rawThdIB = pgPq.thd_current_b !== null ? Number(pgPq.thd_current_b) : null;
+  const rawThdIC = pgPq.thd_current_c !== null ? Number(pgPq.thd_current_c) : null;
+  if (rawThdIA !== null) thdIR = rawThdIA < 1.0 ? rawThdIA * 100.0 : rawThdIA;
+  if (rawThdIB !== null) thdIS = rawThdIB < 1.0 ? rawThdIB * 100.0 : rawThdIB;
+  if (rawThdIC !== null) thdIT = rawThdIC < 1.0 ? rawThdIC * 100.0 : rawThdIC;
+  const thdIIVal = (thdIR + thdIS + thdIT) / 3.0;
+
+  const statusVal = isPln ? pgPq.status_pm8000 : pgPq.status_pm5500;
+  const isConnected = statusVal !== null ? !!statusVal : true;
+
+  const vln1 = voltABVal / Math.sqrt(3);
+  const vln2 = voltBCVal / Math.sqrt(3);
+  const vln3 = voltCAVal / Math.sqrt(3);
+
+  io.emit("electricity:live_update", {
+    deviceId,
+    pqData: {
+      activePower: Number(activePowerVal.toFixed(1)),
+      reactivePower: Number(reactivePowerVal.toFixed(1)),
+      apparentPower: Number(apparentPowerVal.toFixed(1)),
+      pf: pfVal !== null ? Number(pfVal.toFixed(3)) : null,
+      pfStatus: isConnected ? "connected" : "offline",
+      freq: Number(freqVal.toFixed(2)),
+      vUnb: Number(vUnbVal.toFixed(2)),
+      iUnb: Number(iUnbVal.toFixed(2)),
+      thdV: Number(thdVVVal.toFixed(2)),
+      thdI: Number(thdIIVal.toFixed(2)),
+      vll1: Number(voltABVal.toFixed(2)),
+      vll2: Number(voltBCVal.toFixed(2)),
+      vll3: Number(voltCAVal.toFixed(2)),
+      vln1: Number(vln1.toFixed(2)),
+      vln2: Number(vln2.toFixed(2)),
+      vln3: Number(vln3.toFixed(2)),
+      current1: Number(currentAVal.toFixed(1)),
+      current2: Number(currentBVal.toFixed(1)),
+      current3: Number(currentCVal.toFixed(1)),
+      vR: Number(vln1.toFixed(3)),
+      vS: Number(vln2.toFixed(3)),
+      vT: Number(vln3.toFixed(3)),
+      iR: Number(currentAVal.toFixed(1)),
+      iS: Number(currentBVal.toFixed(1)),
+      iT: Number(currentCVal.toFixed(1)),
+      thdV_R: Number(thdVR.toFixed(2)),
+      thdV_S: Number(thdVS.toFixed(2)),
+      thdV_T: Number(thdVT.toFixed(2)),
+      thdI_R: Number(thdIR.toFixed(2)),
+      thdI_S: Number(thdIS.toFixed(2)),
+      thdI_T: Number(thdIT.toFixed(2)),
+      voltage: Number(voltLAvg.toFixed(2))
+    }
+  });
+};
+const broadcastLiveTelemetryOffline = (deviceId: string) => {
+  const io = getSocketServer();
+  if (!io) return;
+  io.emit("electricity:live_update", {
+    deviceId,
+    pqData: {
+      pfStatus: "offline"
+    }
+  });
+};
+
+export const startIncomingElectricityPolling = () => {
+  if (incomingElectricityPollingInterval) return;
+
+  const poll = async () => {
+    const ts = new Date();
+    
+    // Fetch and store PLN
+    try {
+      const data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln");
+      const parsed = parsePlnApi(data, ts);
+      await insertPlnTelemetry(parsed);
+      broadcastLiveTelemetry("Cubicle_PLN_PM8000", parsed);
+    } catch (err: any) {
+      logger.warn(`Incoming PLN polling failed: ${err.message}`);
+      broadcastLiveTelemetryOffline("Cubicle_PLN_PM8000");
+    }
+
+    // Fetch and store WF1
+    try {
+      const data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1");
+      const parsed = parseWfApi(data, ts);
+      await insertWfTelemetry("electric_wf1_telemetry", parsed);
+      broadcastLiveTelemetry("Feeder_WF1_PM5560", parsed);
+    } catch (err: any) {
+      logger.warn(`Incoming WF1 polling failed: ${err.message}`);
+      broadcastLiveTelemetryOffline("Feeder_WF1_PM5560");
+    }
+
+    // Fetch and store WF2
+    try {
+      const data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2");
+      const parsed = parseWfApi(data, ts);
+      await insertWfTelemetry("electric_wf2_telemetry", parsed);
+      broadcastLiveTelemetry("Feeder_WF2_PM5500", parsed);
+    } catch (err: any) {
+      logger.warn(`Incoming WF2 polling failed: ${err.message}`);
+      broadcastLiveTelemetryOffline("Feeder_WF2_PM5500");
+    }
+  };
+
+  poll();
+  incomingElectricityPollingInterval = setInterval(poll, 1000);
+};
+
+const rollupMonthlyForMonth = async (yearMonth: string) => {
+  const pool = getPostgresPool();
+  const startStr = `${yearMonth}-01 00:00:00`;
+  const [year, month] = yearMonth.split("-").map(Number);
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  const endStr = `${nextYear}-${nextMonth.toString().padStart(2, "0")}-01 00:00:00`;
+
+  // 1. PLN Rollup
+  const plnAgg = await pool.query(`
+    SELECT 
+      MIN(active_energy) as energy_start,
+      MAX(active_energy) as energy_end,
+      MAX(active_power) as active_power_peak,
+      AVG(volt_ll) as volt_ll_avg,
+      AVG((current_a + current_b + current_c) / 3.0) as current_avg,
+      AVG(power_factor) as power_factor_avg,
+      MIN(power_factor) as power_factor_min,
+      AVG(frequency) as frequency_avg
+    FROM electric_pln_telemetry
+    WHERE t_stamp >= $1 AND t_stamp < $2
+  `, [startStr, endStr]);
+
+  if (plnAgg.rows[0] && plnAgg.rows[0].energy_start !== null) {
+    const r = plnAgg.rows[0];
+    const kwh_consumed = Number(r.energy_end) - Number(r.energy_start);
+    await pool.query(`
+      INSERT INTO electric_pln_monthly (
+        year_month, energy_start, energy_end, kwh_consumed, active_power_peak,
+        volt_ll_avg, current_avg, power_factor_avg, power_factor_min, frequency_avg, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+      ON CONFLICT (year_month) DO UPDATE SET
+        energy_start = EXCLUDED.energy_start,
+        energy_end = EXCLUDED.energy_end,
+        kwh_consumed = EXCLUDED.kwh_consumed,
+        active_power_peak = EXCLUDED.active_power_peak,
+        volt_ll_avg = EXCLUDED.volt_ll_avg,
+        current_avg = EXCLUDED.current_avg,
+        power_factor_avg = EXCLUDED.power_factor_avg,
+        power_factor_min = EXCLUDED.power_factor_min,
+        frequency_avg = EXCLUDED.frequency_avg,
+        updated_at = NOW()
+    `, [
+      yearMonth, r.energy_start, r.energy_end, kwh_consumed, r.active_power_peak,
+      r.volt_ll_avg, r.current_avg, r.power_factor_avg, r.power_factor_min, r.frequency_avg
+    ]);
+  }
+
+  // 2. WF1 Rollup
+  const wf1Agg = await pool.query(`
+    SELECT 
+      MIN(active_energy) as energy_start,
+      MAX(active_energy) as energy_end,
+      MAX(active_power_total) as active_power_peak,
+      AVG(volt_ll) as volt_ll_avg,
+      AVG((current_a + current_b + current_c) / 3.0) as current_avg,
+      AVG(power_factor) as power_factor_avg,
+      MIN(power_factor) as power_factor_min,
+      AVG(frequency) as frequency_avg
+    FROM electric_wf1_telemetry
+    WHERE t_stamp >= $1 AND t_stamp < $2
+  `, [startStr, endStr]);
+
+  if (wf1Agg.rows[0] && wf1Agg.rows[0].energy_start !== null) {
+    const r = wf1Agg.rows[0];
+    const kwh_consumed = Number(r.energy_end) - Number(r.energy_start);
+    await pool.query(`
+      INSERT INTO electric_wf1_monthly (
+        year_month, energy_start, energy_end, kwh_consumed, active_power_peak,
+        volt_ll_avg, current_avg, power_factor_avg, power_factor_min, frequency_avg, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+      ON CONFLICT (year_month) DO UPDATE SET
+        energy_start = EXCLUDED.energy_start,
+        energy_end = EXCLUDED.energy_end,
+        kwh_consumed = EXCLUDED.kwh_consumed,
+        active_power_peak = EXCLUDED.active_power_peak,
+        volt_ll_avg = EXCLUDED.volt_ll_avg,
+        current_avg = EXCLUDED.current_avg,
+        power_factor_avg = EXCLUDED.power_factor_avg,
+        power_factor_min = EXCLUDED.power_factor_min,
+        frequency_avg = EXCLUDED.frequency_avg,
+        updated_at = NOW()
+    `, [
+      yearMonth, r.energy_start, r.energy_end, kwh_consumed, r.active_power_peak,
+      r.volt_ll_avg, r.current_avg, r.power_factor_avg, r.power_factor_min, r.frequency_avg
+    ]);
+  }
+
+  // 3. WF2 Rollup
+  const wf2Agg = await pool.query(`
+    SELECT 
+      MIN(active_energy) as energy_start,
+      MAX(active_energy) as energy_end,
+      MAX(active_power_total) as active_power_peak,
+      AVG(volt_ll) as volt_ll_avg,
+      AVG((current_a + current_b + current_c) / 3.0) as current_avg,
+      AVG(power_factor) as power_factor_avg,
+      MIN(power_factor) as power_factor_min,
+      AVG(frequency) as frequency_avg
+    FROM electric_wf2_telemetry
+    WHERE t_stamp >= $1 AND t_stamp < $2
+  `, [startStr, endStr]);
+
+  if (wf2Agg.rows[0] && wf2Agg.rows[0].energy_start !== null) {
+    const r = wf2Agg.rows[0];
+    const kwh_consumed = Number(r.energy_end) - Number(r.energy_start);
+    await pool.query(`
+      INSERT INTO electric_wf2_monthly (
+        year_month, energy_start, energy_end, kwh_consumed, active_power_peak,
+        volt_ll_avg, current_avg, power_factor_avg, power_factor_min, frequency_avg, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+      ON CONFLICT (year_month) DO UPDATE SET
+        energy_start = EXCLUDED.energy_start,
+        energy_end = EXCLUDED.energy_end,
+        kwh_consumed = EXCLUDED.kwh_consumed,
+        active_power_peak = EXCLUDED.active_power_peak,
+        volt_ll_avg = EXCLUDED.volt_ll_avg,
+        current_avg = EXCLUDED.current_avg,
+        power_factor_avg = EXCLUDED.power_factor_avg,
+        power_factor_min = EXCLUDED.power_factor_min,
+        frequency_avg = EXCLUDED.frequency_avg,
+        updated_at = NOW()
+    `, [
+      yearMonth, r.energy_start, r.energy_end, kwh_consumed, r.active_power_peak,
+      r.volt_ll_avg, r.current_avg, r.power_factor_avg, r.power_factor_min, r.frequency_avg
+    ]);
+  }
+};
+
+export const runElectricityRollupAndCleanup = async () => {
+  try {
+    const now = new Date();
+    // Rollup current month
+    const yearMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}`;
+    await rollupMonthlyForMonth(yearMonth);
+
+    // Rollup previous month
+    const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevYearMonth = `${prevMonthDate.getFullYear()}-${(prevMonthDate.getMonth() + 1).toString().padStart(2, "0")}`;
+    await rollupMonthlyForMonth(prevYearMonth);
+
+    logger.info({ yearMonth, prevYearMonth }, "Electricity monthly rollup updated successfully");
+
+    // Cleanup raw telemetry data older than 1 month
+    const pool = getPostgresPool();
+    await pool.query(`DELETE FROM electric_pln_telemetry WHERE t_stamp < NOW() - INTERVAL '1 month';`);
+    await pool.query(`DELETE FROM electric_wf1_telemetry WHERE t_stamp < NOW() - INTERVAL '1 month';`);
+    await pool.query(`DELETE FROM electric_wf2_telemetry WHERE t_stamp < NOW() - INTERVAL '1 month';`);
+
+    logger.info("Cleared raw electricity telemetry older than 1 month from PostgreSQL");
+  } catch (err: any) {
+    logger.error({ err: err.message }, "Electricity rollup/cleanup job failed");
+  }
+};
+
 export const startPostgresPolling = () => {
   if (pollingInterval) return;
 
@@ -425,6 +843,19 @@ export const startScheduler = () => {
   startPowerFactorPolling();
   startCoolingTowerPolling();
   startWaterPolling();
+  startIncomingElectricityPolling();
+
+  // Initial rollup and cleanup on start
+  runElectricityRollupAndCleanup().catch((err) => {
+    logger.error({ err }, "Initial electricity rollup/cleanup failed");
+  });
+
+  // Hourly rollup and cleanup
+  setInterval(() => {
+    runElectricityRollupAndCleanup().catch((err) => {
+      logger.error({ err }, "Periodic electricity rollup/cleanup failed");
+    });
+  }, 60 * 60 * 1000);
 
   setInterval(() => {
     rollupTelemetryMinute().catch((err) => {

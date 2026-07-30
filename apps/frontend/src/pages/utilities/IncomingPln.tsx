@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Line, Radar } from "react-chartjs-2";
 import "../../components/charts/chartjs";
-import { getJson } from "../../services/api.client";
+import { getJson, postJson } from "../../services/api.client";
 import { getSocket } from "../../services/socket.service";
 import { useSystemStore } from "../../store/system.store";
 
@@ -88,6 +88,69 @@ export default function IncomingPln() {
   const isDark = theme === "dark";
   const location = useLocation();
 
+  // Standards configuration state
+  const [standards, setStandards] = useState({
+    voltageNominal: 20.0,
+    voltageTolerance: 5.0,
+    frequencyNominal: 50.0,
+    frequencyTolerance: 0.5,
+    activePowerMax: 0,
+    reactivePowerMax: 0,
+    apparentPowerMax: 0,
+    powerFactorMin: 0.85,
+    unbalanceVMax: 2.0,
+    unbalanceIMax: 10.0,
+    thdVoltageMax: 5.0,
+    thdCurrentMax: 8.0
+  });
+
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+
+  // Form temporary state inside config modal
+  const [formStds, setFormStds] = useState(standards);
+
+  // Load standards from Postgres config
+  useEffect(() => {
+    getJson<{ data: any[] }>("/config/electricity?configType=sumber_utama_standards")
+      .then((res) => {
+        if (res?.data && res.data.length > 0) {
+          const stored = res.data.find(item => item.config_key === "standards");
+          if (stored && stored.value) {
+            setStandards(stored.value);
+            setFormStds(stored.value);
+          }
+        }
+      })
+      .catch((err) => console.error("Failed to load PLN standards:", err));
+  }, []);
+
+  const handleOpenConfig = () => {
+    setFormStds(standards);
+    setShowConfigModal(true);
+  };
+
+  const handleSaveStandards = async () => {
+    setSavingConfig(true);
+    try {
+      await postJson("/config/electricity", {
+        config_type: "sumber_utama_standards",
+        config_key: "standards",
+        label: "Incoming PLN Standards",
+        value: formStds,
+        sort_order: 0,
+        enabled: true
+      });
+      setStandards(formStds);
+      setShowConfigModal(false);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save standard settings.");
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
   // Determine current mode based on route URL
   const mode = useMemo(() => {
     if (location.pathname.endsWith("incoming-fact-1")) return "fact1";
@@ -157,8 +220,12 @@ export default function IncomingPln() {
     vR: 11.541, vS: 11.558, vT: 11.640,
     iR: 120.6, iS: 121.2, iT: 125.9,
     thdV_R: 2.51, thdV_S: 2.34, thdV_T: 1.92,
-    thdI_R: 6.20, thdI_S: 5.78, thdI_T: 5.55
+    thdI_R: 6.20, thdI_S: 5.78, thdI_T: 5.55,
+    isConnected: true
   });
+
+  const [voltageTrend, setVoltageTrend] = useState<{ hour: string; value: number }[]>([]);
+  const [activePowerTrend, setActivePowerTrend] = useState<{ hour: string; value: number }[]>([]);
 
   // Event & alarm logs
   const [events, setEvents] = useState(MOCK_EVENTS);
@@ -171,13 +238,33 @@ export default function IncomingPln() {
           const pq = res.data.pqData;
           setMetrics((prev) => ({
             ...prev,
-            voltage: pq.voltage || prev.voltage,
-            frequency: pq.frequency || prev.frequency,
-            activePower: pq.activePower || prev.activePower,
-            powerFactor: pq.pf || prev.powerFactor,
-            reactivePower: pq.reactivePower || prev.reactivePower,
-            apparentPower: pq.apparentPower || prev.apparentPower
+            voltage: pq.voltage !== undefined ? pq.voltage : prev.voltage,
+            frequency: pq.freq !== undefined ? pq.freq : (pq.frequency !== undefined ? pq.frequency : prev.frequency),
+            activePower: pq.activePower !== undefined ? pq.activePower : prev.activePower,
+            powerFactor: pq.pf !== undefined && pq.pf !== null ? pq.pf : prev.powerFactor,
+            reactivePower: pq.reactivePower !== undefined ? pq.reactivePower : prev.reactivePower,
+            apparentPower: pq.apparentPower !== undefined ? pq.apparentPower : prev.apparentPower,
+            unbalanceV: pq.vUnb !== undefined ? pq.vUnb : prev.unbalanceV,
+            unbalanceI: pq.iUnb !== undefined ? pq.iUnb : prev.unbalanceI,
+            vR: pq.vR !== undefined ? pq.vR : prev.vR,
+            vS: pq.vS !== undefined ? pq.vS : prev.vS,
+            vT: pq.vT !== undefined ? pq.vT : prev.vT,
+            iR: pq.iR !== undefined ? pq.iR : prev.iR,
+            iS: pq.iS !== undefined ? pq.iS : prev.iS,
+            iT: pq.iT !== undefined ? pq.iT : prev.iT,
+            thdV_R: pq.thdV_R !== undefined ? pq.thdV_R : prev.thdV_R,
+            thdV_S: pq.thdV_S !== undefined ? pq.thdV_S : prev.thdV_S,
+            thdV_T: pq.thdV_T !== undefined ? pq.thdV_T : prev.thdV_T,
+            thdI_R: pq.thdI_R !== undefined ? pq.thdI_R : prev.thdI_R,
+            thdI_S: pq.thdI_S !== undefined ? pq.thdI_S : prev.thdI_S,
+            thdI_T: pq.thdI_T !== undefined ? pq.thdI_T : prev.thdI_T,
+            isConnected: pq.pfStatus === "connected"
           }));
+        }
+        if (res?.data?.charts) {
+          const charts = res.data.charts;
+          if (charts.voltage24h) setVoltageTrend(charts.voltage24h);
+          if (charts.activePower24h) setActivePowerTrend(charts.activePower24h);
         }
         setLoading(false);
       })
@@ -206,7 +293,8 @@ export default function IncomingPln() {
       iS: 121.2 * (config.activePowerBase / 4278),
       iT: 125.9 * (config.activePowerBase / 4278),
       thdV_R: 2.51, thdV_S: 2.34, thdV_T: 1.92,
-      thdI_R: 6.20, thdI_S: 5.78, thdI_T: 5.55
+      thdI_R: 6.20, thdI_S: 5.78, thdI_T: 5.55,
+      isConnected: true
     });
   }, [config]);
 
@@ -219,35 +307,70 @@ export default function IncomingPln() {
   // Handle socket updates
   useEffect(() => {
     const socket = getSocket();
-    const handlePfUpdate = (payload: any) => {
-      if (payload?.value) {
+    
+    const handleLiveUpdate = (payload: any) => {
+      if (payload && payload.deviceId === config.deviceId && payload.pqData) {
+        const pq = payload.pqData;
         setMetrics((prev) => ({
           ...prev,
-          powerFactor: payload.value
+          voltage: pq.voltage !== undefined ? pq.voltage : prev.voltage,
+          frequency: pq.freq !== undefined ? pq.freq : prev.frequency,
+          activePower: pq.activePower !== undefined ? pq.activePower : prev.activePower,
+          powerFactor: pq.pf !== undefined && pq.pf !== null ? pq.pf : prev.powerFactor,
+          reactivePower: pq.reactivePower !== undefined ? pq.reactivePower : prev.reactivePower,
+          apparentPower: pq.apparentPower !== undefined ? pq.apparentPower : prev.apparentPower,
+          unbalanceV: pq.vUnb !== undefined ? pq.vUnb : prev.unbalanceV,
+          unbalanceI: pq.iUnb !== undefined ? pq.iUnb : prev.unbalanceI,
+          vR: pq.vR !== undefined ? pq.vR : prev.vR,
+          vS: pq.vS !== undefined ? pq.vS : prev.vS,
+          vT: pq.vT !== undefined ? pq.vT : prev.vT,
+          iR: pq.iR !== undefined ? pq.iR : prev.iR,
+          iS: pq.iS !== undefined ? pq.iS : prev.iS,
+          iT: pq.iT !== undefined ? pq.iT : prev.iT,
+          thdV_R: pq.thdV_R !== undefined ? pq.thdV_R : prev.thdV_R,
+          thdV_S: pq.thdV_S !== undefined ? pq.thdV_S : prev.thdV_S,
+          thdV_T: pq.thdV_T !== undefined ? pq.thdV_T : prev.thdV_T,
+          thdI_R: pq.thdI_R !== undefined ? pq.thdI_R : prev.thdI_R,
+          thdI_S: pq.thdI_S !== undefined ? pq.thdI_S : prev.thdI_S,
+          thdI_T: pq.thdI_T !== undefined ? pq.thdI_T : prev.thdI_T,
+          isConnected: pq.pfStatus === "connected"
         }));
       }
     };
-    socket.on("power_factor:status", handlePfUpdate);
+
+    socket.on("electricity:live_update", handleLiveUpdate);
     return () => {
-      socket.off("power_factor:status", handlePfUpdate);
+      socket.off("electricity:live_update", handleLiveUpdate);
     };
-  }, []);
+  }, [config.deviceId]);
 
   // Radar PQ index chart data
-  const radarData = {
-    labels: ["Voltage", "Current", "PF", "Freq", "THD-V", "THD-I"],
-    datasets: [
-      {
-        label: "Daya Aktual",
-        data: [98, 92, metrics.powerFactor * 100, 99.8, 94.5, 91.2],
-        backgroundColor: "rgba(56, 189, 248, 0.25)",
-        borderColor: "#38bdf8",
-        borderWidth: 2,
-        pointBackgroundColor: "#0284c7",
-        pointBorderColor: "#fff"
-      }
-    ]
-  };
+  const radarData = useMemo(() => {
+    const avgCurrent = (metrics.iR + metrics.iS + metrics.iT) / 3;
+    const avgThdV = (metrics.thdV_R + metrics.thdV_S + metrics.thdV_T) / 3;
+    const avgThdI = (metrics.thdI_R + metrics.thdI_S + metrics.thdI_T) / 3;
+    return {
+      labels: ["Voltage", "Current", "PF", "Freq", "THD-V", "THD-I"],
+      datasets: [
+        {
+          label: "Daya Aktual",
+          data: [
+            (metrics.voltage / config.voltageBase) * 100,
+            avgCurrent > 0 ? 95 : 0,
+            metrics.powerFactor * 100,
+            (metrics.frequency / 50) * 100,
+            Math.max(0, 100 - avgThdV),
+            Math.max(0, 100 - avgThdI)
+          ],
+          backgroundColor: "rgba(56, 189, 248, 0.25)",
+          borderColor: "#38bdf8",
+          borderWidth: 2,
+          pointBackgroundColor: "#0284c7",
+          pointBorderColor: "#fff"
+        }
+      ]
+    };
+  }, [metrics, config.voltageBase]);
 
   const radarOptions: any = {
     responsive: true,
@@ -269,37 +392,49 @@ export default function IncomingPln() {
   };
 
   // 24 Hour Line Trend Data
-  const trendLabels = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
+  const trendLabels = useMemo(() => Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`), []);
 
-  const voltageTrendData = {
-    labels: trendLabels,
-    datasets: [
-      {
-        label: "Tegangan (kV)",
-        data: Array.from({ length: 24 }, () => 20.0 + Math.random() * 0.15),
-        borderColor: "#eab308",
-        backgroundColor: "rgba(234, 179, 8, 0.05)",
-        tension: 0.3,
-        borderWidth: 2,
-        pointRadius: 0
-      }
-    ]
-  };
+  const voltageTrendData = useMemo(() => {
+    const dataMap = new Map(voltageTrend.map(item => [item.hour, item.value]));
+    const dataPoints = trendLabels.map(label => dataMap.get(label) ?? null);
+    const hasData = voltageTrend.length > 0;
+    
+    return {
+      labels: trendLabels,
+      datasets: [
+        {
+          label: "Tegangan (kV)",
+          data: hasData ? dataPoints : [],
+          borderColor: "#eab308",
+          backgroundColor: "rgba(234, 179, 8, 0.05)",
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 0
+        }
+      ]
+    };
+  }, [voltageTrend, trendLabels]);
 
-  const activePowerTrendData = {
-    labels: trendLabels,
-    datasets: [
-      {
-        label: "Daya Aktif (kW)",
-        data: Array.from({ length: 24 }, () => 4000 + Math.random() * 500),
-        borderColor: "#10b981",
-        backgroundColor: "rgba(16, 185, 129, 0.05)",
-        tension: 0.3,
-        borderWidth: 2,
-        pointRadius: 0
-      }
-    ]
-  };
+  const activePowerTrendData = useMemo(() => {
+    const dataMap = new Map(activePowerTrend.map(item => [item.hour, item.value]));
+    const dataPoints = trendLabels.map(label => dataMap.get(label) ?? null);
+    const hasData = activePowerTrend.length > 0;
+    
+    return {
+      labels: trendLabels,
+      datasets: [
+        {
+          label: "Daya Aktif (kW)",
+          data: hasData ? dataPoints : [],
+          borderColor: "#10b981",
+          backgroundColor: "rgba(16, 185, 129, 0.05)",
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 0
+        }
+      ]
+    };
+  }, [activePowerTrend, trendLabels]);
 
   const lineOptions = (title: string, color: string, unit: string) => ({
     responsive: true,
@@ -331,10 +466,24 @@ export default function IncomingPln() {
           title={config.title}
           description={`Monitoring real-time parameter kelistrikan ${config.title} - Update setiap 3 detik`}
         />
-        <span className="px-3 py-1.5 rounded-full text-xs font-extrabold uppercase bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          {config.connectedLabel}
-        </span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleOpenConfig}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700 shadow-sm"
+          >
+            ⚙️ Config Standar
+          </button>
+          <span className={`px-3 py-1.5 rounded-full text-xs font-extrabold uppercase flex items-center gap-1.5 border transition-colors duration-300 ${
+            metrics.isConnected
+              ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+              : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+          }`}>
+            <span className={`h-2 w-2 rounded-full animate-pulse ${
+              metrics.isConnected ? "bg-emerald-500" : "bg-rose-500"
+            }`} />
+            {metrics.isConnected ? config.connectedLabel : "DISCONNECTED"}
+          </span>
+        </div>
       </div>
 
       {/* ═══════════ SECTION A: SIX METRIC CARDS ═══════════ */}
@@ -438,8 +587,8 @@ export default function IncomingPln() {
 
       {/* ═══════════ SECTION B: POWER QUALITY INDEX & GAUGES ═══════════ */}
       <section className="grid gap-6 md:grid-cols-3">
-        <UnbalancedGauge label="Voltage Unbalanced" value={metrics.unbalanceV} maxAllowed={2} isDark={isDark} />
-        <UnbalancedGauge label="Current Unbalanced" value={metrics.unbalanceI} maxAllowed={10} isDark={isDark} />
+        <UnbalancedGauge label="Voltage Unbalanced" value={metrics.unbalanceV} maxAllowed={standards.unbalanceVMax} isDark={isDark} />
+        <UnbalancedGauge label="Current Unbalanced" value={metrics.unbalanceI} maxAllowed={standards.unbalanceIMax} isDark={isDark} />
 
         {/* Power Quality Radar Index */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
@@ -666,21 +815,12 @@ export default function IncomingPln() {
             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Recent 5 events</span>
           </div>
 
-          <div className="flex-1 space-y-2">
-            {events.map((ev, idx) => (
-              <div key={idx} className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-slate-800/60 text-xs">
-                <span className="font-mono text-slate-400">{ev.time}</span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
-                  ev.type === "INFO" ? "bg-blue-500/10 text-blue-500 border-blue-500/20" :
-                  ev.type === "WARN" ? "bg-amber-500/10 text-amber-500 border-amber-500/20" :
-                  "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                }`}>
-                  {ev.type}
-                </span>
-                <span className="font-semibold text-slate-500 max-w-[80px] truncate">{ev.source}</span>
-                <span className="text-slate-700 dark:text-slate-300 font-semibold truncate flex-1 text-right ml-4">{ev.message}</span>
-              </div>
-            ))}
+          <div className="flex-1 flex flex-col items-center justify-center py-6 text-center">
+            <svg className="h-8 w-8 text-rose-500 mb-2 opacity-85" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span className="text-xs font-bold text-red-500 font-mono tracking-wider">API TIDAK TERSEDIA</span>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 max-w-[200px]">Data event dan alarm log belum terintegrasi ke database/API.</p>
           </div>
         </div>
       </section>
@@ -706,100 +846,327 @@ export default function IncomingPln() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-semibold text-slate-800 dark:text-slate-200">
+              {/* Tegangan */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Tegangan</td>
                 <td className="py-3 px-3 font-mono">{metrics.voltage.toFixed(2)}</td>
                 <td className="py-3 px-3">kV</td>
-                <td className="py-3 px-3 font-mono">20 ± 5%</td>
+                <td className="py-3 px-3 font-mono">{standards.voltageNominal} ± {standards.voltageTolerance}%</td>
                 <td className="py-3 px-3 text-right">
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  {Math.abs(metrics.voltage - standards.voltageNominal) <= (standards.voltageNominal * standards.voltageTolerance / 100) ? (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  )}
                 </td>
               </tr>
+              {/* Frekuensi */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Frekuensi</td>
                 <td className="py-3 px-3 font-mono">{metrics.frequency.toFixed(2)}</td>
                 <td className="py-3 px-3">Hz</td>
-                <td className="py-3 px-3 font-mono">50 ± 0.5</td>
+                <td className="py-3 px-3 font-mono">{standards.frequencyNominal} ± {standards.frequencyTolerance}</td>
                 <td className="py-3 px-3 text-right">
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  {Math.abs(metrics.frequency - standards.frequencyNominal) <= standards.frequencyTolerance ? (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  )}
                 </td>
               </tr>
+              {/* Active Power */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Active Power</td>
                 <td className="py-3 px-3 font-mono">{metrics.activePower}</td>
                 <td className="py-3 px-3">kW</td>
-                <td className="py-3 px-3 font-mono">—</td>
+                <td className="py-3 px-3 font-mono">{standards.activePowerMax > 0 ? `≤ ${standards.activePowerMax}` : "—"}</td>
                 <td className="py-3 px-3 text-right">
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  {standards.activePowerMax > 0 && metrics.activePower > standards.activePowerMax ? (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  )}
                 </td>
               </tr>
+              {/* Reactive Power */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Reactive Power</td>
                 <td className="py-3 px-3 font-mono">{metrics.reactivePower}</td>
                 <td className="py-3 px-3">kVAR</td>
-                <td className="py-3 px-3 font-mono">—</td>
+                <td className="py-3 px-3 font-mono">{standards.reactivePowerMax > 0 ? `≤ ${standards.reactivePowerMax}` : "—"}</td>
                 <td className="py-3 px-3 text-right">
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  {standards.reactivePowerMax > 0 && metrics.reactivePower > standards.reactivePowerMax ? (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  )}
                 </td>
               </tr>
+              {/* Apparent Power */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Apparent Power</td>
                 <td className="py-3 px-3 font-mono">{metrics.apparentPower}</td>
                 <td className="py-3 px-3">kVA</td>
-                <td className="py-3 px-3 font-mono">—</td>
+                <td className="py-3 px-3 font-mono">{standards.apparentPowerMax > 0 ? `≤ ${standards.apparentPowerMax}` : "—"}</td>
                 <td className="py-3 px-3 text-right">
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  {standards.apparentPowerMax > 0 && metrics.apparentPower > standards.apparentPowerMax ? (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  )}
                 </td>
               </tr>
+              {/* Power Factor */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Power Factor</td>
                 <td className="py-3 px-3 font-mono">{metrics.powerFactor.toFixed(3)}</td>
                 <td className="py-3 px-3">PF</td>
-                <td className="py-3 px-3 font-mono">≥ 0.85</td>
+                <td className="py-3 px-3 font-mono">≥ {standards.powerFactorMin}</td>
                 <td className="py-3 px-3 text-right">
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  {metrics.powerFactor >= standards.powerFactorMin ? (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Low PF</span>
+                  )}
                 </td>
               </tr>
+              {/* Voltage Unbalanced */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Voltage Unbalanced</td>
                 <td className="py-3 px-3 font-mono">{metrics.unbalanceV.toFixed(2)}</td>
                 <td className="py-3 px-3">%</td>
-                <td className="py-3 px-3 font-mono">≤ 2%</td>
+                <td className="py-3 px-3 font-mono">≤ {standards.unbalanceVMax}%</td>
                 <td className="py-3 px-3 text-right">
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  {metrics.unbalanceV <= standards.unbalanceVMax ? (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  )}
                 </td>
               </tr>
+              {/* Current Unbalanced */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Current Unbalanced</td>
                 <td className="py-3 px-3 font-mono">{metrics.unbalanceI.toFixed(2)}</td>
                 <td className="py-3 px-3">%</td>
-                <td className="py-3 px-3 font-mono">≤ 10%</td>
+                <td className="py-3 px-3 font-mono">≤ {standards.unbalanceIMax}%</td>
                 <td className="py-3 px-3 text-right">
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  {metrics.unbalanceI <= standards.unbalanceIMax ? (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  )}
                 </td>
               </tr>
+              {/* THD Voltage */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">THD Voltage (Avg)</td>
                 <td className="py-3 px-3 font-mono">2.28</td>
                 <td className="py-3 px-3">%</td>
-                <td className="py-3 px-3 font-mono">≤ 5%</td>
+                <td className="py-3 px-3 font-mono">≤ {standards.thdVoltageMax}%</td>
                 <td className="py-3 px-3 text-right">
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  {2.28 <= standards.thdVoltageMax ? (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  )}
                 </td>
               </tr>
+              {/* THD Current */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">THD Current (Avg)</td>
                 <td className="py-3 px-3 font-mono">5.84</td>
                 <td className="py-3 px-3">%</td>
-                <td className="py-3 px-3 font-mono">≤ 8%</td>
+                <td className="py-3 px-3 font-mono">≤ {standards.thdCurrentMax}%</td>
                 <td className="py-3 px-3 text-right">
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  {5.84 <= standards.thdCurrentMax ? (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  )}
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
       </section>
+
+      {/* CONFIG MODAL */}
+      {showConfigModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowConfigModal(false)}>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-white">
+                ⚙️ Konfigurasi Standar Parameter Incoming PLN
+              </h3>
+              <button onClick={() => setShowConfigModal(false)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+            </div>
+
+            <div className="space-y-3.5 max-h-[60vh] overflow-y-auto pr-1">
+              {/* Tegangan */}
+              <div className="grid grid-cols-2 gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div>
+                  <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Tegangan Nominal (kV)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formStds.voltageNominal}
+                    onChange={(e) => setFormStds({ ...formStds, voltageNominal: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Toleransi Tegangan (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formStds.voltageTolerance}
+                    onChange={(e) => setFormStds({ ...formStds, voltageTolerance: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Frekuensi */}
+              <div className="grid grid-cols-2 gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div>
+                  <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Frekuensi Nominal (Hz)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formStds.frequencyNominal}
+                    onChange={(e) => setFormStds({ ...formStds, frequencyNominal: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Toleransi Frekuensi (Hz)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formStds.frequencyTolerance}
+                    onChange={(e) => setFormStds({ ...formStds, frequencyTolerance: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Power Limits */}
+              <div className="grid grid-cols-3 gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div>
+                  <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Max Active Power (kW)</label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={formStds.activePowerMax}
+                    onChange={(e) => setFormStds({ ...formStds, activePowerMax: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-sky-500 outline-none"
+                    placeholder="0 = tanpa batas"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Max Reactive (kVAR)</label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={formStds.reactivePowerMax}
+                    onChange={(e) => setFormStds({ ...formStds, reactivePowerMax: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-sky-500 outline-none"
+                    placeholder="0 = tanpa batas"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Max Apparent (kVA)</label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={formStds.apparentPowerMax}
+                    onChange={(e) => setFormStds({ ...formStds, apparentPowerMax: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-sky-500 outline-none"
+                    placeholder="0 = tanpa batas"
+                  />
+                </div>
+              </div>
+
+              {/* Power Factor & Unbalance */}
+              <div className="grid grid-cols-3 gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div>
+                  <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Min PF</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formStds.powerFactorMin}
+                    onChange={(e) => setFormStds({ ...formStds, powerFactorMin: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Max Unb V (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formStds.unbalanceVMax}
+                    onChange={(e) => setFormStds({ ...formStds, unbalanceVMax: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Max Unb I (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formStds.unbalanceIMax}
+                    onChange={(e) => setFormStds({ ...formStds, unbalanceIMax: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* THD Limits */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Max THD Voltage (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formStds.thdVoltageMax}
+                    onChange={(e) => setFormStds({ ...formStds, thdVoltageMax: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Max THD Current (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formStds.thdCurrentMax}
+                    onChange={(e) => setFormStds({ ...formStds, thdCurrentMax: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 dark:border-slate-800 pt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowConfigModal(false)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveStandards}
+                disabled={savingConfig}
+                className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold transition-colors shadow-md shadow-sky-500/20"
+              >
+                {savingConfig ? "Menyimpan..." : "💾 Simpan Standar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

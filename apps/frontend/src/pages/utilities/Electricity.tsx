@@ -495,12 +495,12 @@ export default function Electricity() {
 
   const cardSummary = useMemo(() => {
     if (!hasSummaryData || !summaryData) {
-      return { totalCost: dailyEnergyTotal * config.scale * electricityRate, totalKwh: dailyEnergyTotal * config.scale, peakDemand: 1200, peakDemandTs: null, loadFactor: 88.5, wbpKwh: 0, lwbpKwh: 0, wbpCost: 0, lwbpCost: 0 };
+      return { totalCost: 0, totalKwh: 0, peakDemand: 0, peakDemandTs: null, loadFactor: 0, wbpKwh: 0, lwbpKwh: 0, wbpCost: 0, lwbpCost: 0 };
     }
     if (range === "day" && summaryData.summary.perMonthSummary) {
       const monthData = summaryData.summary.perMonthSummary[selectedMonth];
       if (monthData) {
-        return { totalCost: monthData.totalCost, totalKwh: monthData.totalKwh, peakDemand: monthData.peakDemand, peakDemandTs: monthData.peakDemandTs, loadFactor: summaryData.pqData.pf ? summaryData.pqData.pf * 100 : 88.5, wbpKwh: monthData.wbpKwh, lwbpKwh: monthData.lwbpKwh, wbpCost: monthData.wbpCost, lwbpCost: monthData.lwbpCost };
+        return { totalCost: monthData.totalCost, totalKwh: monthData.totalKwh, peakDemand: monthData.peakDemand, peakDemandTs: monthData.peakDemandTs, loadFactor: summaryData.pqData.pf ? summaryData.pqData.pf * 100 : 0, wbpKwh: monthData.wbpKwh, lwbpKwh: monthData.lwbpKwh, wbpCost: monthData.wbpCost, lwbpCost: monthData.lwbpCost };
       }
     }
     return { totalCost: summaryData.summary.totalCost, totalKwh: summaryData.summary.totalKwh, peakDemand: summaryData.pqData.activePower, peakDemandTs: summaryData.pqData.activePowerTs, loadFactor: summaryData.pqData.pf ? summaryData.pqData.pf * 100 : 0, wbpKwh: summaryData.summary.wbpKwh, lwbpKwh: summaryData.summary.lwbpKwh, wbpCost: summaryData.summary.wbpCost, lwbpCost: summaryData.summary.lwbpCost };
@@ -708,12 +708,12 @@ export default function Electricity() {
               <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>Solar Generation</span>
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-emerald-600/10 text-emerald-700'} flex items-center justify-center`}><IconSolar /></div>
             </div>
-            <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-emerald-950'}`}>
-              1,579<span className={`text-sm font-bold ml-1 ${isDark ? 'text-emerald-200' : 'text-emerald-700'}`}>kWh</span>
+            <div className={`text-sm font-extrabold text-red-500 font-mono`}>
+              API TIDAK TERSEDIA
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>
               <span>Capacity: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>1,700 kW</strong></span>
-              <span>Efficiency: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>94%</strong></span>
+              <span>Efficiency: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>—</strong></span>
             </div>
           </div>
         </div>
@@ -735,9 +735,10 @@ export default function Electricity() {
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-amber-950'}`}>
               0/2 <span className={`text-sm font-bold ml-1 ${isDark ? 'text-amber-200' : 'text-amber-700'}`}>running</span>
             </div>
-            <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
-              <span>Cap: <strong className={isDark ? 'text-white' : 'text-amber-950'}>1,500 kVA</strong></span>
-              <span>Backup: <strong className={isDark ? 'text-white' : 'text-amber-950'}>1,000 kVA</strong></span>
+            <div className={`mt-2 text-[10px] ${isDark ? 'text-amber-200' : 'text-amber-800'} space-y-0.5`}>
+              <div>Caterpillar: <strong className={isDark ? 'text-white' : 'text-amber-950'}>1350 kVA</strong></div>
+              <div>Perkins: <strong className={isDark ? 'text-white' : 'text-amber-950'}>1000 kVA</strong></div>
+              <div className="text-[8px] opacity-75 font-semibold italic mt-1">Genset tidak dipasang powermeter</div>
             </div>
           </div>
         </div>
@@ -757,12 +758,12 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-cyan-600/10 text-cyan-700'} flex items-center justify-center`}><IconPlant /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-cyan-950'}`}>
-              {summaryLoading ? "..." : `${((cardSummary.totalKwh + 1579) / 1000).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
+              {summaryLoading ? "..." : `${((cardSummary.totalKwh) / 1000).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
               <span className={`text-sm font-bold ml-1 ${isDark ? 'text-cyan-200' : 'text-cyan-700'}`}>kWh</span>
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-cyan-200' : 'text-cyan-800'}`}>
               <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{summaryLoading ? "..." : `${(cardSummary.totalKwh / 1000).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`} kW</strong></span>
-              <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>1,579 kW</strong></span>
+              <span>P Solar: <strong className="text-red-500">API TIDAK TERSEDIA</strong></span>
             </div>
           </div>
         </div>
@@ -775,10 +776,10 @@ export default function Electricity() {
           <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-blue-500">PLN — Incoming Grid</h3>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {/* Total Biaya */}
+          {/* Estimasi Biaya */}
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Total Biaya</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Estimasi Biaya</span>
               <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500"><IconMoney /></div>
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
@@ -827,6 +828,91 @@ export default function Electricity() {
               {summaryLoading ? "..." : `${cardSummary.peakDemand.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW`}
             </div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
+          </div>
+        </div>
+
+        {/* Ringkasan Parameter Table */}
+        <div className="mt-5 border-t border-slate-100 dark:border-slate-800/80 pt-4">
+          <div className="flex items-center gap-2 mb-3">
+            <svg className="h-4 w-4 text-sky-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ringkasan Parameter Incoming PLN 20 kV - Sumber Utama</h4>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
+                  <th className="pb-2.5 px-3">Parameter</th>
+                  <th className="pb-2.5 px-3">Nilai</th>
+                  <th className="pb-2.5 px-3">Satuan</th>
+                  <th className="pb-2.5 px-3">Standar</th>
+                  <th className="pb-2.5 px-3 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-semibold text-slate-700 dark:text-slate-300">
+                {/* Tegangan */}
+                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
+                  <td className="py-2.5 px-3">Tegangan</td>
+                  <td className="py-2.5 px-3 font-mono">20.07</td>
+                  <td className="py-2.5 px-3">kV</td>
+                  <td className="py-2.5 px-3 font-mono">20 ± 5%</td>
+                  <td className="py-2.5 px-3 text-right">
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  </td>
+                </tr>
+                {/* Frekuensi */}
+                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
+                  <td className="py-2.5 px-3">Frekuensi</td>
+                  <td className="py-2.5 px-3 font-mono">49.96</td>
+                  <td className="py-2.5 px-3">Hz</td>
+                  <td className="py-2.5 px-3 font-mono">50 ± 0.5</td>
+                  <td className="py-2.5 px-3 text-right">
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  </td>
+                </tr>
+                {/* Active Power */}
+                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
+                  <td className="py-2.5 px-3">Active Power</td>
+                  <td className="py-2.5 px-3 font-mono">2.998</td>
+                  <td className="py-2.5 px-3">kW</td>
+                  <td className="py-2.5 px-3 font-mono">—</td>
+                  <td className="py-2.5 px-3 text-right">
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  </td>
+                </tr>
+                {/* Power Factor */}
+                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
+                  <td className="py-2.5 px-3">Power Factor</td>
+                  <td className="py-2.5 px-3 font-mono">0.943</td>
+                  <td className="py-2.5 px-3">PF</td>
+                  <td className="py-2.5 px-3 font-mono">≥ 0.85</td>
+                  <td className="py-2.5 px-3 text-right">
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  </td>
+                </tr>
+                {/* Voltage Unbalanced */}
+                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
+                  <td className="py-2.5 px-3">Voltage Unbalanced</td>
+                  <td className="py-2.5 px-3 font-mono">0.95</td>
+                  <td className="py-2.5 px-3">%</td>
+                  <td className="py-2.5 px-3 font-mono">≤ 2%</td>
+                  <td className="py-2.5 px-3 text-right">
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  </td>
+                </tr>
+                {/* Current Unbalanced */}
+                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
+                  <td className="py-2.5 px-3">Current Unbalanced</td>
+                  <td className="py-2.5 px-3 font-mono">1.56</td>
+                  <td className="py-2.5 px-3">%</td>
+                  <td className="py-2.5 px-3 font-mono">≤ 10%</td>
+                  <td className="py-2.5 px-3 text-right">
+                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -904,34 +990,34 @@ export default function Electricity() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Total Biaya</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Estimasi Biaya</span>
               <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500"><IconMoney /></div>
             </div>
-            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">Rp 159.404.220,00</div>
-            <div className="mt-1 text-[10px] font-semibold text-emerald-500">108.640 kWh</div>
+            <div className="mt-2 text-sm font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
+            <div className="mt-1 text-[10px] font-semibold text-emerald-500">—</div>
           </div>
 
           <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">POI-1</span>
-            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kWh</div>
-            <div className="mt-1 text-[10px] font-semibold text-blue-500">Rp 0,00</div>
+            <div className="mt-2 text-sm font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
+            <div className="mt-1 text-[10px] font-semibold text-blue-500">—</div>
           </div>
 
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand</span>
-            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">1.200 kW</div>
+            <div className="mt-2 text-sm font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
           </div>
 
           <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-500 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20">POI-2</span>
-            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kWh</div>
-            <div className="mt-1 text-[10px] font-semibold text-cyan-500">Rp 0,00</div>
+            <div className="mt-2 text-sm font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
+            <div className="mt-1 text-[10px] font-semibold text-cyan-500">—</div>
           </div>
 
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand</span>
-            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">1.200 kW</div>
+            <div className="mt-2 text-sm font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
           </div>
         </div>
@@ -952,20 +1038,20 @@ export default function Electricity() {
         </section>
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
           <div>
-            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Distribusi Beban</h3>
+            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Distribusi Beban PLTS</h3>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Perbandingan POI-1 vs POI-2.</p>
           </div>
           <div className="my-6 flex justify-center">
-            <DonutChart segments={[{ label: "POI-1", value: 0, color: "#3b82f6" }, { label: "POI-2", value: 0, color: "#06b6d4" }]} size={150} thickness={18} centerLabel="0%" />
+            <DonutChart segments={[{ label: "POI-1", value: 60, color: "#3b82f6" }, { label: "POI-2", value: 40, color: "#06b6d4" }]} size={150} thickness={18} centerLabel="POI-1 vs POI-2" centerLabelSize="text-[11px]" />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5">
-              <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium"><span className="h-2 w-2 rounded-full bg-blue-500" />Beban WBP (17-22)</span>
-              <span className="font-bold text-slate-800 dark:text-white font-mono">0%</span>
+              <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium"><span className="h-2 w-2 rounded-full bg-blue-500" />POI-1</span>
+              <span className="font-bold text-red-500 font-mono text-[10px]">API TIDAK TERSEDIA</span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium"><span className="h-2 w-2 rounded-full bg-cyan-500" />Beban LWBP</span>
-              <span className="font-bold text-slate-800 dark:text-white font-mono">0%</span>
+              <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium"><span className="h-2 w-2 rounded-full bg-cyan-500" />POI-2</span>
+              <span className="font-bold text-red-500 font-mono text-[10px]">API TIDAK TERSEDIA</span>
             </div>
           </div>
         </section>
@@ -1001,11 +1087,11 @@ export default function Electricity() {
             <>
               <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4">
                 <span className="text-[10px] font-bold text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">POI-1</span>
-                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kWh</div>
+                <div className="mt-1 text-xs font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
               </div>
               <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30 p-4">
                 <span className="text-[10px] font-bold text-cyan-500 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20">POI-2</span>
-                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kWh</div>
+                <div className="mt-1 text-xs font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
               </div>
             </>
           ) : (
@@ -1081,44 +1167,81 @@ export default function Electricity() {
       </div>
 
       {/* ═══════════ SECTION H: EQUIPMENT MONTHLY CHARTS ═══════════ */}
-      <div className="space-y-6">
-        <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Konsumsi Per-Equipment (Bulanan vs Bulan Sebelumnya)</h3>
+      <div className="space-y-8">
+        <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 border-b border-slate-200 dark:border-slate-800 pb-2">
+          Konsumsi Per-Equipment (Bulanan vs Bulan Sebelumnya)
+        </h3>
 
-        {/* Cooling Tower */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          <MonthlyComparisonChart title="Cooling Tower — WF1" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
-          <MonthlyComparisonChart title="Cooling Tower — WF2" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+        {/* Cooling Tower Section */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Cooling Tower</h4>
+          <div className="grid gap-6 md:grid-cols-2">
+            <MonthlyComparisonChart title="Cooling Tower WF1" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="Cooling Tower WF2" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+          </div>
         </div>
 
-        {/* Boiler */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          <MonthlyComparisonChart title="Boiler 3 — WF1" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
-          <MonthlyComparisonChart title="Boiler 4" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
-          <MonthlyComparisonChart title="Boiler 5" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+        {/* Boiler Section */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Boiler</h4>
+          <div className="grid gap-6 md:grid-cols-3">
+            <MonthlyComparisonChart title="Boiler 3 WF1" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="Boiler 4" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="Boiler 5" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+          </div>
         </div>
 
-        {/* Compressed Air */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          <MonthlyComparisonChart title="Compressed Air WF1 — ALE-30, ZT-30.1, ZT-30.2, ZT-55" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
-          <MonthlyComparisonChart title="Compressed Air WF2 — ALE-250, ZT-110" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+        {/* Compressed Air Section */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Compressed Air</h4>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <MonthlyComparisonChart title="Compressed Air WF1 — ALE-30" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="Compressed Air WF1 — ZT-30.1" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="Compressed Air WF1 — ZT-30.2" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="Compressed Air WF1 — ZT-55" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="Compressed Air WF2 — ALE-250" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="Compressed Air WF2 — ZT-110" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+          </div>
         </div>
 
-        {/* Chiller */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          <MonthlyComparisonChart title="Chiller WF-1 (Daikin-1, Daikin-2, Trane-CGAM40)" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
-          <MonthlyComparisonChart title="Chiller WF-2 (Trane-100, Trane-275)" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+        {/* Chiller Section */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Chiller</h4>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <MonthlyComparisonChart title="Chiller WF1 — Daikin-1" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="Chiller WF1 — Daikin-2" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="Chiller WF1 — Trane-CGAM40" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="Chiller WF2 — Trane-100" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="Chiller WF2 — Trane-275" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+          </div>
         </div>
 
-        {/* Chiller HVAC WF-2 & Warehouse */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          <MonthlyComparisonChart title="Chiller HVAC WF-2 (Trane-250, Trane-185)" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
-          <MonthlyComparisonChart title="HVAC Warehouse (WH-2, 3, 4, 5, 6, 7)" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+        {/* Chiller HVAC & Warehouse Section */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Chiller HVAC & Warehouse</h4>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <MonthlyComparisonChart title="Chiller HVAC WF2 — Trane-250" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="Chiller HVAC WF2 — Trane-185" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="HVAC Warehouse — WH-2" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="HVAC Warehouse — WH-3" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="HVAC Warehouse — WH-4" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="HVAC Warehouse — WH-5" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="HVAC Warehouse — WH-6" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="HVAC Warehouse — WH-7" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+          </div>
         </div>
 
-        {/* HVAC QC & Produksi */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          <MonthlyComparisonChart title="HVAC QC (Micro, Retained Sample, Sampling)" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
-          <MonthlyComparisonChart title="HVAC Produksi (WF1-U3, WF2-U1, WF2-U2)" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+        {/* HVAC QC & Produksi Section */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC QC & Produksi</h4>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <MonthlyComparisonChart title="HVAC QC — Micro" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="HVAC QC — Retained Sample" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="HVAC QC — Sampling" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="HVAC Produksi — WF1-U3" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="HVAC Produksi — WF2-U1" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+            <MonthlyComparisonChart title="HVAC Produksi — WF2-U2" currentData={dummyMonthlyData} previousData={dummyPreviousData} isDark={isDark} />
+          </div>
         </div>
 
         {/* Dynamic Selection Chart (Sesuai Pilihan) */}
