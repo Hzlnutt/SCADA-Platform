@@ -142,35 +142,26 @@ export const startCoolingTowerPolling = () => {
       const pool = getPostgresPool();
       
       // Load custom URL and jsonKey configs
-      let targetUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
-      let jsonKeyMap: Record<string, string> = {};
+      const tagToUrlMap: Record<string, string> = {};
+      const tagToJsonKeyMap: Record<string, string> = {};
+      const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
 
       try {
-        const mapRes = await pool.query("SELECT value FROM global_configs WHERE key = $1", ["api_sources_map_cooling-water-1"]);
-        if (mapRes.rows.length > 0) {
-          const map = mapRes.rows[0].value;
-          const firstConfiguredUrl = Object.values(map).find((u: any) => typeof u === "string" && u.trim());
-          if (firstConfiguredUrl) {
-            let url = firstConfiguredUrl as string;
-            url = url.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
-            targetUrl = url;
-          }
-        }
-      } catch (e) {
-        logger.warn("Failed to load custom API sources map from global_configs, using default URL");
-      }
-
-      try {
-        const listRes = await pool.query("SELECT value FROM global_configs WHERE key = $1", ["api_sources_list_cooling-water-1"]);
+        const listRes = await pool.query(
+          "SELECT value FROM global_configs WHERE key = $1", 
+          ["api_sources_list_cooling-water-1"]
+        );
         if (listRes.rows.length > 0) {
           const list = listRes.rows[0].value;
           if (Array.isArray(list)) {
             list.forEach((row: any) => {
-              if (row.tagKey && row.jsonKey) {
-                let jk = row.jsonKey;
-                if (jk === "Scaled_Temp_Tank_Cooling3_Supp") jk = "Scaled_Temp_Tank_Colling3_Supp";
-                if (jk === "Scaled_Temp_Tank_Cooling3_Return") jk = "Scaled_Temp_Tank_Colling3_Return";
-                jsonKeyMap[row.tagKey] = jk;
+              if (row.tagKey) {
+                let ep = row.endpoint || "";
+                if (ep) {
+                  ep = ep.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+                }
+                tagToUrlMap[row.tagKey] = ep;
+                tagToJsonKeyMap[row.tagKey] = row.jsonKey || "";
               }
             });
           }
@@ -179,159 +170,187 @@ export const startCoolingTowerPolling = () => {
         logger.warn("Failed to load custom API sources list from global_configs");
       }
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-      const res = await fetch(targetUrl, {
-        headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" },
-        signal: controller.signal
+      // Add default fallbacks for any keys not configured
+      Object.keys(DEFAULT_TAG_KEY_TO_API_JSON_KEY).forEach((tagKey) => {
+        if (tagToUrlMap[tagKey] === undefined) {
+          tagToUrlMap[tagKey] = defaultUrl;
+          tagToJsonKeyMap[tagKey] = DEFAULT_TAG_KEY_TO_API_JSON_KEY[tagKey];
+        }
       });
-      clearTimeout(timeoutId);
 
-      if (res.ok) {
-        const data: any = await res.json();
-        const ts = new Date();
-        const io = getSocketServer();
+      // Poll unique URLs
+      const uniqueUrls = Array.from(
+        new Set(
+          Object.values(tagToUrlMap).filter(url => typeof url === "string" && url.trim().length > 0)
+        )
+      );
 
-        const getVal = (tagId: string): any => {
-          const customKey = jsonKeyMap[tagId];
-          const standardKey = DEFAULT_TAG_KEY_TO_API_JSON_KEY[tagId];
-          let val = undefined;
-          if (customKey) {
-            val = data[customKey];
+      const urlDataMap: Record<string, any> = {};
+      await Promise.all(
+        uniqueUrls.map(async (url) => {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            const fetchRes = await fetch(url, {
+              headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" },
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            if (fetchRes.ok) {
+              urlDataMap[url] = await fetchRes.json();
+            }
+          } catch (err) {
+            logger.warn(`Scheduler failed to poll URL ${url}: ${err instanceof Error ? err.message : String(err)}`);
           }
-          if (val === undefined && standardKey) {
-            val = data[standardKey];
-          }
-          return val;
-        };
+        })
+      );
 
-        const retVal = getVal("cooling-water/return_temp");
-        const suppVal = getVal("cooling-water/supply_temp");
-        const deltaVal = (typeof retVal === "number" && typeof suppVal === "number")
-          ? Number((retVal - suppVal).toFixed(2))
-          : undefined;
+      const ts = new Date();
+      const io = getSocketServer();
 
-        // Map API fields to telemetry tag points
-        const pointsMapping = [
-          { tagId: "cooling-water/fan_status_1", value: getVal("cooling-water/fan_status_1") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/fan_status_2", value: getVal("cooling-water/fan_status_2") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/fan_status_3", value: getVal("cooling-water/fan_status_3") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/motor_status_1", value: getVal("cooling-water/motor_status_1") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/motor_status_2", value: getVal("cooling-water/motor_status_2") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/motor_status_3", value: getVal("cooling-water/motor_status_3") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/pressure_1", value: getVal("cooling-water/pressure_1"), unit: "bar" },
-          { tagId: "cooling-water/pressure_2", value: getVal("cooling-water/pressure_2"), unit: "bar" },
-          { tagId: "cooling-water/pressure_3", value: getVal("cooling-water/pressure_3"), unit: "bar" },
-          { tagId: "cooling-water/basin_lvl", value: getVal("cooling-water/basin_lvl"), unit: "%" },
-          { tagId: "cooling-water/eq_status_du03", value: getVal("cooling-water/eq_status_du03") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/eq_press_du03", value: getVal("cooling-water/eq_press_du03"), unit: "bar" },
-          { tagId: "cooling-water/eq_status_bp03", value: getVal("cooling-water/eq_status_bp03") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/eq_press_bp03", value: getVal("cooling-water/eq_press_bp03"), unit: "bar" },
-          { tagId: "cooling-water/eq_status_prep03", value: getVal("cooling-water/eq_status_prep03") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/eq_press_prep03", value: getVal("cooling-water/eq_press_prep03"), unit: "bar" },
-          { tagId: "cooling-water/eq_status_st03", value: getVal("cooling-water/eq_status_st03") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/eq_press_st03", value: getVal("cooling-water/eq_press_st03"), unit: "bar" },
-          { tagId: "cooling-water/eq_status_washing", value: getVal("cooling-water/eq_status_washing") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/eq_press_washing", value: getVal("cooling-water/eq_press_washing"), unit: "bar" },
-          { tagId: "cooling-water/supply_temp", value: suppVal, unit: "C" },
-          { tagId: "cooling-water/return_temp", value: retVal, unit: "C" },
-          { tagId: "cooling-water/st3_return_temp", value: getVal("cooling-water/st3_return_temp"), unit: "C" },
-          { tagId: "cooling-water/eq_temp_du03", value: getVal("cooling-water/eq_temp_du03"), unit: "C" },
-          { tagId: "cooling-water/eq_temp_prep03", value: getVal("cooling-water/eq_temp_prep03"), unit: "C" },
-          { tagId: "cooling-water/eq_temp_washing", value: getVal("cooling-water/eq_temp_washing"), unit: "C" },
-          { tagId: "cooling-water/eq_temp_st03_supply", value: getVal("cooling-water/eq_temp_st03_supply"), unit: "C" },
-          { tagId: "cooling-water/st3_heating", value: getVal("cooling-water/st3_heating") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/st3_cooling", value: getVal("cooling-water/st3_cooling") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/st3_steril", value: getVal("cooling-water/st3_steril") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/jumo_pieces", value: getVal("cooling-water/jumo_pieces") || "", unit: "" },
-          { tagId: "cooling-water/delta_temp", value: deltaVal, unit: "C" },
-          
-          // Makeup, Ambient & Chemical
-          { tagId: "cooling-water/makeup_wtr_tds", value: getVal("cooling-water/makeup_wtr_tds"), unit: "uS/cm" },
-          { tagId: "cooling-water/makeup_wtr_ph", value: getVal("cooling-water/makeup_wtr_ph"), unit: "pH" },
-          { tagId: "cooling-water/makeup_wtr_flow", value: getVal("cooling-water/makeup_wtr_flow"), unit: "m3/h" },
-          { tagId: "cooling-water/makeup_wtr_vol", value: getVal("cooling-water/makeup_wtr_vol"), unit: "L" },
-          { tagId: "cooling-water/cooling_tank_tds", value: getVal("cooling-water/cooling_tank_tds"), unit: "uS/cm" },
-          { tagId: "cooling-water/cooling_tank_ph", value: getVal("cooling-water/cooling_tank_ph"), unit: "pH" },
-          { tagId: "cooling-water/ambient_temp", value: getVal("cooling-water/ambient_temp"), unit: "C" },
-          { tagId: "cooling-water/ambient_humidity", value: getVal("cooling-water/ambient_humidity"), unit: "%" },
-          { tagId: "cooling-water/ct_efficiency", value: getVal("cooling-water/ct_efficiency"), unit: "%" },
-          { tagId: "cooling-water/total_energy", value: getVal("cooling-water/total_energy"), unit: "kWh" },
-          { tagId: "cooling-water/chemical_357_pump", value: getVal("cooling-water/chemical_357_pump") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/chemical_357_lvl", value: getVal("cooling-water/chemical_357_lvl"), unit: "%" },
-          { tagId: "cooling-water/chemical_357_vol", value: getVal("cooling-water/chemical_357_vol"), unit: "L" },
-          { tagId: "cooling-water/chemical_327_pump", value: getVal("cooling-water/chemical_327_pump") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/chemical_327_lvl", value: getVal("cooling-water/chemical_327_lvl"), unit: "%" },
-          { tagId: "cooling-water/chemical_327_vol", value: getVal("cooling-water/chemical_327_vol"), unit: "L" },
-          { tagId: "cooling-water/blowdown_status", value: getVal("cooling-water/blowdown_status") ? 1 : 0, unit: "status" },
-          { tagId: "cooling-water/blowdown_flow", value: getVal("cooling-water/blowdown_flow"), unit: "L/h" },
-          { tagId: "cooling-water/blowdown_vol", value: getVal("cooling-water/blowdown_vol"), unit: "m3" }
-        ];
+      const getVal = (tagId: string): any => {
+        const url = tagToUrlMap[tagId];
+        if (!url) return undefined;
+        const data = urlDataMap[url];
+        if (!data) return undefined;
+        
+        const jsonKey = tagToJsonKeyMap[tagId];
+        if (!jsonKey) return undefined; // strict check: empty jsonKey means undefined value
+        
+        let jk = jsonKey;
+        if (jk === "Scaled_Temp_Tank_Cooling3_Supp") jk = "Scaled_Temp_Tank_Colling3_Supp";
+        if (jk === "Scaled_Temp_Tank_Cooling3_Return") jk = "Scaled_Temp_Tank_Colling3_Return";
+        
+        return data[jk];
+      };
 
-        // Filter out undefined values before saving/emitting
-        const activePoints = pointsMapping.filter(p => p.value !== undefined && p.value !== null);
+      const retVal = getVal("cooling-water/return_temp");
+      const suppVal = getVal("cooling-water/supply_temp");
+      const deltaVal = (typeof retVal === "number" && typeof suppVal === "number")
+        ? Number((retVal - suppVal).toFixed(2))
+        : undefined;
 
-        const points = activePoints.map((p) => ({
-          ts: ts.toISOString(),
-          value: p.value,
-          quality: "good" as const,
-          meta: {
-            tagId: p.tagId,
-            deviceId: "cooling-water-1",
-            unit: "cooling-water-1",
-            area: "Utilities",
-            source: "ignition-api"
-          }
-        }));
+      // Map API fields to telemetry tag points
+      const pointsMapping = [
+        { tagId: "cooling-water/fan_status_1", value: getVal("cooling-water/fan_status_1") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/fan_status_2", value: getVal("cooling-water/fan_status_2") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/fan_status_3", value: getVal("cooling-water/fan_status_3") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/motor_status_1", value: getVal("cooling-water/motor_status_1") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/motor_status_2", value: getVal("cooling-water/motor_status_2") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/motor_status_3", value: getVal("cooling-water/motor_status_3") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/pressure_1", value: getVal("cooling-water/pressure_1"), unit: "bar" },
+        { tagId: "cooling-water/pressure_2", value: getVal("cooling-water/pressure_2"), unit: "bar" },
+        { tagId: "cooling-water/pressure_3", value: getVal("cooling-water/pressure_3"), unit: "bar" },
+        { tagId: "cooling-water/basin_lvl", value: getVal("cooling-water/basin_lvl"), unit: "%" },
+        { tagId: "cooling-water/eq_status_du03", value: getVal("cooling-water/eq_status_du03") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/eq_press_du03", value: getVal("cooling-water/eq_press_du03"), unit: "bar" },
+        { tagId: "cooling-water/eq_status_bp03", value: getVal("cooling-water/eq_status_bp03") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/eq_press_bp03", value: getVal("cooling-water/eq_press_bp03"), unit: "bar" },
+        { tagId: "cooling-water/eq_status_prep03", value: getVal("cooling-water/eq_status_prep03") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/eq_press_prep03", value: getVal("cooling-water/eq_press_prep03"), unit: "bar" },
+        { tagId: "cooling-water/eq_status_st03", value: getVal("cooling-water/eq_status_st03") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/eq_press_st03", value: getVal("cooling-water/eq_press_st03"), unit: "bar" },
+        { tagId: "cooling-water/eq_status_washing", value: getVal("cooling-water/eq_status_washing") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/eq_press_washing", value: getVal("cooling-water/eq_press_washing"), unit: "bar" },
+        { tagId: "cooling-water/supply_temp", value: suppVal, unit: "C" },
+        { tagId: "cooling-water/return_temp", value: retVal, unit: "C" },
+        { tagId: "cooling-water/st3_return_temp", value: getVal("cooling-water/st3_return_temp"), unit: "C" },
+        { tagId: "cooling-water/eq_temp_du03", value: getVal("cooling-water/eq_temp_du03"), unit: "C" },
+        { tagId: "cooling-water/eq_temp_prep03", value: getVal("cooling-water/eq_temp_prep03"), unit: "C" },
+        { tagId: "cooling-water/eq_temp_washing", value: getVal("cooling-water/eq_temp_washing"), unit: "C" },
+        { tagId: "cooling-water/eq_temp_st03_supply", value: getVal("cooling-water/eq_temp_st03_supply"), unit: "C" },
+        { tagId: "cooling-water/st3_heating", value: getVal("cooling-water/st3_heating") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/st3_cooling", value: getVal("cooling-water/st3_cooling") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/st3_steril", value: getVal("cooling-water/st3_steril") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/jumo_pieces", value: getVal("cooling-water/jumo_pieces") || "", unit: "" },
+        { tagId: "cooling-water/delta_temp", value: deltaVal, unit: "C" },
+        
+        // Makeup, Ambient & Chemical
+        { tagId: "cooling-water/makeup_wtr_tds", value: getVal("cooling-water/makeup_wtr_tds"), unit: "uS/cm" },
+        { tagId: "cooling-water/makeup_wtr_ph", value: getVal("cooling-water/makeup_wtr_ph"), unit: "pH" },
+        { tagId: "cooling-water/makeup_wtr_flow", value: getVal("cooling-water/makeup_wtr_flow"), unit: "m3/h" },
+        { tagId: "cooling-water/makeup_wtr_vol", value: getVal("cooling-water/makeup_wtr_vol"), unit: "L" },
+        { tagId: "cooling-water/cooling_tank_tds", value: getVal("cooling-water/cooling_tank_tds"), unit: "uS/cm" },
+        { tagId: "cooling-water/cooling_tank_ph", value: getVal("cooling-water/cooling_tank_ph"), unit: "pH" },
+        { tagId: "cooling-water/ambient_temp", value: getVal("cooling-water/ambient_temp"), unit: "C" },
+        { tagId: "cooling-water/ambient_humidity", value: getVal("cooling-water/ambient_humidity"), unit: "%" },
+        { tagId: "cooling-water/ct_efficiency", value: getVal("cooling-water/ct_efficiency"), unit: "%" },
+        { tagId: "cooling-water/total_energy", value: getVal("cooling-water/total_energy"), unit: "kWh" },
+        { tagId: "cooling-water/chemical_357_pump", value: getVal("cooling-water/chemical_357_pump") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/chemical_357_lvl", value: getVal("cooling-water/chemical_357_lvl"), unit: "%" },
+        { tagId: "cooling-water/chemical_357_vol", value: getVal("cooling-water/chemical_357_vol"), unit: "L" },
+        { tagId: "cooling-water/chemical_327_pump", value: getVal("cooling-water/chemical_327_pump") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/chemical_327_lvl", value: getVal("cooling-water/chemical_327_lvl"), unit: "%" },
+        { tagId: "cooling-water/chemical_327_vol", value: getVal("cooling-water/chemical_327_vol"), unit: "L" },
+        { tagId: "cooling-water/blowdown_status", value: getVal("cooling-water/blowdown_status") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/blowdown_flow", value: getVal("cooling-water/blowdown_flow"), unit: "L/h" },
+        { tagId: "cooling-water/blowdown_vol", value: getVal("cooling-water/blowdown_vol"), unit: "m3" }
+      ];
 
-        // Ingest telemetry into MongoDB raw collection for historical and latest queries
-        const ingestPoints = activePoints.map((p) => ({
+      // Filter out undefined values before saving/emitting
+      const activePoints = pointsMapping.filter(p => p.value !== undefined && p.value !== null);
+
+      const points = activePoints.map((p) => ({
+        ts: ts.toISOString(),
+        value: p.value,
+        quality: "good" as const,
+        meta: {
           tagId: p.tagId,
-          value: p.value,
-          quality: "good" as const,
-          ts: ts,
           deviceId: "cooling-water-1",
           unit: "cooling-water-1",
-          area: "Utilities"
-        }));
-        
-        await ingestTelemetry(ingestPoints).catch((err) => {
-          logger.error({ err }, "Failed to save polled cooling tower telemetry to MongoDB");
-        });
-
-        // Update in-memory cache
-        updateTelemetryCache(points);
-
-        evaluateSensorRulesForPoints(points).catch((err) => {
-          logger.error({ err }, "Failed to evaluate sensor rules for polled points");
-        });
-
-        // Update running hours
-        const statusPoints = points.filter(p => p.meta.tagId.includes("status"));
-        for (const p of statusPoints) {
-          const isRunning = p.value === 1 || p.value === true;
-          updateRunningHours(p.meta.tagId, isRunning, ts).catch((err) => {
-            logger.error({ err, tagId: p.meta.tagId }, "Failed to update running hours from scheduler");
-          });
+          area: "Utilities",
+          source: "ignition-api"
         }
+      }));
 
-        // Emit directly via WebSocket (no database, instant real-time)
+      // Ingest telemetry into MongoDB raw collection for historical and latest queries
+      const ingestPoints = activePoints.map((p) => ({
+        tagId: p.tagId,
+        value: p.value,
+        quality: "good" as const,
+        ts: ts,
+        deviceId: "cooling-water-1",
+        unit: "cooling-water-1",
+        area: "Utilities"
+      }));
+      
+      await ingestTelemetry(ingestPoints).catch((err) => {
+        logger.error({ err }, "Failed to save polled cooling tower telemetry to MongoDB");
+      });
+
+      // Update in-memory cache
+      updateTelemetryCache(points);
+
+      evaluateSensorRulesForPoints(points).catch((err) => {
+        logger.error({ err }, "Failed to evaluate sensor rules for polled points");
+      });
+
+      // Update running hours
+      const statusPoints = points.filter(p => p.meta.tagId.includes("status"));
+      for (const p of statusPoints) {
+        const isRunning = p.value === 1 || p.value === true;
+        updateRunningHours(p.meta.tagId, isRunning, ts).catch((err) => {
+          logger.error({ err, tagId: p.meta.tagId }, "Failed to update running hours from scheduler");
+        });
+      }
+
+      // Emit directly via WebSocket
+      const hasAnyData = Object.keys(urlDataMap).length > 0;
+      if (hasAnyData) {
         if (io) {
           io.to(TELEMETRY_ALL_ROOM).emit("telemetry:update", { points });
           points.forEach((point) => {
             io.to(telemetryTagRoom(point.meta.tagId)).emit("telemetry:update", { points: [point] });
           });
 
-          // Also emit raw API data for any component that wants the full payload
+          // Also emit raw API data for defaultUrl to keep backward compatibility
           io.emit("cooling_tower:update", {
             deviceId: "cooling-water-1",
             ts: ts.toISOString(),
             status: "connected",
-            raw: data
+            raw: urlDataMap[defaultUrl] || null
           });
         }
-
         logger.info("Cooling tower WF1-U3 API polled, saved to DB, and emitted via WebSocket");
       } else {
         const io = getSocketServer();
@@ -343,7 +362,7 @@ export const startCoolingTowerPolling = () => {
             raw: null
           });
         }
-        logger.warn(`Cooling tower API returned status: ${res.status}`);
+        logger.warn("Cooling tower API polling returned no data from any configured URLs");
       }
     } catch (err: any) {
       const io = getSocketServer();
@@ -453,39 +472,40 @@ export const evaluateSensorRulesForPoints = async (points: any[]) => {
     const clearEvents: any[] = [];
 
     for (const rule of rules) {
-      if (!rule.enable_alert || rule.suppress_alert) continue;
-
+      const isAlertEnabled = rule.enable_alert && !rule.suppress_alert;
       const point = points.find(p => p.meta.tagId === rule.tag_key);
-      if (!point || typeof point.value !== "number") continue;
-
-      const value = point.value;
-      const warning = rule.baseline ? parseFloat(rule.baseline) : null;
-      const alarm = rule.high_limit ? parseFloat(rule.high_limit) : null;
-      const direction = (rule.direction || "above").toLowerCase();
+      const hasValidValue = point && typeof point.value === "number";
 
       let status: "active" | "cleared" = "cleared";
       let severity: "medium" | "high" = "medium";
       let msg = "";
 
-      if (direction === "above") {
-        if (alarm !== null && value >= alarm) {
-          status = "active";
-          severity = "high";
-          msg = `[${rule.tag_name}] exceeds Alarm Limit of ${alarm} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
-        } else if (warning !== null && value >= warning) {
-          status = "active";
-          severity = "medium";
-          msg = `[${rule.tag_name}] exceeds Warning Limit of ${warning} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
-        }
-      } else {
-        if (alarm !== null && value <= alarm) {
-          status = "active";
-          severity = "high";
-          msg = `[${rule.tag_name}] is below Alarm Limit of ${alarm} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
-        } else if (warning !== null && value <= warning) {
-          status = "active";
-          severity = "medium";
-          msg = `[${rule.tag_name}] is below Warning Limit of ${warning} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
+      if (isAlertEnabled && hasValidValue) {
+        const value = point.value;
+        const warning = rule.baseline ? parseFloat(rule.baseline) : null;
+        const alarm = rule.high_limit ? parseFloat(rule.high_limit) : null;
+        const direction = (rule.direction || "above").toLowerCase();
+
+        if (direction === "above") {
+          if (alarm !== null && value >= alarm) {
+            status = "active";
+            severity = "high";
+            msg = `[${rule.tag_name}] exceeds Alarm Limit of ${alarm} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
+          } else if (warning !== null && value >= warning) {
+            status = "active";
+            severity = "medium";
+            msg = `[${rule.tag_name}] exceeds Warning Limit of ${warning} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
+          }
+        } else {
+          if (alarm !== null && value <= alarm) {
+            status = "active";
+            severity = "high";
+            msg = `[${rule.tag_name}] is below Alarm Limit of ${alarm} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
+          } else if (warning !== null && value <= warning) {
+            status = "active";
+            severity = "medium";
+            msg = `[${rule.tag_name}] is below Warning Limit of ${warning} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
+          }
         }
       }
 
@@ -495,9 +515,9 @@ export const evaluateSensorRulesForPoints = async (points: any[]) => {
         activeEvents.push({
           alarmKey,
           tagId: rule.tag_key,
-          deviceId: point.meta.deviceId || "plc-sim",
+          deviceId: (point && point.meta && point.meta.deviceId) || "plc-sim",
           unit: rule.unit_id,
-          area: point.meta.area || "Utilities",
+          area: (point && point.meta && point.meta.area) || "Utilities",
           message: msg,
           severity,
           status: "active"
@@ -506,9 +526,9 @@ export const evaluateSensorRulesForPoints = async (points: any[]) => {
         clearEvents.push({
           alarmKey,
           tagId: rule.tag_key,
-          deviceId: point.meta.deviceId || "plc-sim",
+          deviceId: (point && point.meta && point.meta.deviceId) || "plc-sim",
           unit: rule.unit_id,
-          area: point.meta.area || "Utilities",
+          area: (point && point.meta && point.meta.area) || "Utilities",
           message: `Cleared: Telemetry parameter for tag ${rule.tag_key} has returned to normal range.`,
           severity: "low",
           status: "cleared"
