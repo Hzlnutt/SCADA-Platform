@@ -71,7 +71,7 @@ export const ingestAlarmEvents = async (events: AlarmEventInput[]) => {
     } else {
       // It's active! Check if there is already an active alarm for this key
       const activeAlarm = await pool.query(
-        "SELECT id FROM alarms WHERE alarm_key = $1 AND status IN ('Active', 'Pending Approval')",
+        "SELECT id, severity, message FROM alarms WHERE alarm_key = $1 AND status IN ('Active', 'Pending Approval')",
         [event.alarmKey]
       );
       if (activeAlarm.rows.length === 0) {
@@ -96,6 +96,16 @@ export const ingestAlarmEvents = async (events: AlarmEventInput[]) => {
           ]
         );
         inserted++;
+      } else {
+        const existing = activeAlarm.rows[0];
+        if (existing.severity !== event.severity || existing.message !== event.message) {
+          await pool.query(
+            `UPDATE alarms 
+             SET severity = $1, message = $2, t_stamp = $3
+             WHERE id = $4`,
+            [event.severity, event.message, ts, existing.id]
+          );
+        }
       }
     }
   }

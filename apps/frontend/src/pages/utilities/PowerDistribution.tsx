@@ -129,47 +129,47 @@ type TransformerData = {
 const INITIAL_TRANSFORMERS: TransformerData[] = [
   // Factory 1
   {
-    id: "mdp-1.1", name: "MDP-1.1", factory: 1, capacityKva: 630, activePowerKw: 493, reactivePowerKvar: 182,
-    apparentPowerKva: 530, powerFactor: 0.930, frequencyHz: 50.02, tempCc: 54.6, voltageInKv: 20.23,
-    voltageOutL2L: 404.8, voltageOutL2N: 231.9, currentR: 734.1, currentS: 727.8, currentT: 740.9,
-    thdVoltage: 2.14, thdCurrent: 5.54, kwh: 124580.4, status: "online"
+    id: "mdp-1.1", name: "MDP-1.1", factory: 1, capacityKva: 630, activePowerKw: 0, reactivePowerKvar: 0,
+    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
+    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
+    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
   },
   {
-    id: "mdp-1.2", name: "MDP-1.2", factory: 1, capacityKva: 630, activePowerKw: 512, reactivePowerKvar: 201,
-    apparentPowerKva: 550, powerFactor: 0.931, frequencyHz: 50.01, tempCc: 58.2, voltageInKv: 20.21,
-    voltageOutL2L: 403.9, voltageOutL2N: 230.8, currentR: 748.2, currentS: 738.9, currentT: 755.1,
-    thdVoltage: 2.32, thdCurrent: 5.81, kwh: 148920.6, status: "online"
+    id: "mdp-1.2", name: "MDP-1.2", factory: 1, capacityKva: 630, activePowerKw: 0, reactivePowerKvar: 0,
+    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
+    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
+    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
   },
   {
-    id: "mdp-2", name: "MDP-2", factory: 1, capacityKva: 1000, activePowerKw: 821, reactivePowerKvar: 310,
-    apparentPowerKva: 878, powerFactor: 0.935, frequencyHz: 50.02, tempCc: 62.4, voltageInKv: 20.24,
-    voltageOutL2L: 405.1, voltageOutL2N: 232.1, currentR: 1205.4, currentS: 1211.8, currentT: 1228.6,
-    thdVoltage: 2.11, thdCurrent: 5.25, kwh: 239010.5, status: "online"
+    id: "mdp-2", name: "MDP-2", factory: 1, capacityKva: 1000, activePowerKw: 0, reactivePowerKvar: 0,
+    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
+    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
+    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
   },
   {
-    id: "mdp-3", name: "MDP-3", factory: 1, capacityKva: 1000, activePowerKw: 851, reactivePowerKvar: 382,
-    apparentPowerKva: 932, powerFactor: 0.913, frequencyHz: 49.98, tempCc: 67.8, voltageInKv: 20.19,
-    voltageOutL2L: 402.5, voltageOutL2N: 229.4, currentR: 1260.8, currentS: 1251.2, currentT: 1279.4,
-    thdVoltage: 2.85, thdCurrent: 6.42, kwh: 98450.8, status: "warning"
+    id: "mdp-3", name: "MDP-3", factory: 1, capacityKva: 1000, activePowerKw: 0, reactivePowerKvar: 0,
+    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
+    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
+    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
   },
   // Factory 2
   {
-    id: "putr-1", name: "PUTR-1", factory: 2, capacityKva: 2000, activePowerKw: 1654, reactivePowerKvar: 480,
-    apparentPowerKva: 1722, powerFactor: 0.960, frequencyHz: 50.03, tempCc: 61.2, voltageInKv: 20.25,
-    voltageOutL2L: 405.8, voltageOutL2N: 232.5, currentR: 2420.5, currentS: 2435.1, currentT: 2408.2,
-    thdVoltage: 1.84, thdCurrent: 4.88, kwh: 458900.2, status: "online"
+    id: "putr-1", name: "PUTR-1", factory: 2, capacityKva: 2000, activePowerKw: 0, reactivePowerKvar: 0,
+    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
+    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
+    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
   },
   {
-    id: "putr-2", name: "PUTR-2", factory: 2, capacityKva: 2000, activePowerKw: 1456, reactivePowerKvar: 495,
-    apparentPowerKva: 1537, powerFactor: 0.947, frequencyHz: 50.01, tempCc: 56.4, voltageInKv: 20.22,
-    voltageOutL2L: 404.2, voltageOutL2N: 231.0, currentR: 2130.4, currentS: 2145.8, currentT: 2125.1,
-    thdVoltage: 2.05, thdCurrent: 5.12, kwh: 382400.9, status: "online"
+    id: "putr-2", name: "PUTR-2", factory: 2, capacityKva: 2000, activePowerKw: 0, reactivePowerKvar: 0,
+    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
+    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
+    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
   },
   {
-    id: "putr-new", name: "PUTR-New", factory: 2, capacityKva: 1600, activePowerKw: 828, reactivePowerKvar: 280,
-    apparentPowerKva: 874, powerFactor: 0.947, frequencyHz: 50.02, tempCc: 51.5, voltageInKv: 20.26,
-    voltageOutL2L: 406.2, voltageOutL2N: 232.9, currentR: 1210.8, currentS: 1215.4, currentT: 1201.2,
-    thdVoltage: 1.95, thdCurrent: 4.65, kwh: 120560.5, status: "online"
+    id: "putr-new", name: "PUTR-New", factory: 2, capacityKva: 1600, activePowerKw: 0, reactivePowerKvar: 0,
+    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
+    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
+    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
   }
 ];
 
@@ -713,29 +713,9 @@ export default function PowerDistribution() {
     return transformers.reduce((sum, tx) => sum + tx.capacityKva, 0);
   }, [transformers]);
 
-  // Real-time ticking simulation
+  // Real-time ticking simulation disabled since data is dummy
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTransformers((prev) =>
-        prev.map((tx) => {
-          const diffKw = (Math.random() * 8 - 4);
-          const nextKw = Math.max(0, Math.min(tx.capacityKva, tx.activePowerKw + diffKw));
-          const addedKwh = (nextKw * (3 / 3600));
-
-          return {
-            ...tx,
-            activePowerKw: Math.round(nextKw * 10) / 10,
-            kwh: Math.round((tx.kwh + addedKwh) * 100) / 100,
-            tempCc: Math.round((tx.tempCc + (Math.random() * 0.4 - 0.2)) * 10) / 10,
-            currentR: Math.round((tx.currentR + (Math.random() * 4 - 2)) * 10) / 10,
-            currentS: Math.round((tx.currentS + (Math.random() * 4 - 2)) * 10) / 10,
-            currentT: Math.round((tx.currentT + (Math.random() * 4 - 2)) * 10) / 10
-          };
-        })
-      );
-    }, 3000);
-
-    return () => clearInterval(timer);
+    // Disabled
   }, []);
 
   const factory1 = transformers.filter(tx => tx.factory === 1);

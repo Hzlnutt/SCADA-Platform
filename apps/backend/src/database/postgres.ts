@@ -130,9 +130,14 @@ export const ensurePostgresTables = async () => {
         actual_hours_at_trigger DOUBLE PRECISION NOT NULL DEFAULT 0.0,
         completed_at TIMESTAMP WITHOUT TIME ZONE,
         completion_status VARCHAR(50),
+        completed_by VARCHAR(100),
         created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    await pool.query(`
+      ALTER TABLE running_hours_tasks ADD COLUMN IF NOT EXISTS completed_by VARCHAR(100);
+    `).catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sensor_rules (

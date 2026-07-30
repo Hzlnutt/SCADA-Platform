@@ -12,13 +12,7 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
 // Event logs mock data matching the mockup
-const MOCK_EVENTS = [
-  { time: "08:42:15", type: "INFO", source: "MDP-2", message: "MDP-2 Load above 75% threshold" },
-  { time: "07:15:02", type: "WARN", source: "MDP-2", message: "Temperature high on MDP-2 (62.4°C)" },
-  { time: "06:58:30", type: "INFO", source: "PLN", message: "PLN Voltage dip detected (19.8 kV)" },
-  { time: "03:22:18", type: "INFO", source: "PUTR-New", message: "PUTR-New transformer online" },
-  { time: "01:10:45", type: "OK", source: "System", message: "Auto PF correction bank engaged" }
-];
+const MOCK_EVENTS: any[] = [];
 
 /* ═══════════ CUSTOM GAUGE COMPONENT ═══════════ */
 function UnbalancedGauge({
@@ -165,13 +159,13 @@ export default function IncomingPln() {
         title: "Incoming Fact-1 20 kV — Feeder WF1",
         connectedLabel: "FACT-1 CONNECTED",
         deviceId: "Feeder_WF1_PM5560",
-        activePowerBase: 2800,
-        voltageBase: 20.04,
-        pfBase: 0.952,
-        reactiveBase: 1200,
-        apparentBase: 2990,
-        unbalanceVBase: 0.88,
-        unbalanceIBase: 1.42
+        activePowerBase: 0,
+        voltageBase: 0,
+        pfBase: 0,
+        reactiveBase: 0,
+        apparentBase: 0,
+        unbalanceVBase: 0,
+        unbalanceIBase: 0
       };
     }
     if (mode === "fact2") {
@@ -179,13 +173,13 @@ export default function IncomingPln() {
         title: "Incoming Fact-2 20 kV — Feeder WF2",
         connectedLabel: "FACT-2 CONNECTED",
         deviceId: "Feeder_WF2_PM5500",
-        activePowerBase: 1420,
-        voltageBase: 19.98,
-        pfBase: 0.928,
-        reactiveBase: 710,
-        apparentBase: 1580,
-        unbalanceVBase: 1.05,
-        unbalanceIBase: 1.82
+        activePowerBase: 0,
+        voltageBase: 0,
+        pfBase: 0,
+        reactiveBase: 0,
+        apparentBase: 0,
+        unbalanceVBase: 0,
+        unbalanceIBase: 0
       };
     }
     // Default PLN
@@ -193,13 +187,13 @@ export default function IncomingPln() {
       title: "Incoming PLN 20 kV — Sumber Utama",
       connectedLabel: "PLN CONNECTED",
       deviceId: "Cubicle_PLN_PM8000",
-      activePowerBase: 4278,
-      voltageBase: 20.07,
-      pfBase: 0.943,
-      reactiveBase: 1898,
-      apparentBase: 4595,
-      unbalanceVBase: 0.95,
-      unbalanceIBase: 1.56
+      activePowerBase: 0,
+      voltageBase: 0,
+      pfBase: 0,
+      reactiveBase: 0,
+      apparentBase: 0,
+      unbalanceVBase: 0,
+      unbalanceIBase: 0
     };
   }, [mode]);
 
@@ -208,19 +202,19 @@ export default function IncomingPln() {
 
   // Real-time metrics states
   const [metrics, setMetrics] = useState({
-    voltage: 20.07,
-    frequency: 49.96,
-    activePower: 4278,
-    powerFactor: 0.943,
-    reactivePower: 1898,
-    apparentPower: 4595,
-    unbalanceV: 0.95,
-    unbalanceI: 1.56,
+    voltage: 0,
+    frequency: 0,
+    activePower: 0,
+    powerFactor: 0,
+    reactivePower: 0,
+    apparentPower: 0,
+    unbalanceV: 0,
+    unbalanceI: 0,
     // Phase values
-    vR: 11.541, vS: 11.558, vT: 11.640,
-    iR: 120.6, iS: 121.2, iT: 125.9,
-    thdV_R: 2.51, thdV_S: 2.34, thdV_T: 1.92,
-    thdI_R: 6.20, thdI_S: 5.78, thdI_T: 5.55,
+    vR: 0, vS: 0, vT: 0,
+    iR: 0, iS: 0, iT: 0,
+    thdV_R: 0, thdV_S: 0, thdV_T: 0,
+    thdI_R: 0, thdI_S: 0, thdI_T: 0,
     isConnected: true
   });
 
@@ -278,22 +272,21 @@ export default function IncomingPln() {
   useEffect(() => {
     setMetrics({
       voltage: config.voltageBase,
-      frequency: 49.96,
+      frequency: 0,
       activePower: config.activePowerBase,
       powerFactor: config.pfBase,
       reactivePower: config.reactiveBase,
       apparentPower: config.apparentBase,
       unbalanceV: config.unbalanceVBase,
       unbalanceI: config.unbalanceIBase,
-      // Scale phase values proportionally
-      vR: 11.541 * (config.voltageBase / 20.07),
-      vS: 11.558 * (config.voltageBase / 20.07),
-      vT: 11.640 * (config.voltageBase / 20.07),
-      iR: 120.6 * (config.activePowerBase / 4278),
-      iS: 121.2 * (config.activePowerBase / 4278),
-      iT: 125.9 * (config.activePowerBase / 4278),
-      thdV_R: 2.51, thdV_S: 2.34, thdV_T: 1.92,
-      thdI_R: 6.20, thdI_S: 5.78, thdI_T: 5.55,
+      vR: 0,
+      vS: 0,
+      vT: 0,
+      iR: 0,
+      iS: 0,
+      iT: 0,
+      thdV_R: 0, thdV_S: 0, thdV_T: 0,
+      thdI_R: 0, thdI_S: 0, thdI_T: 0,
       isConnected: true
     });
   }, [config]);
@@ -343,6 +336,31 @@ export default function IncomingPln() {
       socket.off("electricity:live_update", handleLiveUpdate);
     };
   }, [config.deviceId]);
+
+  // Averages and stats helpers for Phase details
+  const statsV = useMemo(() => {
+    const vals = [metrics.vR, metrics.vS, metrics.vT];
+    const avg = vals.reduce((a, b) => a + b, 0) / 3;
+    return { avg, min: Math.min(...vals), max: Math.max(...vals) };
+  }, [metrics.vR, metrics.vS, metrics.vT]);
+
+  const statsI = useMemo(() => {
+    const vals = [metrics.iR, metrics.iS, metrics.iT];
+    const avg = vals.reduce((a, b) => a + b, 0) / 3;
+    return { avg, min: Math.min(...vals), max: Math.max(...vals) };
+  }, [metrics.iR, metrics.iS, metrics.iT]);
+
+  const statsThdV = useMemo(() => {
+    const vals = [metrics.thdV_R, metrics.thdV_S, metrics.thdV_T];
+    const avg = vals.reduce((a, b) => a + b, 0) / 3;
+    return { avg, min: Math.min(...vals), max: Math.max(...vals) };
+  }, [metrics.thdV_R, metrics.thdV_S, metrics.thdV_T]);
+
+  const statsThdI = useMemo(() => {
+    const vals = [metrics.thdI_R, metrics.thdI_S, metrics.thdI_T];
+    const avg = vals.reduce((a, b) => a + b, 0) / 3;
+    return { avg, min: Math.min(...vals), max: Math.max(...vals) };
+  }, [metrics.thdI_R, metrics.thdI_S, metrics.thdI_T]);
 
   // Radar PQ index chart data
   const radarData = useMemo(() => {
@@ -619,7 +637,7 @@ export default function IncomingPln() {
                 <span className="font-mono">{metrics.vR.toFixed(3)} kV</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: "96%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: metrics.vR > 0 ? `${(metrics.vR / 12) * 100}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
@@ -629,7 +647,7 @@ export default function IncomingPln() {
                 <span className="font-mono">{metrics.vS.toFixed(3)} kV</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: "97%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: metrics.vS > 0 ? `${(metrics.vS / 12) * 100}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
@@ -639,15 +657,15 @@ export default function IncomingPln() {
                 <span className="font-mono">{metrics.vT.toFixed(3)} kV</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: "98%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: metrics.vT > 0 ? `${(metrics.vT / 12) * 100}%` : "0%" }} />
               </div>
             </div>
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">11.580</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">11.541</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">11.640</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{statsV.avg.toFixed(3)}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{statsV.min.toFixed(3)}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{statsV.max.toFixed(3)}</strong></span>
           </div>
         </div>
 
@@ -666,7 +684,7 @@ export default function IncomingPln() {
                 <span className="font-mono">{metrics.iR.toFixed(1)} A</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: "90%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: metrics.iR > 0 ? `${Math.min(100, (metrics.iR / 150) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
@@ -676,7 +694,7 @@ export default function IncomingPln() {
                 <span className="font-mono">{metrics.iS.toFixed(1)} A</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: "91%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: metrics.iS > 0 ? `${Math.min(100, (metrics.iS / 150) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
@@ -686,15 +704,15 @@ export default function IncomingPln() {
                 <span className="font-mono">{metrics.iT.toFixed(1)} A</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: "95%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: metrics.iT > 0 ? `${Math.min(100, (metrics.iT / 150) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">122.6</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">120.6</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">125.9</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{statsI.avg.toFixed(1)}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{statsI.min.toFixed(1)}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{statsI.max.toFixed(1)}</strong></span>
           </div>
         </div>
 
@@ -713,7 +731,7 @@ export default function IncomingPln() {
                 <span className="font-mono">{metrics.thdV_R.toFixed(2)} %</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: "50%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: metrics.thdV_R > 0 ? `${Math.min(100, (metrics.thdV_R / 5) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
@@ -723,7 +741,7 @@ export default function IncomingPln() {
                 <span className="font-mono">{metrics.thdV_S.toFixed(2)} %</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: "46%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: metrics.thdV_S > 0 ? `${Math.min(100, (metrics.thdV_S / 5) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
@@ -733,15 +751,15 @@ export default function IncomingPln() {
                 <span className="font-mono">{metrics.thdV_T.toFixed(2)} %</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: "38%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: metrics.thdV_T > 0 ? `${Math.min(100, (metrics.thdV_T / 5) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">2.28</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">1.92</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">2.51</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{statsThdV.avg.toFixed(2)}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{statsThdV.min.toFixed(2)}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{statsThdV.max.toFixed(2)}</strong></span>
           </div>
         </div>
 
@@ -760,7 +778,7 @@ export default function IncomingPln() {
                 <span className="font-mono">{metrics.thdI_R.toFixed(2)} %</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: "77%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: metrics.thdI_R > 0 ? `${Math.min(100, (metrics.thdI_R / 8) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
@@ -770,7 +788,7 @@ export default function IncomingPln() {
                 <span className="font-mono">{metrics.thdI_S.toFixed(2)} %</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: "72%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: metrics.thdI_S > 0 ? `${Math.min(100, (metrics.thdI_S / 8) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
@@ -780,15 +798,15 @@ export default function IncomingPln() {
                 <span className="font-mono">{metrics.thdI_T.toFixed(2)} %</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: "69%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: metrics.thdI_T > 0 ? `${Math.min(100, (metrics.thdI_T / 8) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">5.84</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">5.55</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">6.20</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{statsThdI.avg.toFixed(2)}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{statsThdI.min.toFixed(2)}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{statsThdI.max.toFixed(2)}</strong></span>
           </div>
         </div>
       </section>

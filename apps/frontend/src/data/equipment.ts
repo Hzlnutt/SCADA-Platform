@@ -539,8 +539,8 @@ export const DEFAULT_CT3_EQ_CONFIGS: ConfigEqRow[] = [
 export type ConfigTagRow = {
   tagKey: string;
   tagName: string;
-  lowLimit: number;
-  baseline: number;
+  lowLimit: number | null;
+  baseline: number | null;
   highLimit: number;
   unit: string;
   enableAlert: boolean;

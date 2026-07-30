@@ -138,7 +138,11 @@ function StandardMachineOverview({
   const [subTab, setSubTab] = useState<"telemetry" | "process">("telemetry");
   const [dbAlarms, setDbAlarms] = useState<any[]>([]);
 
-  const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>(() => {
+  const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>({});
+  const [jsonKeyMap, setJsonKeyMap] = useState<Record<string, string>>({});
+
+  // Reset and sync API sources from LocalStorage/Postgres when unitId changes
+  useEffect(() => {
     const defaultMap: Record<string, string> = {};
     if (unitId.startsWith("cooling-water")) {
       const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
@@ -147,39 +151,67 @@ function StandardMachineOverview({
         defaultMap[s.tagKey] = defaultUrl;
       });
     }
-    const saved = localStorage.getItem(`scada.config.api_sources.${unitId}`);
-    if (saved) {
+
+    // Load URLs
+    const savedUrls = localStorage.getItem(`scada.config.api_sources.${unitId}`);
+    if (savedUrls) {
       try {
-        const parsed = JSON.parse(saved);
+        const parsed = JSON.parse(savedUrls);
         const healed: Record<string, string> = {};
-        let modified = false;
         Object.entries(parsed).forEach(([key, val]) => {
           if (typeof val === "string") {
-            const newVal = val.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
-            if (newVal !== val) modified = true;
-            healed[key] = newVal;
-          } else {
-            healed[key] = val as string;
+            healed[key] = val.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
           }
         });
-        if (modified) {
-          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(healed));
-        }
-        return { ...defaultMap, ...healed };
-      } catch (e) {}
+        setApiSourceUrls({ ...defaultMap, ...healed });
+      } catch (e) {
+        setApiSourceUrls(defaultMap);
+      }
+    } else {
+      setApiSourceUrls(defaultMap);
     }
-    return defaultMap;
-  });
 
-  // Sync API sources from Postgres database on mount
-  useEffect(() => {
-    getJson<{ success: boolean; sources: Record<string, string> | null }>(
+    // Load JSON Key map
+    const savedList = localStorage.getItem(`scada.config.api_sources_list.${unitId}`);
+    if (savedList) {
+      try {
+        const parsed = JSON.parse(savedList);
+        const map: Record<string, string> = {};
+        if (Array.isArray(parsed)) {
+          parsed.forEach((row: any) => {
+            if (row.tagKey && row.jsonKey) {
+              map[row.tagKey] = row.jsonKey;
+            }
+          });
+        }
+        setJsonKeyMap(map);
+      } catch (e) {
+        setJsonKeyMap({});
+      }
+    } else {
+      setJsonKeyMap({});
+    }
+
+    // Fetch fresh map from DB
+    getJson<{ success: boolean; sources: Record<string, string> | null; rows?: any[] | null }>(
       `/config/api-sources-map?unitId=${unitId}`
     )
       .then((res) => {
-        if (res && res.success && res.sources) {
-          setApiSourceUrls((prev) => ({ ...prev, ...res.sources }));
-          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(res.sources));
+        if (res && res.success) {
+          if (res.sources) {
+            setApiSourceUrls((prev) => ({ ...prev, ...res.sources }));
+            localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(res.sources));
+          }
+          if (res.rows) {
+            localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(res.rows));
+            const map: Record<string, string> = {};
+            res.rows.forEach((row: any) => {
+              if (row.tagKey && row.jsonKey) {
+                map[row.tagKey] = row.jsonKey;
+              }
+            });
+            setJsonKeyMap(map);
+          }
         }
       })
       .catch((err) => console.error("Failed to load API sources map from DB:", err));
@@ -205,7 +237,7 @@ function StandardMachineOverview({
               method: "GET"
             });
             if (res && res.success && res.data) {
-              Object.assign(aggregatedData, res.data);
+              aggregatedData[url] = res.data;
             }
           } catch (err) {
             console.error(`Live API poll error on overview for URL ${url}:`, err);
@@ -354,31 +386,17 @@ function StandardMachineOverview({
   const latest = useTelemetryStore((state) => state.latest);
   const liveData = useMemo(() => {
     if (unitId.startsWith("cooling-water")) {
-      const jsonKeyMap = (() => {
-        const map: Record<string, string> = {};
-        const savedList = localStorage.getItem(`scada.config.api_sources_list.${unitId}`);
-        if (savedList) {
-          try {
-            const parsed = JSON.parse(savedList);
-            if (Array.isArray(parsed)) {
-              parsed.forEach((row: any) => {
-                if (row.tagKey && row.jsonKey) {
-                  map[row.tagKey] = row.jsonKey;
-                }
-              });
-            }
-          } catch (e) {}
-        }
-        return map;
-      })();
-
       const getApiVal = (tagKey: string) => {
         const url = apiSourceUrls[tagKey] || "";
         if (!url.trim()) return "Belum Ada API";
 
         if (tagKey === "cooling-water/delta_temp") {
-          const retVal = apiLiveData[jsonKeyMap["cooling-water/return_temp"] || "Scaled_Temp_Tank_Cooling3_Return"];
-          const suppVal = apiLiveData[jsonKeyMap["cooling-water/supply_temp"] || "Scaled_Temp_Tank_Cooling3_Supp"];
+          const retKey = jsonKeyMap["cooling-water/return_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/return_temp"];
+          const suppKey = jsonKeyMap["cooling-water/supply_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
+          const retUrl = apiSourceUrls["cooling-water/return_temp"] || "";
+          const suppUrl = apiSourceUrls["cooling-water/supply_temp"] || "";
+          const retVal = retKey && retUrl ? apiLiveData[retUrl]?.[retKey] : undefined;
+          const suppVal = suppKey && suppUrl ? apiLiveData[suppUrl]?.[suppKey] : undefined;
           if (typeof retVal === "number" && typeof suppVal === "number") {
             return retVal - suppVal;
           }
@@ -388,7 +406,7 @@ function StandardMachineOverview({
         const jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
         if (!jsonKey) return "xx";
 
-        const val = apiLiveData[jsonKey];
+        const val = apiLiveData[url]?.[jsonKey];
         if (val === undefined || val === null) return "xx";
         return val;
       };
@@ -771,7 +789,7 @@ function StandardMachineOverview({
         liveDataState.equipment[5]
       ]
     };
-  }, [liveDataState, latest, machineConfig]);
+  }, [liveDataState, latest, machineConfig, apiSourceUrls, apiLiveData, jsonKeyMap, unitId]);
 
   // Drift simulation disabled for production telemetry integration
   useEffect(() => {

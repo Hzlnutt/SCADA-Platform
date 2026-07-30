@@ -285,24 +285,9 @@ function DynamicSelectionChart({ isDark }: { isDark: boolean }) {
     }
   }, [machineOptions, machine]);
 
-  // Generate deterministic data based on selection so it looks realistic
-  const currentData = useMemo(() => {
-    const seed = machine.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return Array.from({ length: 31 }, (_, i) => {
-      const base = 15000 + (seed % 10) * 2000;
-      const variation = Math.sin((i + seed) / 2) * 5000;
-      return Math.max(1000, base + variation);
-    });
-  }, [machine]);
-
-  const previousData = useMemo(() => {
-    const seed = machine.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) + 123;
-    return Array.from({ length: 31 }, (_, i) => {
-      const base = 14000 + (seed % 10) * 2000;
-      const variation = Math.sin((i + seed) / 2) * 5000;
-      return Math.max(1000, base + variation);
-    });
-  }, [machine]);
+  // Empty data for integration ready state
+  const currentData = useMemo(() => [], []);
+  const previousData = useMemo(() => [], []);
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
@@ -575,7 +560,39 @@ export default function Electricity() {
     responsive: true, maintainAspectRatio: false, animation: { duration: 0 },
     plugins: {
       legend: { display: true, position: "top", align: "end", labels: { color: isDark ? "rgba(148,163,184,.9)" : "rgba(71,85,105,.9)", font: { size: 10, weight: "600" as const }, usePointStyle: true, pointStyle: "rectRounded", padding: 12 } },
-      tooltip: { backgroundColor: isDark ? "rgba(13,21,39,.95)" : "rgba(255,255,255,.95)", titleColor: isDark ? "#f1f5f9" : "#0f172a", bodyColor: isDark ? "#f1f5f9" : "#0f172a", borderColor: isDark ? "rgba(51,65,85,.5)" : "rgba(203,213,225,.5)", borderWidth: 1, padding: 12, bodyFont: { family: "IBM Plex Mono, monospace", size: 11 }, callbacks: { label: (ctx: any) => `${ctx.dataset.label}: ${Number(ctx.parsed.y).toLocaleString("id-ID", { maximumFractionDigits: 2 })}` } }
+      tooltip: {
+        mode: "index",
+        intersect: false,
+        backgroundColor: isDark ? "rgba(15, 23, 42, 0.98)" : "rgba(255, 255, 255, 1)",
+        titleColor: isDark ? "#ffffff" : "#000000",
+        bodyColor: isDark ? "#f8fafc" : "#0f172a",
+        borderColor: isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(15, 23, 42, 0.15)",
+        borderWidth: 2,
+        padding: 12,
+        titleFont: { family: "IBM Plex Mono, monospace", size: 12, weight: "bold" as const },
+        bodyFont: { family: "IBM Plex Mono, monospace", size: 11, weight: "bold" as const },
+        footerColor: isDark ? "#fbbf24" : "#b45309",
+        footerFont: { family: "IBM Plex Mono, monospace", size: 11, weight: "bold" as const },
+        callbacks: {
+          label: (ctx: any) => {
+            const val = ctx.parsed.y;
+            return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { maximumFractionDigits: 2 })}`;
+          },
+          footer: (tooltipItems: any[]) => {
+            if (!tooltipItems || tooltipItems.length === 0) return "";
+            const dataIndex = tooltipItems[0].dataIndex;
+            const wbp = barWbpValues[dataIndex] || 0;
+            const lwbp = barLwbpValues[dataIndex] || 0;
+            const total = wbp + lwbp;
+            const multiplier = barUnit === "MWh" ? 1000 : 1;
+            const cost = (wbp * multiplier * wbpRate) + (lwbp * multiplier * lwbpRate);
+            return [
+              `Total: ${total.toLocaleString("id-ID", { maximumFractionDigits: 2 })} ${barUnit}`,
+              `Estimasi Biaya: Rp ${cost.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+            ];
+          }
+        }
+      }
     },
     scales: {
       x: { stacked: true, grid: { display: false }, ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
@@ -608,9 +625,9 @@ export default function Electricity() {
     }
   };
 
-  /* ═══ DUMMY DATA FOR PLACEHOLDER SECTIONS ═══ */
-  const dummyMonthlyData = useMemo(() => Array.from({ length: 31 }, () => Math.random() * 40000 + 5000), []);
-  const dummyPreviousData = useMemo(() => Array.from({ length: 31 }, () => Math.random() * 40000 + 5000), []);
+  /* ═══ NO DATA PLACEHOLDER SECTIONS ═══ */
+  const dummyMonthlyData = useMemo(() => [], []);
+  const dummyPreviousData = useMemo(() => [], []);
 
   /* ═══ CONSUMPTION FACT EDITOR HANDLERS ═══ */
   const handleAddCategory = async () => {
@@ -733,7 +750,7 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-amber-600/10 text-amber-700'} flex items-center justify-center`}><IconGenset /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-amber-950'}`}>
-              0/2 <span className={`text-sm font-bold ml-1 ${isDark ? 'text-amber-200' : 'text-amber-700'}`}>running</span>
+              0 <span className={`text-sm font-bold ml-1 ${isDark ? 'text-amber-200' : 'text-amber-700'}`}>running</span>
             </div>
             <div className={`mt-2 text-[10px] ${isDark ? 'text-amber-200' : 'text-amber-800'} space-y-0.5`}>
               <div>Caterpillar: <strong className={isDark ? 'text-white' : 'text-amber-950'}>1350 kVA</strong></div>
@@ -828,6 +845,11 @@ export default function Electricity() {
               {summaryLoading ? "..." : `${cardSummary.peakDemand.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW`}
             </div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
+            {cardSummary.peakDemandTs && (
+              <div className="text-[9px] font-bold text-amber-600 dark:text-amber-400 mt-0.5 font-mono">
+                {formatPeakTs(cardSummary.peakDemandTs)}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1080,7 +1102,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Peak Demand</div>
             <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {summaryLoading ? "..." : `${cardSummary.totalKwh.toLocaleString("id-ID", { maximumFractionDigits: 3 })} kWh`}
+              0 kWh
             </div>
           </div>
           {cubiclePoiView ? (
@@ -1098,21 +1120,21 @@ export default function Electricity() {
             <>
               <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4">
                 <span className="text-[10px] font-bold text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">LWBP</span>
-                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">{summaryLoading ? "..." : `${cardSummary.lwbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}</div>
+                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kWh</div>
               </div>
               <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30 p-4">
                 <span className="text-[10px] font-bold text-rose-500 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">WBP</span>
-                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">{summaryLoading ? "..." : `${cardSummary.wbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}</div>
+                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kWh</div>
               </div>
             </>
           )}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Monthly Usage</div>
-            <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">{summaryLoading ? "..." : `${cardSummary.totalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}</div>
+            <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kWh</div>
           </div>
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Estimation Cost</div>
-            <div className="mt-1 text-base font-extrabold text-slate-800 dark:text-white font-mono">{summaryLoading ? "..." : formatCurrency(cardSummary.totalCost)}</div>
+            <div className="mt-1 text-base font-extrabold text-slate-800 dark:text-white font-mono">Rp 0,00</div>
           </div>
         </div>
 

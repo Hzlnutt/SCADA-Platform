@@ -4,6 +4,7 @@ import { getUnitById } from "../../data/machines";
 import type { MachineOutletContext } from "./MachineLayout";
 import PidPageTemplate from "./PidPageTemplate";
 import type { Task, Alarm } from "./PidPageTemplate";
+import type { ApiSourceRow } from "./MachineConfig";
 import { useTelemetryStore } from "../../store/telemetry.store";
 import { getJson, postJson } from "../../services/api.client";
 import { telemetryTagIds } from "../../data/industrial-tags";
@@ -207,7 +208,11 @@ export default function MachinePidDiagram() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
 
-  const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>(() => {
+  const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>({});
+  const [jsonKeyMap, setJsonKeyMap] = useState<Record<string, string>>({});
+
+  // Reset and sync API sources from LocalStorage/Postgres when unitId changes
+  useEffect(() => {
     const defaultMap: Record<string, string> = {};
     if (unitId.startsWith("cooling-water")) {
       const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
@@ -216,39 +221,67 @@ export default function MachinePidDiagram() {
         defaultMap[s.tagKey] = defaultUrl;
       });
     }
-    const saved = localStorage.getItem(`scada.config.api_sources.${unitId}`);
-    if (saved) {
+
+    // Load URLs
+    const savedUrls = localStorage.getItem(`scada.config.api_sources.${unitId}`);
+    if (savedUrls) {
       try {
-        const parsed = JSON.parse(saved);
+        const parsed = JSON.parse(savedUrls);
         const healed: Record<string, string> = {};
-        let modified = false;
         Object.entries(parsed).forEach(([key, val]) => {
           if (typeof val === "string") {
-            const newVal = val.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
-            if (newVal !== val) modified = true;
-            healed[key] = newVal;
-          } else {
-            healed[key] = val as string;
+            healed[key] = val.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
           }
         });
-        if (modified) {
-          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(healed));
-        }
-        return { ...defaultMap, ...healed };
-      } catch (e) {}
+        setApiSourceUrls({ ...defaultMap, ...healed });
+      } catch (e) {
+        setApiSourceUrls(defaultMap);
+      }
+    } else {
+      setApiSourceUrls(defaultMap);
     }
-    return defaultMap;
-  });
 
-  // Sync API sources from Postgres database on mount
-  useEffect(() => {
-    getJson<{ success: boolean; sources: Record<string, string> | null }>(
+    // Load JSON Key map
+    const savedList = localStorage.getItem(`scada.config.api_sources_list.${unitId}`);
+    if (savedList) {
+      try {
+        const parsed = JSON.parse(savedList);
+        const map: Record<string, string> = {};
+        if (Array.isArray(parsed)) {
+          parsed.forEach((row: any) => {
+            if (row.tagKey && row.jsonKey) {
+              map[row.tagKey] = row.jsonKey;
+            }
+          });
+        }
+        setJsonKeyMap(map);
+      } catch (e) {
+        setJsonKeyMap({});
+      }
+    } else {
+      setJsonKeyMap({});
+    }
+
+    // Fetch fresh map from DB
+    getJson<{ success: boolean; sources: Record<string, string> | null; rows?: ApiSourceRow[] | null }>(
       `/config/api-sources-map?unitId=${unitId}`
     )
       .then((res) => {
-        if (res && res.success && res.sources) {
-          setApiSourceUrls((prev) => ({ ...prev, ...res.sources }));
-          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(res.sources));
+        if (res && res.success) {
+          if (res.sources) {
+            setApiSourceUrls((prev) => ({ ...prev, ...res.sources }));
+            localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(res.sources));
+          }
+          if (res.rows) {
+            localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(res.rows));
+            const map: Record<string, string> = {};
+            res.rows.forEach((row) => {
+              if (row.tagKey && row.jsonKey) {
+                map[row.tagKey] = row.jsonKey;
+              }
+            });
+            setJsonKeyMap(map);
+          }
         }
       })
       .catch((err) => console.error("Failed to load API sources map from DB:", err));
@@ -274,7 +307,7 @@ export default function MachinePidDiagram() {
               method: "GET"
             });
             if (res && res.success && res.data) {
-              Object.assign(aggregatedData, res.data);
+              aggregatedData[url] = res.data;
             }
           } catch (err) {
             console.error(`Live API poll error on P&ID diagram for URL ${url}:`, err);
@@ -300,29 +333,11 @@ export default function MachinePidDiagram() {
   const mergedLatest = useMemo(() => {
     const merged = { ...latest };
     if (unitId.startsWith("cooling-water")) {
-      const jsonKeyMap = (() => {
-        const map: Record<string, string> = {};
-        const savedList = localStorage.getItem(`scada.config.api_sources_list.${unitId}`);
-        if (savedList) {
-          try {
-            const parsed = JSON.parse(savedList);
-            if (Array.isArray(parsed)) {
-              parsed.forEach((row: any) => {
-                if (row.tagKey && row.jsonKey) {
-                  map[row.tagKey] = row.jsonKey;
-                }
-              });
-            }
-          } catch (e) {}
-        }
-        return map;
-      })();
-
       Object.entries(apiSourceUrls).forEach(([tagKey, url]) => {
         if (!url.trim()) {
           merged[tagKey] = {
             ts: new Date().toISOString(),
-            value: "Belum Ada API",
+            value: "xx",
             quality: "bad",
             meta: { tagId: tagKey }
           };
@@ -330,10 +345,12 @@ export default function MachinePidDiagram() {
         }
 
         if (tagKey === "cooling-water/delta_temp") {
-          const retKey = jsonKeyMap["cooling-water/return_temp"] || "Scaled_Temp_Tank_Cooling3_Return";
-          const suppKey = jsonKeyMap["cooling-water/supply_temp"] || "Scaled_Temp_Tank_Cooling3_Supp";
-          const retVal = apiLiveData[retKey] !== undefined ? apiLiveData[retKey] : apiLiveData["Scaled_Temp_Tank_Colling3_Return"];
-          const suppVal = apiLiveData[suppKey] !== undefined ? apiLiveData[suppKey] : apiLiveData["Scaled_Temp_Tank_Colling3_Supp"];
+          const retKey = jsonKeyMap["cooling-water/return_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/return_temp"];
+          const suppKey = jsonKeyMap["cooling-water/supply_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
+          const retUrl = apiSourceUrls["cooling-water/return_temp"] || "";
+          const suppUrl = apiSourceUrls["cooling-water/supply_temp"] || "";
+          const retVal = retKey && retUrl ? apiLiveData[retUrl]?.[retKey] : undefined;
+          const suppVal = suppKey && suppUrl ? apiLiveData[suppUrl]?.[suppKey] : undefined;
 
           if (typeof retVal === "number" && typeof suppVal === "number") {
             merged[tagKey] = {
@@ -364,14 +381,7 @@ export default function MachinePidDiagram() {
           return;
         }
 
-        let val = apiLiveData[jsonKey];
-        if (val === undefined || val === null) {
-          if (tagKey === "cooling-water/supply_temp") {
-            val = apiLiveData["Scaled_Temp_Tank_Colling3_Supp"];
-          } else if (tagKey === "cooling-water/return_temp") {
-            val = apiLiveData["Scaled_Temp_Tank_Colling3_Return"];
-          }
-        }
+        const val = apiLiveData[url]?.[jsonKey];
 
         if (val === undefined || val === null) {
           merged[tagKey] = {
@@ -391,7 +401,7 @@ export default function MachinePidDiagram() {
       });
     }
     return merged;
-  }, [latest, apiSourceUrls, apiLiveData, unitId]);
+  }, [latest, apiSourceUrls, apiLiveData, unitId, jsonKeyMap]);
 
   const [selectedTaskFilter, setSelectedTaskFilter] = useState<
     "all" | "overdue" | "open" | "close"
@@ -487,6 +497,24 @@ export default function MachinePidDiagram() {
 
   const [runningHours, setRunningHours] = useState<Record<string, number>>({});
   const [pidThresholds, setPidThresholds] = useState<any>(null);
+  const [sensorRules, setSensorRules] = useState<any[]>([]);
+
+  useEffect(() => {
+    getJson<{ data: any[] }>(`/config/sensor-rules?unitId=${unitId}`)
+      .then((res) => {
+        if (res && Array.isArray(res.data)) {
+          setSensorRules(res.data);
+        }
+      })
+      .catch((err) => console.error("Failed to load sensor rules for P&ID:", err));
+  }, [unitId]);
+
+  const sensorRulesMap = useMemo(() => {
+    return sensorRules.reduce((acc, rule) => {
+      acc[rule.tagKey] = rule;
+      return acc;
+    }, {} as Record<string, any>);
+  }, [sensorRules]);
 
   const [dbTasks, setDbTasks] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string }>(() => {
@@ -746,7 +774,13 @@ export default function MachinePidDiagram() {
       onChangeDateRange={setDateRange}
     >
       {PidDiagram ? (
-        <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} latest={mergedLatest} />
+        <PidDiagram 
+          motorStatus={motorStatus} 
+          runningHours={runningHours} 
+          pidThresholds={pidThresholds} 
+          sensorRulesMap={sensorRulesMap} 
+          latest={mergedLatest} 
+        />
       ) : (
         <div className="flex items-center justify-center h-full text-slate-400">
           Diagram untuk {unitId} belum tersedia.

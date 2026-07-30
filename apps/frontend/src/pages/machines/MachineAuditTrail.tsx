@@ -77,27 +77,211 @@ export default function MachineAuditTrail() {
     return "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20";
   };
 
+  const getDiff = (action: string, before: any, after: any) => {
+    const diffs: { item: string; field: string; from: string; to: string }[] = [];
+    if (!before || !after) return null;
+
+    try {
+      if (action === "update_api_sources") {
+        const beforeRows = Array.isArray(before.rows) ? before.rows : [];
+        const afterRows = Array.isArray(after.rows) ? after.rows : [];
+
+        afterRows.forEach((afterRow: any) => {
+          const beforeRow = beforeRows.find((r: any) => r.parameter === afterRow.parameter);
+          if (!beforeRow) {
+            diffs.push({
+              item: afterRow.parameter || "Unknown",
+              field: "Status",
+              from: "-",
+              to: "Configured"
+            });
+          } else {
+            if (beforeRow.jsonKey !== afterRow.jsonKey) {
+              diffs.push({
+                item: afterRow.parameter,
+                field: "JSON Key",
+                from: beforeRow.jsonKey || "-",
+                to: afterRow.jsonKey || "-"
+              });
+            }
+            if (beforeRow.endpoint !== afterRow.endpoint) {
+              diffs.push({
+                item: afterRow.parameter,
+                field: "Endpoint URL",
+                from: beforeRow.endpoint || "-",
+                to: afterRow.endpoint || "-"
+              });
+            }
+          }
+        });
+      } else if (action === "update_sensor_rules") {
+        const beforeRules = Array.isArray(before) ? before : [];
+        const afterRules = Array.isArray(after) ? after : [];
+
+        afterRules.forEach((afterRule: any) => {
+          const beforeRule = beforeRules.find((r: any) => r.tagKey === afterRule.tagKey);
+          if (!beforeRule) {
+            diffs.push({
+              item: afterRule.tagName || afterRule.tagKey,
+              field: "Status",
+              from: "-",
+              to: "Rule Created"
+            });
+          } else {
+            const fields = [
+              { key: "lowLimit", label: "Low Limit" },
+              { key: "baseline", label: "Baseline" },
+              { key: "highLimit", label: "High Limit" },
+              { key: "unit", label: "Unit" },
+              { key: "enableAlert", label: "Enable Alert" },
+              { key: "suppressAlert", label: "Suppress Alert" },
+              { key: "direction", label: "Direction" }
+            ];
+            fields.forEach((f) => {
+              const beforeVal = beforeRule[f.key];
+              const afterVal = afterRule[f.key];
+              if (beforeVal !== afterVal) {
+                diffs.push({
+                  item: afterRule.tagName || afterRule.tagKey,
+                  field: f.label,
+                  from: String(beforeVal !== undefined && beforeVal !== null ? beforeVal : "-"),
+                  to: String(afterVal !== undefined && afterVal !== null ? afterVal : "-")
+                });
+              }
+            });
+          }
+        });
+      } else if (action === "update_rh_task_rules") {
+        const beforeItems = Array.isArray(before) ? before : [];
+        const afterItems = Array.isArray(after) ? after : [];
+
+        afterItems.forEach((afterItem: any) => {
+          const beforeItem = beforeItems.find((r: any) => r.itemKey === afterItem.itemKey);
+          if (!beforeItem) {
+            diffs.push({
+              item: afterItem.displayName || afterItem.itemKey,
+              field: "Status",
+              from: "-",
+              to: "Added Rules"
+            });
+          } else {
+            const beforeRules = Array.isArray(beforeItem.rules) ? beforeItem.rules : [];
+            const afterRules = Array.isArray(afterItem.rules) ? afterItem.rules : [];
+
+            afterRules.forEach((ar: any, idx: number) => {
+              const br = beforeRules[idx];
+              if (!br) {
+                diffs.push({
+                  item: afterItem.displayName || afterItem.itemKey,
+                  field: `Rule #${idx + 1}`,
+                  from: "-",
+                  to: `Added Rule (${ar.targetHours}h)`
+                });
+              } else {
+                if (br.targetHours !== ar.targetHours) {
+                  diffs.push({
+                    item: `${afterItem.displayName || afterItem.itemKey} (Rule #${idx + 1})`,
+                    field: "Target Hours",
+                    from: `${br.targetHours}h`,
+                    to: `${ar.targetHours}h`
+                  });
+                }
+                if (br.warningHours !== ar.warningHours) {
+                  diffs.push({
+                    item: `${afterItem.displayName || afterItem.itemKey} (Rule #${idx + 1})`,
+                    field: "Warning Hours",
+                    from: `${br.warningHours}h`,
+                    to: `${ar.warningHours}h`
+                  });
+                }
+                const brTasks = Array.isArray(br.tasks) ? br.tasks.join(", ") : "";
+                const arTasks = Array.isArray(ar.tasks) ? ar.tasks.join(", ") : "";
+                if (brTasks !== arTasks) {
+                  diffs.push({
+                    item: `${afterItem.displayName || afterItem.itemKey} (Rule #${idx + 1})`,
+                    field: "Tasks",
+                    from: brTasks || "-",
+                    to: arTasks || "-"
+                  });
+                }
+              }
+            });
+          }
+        });
+      } else if (action === "update_thresholds") {
+        const beforeRules = Array.isArray(before) ? before : [];
+        const afterRules = Array.isArray(after) ? after : [];
+
+        afterRules.forEach((afterRule: any) => {
+          const beforeRule = beforeRules.find((r: any) => r.parameter === afterRule.parameter);
+          if (beforeRule) {
+            const fields = [
+              { key: "warningHigh", label: "Warning High" },
+              { key: "alarmHigh", label: "Alarm High" },
+              { key: "warningLow", label: "Warning Low" },
+              { key: "alarmLow", label: "Alarm Low" }
+            ];
+            fields.forEach((f) => {
+              if (beforeRule[f.key] !== afterRule[f.key]) {
+                diffs.push({
+                  item: afterRule.parameter,
+                  field: f.label,
+                  from: String(beforeRule[f.key] !== undefined && beforeRule[f.key] !== null ? beforeRule[f.key] : "-"),
+                  to: String(afterRule[f.key] !== undefined && afterRule[f.key] !== null ? afterRule[f.key] : "-")
+                });
+              }
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return diffs.length > 0 ? diffs : null;
+  };
+
   const formatChangeDetails = (log: AuditLogItem) => {
     const meta = log.meta;
     if (!meta) return "Audit log entry without detailed metadata.";
+    
+    // Check if before/after diff is possible
     if (meta.before !== undefined || meta.after !== undefined) {
-      return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2 text-xs font-mono">
-          <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 p-2.5 rounded-lg">
-            <span className="font-bold text-rose-600 dark:text-rose-400 block mb-1">Before:</span>
-            <pre className="whitespace-pre-wrap break-all text-[11px]">
-              {typeof meta.before === "object" ? JSON.stringify(meta.before, null, 2) : String(meta.before ?? "N/A")}
-            </pre>
+      const diffs = getDiff(log.action, meta.before, meta.after);
+      if (diffs && diffs.length > 0) {
+        return (
+          <div className="mt-3 overflow-hidden border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900/30 p-4">
+            <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 mb-3 flex items-center gap-1.5">
+              <span>📋 Detail Perubahan Konfigurasi</span>
+              <span className="text-[10px] font-medium text-slate-400">({diffs.length} item diubah)</span>
+            </h4>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-450 dark:text-slate-500 font-bold">
+                    <th className="pb-2 px-2">Komponen / Parameter</th>
+                    <th className="pb-2 px-2">Kategori Perubahan</th>
+                    <th className="pb-2 px-2">Sebelumnya</th>
+                    <th className="pb-2 px-2">Menjadi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-slate-700 dark:text-slate-350">
+                  {diffs.map((diff, index) => (
+                    <tr key={index} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/50">
+                      <td className="py-2.5 px-2 font-bold text-[#002b5c] dark:text-slate-200">{diff.item}</td>
+                      <td className="py-2.5 px-2 font-semibold text-slate-500">{diff.field}</td>
+                      <td className="py-2.5 px-2 font-mono text-[11px] text-rose-600 dark:text-rose-400 line-through bg-rose-500/[0.02] px-1 rounded">{diff.from}</td>
+                      <td className="py-2.5 px-2 font-mono text-[11px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/[0.02] px-1 rounded">{diff.to}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 p-2.5 rounded-lg">
-            <span className="font-bold text-emerald-600 dark:text-emerald-400 block mb-1">After:</span>
-            <pre className="whitespace-pre-wrap break-all text-[11px]">
-              {typeof meta.after === "object" ? JSON.stringify(meta.after, null, 2) : String(meta.after ?? "N/A")}
-            </pre>
-          </div>
-        </div>
-      );
+        );
+      }
     }
+    
+    // Fallback simple view
     return (
       <pre className="mt-2 text-[11px] font-mono whitespace-pre-wrap break-all bg-slate-50 dark:bg-slate-950 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
         {JSON.stringify(meta, null, 2)}
@@ -132,10 +316,11 @@ export default function MachineAuditTrail() {
             className="px-3 py-1.5 text-xs rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#002b5c] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Semua Aksi</option>
-            <option value="config_update">Config Update</option>
-            <option value="setpoint_update">Setpoint Change</option>
-            <option value="rule_update">Rule Update</option>
-            <option value="task_update">Task Update</option>
+            <option value="update_thresholds">Batas Threshold</option>
+            <option value="update_api_sources">API Source Map</option>
+            <option value="update_sensor_rules">Sensor Rules</option>
+            <option value="update_rh_task_rules">Running Hours Task Rules</option>
+            <option value="complete_maintenance_task">Penyelesaian Maintenance</option>
           </select>
           <button
             type="submit"
