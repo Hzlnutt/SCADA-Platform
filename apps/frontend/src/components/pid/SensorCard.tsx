@@ -54,10 +54,7 @@ const SensorCard: React.FC<SensorCardProps> = ({
       return parsed.toFixed(1);
     }
     const lower = valStr.toLowerCase();
-    if (lower === "belum ada api") {
-      return "belum ada api";
-    }
-    if (lower === "xx") {
+    if (lower === "belum ada api" || lower === "xx") {
       return "xx";
     }
     return val;
@@ -65,15 +62,18 @@ const SensorCard: React.FC<SensorCardProps> = ({
 
   let displayContent: React.ReactNode;
   if (values && values.length > 0) {
-    const parts = values.map(
-      (item) => `${formatSensorValue(item.value)}${item.unit ? " " + item.unit : ""}`
-    );
+    const parts = values.map((item) => {
+      const valStr = formatSensorValue(item.value);
+      if (valStr === "xx") return "xx";
+      return `${valStr}${item.unit ? " " + item.unit : ""}`;
+    });
     displayContent = <tspan>{parts.join(" / ")}</tspan>;
   } else {
+    const valStr = formatSensorValue(value);
     displayContent = (
       <tspan>
-        {formatSensorValue(value)}
-        {unit ? " " + unit : ""}
+        {valStr}
+        {valStr !== "xx" && unit ? " " + unit : ""}
       </tspan>
     );
   }
@@ -84,17 +84,14 @@ const SensorCard: React.FC<SensorCardProps> = ({
   const isOn = value === "ON" || value === "HEATING" || value === "COOLING" || value === "STERIL";
   const isStandby = value === "STANDBY";
 
-  const displayFontSize = isOffline ? "12" : "28";
+  // xx fits perfectly in size 28, but long status string like "API TIDAK TERKIRIM" needs size 12
+  const valString = String(value || "");
+  const isTextLong = valString.length > 7 || (values && values.some(v => String(v.value).length > 7));
+  const displayFontSize = isTextLong ? "12" : "28";
   
   let displayTextColor = valueTextColor;
   if (isOffline) {
-    const valStr = String(value || "").toLowerCase();
-    const hasValsOffline = values && values.some(v => String(v.value).toLowerCase().includes("belum") || String(v.value).toLowerCase().includes("no api"));
-    if (valStr.includes("belum") || valStr.includes("no api") || hasValsOffline) {
-      displayTextColor = "#ffaa00"; // Orange color for unconfigured API
-    } else {
-      displayTextColor = "#ff2222"; // Red color for missing/dead API data
-    }
+    displayTextColor = "#ff2222"; // Red color for missing/dead/unconfigured API data (xx)
   } else if (isOff) {
     displayTextColor = "#ff2222";
   } else if (isOn) {

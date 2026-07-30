@@ -337,7 +337,7 @@ export default function MachinePidDiagram() {
         if (!url.trim()) {
           merged[tagKey] = {
             ts: new Date().toISOString(),
-            value: "Belum Ada API",
+            value: "xx",
             quality: "bad",
             meta: { tagId: tagKey }
           };
