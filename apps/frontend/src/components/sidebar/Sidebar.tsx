@@ -103,6 +103,7 @@ export const Sidebar = () => {
       hvac: false,
       penggunaanUtility: true,
       electricity: true,
+      water: true,
       operasional: true
     };
   });
@@ -331,7 +332,27 @@ export const Sidebar = () => {
           </div>
 
           <NavItem to="/gas" label="Gas" icon={<IconDevice />} tone="scada" />
-          <NavItem to="/air" label="Water" icon={<IconDevice />} tone="scada" />
+          {/* Collapsible Water Item */}
+          <div className="mb-1">
+            <button
+              type="button"
+              onClick={() => toggleSection("water")}
+              className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white"
+            >
+              <span className="flex items-center gap-1.5">
+                <IconDevice />
+                <span>Water</span>
+              </span>
+              <IconChevron open={openSections.water} />
+            </button>
+            {openSections.water && (
+              <div className="flex flex-col gap-0.5 mt-1 border-l border-[#acd3ff] dark:border-slate-800 ml-2.5 pl-1.5">
+                <NavItem to="/air" label="Overview" tone="scada" />
+                <NavItem to="/air/distribusi" label="Distribusi Air" tone="scada" />
+                <NavItem to="/air/energy" label="Energy" tone="scada" />
+              </div>
+            )}
+          </div>
           <NavItem to="/wwtp" label="WWTP" icon={<IconDevice />} tone="scada" />
           <NavItem to="/utility-billing" label="Billing" icon={<IconReport />} tone="scada" />
           <NavItem to="/utility-config" label="Config" icon={<IconSettings />} tone="scada" />

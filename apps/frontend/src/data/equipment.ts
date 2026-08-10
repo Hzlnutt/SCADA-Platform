@@ -549,6 +549,53 @@ export type ConfigTagRow = {
 };
 
 export const getDefaultSensorConfigs = (unitId: string): ConfigTagRow[] => {
+  if (unitId === "electricity") {
+    return [
+      { tagKey: "electricity/solar_generation", tagName: "Solar Generation Total", lowLimit: 0, baseline: 0, highLimit: 2000, unit: "kWh", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/solar_capacity", tagName: "Solar Capacity", lowLimit: 0, baseline: 1700, highLimit: 2000, unit: "kW", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/solar_efficiency", tagName: "Solar Efficiency", lowLimit: 0, baseline: 0, highLimit: 100, unit: "%", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/genset_running", tagName: "Genset Running Count", lowLimit: 0, baseline: 0, highLimit: 10, unit: "running", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/genset_caterpillar_cap", tagName: "Genset Caterpillar Capacity", lowLimit: 0, baseline: 1350, highLimit: 1500, unit: "kVA", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/genset_perkins_cap", tagName: "Genset Perkins Capacity", lowLimit: 0, baseline: 1000, highLimit: 1200, unit: "kVA", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/p_grid", tagName: "P Grid Load", lowLimit: 0, baseline: 0, highLimit: 5000, unit: "kW", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/p_solar", tagName: "P Solar Load", lowLimit: 0, baseline: 0, highLimit: 2000, unit: "kW", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/solar_cost", tagName: "Solar Estimasi Biaya", lowLimit: 0, baseline: 0, highLimit: 100000000, unit: "Rp", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/solar_poi1", tagName: "Solar POI-1 Status", lowLimit: 0, baseline: 0, highLimit: 1, unit: "status", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/solar_poi1_peak", tagName: "Solar POI-1 Peak Demand", lowLimit: 0, baseline: 0, highLimit: 1000, unit: "kW", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/solar_poi2", tagName: "Solar POI-2 Status", lowLimit: 0, baseline: 0, highLimit: 1, unit: "status", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/solar_poi2_peak", tagName: "Solar POI-2 Peak Demand", lowLimit: 0, baseline: 0, highLimit: 1000, unit: "kW", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/solar_poi1_dist", tagName: "Solar POI-1 Distribution Ratio", lowLimit: 0, baseline: 60, highLimit: 100, unit: "%", enableAlert: false, suppressAlert: true },
+      { tagKey: "electricity/solar_poi2_dist", tagName: "Solar POI-2 Distribution Ratio", lowLimit: 0, baseline: 40, highLimit: 100, unit: "%", enableAlert: false, suppressAlert: true }
+    ];
+  }
+
+  if (unitId === "Cubicle_PLN_PM8000" || unitId === "Feeder_WF1_PM5560" || unitId === "Feeder_WF2_PM5500" || unitId === "incoming-pln" || unitId === "incoming-fact-1" || unitId === "incoming-fact-2") {
+    const isPln = unitId === "Cubicle_PLN_PM8000" || unitId === "incoming-pln";
+    const prefix = isPln ? "pln" : (unitId === "Feeder_WF1_PM5560" || unitId === "incoming-fact-1") ? "wf1" : "wf2";
+    return [
+      { tagKey: `${prefix}/voltage`, tagName: "Tegangan Average", lowLimit: 18.0, baseline: 20.0, highLimit: 22.0, unit: "kV", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/frequency`, tagName: "Frekuensi", lowLimit: 49.0, baseline: 50.0, highLimit: 51.0, unit: "Hz", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/active_power`, tagName: "Active Power", lowLimit: 0, baseline: 0, highLimit: 5000, unit: "kW", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/power_factor`, tagName: "Power Factor", lowLimit: 0.8, baseline: 0.95, highLimit: 1.0, unit: "PF", enableAlert: true, suppressAlert: false, direction: "below" },
+      { tagKey: `${prefix}/reactive_power`, tagName: "Reactive Power", lowLimit: 0, baseline: 0, highLimit: 5000, unit: "kVAR", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/apparent_power`, tagName: "Apparent Power", lowLimit: 0, baseline: 0, highLimit: 5000, unit: "kVA", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/unbalance_v`, tagName: "Voltage Unbalanced", lowLimit: 0, baseline: 0, highLimit: 2.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/unbalance_i`, tagName: "Current Unbalanced", lowLimit: 0, baseline: 0, highLimit: 10.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/v_r`, tagName: "Tegangan Phase R", lowLimit: 10.0, baseline: 11.5, highLimit: 13.0, unit: "kV", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/v_s`, tagName: "Tegangan Phase S", lowLimit: 10.0, baseline: 11.5, highLimit: 13.0, unit: "kV", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/v_t`, tagName: "Tegangan Phase T", lowLimit: 10.0, baseline: 11.5, highLimit: 13.0, unit: "kV", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/i_r`, tagName: "Arus Phase R", lowLimit: 0, baseline: 0, highLimit: 500, unit: "A", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/i_s`, tagName: "Arus Phase S", lowLimit: 0, baseline: 0, highLimit: 500, unit: "A", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/i_t`, tagName: "Arus Phase T", lowLimit: 0, baseline: 0, highLimit: 500, unit: "A", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/thd_v_r`, tagName: "THD Voltage Phase R", lowLimit: 0, baseline: 0, highLimit: 5.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/thd_v_s`, tagName: "THD Voltage Phase S", lowLimit: 0, baseline: 0, highLimit: 5.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/thd_v_t`, tagName: "THD Voltage Phase T", lowLimit: 0, baseline: 0, highLimit: 5.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/thd_i_r`, tagName: "THD Current Phase R", lowLimit: 0, baseline: 0, highLimit: 15.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/thd_i_s`, tagName: "THD Current Phase S", lowLimit: 0, baseline: 0, highLimit: 15.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: `${prefix}/thd_i_t`, tagName: "THD Current Phase T", lowLimit: 0, baseline: 0, highLimit: 15.0, unit: "%", enableAlert: true, suppressAlert: false, direction: "above" }
+    ];
+  }
+
   const isCooling = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
   if (!isCooling) {
     return [

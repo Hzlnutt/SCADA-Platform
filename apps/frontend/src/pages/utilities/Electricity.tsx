@@ -372,6 +372,113 @@ export default function Electricity() {
   // Config panel
   const [showConfigPanel, setShowConfigPanel] = useState(false);
 
+  // Live API Data states
+  const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>({});
+  const [jsonKeyMap, setJsonKeyMap] = useState<Record<string, string>>({});
+  const [apiLiveData, setApiLiveData] = useState<Record<string, any>>({});
+
+  // Sync API configurations for both targets
+  useEffect(() => {
+    Promise.all([
+      getJson<{ success: boolean; rows?: any[] | null }>("/config/api-sources-map?unitId=electricity"),
+      getJson<{ success: boolean; rows?: any[] | null }>("/config/api-sources-map?unitId=Cubicle_PLN_PM8000")
+    ])
+      .then(([resElec, resPln]) => {
+        const urls: Record<string, string> = {};
+        const keys: Record<string, string> = {};
+
+        const addRows = (rows: any[] | null | undefined) => {
+          if (rows) {
+            rows.forEach((row: any) => {
+              if (row.tagKey) {
+                urls[row.tagKey] = row.url || "";
+                keys[row.tagKey] = row.jsonKey || "";
+              }
+            });
+          }
+        };
+
+        if (resElec && resElec.success) addRows(resElec.rows);
+        if (resPln && resPln.success) addRows(resPln.rows);
+
+        setApiSourceUrls(urls);
+        setJsonKeyMap(keys);
+      })
+      .catch((err) => {
+        console.error("Failed to load API sources for Electricity dashboard:", err);
+      });
+  }, []);
+
+  // Poll active URLs
+  useEffect(() => {
+    let isMounted = true;
+    const fetchActiveApiData = async () => {
+      const uniqueUrls = Array.from(new Set(Object.values(apiSourceUrls).filter((u) => u.trim())));
+      if (uniqueUrls.length === 0) {
+        if (isMounted) setApiLiveData({});
+        return;
+      }
+
+      const aggregatedData: Record<string, any> = {};
+      await Promise.all(
+        uniqueUrls.map(async (url) => {
+          try {
+            const res = await postJson<{ success: boolean; data?: any }>("/config/api-sources/test", {
+              url,
+              method: "GET"
+            });
+            if (res && res.success && res.data) {
+              aggregatedData[url] = res.data;
+            }
+          } catch (err) {
+            console.error(`Live API poll error on Electricity for URL ${url}:`, err);
+          }
+        })
+      );
+
+      if (isMounted) {
+        setApiLiveData(aggregatedData);
+      }
+    };
+
+    fetchActiveApiData();
+    const interval = setInterval(fetchActiveApiData, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [apiSourceUrls]);
+
+  const getApiVal = useCallback((tagKey: string) => {
+    const url = apiSourceUrls[tagKey] || "";
+    if (!url.trim()) return "BELUM ADA API";
+    
+    const jsonKey = jsonKeyMap[tagKey] || tagKey.split("/")[1];
+    if (!jsonKey) return "API TIDAK TERKIRIM";
+
+    const val = apiLiveData[url]?.[jsonKey];
+    if (val === undefined || val === null) return "API TIDAK TERKIRIM";
+    return val;
+  }, [apiSourceUrls, jsonKeyMap, apiLiveData]);
+
+  const isOfflineVal = useCallback((val: any) => {
+    return val === "BELUM ADA API" || val === "API TIDAK TERKIRIM" || val === "xx";
+  }, []);
+
+  const renderMetricVal = useCallback((val: any, formatFn: (v: number) => string) => {
+    if (val === "BELUM ADA API") {
+      return <span className="text-red-500 text-xs font-extrabold font-mono uppercase tracking-wider">BELUM ADA API</span>;
+    }
+    if (val === "API TIDAK TERKIRIM" || val === "xx") {
+      return <span className="text-red-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">API TIDAK TERKIRIM</span>;
+    }
+    const num = Number(val);
+    if (isNaN(num)) {
+      return <span className="text-red-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">API TIDAK TERKIRIM</span>;
+    }
+    return formatFn(num);
+  }, []);
+
   /* ═══ DATA FETCHING ═══ */
   const fetchData = useCallback((showLoading = false) => {
     if (showLoading) {
@@ -701,12 +808,12 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-blue-600/10 text-blue-700'} flex items-center justify-center`}><IconGrid /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-blue-950'}`}>
-              {summaryLoading ? "..." : `${(cardSummary.totalKwh / 1000).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
+              {summaryLoading ? "..." : `${(cardSummary.totalKwh).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
               <span className={`text-sm font-bold ml-1 ${isDark ? 'text-blue-200' : 'text-blue-700'}`}>kWh</span>
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-blue-200' : 'text-blue-800'}`}>
-              <span>Voltage: <strong className={isDark ? 'text-white' : 'text-blue-950'}>20.09 kV</strong></span>
-              <span>Freq: <strong className={isDark ? 'text-white' : 'text-blue-950'}>50.12 Hz</strong></span>
+              <span>Voltage: <strong className={isDark ? 'text-white' : 'text-blue-950'}>{renderMetricVal(getApiVal("pln/voltage"), (v) => `${v.toFixed(2)} kV`)}</strong></span>
+              <span>Freq: <strong className={isDark ? 'text-white' : 'text-blue-950'}>{renderMetricVal(getApiVal("pln/frequency"), (v) => `${v.toFixed(2)} Hz`)}</strong></span>
             </div>
           </div>
         </div>
@@ -725,12 +832,13 @@ export default function Electricity() {
               <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>Solar Generation</span>
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-emerald-600/10 text-emerald-700'} flex items-center justify-center`}><IconSolar /></div>
             </div>
-            <div className={`text-sm font-extrabold text-red-500 font-mono`}>
-              API TIDAK TERSEDIA
+            <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-emerald-950'}`}>
+              {renderMetricVal(getApiVal("electricity/solar_generation"), (v) => `${v.toLocaleString("id-ID")}`)}
+              {!isOfflineVal(getApiVal("electricity/solar_generation")) && <span className={`text-sm font-bold ml-1 ${isDark ? 'text-emerald-200' : 'text-emerald-700'}`}>kWh</span>}
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>
-              <span>Capacity: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>1,700 kW</strong></span>
-              <span>Efficiency: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>—</strong></span>
+              <span>Capacity: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>{renderMetricVal(getApiVal("electricity/solar_capacity"), (v) => `${v.toLocaleString("id-ID")} kW`)}</strong></span>
+              <span>Efficiency: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>{renderMetricVal(getApiVal("electricity/solar_efficiency"), (v) => `${v.toFixed(1)} %`)}</strong></span>
             </div>
           </div>
         </div>
@@ -750,11 +858,11 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-amber-600/10 text-amber-700'} flex items-center justify-center`}><IconGenset /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-amber-950'}`}>
-              0 <span className={`text-sm font-bold ml-1 ${isDark ? 'text-amber-200' : 'text-amber-700'}`}>running</span>
+              {renderMetricVal(getApiVal("electricity/genset_running"), (v) => `${v}`)} <span className={`text-sm font-bold ml-1 ${isDark ? 'text-amber-200' : 'text-amber-700'}`}>running</span>
             </div>
             <div className={`mt-2 text-[10px] ${isDark ? 'text-amber-200' : 'text-amber-800'} space-y-0.5`}>
-              <div>Caterpillar: <strong className={isDark ? 'text-white' : 'text-amber-950'}>1350 kVA</strong></div>
-              <div>Perkins: <strong className={isDark ? 'text-white' : 'text-amber-950'}>1000 kVA</strong></div>
+              <div>Caterpillar: <strong className={isDark ? 'text-white' : 'text-amber-950'}>{renderMetricVal(getApiVal("electricity/genset_caterpillar_cap"), (v) => `${v.toLocaleString("id-ID")} kVA`)}</strong></div>
+              <div>Perkins: <strong className={isDark ? 'text-white' : 'text-amber-950'}>{renderMetricVal(getApiVal("electricity/genset_perkins_cap"), (v) => `${v.toLocaleString("id-ID")} kVA`)}</strong></div>
               <div className="text-[8px] opacity-75 font-semibold italic mt-1">Genset tidak dipasang powermeter</div>
             </div>
           </div>
@@ -775,12 +883,12 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-cyan-600/10 text-cyan-700'} flex items-center justify-center`}><IconPlant /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-cyan-950'}`}>
-              {summaryLoading ? "..." : `${((cardSummary.totalKwh) / 1000).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
+              {summaryLoading ? "..." : `${(cardSummary.totalKwh).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
               <span className={`text-sm font-bold ml-1 ${isDark ? 'text-cyan-200' : 'text-cyan-700'}`}>kWh</span>
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-cyan-200' : 'text-cyan-800'}`}>
-              <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{summaryLoading ? "..." : `${(cardSummary.totalKwh / 1000).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`} kW</strong></span>
-              <span>P Solar: <strong className="text-red-500">API TIDAK TERSEDIA</strong></span>
+              <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{renderMetricVal(getApiVal("electricity/p_grid"), (v) => `${v.toLocaleString("id-ID")} kW`)}</strong></span>
+              <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{renderMetricVal(getApiVal("electricity/p_solar"), (v) => `${v.toLocaleString("id-ID")} kW`)}</strong></span>
             </div>
           </div>
         </div>
@@ -828,13 +936,9 @@ export default function Electricity() {
           {/* PF / Power Factor */}
           <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 dark:bg-purple-950/30 p-4 hover:border-purple-400 transition">
             <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">PF</span>
-            {pfStatus === "offline" ? (
-              <div className="mt-2 text-sm font-bold text-red-500 font-mono">API TIDAK TERKIRIM</div>
-            ) : (
-              <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-                {chartLoading ? "..." : livePf !== null ? livePf.toFixed(2) : "..."}
-              </div>
-            )}
+            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+              {renderMetricVal(getApiVal("pln/power_factor"), (v) => `${v.toFixed(3)}`)}
+            </div>
             <div className="mt-1 text-[10px] text-slate-400">Stabilitas beban listrik</div>
           </div>
 
@@ -876,61 +980,95 @@ export default function Electricity() {
                 {/* Tegangan */}
                 <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                   <td className="py-2.5 px-3">Tegangan</td>
-                  <td className="py-2.5 px-3 font-mono">20.07</td>
+                  <td className="py-2.5 px-3 font-mono">{renderMetricVal(getApiVal("pln/voltage"), (v) => `${v.toFixed(2)}`)}</td>
                   <td className="py-2.5 px-3">kV</td>
                   <td className="py-2.5 px-3 font-mono">20 ± 5%</td>
                   <td className="py-2.5 px-3 text-right">
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                    {isOfflineVal(getApiVal("pln/voltage")) ? (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                    ) : Math.abs(Number(getApiVal("pln/voltage")) - 20) <= 1.0 ? (
+                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                    )}
                   </td>
                 </tr>
                 {/* Frekuensi */}
                 <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                   <td className="py-2.5 px-3">Frekuensi</td>
-                  <td className="py-2.5 px-3 font-mono">49.96</td>
+                  <td className="py-2.5 px-3 font-mono">{renderMetricVal(getApiVal("pln/frequency"), (v) => `${v.toFixed(2)}`)}</td>
                   <td className="py-2.5 px-3">Hz</td>
                   <td className="py-2.5 px-3 font-mono">50 ± 0.5</td>
                   <td className="py-2.5 px-3 text-right">
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                    {isOfflineVal(getApiVal("pln/frequency")) ? (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                    ) : Math.abs(Number(getApiVal("pln/frequency")) - 50) <= 0.5 ? (
+                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                    )}
                   </td>
                 </tr>
                 {/* Active Power */}
                 <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                   <td className="py-2.5 px-3">Active Power</td>
-                  <td className="py-2.5 px-3 font-mono">2.998</td>
+                  <td className="py-2.5 px-3 font-mono">{renderMetricVal(getApiVal("pln/active_power"), (v) => `${v.toFixed(3)}`)}</td>
                   <td className="py-2.5 px-3">kW</td>
                   <td className="py-2.5 px-3 font-mono">—</td>
                   <td className="py-2.5 px-3 text-right">
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                    {isOfflineVal(getApiVal("pln/active_power")) ? (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                    )}
                   </td>
                 </tr>
                 {/* Power Factor */}
                 <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                   <td className="py-2.5 px-3">Power Factor</td>
-                  <td className="py-2.5 px-3 font-mono">0.943</td>
+                  <td className="py-2.5 px-3 font-mono">{renderMetricVal(getApiVal("pln/power_factor"), (v) => `${v.toFixed(3)}`)}</td>
                   <td className="py-2.5 px-3">PF</td>
                   <td className="py-2.5 px-3 font-mono">≥ 0.85</td>
                   <td className="py-2.5 px-3 text-right">
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                    {isOfflineVal(getApiVal("pln/power_factor")) ? (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                    ) : Number(getApiVal("pln/power_factor")) >= 0.85 ? (
+                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Low PF</span>
+                    )}
                   </td>
                 </tr>
                 {/* Voltage Unbalanced */}
                 <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                   <td className="py-2.5 px-3">Voltage Unbalanced</td>
-                  <td className="py-2.5 px-3 font-mono">0.95</td>
+                  <td className="py-2.5 px-3 font-mono">{renderMetricVal(getApiVal("pln/unbalance_v"), (v) => `${v.toFixed(2)}`)}</td>
                   <td className="py-2.5 px-3">%</td>
                   <td className="py-2.5 px-3 font-mono">≤ 2%</td>
                   <td className="py-2.5 px-3 text-right">
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                    {isOfflineVal(getApiVal("pln/unbalance_v")) ? (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                    ) : Number(getApiVal("pln/unbalance_v")) <= 2 ? (
+                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                    )}
                   </td>
                 </tr>
                 {/* Current Unbalanced */}
                 <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                   <td className="py-2.5 px-3">Current Unbalanced</td>
-                  <td className="py-2.5 px-3 font-mono">1.56</td>
+                  <td className="py-2.5 px-3 font-mono">{renderMetricVal(getApiVal("pln/unbalance_i"), (v) => `${v.toFixed(2)}`)}</td>
                   <td className="py-2.5 px-3">%</td>
                   <td className="py-2.5 px-3 font-mono">≤ 10%</td>
                   <td className="py-2.5 px-3 text-right">
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                    {isOfflineVal(getApiVal("pln/unbalance_i")) ? (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                    ) : Number(getApiVal("pln/unbalance_i")) <= 10 ? (
+                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                    )}
                   </td>
                 </tr>
               </tbody>
@@ -1329,7 +1467,13 @@ export default function Electricity() {
 
             {/* API Sources for Electricity */}
             <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">🔌 API Sources - General (Solar & Genset)</h4>
               <ApiSourcesPanel unitId="electricity" />
+            </div>
+
+            <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">🔌 API Sources - PLN Cubicle (PM8000)</h4>
+              <ApiSourcesPanel unitId="Cubicle_PLN_PM8000" />
             </div>
 
             {/* Quick management for consumption fact categories */}

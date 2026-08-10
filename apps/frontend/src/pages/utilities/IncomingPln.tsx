@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Line, Radar } from "react-chartjs-2";
@@ -6,6 +6,7 @@ import "../../components/charts/chartjs";
 import { getJson, postJson } from "../../services/api.client";
 import { getSocket } from "../../services/socket.service";
 import { useSystemStore } from "../../store/system.store";
+import { ApiSourcesPanel } from "../machines/MachineConfig";
 
 /* ═══════════ CONSTANTS & HELPERS ═══════════ */
 const formatCurrency = (value: number) =>
@@ -22,11 +23,14 @@ function UnbalancedGauge({
   isDark
 }: {
   label: string;
-  value: number;
+  value: number | string;
   maxAllowed: number;
   isDark: boolean;
 }) {
-  const percentage = Math.min(100, (value / maxAllowed) * 100);
+  const isOffline = typeof value === "string" && (value.includes("API") || value === "xx" || value.includes("xx") || value.includes("TIDAK"));
+  const numVal = isOffline ? 0 : Number(value) || 0;
+  
+  const percentage = Math.min(100, (numVal / maxAllowed) * 100);
   const radius = 50;
   const strokeWidth = 10;
   const circumference = 2 * Math.PI * radius;
@@ -52,26 +56,44 @@ function UnbalancedGauge({
             strokeLinecap="round"
           />
           {/* Progress Arc */}
-          <path
-            d="M 10 60 A 50 50 0 0 1 110 60"
-            fill="none"
-            stroke={value > maxAllowed ? "#ef4444" : "#10b981"}
-            strokeWidth={strokeWidth}
-            strokeDasharray={circumference / 2}
-            strokeDashoffset={strokeDashoffset}
-            strokeLinecap="round"
-            className="transition-all duration-1000 ease-out"
-          />
+          {!isOffline && (
+            <path
+              d="M 10 60 A 50 50 0 0 1 110 60"
+              fill="none"
+              stroke={numVal > maxAllowed ? "#ef4444" : "#10b981"}
+              strokeWidth={strokeWidth}
+              strokeDasharray={circumference / 2}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+              className="transition-all duration-1000 ease-out"
+            />
+          )}
         </svg>
-        <div className="absolute bottom-2 text-center">
-          <span className="text-2xl font-extrabold font-mono text-slate-800 dark:text-white">{value.toFixed(2)}</span>
-          <span className="text-xs font-bold text-slate-400 ml-0.5">%</span>
+        <div className="absolute bottom-2 text-center flex flex-col items-center justify-center w-full px-1">
+          {isOffline ? (
+            <span className="text-[9px] font-bold font-mono text-red-500 uppercase leading-none text-center select-none break-all">{value}</span>
+          ) : (
+            <div>
+              <span className="text-2xl font-extrabold font-mono text-slate-800 dark:text-white">{numVal.toFixed(2)}</span>
+              <span className="text-xs font-bold text-slate-400 ml-0.5">%</span>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-extrabold uppercase text-emerald-500 tracking-wider">
-        ✓ Dalam batas normal
-      </div>
+      {isOffline ? (
+        <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-red-500/10 border border-red-500/20 text-[10px] font-extrabold uppercase text-red-500 tracking-wider">
+          ✕ API TIDAK AKTIF
+        </div>
+      ) : numVal > maxAllowed ? (
+        <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-red-500/10 border border-red-500/20 text-[10px] font-extrabold uppercase text-red-500 tracking-wider">
+          ⚠ MELEBIHI BATAS
+        </div>
+      ) : (
+        <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-extrabold uppercase text-emerald-500 tracking-wider">
+          ✓ Dalam batas normal
+        </div>
+      )}
     </div>
   );
 }
@@ -99,6 +121,7 @@ export default function IncomingPln() {
   });
 
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [showConfigPanel, setShowConfigPanel] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
 
   // Form temporary state inside config modal
@@ -200,6 +223,96 @@ export default function IncomingPln() {
   const [loading, setLoading] = useState(true);
   const [realtimeData, setRealtimeData] = useState<any>(null);
 
+  const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>({});
+  const [jsonKeyMap, setJsonKeyMap] = useState<Record<string, string>>({});
+  const [apiLiveData, setApiLiveData] = useState<Record<string, any>>({});
+
+  // Sync API configurations for this incoming grid device
+  useEffect(() => {
+    getJson<{ success: boolean; rows?: any[] | null }>(
+      `/config/api-sources-map?unitId=${config.deviceId}`
+    )
+      .then((res) => {
+        if (res && res.success && res.rows) {
+          const urls: Record<string, string> = {};
+          const keys: Record<string, string> = {};
+          res.rows.forEach((row: any) => {
+            if (row.tagKey) {
+              urls[row.tagKey] = row.url || "";
+              keys[row.tagKey] = row.jsonKey || "";
+            }
+          });
+          setApiSourceUrls(urls);
+          setJsonKeyMap(keys);
+        } else {
+          // If no custom config in DB, fallback to empty to correctly trigger "BELUM ADA API" or custom defaults
+          setApiSourceUrls({});
+          setJsonKeyMap({});
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load API sources for Incoming:", err);
+        setApiSourceUrls({});
+        setJsonKeyMap({});
+      });
+  }, [config.deviceId]);
+
+  // Poll active URLs
+  useEffect(() => {
+    let isMounted = true;
+    const fetchActiveApiData = async () => {
+      const uniqueUrls = Array.from(new Set(Object.values(apiSourceUrls).filter((u) => u.trim())));
+      if (uniqueUrls.length === 0) {
+        if (isMounted) setApiLiveData({});
+        return;
+      }
+
+      const aggregatedData: Record<string, any> = {};
+      await Promise.all(
+        uniqueUrls.map(async (url) => {
+          try {
+            const res = await postJson<{ success: boolean; data?: any }>("/config/api-sources/test", {
+              url,
+              method: "GET"
+            });
+            if (res && res.success && res.data) {
+              aggregatedData[url] = res.data;
+            }
+          } catch (err) {
+            console.error(`Live API poll error on Incoming for URL ${url}:`, err);
+          }
+        })
+      );
+
+      if (isMounted) {
+        setApiLiveData(aggregatedData);
+      }
+    };
+
+    fetchActiveApiData();
+    const interval = setInterval(fetchActiveApiData, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [apiSourceUrls]);
+
+  const getApiVal = useCallback((tagKey: string) => {
+    const url = apiSourceUrls[tagKey] || "";
+    if (!url.trim()) return "BELUM ADA API";
+    
+    const jsonKey = jsonKeyMap[tagKey] || tagKey.split("/")[1];
+    if (!jsonKey) return "API TIDAK TERKIRIM";
+
+    const val = apiLiveData[url]?.[jsonKey];
+    if (val === undefined || val === null) return "API TIDAK TERKIRIM";
+    return val;
+  }, [apiSourceUrls, jsonKeyMap, apiLiveData]);
+
+  const isOfflineVal = useCallback((val: any) => {
+    return val === "BELUM ADA API" || val === "API TIDAK TERKIRIM" || val === "xx";
+  }, []);
+
   // Real-time metrics states
   const [metrics, setMetrics] = useState({
     voltage: 0,
@@ -297,7 +410,7 @@ export default function IncomingPln() {
     return () => clearInterval(interval);
   }, [config]);
 
-  // Handle socket updates
+  // Handle socket updates fallback
   useEffect(() => {
     const socket = getSocket();
     
@@ -337,59 +450,107 @@ export default function IncomingPln() {
     };
   }, [config.deviceId]);
 
+  const prefix = mode === "pln" ? "pln" : mode === "fact1" ? "wf1" : "wf2";
+
+  const liveMetrics = useMemo(() => {
+    return {
+      voltage: getApiVal(`${prefix}/voltage`),
+      frequency: getApiVal(`${prefix}/frequency`),
+      activePower: getApiVal(`${prefix}/active_power`),
+      powerFactor: getApiVal(`${prefix}/power_factor`),
+      reactivePower: getApiVal(`${prefix}/reactive_power`),
+      apparentPower: getApiVal(`${prefix}/apparent_power`),
+      unbalanceV: getApiVal(`${prefix}/unbalance_v`),
+      unbalanceI: getApiVal(`${prefix}/unbalance_i`),
+      vR: getApiVal(`${prefix}/v_r`),
+      vS: getApiVal(`${prefix}/v_s`),
+      vT: getApiVal(`${prefix}/v_t`),
+      iR: getApiVal(`${prefix}/i_r`),
+      iS: getApiVal(`${prefix}/i_s`),
+      iT: getApiVal(`${prefix}/i_t`),
+      thdV_R: getApiVal(`${prefix}/thd_v_r`),
+      thdV_S: getApiVal(`${prefix}/thd_v_s`),
+      thdV_T: getApiVal(`${prefix}/thd_v_t`),
+      thdI_R: getApiVal(`${prefix}/thd_i_r`),
+      thdI_S: getApiVal(`${prefix}/thd_i_s`),
+      thdI_T: getApiVal(`${prefix}/thd_i_t`),
+      isConnected: getApiVal(`${prefix}/active_power`) !== "BELUM ADA API" && getApiVal(`${prefix}/active_power`) !== "API TIDAK TERKIRIM"
+    };
+  }, [prefix, getApiVal]);
+
+  const renderMetricVal = useCallback((val: any, formatFn: (v: number) => string) => {
+    if (val === "BELUM ADA API") {
+      return <span className="text-red-500 text-xs font-extrabold font-mono uppercase tracking-wider">BELUM ADA API</span>;
+    }
+    if (val === "API TIDAK TERKIRIM" || val === "xx") {
+      return <span className="text-red-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">API TIDAK TERKIRIM</span>;
+    }
+    const num = Number(val);
+    if (isNaN(num)) {
+      return <span className="text-red-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">API TIDAK TERKIRIM</span>;
+    }
+    return formatFn(num);
+  }, []);
+
   // Averages and stats helpers for Phase details
   const statsV = useMemo(() => {
-    const vals = [metrics.vR, metrics.vS, metrics.vT];
+    const vals = [liveMetrics.vR, liveMetrics.vS, liveMetrics.vT].map(v => isOfflineVal(v) ? 0 : Number(v) || 0);
     const avg = vals.reduce((a, b) => a + b, 0) / 3;
     return { avg, min: Math.min(...vals), max: Math.max(...vals) };
-  }, [metrics.vR, metrics.vS, metrics.vT]);
+  }, [liveMetrics.vR, liveMetrics.vS, liveMetrics.vT, isOfflineVal]);
 
   const statsI = useMemo(() => {
-    const vals = [metrics.iR, metrics.iS, metrics.iT];
+    const vals = [liveMetrics.iR, liveMetrics.iS, liveMetrics.iT].map(v => isOfflineVal(v) ? 0 : Number(v) || 0);
     const avg = vals.reduce((a, b) => a + b, 0) / 3;
     return { avg, min: Math.min(...vals), max: Math.max(...vals) };
-  }, [metrics.iR, metrics.iS, metrics.iT]);
+  }, [liveMetrics.iR, liveMetrics.iS, liveMetrics.iT, isOfflineVal]);
 
   const statsThdV = useMemo(() => {
-    const vals = [metrics.thdV_R, metrics.thdV_S, metrics.thdV_T];
+    const vals = [liveMetrics.thdV_R, liveMetrics.thdV_S, liveMetrics.thdV_T].map(v => isOfflineVal(v) ? 0 : Number(v) || 0);
     const avg = vals.reduce((a, b) => a + b, 0) / 3;
     return { avg, min: Math.min(...vals), max: Math.max(...vals) };
-  }, [metrics.thdV_R, metrics.thdV_S, metrics.thdV_T]);
+  }, [liveMetrics.thdV_R, liveMetrics.thdV_S, liveMetrics.thdV_T, isOfflineVal]);
 
   const statsThdI = useMemo(() => {
-    const vals = [metrics.thdI_R, metrics.thdI_S, metrics.thdI_T];
+    const vals = [liveMetrics.thdI_R, liveMetrics.thdI_S, liveMetrics.thdI_T].map(v => isOfflineVal(v) ? 0 : Number(v) || 0);
     const avg = vals.reduce((a, b) => a + b, 0) / 3;
     return { avg, min: Math.min(...vals), max: Math.max(...vals) };
-  }, [metrics.thdI_R, metrics.thdI_S, metrics.thdI_T]);
+  }, [liveMetrics.thdI_R, liveMetrics.thdI_S, liveMetrics.thdI_T, isOfflineVal]);
 
   // Radar PQ index chart data
   const radarData = useMemo(() => {
-    const avgCurrent = (metrics.iR + metrics.iS + metrics.iT) / 3;
-    const avgThdV = (metrics.thdV_R + metrics.thdV_S + metrics.thdV_T) / 3;
-    const avgThdI = (metrics.thdI_R + metrics.thdI_S + metrics.thdI_T) / 3;
+    const numVoltage = isOfflineVal(liveMetrics.voltage) ? 0 : Number(liveMetrics.voltage) || 0;
+    const numPf = isOfflineVal(liveMetrics.powerFactor) ? 0 : Number(liveMetrics.powerFactor) || 0;
+    const numFrequency = isOfflineVal(liveMetrics.frequency) ? 0 : Number(liveMetrics.frequency) || 0;
+    const avgCurrent = statsI.avg;
+    const avgThdV = statsThdV.avg;
+    const avgThdI = statsThdI.avg;
     return {
       labels: ["Voltage", "Current", "PF", "Freq", "THD-V", "THD-I"],
       datasets: [
         {
           label: "Daya Aktual",
           data: [
-            (metrics.voltage / config.voltageBase) * 100,
+            config.voltageBase > 0 ? (numVoltage / config.voltageBase) * 100 : 0,
             avgCurrent > 0 ? 95 : 0,
-            metrics.powerFactor * 100,
-            (metrics.frequency / 50) * 100,
+            numPf * 100,
+            (numFrequency / 50) * 100,
             Math.max(0, 100 - avgThdV),
             Math.max(0, 100 - avgThdI)
           ],
           backgroundColor: "rgba(56, 189, 248, 0.25)",
           borderColor: "#38bdf8",
-          borderWidth: 2,
-          pointBackgroundColor: "#0284c7",
-          pointBorderColor: "#fff"
+          borderWidth: 1.5,
+          pointBackgroundColor: "#38bdf8",
+          pointBorderColor: "#fff",
+          pointHoverBackgroundColor: "#fff",
+          pointHoverBorderColor: "#38bdf8"
         }
       ]
     };
-  }, [metrics, config.voltageBase]);
+  }, [liveMetrics, statsI.avg, statsThdV.avg, statsThdI.avg, config.voltageBase, isOfflineVal]);
 
+  const isConnected = !isOfflineVal(liveMetrics.voltage) || !isOfflineVal(liveMetrics.activePower);
   const radarOptions: any = {
     responsive: true,
     maintainAspectRatio: false,
@@ -486,20 +647,26 @@ export default function IncomingPln() {
         />
         <div className="flex items-center gap-3">
           <button
+            onClick={() => setShowConfigPanel(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm"
+          >
+            🔌 API Sources Config
+          </button>
+          <button
             onClick={handleOpenConfig}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700 shadow-sm"
           >
             ⚙️ Config Standar
           </button>
           <span className={`px-3 py-1.5 rounded-full text-xs font-extrabold uppercase flex items-center gap-1.5 border transition-colors duration-300 ${
-            metrics.isConnected
+            isConnected
               ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
               : "bg-rose-500/10 text-rose-500 border-rose-500/20"
           }`}>
             <span className={`h-2 w-2 rounded-full animate-pulse ${
-              metrics.isConnected ? "bg-emerald-500" : "bg-rose-500"
+              isConnected ? "bg-emerald-500" : "bg-rose-500"
             }`} />
-            {metrics.isConnected ? config.connectedLabel : "DISCONNECTED"}
+            {isConnected ? config.connectedLabel : "DISCONNECTED"}
           </span>
         </div>
       </div>
@@ -515,8 +682,8 @@ export default function IncomingPln() {
             </svg>
           </div>
           <div className="mt-4">
-            <div className="text-xl font-extrabold font-mono text-slate-800 dark:text-white">
-              {metrics.voltage.toFixed(2)} <span className="text-xs text-slate-400 ml-0.5">kV</span>
+            <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
+              {renderMetricVal(liveMetrics.voltage, (v) => `${v.toFixed(2)} kV`)}
             </div>
             <p className="text-[9px] text-slate-400 mt-1">Nominal: 20 kV</p>
           </div>
@@ -531,8 +698,8 @@ export default function IncomingPln() {
             </svg>
           </div>
           <div className="mt-4">
-            <div className="text-xl font-extrabold font-mono text-slate-800 dark:text-white">
-              {metrics.frequency.toFixed(2)} <span className="text-xs text-slate-400 ml-0.5">Hz</span>
+            <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
+              {renderMetricVal(liveMetrics.frequency, (v) => `${v.toFixed(2)} Hz`)}
             </div>
             <p className="text-[9px] text-slate-400 mt-1">Nominal: 50 Hz</p>
           </div>
@@ -547,8 +714,8 @@ export default function IncomingPln() {
             </svg>
           </div>
           <div className="mt-4">
-            <div className="text-xl font-extrabold font-mono text-slate-800 dark:text-white">
-              {metrics.activePower.toLocaleString("id-ID")} <span className="text-xs text-slate-400 ml-0.5">kW</span>
+            <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
+              {renderMetricVal(liveMetrics.activePower, (v) => `${v.toLocaleString("id-ID")} kW`)}
             </div>
             <p className="text-[9px] text-slate-400 mt-1">Total daya aktif</p>
           </div>
@@ -563,8 +730,8 @@ export default function IncomingPln() {
             </svg>
           </div>
           <div className="mt-4">
-            <div className="text-xl font-extrabold font-mono text-slate-800 dark:text-white">
-              {metrics.powerFactor.toFixed(3)} <span className="text-xs text-slate-400 ml-0.5">PF</span>
+            <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
+              {renderMetricVal(liveMetrics.powerFactor, (v) => `${v.toFixed(3)} PF`)}
             </div>
             <p className="text-[9px] text-emerald-500 font-bold mt-1">Good</p>
           </div>
@@ -579,8 +746,8 @@ export default function IncomingPln() {
             </svg>
           </div>
           <div className="mt-4">
-            <div className="text-xl font-extrabold font-mono text-slate-800 dark:text-white">
-              {metrics.reactivePower.toLocaleString("id-ID")} <span className="text-xs text-slate-400 ml-0.5">kVAR</span>
+            <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
+              {renderMetricVal(liveMetrics.reactivePower, (v) => `${v.toLocaleString("id-ID")} kVAR`)}
             </div>
             <p className="text-[9px] text-slate-400 mt-1">Daya reaktif</p>
           </div>
@@ -595,8 +762,8 @@ export default function IncomingPln() {
             </svg>
           </div>
           <div className="mt-4">
-            <div className="text-xl font-extrabold font-mono text-slate-800 dark:text-white">
-              {metrics.apparentPower.toLocaleString("id-ID")} <span className="text-xs text-slate-400 ml-0.5">kVA</span>
+            <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
+              {renderMetricVal(liveMetrics.apparentPower, (v) => `${v.toLocaleString("id-ID")} kVA`)}
             </div>
             <p className="text-[9px] text-slate-400 mt-1">Daya semu</p>
           </div>
@@ -605,8 +772,8 @@ export default function IncomingPln() {
 
       {/* ═══════════ SECTION B: POWER QUALITY INDEX & GAUGES ═══════════ */}
       <section className="grid gap-6 md:grid-cols-3">
-        <UnbalancedGauge label="Voltage Unbalanced" value={metrics.unbalanceV} maxAllowed={standards.unbalanceVMax} isDark={isDark} />
-        <UnbalancedGauge label="Current Unbalanced" value={metrics.unbalanceI} maxAllowed={standards.unbalanceIMax} isDark={isDark} />
+        <UnbalancedGauge label="Voltage Unbalanced" value={liveMetrics.unbalanceV} maxAllowed={standards.unbalanceVMax} isDark={isDark} />
+        <UnbalancedGauge label="Current Unbalanced" value={liveMetrics.unbalanceI} maxAllowed={standards.unbalanceIMax} isDark={isDark} />
 
         {/* Power Quality Radar Index */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
@@ -634,30 +801,30 @@ export default function IncomingPln() {
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-rose-500">R</span>
-                <span className="font-mono">{metrics.vR.toFixed(3)} kV</span>
+                <span className="font-mono">{renderMetricVal(liveMetrics.vR, (v) => `${v.toFixed(3)} kV`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: metrics.vR > 0 ? `${(metrics.vR / 12) * 100}%` : "0%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vR) && Number(liveMetrics.vR) > 0 ? `${(Number(liveMetrics.vR) / 12) * 100}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-amber-500">S</span>
-                <span className="font-mono">{metrics.vS.toFixed(3)} kV</span>
+                <span className="font-mono">{renderMetricVal(liveMetrics.vS, (v) => `${v.toFixed(3)} kV`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: metrics.vS > 0 ? `${(metrics.vS / 12) * 100}%` : "0%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vS) && Number(liveMetrics.vS) > 0 ? `${(Number(liveMetrics.vS) / 12) * 100}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-blue-500">T</span>
-                <span className="font-mono">{metrics.vT.toFixed(3)} kV</span>
+                <span className="font-mono">{renderMetricVal(liveMetrics.vT, (v) => `${v.toFixed(3)} kV`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: metrics.vT > 0 ? `${(metrics.vT / 12) * 100}%` : "0%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vT) && Number(liveMetrics.vT) > 0 ? `${(Number(liveMetrics.vT) / 12) * 100}%` : "0%" }} />
               </div>
             </div>
           </div>
@@ -681,30 +848,30 @@ export default function IncomingPln() {
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-rose-500">R</span>
-                <span className="font-mono">{metrics.iR.toFixed(1)} A</span>
+                <span className="font-mono">{renderMetricVal(liveMetrics.iR, (v) => `${v.toFixed(1)} A`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: metrics.iR > 0 ? `${Math.min(100, (metrics.iR / 150) * 100)}%` : "0%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.iR) && Number(liveMetrics.iR) > 0 ? `${Math.min(100, (Number(liveMetrics.iR) / 150) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-amber-500">S</span>
-                <span className="font-mono">{metrics.iS.toFixed(1)} A</span>
+                <span className="font-mono">{renderMetricVal(liveMetrics.iS, (v) => `${v.toFixed(1)} A`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: metrics.iS > 0 ? `${Math.min(100, (metrics.iS / 150) * 100)}%` : "0%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.iS) && Number(liveMetrics.iS) > 0 ? `${Math.min(100, (Number(liveMetrics.iS) / 150) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-blue-500">T</span>
-                <span className="font-mono">{metrics.iT.toFixed(1)} A</span>
+                <span className="font-mono">{renderMetricVal(liveMetrics.iT, (v) => `${v.toFixed(1)} A`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: metrics.iT > 0 ? `${Math.min(100, (metrics.iT / 150) * 100)}%` : "0%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.iT) && Number(liveMetrics.iT) > 0 ? `${Math.min(100, (Number(liveMetrics.iT) / 150) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
@@ -728,30 +895,30 @@ export default function IncomingPln() {
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-rose-500">R</span>
-                <span className="font-mono">{metrics.thdV_R.toFixed(2)} %</span>
+                <span className="font-mono">{renderMetricVal(liveMetrics.thdV_R, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: metrics.thdV_R > 0 ? `${Math.min(100, (metrics.thdV_R / 5) * 100)}%` : "0%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdV_R) && Number(liveMetrics.thdV_R) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_R) / 5) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-amber-500">S</span>
-                <span className="font-mono">{metrics.thdV_S.toFixed(2)} %</span>
+                <span className="font-mono">{renderMetricVal(liveMetrics.thdV_S, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: metrics.thdV_S > 0 ? `${Math.min(100, (metrics.thdV_S / 5) * 100)}%` : "0%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdV_S) && Number(liveMetrics.thdV_S) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_S) / 5) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-blue-500">T</span>
-                <span className="font-mono">{metrics.thdV_T.toFixed(2)} %</span>
+                <span className="font-mono">{renderMetricVal(liveMetrics.thdV_T, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: metrics.thdV_T > 0 ? `${Math.min(100, (metrics.thdV_T / 5) * 100)}%` : "0%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdV_T) && Number(liveMetrics.thdV_T) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_T) / 5) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
@@ -775,30 +942,30 @@ export default function IncomingPln() {
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-rose-500">R</span>
-                <span className="font-mono">{metrics.thdI_R.toFixed(2)} %</span>
+                <span className="font-mono">{renderMetricVal(liveMetrics.thdI_R, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: metrics.thdI_R > 0 ? `${Math.min(100, (metrics.thdI_R / 8) * 100)}%` : "0%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdI_R) && Number(liveMetrics.thdI_R) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_R) / 8) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-amber-500">S</span>
-                <span className="font-mono">{metrics.thdI_S.toFixed(2)} %</span>
+                <span className="font-mono">{renderMetricVal(liveMetrics.thdI_S, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: metrics.thdI_S > 0 ? `${Math.min(100, (metrics.thdI_S / 8) * 100)}%` : "0%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdI_S) && Number(liveMetrics.thdI_S) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_S) / 8) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold">
                 <span className="text-blue-500">T</span>
-                <span className="font-mono">{metrics.thdI_T.toFixed(2)} %</span>
+                <span className="font-mono">{renderMetricVal(liveMetrics.thdI_T, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: metrics.thdI_T > 0 ? `${Math.min(100, (metrics.thdI_T / 8) * 100)}%` : "0%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdI_T) && Number(liveMetrics.thdI_T) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_T) / 8) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
@@ -867,11 +1034,13 @@ export default function IncomingPln() {
               {/* Tegangan */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Tegangan</td>
-                <td className="py-3 px-3 font-mono">{metrics.voltage.toFixed(2)}</td>
+                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.voltage, (v) => `${v.toFixed(2)}`)}</td>
                 <td className="py-3 px-3">kV</td>
                 <td className="py-3 px-3 font-mono">{standards.voltageNominal} ± {standards.voltageTolerance}%</td>
                 <td className="py-3 px-3 text-right">
-                  {Math.abs(metrics.voltage - standards.voltageNominal) <= (standards.voltageNominal * standards.voltageTolerance / 100) ? (
+                  {isOfflineVal(liveMetrics.voltage) ? (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                  ) : Math.abs(Number(liveMetrics.voltage) - standards.voltageNominal) <= (standards.voltageNominal * standards.voltageTolerance / 100) ? (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
                   ) : (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
@@ -881,11 +1050,13 @@ export default function IncomingPln() {
               {/* Frekuensi */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Frekuensi</td>
-                <td className="py-3 px-3 font-mono">{metrics.frequency.toFixed(2)}</td>
+                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.frequency, (v) => `${v.toFixed(2)}`)}</td>
                 <td className="py-3 px-3">Hz</td>
                 <td className="py-3 px-3 font-mono">{standards.frequencyNominal} ± {standards.frequencyTolerance}</td>
                 <td className="py-3 px-3 text-right">
-                  {Math.abs(metrics.frequency - standards.frequencyNominal) <= standards.frequencyTolerance ? (
+                  {isOfflineVal(liveMetrics.frequency) ? (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                  ) : Math.abs(Number(liveMetrics.frequency) - standards.frequencyNominal) <= standards.frequencyTolerance ? (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
                   ) : (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
@@ -895,11 +1066,13 @@ export default function IncomingPln() {
               {/* Active Power */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Active Power</td>
-                <td className="py-3 px-3 font-mono">{metrics.activePower}</td>
+                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.activePower, (v) => `${v.toLocaleString("id-ID")}`)}</td>
                 <td className="py-3 px-3">kW</td>
                 <td className="py-3 px-3 font-mono">{standards.activePowerMax > 0 ? `≤ ${standards.activePowerMax}` : "—"}</td>
                 <td className="py-3 px-3 text-right">
-                  {standards.activePowerMax > 0 && metrics.activePower > standards.activePowerMax ? (
+                  {isOfflineVal(liveMetrics.activePower) ? (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                  ) : (standards.activePowerMax > 0 && Number(liveMetrics.activePower) > standards.activePowerMax) ? (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
                   ) : (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
@@ -909,11 +1082,13 @@ export default function IncomingPln() {
               {/* Reactive Power */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Reactive Power</td>
-                <td className="py-3 px-3 font-mono">{metrics.reactivePower}</td>
+                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.reactivePower, (v) => `${v.toLocaleString("id-ID")}`)}</td>
                 <td className="py-3 px-3">kVAR</td>
                 <td className="py-3 px-3 font-mono">{standards.reactivePowerMax > 0 ? `≤ ${standards.reactivePowerMax}` : "—"}</td>
                 <td className="py-3 px-3 text-right">
-                  {standards.reactivePowerMax > 0 && metrics.reactivePower > standards.reactivePowerMax ? (
+                  {isOfflineVal(liveMetrics.reactivePower) ? (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                  ) : (standards.reactivePowerMax > 0 && Number(liveMetrics.reactivePower) > standards.reactivePowerMax) ? (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
                   ) : (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
@@ -923,11 +1098,13 @@ export default function IncomingPln() {
               {/* Apparent Power */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Apparent Power</td>
-                <td className="py-3 px-3 font-mono">{metrics.apparentPower}</td>
+                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.apparentPower, (v) => `${v.toLocaleString("id-ID")}`)}</td>
                 <td className="py-3 px-3">kVA</td>
                 <td className="py-3 px-3 font-mono">{standards.apparentPowerMax > 0 ? `≤ ${standards.apparentPowerMax}` : "—"}</td>
                 <td className="py-3 px-3 text-right">
-                  {standards.apparentPowerMax > 0 && metrics.apparentPower > standards.apparentPowerMax ? (
+                  {isOfflineVal(liveMetrics.apparentPower) ? (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                  ) : (standards.apparentPowerMax > 0 && Number(liveMetrics.apparentPower) > standards.apparentPowerMax) ? (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
                   ) : (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
@@ -937,11 +1114,13 @@ export default function IncomingPln() {
               {/* Power Factor */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Power Factor</td>
-                <td className="py-3 px-3 font-mono">{metrics.powerFactor.toFixed(3)}</td>
+                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.powerFactor, (v) => `${v.toFixed(3)}`)}</td>
                 <td className="py-3 px-3">PF</td>
                 <td className="py-3 px-3 font-mono">≥ {standards.powerFactorMin}</td>
                 <td className="py-3 px-3 text-right">
-                  {metrics.powerFactor >= standards.powerFactorMin ? (
+                  {isOfflineVal(liveMetrics.powerFactor) ? (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                  ) : Number(liveMetrics.powerFactor) >= standards.powerFactorMin ? (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
                   ) : (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Low PF</span>
@@ -951,11 +1130,13 @@ export default function IncomingPln() {
               {/* Voltage Unbalanced */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Voltage Unbalanced</td>
-                <td className="py-3 px-3 font-mono">{metrics.unbalanceV.toFixed(2)}</td>
+                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.unbalanceV, (v) => `${v.toFixed(2)}`)}</td>
                 <td className="py-3 px-3">%</td>
                 <td className="py-3 px-3 font-mono">≤ {standards.unbalanceVMax}%</td>
                 <td className="py-3 px-3 text-right">
-                  {metrics.unbalanceV <= standards.unbalanceVMax ? (
+                  {isOfflineVal(liveMetrics.unbalanceV) ? (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                  ) : Number(liveMetrics.unbalanceV) <= standards.unbalanceVMax ? (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
                   ) : (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
@@ -965,11 +1146,13 @@ export default function IncomingPln() {
               {/* Current Unbalanced */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">Current Unbalanced</td>
-                <td className="py-3 px-3 font-mono">{metrics.unbalanceI.toFixed(2)}</td>
+                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.unbalanceI, (v) => `${v.toFixed(2)}`)}</td>
                 <td className="py-3 px-3">%</td>
                 <td className="py-3 px-3 font-mono">≤ {standards.unbalanceIMax}%</td>
                 <td className="py-3 px-3 text-right">
-                  {metrics.unbalanceI <= standards.unbalanceIMax ? (
+                  {isOfflineVal(liveMetrics.unbalanceI) ? (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                  ) : Number(liveMetrics.unbalanceI) <= standards.unbalanceIMax ? (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
                   ) : (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
@@ -979,11 +1162,13 @@ export default function IncomingPln() {
               {/* THD Voltage */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">THD Voltage (Avg)</td>
-                <td className="py-3 px-3 font-mono">2.28</td>
+                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.thdV_R === "BELUM ADA API" || liveMetrics.thdV_S === "BELUM ADA API" || liveMetrics.thdV_T === "BELUM ADA API" ? "BELUM ADA API" : liveMetrics.thdV_R === "API TIDAK TERKIRIM" || liveMetrics.thdV_S === "API TIDAK TERKIRIM" || liveMetrics.thdV_T === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : statsThdV.avg, (v) => `${v.toFixed(2)}`)}</td>
                 <td className="py-3 px-3">%</td>
                 <td className="py-3 px-3 font-mono">≤ {standards.thdVoltageMax}%</td>
                 <td className="py-3 px-3 text-right">
-                  {2.28 <= standards.thdVoltageMax ? (
+                  {isOfflineVal(liveMetrics.thdV_R) ? (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                  ) : statsThdV.avg <= standards.thdVoltageMax ? (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
                   ) : (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
@@ -993,11 +1178,13 @@ export default function IncomingPln() {
               {/* THD Current */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                 <td className="py-3 px-3">THD Current (Avg)</td>
-                <td className="py-3 px-3 font-mono">5.84</td>
+                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.thdI_R === "BELUM ADA API" || liveMetrics.thdI_S === "BELUM ADA API" || liveMetrics.thdI_T === "BELUM ADA API" ? "BELUM ADA API" : liveMetrics.thdI_R === "API TIDAK TERKIRIM" || liveMetrics.thdI_S === "API TIDAK TERKIRIM" || liveMetrics.thdI_T === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : statsThdI.avg, (v) => `${v.toFixed(2)}`)}</td>
                 <td className="py-3 px-3">%</td>
                 <td className="py-3 px-3 font-mono">≤ {standards.thdCurrentMax}%</td>
                 <td className="py-3 px-3 text-right">
-                  {5.84 <= standards.thdCurrentMax ? (
+                  {isOfflineVal(liveMetrics.thdI_R) ? (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
+                  ) : statsThdI.avg <= standards.thdCurrentMax ? (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
                   ) : (
                     <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
@@ -1180,6 +1367,33 @@ export default function IncomingPln() {
                 className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold transition-colors shadow-md shadow-sky-500/20"
               >
                 {savingConfig ? "Menyimpan..." : "💾 Simpan Standar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* API SOURCES CONFIG MODAL */}
+      {showConfigPanel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowConfigPanel(false)}>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-white">
+                🔌 Konfigurasi API Live Data - {config.title}
+              </h3>
+              <button onClick={() => setShowConfigPanel(false)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+            </div>
+
+            <div className="max-h-[70vh] overflow-y-auto pr-1">
+              <ApiSourcesPanel unitId={config.deviceId} />
+            </div>
+
+            <div className="border-t border-slate-100 dark:border-slate-800 pt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowConfigPanel(false)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors shadow-md"
+              >
+                Tutup
               </button>
             </div>
           </div>
