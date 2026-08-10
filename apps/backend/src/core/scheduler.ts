@@ -940,7 +940,7 @@ export const evaluateSensorRulesForPoints = async (points: any[]) => {
         }
       }
 
-      const alarmKey = `pid-threshold:${rule.tag_key}`;
+      const alarmKey = `pid-threshold:${rule.unit_id}:${rule.tag_key}`;
 
       if (status === "active") {
         activeEvents.push({
