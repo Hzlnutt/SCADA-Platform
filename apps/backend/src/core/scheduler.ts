@@ -562,7 +562,7 @@ export const startCoolingTowerPolling = () => {
       // Load custom URL and jsonKey configs
       const tagToUrlMap: Record<string, string> = {};
       const tagToJsonKeyMap: Record<string, string> = {};
-      const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
+      const defaultUrl = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3";
 
       try {
         const listRes = await pool.query(
@@ -575,9 +575,6 @@ export const startCoolingTowerPolling = () => {
             list.forEach((row: any) => {
               if (row.tagKey) {
                 let ep = row.url || row.endpoint || "";
-                if (ep) {
-                  ep = ep.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
-                }
                 tagToUrlMap[row.tagKey] = ep;
                 tagToJsonKeyMap[row.tagKey] = row.jsonKey || "";
               }

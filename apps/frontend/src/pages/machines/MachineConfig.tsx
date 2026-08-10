@@ -49,7 +49,7 @@ const DEFAULT_JSON_KEYS: Record<string, string> = {
 };
 
 const getDefaultApiSourceConfigs = (unitId: string): ApiSourceRow[] => {
-  const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
+  const defaultUrl = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3";
   const isCooling = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
   
   if (!isCooling) {
@@ -372,10 +372,6 @@ export default function MachineConfig() {
         if (Array.isArray(parsed)) {
           let modified = false;
           const healed = parsed.map((row: any) => {
-            let healedUrl = typeof row.url === "string" ? row.url : "";
-            const newUrl = healedUrl.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
-            if (newUrl !== healedUrl) modified = true;
-            
             let healedJsonKey = row.jsonKey;
             if (healedJsonKey === "Scaled_Temp_Tank_Cooling3_Supp") {
               healedJsonKey = "Scaled_Temp_Tank_Colling3_Supp";
@@ -388,7 +384,6 @@ export default function MachineConfig() {
             
             return {
               ...row,
-              url: newUrl,
               jsonKey: healedJsonKey || DEFAULT_JSON_KEYS[row.tagKey] || row.tagKey.split("/")[1] || ""
             };
           });
@@ -409,16 +404,8 @@ export default function MachineConfig() {
     if (savedUrlsStr) {
       try {
         const savedUrls = JSON.parse(savedUrlsStr);
-        let modified = false;
         const healed = defaults.map(d => {
           let url = savedUrls[d.tagKey] !== undefined ? savedUrls[d.tagKey] : d.url;
-          if (typeof url === "string") {
-            const newUrl = url.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
-            if (newUrl !== url) {
-              modified = true;
-              url = newUrl;
-            }
-          }
           return {
             ...d,
             url

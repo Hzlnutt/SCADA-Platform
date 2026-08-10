@@ -145,7 +145,7 @@ function StandardMachineOverview({
   useEffect(() => {
     const defaultMap: Record<string, string> = {};
     if (unitId.startsWith("cooling-water")) {
-      const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
+      const defaultUrl = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3";
       const sensorList = getDefaultSensorConfigs(unitId);
       sensorList.forEach((s) => {
         defaultMap[s.tagKey] = defaultUrl;
@@ -160,7 +160,7 @@ function StandardMachineOverview({
         const healed: Record<string, string> = {};
         Object.entries(parsed).forEach(([key, val]) => {
           if (typeof val === "string") {
-            healed[key] = val.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
+            healed[key] = val;
           }
         });
         setApiSourceUrls({ ...defaultMap, ...healed });
