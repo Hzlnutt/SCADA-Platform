@@ -411,14 +411,6 @@ export default function MachineConfig() {
             url
           };
         });
-        if (modified) {
-          const flatMap: Record<string, string> = {};
-          healed.forEach(r => {
-            flatMap[r.tagKey] = r.url;
-          });
-          localStorage.setItem(`scada.config.api_sources.${unitId}`, JSON.stringify(flatMap));
-          localStorage.setItem(`scada.config.api_sources_list.${unitId}`, JSON.stringify(healed));
-        }
         return deduplicateApiSourceRows(healed);
       } catch (e) {}
     }
