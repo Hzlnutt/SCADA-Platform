@@ -140,7 +140,7 @@ export default function CoolingWF1U3Pid({
   };
 
   const renderSensorIndicator = (
-    tagId: string, 
+    tagId: string,
     extraProps: Omit<React.ComponentProps<typeof SensorIndicator>, "value" | "warningThreshold" | "alarmThreshold" | "thresholdDirection" | "enableAlert" | "suppressAlert">
   ) => {
     const rule = sensorRulesMap[tagId] || {};

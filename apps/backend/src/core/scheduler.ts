@@ -574,7 +574,7 @@ export const startCoolingTowerPolling = () => {
           if (Array.isArray(list)) {
             list.forEach((row: any) => {
               if (row.tagKey) {
-                let ep = row.endpoint || "";
+                let ep = row.url || row.endpoint || "";
                 if (ep) {
                   ep = ep.replace("10.3.164.3", "10.3.161.3").replace(":9080", ":8088");
                 }
