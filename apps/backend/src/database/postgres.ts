@@ -194,6 +194,29 @@ export const ensurePostgresTables = async () => {
       logger.warn({ err }, "Failed to alter alarms table columns to TIMESTAMP WITH TIME ZONE");
     });
 
+    // Create trigger to block auto-clearing of pid-threshold alarms (e.g. from duplicate developer/old backends)
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION block_pid_auto_resolve()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF NEW.alarm_key LIKE 'pid-threshold:%' AND NEW.status = 'Resolved' AND NEW.approver IS NULL AND NEW.operator_name IS NULL THEN
+          NEW.status := OLD.status;
+          NEW.cleared_at := OLD.cleared_at;
+          NEW.rtn := OLD.rtn;
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+    `);
+
+    await pool.query(`
+      DROP TRIGGER IF EXISTS trigger_block_pid_auto_resolve ON alarms;
+      CREATE TRIGGER trigger_block_pid_auto_resolve
+      BEFORE UPDATE ON alarms
+      FOR EACH ROW
+      EXECUTE FUNCTION block_pid_auto_resolve();
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS api_sources (
         id SERIAL PRIMARY KEY,
