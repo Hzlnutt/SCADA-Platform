@@ -1116,8 +1116,6 @@ export default function Electricity() {
         </div>
       </div>
 
-      </div>
-
       {/* ═══════════ SECTION C: PLN TREND + DONUT ═══════════ */}
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
