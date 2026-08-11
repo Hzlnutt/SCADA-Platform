@@ -1402,6 +1402,7 @@ export default function Electricity() {
                 Belum ada kategori. Klik ikon ⚙️ untuk menambahkan.
               </div>
             )}
+          </div>
         </section>
       </div>
 
