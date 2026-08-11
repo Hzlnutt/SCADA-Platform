@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
-import { Bar } from "react-chartjs-2";
+import { Bar, Line } from "react-chartjs-2";
 import "../../components/charts/chartjs";
 import { DonutChart } from "../../components/charts/DonutChart";
 import { machineGroups } from "../../data/machines";

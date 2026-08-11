@@ -83,7 +83,7 @@ export default function MachineAlarm() {
     const defaultSensors = getDefaultSensorConfigs(unitId);
     const defaultMap: Record<string, string> = {};
     defaultSensors.forEach((s) => {
-      defaultMap[s.tagKey] = s.apiSourceUrl || "";
+      defaultMap[s.tagKey] = "";
     });
 
     const savedUrls = localStorage.getItem(`scada.config.api_sources.${unitId}`);
