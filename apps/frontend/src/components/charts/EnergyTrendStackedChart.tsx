@@ -9,6 +9,7 @@ type EnergyTrendStackedChartProps = {
   gas: number[];
   water: number[];
   solar?: number[];
+  solarFuel?: number[];
   height?: number;
 };
 
@@ -18,6 +19,7 @@ export const EnergyTrendStackedChart = ({
   gas,
   water,
   solar,
+  solarFuel,
   height = 260
 }: EnergyTrendStackedChartProps) => {
   const theme = useSystemStore((state) => state.theme);
@@ -97,6 +99,28 @@ export const EnergyTrendStackedChart = ({
             if (!chartArea) return "rgba(245, 158, 11, 0.05)";
             const gradient = canvas.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
             const color = isDark ? "245, 158, 11" : "217, 70, 23";
+            gradient.addColorStop(0, `rgba(${color}, 0.35)`);
+            gradient.addColorStop(1, `rgba(${color}, 0.0)`);
+            return gradient;
+          },
+          borderWidth: 2.5,
+          fill: true,
+          tension: 0.35,
+          pointRadius: 0,
+          pointHoverRadius: 5
+        }
+      ] : []),
+      ...(solarFuel ? [
+        {
+          label: "Solar Fuel",
+          data: solarFuel,
+          borderColor: isDark ? "rgba(244, 63, 94, 1)" : "rgba(225, 29, 72, 1)",
+          backgroundColor: (ctx: ScriptableContext<"line">) => {
+            const { chart } = ctx;
+            const { ctx: canvas, chartArea } = chart;
+            if (!chartArea) return "rgba(244, 63, 94, 0.05)";
+            const gradient = canvas.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            const color = isDark ? "244, 63, 94" : "225, 29, 72";
             gradient.addColorStop(0, `rgba(${color}, 0.35)`);
             gradient.addColorStop(1, `rgba(${color}, 0.0)`);
             return gradient;
