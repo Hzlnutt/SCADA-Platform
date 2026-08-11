@@ -262,7 +262,9 @@ export default function MachineEnergy() {
     vUnb: 1.04,
     iUnb: 2.64,
     thdV: 3.15,
-    thdI: 9.82
+    thdI: 9.82,
+    thdV_L1: 3.15, thdV_L2: 2.98, thdV_L3: 3.31, thdV_N: 1.42,
+    thdI_L1: 9.82, thdI_L2: 9.56, thdI_L3: 10.14, thdI_N: 4.27
   });
 
   // Drift simulation disabled for production telemetry integration
@@ -672,12 +674,37 @@ export default function MachineEnergy() {
               Power Quality
             </span>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <RadialGauge label="FREQUENCY" value={pqData.freq} unit=" Hz" min={48} max={52} color="#10b981" />
             <RadialGauge label="V UNBALANCE" value={pqData.vUnb} unit=" %" min={0} max={5} color="#10b981" />
             <RadialGauge label="I UNBALANCE" value={pqData.iUnb} unit=" %" min={0} max={10} color="#f59e0b" />
-            <RadialGauge label="THD VOLTAGE" value={pqData.thdV} unit=" %" min={0} max={10} color="#f59e0b" />
-            <RadialGauge label="THD CURRENT" value={pqData.thdI} unit=" %" min={0} max={20} color="#ef4444" />
+          </div>
+          {/* THD Voltage & Current — Progress Bar per Phase */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+            <div className="p-4 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-xl space-y-3 shadow-sm">
+              <div className="flex justify-between items-baseline">
+                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">THD VOLTAGE (%)</span>
+                <span className="text-[9px] font-bold text-slate-400">Standar ≤ 5%</span>
+              </div>
+              <div className="space-y-2.5">
+                <ProgressBarRow label="L1" val={pqData.thdV_L1} unit="%" nominal={5} />
+                <ProgressBarRow label="L2" val={pqData.thdV_L2} unit="%" nominal={5} />
+                <ProgressBarRow label="L3" val={pqData.thdV_L3} unit="%" nominal={5} />
+                <ProgressBarRow label="N" val={pqData.thdV_N} unit="%" nominal={5} />
+              </div>
+            </div>
+            <div className="p-4 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-xl space-y-3 shadow-sm">
+              <div className="flex justify-between items-baseline">
+                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">THD CURRENT (%)</span>
+                <span className="text-[9px] font-bold text-slate-400">Standar ≤ 8%</span>
+              </div>
+              <div className="space-y-2.5">
+                <ProgressBarRow label="L1" val={pqData.thdI_L1} unit="%" nominal={8} />
+                <ProgressBarRow label="L2" val={pqData.thdI_L2} unit="%" nominal={8} />
+                <ProgressBarRow label="L3" val={pqData.thdI_L3} unit="%" nominal={8} />
+                <ProgressBarRow label="N" val={pqData.thdI_N} unit="%" nominal={8} />
+              </div>
+            </div>
           </div>
         </div>
 

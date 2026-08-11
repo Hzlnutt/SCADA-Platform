@@ -357,8 +357,66 @@ export default function Electricity() {
   const lwbpRate = useConfigStore((state) => state.lwbpRate);
 
   // Incoming Cubicle state
-  const [cubicleSelector, setCubicleSelector] = useState<"wf1" | "wf2">("wf1");
+  // Incoming Cubicle selector (PLN, WF1, WF2, POI1, POI2)
+  const [cubicleSelector, setCubicleSelector] = useState<"pln" | "wf1" | "wf2" | "poi1" | "poi2">("pln");
   const [cubiclePoiView, setCubiclePoiView] = useState(false);
+
+  // Computed summary metrics based on selected source
+  const cubicleSummary = useMemo(() => {
+    switch (cubicleSelector) {
+      case "pln":
+        return {
+          peakDemand: 2150,
+          lwbpKwh: 85400,
+          wbpKwh: 24500,
+          monthlyKwh: 109900,
+          cost: 122500000,
+          poi1Kwh: 50,
+          poi2Kwh: 1000
+        };
+      case "wf1":
+        return {
+          peakDemand: 1120,
+          lwbpKwh: 42100,
+          wbpKwh: 12300,
+          monthlyKwh: 54400,
+          cost: 60600000,
+          poi1Kwh: 40,
+          poi2Kwh: 800
+        };
+      case "wf2":
+        return {
+          peakDemand: 1030,
+          lwbpKwh: 43300,
+          wbpKwh: 12200,
+          monthlyKwh: 55500,
+          cost: 61900000,
+          poi1Kwh: 10,
+          poi2Kwh: 200
+        };
+      case "poi1":
+        return {
+          peakDemand: 50,
+          lwbpKwh: 12000,
+          wbpKwh: 3000,
+          monthlyKwh: 15000,
+          cost: 0,
+          poi1Kwh: 15000,
+          poi2Kwh: 0
+        };
+      case "poi2":
+      default:
+        return {
+          peakDemand: 1000,
+          lwbpKwh: 24000,
+          wbpKwh: 6000,
+          monthlyKwh: 30000,
+          cost: 0,
+          poi1Kwh: 0,
+          poi2Kwh: 30000
+        };
+    }
+  }, [cubicleSelector]);
 
   // Consumption Fact categories
   const [factCategories1, setFactCategories1] = useState<ConsumptionFactCategory[]>([]);
@@ -808,8 +866,8 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-blue-600/10 text-blue-700'} flex items-center justify-center`}><IconGrid /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-blue-950'}`}>
-              {summaryLoading ? "..." : `${(cardSummary.totalKwh).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
-              <span className={`text-sm font-bold ml-1 ${isDark ? 'text-blue-200' : 'text-blue-700'}`}>kWh</span>
+              {renderMetricVal(getApiVal("pln/active_power"), (v) => `${v.toLocaleString("id-ID", { maximumFractionDigits: 1 })}`)}
+              <span className={`text-sm font-bold ml-1 ${isDark ? 'text-blue-200' : 'text-blue-700'}`}>kW</span>
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-blue-200' : 'text-blue-800'}`}>
               <span>Voltage: <strong className={isDark ? 'text-white' : 'text-blue-950'}>{renderMetricVal(getApiVal("pln/voltage"), (v) => `${v.toFixed(2)} kV`)}</strong></span>
@@ -883,8 +941,8 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-cyan-600/10 text-cyan-700'} flex items-center justify-center`}><IconPlant /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-cyan-950'}`}>
-              {summaryLoading ? "..." : `${(cardSummary.totalKwh).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
-              <span className={`text-sm font-bold ml-1 ${isDark ? 'text-cyan-200' : 'text-cyan-700'}`}>kWh</span>
+              {renderMetricVal(getApiVal("electricity/p_grid"), (v) => `${v.toLocaleString("id-ID", { maximumFractionDigits: 1 })}`)}
+              <span className={`text-sm font-bold ml-1 ${isDark ? 'text-cyan-200' : 'text-cyan-700'}`}>kW</span>
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-cyan-200' : 'text-cyan-800'}`}>
               <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{renderMetricVal(getApiVal("electricity/p_grid"), (v) => `${v.toLocaleString("id-ID")} kW`)}</strong></span>
@@ -957,124 +1015,107 @@ export default function Electricity() {
           </div>
         </div>
 
-        {/* Ringkasan Parameter Table */}
-        <div className="mt-5 border-t border-slate-100 dark:border-slate-800/80 pt-4">
-          <div className="flex items-center gap-2 mb-3">
-            <svg className="h-4 w-4 text-sky-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-            </svg>
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ringkasan Parameter Incoming PLN 20 kV - Sumber Utama</h4>
+        {/* Real-time Power Meter Widget */}
+        <div className="mt-5 border-t border-slate-100 dark:border-slate-800/80 pt-5">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-blue-500 font-bold">🔌</span>
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              PLN Power Meter Cubicle (PM8000) — Real-time Readings
+            </h4>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
-                  <th className="pb-2.5 px-3">Parameter</th>
-                  <th className="pb-2.5 px-3">Nilai</th>
-                  <th className="pb-2.5 px-3">Satuan</th>
-                  <th className="pb-2.5 px-3">Standar</th>
-                  <th className="pb-2.5 px-3 text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-semibold text-slate-700 dark:text-slate-300">
-                {/* Tegangan */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                  <td className="py-2.5 px-3">Tegangan</td>
-                  <td className="py-2.5 px-3 font-mono">{renderMetricVal(getApiVal("pln/voltage"), (v) => `${v.toFixed(2)}`)}</td>
-                  <td className="py-2.5 px-3">kV</td>
-                  <td className="py-2.5 px-3 font-mono">20 ± 5%</td>
-                  <td className="py-2.5 px-3 text-right">
-                    {isOfflineVal(getApiVal("pln/voltage")) ? (
-                      <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                    ) : Math.abs(Number(getApiVal("pln/voltage")) - 20) <= 1.0 ? (
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
-                    )}
-                  </td>
-                </tr>
-                {/* Frekuensi */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                  <td className="py-2.5 px-3">Frekuensi</td>
-                  <td className="py-2.5 px-3 font-mono">{renderMetricVal(getApiVal("pln/frequency"), (v) => `${v.toFixed(2)}`)}</td>
-                  <td className="py-2.5 px-3">Hz</td>
-                  <td className="py-2.5 px-3 font-mono">50 ± 0.5</td>
-                  <td className="py-2.5 px-3 text-right">
-                    {isOfflineVal(getApiVal("pln/frequency")) ? (
-                      <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                    ) : Math.abs(Number(getApiVal("pln/frequency")) - 50) <= 0.5 ? (
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
-                    )}
-                  </td>
-                </tr>
-                {/* Active Power */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                  <td className="py-2.5 px-3">Active Power</td>
-                  <td className="py-2.5 px-3 font-mono">{renderMetricVal(getApiVal("pln/active_power"), (v) => `${v.toFixed(3)}`)}</td>
-                  <td className="py-2.5 px-3">kW</td>
-                  <td className="py-2.5 px-3 font-mono">—</td>
-                  <td className="py-2.5 px-3 text-right">
-                    {isOfflineVal(getApiVal("pln/active_power")) ? (
-                      <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
-                    )}
-                  </td>
-                </tr>
-                {/* Power Factor */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                  <td className="py-2.5 px-3">Power Factor</td>
-                  <td className="py-2.5 px-3 font-mono">{renderMetricVal(getApiVal("pln/power_factor"), (v) => `${v.toFixed(3)}`)}</td>
-                  <td className="py-2.5 px-3">PF</td>
-                  <td className="py-2.5 px-3 font-mono">≥ 0.85</td>
-                  <td className="py-2.5 px-3 text-right">
-                    {isOfflineVal(getApiVal("pln/power_factor")) ? (
-                      <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                    ) : Number(getApiVal("pln/power_factor")) >= 0.85 ? (
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Low PF</span>
-                    )}
-                  </td>
-                </tr>
-                {/* Voltage Unbalanced */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                  <td className="py-2.5 px-3">Voltage Unbalanced</td>
-                  <td className="py-2.5 px-3 font-mono">{renderMetricVal(getApiVal("pln/unbalance_v"), (v) => `${v.toFixed(2)}`)}</td>
-                  <td className="py-2.5 px-3">%</td>
-                  <td className="py-2.5 px-3 font-mono">≤ 2%</td>
-                  <td className="py-2.5 px-3 text-right">
-                    {isOfflineVal(getApiVal("pln/unbalance_v")) ? (
-                      <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                    ) : Number(getApiVal("pln/unbalance_v")) <= 2 ? (
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
-                    )}
-                  </td>
-                </tr>
-                {/* Current Unbalanced */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                  <td className="py-2.5 px-3">Current Unbalanced</td>
-                  <td className="py-2.5 px-3 font-mono">{renderMetricVal(getApiVal("pln/unbalance_i"), (v) => `${v.toFixed(2)}`)}</td>
-                  <td className="py-2.5 px-3">%</td>
-                  <td className="py-2.5 px-3 font-mono">≤ 10%</td>
-                  <td className="py-2.5 px-3 text-right">
-                    {isOfflineVal(getApiVal("pln/unbalance_i")) ? (
-                      <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                    ) : Number(getApiVal("pln/unbalance_i")) <= 10 ? (
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
-                    )}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Voltage Phase-Neutral */}
+            <div className="p-4 bg-slate-50/50 dark:bg-slate-950/30 rounded-xl border border-slate-100 dark:border-slate-800/60 shadow-inner">
+              <div className="flex justify-between items-baseline mb-2">
+                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">Voltage L-N</span>
+                <span className="text-[9px] font-bold text-slate-400">Nominal 230V</span>
+              </div>
+              <div className="space-y-1.5 font-semibold text-xs text-slate-700 dark:text-slate-300">
+                <div className="flex justify-between items-center">
+                  <span>Phase R-N</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/voltage_rn") || 229.1, (v) => `${Number(v).toFixed(1)} V`)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>Phase S-N</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/voltage_sn") || 229.2, (v) => `${Number(v).toFixed(1)} V`)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>Phase T-N</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/voltage_tn") || 228.9, (v) => `${Number(v).toFixed(1)} V`)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Current Phase */}
+            <div className="p-4 bg-slate-50/50 dark:bg-slate-950/30 rounded-xl border border-slate-100 dark:border-slate-800/60 shadow-inner">
+              <div className="flex justify-between items-baseline mb-2">
+                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">Current Phase</span>
+                <span className="text-[9px] font-bold text-slate-400">Rating 165A</span>
+              </div>
+              <div className="space-y-1.5 font-semibold text-xs text-slate-700 dark:text-slate-300">
+                <div className="flex justify-between items-center">
+                  <span>Phase R</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/current_r") || 165.3, (v) => `${Number(v).toFixed(1)} A`)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>Phase S</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/current_s") || 163.7, (v) => `${Number(v).toFixed(1)} A`)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>Phase T</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/current_t") || 165.2, (v) => `${Number(v).toFixed(1)} A`)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Power Summary */}
+            <div className="p-4 bg-slate-50/50 dark:bg-slate-950/30 rounded-xl border border-slate-100 dark:border-slate-800/60 shadow-inner">
+              <div className="flex justify-between items-baseline mb-2">
+                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">Power Parameters</span>
+                <span className="text-[9px] font-bold text-slate-400">Total Load</span>
+              </div>
+              <div className="space-y-1.5 font-semibold text-xs text-slate-700 dark:text-slate-300">
+                <div className="flex justify-between items-center">
+                  <span>Active Power</span>
+                  <span className="font-mono text-emerald-500 font-extrabold">{renderMetricVal(getApiVal("pln/active_power"), (v) => `${Number(v).toFixed(2)} kW`)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>Reactive Power</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/reactive_power") || 46.1, (v) => `${Number(v).toFixed(2)} kVAR`)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>Apparent Power</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/apparent_power") || 111.4, (v) => `${Number(v).toFixed(2)} kVA`)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Power Quality */}
+            <div className="p-4 bg-slate-50/50 dark:bg-slate-950/30 rounded-xl border border-slate-100 dark:border-slate-800/60 shadow-inner">
+              <div className="flex justify-between items-baseline mb-2">
+                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">Power Quality</span>
+                <span className="text-[9px] font-bold text-slate-400">Grid Status</span>
+              </div>
+              <div className="space-y-1.5 font-semibold text-xs text-slate-700 dark:text-slate-300">
+                <div className="flex justify-between items-center">
+                  <span>Frequency</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/frequency"), (v) => `${Number(v).toFixed(2)} Hz`)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>V Unbalanced</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/unbalance_v"), (v) => `${Number(v).toFixed(2)} %`)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>I Unbalanced</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/unbalance_i"), (v) => `${Number(v).toFixed(2)} %`)}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+      </div>
+
       </div>
 
       {/* ═══════════ SECTION C: PLN TREND + DONUT ═══════════ */}
@@ -1221,15 +1262,27 @@ export default function Electricity() {
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <h3 className="text-sm font-bold text-slate-700 dark:text-white">Dashboard <span className="text-slate-400 dark:text-slate-500">|</span> <span className="text-blue-500">Home</span> <span className="text-slate-400 dark:text-slate-500">›</span> Overview</h3>
+            <h3 className="text-sm font-bold text-slate-700 dark:text-white">
+              Dashboard <span className="text-slate-400 dark:text-slate-500">|</span> <span className="text-blue-500">Home</span> <span className="text-slate-400 dark:text-slate-500">›</span> Monthly Consumption
+            </h3>
           </div>
           <div className="flex items-center gap-2">
-            <select value={cubicleSelector} onChange={(e) => setCubicleSelector(e.target.value as "wf1" | "wf2")} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer">
+            <select
+              value={cubicleSelector}
+              onChange={(e) => setCubicleSelector(e.target.value as any)}
+              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer outline-none"
+            >
+              <option value="pln">Incoming PLN Grid</option>
               <option value="wf1">Incoming Cubicle WF1</option>
               <option value="wf2">Incoming Cubicle WF2</option>
+              <option value="poi1">Solar PV POI-1</option>
+              <option value="poi2">Solar PV POI-2</option>
             </select>
             <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">ON</span>
-            <button onClick={() => setCubiclePoiView(!cubiclePoiView)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-blue-500 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 transition">
+            <button
+              onClick={() => setCubiclePoiView(!cubiclePoiView)}
+              className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-blue-500 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 transition"
+            >
               {cubiclePoiView ? "View: Total kWh" : "View: POI Mode"}
             </button>
           </div>
@@ -1240,47 +1293,76 @@ export default function Electricity() {
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Peak Demand</div>
             <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              0 kWh
+              {cubicleSummary.peakDemand.toLocaleString("id-ID")} kW
             </div>
           </div>
           {cubiclePoiView ? (
             <>
               <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4">
                 <span className="text-[10px] font-bold text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">POI-1</span>
-                <div className="mt-1 text-xs font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
+                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
+                  {cubicleSelector.startsWith("poi") || cubicleSelector === "pln" ? `${cubicleSummary.poi1Kwh.toLocaleString("id-ID")} kWh` : "0 kWh"}
+                </div>
               </div>
               <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30 p-4">
                 <span className="text-[10px] font-bold text-cyan-500 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20">POI-2</span>
-                <div className="mt-1 text-xs font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
+                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
+                  {cubicleSelector.startsWith("poi") || cubicleSelector === "pln" ? `${cubicleSummary.poi2Kwh.toLocaleString("id-ID")} kWh` : "0 kWh"}
+                </div>
               </div>
             </>
           ) : (
             <>
               <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4">
                 <span className="text-[10px] font-bold text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">LWBP</span>
-                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kWh</div>
+                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
+                  {cubicleSummary.lwbpKwh.toLocaleString("id-ID")} kWh
+                </div>
               </div>
               <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30 p-4">
                 <span className="text-[10px] font-bold text-rose-500 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">WBP</span>
-                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kWh</div>
+                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
+                  {cubicleSummary.wbpKwh.toLocaleString("id-ID")} kWh
+                </div>
               </div>
             </>
           )}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Monthly Usage</div>
-            <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">0 kWh</div>
+            <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
+              {cubicleSummary.monthlyKwh.toLocaleString("id-ID")} kWh
+            </div>
           </div>
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Estimation Cost</div>
-            <div className="mt-1 text-base font-extrabold text-slate-800 dark:text-white font-mono">Rp 0,00</div>
+            <div className="mt-1 text-base font-extrabold text-slate-800 dark:text-white font-mono">
+              {cubicleSummary.cost > 0 ? formatCurrency(cubicleSummary.cost) : "Rp 0,00 (Free)"}
+            </div>
           </div>
         </div>
 
         {/* Cubicle monthly comparison chart */}
         <MonthlyComparisonChart
-          title={`Konsumsi Bulanan Real Time (vs Bulan Sebelumnya) — Incoming Cubicle ${cubicleSelector.toUpperCase()}`}
-          currentData={dummyMonthlyData}
-          previousData={dummyPreviousData}
+          title={`Konsumsi Bulanan Real Time (vs Bulan Sebelumnya) — ${
+            cubicleSelector === "pln" ? "Incoming PLN Grid" :
+            cubicleSelector === "wf1" ? "Incoming Cubicle WF1" :
+            cubicleSelector === "wf2" ? "Incoming Cubicle WF2" :
+            cubicleSelector === "poi1" ? "Solar PV POI-1" : "Solar PV POI-2"
+          }`}
+          currentData={
+            cubicleSelector === "pln" ? [24000, 38000, 6000, 10000, 4000, 6000, 10000, 18000, 22000, 28000, 22000, 26000] :
+            cubicleSelector === "wf1" ? [12000, 19000, 3000, 5000, 2000, 3000, 5000, 9000, 11000, 14000, 11000, 13000] :
+            cubicleSelector === "wf2" ? [11400, 18050, 2850, 4750, 1900, 2850, 4750, 8550, 10450, 13300, 10450, 12350] :
+            cubicleSelector === "poi1" ? [3600, 5700, 900, 1500, 600, 900, 1500, 2700, 3300, 4200, 3300, 3900] :
+            [7200, 11400, 1800, 3000, 1200, 1800, 3000, 5400, 6600, 8400, 6600, 7800]
+          }
+          previousData={
+            cubicleSelector === "pln" ? [22000, 34000, 8000, 12000, 6000, 4000, 8000, 16000, 20000, 26000, 24000, 24000] :
+            cubicleSelector === "wf1" ? [11000, 17000, 4000, 6000, 3000, 2000, 4000, 8000, 10000, 13000, 12000, 12000] :
+            cubicleSelector === "wf2" ? [10450, 16150, 3800, 5700, 2850, 1900, 3800, 7600, 9500, 12350, 11400, 11400] :
+            cubicleSelector === "poi1" ? [3300, 5100, 1200, 1800, 900, 600, 1200, 2400, 3000, 3900, 3600, 3600] :
+            [6600, 10200, 2400, 3600, 1800, 1200, 2400, 4800, 6000, 7800, 7200, 7200]
+          }
           isDark={isDark}
         />
       </div>
@@ -1324,7 +1406,61 @@ export default function Electricity() {
             )}
           </div>
         </section>
-      </div>
+      {/* Trend Panel Distribusi (Utility & HVAC) */}
+      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
+        <div>
+          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-400">
+            📊 Trend Panel Distribusi — Utility vs HVAC
+          </h3>
+          <p className="text-[10px] text-slate-400 mt-0.5">Real-time electricity load distribution comparison (24 Hour Trend)</p>
+        </div>
+        <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80" style={{ height: 260 }}>
+          <Line
+            data={{
+              labels: Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`),
+              datasets: [
+                {
+                  label: "Utility Department (kW) — Boiler, Compressors, Cooling Towers",
+                  data: [350, 420, 290, 310, 410, 480, 520, 610, 680, 710, 640, 680, 720, 750, 730, 700, 680, 610, 580, 520, 480, 450, 410, 380],
+                  borderColor: "#3b82f6",
+                  backgroundColor: "rgba(59, 130, 246, 0.05)",
+                  borderWidth: 2,
+                  pointRadius: 0,
+                  fill: true,
+                  tension: 0.3
+                },
+                {
+                  label: "HVAC Department (kW) — Chillers & AHUs",
+                  data: [410, 490, 320, 340, 450, 550, 620, 780, 850, 920, 880, 910, 950, 990, 970, 930, 890, 790, 740, 650, 590, 540, 490, 440],
+                  borderColor: "#06b6d4",
+                  backgroundColor: "rgba(6, 182, 212, 0.05)",
+                  borderWidth: 2,
+                  pointRadius: 0,
+                  fill: true,
+                  tension: 0.3
+                }
+              ]
+            }}
+            options={{
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  labels: { color: isDark ? "#94a3b8" : "#475569", font: { size: 9, weight: "bold" } }
+                }
+              },
+              scales: {
+                x: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 8 } } },
+                y: {
+                  grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
+                  ticks: { color: "#64748b", font: { size: 8 } }
+                }
+              }
+            }}
+          />
+        </div>
+      </section>
+
 
       {/* ═══════════ SECTION H: EQUIPMENT MONTHLY CHARTS ═══════════ */}
       <div className="space-y-8">

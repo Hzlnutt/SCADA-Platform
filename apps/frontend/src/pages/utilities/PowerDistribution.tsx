@@ -123,53 +123,57 @@ type TransformerData = {
   thdCurrent: number;
   kwh: number;
   status: "online" | "warning" | "offline";
+  vectorGroup?: string;
+  impedance?: number;
+  year?: string;
+  manufacturer?: string;
 };
 
 /* ═══════════ INITIAL MOCK DATA ═══════════ */
 const INITIAL_TRANSFORMERS: TransformerData[] = [
   // Factory 1
   {
-    id: "mdp-1.1", name: "MDP-1.1", factory: 1, capacityKva: 630, activePowerKw: 0, reactivePowerKvar: 0,
-    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
-    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
-    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
+    id: "mdp-1.1", name: "MDP-1.1", factory: 1, capacityKva: 630, activePowerKw: 594, reactivePowerKvar: 128,
+    apparentPowerKva: 608, powerFactor: 0.942, frequencyHz: 49.98, tempCc: 54.2, voltageInKv: 20.8,
+    voltageOutL2L: 399.2, voltageOutL2N: 229.4, currentR: 512, currentS: 508, currentT: 515,
+    thdVoltage: 2.81, thdCurrent: 7.42, kwh: 170967, status: "online"
   },
   {
-    id: "mdp-1.2", name: "MDP-1.2", factory: 1, capacityKva: 630, activePowerKw: 0, reactivePowerKvar: 0,
-    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
-    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
-    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
+    id: "mdp-1.2", name: "MDP-1.2", factory: 1, capacityKva: 630, activePowerKw: 521, reactivePowerKvar: 112,
+    apparentPowerKva: 533, powerFactor: 0.952, frequencyHz: 49.97, tempCc: 51.8, voltageInKv: 20.7,
+    voltageOutL2L: 400.1, voltageOutL2N: 230.1, currentR: 448, currentS: 452, currentT: 445,
+    thdVoltage: 2.65, thdCurrent: 6.91, kwh: 149832, status: "online"
   },
   {
-    id: "mdp-2", name: "MDP-2", factory: 1, capacityKva: 1000, activePowerKw: 0, reactivePowerKvar: 0,
-    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
-    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
-    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
+    id: "mdp-2", name: "MDP-2", factory: 1, capacityKva: 1000, activePowerKw: 715, reactivePowerKvar: 168,
+    apparentPowerKva: 734, powerFactor: 0.958, frequencyHz: 49.99, tempCc: 57.5, voltageInKv: 20.9,
+    voltageOutL2L: 401.3, voltageOutL2N: 231.2, currentR: 615, currentS: 620, currentT: 618,
+    thdVoltage: 3.12, thdCurrent: 8.15, kwh: 206541, status: "online"
   },
   {
-    id: "mdp-3", name: "MDP-3", factory: 1, capacityKva: 1000, activePowerKw: 0, reactivePowerKvar: 0,
-    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
-    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
-    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
+    id: "mdp-3", name: "MDP-3", factory: 1, capacityKva: 1000, activePowerKw: 718, reactivePowerKvar: 175,
+    apparentPowerKva: 739, powerFactor: 0.960, frequencyHz: 49.98, tempCc: 59.1, voltageInKv: 20.8,
+    voltageOutL2L: 400.8, voltageOutL2N: 230.6, currentR: 622, currentS: 618, currentT: 625,
+    thdVoltage: 2.94, thdCurrent: 7.88, kwh: 211423, status: "online"
   },
   // Factory 2
   {
-    id: "putr-1", name: "PUTR-1", factory: 2, capacityKva: 2000, activePowerKw: 0, reactivePowerKvar: 0,
-    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
-    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
-    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
+    id: "putr-1", name: "PUTR-1", factory: 2, capacityKva: 2000, activePowerKw: 491, reactivePowerKvar: 105,
+    apparentPowerKva: 502, powerFactor: 0.947, frequencyHz: 49.99, tempCc: 48.3, voltageInKv: 20.9,
+    voltageOutL2L: 400.5, voltageOutL2N: 230.8, currentR: 425, currentS: 430, currentT: 422,
+    thdVoltage: 2.45, thdCurrent: 6.52, kwh: 142876, status: "online"
   },
   {
-    id: "putr-2", name: "PUTR-2", factory: 2, capacityKva: 2000, activePowerKw: 0, reactivePowerKvar: 0,
-    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
-    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
-    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
+    id: "putr-2", name: "PUTR-2", factory: 2, capacityKva: 2000, activePowerKw: 563, reactivePowerKvar: 118,
+    apparentPowerKva: 575, powerFactor: 0.985, frequencyHz: 49.98, tempCc: 50.1, voltageInKv: 20.8,
+    voltageOutL2L: 399.8, voltageOutL2N: 229.9, currentR: 486, currentS: 490, currentT: 484,
+    thdVoltage: 2.68, thdCurrent: 7.15, kwh: 163254, status: "online"
   },
   {
-    id: "putr-new", name: "PUTR-New", factory: 2, capacityKva: 1600, activePowerKw: 0, reactivePowerKvar: 0,
-    apparentPowerKva: 0, powerFactor: 0, frequencyHz: 0, tempCc: 0, voltageInKv: 0,
-    voltageOutL2L: 0, voltageOutL2N: 0, currentR: 0, currentS: 0, currentT: 0,
-    thdVoltage: 0, thdCurrent: 0, kwh: 0, status: "offline"
+    id: "putr-new", name: "PUTR-New", factory: 2, capacityKva: 1600, activePowerKw: 406, reactivePowerKvar: 92,
+    apparentPowerKva: 416, powerFactor: 0.952, frequencyHz: 49.97, tempCc: 46.7, voltageInKv: 20.7,
+    voltageOutL2L: 400.3, voltageOutL2N: 230.5, currentR: 352, currentS: 348, currentT: 355,
+    thdVoltage: 2.32, thdCurrent: 5.94, kwh: 118742, status: "online"
   }
 ];
 
@@ -180,31 +184,53 @@ const formatCurrencyIDR = (v: number) =>
 
 /* ═══════════ DETAILED HISTORICAL MODAL ═══════════ */
 type ModalProps = {
-  transformer: TransformerData;
+  transformer: TransformerData & { vectorGroup: string; impedance: number; year: string; manufacturer: string };
   onClose: () => void;
   isDark: boolean;
+  coverageList: { group?: string; breaker: string; load: string; label: string }[];
+  onSaveSpecs: (specs: any) => void;
+  onSaveCoverage: (items: any[]) => void;
 };
 
-function DetailRecordModal({ transformer, onClose, isDark }: ModalProps) {
+function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveSpecs, onSaveCoverage }: ModalProps) {
   const [activeTab, setActiveTab] = useState<"voltage" | "ampere" | "power">("voltage");
+  const [rightTab, setRightTab] = useState<"specs" | "coverage">("specs");
+
+  // Specs form state
+  const [specForm, setSpecForm] = useState({
+    capacityKva: transformer.capacityKva,
+    vectorGroup: transformer.vectorGroup,
+    impedance: transformer.impedance,
+    year: transformer.year,
+    manufacturer: transformer.manufacturer,
+  });
+
+  // Coverage items local state
+  const [coverages, setCoverages] = useState(coverageList);
+
+  // New coverage form state
+  const [newGroup, setNewGroup] = useState("");
+  const [newBreaker, setNewBreaker] = useState("");
+  const [newLoad, setNewLoad] = useState("");
+  const [newLabel, setNewLabel] = useState("");
 
   const trendLabels = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
 
   const voltageData = {
     labels: trendLabels,
     datasets: [
-      { label: "VAB (V)", data: [], borderColor: "#f43f5e", borderWidth: 2, pointRadius: 0, fill: false },
-      { label: "VBC (V)", data: [], borderColor: "#eab308", borderWidth: 2, pointRadius: 0, fill: false },
-      { label: "VCA (V)", data: [], borderColor: "#3b82f6", borderWidth: 2, pointRadius: 0, fill: false }
+      { label: "VAB (V)", data: Array.from({ length: 24 }, () => 398 + Math.random() * 4), borderColor: "#f43f5e", borderWidth: 2, pointRadius: 0, fill: false },
+      { label: "VBC (V)", data: Array.from({ length: 24 }, () => 399 + Math.random() * 4), borderColor: "#eab308", borderWidth: 2, pointRadius: 0, fill: false },
+      { label: "VCA (V)", data: Array.from({ length: 24 }, () => 400 + Math.random() * 4), borderColor: "#3b82f6", borderWidth: 2, pointRadius: 0, fill: false }
     ]
   };
 
   const ampereData = {
     labels: trendLabels,
     datasets: [
-      { label: "Phase R (A)", data: [], borderColor: "#f43f5e", borderWidth: 2, pointRadius: 0, fill: false },
-      { label: "Phase S (A)", data: [], borderColor: "#eab308", borderWidth: 2, pointRadius: 0, fill: false },
-      { label: "Phase T (A)", data: [], borderColor: "#3b82f6", borderWidth: 2, pointRadius: 0, fill: false }
+      { label: "Phase R (A)", data: Array.from({ length: 24 }, () => 320 + Math.random() * 40), borderColor: "#f43f5e", borderWidth: 2, pointRadius: 0, fill: false },
+      { label: "Phase S (A)", data: Array.from({ length: 24 }, () => 310 + Math.random() * 35), borderColor: "#eab308", borderWidth: 2, pointRadius: 0, fill: false },
+      { label: "Phase T (A)", data: Array.from({ length: 24 }, () => 330 + Math.random() * 45), borderColor: "#3b82f6", borderWidth: 2, pointRadius: 0, fill: false }
     ]
   };
 
@@ -213,7 +239,7 @@ function DetailRecordModal({ transformer, onClose, isDark }: ModalProps) {
     datasets: [
       {
         label: "Daya Aktif (kW)",
-        data: [],
+        data: Array.from({ length: 24 }, () => 520 + Math.random() * 60),
         backgroundColor: "rgba(16, 185, 129, 0.4)",
         borderColor: "#10b981",
         borderWidth: 1.5
@@ -244,13 +270,43 @@ function DetailRecordModal({ transformer, onClose, isDark }: ModalProps) {
     { key: "power" as const, label: "Daya Aktif Record" },
   ];
 
-  const coveredList = COVERED_EQUIPMENT[transformer.id] || [];
+  const handleSaveSpecsClick = () => {
+    onSaveSpecs(specForm);
+    alert("Transformer Specifications saved successfully!");
+  };
+
+  const handleAddCoverage = () => {
+    if (!newLoad.trim() || !newBreaker.trim()) {
+      alert("Load name and Breaker MCCB rating are required.");
+      return;
+    }
+    const newItem = {
+      group: newGroup.trim() || undefined,
+      breaker: newBreaker.trim(),
+      load: newLoad.trim(),
+      label: newLabel.trim() || newLoad.trim(),
+    };
+    const updated = [...coverages, newItem];
+    setCoverages(updated);
+    onSaveCoverage(updated);
+    // Reset inputs
+    setNewGroup("");
+    setNewBreaker("");
+    setNewLoad("");
+    setNewLabel("");
+  };
+
+  const handleDeleteCoverage = (idxToDelete: number) => {
+    const updated = coverages.filter((_, idx) => idx !== idxToDelete);
+    setCoverages(updated);
+    onSaveCoverage(updated);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-6xl rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-6xl rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-4 mb-4">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-4 mb-4 flex-shrink-0">
           <div className="flex items-center gap-3">
             <span
               className="rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-500"
@@ -262,7 +318,7 @@ function DetailRecordModal({ transformer, onClose, isDark }: ModalProps) {
             </span>
             <div>
               <h3 className="text-sm font-extrabold text-slate-800 dark:text-white">
-                Historical Records & Area Coverage — {transformer.name}
+                Detailed Configurations & Records — {transformer.name}
               </h3>
               <p className="text-[10px] text-slate-400">Transformator {transformer.factory === 1 ? "Factory 1" : "Factory 2"}</p>
             </div>
@@ -284,11 +340,15 @@ function DetailRecordModal({ transformer, onClose, isDark }: ModalProps) {
         </div>
 
         {/* Modal Layout Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-[1.6fr_1fr] gap-6 overflow-hidden flex-1">
-          {/* Left Column: Tab & Chart */}
+        <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-6 overflow-hidden flex-1">
+          
+          {/* Left Column: Tab & Chart (Historical Trends) */}
           <div className="flex flex-col overflow-hidden space-y-4">
+            <h4 className="text-xs font-extrabold uppercase text-[#47729f] dark:text-sky-400 tracking-wider">
+              📈 Historical Trend (24 Jam)
+            </h4>
             {/* Tab Buttons */}
-            <div className="flex gap-2 bg-slate-100/80 dark:bg-slate-800/40 p-1 rounded-xl self-start">
+            <div className="flex gap-2 bg-slate-100/80 dark:bg-slate-800/40 p-1 rounded-xl self-start flex-shrink-0">
               {tabs.map(t => (
                 <button
                   key={t.key}
@@ -312,36 +372,172 @@ function DetailRecordModal({ transformer, onClose, isDark }: ModalProps) {
             </div>
           </div>
 
-          {/* Right Column: Covered Equipment Directory */}
+          {/* Right Column: Configurations Specs & Coverage split tabs */}
           <div className="flex flex-col border-l border-slate-100 dark:border-slate-800/80 pl-6 overflow-hidden">
-            <h4 className="text-xs font-extrabold uppercase text-[#47729f] dark:text-sky-400 tracking-wider mb-3">
-              📋 Area & Equipment Coverage ({coveredList.length} items)
-            </h4>
-            <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-              {coveredList.map((item, idx) => (
-                <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60 rounded-xl flex items-center justify-between text-xs transition hover:border-sky-500/25">
-                  <div className="space-y-0.5 max-w-[200px]">
-                    <span className="font-bold text-slate-800 dark:text-slate-200 block truncate">{item.load}</span>
-                    {item.group && (
-                      <span className="text-[9px] text-slate-400 font-semibold block">{item.group}</span>
-                    )}
-                  </div>
-                  <span className="px-2 py-1 font-mono text-[10px] font-extrabold text-blue-500 dark:text-sky-400 bg-blue-500/10 border border-blue-500/20 rounded-md">
-                    {item.breaker}
-                  </span>
-                </div>
-              ))}
-              {coveredList.length === 0 && (
-                <div className="text-center py-10 text-xs text-slate-400 font-bold">
-                  No coverage list defined for this panel.
-                </div>
-              )}
+            {/* Right Side Tabs */}
+            <div className="flex gap-2 bg-slate-100/80 dark:bg-slate-800/40 p-1 rounded-xl self-start mb-4 flex-shrink-0">
+              <button
+                onClick={() => setRightTab("specs")}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  rightTab === "specs"
+                    ? "bg-white dark:bg-slate-800 shadow-sm text-[#002b5c] dark:text-sky-400"
+                    : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                }`}
+              >
+                🪪 Nameplate Specifications
+              </button>
+              <button
+                onClick={() => setRightTab("coverage")}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  rightTab === "coverage"
+                    ? "bg-white dark:bg-slate-800 shadow-sm text-[#002b5c] dark:text-sky-400"
+                    : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                }`}
+              >
+                📋 Coverage Equipment ({coverages.length})
+              </button>
             </div>
+
+            {/* TAB 1: Specs Editor */}
+            {rightTab === "specs" && (
+              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Kapasitas (kVA)</label>
+                    <input
+                      type="number"
+                      value={specForm.capacityKva}
+                      onChange={e => setSpecForm({ ...specForm, capacityKva: +e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold outline-none focus:border-sky-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Manufacturer</label>
+                    <input
+                      type="text"
+                      value={specForm.manufacturer}
+                      onChange={e => setSpecForm({ ...specForm, manufacturer: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold outline-none focus:border-sky-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Vector Group</label>
+                    <input
+                      type="text"
+                      value={specForm.vectorGroup}
+                      onChange={e => setSpecForm({ ...specForm, vectorGroup: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold outline-none focus:border-sky-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Impedansi (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={specForm.impedance}
+                      onChange={e => setSpecForm({ ...specForm, impedance: +e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold outline-none focus:border-sky-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Tahun Pembuatan</label>
+                    <input
+                      type="text"
+                      value={specForm.year}
+                      onChange={e => setSpecForm({ ...specForm, year: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold outline-none focus:border-sky-500"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSaveSpecsClick}
+                  className="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-bold transition shadow"
+                >
+                  Save Specification Details
+                </button>
+              </div>
+            )}
+
+            {/* TAB 2: Coverage Editor */}
+            {rightTab === "coverage" && (
+              <div className="flex-1 overflow-y-auto space-y-4 pr-2 flex flex-col justify-between">
+                
+                {/* List items */}
+                <div className="space-y-2 overflow-y-auto max-h-[220px] pr-1">
+                  {coverages.map((item, idx) => (
+                    <div key={idx} className="p-2.5 bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60 rounded-xl flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 block">{item.load}</span>
+                        {item.group && (
+                          <span className="text-[8px] text-slate-400 font-semibold">{item.group}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="px-2 py-0.5 font-mono text-[9px] font-extrabold text-blue-500 dark:text-sky-400 bg-blue-500/10 border border-blue-500/20 rounded">
+                          {item.breaker}
+                        </span>
+                        <button
+                          onClick={() => handleDeleteCoverage(idx)}
+                          className="text-rose-500 hover:text-rose-700 font-extrabold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {coverages.length === 0 && (
+                    <div className="text-center py-6 text-xs text-slate-400 font-semibold">
+                      No coverage equipment added yet.
+                    </div>
+                  )}
+                </div>
+
+                {/* Add new coverage Form */}
+                <div className="border-t border-slate-100 dark:border-slate-800/80 pt-3 space-y-2 mt-auto">
+                  <h5 className="text-[10px] font-extrabold text-[#47729f] dark:text-slate-400 uppercase tracking-wider">
+                    ➕ Add Equipment Coverage
+                  </h5>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <input
+                      type="text"
+                      placeholder="Load Name"
+                      value={newLoad}
+                      onChange={e => {
+                        setNewLoad(e.target.value);
+                        setNewLabel(e.target.value);
+                      }}
+                      className="px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 rounded-lg text-slate-800 dark:text-slate-100 outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Breaker MCCB"
+                      value={newBreaker}
+                      onChange={e => setNewBreaker(e.target.value)}
+                      className="px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 rounded-lg text-slate-800 dark:text-slate-100 outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Group (optional)"
+                      value={newGroup}
+                      onChange={e => setNewGroup(e.target.value)}
+                      className="col-span-2 px-2.5 py-1.5 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 rounded-lg text-slate-800 dark:text-slate-100 outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={handleAddCoverage}
+                    className="w-full py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow transition"
+                  >
+                    Add to Coverage List
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Modal Footer */}
-        <div className="border-t border-slate-100 dark:border-slate-800/80 pt-4 mt-4 flex justify-end">
+        <div className="border-t border-slate-100 dark:border-slate-800/80 pt-4 mt-4 flex justify-end flex-shrink-0">
           <button
             onClick={onClose}
             className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors"
@@ -434,6 +630,10 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
           <ParamCell label="Power Factor" value={tx.powerFactor.toFixed(3)} />
           <ParamCell label="Frequency" value={`${tx.frequencyHz.toFixed(2)} Hz`} />
           <ParamCell label="Temperature" value={`${tx.tempCc.toFixed(1)} °C`} warn={tx.tempCc > 60} />
+
+          <ParamCell label="Impedance" value={`${tx.impedance ?? 4.5} %`} />
+          <ParamCell label="Vector Group" value={tx.vectorGroup ?? "Dyn11"} />
+          <ParamCell label="Mfg / Year" value={`${tx.manufacturer ?? "Schneider"} (${tx.year ?? "2021"})`} />
         </div>
 
         {/* Current & THD Section */}
@@ -644,8 +844,94 @@ export default function PowerDistribution() {
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
 
-  const [transformers, setTransformers] = useState<TransformerData[]>(INITIAL_TRANSFORMERS);
+  const [telemetryTransformers, setTelemetryTransformers] = useState<TransformerData[]>(INITIAL_TRANSFORMERS);
   const [selectedTx, setSelectedTx] = useState<TransformerData | null>(null);
+
+  const [customSpecs, setCustomSpecs] = useState<Record<string, any>>({});
+  const [customCoverage, setCustomCoverage] = useState<Record<string, any[]>>({});
+
+  // Merge specs into transformers
+  const transformers = useMemo(() => {
+    return telemetryTransformers.map(tx => {
+      const spec = customSpecs[tx.id];
+      if (spec) {
+        return {
+          ...tx,
+          capacityKva: spec.capacityKva || tx.capacityKva,
+          vectorGroup: spec.vectorGroup || "Dyn11",
+          impedance: spec.impedance || 4.5,
+          year: spec.year || "2021",
+          manufacturer: spec.manufacturer || "Schneider"
+        };
+      }
+      return {
+        ...tx,
+        vectorGroup: "Dyn11",
+        impedance: 4.5,
+        year: "2021",
+        manufacturer: "Schneider"
+      };
+    });
+  }, [telemetryTransformers, customSpecs]);
+
+  // Load specs & coverage from database on mount
+  useEffect(() => {
+    getJson<{ data: any[] }>("/config/electricity?configType=trafo_spec")
+      .then(res => {
+        if (res?.data) {
+          const specs: any = {};
+          res.data.forEach(item => {
+            specs[item.config_key] = item.value;
+          });
+          setCustomSpecs(specs);
+        }
+      })
+      .catch(e => console.error("Error loading specs", e));
+
+    getJson<{ data: any[] }>("/config/electricity?configType=trafo_coverage")
+      .then(res => {
+        if (res?.data) {
+          const coverage: any = {};
+          res.data.forEach(item => {
+            coverage[item.config_key] = item.value;
+          });
+          setCustomCoverage(coverage);
+        }
+      })
+      .catch(e => console.error("Error loading coverage", e));
+  }, []);
+
+  const handleSaveSpecs = async (id: string, specs: any) => {
+    setCustomSpecs(prev => ({ ...prev, [id]: specs }));
+    try {
+      await postJson("/config/electricity", {
+        config_type: "trafo_spec",
+        config_key: id,
+        label: `Trafo Spec ${id}`,
+        value: specs,
+        sort_order: 0,
+        enabled: true
+      });
+    } catch (e) {
+      console.error("Failed to save spec to DB", e);
+    }
+  };
+
+  const handleSaveCoverage = async (id: string, items: any[]) => {
+    setCustomCoverage(prev => ({ ...prev, [id]: items }));
+    try {
+      await postJson("/config/electricity", {
+        config_type: "trafo_coverage",
+        config_key: id,
+        label: `Trafo Coverage ${id}`,
+        value: items,
+        sort_order: 0,
+        enabled: true
+      });
+    } catch (e) {
+      console.error("Failed to save coverage to DB", e);
+    }
+  };
 
   // Load color threshold configs
   const [loadConfig, setLoadConfig] = useState({
@@ -713,9 +999,29 @@ export default function PowerDistribution() {
     return transformers.reduce((sum, tx) => sum + tx.capacityKva, 0);
   }, [transformers]);
 
-  // Real-time ticking simulation disabled since data is dummy
+  // Real-time ticking simulation
   useEffect(() => {
-    // Disabled
+    const timer = setInterval(() => {
+      setTelemetryTransformers(prev =>
+        prev.map(tx => {
+          const jitter = (Math.random() - 0.5) * 12;
+          const newPower = Math.max(50, Math.min(tx.capacityKva * 0.95, Math.round(tx.activePowerKw + jitter)));
+          const newTemp = Math.max(30, Math.min(110, +(tx.tempCc + (Math.random() - 0.5) * 0.4).toFixed(1)));
+          const baseV = tx.voltageOutL2L || 400;
+          return {
+            ...tx,
+            activePowerKw: newPower,
+            tempCc: newTemp,
+            currentR: Math.round((newPower * 1000) / (Math.sqrt(3) * baseV * tx.powerFactor || 1)),
+            currentS: Math.round((newPower * 1000) / (Math.sqrt(3) * baseV * tx.powerFactor || 1) * 0.98),
+            currentT: Math.round((newPower * 1000) / (Math.sqrt(3) * baseV * tx.powerFactor || 1) * 1.02),
+            apparentPowerKva: Math.round(newPower / tx.powerFactor),
+            reactivePowerKvar: Math.round(Math.sqrt(Math.pow(newPower / tx.powerFactor, 2) - Math.pow(newPower, 2)))
+          };
+        })
+      );
+    }, 4000);
+    return () => clearInterval(timer);
   }, []);
 
   const factory1 = transformers.filter(tx => tx.factory === 1);
@@ -724,30 +1030,39 @@ export default function PowerDistribution() {
   // Bottom historical trend datasets (Gambar 2)
   const trendHours = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
 
-  const bottomVoltageData = useMemo(() => ({
-    labels: trendHours,
-    datasets: [
-      { label: "VAB (V)", data: [], borderColor: "#f43f5e", borderWidth: 2, pointRadius: 0, tension: 0.3 },
-      { label: "VBC (V)", data: [], borderColor: "#eab308", borderWidth: 2, pointRadius: 0, tension: 0.3 },
-      { label: "VCA (V)", data: [], borderColor: "#3b82f6", borderWidth: 2, pointRadius: 0, tension: 0.3 }
-    ]
-  }), [trendHours]);
+  const bottomVoltageData = useMemo(() => {
+    const baseV = bottomTx.voltageOutL2L || 400;
+    return {
+      labels: trendHours,
+      datasets: [
+        { label: "VAB (V)", data: Array.from({ length: 24 }, (_, i) => +(baseV - 0.8 + Math.sin(i / 2) * 1.5).toFixed(1)), borderColor: "#f43f5e", borderWidth: 2, pointRadius: 0, tension: 0.3 },
+        { label: "VBC (V)", data: Array.from({ length: 24 }, (_, i) => +(baseV + 1.2 + Math.cos(i / 2) * 1.3).toFixed(1)), borderColor: "#eab308", borderWidth: 2, pointRadius: 0, tension: 0.3 },
+        { label: "VCA (V)", data: Array.from({ length: 24 }, (_, i) => +(baseV - 0.4 + Math.sin(i / 3) * 1.8).toFixed(1)), borderColor: "#3b82f6", borderWidth: 2, pointRadius: 0, tension: 0.3 }
+      ]
+    };
+  }, [trendHours, bottomTx]);
 
-  const bottomPowerData = useMemo(() => ({
-    labels: trendHours,
-    datasets: [
-      { label: "Daya Aktif (kW)", data: [], borderColor: "#10b981", backgroundColor: "rgba(16, 185, 129, 0.05)", borderWidth: 2.5, pointRadius: 0, fill: true, tension: 0.3 }
-    ]
-  }), [trendHours]);
+  const bottomPowerData = useMemo(() => {
+    const baseP = bottomTx.activePowerKw || 500;
+    return {
+      labels: trendHours,
+      datasets: [
+        { label: "Daya Aktif (kW)", data: Array.from({ length: 24 }, (_, i) => Math.round(baseP - 30 + Math.sin(i / 4) * 45)), borderColor: "#10b981", backgroundColor: "rgba(16, 185, 129, 0.05)", borderWidth: 2.5, pointRadius: 0, fill: true, tension: 0.3 }
+      ]
+    };
+  }, [trendHours, bottomTx]);
 
-  const bottomAmpereData = useMemo(() => ({
-    labels: trendHours,
-    datasets: [
-      { label: "Phase R (A)", data: [], borderColor: "#f43f5e", borderWidth: 2, pointRadius: 0, tension: 0.3 },
-      { label: "Phase S (A)", data: [], borderColor: "#eab308", borderWidth: 2, pointRadius: 0, tension: 0.3 },
-      { label: "Phase T (A)", data: [], borderColor: "#3b82f6", borderWidth: 2, pointRadius: 0, tension: 0.3 }
-    ]
-  }), [trendHours]);
+  const bottomAmpereData = useMemo(() => {
+    const baseI = bottomTx.currentR || 400;
+    return {
+      labels: trendHours,
+      datasets: [
+        { label: "Phase R (A)", data: Array.from({ length: 24 }, (_, i) => Math.round(baseI - 15 + Math.sin(i / 2) * 20)), borderColor: "#f43f5e", borderWidth: 2, pointRadius: 0, tension: 0.3 },
+        { label: "Phase S (A)", data: Array.from({ length: 24 }, (_, i) => Math.round(baseI * 0.98 - 12 + Math.cos(i / 2) * 18)), borderColor: "#eab308", borderWidth: 2, pointRadius: 0, tension: 0.3 },
+        { label: "Phase T (A)", data: Array.from({ length: 24 }, (_, i) => Math.round(baseI * 1.02 - 18 + Math.sin(i / 3) * 22)), borderColor: "#3b82f6", borderWidth: 2, pointRadius: 0, tension: 0.3 }
+      ]
+    };
+  }, [trendHours, bottomTx]);
 
   const chartOptions = (yTitle: string) => ({
     responsive: true,
@@ -814,7 +1129,7 @@ export default function PowerDistribution() {
         </div>
 
         {/* SLD Canvas */}
-        <div className="p-6" style={{ minWidth: 1080 }}>
+        <div className="p-6" style={{ minWidth: 1100 }}>
           <div className="flex flex-col items-center">
 
             {/* 1. PLN Main Source Node */}
@@ -822,7 +1137,7 @@ export default function PowerDistribution() {
               <div
                 className="text-center relative"
                 style={{
-                  padding: "22px 28px 14px",
+                  padding: "22px 32px 16px",
                   borderRadius: 14,
                   border: "1px solid rgba(245,158,11,0.3)",
                   background: isDark ? "rgba(245,158,11,0.08)" : "rgba(245,158,11,0.04)",
@@ -840,73 +1155,153 @@ export default function PowerDistribution() {
                 >
                   Main Source
                 </span>
-                <div className="text-xs font-extrabold text-amber-500 tracking-wider">PLN 20 kV</div>
-                <div className="text-[9px] font-bold text-slate-400 mt-0.5">Kapasitas: 5.540 kVA</div>
+                <div className="text-sm font-extrabold text-amber-500 tracking-wider">⚡ PLN 21 kV</div>
+                <div className="text-[10px] font-bold text-slate-400 mt-0.5">5.540 kVA</div>
+                <div className="text-[9px] font-mono font-bold text-slate-500 mt-1">
+                  Active Power: <span className="text-amber-400">1.850 kW</span> · PF: <span className="text-amber-400">0,967</span>
+                </div>
               </div>
             </div>
 
-            {/* Line down */}
-            <VerticalLine height={28} color={isDark ? "rgba(245,158,11,0.4)" : "rgba(245,158,11,0.5)"} />
-
-            {/* Main CB */}
+            {/* Line down from PLN */}
+            <VerticalLine height={20} color={isDark ? "rgba(245,158,11,0.4)" : "rgba(245,158,11,0.5)"} />
             <CircuitBreaker closed />
+            <VerticalLine height={16} color={isDark ? "rgba(245,158,11,0.4)" : "rgba(245,158,11,0.5)"} />
 
-            {/* Line to Busbar */}
-            <VerticalLine height={28} color={isDark ? "rgba(245,158,11,0.4)" : "rgba(245,158,11,0.5)"} />
+            {/* 2. SPLIT INTO TWO FACTORY SECTIONS */}
+            <div className="w-full grid grid-cols-2 gap-6" style={{ padding: "0 1%" }}>
 
-            {/* 2. 20 kV Busbar */}
-            <div className="w-full flex items-center justify-center relative" style={{ padding: "0 6%" }}>
-              <div
-                className="w-full"
-                style={{
-                  height: 8,
-                  borderRadius: 4,
-                  background: "linear-gradient(90deg, #f59e0b, #f97316, #f59e0b)",
-                  boxShadow: "0 2px 12px rgba(249,115,22,0.25)",
-                }}
-              />
-              <span
-                className="absolute text-orange-500 uppercase font-extrabold"
-                style={{ left: "2%", top: -20, fontSize: 10, letterSpacing: "0.15em" }}
-              >
-                20 kV BUS
-              </span>
-            </div>
-
-            {/* 3. Drop Lines to Transformers (7 columns) */}
-            <div
-              className="relative"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(7, 1fr)",
-                width: "88%",
-                paddingTop: 2,
-              }}
-            >
-              {transformers.map((tx) => (
-                <div key={tx.id} className="flex flex-col items-center">
-                  <VerticalLine height={20} color={isDark ? "#334155" : "#cbd5e1"} />
-                  <CircuitBreaker closed={tx.status !== "offline"} />
-                  <VerticalLine height={14} color={isDark ? "#334155" : "#cbd5e1"} />
-                  <TransformerSymbol />
-                  <VerticalLine height={20} color={isDark ? "#334155" : "#cbd5e1"} />
+              {/* ════════ FACTORY 1 (LEFT) ════════ */}
+              <div className="flex flex-col items-center">
+                {/* Factory 1 Label Bar */}
+                <div className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px]">🏭</span>
+                    <span className="text-xs font-extrabold text-emerald-500 uppercase tracking-wider">Factory 1</span>
+                  </div>
+                  <span className="text-[9px] font-bold text-slate-400">{factory1.length} Transformator</span>
                 </div>
-              ))}
+
+                {/* Incoming Sources Row */}
+                <div className="grid grid-cols-3 gap-2 w-full mb-3">
+                  {/* Genset Natural Gas */}
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 dark:bg-amber-950/20 p-2.5 text-center">
+                    <div className="text-[7px] font-extrabold uppercase tracking-wider text-amber-500 mb-1">Genset Natural Gas</div>
+                    <div className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200 font-mono">1350 kVA</div>
+                    <div className="text-[8px] text-slate-400 mt-0.5">Caterpillar</div>
+                  </div>
+                  {/* Incoming Fact-1 */}
+                  <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 dark:bg-blue-950/20 p-2.5 text-center">
+                    <div className="text-[7px] font-extrabold uppercase tracking-wider text-blue-500 mb-1">Incoming Fact-1</div>
+                    <div className="text-[9px] font-bold text-slate-500 dark:text-slate-400">Active Power</div>
+                    <div className="text-[11px] font-extrabold text-blue-500 font-mono">850 kW</div>
+                    <div className="text-[8px] font-mono text-slate-400">PF: 0,967</div>
+                  </div>
+                  {/* Solar PV POI-1 */}
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 p-2.5 text-center">
+                    <div className="text-[7px] font-extrabold uppercase tracking-wider text-emerald-500 mb-1">Solar PV POI-1</div>
+                    <div className="text-[9px] font-bold text-slate-500 dark:text-slate-400">Active Power</div>
+                    <div className="text-[11px] font-extrabold text-emerald-500 font-mono">50 kW</div>
+                    <div className="text-[8px] font-mono text-slate-400">PF: 0,967</div>
+                  </div>
+                </div>
+
+                {/* Factory 1 Busbar */}
+                <div className="w-full flex items-center justify-center relative my-1" style={{ padding: "0 3%" }}>
+                  <div className="w-full" style={{ height: 6, borderRadius: 3, background: "linear-gradient(90deg, #f59e0b, #f97316, #f59e0b)", boxShadow: "0 2px 10px rgba(249,115,22,0.2)" }} />
+                  <span className="absolute text-orange-500 uppercase font-extrabold" style={{ left: "1%", top: -16, fontSize: 9, letterSpacing: "0.12em" }}>20 kV BUS</span>
+                </div>
+
+                {/* Drop Lines to Factory 1 Transformers */}
+                <div className="relative" style={{ display: "grid", gridTemplateColumns: `repeat(${factory1.length}, 1fr)`, width: "92%", paddingTop: 2 }}>
+                  {factory1.map((tx) => (
+                    <div key={tx.id} className="flex flex-col items-center">
+                      <VerticalLine height={16} color={isDark ? "#334155" : "#cbd5e1"} />
+                      <CircuitBreaker closed={tx.status !== "offline"} />
+                      <VerticalLine height={10} color={isDark ? "#334155" : "#cbd5e1"} />
+                      <TransformerSymbol />
+                      <VerticalLine height={16} color={isDark ? "#334155" : "#cbd5e1"} />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Factory 1 Transformer Mini Cards */}
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${factory1.length}, 1fr)`, gap: 6, width: "100%", padding: "0 2px" }}>
+                  {factory1.map((tx) => (
+                    <SldMiniCard key={tx.id} tx={tx} onClick={() => setSelectedTx(tx)} loadConfig={loadConfig} />
+                  ))}
+                </div>
+              </div>
+
+              {/* ════════ FACTORY 2 (RIGHT) ════════ */}
+              <div className="flex flex-col items-center">
+                {/* Factory 2 Label Bar */}
+                <div className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-sky-500/30 bg-sky-500/5 dark:bg-sky-950/20 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px]">🏭</span>
+                    <span className="text-xs font-extrabold text-sky-500 uppercase tracking-wider">Factory 2</span>
+                  </div>
+                  <span className="text-[9px] font-bold text-slate-400">{factory2.length} Transformator</span>
+                </div>
+
+                {/* Incoming Sources Row */}
+                <div className="grid grid-cols-3 gap-2 w-full mb-3">
+                  {/* Incoming Fact-2 */}
+                  <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 dark:bg-blue-950/20 p-2.5 text-center">
+                    <div className="text-[7px] font-extrabold uppercase tracking-wider text-blue-500 mb-1">Incoming Fact-2</div>
+                    <div className="text-[9px] font-bold text-slate-500 dark:text-slate-400">Active Power</div>
+                    <div className="text-[11px] font-extrabold text-blue-500 font-mono">1.000 kW</div>
+                    <div className="text-[8px] font-mono text-slate-400">PF: 0,967</div>
+                  </div>
+                  {/* Solar PV POI-2 */}
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 p-2.5 text-center">
+                    <div className="text-[7px] font-extrabold uppercase tracking-wider text-emerald-500 mb-1">Solar PV POI-2</div>
+                    <div className="text-[9px] font-bold text-slate-500 dark:text-slate-400">Active Power</div>
+                    <div className="text-[11px] font-extrabold text-emerald-500 font-mono">1.000 kW</div>
+                    <div className="text-[8px] font-mono text-slate-400">PF: 0,967</div>
+                  </div>
+                  {/* Genset Diesel Fuel */}
+                  <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 dark:bg-rose-950/20 p-2.5 text-center">
+                    <div className="text-[7px] font-extrabold uppercase tracking-wider text-rose-500 mb-1">Genset Diesel Fuel</div>
+                    <div className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200 font-mono">1000 kVA</div>
+                    <div className="text-[8px] text-slate-400 mt-0.5">Perkins</div>
+                  </div>
+                </div>
+
+                {/* Factory 2 Busbar */}
+                <div className="w-full flex items-center justify-center relative my-1" style={{ padding: "0 3%" }}>
+                  <div className="w-full" style={{ height: 6, borderRadius: 3, background: "linear-gradient(90deg, #f59e0b, #f97316, #f59e0b)", boxShadow: "0 2px 10px rgba(249,115,22,0.2)" }} />
+                  <span className="absolute text-orange-500 uppercase font-extrabold" style={{ left: "1%", top: -16, fontSize: 9, letterSpacing: "0.12em" }}>20 kV BUS</span>
+                </div>
+
+                {/* Drop Lines to Factory 2 Transformers */}
+                <div className="relative" style={{ display: "grid", gridTemplateColumns: `repeat(${factory2.length}, 1fr)`, width: "92%", paddingTop: 2 }}>
+                  {factory2.map((tx) => (
+                    <div key={tx.id} className="flex flex-col items-center">
+                      <VerticalLine height={16} color={isDark ? "#334155" : "#cbd5e1"} />
+                      <CircuitBreaker closed={tx.status !== "offline"} />
+                      <VerticalLine height={10} color={isDark ? "#334155" : "#cbd5e1"} />
+                      <TransformerSymbol />
+                      <VerticalLine height={16} color={isDark ? "#334155" : "#cbd5e1"} />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Factory 2 Transformer Mini Cards */}
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${factory2.length}, 1fr)`, gap: 6, width: "100%", padding: "0 2px" }}>
+                  {factory2.map((tx) => (
+                    <SldMiniCard key={tx.id} tx={tx} onClick={() => setSelectedTx(tx)} loadConfig={loadConfig} />
+                  ))}
+                </div>
+              </div>
             </div>
 
-            {/* 4. Transformer Mini Cards (7 columns) */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(7, 1fr)",
-                gap: 10,
-                width: "100%",
-                padding: "0 8px",
-              }}
-            >
-              {transformers.map((tx) => (
-                <SldMiniCard key={tx.id} tx={tx} onClick={() => setSelectedTx(tx)} loadConfig={loadConfig} />
-              ))}
+            {/* Legend */}
+            <div className="mt-5 flex items-center gap-4 text-[9px] font-bold text-slate-400">
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Online</span>
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> Warning</span>
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500" /> Offline</span>
+              <span className="text-[8px] text-slate-500 italic ml-2">Klik panel untuk detail</span>
             </div>
           </div>
         </div>
@@ -1004,9 +1399,12 @@ export default function PowerDistribution() {
       {/* DETAIL MODAL IF OPENED */}
       {selectedTx && (
         <DetailRecordModal
-          transformer={selectedTx}
+          transformer={transformers.find(t => t.id === selectedTx.id) as any}
           onClose={() => setSelectedTx(null)}
           isDark={isDark}
+          coverageList={customCoverage[selectedTx.id] || COVERED_EQUIPMENT[selectedTx.id] || []}
+          onSaveSpecs={(specs) => handleSaveSpecs(selectedTx.id, specs)}
+          onSaveCoverage={(items) => handleSaveCoverage(selectedTx.id, items)}
         />
       )}
 

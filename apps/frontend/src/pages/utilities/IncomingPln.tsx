@@ -982,11 +982,13 @@ export default function IncomingPln() {
       <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400 mb-2">Trend Tegangan 24 Jam (kV)</h4>
             <div style={{ height: 130 }}>
               <Line data={voltageTrendData} options={lineOptions("Trend Tegangan 24 Jam (kV)", "#eab308", "kV")} />
             </div>
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400 mb-2">Trend Daya Aktif 24 Jam (kW)</h4>
             <div style={{ height: 130 }}>
               <Line data={activePowerTrendData} options={lineOptions("Trend Daya Aktif 24 Jam (kW)", "#10b981", "kW")} />
             </div>

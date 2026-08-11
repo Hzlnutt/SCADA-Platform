@@ -72,10 +72,26 @@ export const AppRouter = () => {
               <Route index element={<MachinesOverview />} />
               <Route path=":groupId" element={<MachineGroupOverview />} />
               
+              {/* Dynamic factory nested routing */}
+              <Route path=":groupId/:factoryId/:unitId" element={<MachineLayout />}>
+                <Route index element={<MachineOverview />} />
+                <Route path="custom-tab/:tabId" element={<MachineCustomTab />} />
+                <Route path="pid-diagram" element={<MachinePidDiagram />} />
+                <Route path="tasks" element={<MachineTasks />} />
+                <Route path="historian" element={<MachineHistorian />} />
+                <Route path="statistics" element={<MachineStatistics />} />
+                <Route path="maintenance" element={<MachineMaintenance />} />
+                <Route path="shift-report" element={<MachineShiftReport />} />
+                <Route path="alarm" element={<MachineAlarm />} />
+                <Route path="energy" element={<MachineEnergy />} />
+                <Route path="configuration" element={<MachineConfig />} />
+                <Route path="audit-trail" element={<MachineAuditTrail />} />
+              </Route>
+
               <Route path=":groupId/:unitId" element={<MachineLayout />}>
                 <Route index element={<MachineOverview />} />
                 
-                {/* ✅ ROUTE GENERIC UNTUK SEMUA CUSTOM TAB */}
+                {/* Route generic untuk semua custom tab */}
                 <Route path="custom-tab/:tabId" element={<MachineCustomTab />} />
 
                 {/* Route standar */}

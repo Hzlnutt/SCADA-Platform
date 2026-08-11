@@ -1075,7 +1075,7 @@ export default function Dashboard() {
                     {formatCurrency(gasCostUsd, "USD")}
                   </div>
                   <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                    {formatCurrency(gasCostIdr, "IDR")} &middot; {gasSeries.reduce((sum: number, v: number) => sum + v, 0).toFixed(1)} Sm³
+                    {formatCurrency(gasCostIdr, "IDR")} &middot; {(gasSeries.reduce((sum: number, v: number) => sum + v, 0) * 0.03531).toFixed(2)} MMBtu
                   </div>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-[#f4c542]" />
@@ -1083,8 +1083,8 @@ export default function Dashboard() {
               <div className="mt-3">
                 <UtilityBarChart
                   labels={consumptionLabels}
-                  values={gasSeries}
-                  unit="Sm³"
+                  values={gasSeries.map((v: number) => v * 0.03531)}
+                  unit="MMBtu"
                   color="#f4c542"
                   height={160}
                 />
@@ -1100,7 +1100,7 @@ export default function Dashboard() {
                     {formatCurrency(consumptionWaterCost, "IDR")}
                   </div>
                   <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                    {waterSeriesKwh.reduce((sum: number, v: number) => sum + v, 0).toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh
+                    {waterSeries.reduce((sum: number, v: number) => sum + v, 0).toLocaleString("id-ID", { maximumFractionDigits: 1 })} m³
                   </div>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-[#3bb77e]" />
@@ -1108,24 +1108,24 @@ export default function Dashboard() {
               <div className="mt-3">
                 <UtilityBarChart
                   labels={consumptionLabels}
-                  values={waterSeriesKwh}
-                  unit="kWh"
+                  values={waterSeries}
+                  unit="m³"
                   color="#3bb77e"
                   height={160}
                 />
               </div>
             </div>
 
-            {/* Solar Panel */}
+            {/* Solar Fuel */}
             <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Solar Panel</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Solar Fuel</div>
                   <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
                     Rp 0
                   </div>
                   <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                    0.0 kWh
+                    0 L
                   </div>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-[#f59e0b]" />
@@ -1134,7 +1134,7 @@ export default function Dashboard() {
                 <UtilityBarChart
                   labels={consumptionLabels}
                   values={solarSeries}
-                  unit="kWh"
+                  unit="L"
                   color="#f59e0b"
                   height={160}
                 />
@@ -1270,13 +1270,13 @@ export default function Dashboard() {
               {formatCurrency(ytdGasTotal * utilityRates.gasUsd, "USD")}
             </div>
             <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-              {ytdGasTotal.toFixed(0)} Sm³
+              {(ytdGasTotal * 0.03531).toFixed(1)} MMBtu
             </div>
             <div className="mt-3">
               <UtilityBarChart
                 labels={ytdLabels}
                 values={ytdGasSeries}
-                unit="Sm³"
+                unit="MMBtu"
                 color="#f4c542"
                 height={140}
               />
@@ -1522,7 +1522,7 @@ export default function Dashboard() {
                 labels={gasCompareLabels}
                 current={gasCurrent}
                 previous={gasPrevious}
-                unit="Sm³"
+                unit="MMBtu"
                 heightClassName="h-32"
               />
             </div>

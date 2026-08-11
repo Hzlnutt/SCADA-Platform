@@ -403,7 +403,8 @@ export default function WaterOverview() {
       { jalur: "F1: WF1U3", sumber: "Factory-1 Distribution", flow: 7.5, pressure: 2.9, harian: 28.7, bulanan: 716 },
       { jalur: "F1: Sanitari-1", sumber: "Factory-1 Distribution", flow: 27.7, pressure: 2.0, harian: 15.0, bulanan: 481 },
       { jalur: "F1: Sanitari-2", sumber: "Factory-1 Distribution", flow: 26.0, pressure: 3.3, harian: 12.0, bulanan: 418 },
-      { jalur: "F1: Hydrant", sumber: "Factory-1 Distribution", flow: 19.4, pressure: 5.7, harian: 3.0, bulanan: 51 }
+      { jalur: "F1: Hydrant", sumber: "Factory-1 Distribution", flow: 19.4, pressure: 5.7, harian: 3.0, bulanan: 51 },
+      { jalur: "CSR", sumber: "Main Distribution", flow: 8.2, pressure: 2.1, harian: 6.5, bulanan: 195 }
     ];
 
     // Jitter table flows slightly to make table feel dynamic
