@@ -43,6 +43,10 @@ export const ingestAlarmEvents = async (events: AlarmEventInput[]) => {
   for (const event of events) {
     const ts = event.ts ?? new Date();
     if (event.status === "cleared") {
+      // Do not allow auto-clearing for sensor-rule (PID) alarms
+      if (event.alarmKey.startsWith("pid-threshold:")) {
+        continue;
+      }
       // Find active or ack alarm with this alarmKey and resolve it
       const activeAlarm = await pool.query(
         "SELECT id, t_stamp FROM alarms WHERE alarm_key = $1 AND status IN ('Active', 'Pending Approval') ORDER BY t_stamp DESC LIMIT 1",
