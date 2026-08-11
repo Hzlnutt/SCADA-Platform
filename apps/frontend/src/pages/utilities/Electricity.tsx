@@ -1402,8 +1402,9 @@ export default function Electricity() {
                 Belum ada kategori. Klik ikon ⚙️ untuk menambahkan.
               </div>
             )}
-          </div>
         </section>
+      </div>
+
       {/* Trend Panel Distribusi (Utility & HVAC) */}
       <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
         <div>
