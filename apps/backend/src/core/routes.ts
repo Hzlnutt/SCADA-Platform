@@ -11,6 +11,7 @@ import { thresholdsRouter } from "../modules/thresholds";
 import { usersRouter } from "../modules/users";
 import { configRouter } from "../modules/config";
 import { auditRouter } from "../modules/audit";
+import { mockScadaRouter } from "../modules/mock-scada/mock-scada.routes";
 import { getMongoDb } from "../database/mongo";
 import { getPostgresPool } from "../database/postgres";
 
@@ -87,4 +88,5 @@ export const registerRoutes = (app: Express) => {
   router.use(auditRouter);
 
   app.use("/api/v1", router);
+  app.use(mockScadaRouter);
 };
