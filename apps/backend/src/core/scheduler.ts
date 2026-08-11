@@ -897,7 +897,6 @@ export const evaluateSensorRulesForPoints = async (points: any[]) => {
     const rules = rulesRes.rows;
 
     const activeEvents: any[] = [];
-    const clearEvents: any[] = [];
 
     for (const rule of rules) {
       const isAlertEnabled = rule.enable_alert && !rule.suppress_alert;
@@ -950,26 +949,11 @@ export const evaluateSensorRulesForPoints = async (points: any[]) => {
           severity,
           status: "active"
         });
-      } else {
-        clearEvents.push({
-          alarmKey,
-          tagId: rule.tag_key,
-          deviceId: (point && point.meta && point.meta.deviceId) || "plc-sim",
-          unit: rule.unit_id,
-          area: (point && point.meta && point.meta.area) || "Utilities",
-          message: `Cleared: Telemetry parameter for tag ${rule.tag_key} has returned to normal range.`,
-          severity: "low",
-          status: "cleared"
-        });
       }
     }
 
     if (activeEvents.length > 0) {
       const res = await ingestAlarmEvents(activeEvents);
-      publishAlarmEvents(res.events);
-    }
-    if (clearEvents.length > 0) {
-      const res = await ingestAlarmEvents(clearEvents);
       publishAlarmEvents(res.events);
     }
   } catch (err) {

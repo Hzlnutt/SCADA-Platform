@@ -158,7 +158,7 @@ export const ensurePostgresTables = async () => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS alarms (
         id SERIAL PRIMARY KEY,
-        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        t_stamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
         alarm_key VARCHAR(100) NOT NULL,
         tag_id VARCHAR(100) NOT NULL,
         device_id VARCHAR(100),
@@ -171,10 +171,19 @@ export const ensurePostgresTables = async () => {
         operator_action VARCHAR(255),
         approver VARCHAR(100),
         rtn VARCHAR(50),
-        cleared_at TIMESTAMP WITHOUT TIME ZONE,
-        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        cleared_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Alter table to migrate existing database columns to TIMESTAMP WITH TIME ZONE
+    await pool.query(`
+      ALTER TABLE alarms ALTER COLUMN t_stamp TYPE TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE alarms ALTER COLUMN cleared_at TYPE TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE alarms ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE;
+    `).catch((err) => {
+      logger.warn({ err }, "Failed to alter alarms table columns to TIMESTAMP WITH TIME ZONE");
+    });
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS api_sources (
