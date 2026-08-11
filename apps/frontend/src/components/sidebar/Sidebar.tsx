@@ -193,20 +193,9 @@ export const Sidebar = () => {
                 </div>
                 <div className="flex flex-col gap-0.5 border-l border-slate-200 dark:border-slate-800/40 pl-2">
                   <NavItem to="/machines/cooling-water-system/factory-1/cooling-water-1" label="Cooling Tower WF1-U3" tone="scada" />
-                  <NavItem to="/machines/boiler-plant/factory-1/boiler-3" label="Boiler-3 WF1" tone="scada" />
-                  <NavItem to="/machines/boiler-plant/factory-1/boiler-4" label="Boiler-4" tone="scada" />
-                  
-                  {/* Compressed Air Fact 1 */}
-                  <div className="text-[9px] uppercase font-bold text-slate-400 dark:text-slate-500 py-0.5 pl-1.5 mt-1">Compressed Air</div>
-                  <NavItem to="/machines/compressed-air/factory-1/zt-30.1" label="ZT-30.1" tone="scada" />
-                  <NavItem to="/machines/compressed-air/factory-1/zt-30-2" label="ZT-30.2" tone="scada" />
-                  <NavItem to="/machines/compressed-air/factory-1/zt-55" label="ZT-55" tone="scada" />
-                  <NavItem to="/machines/compressed-air/factory-1/ingersoll-55" label="Ingersoll-55" tone="scada" />
-
-                  {/* Chiller Fact 1 */}
-                  <div className="text-[9px] uppercase font-bold text-slate-400 dark:text-slate-500 py-0.5 pl-1.5 mt-1">Chiller System</div>
-                  <NavItem to="/machines/chiller-system/factory-1/daikin-wf1u3" label="Daikin WF1U3" tone="scada" />
-                  <NavItem to="/machines/chiller-system/factory-1/rtac-100" label="RTAC-100" tone="scada" />
+                  <NavItem to="/machines/boiler-plant/factory-1/boiler-factory-1" label="Boiler Factory 1" tone="scada" />
+                  <NavItem to="/machines/compressed-air/factory-1/compressed-air-fact-1" label="Compressed Air Fact-1" tone="scada" />
+                  <NavItem to="/machines/chiller-system/factory-1/chiller-fact-1" label="Chiller Fact-1" tone="scada" />
                 </div>
               </div>
 
@@ -217,18 +206,9 @@ export const Sidebar = () => {
                 </div>
                 <div className="flex flex-col gap-0.5 border-l border-slate-200 dark:border-slate-800/40 pl-2">
                   <NavItem to="/machines/cooling-water-system/factory-2/cooling-water-2" label="Cooling Tower WF2" tone="scada" />
-                  <NavItem to="/machines/boiler-plant/factory-2/boiler-5" label="Boiler-5" tone="scada" />
-                  
-                  {/* Compressed Air Fact 2 */}
-                  <div className="text-[9px] uppercase font-bold text-slate-400 dark:text-slate-500 py-0.5 pl-1.5 mt-1">Compressed Air</div>
-                  <NavItem to="/machines/compressed-air/factory-2/ale-30" label="ALE-30" tone="scada" />
-                  <NavItem to="/machines/compressed-air/factory-2/ale-250" label="ALE-250" tone="scada" />
-                  <NavItem to="/machines/compressed-air/factory-2/zt-110" label="ZT-110" tone="scada" />
-
-                  {/* Chiller Fact 2 */}
-                  <div className="text-[9px] uppercase font-bold text-slate-400 dark:text-slate-500 py-0.5 pl-1.5 mt-1">Chiller System</div>
-                  <NavItem to="/machines/chiller-system/factory-2/trane-cgam-40" label="Trane CGAM-40" tone="scada" />
-                  <NavItem to="/machines/chiller-system/factory-2/rtac-275" label="RTAC-275" tone="scada" />
+                  <NavItem to="/machines/boiler-plant/factory-2/boiler-factory-2" label="Boiler Factory 2" tone="scada" />
+                  <NavItem to="/machines/compressed-air/factory-2/compressed-air-fact-2" label="Compressed Air Fact-2" tone="scada" />
+                  <NavItem to="/machines/chiller-system/factory-2/chiller-fact-2" label="Chiller Fact-2" tone="scada" />
                 </div>
               </div>
 

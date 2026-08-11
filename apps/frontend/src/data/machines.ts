@@ -563,6 +563,40 @@ export const machineGroups: MachineGroup[] = [
         dailyVariance: 750,
         outputBase: 1680,
         energyBase: 118
+      }),
+      buildUnit({
+        id: "boiler-factory-1",
+        unitLabel: "Boiler Factory 1",
+        groupId: "boiler-plant",
+        groupName: "Boiler Plant",
+        area: "Utilities",
+        category: "Steam",
+        tagId: "boiler/boiler_3_pressure",
+        unit: "bar",
+        consumptionUnit: "m3",
+        baseValue: 18.0,
+        variance: 1.5,
+        dailyBase: 9800,
+        dailyVariance: 1500,
+        outputBase: 3400,
+        energyBase: 240
+      }),
+      buildUnit({
+        id: "boiler-factory-2",
+        unitLabel: "Boiler Factory 2",
+        groupId: "boiler-plant",
+        groupName: "Boiler Plant",
+        area: "Utilities",
+        category: "Steam",
+        tagId: "boiler/boiler_5_pressure",
+        unit: "bar",
+        consumptionUnit: "m3",
+        baseValue: 17.8,
+        variance: 1.3,
+        dailyBase: 4900,
+        dailyVariance: 750,
+        outputBase: 1680,
+        energyBase: 118
       })
     ]
   }),
@@ -723,6 +757,40 @@ export const machineGroups: MachineGroup[] = [
         dailyVariance: 640,
         outputBase: 1380,
         energyBase: 98
+      }),
+      buildUnit({
+        id: "chiller-fact-1",
+        unitLabel: "Chiller Fact-1",
+        groupId: "chiller-system",
+        groupName: "Chiller System",
+        area: "Utilities",
+        category: "Cooling",
+        tagId: "chiller/daikin_wf1u3_temp",
+        unit: "C",
+        consumptionUnit: "kWh",
+        baseValue: 7.0,
+        variance: 1.1,
+        dailyBase: 8400,
+        dailyVariance: 1200,
+        outputBase: 2600,
+        energyBase: 182
+      }),
+      buildUnit({
+        id: "chiller-fact-2",
+        unitLabel: "Chiller Fact-2",
+        groupId: "chiller-system",
+        groupName: "Chiller System",
+        area: "Utilities",
+        category: "Cooling",
+        tagId: "chiller/trane_cgam_40_temp",
+        unit: "C",
+        consumptionUnit: "kWh",
+        baseValue: 6.7,
+        variance: 1.0,
+        dailyBase: 8700,
+        dailyVariance: 1250,
+        outputBase: 2700,
+        energyBase: 192
       })
     ]
   }),
@@ -950,6 +1018,40 @@ export const machineGroups: MachineGroup[] = [
         dailyVariance: 560,
         outputBase: 1180,
         energyBase: 92
+      }),
+      buildUnit({
+        id: "compressed-air-fact-1",
+        unitLabel: "Compressed Air Fact-1",
+        groupId: "compressed-air",
+        groupName: "Compressed Air",
+        area: "Utilities",
+        category: "Air",
+        tagId: "compressed-air/zt_30_1_pressure",
+        unit: "bar",
+        consumptionUnit: "kWh",
+        baseValue: 7.2,
+        variance: 0.5,
+        dailyBase: 14700,
+        dailyVariance: 2000,
+        outputBase: 4400,
+        energyBase: 340
+      }),
+      buildUnit({
+        id: "compressed-air-fact-2",
+        unitLabel: "Compressed Air Fact-2",
+        groupId: "compressed-air",
+        groupName: "Compressed Air",
+        area: "Utilities",
+        category: "Air",
+        tagId: "compressed-air/ale_30_pressure",
+        unit: "bar",
+        consumptionUnit: "kWh",
+        baseValue: 7.3,
+        variance: 0.6,
+        dailyBase: 12000,
+        dailyVariance: 1700,
+        outputBase: 3600,
+        energyBase: 280
       })
     ]
   }),

@@ -1079,6 +1079,8 @@ export default function PowerDistribution() {
     }
   });
 
+  const activeLineColor = isDark ? "#06b6d4" : "#3b82f6";
+
   return (
     <div className="space-y-6">
       {/* HEADER */}
@@ -1129,180 +1131,172 @@ export default function PowerDistribution() {
         </div>
 
         {/* SLD Canvas */}
-        <div className="p-6" style={{ minWidth: 1100 }}>
-          <div className="flex flex-col items-center">
+        <div className="p-6 overflow-x-auto relative" style={{ minWidth: 1200, height: 570 }}>
+          
+          {/* 1. SVG PIPELINE AND POWER LINES OVERLAY */}
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+            <defs>
+              <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 2 L 8 5 L 0 8 z" fill="#10b981" />
+              </marker>
+              <marker id="arrow-red" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 2 L 8 5 L 0 8 z" fill="#ef4444" />
+              </marker>
+              <marker id="arrow-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 2 L 8 5 L 0 8 z" fill={activeLineColor} />
+              </marker>
+            </defs>
 
-            {/* 1. PLN Main Source Node */}
-            <div className="flex flex-col items-center">
-              <div
-                className="text-center relative"
-                style={{
-                  padding: "22px 32px 16px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(245,158,11,0.3)",
-                  background: isDark ? "rgba(245,158,11,0.08)" : "rgba(245,158,11,0.04)",
-                  boxShadow: "0 4px 20px rgba(245,158,11,0.08)",
-                }}
-              >
-                <span
-                  style={{
-                    position: "absolute", top: -11, left: "50%", transform: "translateX(-50%)",
-                    padding: "3px 12px", borderRadius: 6,
-                    backgroundColor: "#f59e0b", color: "#fff",
-                    fontSize: 8, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Main Source
-                </span>
-                <div className="text-sm font-extrabold text-amber-500 tracking-wider">⚡ PLN 21 kV</div>
-                <div className="text-[10px] font-bold text-slate-400 mt-0.5">5.540 kVA</div>
-                <div className="text-[9px] font-mono font-bold text-slate-500 mt-1">
-                  Active Power: <span className="text-amber-400">1.850 kW</span> · PF: <span className="text-amber-400">0,967</span>
-                </div>
+            {/* Main PLN line down and split to Factories */}
+            <path d="M 600 95 L 600 110 M 280 110 L 920 110" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            
+            {/* Feeder line to Incoming Fact-1 */}
+            <path d="M 280 110 L 280 120" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            
+            {/* Feeder line to Incoming Fact-2 */}
+            <path d="M 920 110 L 920 120" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+
+            {/* Blue lines from Sources to Yellow Busbars */}
+            <path d="M 280 180 L 280 230 M 440 180 L 440 230" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <path d="M 760 180 L 760 230 M 920 180 L 920 230" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+
+            {/* Busbars: Thick Yellow Lines */}
+            {/* Factory 1 Busbar */}
+            <path d="M 100 230 L 490 230" fill="none" stroke="#f59e0b" strokeWidth="6" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(245,158,11,0.3))" }} />
+            <text x="110" y="222" fill="#d97706" fontSize="8" fontWeight="800" letterSpacing="0.1em">20 kV BUS (F1)</text>
+
+            {/* Factory 2 Busbar */}
+            <path d="M 700 230 L 1090 230" fill="none" stroke="#f59e0b" strokeWidth="6" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(245,158,11,0.3))" }} />
+            <text x="710" y="222" fill="#d97706" fontSize="8" fontWeight="800" letterSpacing="0.1em">20 kV BUS (F2)</text>
+
+            {/* Lines from Busbar 1 down to Transformers with Transformer/Breaker Symbols */}
+            {[90, 220, 350, 480].map((x) => (
+              <g key={x}>
+                <path d={`M ${x} 230 L ${x} 270`} fill="none" stroke={activeLineColor} strokeWidth="2" />
+                <rect x={x - 4} y="270" width="8" height="12" fill={isDark ? "#1e293b" : "#94a3b8"} rx="1" />
+                <path d={`M ${x} 282 L ${x} 310`} fill="none" stroke={activeLineColor} strokeWidth="2" />
+                {/* Transformer Circles */}
+                <circle cx={x} cy="318" r="8" fill="none" stroke={activeLineColor} strokeWidth="2" />
+                <circle cx={x} cy="328" r="8" fill="none" stroke={activeLineColor} strokeWidth="2" />
+                <path d={`M ${x} 336 L ${x} 380`} fill="none" stroke={activeLineColor} strokeWidth="2" />
+              </g>
+            ))}
+
+            {/* Lines from Busbar 2 down to Transformers */}
+            {[730, 860, 990].map((x) => (
+              <g key={x}>
+                <path d={`M ${x} 230 L ${x} 270`} fill="none" stroke={activeLineColor} strokeWidth="2" />
+                <rect x={x - 4} y="270" width="8" height="12" fill={isDark ? "#1e293b" : "#94a3b8"} rx="1" />
+                <path d={`M ${x} 282 L ${x} 310`} fill="none" stroke={activeLineColor} strokeWidth="2" />
+                {/* Transformer Circles */}
+                <circle cx={x} cy="318" r="8" fill="none" stroke={activeLineColor} strokeWidth="2" />
+                <circle cx={x} cy="328" r="8" fill="none" stroke={activeLineColor} strokeWidth="2" />
+                <path d={`M ${x} 336 L ${x} 380`} fill="none" stroke={activeLineColor} strokeWidth="2" />
+              </g>
+            ))}
+
+            {/* --- BACKUP FEEDER LINES --- */}
+            {/* 1. Genset Caterpillar (120, 180) -> Green Dotted to Tx 1, Tx 2, Tx 3 output side */}
+            <path d="M 120 180 L 120 360 L 350 360" fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="3 3" />
+            <path d="M 90 360 L 90 380" fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="3 3" markerEnd="url(#arrow-green)" />
+            <path d="M 220 360 L 220 380" fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="3 3" markerEnd="url(#arrow-green)" />
+            <path d="M 350 360 L 350 380" fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="3 3" markerEnd="url(#arrow-green)" />
+
+            {/* 2. Solar PV POI-1 (440, 180) -> Red Dotted to Tx 4 output side */}
+            <path d="M 440 180 L 440 200 L 520 200 L 520 410 L 480 410" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="3 3" markerEnd="url(#arrow-red)" />
+
+            {/* 3. Solar PV POI-2 (920, 180) -> Red Dotted to Tx 6 output side */}
+            <path d="M 920 180 L 920 200 L 860 200 L 860 380" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="3 3" markerEnd="url(#arrow-red)" />
+
+            {/* 4. Genset Perkins (1080, 180) -> Green Dotted to Tx 7 output side */}
+            <path d="M 1080 180 L 1080 360 L 990 360 L 990 380" fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="3 3" markerEnd="url(#arrow-green)" />
+          </svg>
+
+          {/* 2. ABSOLUTE CARDS LAYOUT */}
+          {/* Main PLN card at top */}
+          <div className="absolute z-10" style={{ left: 510, top: 20 }}>
+            <div className={`text-center p-3 w-[180px] rounded-xl border shadow-md transition duration-300 ${
+              isDark ? "bg-slate-900 border-amber-500/20 text-white" : "bg-white border-amber-200 text-slate-800"
+            }`}>
+              <div className="text-[8px] font-extrabold uppercase text-amber-500 tracking-wider">Main Source</div>
+              <div className="text-xs font-extrabold text-amber-500">⚡ PLN 21 kV</div>
+              <div className="text-[9px] font-bold text-slate-400">5.540 kVA</div>
+              <div className="text-[8px] font-mono text-slate-500 dark:text-slate-400 mt-1">
+                Act: <span className="font-bold">1.850 kW</span> · PF: <span className="font-bold">0,967</span>
               </div>
             </div>
+          </div>
 
-            {/* Line down from PLN */}
-            <VerticalLine height={20} color={isDark ? "rgba(245,158,11,0.4)" : "rgba(245,158,11,0.5)"} />
-            <CircuitBreaker closed />
-            <VerticalLine height={16} color={isDark ? "rgba(245,158,11,0.4)" : "rgba(245,158,11,0.5)"} />
-
-            {/* 2. SPLIT INTO TWO FACTORY SECTIONS */}
-            <div className="w-full grid grid-cols-2 gap-6" style={{ padding: "0 1%" }}>
-
-              {/* ════════ FACTORY 1 (LEFT) ════════ */}
-              <div className="flex flex-col items-center">
-                {/* Factory 1 Label Bar */}
-                <div className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px]">🏭</span>
-                    <span className="text-xs font-extrabold text-emerald-500 uppercase tracking-wider">Factory 1</span>
-                  </div>
-                  <span className="text-[9px] font-bold text-slate-400">{factory1.length} Transformator</span>
-                </div>
-
-                {/* Incoming Sources Row */}
-                <div className="grid grid-cols-3 gap-2 w-full mb-3">
-                  {/* Genset Natural Gas */}
-                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 dark:bg-amber-950/20 p-2.5 text-center">
-                    <div className="text-[7px] font-extrabold uppercase tracking-wider text-amber-500 mb-1">Genset Natural Gas</div>
-                    <div className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200 font-mono">1350 kVA</div>
-                    <div className="text-[8px] text-slate-400 mt-0.5">Caterpillar</div>
-                  </div>
-                  {/* Incoming Fact-1 */}
-                  <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 dark:bg-blue-950/20 p-2.5 text-center">
-                    <div className="text-[7px] font-extrabold uppercase tracking-wider text-blue-500 mb-1">Incoming Fact-1</div>
-                    <div className="text-[9px] font-bold text-slate-500 dark:text-slate-400">Active Power</div>
-                    <div className="text-[11px] font-extrabold text-blue-500 font-mono">850 kW</div>
-                    <div className="text-[8px] font-mono text-slate-400">PF: 0,967</div>
-                  </div>
-                  {/* Solar PV POI-1 */}
-                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 p-2.5 text-center">
-                    <div className="text-[7px] font-extrabold uppercase tracking-wider text-emerald-500 mb-1">Solar PV POI-1</div>
-                    <div className="text-[9px] font-bold text-slate-500 dark:text-slate-400">Active Power</div>
-                    <div className="text-[11px] font-extrabold text-emerald-500 font-mono">50 kW</div>
-                    <div className="text-[8px] font-mono text-slate-400">PF: 0,967</div>
-                  </div>
-                </div>
-
-                {/* Factory 1 Busbar */}
-                <div className="w-full flex items-center justify-center relative my-1" style={{ padding: "0 3%" }}>
-                  <div className="w-full" style={{ height: 6, borderRadius: 3, background: "linear-gradient(90deg, #f59e0b, #f97316, #f59e0b)", boxShadow: "0 2px 10px rgba(249,115,22,0.2)" }} />
-                  <span className="absolute text-orange-500 uppercase font-extrabold" style={{ left: "1%", top: -16, fontSize: 9, letterSpacing: "0.12em" }}>20 kV BUS</span>
-                </div>
-
-                {/* Drop Lines to Factory 1 Transformers */}
-                <div className="relative" style={{ display: "grid", gridTemplateColumns: `repeat(${factory1.length}, 1fr)`, width: "92%", paddingTop: 2 }}>
-                  {factory1.map((tx) => (
-                    <div key={tx.id} className="flex flex-col items-center">
-                      <VerticalLine height={16} color={isDark ? "#334155" : "#cbd5e1"} />
-                      <CircuitBreaker closed={tx.status !== "offline"} />
-                      <VerticalLine height={10} color={isDark ? "#334155" : "#cbd5e1"} />
-                      <TransformerSymbol />
-                      <VerticalLine height={16} color={isDark ? "#334155" : "#cbd5e1"} />
-                    </div>
-                  ))}
-                </div>
-
-                {/* Factory 1 Transformer Mini Cards */}
-                <div style={{ display: "grid", gridTemplateColumns: `repeat(${factory1.length}, 1fr)`, gap: 6, width: "100%", padding: "0 2px" }}>
-                  {factory1.map((tx) => (
-                    <SldMiniCard key={tx.id} tx={tx} onClick={() => setSelectedTx(tx)} loadConfig={loadConfig} />
-                  ))}
-                </div>
-              </div>
-
-              {/* ════════ FACTORY 2 (RIGHT) ════════ */}
-              <div className="flex flex-col items-center">
-                {/* Factory 2 Label Bar */}
-                <div className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-sky-500/30 bg-sky-500/5 dark:bg-sky-950/20 mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px]">🏭</span>
-                    <span className="text-xs font-extrabold text-sky-500 uppercase tracking-wider">Factory 2</span>
-                  </div>
-                  <span className="text-[9px] font-bold text-slate-400">{factory2.length} Transformator</span>
-                </div>
-
-                {/* Incoming Sources Row */}
-                <div className="grid grid-cols-3 gap-2 w-full mb-3">
-                  {/* Incoming Fact-2 */}
-                  <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 dark:bg-blue-950/20 p-2.5 text-center">
-                    <div className="text-[7px] font-extrabold uppercase tracking-wider text-blue-500 mb-1">Incoming Fact-2</div>
-                    <div className="text-[9px] font-bold text-slate-500 dark:text-slate-400">Active Power</div>
-                    <div className="text-[11px] font-extrabold text-blue-500 font-mono">1.000 kW</div>
-                    <div className="text-[8px] font-mono text-slate-400">PF: 0,967</div>
-                  </div>
-                  {/* Solar PV POI-2 */}
-                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 p-2.5 text-center">
-                    <div className="text-[7px] font-extrabold uppercase tracking-wider text-emerald-500 mb-1">Solar PV POI-2</div>
-                    <div className="text-[9px] font-bold text-slate-500 dark:text-slate-400">Active Power</div>
-                    <div className="text-[11px] font-extrabold text-emerald-500 font-mono">1.000 kW</div>
-                    <div className="text-[8px] font-mono text-slate-400">PF: 0,967</div>
-                  </div>
-                  {/* Genset Diesel Fuel */}
-                  <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 dark:bg-rose-950/20 p-2.5 text-center">
-                    <div className="text-[7px] font-extrabold uppercase tracking-wider text-rose-500 mb-1">Genset Diesel Fuel</div>
-                    <div className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200 font-mono">1000 kVA</div>
-                    <div className="text-[8px] text-slate-400 mt-0.5">Perkins</div>
-                  </div>
-                </div>
-
-                {/* Factory 2 Busbar */}
-                <div className="w-full flex items-center justify-center relative my-1" style={{ padding: "0 3%" }}>
-                  <div className="w-full" style={{ height: 6, borderRadius: 3, background: "linear-gradient(90deg, #f59e0b, #f97316, #f59e0b)", boxShadow: "0 2px 10px rgba(249,115,22,0.2)" }} />
-                  <span className="absolute text-orange-500 uppercase font-extrabold" style={{ left: "1%", top: -16, fontSize: 9, letterSpacing: "0.12em" }}>20 kV BUS</span>
-                </div>
-
-                {/* Drop Lines to Factory 2 Transformers */}
-                <div className="relative" style={{ display: "grid", gridTemplateColumns: `repeat(${factory2.length}, 1fr)`, width: "92%", paddingTop: 2 }}>
-                  {factory2.map((tx) => (
-                    <div key={tx.id} className="flex flex-col items-center">
-                      <VerticalLine height={16} color={isDark ? "#334155" : "#cbd5e1"} />
-                      <CircuitBreaker closed={tx.status !== "offline"} />
-                      <VerticalLine height={10} color={isDark ? "#334155" : "#cbd5e1"} />
-                      <TransformerSymbol />
-                      <VerticalLine height={16} color={isDark ? "#334155" : "#cbd5e1"} />
-                    </div>
-                  ))}
-                </div>
-
-                {/* Factory 2 Transformer Mini Cards */}
-                <div style={{ display: "grid", gridTemplateColumns: `repeat(${factory2.length}, 1fr)`, gap: 6, width: "100%", padding: "0 2px" }}>
-                  {factory2.map((tx) => (
-                    <SldMiniCard key={tx.id} tx={tx} onClick={() => setSelectedTx(tx)} loadConfig={loadConfig} />
-                  ))}
-                </div>
-              </div>
+          {/* Factory 1 Sources (Genset, Feeder, Solar) */}
+          <div className="absolute z-10" style={{ left: 50, top: 120 }}>
+            <div className={`p-2 w-[140px] text-center rounded-xl border shadow-md transition duration-300 ${
+              isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
+            }`}>
+              <div className="text-[8px] font-extrabold uppercase text-amber-500">Genset Gas</div>
+              <div className="text-xs font-extrabold text-slate-700 dark:text-white">1.350 kVA</div>
+              <div className="text-[8px] text-slate-400">Caterpillar</div>
             </div>
-
-            {/* Legend */}
-            <div className="mt-5 flex items-center gap-4 text-[9px] font-bold text-slate-400">
-              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Online</span>
-              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> Warning</span>
-              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500" /> Offline</span>
-              <span className="text-[8px] text-slate-500 italic ml-2">Klik panel untuk detail</span>
+          </div>
+          <div className="absolute z-10" style={{ left: 210, top: 120 }}>
+            <div className={`p-2 w-[140px] text-center rounded-xl border border-blue-500/30 bg-blue-500/5 shadow-md transition duration-300`}>
+              <div className="text-[8px] font-extrabold uppercase text-blue-500">Incoming Fact-1</div>
+              <div className="text-xs font-extrabold text-blue-500 font-mono">850 kW</div>
+              <div className="text-[8px] text-slate-400">PF: 0,967</div>
             </div>
+          </div>
+          <div className="absolute z-10" style={{ left: 370, top: 120 }}>
+            <div className={`p-2 w-[140px] text-center rounded-xl border border-emerald-500/30 bg-emerald-500/5 shadow-md transition duration-300`}>
+              <div className="text-[8px] font-extrabold uppercase text-emerald-500">Solar PV POI-1</div>
+              <div className="text-xs font-extrabold text-emerald-500 font-mono">50 kW</div>
+              <div className="text-[8px] text-slate-400">PF: 0,967</div>
+            </div>
+          </div>
+
+          {/* Factory 2 Sources (Feeder, Solar, Genset) */}
+          <div className="absolute z-10" style={{ left: 690, top: 120 }}>
+            <div className={`p-2 w-[140px] text-center rounded-xl border border-blue-500/30 bg-blue-500/5 shadow-md transition duration-300`}>
+              <div className="text-[8px] font-extrabold uppercase text-blue-500">Incoming Fact-2</div>
+              <div className="text-xs font-extrabold text-blue-500 font-mono">1.000 kW</div>
+              <div className="text-[8px] text-slate-400">PF: 0,967</div>
+            </div>
+          </div>
+          <div className="absolute z-10" style={{ left: 850, top: 120 }}>
+            <div className={`p-2 w-[140px] text-center rounded-xl border border-emerald-500/30 bg-emerald-500/5 shadow-md transition duration-300`}>
+              <div className="text-[8px] font-extrabold uppercase text-emerald-500">Solar PV POI-2</div>
+              <div className="text-xs font-extrabold text-emerald-500 font-mono">1.000 kW</div>
+              <div className="text-[8px] text-slate-400">PF: 0,967</div>
+            </div>
+          </div>
+          <div className="absolute z-10" style={{ left: 1010, top: 120 }}>
+            <div className={`p-2 w-[140px] text-center rounded-xl border shadow-md transition duration-300 ${
+              isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
+            }`}>
+              <div className="text-[8px] font-extrabold uppercase text-rose-500">Genset Diesel</div>
+              <div className="text-xs font-extrabold text-slate-700 dark:text-white">1.000 kVA</div>
+              <div className="text-[8px] text-slate-400">Perkins</div>
+            </div>
+          </div>
+
+          {/* Factory 1 Transformer Cards */}
+          {factory1.map((tx, idx) => (
+            <div key={tx.id} className="absolute z-10" style={{ left: 30 + idx * 130, top: 380, width: 120 }}>
+              <SldMiniCard tx={tx} onClick={() => setSelectedTx(tx)} loadConfig={loadConfig} />
+            </div>
+          ))}
+
+          {/* Factory 2 Transformer Cards */}
+          {factory2.map((tx, idx) => (
+            <div key={tx.id} className="absolute z-10" style={{ left: 670 + idx * 130, top: 380, width: 120 }}>
+              <SldMiniCard tx={tx} onClick={() => setSelectedTx(tx)} loadConfig={loadConfig} />
+            </div>
+          ))}
+
+          {/* Legend */}
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-4 text-[9px] font-bold text-slate-400 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-1.5 rounded-full border border-slate-200/50 dark:border-slate-800/40">
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Online</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> Warning</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500" /> Offline</span>
+            <span className="text-[8px] text-slate-500 italic ml-2">Klik panel untuk detail</span>
           </div>
         </div>
       </section>

@@ -45,36 +45,46 @@ const INITIAL_DATA: Record<string, FlowNode> = {
   "csr": { id: "csr", label: "CSR", flowLpm: 8.2, dailyM3: 6.5, type: "distribution" },
 };
 
-/* ═══════════ SUB COMPONENTS ═══════════ */
+/* ═══════════ SUB COMPONENTS WITH THEME AWARENESS ═══════════ */
 
-function PumpCard({ node }: { node: FlowNode }) {
+function PumpCard({ node, isDark }: { node: FlowNode; isDark: boolean }) {
+  const isRun = node.status === "RUN";
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-900/80 p-3 text-center min-w-[110px] shadow-lg">
-      <div className="text-[9px] font-bold text-slate-400 mb-1">⚙️</div>
-      <div className="text-sm font-extrabold text-white">{node.label}</div>
+    <div className={`rounded-xl border p-3 text-center w-[110px] shadow-lg transition duration-300 ${
+      isDark 
+        ? "bg-slate-900 border-slate-800 text-white" 
+        : "bg-slate-50 border-slate-200 text-slate-800"
+    }`}>
+      <div className="text-[10px] font-bold text-slate-400 mb-0.5">🔌 DW Pump</div>
+      <div className="text-xs font-extrabold">{node.label}</div>
       <div className="flex items-center justify-center gap-1.5 mt-1.5">
-        <span className={`h-2 w-2 rounded-full ${node.status === "RUN" ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} style={{ boxShadow: node.status === "RUN" ? "0 0 6px #10b981" : "0 0 6px #ef4444" }} />
-        <span className={`text-[10px] font-extrabold ${node.status === "RUN" ? "text-emerald-400" : "text-red-400"}`}>{node.status}</span>
+        <span className={`h-2 w-2 rounded-full ${isRun ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} 
+              style={{ boxShadow: isRun ? "0 0 6px #10b981" : "0 0 6px #ef4444" }} />
+        <span className={`text-[10px] font-extrabold ${isRun ? "text-emerald-500" : "text-red-500"}`}>{node.status}</span>
       </div>
-      <div className="text-[10px] font-bold text-cyan-400 font-mono mt-1">{node.flowLpm} L/min</div>
+      <div className="text-[10px] font-bold text-sky-500 font-mono mt-1">{node.flowLpm} L/min</div>
     </div>
   );
 }
 
-function TankCard({ node }: { node: FlowNode }) {
+function TankCard({ node, isDark }: { node: FlowNode; isDark: boolean }) {
   const level = node.tankLevel ?? 0;
   const cap = node.tankCapacity ?? 1;
   const actualLiters = Math.round(cap * level / 100);
   const color = level > 70 ? "#10b981" : level > 40 ? "#eab308" : "#ef4444";
 
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-900/80 p-4 text-center min-w-[130px] shadow-lg relative overflow-hidden">
+    <div className={`rounded-xl border p-3 text-center w-[130px] shadow-lg relative overflow-hidden transition duration-300 ${
+      isDark 
+        ? "bg-slate-900 border-slate-800 text-white" 
+        : "bg-slate-50 border-slate-200 text-slate-800"
+    }`}>
       {/* Tank level background */}
       <div className="absolute bottom-0 left-0 right-0 transition-all duration-1000 opacity-15" style={{ height: `${level}%`, backgroundColor: color }} />
       <div className="relative z-10">
-        <div className="text-[9px] font-bold text-slate-400 mb-0.5">🏗️</div>
-        <div className="text-sm font-extrabold text-white">{node.label}</div>
-        <div className="text-2xl font-extrabold font-mono mt-1" style={{ color }}>{level}%</div>
+        <div className="text-[10px] font-bold text-slate-400 mb-0.5">🏗️ Tank</div>
+        <div className="text-xs font-extrabold">{node.label}</div>
+        <div className="text-xl font-extrabold font-mono mt-1" style={{ color }}>{level}%</div>
         <div className="text-[9px] text-slate-400 font-bold">{(cap).toLocaleString("id-ID")} L</div>
         <div className="text-[9px] text-slate-500 font-mono">{actualLiters.toLocaleString("id-ID")} L</div>
       </div>
@@ -82,45 +92,31 @@ function TankCard({ node }: { node: FlowNode }) {
   );
 }
 
-function DistCard({ node, costColor }: { node: FlowNode; costColor?: string }) {
+function DistCard({ node, costColor, isDark }: { node: FlowNode; costColor?: string; isDark: boolean }) {
   const cost = node.dailyM3 * 30 * COST_PER_M3;
   const isAlert = node.status === "ALERT";
-  const borderColor = isAlert ? "border-red-500/50" : "border-cyan-500/30";
-  const textColor = isAlert ? "text-red-400" : "text-cyan-400";
-  const bgColor = isAlert ? "bg-red-950/30" : "bg-slate-900/80";
+  
+  const borderColor = isAlert 
+    ? "border-red-500/50" 
+    : isDark ? "border-cyan-500/20" : "border-slate-200";
+  
+  const textColor = isAlert ? "text-red-500 dark:text-red-400" : "text-sky-500";
+  
+  const bgColor = isAlert 
+    ? (isDark ? "bg-red-950/20" : "bg-red-50/50") 
+    : (isDark ? "bg-slate-900/90" : "bg-slate-50");
 
   return (
-    <div className={`rounded-xl border ${borderColor} ${bgColor} px-3 py-2 shadow-lg flex items-center justify-between gap-3 min-w-[180px]`}>
+    <div className={`rounded-xl border ${borderColor} ${bgColor} px-3 py-1.5 shadow-md flex items-center justify-between gap-3 w-[180px] transition duration-300`}>
       <div>
-        <div className={`text-xs font-extrabold ${isAlert ? "text-red-300" : "text-white"}`}>{node.label}</div>
-        <div className={`text-[10px] font-bold font-mono ${textColor}`}>
+        <div className={`text-[11px] font-extrabold ${isDark ? "text-white" : "text-slate-800"}`}>{node.label}</div>
+        <div className={`text-[9px] font-bold font-mono ${textColor}`}>
           {node.flowLpm} L/m · {node.dailyM3} m³/d
         </div>
       </div>
       <div className="text-right">
-        <div className={`text-[8px] font-bold uppercase tracking-wider ${costColor || "text-emerald-400"}`}>Est. Cost/bln</div>
-        <div className={`text-[9px] font-extrabold font-mono ${costColor || "text-emerald-400"}`}>{formatCostIDR(cost)}</div>
-      </div>
-    </div>
-  );
-}
-
-function FlowLine({ direction = "right", label, color = "cyan" }: { direction?: "right" | "down" | "left"; label?: string; color?: string }) {
-  const lineColor = color === "cyan" ? "border-cyan-500/40" : color === "orange" ? "border-orange-500/40" : "border-red-500/40";
-  const dashStyle = color === "red" ? "border-dashed" : "border-dashed";
-
-  if (direction === "down") {
-    return (
-      <div className="flex flex-col items-center mx-auto">
-        <div className={`w-0 h-8 border-l-2 ${dashStyle} ${lineColor}`} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center justify-center">
-      <div className={`h-0 flex-1 border-t-2 ${dashStyle} ${lineColor} relative`}>
-        {label && <span className={`absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-bold whitespace-nowrap ${color === "red" ? "text-red-400" : "text-cyan-400"}`}>{label}</span>}
+        <div className={`text-[7px] font-bold uppercase tracking-wider ${costColor || "text-emerald-500"}`}>Cost/bln</div>
+        <div className={`text-[9px] font-extrabold font-mono ${costColor || "text-emerald-500"}`}>{formatCostIDR(cost)}</div>
       </div>
     </div>
   );
@@ -181,12 +177,17 @@ export default function WaterDistribution() {
   }, []);
 
   const totalDailyM3 = useMemo(() => {
-    return Object.values(flowData)
-      .filter(n => n.type === "distribution" || n.type === "subdist" || n.type === "factory")
-      .reduce((sum, n) => sum + n.dailyM3, 0);
+    // Only sum the main distribution lines (excluding sub-distributions and raw pumps) to avoid double counting
+    return ["multimedia", "hydrant-main", "sanitari1", "sanitari2", "softener1", "softener2", "factory1", "csr"]
+      .reduce((sum, key) => sum + (flowData[key]?.dailyM3 ?? 0), 0);
   }, [flowData]);
 
   const totalMonthlyCost = totalDailyM3 * 30 * COST_PER_M3;
+
+  // Colors for lines depending on theme
+  const lineColor = isDark ? "#334155" : "#cbd5e1";
+  const activeLineColor = isDark ? "#06b6d4" : "#3b82f6";
+  const orangeLineColor = "#f97316";
 
   return (
     <div className="space-y-6">
@@ -198,7 +199,7 @@ export default function WaterDistribution() {
             <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-white">{totalDailyM3.toFixed(0)} <span className="text-[10px] text-slate-400">m³/d</span></span>
           </div>
           <div className="px-4 py-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 shadow-sm flex items-center gap-3">
-            <span className="text-[10px] font-extrabold uppercase text-emerald-500">Est. Monthly</span>
+            <span className="text-[10px] font-extrabold uppercase text-emerald-500">Est. Monthly Cost</span>
             <span className="text-sm font-extrabold font-mono text-emerald-500">{formatCostIDR(totalMonthlyCost)}</span>
           </div>
         </div>
@@ -206,109 +207,126 @@ export default function WaterDistribution() {
 
       <WaterSubNav />
 
-      {/* ═══════════ SYSTEM FLOW DIAGRAM ═══════════ */}
-      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-[#0f172a] p-6 shadow-xl overflow-x-auto" style={{ minWidth: 900 }}>
+      {/* ═══════════ SYSTEM FLOW DIAGRAM (SVG Canvas Overlay) ═══════════ */}
+      <section className={`rounded-2xl border p-6 shadow-xl relative transition-all duration-300 overflow-x-auto ${
+        isDark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white"
+      }`} style={{ minWidth: 1200 }}>
+        
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
-              <span className="text-blue-400">💧</span> System Flow Diagram
+            <h3 className={`text-sm font-extrabold flex items-center gap-2 ${isDark ? "text-white" : "text-slate-800"}`}>
+              <span className="text-blue-500">💧</span> System Flow Diagram
             </h3>
-            <p className="text-[10px] text-slate-500 mt-0.5">Alur distribusi air dari sumber ke konsumen</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Alur distribusi air dari sumber ke konsumen</p>
           </div>
           {/* Legend */}
-          <div className="flex items-center gap-4 text-[9px] font-bold text-slate-500">
-            <span className="flex items-center gap-1.5"><span className="w-5 h-0 border-t-2 border-dashed border-cyan-500/50" /> Active Flow</span>
+          <div className="flex items-center gap-4 text-[9px] font-bold text-slate-400">
+            <span className="flex items-center gap-1.5"><span className="w-5 h-0 border-t-2 border-dashed border-sky-500" /> Active Flow</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Online</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-500" /> Hydrant/Alert</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-orange-500" /> Factory Line</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-orange-500" /> Pipeline (Factory Line)</span>
           </div>
         </div>
 
-        {/* Flow Diagram Layout */}
-        <div className="grid grid-cols-[140px_60px_160px_60px_200px_60px_200px_60px_200px] gap-y-3 items-center">
+        {/* Relative Canvas Container of 1200x580 */}
+        <div className="relative w-[1200px] h-[580px] select-none mx-auto">
+          
+          {/* 1. SVG OVERLAY FOR PRECISION PIPELINE LINES */}
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+            <defs>
+              <marker id="arrow-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 2 L 8 5 L 0 8 z" fill={activeLineColor} />
+              </marker>
+              <marker id="arrow-orange" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 2 L 8 5 L 0 8 z" fill={orangeLineColor} />
+              </marker>
+            </defs>
 
-          {/* ──── ROW 1: Tanks → Distribution Lines ──── */}
-          {/* Tank Column */}
-          <div className="row-span-7 flex flex-col gap-4 items-center justify-start pt-0">
-            <TankCard node={flowData["tank1"]} />
-            <TankCard node={flowData["tank2"]} />
-          </div>
+            {/* Line from DW Pumps to Tank inputs */}
+            {/* DW-3 center is 95, DW-4 center is 225. Merge point is 160 */}
+            <path d="M 95 440 L 95 410 L 225 410 L 225 440" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" />
+            <path d="M 160 410 L 160 305 L 200 305" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+            <path d="M 160 250 L 160 145 L 200 145" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
 
-          {/* Flow arrow from tank */}
-          <div className="row-span-7" />
+            {/* Line from Tanks to Distribution split */}
+            {/* Tank output right edges are 330. Vertical merge is at 380 */}
+            <path d="M 330 145 L 380 145 L 380 305 L 330 305" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" />
+            <path d="M 380 225 L 410 225" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" />
 
-          {/* Main Distribution Cards Column */}
-          <div className="flex flex-col gap-2">
-            <DistCard node={flowData["multimedia"]} />
-          </div>
-          <div /><div /><div /><div /><div /><div />
+            {/* Vertical Split Line for 8 nodes */}
+            <path d="M 410 35 L 410 490" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" />
+            
+            {/* Horizontal branches into distribution nodes */}
+            <path d="M 410 35 L 450 35" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+            <path d="M 410 100 L 450 100" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+            <path d="M 410 165 L 450 165" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+            <path d="M 410 230 L 450 230" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+            <path d="M 410 295 L 450 295" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+            <path d="M 410 360 L 450 360" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+            <path d="M 410 425 L 450 425" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+            <path d="M 410 490 L 450 490" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
 
-          {/* Row 2: Hydrant */}
-          <div /><div />
-          <DistCard node={flowData["hydrant-main"]} costColor="text-red-400" />
-          <div /><div /><div /><div /><div /><div />
+            {/* Pipeline from Factory-1 to Factory-1 Tank */}
+            {/* Factory-1 output right is 630. Tank left is 740. Tank center Y is 335 */}
+            <path d="M 630 425 L 690 425 L 690 335 L 740 335" fill="none" stroke={orangeLineColor} strokeWidth="3.5" strokeDasharray="5 5" markerEnd="url(#arrow-orange)" />
+            
+            {/* Pipeline Text Label */}
+            <text x="645" y="325" fill={orangeLineColor} fontSize="8" fontWeight="800" letterSpacing="0.1em">⚙️ PIPELINE</text>
 
-          {/* Row 3: Sanitari-1 */}
-          <div /><div />
-          <DistCard node={flowData["sanitari1"]} />
-          <div /><div /><div /><div /><div /><div />
+            {/* Factory-1 Tank Output Split to Sub-distributions */}
+            {/* Tank right is 870. Vertical merge is at 940 */}
+            <path d="M 870 335 L 940 335" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" />
+            <path d="M 940 90 L 940 415" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" />
 
-          {/* Row 4: Sanitari-2 */}
-          <div /><div />
-          <DistCard node={flowData["sanitari2"]} />
-          <div />
-          {/* Sub-dist column header */}
-          <div />
-          <div />
-          {/* Sub-dist cards */}
-          <div className="flex flex-col gap-2">
-            <DistCard node={flowData["wf1u1"]} />
-          </div>
-          <div /><div />
+            {/* Sub-dist horizontal branches */}
+            <path d="M 940 90 L 980 90" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+            <path d="M 940 155 L 980 155" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+            <path d="M 940 220 L 980 220" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+            <path d="M 940 285 L 980 285" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+            <path d="M 940 350 L 980 350" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+            <path d="M 940 415 L 980 415" fill="none" stroke={activeLineColor} strokeWidth="2.5" strokeDasharray="3 3" markerEnd="url(#arrow-blue)" />
+          </svg>
 
-          {/* Row 5: Softener-1 */}
-          <div /><div />
-          <DistCard node={flowData["softener1"]} />
-          <div /><div /><div />
-          <DistCard node={flowData["wf1u2"]} />
-          <div /><div />
+          {/* 2. CARD NODES PLACED ABSOLUTELY */}
 
-          {/* Row 6: Softener-2 */}
-          <div /><div />
-          <DistCard node={flowData["softener2"]} />
-          <div /><div /><div />
-          <DistCard node={flowData["wf1u3"]} />
-          <div /><div />
+          {/* Pumps */}
+          <div className="absolute z-10" style={{ left: 40, top: 440 }}><PumpCard node={flowData["dw3"]} isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 170, top: 440 }}><PumpCard node={flowData["dw4"]} isDark={isDark} /></div>
 
-          {/* Row 7: Factory-1 → Pipeline → Factory-1 Tank → Sub-dists */}
-          <div /><div />
-          <DistCard node={flowData["factory1"]} />
-          <FlowLine label="Pipeline" color="orange" />
-          <TankCard node={flowData["factory1tank"]} />
-          <div />
-          <div className="flex flex-col gap-2">
-            <DistCard node={flowData["sanitari1-sub"]} />
-            <DistCard node={flowData["sanitari2-sub"]} />
-            <DistCard node={flowData["hydrant-sub"]} costColor="text-red-400" />
-          </div>
-          <div /><div />
+          {/* Source Tanks */}
+          <div className="absolute z-10" style={{ left: 200, top: 90 }}><TankCard node={flowData["tank1"]} isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 200, top: 250 }}><TankCard node={flowData["tank2"]} isDark={isDark} /></div>
 
-        </div>
+          {/* Distribution Nodes */}
+          <div className="absolute z-10" style={{ left: 450, top: 15 }}><DistCard node={flowData["multimedia"]} isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 450, top: 80 }}><DistCard node={flowData["hydrant-main"]} costColor="text-rose-500" isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 450, top: 145 }}><DistCard node={flowData["sanitari1"]} isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 450, top: 210 }}><DistCard node={flowData["sanitari2"]} isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 450, top: 275 }}><DistCard node={flowData["softener1"]} isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 450, top: 340 }}><DistCard node={flowData["softener2"]} isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 450, top: 405 }}><DistCard node={flowData["factory1"]} costColor="text-orange-500" isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 450, top: 470 }}><DistCard node={flowData["csr"]} isDark={isDark} /></div>
 
-        {/* Deep Wells at bottom */}
-        <div className="mt-6 flex items-center gap-6 justify-start pl-2">
-          <PumpCard node={flowData["dw3"]} />
-          <PumpCard node={flowData["dw4"]} />
-          <div className="ml-4">
-            <DistCard node={flowData["csr"]} />
-          </div>
+          {/* Factory 1 Buffer Tank */}
+          <div className="absolute z-10" style={{ left: 740, top: 280 }}><TankCard node={flowData["factory1tank"]} isDark={isDark} /></div>
+
+          {/* Sub-distribution Nodes under Factory 1 */}
+          <div className="absolute z-10" style={{ left: 980, top: 70 }}><DistCard node={flowData["wf1u1"]} isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 980, top: 135 }}><DistCard node={flowData["wf1u2"]} isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 980, top: 200 }}><DistCard node={flowData["wf1u3"]} isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 980, top: 265 }}><DistCard node={flowData["sanitari1-sub"]} isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 980, top: 330 }}><DistCard node={flowData["sanitari2-sub"]} isDark={isDark} /></div>
+          <div className="absolute z-10" style={{ left: 980, top: 395 }}><DistCard node={flowData["hydrant-sub"]} costColor="text-rose-500" isDark={isDark} /></div>
+
         </div>
       </section>
 
       {/* ═══════════ COST SUMMARY TABLE ═══════════ */}
-      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-        <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4">
+      <section className={`rounded-2xl border p-5 shadow-sm transition-all duration-300 ${
+        isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"
+      }`}>
+        <h3 className={`text-xs font-extrabold uppercase tracking-wider mb-4 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
           💰 Estimasi Cost Distribusi Air per Jalur
         </h3>
         <div className="overflow-x-auto">

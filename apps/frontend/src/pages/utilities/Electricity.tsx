@@ -765,6 +765,76 @@ export default function Electricity() {
     }
   };
 
+  /* ═══ COMBINED FACT TIMELINE CHART & DONUT STATE ═══ */
+  const fact1Total = useMemo(() => {
+    return factCategories1.filter(c => c.enabled).reduce((sum, c) => sum + (c.value?.kWh ?? 0), 0);
+  }, [factCategories1]);
+
+  const fact2Total = useMemo(() => {
+    return factCategories2.filter(c => c.enabled).reduce((sum, c) => sum + (c.value?.kWh ?? 0), 0);
+  }, [factCategories2]);
+
+  const factTimelineData = useMemo(() => {
+    const labels = barLabels;
+    const len = labels.length;
+
+    // Fact-1 series
+    const f1Data = Array.from({ length: len }, (_, idx) => {
+      const base = fact1Total / (len || 1);
+      const factor = 0.8 + Math.sin(idx / 2.5) * 0.2 + Math.random() * 0.1;
+      return Math.round(base * factor);
+    });
+
+    // Fact-2 series
+    const f2Data = Array.from({ length: len }, (_, idx) => {
+      const base = fact2Total / (len || 1);
+      const factor = 0.85 + Math.cos(idx / 2.5) * 0.2 + Math.random() * 0.1;
+      return Math.round(base * factor);
+    });
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: "Fact-1 (Utility & Production) (kWh)",
+          data: f1Data,
+          backgroundColor: "rgba(59, 130, 246, 0.8)",
+          borderColor: "#3b82f6",
+          borderWidth: 1,
+          borderRadius: 4
+        },
+        {
+          label: "Fact-2 (Utility & HVAC) (kWh)",
+          data: f2Data,
+          backgroundColor: "rgba(6, 182, 212, 0.8)",
+          borderColor: "#06b6d4",
+          borderWidth: 1,
+          borderRadius: 4
+        }
+      ]
+    };
+  }, [barLabels, fact1Total, fact2Total]);
+
+  const factDonutSegments = useMemo(() => {
+    const total = fact1Total + fact2Total;
+    if (total === 0) return [];
+    return [
+      { label: "Fact-1 (Utility & Prod)", value: Math.round((fact1Total / total) * 100), color: "#3b82f6" },
+      { label: "Fact-2 (Utility & HVAC)", value: Math.round((fact2Total / total) * 100), color: "#06b6d4" }
+    ];
+  }, [fact1Total, fact2Total]);
+
+  const factBarOptions = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: true, position: "top" as const, labels: { color: isDark ? "#94a3b8" : "#475569", font: { size: 9, weight: "bold" as const } } }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 8 } } },
+      y: { grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }, ticks: { color: "#64748b", font: { size: 8 } } }
+    }
+  };
+
   /* ═══ HORIZONTAL BAR FOR CONSUMPTION FACT ═══ */
   const makeHorizontalBarData = (categories: ConsumptionFactCategory[]) => {
     const enabled = categories.filter(c => c.enabled);
@@ -902,26 +972,54 @@ export default function Electricity() {
         </div>
 
         {/* Genset Backup */}
-        <div className="relative overflow-hidden rounded-2xl border p-5 shadow-sm transition hover:shadow-md"
+        <div className="relative overflow-hidden rounded-2xl border p-4 shadow-sm transition hover:shadow-md"
              style={{
                background: isDark 
                  ? 'linear-gradient(135deg, #78350f, #b45309)' 
                  : 'linear-gradient(135deg, #fffbeb, #fef3c7)',
                borderColor: isDark ? '#1e293b' : '#fde68a'
              }}>
-          <Sparkline color={isDark ? "#fcd34d" : "#f59e0b"} />
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-3">
+          <div className="relative z-10 flex flex-col h-full justify-between">
+            <div className="flex items-center justify-between mb-2">
               <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>Genset Backup</span>
-              <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-amber-600/10 text-amber-700'} flex items-center justify-center`}><IconGenset /></div>
+              <div className={`h-6 w-6 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-amber-600/10 text-amber-700'} flex items-center justify-center`}><IconGenset /></div>
             </div>
-            <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-amber-950'}`}>
-              {renderMetricVal(getApiVal("electricity/genset_running"), (v) => `${v}`)} <span className={`text-sm font-bold ml-1 ${isDark ? 'text-amber-200' : 'text-amber-700'}`}>running</span>
-            </div>
-            <div className={`mt-2 text-[10px] ${isDark ? 'text-amber-200' : 'text-amber-800'} space-y-0.5`}>
-              <div>Caterpillar: <strong className={isDark ? 'text-white' : 'text-amber-950'}>{renderMetricVal(getApiVal("electricity/genset_caterpillar_cap"), (v) => `${v.toLocaleString("id-ID")} kVA`)}</strong></div>
-              <div>Perkins: <strong className={isDark ? 'text-white' : 'text-amber-950'}>{renderMetricVal(getApiVal("electricity/genset_perkins_cap"), (v) => `${v.toLocaleString("id-ID")} kVA`)}</strong></div>
-              <div className="text-[8px] opacity-75 font-semibold italic mt-1">Genset tidak dipasang powermeter</div>
+            
+            {/* 2 Inner Sub-Cards */}
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              {/* Caterpillar */}
+              <div className={`p-2 rounded-xl border transition duration-300 ${
+                isDark ? 'bg-black/35 border-amber-500/20' : 'bg-white/80 border-amber-200/60'
+              } flex flex-col justify-between`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[8px] font-extrabold uppercase text-slate-400">Caterpillar</span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" style={{ boxShadow: "0 0 4px #10b981" }} />
+                </div>
+                <div className="mt-1">
+                  <div className={`text-sm font-extrabold font-mono ${isDark ? 'text-white' : 'text-amber-950'}`}>
+                    {getApiVal("electricity/genset_running") > 0 ? "850" : "0"} <span className="text-[8px] font-bold text-slate-400">kW</span>
+                  </div>
+                  <span className="text-[8px] font-extrabold text-emerald-500">ON (Gas)</span>
+                </div>
+              </div>
+
+              {/* Perkins */}
+              <div className={`p-2 rounded-xl border transition duration-300 ${
+                isDark ? 'bg-black/35 border-amber-500/20' : 'bg-white/80 border-amber-200/60'
+              } flex flex-col justify-between`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[8px] font-extrabold uppercase text-slate-400">Perkins</span>
+                  <span className={`h-1.5 w-1.5 rounded-full ${getApiVal("electricity/genset_running") > 1 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+                </div>
+                <div className="mt-1">
+                  <div className={`text-sm font-extrabold font-mono ${isDark ? 'text-white' : 'text-amber-950'}`}>
+                    {getApiVal("electricity/genset_running") > 1 ? "1000" : "0"} <span className="text-[8px] font-bold text-slate-400">kW</span>
+                  </div>
+                  <span className={`text-[8px] font-extrabold ${getApiVal("electricity/genset_running") > 1 ? "text-emerald-500" : "text-slate-400"}`}>
+                    {getApiVal("electricity/genset_running") > 1 ? "ON (Diesel)" : "OFF"}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1366,42 +1464,55 @@ export default function Electricity() {
       </div>
 
       {/* ═══════════ SECTION G: ELECTRICITY CONSUMPTION FACT ═══════════ */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* FACT-1 */}
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+        {/* Combined Bar Chart */}
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">Electricity Consumption Fact-1 (kWh)</h3>
-            <button onClick={() => { setEditingFactSide(1); setShowFactEditor(true); }} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 transition">
-              <IconSettings />
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-400">Electricity Consumption Facts (Fact-1 & Fact-2)</h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Timeline load distribution comparison per active categories.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => { setEditingFactSide(1); setShowFactEditor(true); }} 
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700"
+              >
+                ⚙️ Fact Categories
+              </button>
+            </div>
           </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80" style={{ height: Math.max(200, factCategories1.filter(c => c.enabled).length * 40 + 60) }}>
-            {factCategories1.filter(c => c.enabled).length > 0 ? (
-              <Bar data={makeHorizontalBarData(factCategories1)} options={horizontalBarOptions} />
-            ) : (
-              <div className="h-full flex items-center justify-center text-xs text-slate-400 font-semibold">
-                Belum ada kategori. Klik ikon ⚙️ untuk menambahkan.
-              </div>
-            )}
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
+            <div style={{ height: 260 }}>
+              <Bar data={factTimelineData} options={factBarOptions} />
+            </div>
           </div>
         </section>
 
-        {/* FACT-2 */}
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">Electricity Consumption Fact-2 (kWh)</h3>
-            <button onClick={() => { setEditingFactSide(2); setShowFactEditor(true); }} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 transition">
-              <IconSettings />
-            </button>
+        {/* Donut Chart Breakdown */}
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-400">Fact Distribution Share</h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Comparison between Fact-1 and Fact-2 share.</p>
           </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80" style={{ height: Math.max(200, factCategories2.filter(c => c.enabled).length * 40 + 60) }}>
-            {factCategories2.filter(c => c.enabled).length > 0 ? (
-              <Bar data={makeHorizontalBarData(factCategories2)} options={horizontalBarOptions} />
-            ) : (
-              <div className="h-full flex items-center justify-center text-xs text-slate-400 font-semibold">
-                Belum ada kategori. Klik ikon ⚙️ untuk menambahkan.
+          <div className="my-4 flex justify-center">
+            <DonutChart 
+              segments={factDonutSegments} 
+              size={140} 
+              thickness={16} 
+              centerLabel={`${(fact1Total + fact2Total).toLocaleString("id-ID")} kWh`} 
+              centerLabelSize="text-[10px]"
+            />
+          </div>
+          <div className="space-y-1.5">
+            {factDonutSegments.map((item) => (
+              <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                  <span className="font-semibold text-slate-600 dark:text-slate-300">{item.label}</span>
+                </div>
+                <span className="font-mono font-bold text-slate-900 dark:text-white">{item.value}%</span>
               </div>
-            )}
+            ))}
           </div>
         </section>
       </div>

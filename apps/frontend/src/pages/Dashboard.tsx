@@ -215,6 +215,8 @@ export default function Dashboard() {
   const [gasRange, setGasRange] = useState<keyof typeof compareRanges>("1d");
   const [waterRange, setWaterRange] = useState<keyof typeof compareRanges>("1d");
   const [carbonRange, setCarbonRange] = useState<keyof typeof compareRanges>("1d");
+  const [solarRange, setSolarRange] = useState<keyof typeof compareRanges>("1d");
+  const [fuelRange, setFuelRange] = useState<keyof typeof compareRanges>("1d");
 
   useEffect(() => {
     localStorage.setItem("scada.makeupWaterTarget", waterTarget.toString());
@@ -316,41 +318,53 @@ export default function Dashboard() {
   const solarSavings = solarKwh * utilityRates.electricityIdr;
   const solarCoverage = Math.min(100, (solarKwh / Math.max(electricityKwh, 1)) * 100);
 
-  const { currentElectric, currentGasEnergy, currentWaterEnergy, currentEnergyLabel } = useMemo(() => {
+  const { currentElectric, currentGasEnergy, currentWaterEnergy, currentSolarPanel, currentSolarFuel, currentEnergyLabel } = useMemo(() => {
     if (consumptionRange === "hour") {
       const elec = electricityData ? electricityData.summary.todayKwh : utilityBase.electricityKwh;
       const gas = utilityBase.gasSm3 * gasEnergyFactor;
       const water = waterData ? waterData.summary.todayKwh : utilityBase.waterM3 * waterEnergyFactor;
+      const solarPanel = elec * 0.15;
+      const solarFuel = 120 * 10; // 120 L * 10 kWh/L
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
         currentWaterEnergy: water,
+        currentSolarPanel: solarPanel,
+        currentSolarFuel: solarFuel,
         currentEnergyLabel: "Today"
       };
     } else if (consumptionRange === "day") {
       const elec = electricityData ? electricityData.summary.monthlyMwh * 1000 : utilityBase.electricityKwh * 30;
       const gas = utilityBase.gasSm3 * 30 * gasEnergyFactor;
       const water = waterData ? waterData.summary.monthlyKwh : (utilityBase.waterM3 * 30) * waterEnergyFactor;
+      const solarPanel = elec * 0.15;
+      const solarFuel = 2400 * 10; // 2400 L * 10 kWh/L
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
         currentWaterEnergy: water,
+        currentSolarPanel: solarPanel,
+        currentSolarFuel: solarFuel,
         currentEnergyLabel: "This Month"
       };
     } else {
       const elec = electricityData ? electricityData.summary.totalKwh : utilityBase.electricityKwh * 365;
       const gas = utilityBase.gasSm3 * 365 * gasEnergyFactor;
       const water = waterData ? waterData.summary.yearlyKwh : (utilityBase.waterM3 * 365) * waterEnergyFactor;
+      const solarPanel = elec * 0.15;
+      const solarFuel = 29200 * 10; // 29200 L * 10 kWh/L
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
         currentWaterEnergy: water,
+        currentSolarPanel: solarPanel,
+        currentSolarFuel: solarFuel,
         currentEnergyLabel: "This Year"
       };
     }
   }, [consumptionRange, electricityData, waterData, utilityBase]);
 
-  const totalCurrentEnergy = currentElectric + currentGasEnergy + currentWaterEnergy;
+  const totalCurrentEnergy = currentElectric + currentGasEnergy + currentWaterEnergy + currentSolarPanel + currentSolarFuel;
   const co2Emission = totalCurrentEnergy * emissionFactor;
   const totalCo2Kg = co2Emission * 1000;
   const trees = Math.round(totalCo2Kg / 21);
@@ -464,9 +478,17 @@ export default function Dashboard() {
     return currentMonthTotal > 0 ? (totalM3 / currentMonthTotal) * fullMonthCost : 0;
   }, [waterSeries, waterData, waterConfig, consumptionRange, utilityBase.waterM3]);
 
-  const solarSeries = useMemo(() => {
-    return electricitySeries.map(() => 0);
+  const solarPanelSeries = useMemo(() => {
+    return electricitySeries.map((v: number) => Math.round(v * 0.15));
   }, [electricitySeries]);
+
+  const solarFuelSeries = useMemo(() => {
+    return electricitySeries.map((v: number, i: number) => {
+      const baseLiters = consumptionRange === "hour" ? 5 : consumptionRange === "day" ? 80 : 2400;
+      const variance = baseLiters * 0.2;
+      return Math.round(baseLiters + Math.sin(i / 2) * variance + Math.random() * 5);
+    });
+  }, [electricitySeries, consumptionRange]);
 
   const consumptionLabels = useMemo(() => {
     if (electricityData) {
@@ -730,6 +752,22 @@ export default function Dashboard() {
     const previous = current.map((v) => Math.max(0, Number((v * 0.85).toFixed(1))));
     return { carbonCompareLabels: labels, carbonCurrent: current, carbonPrevious: previous };
   }, [carbonRange]);
+
+  const { solarCompareLabels, solarCurrent, solarPrevious } = useMemo(() => {
+    const config = compareRanges[solarRange];
+    const labels = buildLabels(config.points, config.stepMs, config.label);
+    const current = buildSeries(config.points, 250, 40, 1);
+    const previous = current.map((v) => Math.max(0, Math.round(v * 0.9)));
+    return { solarCompareLabels: labels, solarCurrent: current, solarPrevious: previous };
+  }, [solarRange]);
+
+  const { fuelCompareLabels, fuelCurrent, fuelPrevious } = useMemo(() => {
+    const config = compareRanges[fuelRange];
+    const labels = buildLabels(config.points, config.stepMs, config.label);
+    const current = buildSeries(config.points, 85, 15, 1);
+    const previous = current.map((v) => Math.max(0, Math.round(v * 1.05)));
+    return { fuelCompareLabels: labels, fuelCurrent: current, fuelPrevious: previous };
+  }, [fuelRange]);
 
   const thresholdKwh = thresholds.find((item) => item.metric === "kwh");
 
@@ -1037,161 +1075,175 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 grid-cols-1 md:grid-cols-3">
-          {/* 4 Utility Bar Charts Grid (Left) */}
-          <div className="md:col-span-2 grid gap-4 grid-cols-1 sm:grid-cols-2">
-            {/* Electricity */}
-            <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Electricity</div>
-                  <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-                    {formatCurrency(consumptionElectricityCost, "IDR")}
-                  </div>
-                  <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                    {electricitySeries.reduce((sum: number, v: number) => sum + v, 0).toFixed(1)} kWh
-                  </div>
+        <div className="mt-4 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Electricity */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Electricity</div>
+                <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
+                  {formatCurrency(consumptionElectricityCost, "IDR")}
                 </div>
-                <div className="h-2 w-2 rounded-full bg-[#2f8ae5]" />
+                <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
+                  {electricitySeries.reduce((sum: number, v: number) => sum + v, 0).toFixed(1)} kWh
+                </div>
               </div>
-              <div className="mt-3">
-                <UtilityBarChart
-                  labels={consumptionLabels}
-                  values={electricitySeries}
-                  unit="kWh"
-                  color="#2f8ae5"
-                  height={160}
-                  thresholds={thresholdKwh ? { upper: thresholdKwh.upper, lower: thresholdKwh.lower } : undefined}
-                />
-              </div>
+              <div className="h-2 w-2 rounded-full bg-[#2f8ae5]" />
             </div>
-
-            {/* Gas */}
-            <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Gas</div>
-                  <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-                    {formatCurrency(gasCostUsd, "USD")}
-                  </div>
-                  <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                    {formatCurrency(gasCostIdr, "IDR")} &middot; {(gasSeries.reduce((sum: number, v: number) => sum + v, 0) * 0.03531).toFixed(2)} MMBtu
-                  </div>
-                </div>
-                <div className="h-2 w-2 rounded-full bg-[#f4c542]" />
-              </div>
-              <div className="mt-3">
-                <UtilityBarChart
-                  labels={consumptionLabels}
-                  values={gasSeries.map((v: number) => v * 0.03531)}
-                  unit="MMBtu"
-                  color="#f4c542"
-                  height={160}
-                />
-              </div>
-            </div>
-
-            {/* Water */}
-            <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Water</div>
-                  <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-                    {formatCurrency(consumptionWaterCost, "IDR")}
-                  </div>
-                  <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                    {waterSeries.reduce((sum: number, v: number) => sum + v, 0).toLocaleString("id-ID", { maximumFractionDigits: 1 })} m³
-                  </div>
-                </div>
-                <div className="h-2 w-2 rounded-full bg-[#3bb77e]" />
-              </div>
-              <div className="mt-3">
-                <UtilityBarChart
-                  labels={consumptionLabels}
-                  values={waterSeries}
-                  unit="m³"
-                  color="#3bb77e"
-                  height={160}
-                />
-              </div>
-            </div>
-
-            {/* Solar Fuel */}
-            <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Solar Fuel</div>
-                  <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
-                    Rp 0
-                  </div>
-                  <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-                    0 L
-                  </div>
-                </div>
-                <div className="h-2 w-2 rounded-full bg-[#f59e0b]" />
-              </div>
-              <div className="mt-3">
-                <UtilityBarChart
-                  labels={consumptionLabels}
-                  values={solarSeries}
-                  unit="L"
-                  color="#f59e0b"
-                  height={160}
-                />
-              </div>
+            <div className="mt-3">
+              <UtilityBarChart
+                labels={consumptionLabels}
+                values={electricitySeries}
+                unit="kWh"
+                color="#2f8ae5"
+                height={150}
+                thresholds={thresholdKwh ? { upper: thresholdKwh.upper, lower: thresholdKwh.lower } : undefined}
+              />
             </div>
           </div>
-          {/* Distribusi Energi (Right) */}
-          <div className="md:col-span-1 flex flex-col">
-            {/* Energy Distribution */}
-            <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-5 transition-colors duration-300 flex-1 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Energy Distribution</div>
-                    <div className="text-[10px] text-[#47729f] dark:text-slate-400 font-medium">{currentEnergyLabel}</div>
-                  </div>
-                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                    ≈ {trees.toLocaleString("en-US")} trees
-                  </div>
-                </div>
-                <div className="flex items-center justify-center min-h-[220px] mt-4">
-                  <EnergyDonutChart
-                    labels={["Electricity", "Gas", "Water"]}
-                    values={[currentElectric, currentGasEnergy, currentWaterEnergy]}
-                    colors={["rgba(56, 189, 248, 0.9)", "rgba(250, 204, 21, 0.85)", "rgba(74, 222, 128, 0.85)"]}
-                    centerLabel="Total"
-                    centerValue={`${totalCurrentEnergy.toFixed(0)}`}
-                    height={220}
-                  />
-                </div>
-              </div>
 
-              <div className="mt-6 space-y-3">
-                {[
-                  { label: "Electricity", value: currentElectric, unit: "kWh", color: "bg-sky-400", rawVal: currentElectric },
-                  { label: "Gas (equiv.)", value: currentGasEnergy, unit: "kWh", color: "bg-yellow-400", rawVal: currentGasEnergy },
-                  { label: "Water (equiv.)", value: currentWaterEnergy, unit: "kWh", color: "bg-green-400", rawVal: currentWaterEnergy }
-                ].map((item) => {
-                  const pct = totalCurrentEnergy > 0 ? (item.rawVal / totalCurrentEnergy) * 100 : 0;
-                  return (
-                    <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-900 pb-2">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
-                        <span className="font-semibold text-slate-700 dark:text-slate-300">{item.label}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-mono font-bold text-slate-900 dark:text-white">
-                          {item.value.toLocaleString(undefined, { maximumFractionDigits: 0 })} {item.unit}
-                        </span>
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium ml-2">
-                          ({pct.toFixed(1)}%)
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+          {/* Gas */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Gas</div>
+                <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
+                  {formatCurrency(gasCostUsd, "USD")}
+                </div>
+                <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
+                  {formatCurrency(gasCostIdr, "IDR")} &middot; {(gasSeries.reduce((sum: number, v: number) => sum + v, 0) * 0.03531).toFixed(2)} MMBtu
+                </div>
               </div>
+              <div className="h-2 w-2 rounded-full bg-[#f4c542]" />
+            </div>
+            <div className="mt-3">
+              <UtilityBarChart
+                labels={consumptionLabels}
+                values={gasSeries.map((v: number) => v * 0.03531)}
+                unit="MMBtu"
+                color="#f4c542"
+                height={150}
+              />
+            </div>
+          </div>
+
+          {/* Water */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Water</div>
+                <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
+                  {formatCurrency(consumptionWaterCost, "IDR")}
+                </div>
+                <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
+                  {waterSeries.reduce((sum: number, v: number) => sum + v, 0).toLocaleString("id-ID", { maximumFractionDigits: 1 })} m³
+                </div>
+              </div>
+              <div className="h-2 w-2 rounded-full bg-[#3bb77e]" />
+            </div>
+            <div className="mt-3">
+              <UtilityBarChart
+                labels={consumptionLabels}
+                values={waterSeries}
+                unit="m³"
+                color="#3bb77e"
+                height={150}
+              />
+            </div>
+          </div>
+
+          {/* Solar Panel */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Solar Panel</div>
+                <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
+                  {formatCurrency(solarSavings, "IDR")}
+                </div>
+                <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
+                  {solarPanelSeries.reduce((sum: number, v: number) => sum + v, 0).toFixed(1)} kWh
+                </div>
+              </div>
+              <div className="h-2 w-2 rounded-full bg-[#eab308]" />
+            </div>
+            <div className="mt-3">
+              <UtilityBarChart
+                labels={consumptionLabels}
+                values={solarPanelSeries}
+                unit="kWh"
+                color="#eab308"
+                height={150}
+              />
+            </div>
+          </div>
+
+          {/* Solar Fuel */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Solar Fuel</div>
+                <div className="mt-1 text-lg font-semibold text-[#002b5c] dark:text-slate-100">
+                  {formatCurrency(solarFuelSeries.reduce((sum: number, v: number) => sum + v, 0) * 15000, "IDR")}
+                </div>
+                <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
+                  {solarFuelSeries.reduce((sum: number, v: number) => sum + v, 0).toLocaleString("id-ID")} L
+                </div>
+              </div>
+              <div className="h-2 w-2 rounded-full bg-[#f43f5e]" />
+            </div>
+            <div className="mt-3">
+              <UtilityBarChart
+                labels={consumptionLabels}
+                values={solarFuelSeries}
+                unit="L"
+                color="#f43f5e"
+                height={150}
+              />
+            </div>
+          </div>
+
+          {/* Energy Distribution Donut Chart */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300 flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-500 font-semibold">Energy Distribution</div>
+                <div className="text-[10px] text-[#47729f] dark:text-slate-400 font-medium">{currentEnergyLabel}</div>
+              </div>
+              <div className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">
+                ≈ {trees.toLocaleString("en-US")} trees
+              </div>
+            </div>
+            <div className="flex items-center justify-center h-[120px] my-2">
+              <EnergyDonutChart
+                labels={["Electricity", "Gas", "Water", "Solar Panel", "Solar Fuel"]}
+                values={[currentElectric, currentGasEnergy, currentWaterEnergy, currentSolarPanel, currentSolarFuel]}
+                colors={["#2f8ae5", "#f4c542", "#3bb77e", "#eab308", "#f43f5e"]}
+                centerLabel="Total"
+                centerValue={`${totalCurrentEnergy.toFixed(0)}`}
+                height={120}
+              />
+            </div>
+            <div className="space-y-1 mt-1 text-[10px]">
+              {[
+                { label: "Electricity", value: currentElectric, unit: "kWh", color: "bg-[#2f8ae5]", rawVal: currentElectric },
+                { label: "Gas (equiv.)", value: currentGasEnergy, unit: "kWh", color: "bg-[#f4c542]", rawVal: currentGasEnergy },
+                { label: "Water (equiv.)", value: currentWaterEnergy, unit: "kWh", color: "bg-[#3bb77e]", rawVal: currentWaterEnergy },
+                { label: "Solar Panel", value: currentSolarPanel, unit: "kWh", color: "bg-[#eab308]", rawVal: currentSolarPanel },
+                { label: "Solar Fuel (equiv.)", value: currentSolarFuel, unit: "kWh", color: "bg-[#f43f5e]", rawVal: currentSolarFuel }
+              ].map((item) => {
+                const pct = totalCurrentEnergy > 0 ? (item.rawVal / totalCurrentEnergy) * 100 : 0;
+                return (
+                  <div key={item.label} className="flex items-center justify-between border-b border-slate-100 dark:border-slate-900 pb-1">
+                    <div className="flex items-center gap-1">
+                      <span className={`w-1.5 h-1.5 rounded-full ${item.color}`} />
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{item.label}</span>
+                    </div>
+                    <span className="font-mono text-slate-500 dark:text-slate-400">
+                      {pct.toFixed(0)}%
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1463,7 +1515,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {/* Card Electricity */}
           <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300 flex flex-col justify-between">
             <div className="mb-3 flex items-center justify-between gap-2">
@@ -1555,6 +1607,70 @@ export default function Dashboard() {
                 current={waterCurrent}
                 previous={waterPrevious}
                 unit="m³"
+                heightClassName="h-32"
+              />
+            </div>
+          </div>
+
+          {/* Card Solar Panel */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300 flex flex-col justify-between">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <span className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-400 font-semibold">Solar Panel</span>
+              <div className="flex gap-0.5 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-0.5 text-[9px]">
+                {rangeOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setSolarRange(opt.value)}
+                    className={`rounded-full px-1.5 py-0.5 font-bold transition ${
+                      solarRange === opt.value
+                        ? "bg-[#1f6fb5] text-white"
+                        : "text-[#47729f] dark:text-slate-500 hover:text-[#002b5c] dark:hover:text-slate-300"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2 flex-1">
+              <ComparisonBarChart
+                labels={solarCompareLabels}
+                current={solarCurrent}
+                previous={solarPrevious}
+                unit="kWh"
+                heightClassName="h-32"
+              />
+            </div>
+          </div>
+
+          {/* Card Solar Fuel */}
+          <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4 transition-colors duration-300 flex flex-col justify-between">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <span className="text-xs uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-400 font-semibold">Solar Fuel</span>
+              <div className="flex gap-0.5 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-0.5 text-[9px]">
+                {rangeOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setFuelRange(opt.value)}
+                    className={`rounded-full px-1.5 py-0.5 font-bold transition ${
+                      fuelRange === opt.value
+                        ? "bg-[#1f6fb5] text-white"
+                        : "text-[#47729f] dark:text-slate-500 hover:text-[#002b5c] dark:hover:text-slate-300"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2 flex-1">
+              <ComparisonBarChart
+                labels={fuelCompareLabels}
+                current={fuelCurrent}
+                previous={fuelPrevious}
+                unit="L"
                 heightClassName="h-32"
               />
             </div>
