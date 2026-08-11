@@ -5,6 +5,7 @@ import { useAuthStore } from "../../store/auth.store";
 import { getDefaultEqConfigs, getDefaultSensorConfigs } from "../../data/equipment";
 import { getJson, postJson } from "../../services/api.client";
 import type { MachineOutletContext } from "./MachineLayout";
+import { useTelemetryStore } from "../../store/telemetry.store";
 
 type AlarmLogItem = {
   id: string;
@@ -39,10 +40,219 @@ const badgeStyle: Record<AlarmLogItem["status"], string> = {
   Resolved: "bg-emerald-500/15 text-emerald-500 border border-emerald-500/35"
 };
 
+const TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
+  "cooling-water/supply_temp": "Scaled_Temp_Tank_Cooling3_Supp",
+  "cooling-water/return_temp": "Scaled_Temp_Tank_Cooling3_Return",
+  "cooling-water/st3_return_temp": "Scaled_Temp_ST3_Return",
+  "cooling-water/eq_temp_st03_supply": "Scaled_Temp_ST3_Supply",
+  "cooling-water/eq_press_du03": "Scaled_Press_DUU3",
+  "cooling-water/eq_press_bp03": "Scaled_Press_BP",
+  "cooling-water/eq_press_prep03": "Scaled_Press_PrepU3",
+  "cooling-water/eq_press_st03": "Scaled_Press_ST3",
+  "cooling-water/eq_press_washing": "Scaled_Press_Washing",
+  "cooling-water/eq_temp_du03": "Scaled_Temp_DU",
+  "cooling-water/eq_temp_prep03": "Scaled_Tempt_Prep3_Return",
+  "cooling-water/eq_temp_washing": "Scaled_Temp_Washing",
+  "cooling-water/basin_lvl": "Scaled_Level_tank_cooling3",
+  "cooling-water/fan_status_1": "Status_Fan_C11",
+  "cooling-water/fan_status_2": "Status_Fan_CT2",
+  "cooling-water/fan_status_3": "Status_Fan_CT3",
+  "cooling-water/motor_status_1": "Status_MTR_CT_P1",
+  "cooling-water/motor_status_2": "Status_MTR_CT_P2",
+  "cooling-water/motor_status_3": "Status_MTR_CT_P11",
+  "cooling-water/eq_status_du03": "Status_MTR_DU45",
+  "cooling-water/eq_status_bp03": "Status_MTR_BP",
+  "cooling-water/eq_status_prep03": "Status_MTR_Prep3",
+  "cooling-water/eq_status_st03": "Status_MTR_ST3_P3",
+  "cooling-water/eq_status_washing": "Status_MTR_Washing",
+  "cooling-water/st3_heating": "Status_Machine_Heating_ST3",
+  "cooling-water/st3_cooling": "Status_Machine_Cooling_ST3",
+  "cooling-water/st3_steril": "Status_Machine_Steril_ST3",
+};
+
 export default function MachineAlarm() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
   const user = useAuthStore((state) => state.user);
+
+  const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>({});
+  const [jsonKeyMap, setJsonKeyMap] = useState<Record<string, string>>({});
+  const [apiLiveData, setApiLiveData] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    const defaultSensors = getDefaultSensorConfigs(unitId);
+    const defaultMap: Record<string, string> = {};
+    defaultSensors.forEach((s) => {
+      defaultMap[s.tagKey] = s.apiSourceUrl || "";
+    });
+
+    const savedUrls = localStorage.getItem(`scada.config.api_sources.${unitId}`);
+    if (savedUrls) {
+      try {
+        setApiSourceUrls(JSON.parse(savedUrls));
+      } catch (e) {
+        setApiSourceUrls(defaultMap);
+      }
+    } else {
+      setApiSourceUrls(defaultMap);
+    }
+
+    const savedList = localStorage.getItem(`scada.config.api_sources_list.${unitId}`);
+    if (savedList) {
+      try {
+        const parsed = JSON.parse(savedList);
+        const map: Record<string, string> = {};
+        if (Array.isArray(parsed)) {
+          parsed.forEach((row: any) => {
+            if (row.tagKey && row.jsonKey) {
+              map[row.tagKey] = row.jsonKey;
+            }
+          });
+        }
+        setJsonKeyMap(map);
+      } catch (e) {
+        setJsonKeyMap({});
+      }
+    } else {
+      setJsonKeyMap({});
+    }
+
+    getJson<{ success: boolean; sources: Record<string, string> | null; rows?: any[] | null }>(
+      `/config/api-sources-map?unitId=${unitId}`
+    )
+      .then((res) => {
+        if (res && res.success) {
+          if (res.sources) {
+            setApiSourceUrls((prev) => ({ ...prev, ...res.sources }));
+          }
+          if (res.rows) {
+            const map: Record<string, string> = {};
+            res.rows.forEach((row) => {
+              if (row.tagKey && row.jsonKey) {
+                map[row.tagKey] = row.jsonKey;
+              }
+            });
+            setJsonKeyMap(map);
+          }
+        }
+      })
+      .catch((err) => console.error("Failed to load API sources map from DB:", err));
+  }, [unitId]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchActiveApiData = async () => {
+      const uniqueUrls = Array.from(new Set(Object.values(apiSourceUrls).filter((u) => u.trim())));
+      if (uniqueUrls.length === 0) {
+        if (isMounted) setApiLiveData({});
+        return;
+      }
+
+      const aggregatedData: Record<string, any> = {};
+      await Promise.all(
+        uniqueUrls.map(async (url) => {
+          try {
+            const res = await postJson<{ success: boolean; data?: any }>("/config/api-sources/test", {
+              url,
+              method: "GET"
+            });
+            if (res && res.success && res.data) {
+              aggregatedData[url] = res.data;
+            }
+          } catch (err) {
+            console.error(`Live API poll error on Alarm Log for URL ${url}:`, err);
+          }
+        })
+      );
+
+      if (isMounted) {
+        setApiLiveData(aggregatedData);
+      }
+    };
+
+    fetchActiveApiData();
+    const interval = setInterval(fetchActiveApiData, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [apiSourceUrls]);
+
+  const latest = useTelemetryStore((state) => state.latest);
+
+  const mergedLatest = useMemo(() => {
+    const merged = { ...latest };
+    if (unitId.startsWith("cooling-water")) {
+      Object.entries(apiSourceUrls).forEach(([tagKey, url]) => {
+        if (!url.trim()) return;
+
+        if (tagKey === "cooling-water/delta_temp") {
+          const retKey = jsonKeyMap["cooling-water/return_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/return_temp"];
+          const suppKey = jsonKeyMap["cooling-water/supply_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
+          const retUrl = apiSourceUrls["cooling-water/return_temp"] || "";
+          const suppUrl = apiSourceUrls["cooling-water/supply_temp"] || "";
+          const retVal = retKey && retUrl ? apiLiveData[retUrl]?.[retKey] : undefined;
+          const suppVal = suppKey && suppUrl ? apiLiveData[suppUrl]?.[suppKey] : undefined;
+
+          if (typeof retVal === "number" && typeof suppVal === "number") {
+            merged[tagKey] = {
+              ts: new Date().toISOString(),
+              value: Number((retVal - suppVal).toFixed(2)),
+              quality: "good",
+              meta: { tagId: tagKey }
+            };
+          }
+          return;
+        }
+
+        const jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
+        const val = apiLiveData[url]?.[jsonKey];
+        if (val !== undefined && val !== null) {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: val,
+            quality: "good",
+            meta: { tagId: tagKey }
+          };
+        }
+      });
+    }
+    return merged;
+  }, [latest, apiSourceUrls, apiLiveData, unitId, jsonKeyMap]);
+
+  const formatAlarmMessage = (rawMessage: string, tagId: string) => {
+    if (!rawMessage) return "Terdeteksi kondisi alarm pada sensor.";
+
+    let msg = rawMessage;
+    const liveObj = mergedLatest[tagId];
+    const liveVal = liveObj?.value;
+    const hasLive = liveVal !== undefined && liveVal !== null && liveVal !== "xx" && liveVal !== "XX";
+
+    if (msg.includes("Limit of")) {
+      msg = msg.replace(/\[(.*?)\] (exceeds|is below) (Alarm|Warning) Limit of (.*?) \(Current: (.*?)\)/gi, 
+        (_, equip, direction, type, limit, curr) => {
+          let valStr = curr;
+          if (hasLive) {
+            const unitMatch = limit.trim().match(/[a-zA-Z°%]+/);
+            const unit = unitMatch ? " " + unitMatch[0] : "";
+            const numVal = typeof liveVal === "number" ? liveVal.toFixed(1) : String(liveVal);
+            valStr = numVal + unit;
+          }
+          const dirText = direction.toLowerCase() === "exceeds" ? "melebihi" : "di bawah";
+          const typeText = type.toLowerCase() === "alarm" ? "batas aman" : "batas warning";
+          const labelPrefix = (equip.toLowerCase().includes("press") || equip.toLowerCase().includes("bar"))
+            ? "Tekanan pada "
+            : (equip.toLowerCase().includes("temp") || equip.toLowerCase().includes("suhu"))
+            ? "Suhu pada "
+            : "";
+          return `${labelPrefix}${equip} ${dirText} ${typeText} (${limit}). Nilai saat ini: ${valStr}`;
+        }
+      );
+    }
+
+    return msg;
+  };
+
   const userRole = user?.role ?? "user";
 
   const [dbAlarms, setDbAlarms] = useState<AlarmLogItem[]>([]);
@@ -663,7 +873,7 @@ export default function MachineAlarm() {
                     {row.timestamp}
                   </td>
                   <td className={`py-3 px-3 text-[11px] font-bold ${row.status === "Active" ? "text-rose-600 dark:text-rose-400" : ""}`}>
-                    {row.description}
+                    {formatAlarmMessage(row.description, row.equipment)}
                   </td>
                   <td className="py-3 px-3 text-slate-500 dark:text-slate-400">{row.equipment}</td>
                   <td className="py-3 px-3">
@@ -950,7 +1160,7 @@ export default function MachineAlarm() {
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase">Alarm Description</label>
                 <div className="mt-1 p-2 bg-slate-100 dark:bg-slate-900 rounded text-xs text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-850">
-                  {editingAlarm.description}
+                  {formatAlarmMessage(editingAlarm.description, editingAlarm.equipment)}
                 </div>
               </div>
               <div>
@@ -1027,7 +1237,7 @@ export default function MachineAlarm() {
               <div>
                 <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Deskripsi Alarm</span>
                 <span className="text-[#002b5c] dark:text-slate-200 font-bold block bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
-                  {selectedDetailAlarm.description}
+                  {formatAlarmMessage(selectedDetailAlarm.description, selectedDetailAlarm.equipment)}
                 </span>
               </div>
 

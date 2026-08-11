@@ -437,16 +437,34 @@ export default function MachinePidDiagram() {
       .toUpperCase();
   };
 
-  const formatAlarmMessage = (rawMessage: string) => {
+  const formatAlarmMessage = (rawMessage: string, tagId: string) => {
     if (!rawMessage) return "Terdeteksi kondisi alarm pada sensor.";
 
     let msg = rawMessage;
-    if (msg.includes("exceeds Alarm Limit of")) {
-      msg = msg.replace(/\[(.*?)\] exceeds Alarm Limit of (.*?) \(Current: (.*?)\)/gi, (_, equip, limit, curr) => {
-        return `Tekanan pada ${equip} melebihi batas aman (${limit}). Nilai saat ini: ${curr}`;
-      });
-      msg = msg.replace(/exceeds Alarm Limit of/gi, "melebihi batas alarm");
-      msg = msg.replace(/\(Current:/gi, "(Nilai saat ini:");
+    const liveObj = mergedLatest[tagId];
+    const liveVal = liveObj?.value;
+    const hasLive = liveVal !== undefined && liveVal !== null && liveVal !== "xx" && liveVal !== "XX";
+
+    if (msg.includes("Limit of")) {
+      msg = msg.replace(/\[(.*?)\] (exceeds|is below) (Alarm|Warning) Limit of (.*?) \(Current: (.*?)\)/gi, 
+        (_, equip, direction, type, limit, curr) => {
+          let valStr = curr;
+          if (hasLive) {
+            const unitMatch = limit.trim().match(/[a-zA-Z°%]+/);
+            const unit = unitMatch ? " " + unitMatch[0] : "";
+            const numVal = typeof liveVal === "number" ? liveVal.toFixed(1) : String(liveVal);
+            valStr = numVal + unit;
+          }
+          const dirText = direction.toLowerCase() === "exceeds" ? "melebihi" : "di bawah";
+          const typeText = type.toLowerCase() === "alarm" ? "batas aman" : "batas warning";
+          const labelPrefix = (equip.toLowerCase().includes("press") || equip.toLowerCase().includes("bar"))
+            ? "Tekanan pada "
+            : (equip.toLowerCase().includes("temp") || equip.toLowerCase().includes("suhu"))
+            ? "Suhu pada "
+            : "";
+          return `${labelPrefix}${equip} ${dirText} ${typeText} (${limit}). Nilai saat ini: ${valStr}`;
+        }
+      );
     }
 
     return msg;
@@ -471,7 +489,7 @@ export default function MachinePidDiagram() {
           return {
             id: Number(item.id) || item.id,
             code: formatAlarmTitle(item.alarmKey || item.tagId || "ALM", item.message || ""),
-            message: formatAlarmMessage(item.message || ""),
+            message: formatAlarmMessage(item.message || "", item.tagId || ""),
             severity,
             timestamp: ts,
             status: item.status || "Active",
