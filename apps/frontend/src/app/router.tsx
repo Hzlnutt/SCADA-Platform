@@ -38,10 +38,11 @@ import Electricity from "../pages/utilities/Electricity";
 import IncomingPln from "../pages/utilities/IncomingPln";
 import PowerDistribution from "../pages/utilities/PowerDistribution";
 import ElectricityReport from "../pages/utilities/ElectricityReport";
-import Gas from "../pages/utilities/Gas";
 import WaterOverview from "../pages/utilities/WaterOverview";
 import WaterDistribution from "../pages/utilities/WaterDistribution";
 import WaterEnergy from "../pages/utilities/WaterEnergy";
+import GasOverview from "../pages/utilities/GasOverview";
+import GasDistribution from "../pages/utilities/GasDistribution";
 import Hvac from "../pages/utilities/Hvac";
 import Wwtp from "../pages/utilities/Wwtp";
 import UtilityConfig from "../pages/utilities/UtilityConfig";
@@ -108,8 +109,12 @@ export const AppRouter = () => {
               <Route path="distribusi" element={<WaterDistribution />} />
               <Route path="energy" element={<WaterEnergy />} />
             </Route>
-            <Route path="gas" element={<Gas />} />
+            <Route path="gas">
+              <Route index element={<GasOverview />} />
+              <Route path="distribusi" element={<GasDistribution />} />
+            </Route>
             <Route path="hvac" element={<Hvac />} />
+
             <Route path="wwtp" element={<Wwtp />} />
             <Route path="utility-config" element={<UtilityConfig />} />
             <Route path="utility-billing" element={<Billing />} />

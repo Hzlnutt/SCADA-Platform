@@ -700,8 +700,8 @@ export default function WaterOverview() {
             </div>
 
             {/* SCADA Interactive Box */}
-            <div className="bg-[#0b121f] rounded-2xl p-4 border border-[#1e293b] text-slate-200 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+            <div className={`rounded-2xl p-4 border transition-colors duration-200 ${isDark ? "bg-[#0b121f] border-[#1e293b] text-slate-200" : "bg-slate-50 border-slate-200 text-slate-800"} space-y-4`}>
+              <div className={`flex items-center justify-between border-b ${isDark ? "border-slate-800/80" : "border-slate-200"} pb-2`}>
                 <span className="text-[11px] uppercase font-bold text-blue-400 flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-ping" />
                   Submersible Pump
@@ -717,9 +717,9 @@ export default function WaterOverview() {
 
               <div className="grid grid-cols-[80px_1fr] gap-4">
                 {/* Level Gauge */}
-                <div className="flex flex-col items-center justify-center border-r border-slate-800/80 pr-2">
+                <div className={`flex flex-col items-center justify-center border-r ${isDark ? "border-slate-800/80" : "border-slate-200"} pr-2`}>
                   <span className="text-[9px] uppercase font-bold text-slate-500 mb-1">Water Level</span>
-                  <div className="w-10 h-24 rounded-full border border-slate-700 bg-slate-900/60 overflow-hidden relative flex items-end">
+                  <div className={`w-10 h-24 rounded-full border ${isDark ? "border-slate-700 bg-slate-900/60" : "border-slate-300 bg-white"} overflow-hidden relative flex items-end`}>
                     <div 
                       className="w-full bg-sky-500/70 transition-all duration-1000" 
                       style={{ height: `${dw3PumpState ? 72 : 45}%` }}
@@ -728,36 +728,36 @@ export default function WaterOverview() {
                   <span className="text-xs font-mono font-extrabold text-sky-400 mt-1 select-none">
                     {dw3PumpState ? "27.9" : "21.2"} m
                   </span>
-                  <span className="text-[8px] text-slate-500 font-semibold mt-0.5">dari permukaan</span>
+                  <span className={`text-[8px] ${isDark ? "text-slate-500" : "text-slate-400"} font-semibold mt-0.5`}>dari permukaan</span>
                 </div>
 
                 {/* SCADA Metrics grid */}
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-[#131d31] rounded-xl p-2.5 border border-slate-800">
+                  <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Flow Rate</div>
                     <div className="mt-1 font-mono font-extrabold text-sky-400 text-sm">
                       {getVal("dw3/flow_rate", scadaJitter.dw3Flow)} <span className="text-[10px] text-slate-500 font-normal">L/min</span>
                     </div>
                   </div>
-                  <div className="bg-[#131d31] rounded-xl p-2.5 border border-slate-800">
+                  <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Pressure</div>
                     <div className="mt-1 font-mono font-extrabold text-indigo-400 text-sm">
                       {getVal("dw3/pressure", scadaJitter.dw3Pressure)} <span className="text-[10px] text-slate-500 font-normal">bar</span>
                     </div>
                   </div>
-                  <div className="col-span-2 bg-[#131d31] rounded-xl p-3 border border-slate-800 flex flex-col justify-center items-center">
+                  <div className={`col-span-2 rounded-xl p-3 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"} flex flex-col justify-center items-center`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Pump Power</div>
                     <div className="mt-1 font-mono font-extrabold text-[#f97316] text-xl flex items-baseline gap-1">
                       {dw3PumpState ? (5.5 + Math.random() * 0.4).toFixed(2) : "0.00"} <span className="text-xs text-slate-500 font-bold">kW</span>
                     </div>
                   </div>
-                  <div className="bg-[#131d31] rounded-xl p-2.5 border border-slate-800">
+                  <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Running Hrs</div>
                     <div className="mt-1 font-mono font-extrabold text-[#eab308] text-xs">
                       14459 hrs
                     </div>
                   </div>
-                  <div className="bg-[#131d31] rounded-xl p-2.5 border border-slate-800">
+                  <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Current</div>
                     <div className="mt-1 font-mono font-extrabold text-[#ec4899] text-xs">
                       {getVal("dw3/current", scadaJitter.dw3Current)} A
@@ -823,8 +823,8 @@ export default function WaterOverview() {
             </div>
 
             {/* SCADA Interactive Box */}
-            <div className="bg-[#0b121f] rounded-2xl p-4 border border-[#1e293b] text-slate-200 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+            <div className={`rounded-2xl p-4 border transition-colors duration-200 ${isDark ? "bg-[#0b121f] border-[#1e293b] text-slate-200" : "bg-slate-50 border-slate-200 text-slate-800"} space-y-4`}>
+              <div className={`flex items-center justify-between border-b ${isDark ? "border-slate-800/80" : "border-slate-200"} pb-2`}>
                 <span className="text-[11px] uppercase font-bold text-cyan-400 flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-ping" />
                   Submersible Pump
@@ -840,9 +840,9 @@ export default function WaterOverview() {
 
               <div className="grid grid-cols-[80px_1fr] gap-4">
                 {/* Level Gauge */}
-                <div className="flex flex-col items-center justify-center border-r border-slate-800/80 pr-2">
+                <div className={`flex flex-col items-center justify-center border-r ${isDark ? "border-slate-800/80" : "border-slate-200"} pr-2`}>
                   <span className="text-[9px] uppercase font-bold text-slate-500 mb-1">Water Level</span>
-                  <div className="w-10 h-24 rounded-full border border-slate-700 bg-slate-900/60 overflow-hidden relative flex items-end">
+                  <div className={`w-10 h-24 rounded-full border ${isDark ? "border-slate-700 bg-slate-900/60" : "border-slate-300 bg-white"} overflow-hidden relative flex items-end`}>
                     <div 
                       className="w-full bg-sky-500/70 transition-all duration-1000" 
                       style={{ height: `${dw4PumpState ? 81 : 32}%` }}
@@ -851,36 +851,36 @@ export default function WaterOverview() {
                   <span className="text-xs font-mono font-extrabold text-sky-400 mt-1 select-none">
                     {dw4PumpState ? "31.6" : "24.5"} m
                   </span>
-                  <span className="text-[8px] text-slate-500 font-semibold mt-0.5">dari permukaan</span>
+                  <span className={`text-[8px] ${isDark ? "text-slate-500" : "text-slate-400"} font-semibold mt-0.5`}>dari permukaan</span>
                 </div>
 
                 {/* SCADA Metrics grid */}
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-[#131d31] rounded-xl p-2.5 border border-slate-800">
+                  <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Flow Rate</div>
                     <div className="mt-1 font-mono font-extrabold text-sky-400 text-sm">
                       {getVal("dw4/flow_rate", scadaJitter.dw4Flow)} <span className="text-[10px] text-slate-500 font-normal">L/min</span>
                     </div>
                   </div>
-                  <div className="bg-[#131d31] rounded-xl p-2.5 border border-slate-800">
+                  <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Pressure</div>
                     <div className="mt-1 font-mono font-extrabold text-indigo-400 text-sm">
                       {getVal("dw4/pressure", scadaJitter.dw4Pressure)} <span className="text-[10px] text-slate-500 font-normal">bar</span>
                     </div>
                   </div>
-                  <div className="col-span-2 bg-[#131d31] rounded-xl p-3 border border-slate-800 flex flex-col justify-center items-center">
+                  <div className={`col-span-2 rounded-xl p-3 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"} flex flex-col justify-center items-center`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Pump Power</div>
                     <div className="mt-1 font-mono font-extrabold text-[#f97316] text-xl flex items-baseline gap-1">
                       {dw4PumpState ? (4.2 + Math.random() * 0.3).toFixed(2) : "0.00"} <span className="text-xs text-slate-500 font-bold">kW</span>
                     </div>
                   </div>
-                  <div className="bg-[#131d31] rounded-xl p-2.5 border border-slate-800">
+                  <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Running Hrs</div>
                     <div className="mt-1 font-mono font-extrabold text-[#eab308] text-xs">
                       11233 hrs
                     </div>
                   </div>
-                  <div className="bg-[#131d31] rounded-xl p-2.5 border border-slate-800">
+                  <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Current</div>
                     <div className="mt-1 font-mono font-extrabold text-[#ec4899] text-xs">
                       {getVal("dw4/current", scadaJitter.dw4Current)} A
@@ -1029,19 +1029,19 @@ export default function WaterOverview() {
       </section>
 
       {/* ═══════════ SECTION G: TABEL KONSUMSI LENGKAP (Mockup 4) ═══════════ */}
-      <section className="rounded-2xl border border-slate-800/50 bg-[#080f1e] text-slate-100 p-5 shadow-xl">
-        <div className="flex items-center gap-2 mb-4 border-b border-slate-800/80 pb-3">
+      <section className={`rounded-2xl border transition-colors duration-200 ${isDark ? "border-slate-800/50 bg-[#080f1e] text-slate-100" : "border-slate-200 bg-white text-slate-800"} p-5 shadow-xl`}>
+        <div className={`flex items-center gap-2 mb-4 border-b ${isDark ? "border-slate-800/80" : "border-slate-200"} pb-3`}>
           <span className="text-xl">📄</span>
           <div>
-            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400">Tabel Konsumsi Lengkap</h3>
-            <p className="text-[10px] text-slate-500">Detail konsumsi semua jalur distribusi</p>
+            <h3 className={`text-sm font-bold uppercase tracking-[0.2em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Tabel Konsumsi Lengkap</h3>
+            <p className={`text-[10px] ${isDark ? "text-slate-500" : "text-slate-400"}`}>Detail konsumsi semua jalur distribusi</p>
           </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-slate-800 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+              <tr className={`border-b ${isDark ? "border-slate-800" : "border-slate-200"} text-[10px] font-extrabold uppercase tracking-wider text-slate-500`}>
                 <th className="py-2.5 px-3">Jalur</th>
                 <th className="py-2.5 px-3">Sumber</th>
                 <th className="py-2.5 px-3">Status</th>
@@ -1051,31 +1051,31 @@ export default function WaterOverview() {
                 <th className="py-2.5 px-3 text-right">Bulanan (M³)</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/50 text-[11px]">
+            <tbody className={`divide-y ${isDark ? "divide-slate-800/50" : "divide-slate-200/50"} text-[11px]`}>
               {tableRows.map((row, i) => (
-                <tr key={i} className="hover:bg-slate-800/30 transition">
-                  <td className="py-2.5 px-3 font-semibold text-slate-300">{row.jalur}</td>
-                  <td className="py-2.5 px-3 text-slate-500">{row.sumber}</td>
+                <tr key={i} className={`hover:${isDark ? "bg-slate-800/30" : "bg-slate-50"} transition`}>
+                  <td className={`py-2.5 px-3 font-semibold ${isDark ? "text-slate-300" : "text-slate-700"}`}>{row.jalur}</td>
+                  <td className={`py-2.5 px-3 ${isDark ? "text-slate-500" : "text-slate-400"}`}>{row.sumber}</td>
                   <td className="py-2.5 px-3">
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/10 text-emerald-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-extrabold ${isDark ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600"}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${isDark ? "bg-emerald-400" : "bg-emerald-500"} animate-pulse`} />
                       ON
                     </span>
                   </td>
-                  <td className="py-2.5 px-3 text-right font-mono text-cyan-400 font-bold">{row.flow.toFixed(1)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono text-indigo-400">{row.pressure.toFixed(1)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono text-slate-300">{row.harian.toFixed(1)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono font-bold text-sky-400">{row.bulanan.toLocaleString()}</td>
+                  <td className={`py-2.5 px-3 text-right font-mono ${isDark ? "text-cyan-400" : "text-cyan-600"} font-bold`}>{row.flow.toFixed(1)}</td>
+                  <td className={`py-2.5 px-3 text-right font-mono ${isDark ? "text-indigo-400" : "text-indigo-600"}`}>{row.pressure.toFixed(1)}</td>
+                  <td className={`py-2.5 px-3 text-right font-mono ${isDark ? "text-slate-300" : "text-slate-600"}`}>{row.harian.toFixed(1)}</td>
+                  <td className={`py-2.5 px-3 text-right font-mono font-bold ${isDark ? "text-sky-400" : "text-sky-600"}`}>{row.bulanan.toLocaleString()}</td>
                 </tr>
               ))}
               {/* TOTAL ROW */}
-              <tr className="bg-slate-900/60 border-t border-slate-700 text-xs font-bold font-mono">
-                <td className="py-3 px-3 uppercase text-white" colSpan={2}>Total</td>
+              <tr className={`${isDark ? "bg-slate-900/60 border-t border-slate-700" : "bg-slate-50 border-t border-slate-200"} text-xs font-bold font-mono`}>
+                <td className={`py-3 px-3 uppercase ${isDark ? "text-white" : "text-slate-800"}`} colSpan={2}>Total</td>
                 <td className="py-3 px-3"></td>
                 <td className="py-3 px-3 text-right"></td>
                 <td className="py-3 px-3 text-right"></td>
-                <td className="py-3 px-3 text-right text-cyan-400 font-extrabold text-sm">{totalHarian.toFixed(1)}</td>
-                <td className="py-3 px-3 text-right text-emerald-400 font-extrabold text-sm">{totalBulanan.toLocaleString()}</td>
+                <td className={`py-3 px-3 text-right ${isDark ? "text-cyan-400" : "text-cyan-600"} font-extrabold text-sm`}>{totalHarian.toFixed(1)}</td>
+                <td className={`py-3 px-3 text-right ${isDark ? "text-emerald-400" : "text-emerald-600"} font-extrabold text-sm`}>{totalBulanan.toLocaleString()}</td>
               </tr>
             </tbody>
           </table>

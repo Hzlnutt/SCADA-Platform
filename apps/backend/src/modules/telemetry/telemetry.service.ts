@@ -100,6 +100,34 @@ export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
     }
   }
 
+  // PostgreSQL Sync for gas telemetry
+  const gasPoints = points.filter(
+    (p) =>
+      p.tagId === "utility/gas" ||
+      p.tagId.includes("/gas_sm3") ||
+      p.tagId.endsWith("/gas_flow")
+  );
+  if (gasPoints.length > 0) {
+    try {
+      const pool = getPostgresPool();
+      for (const p of gasPoints) {
+        const gas_sm3 = Number(p.value);
+        if (!isNaN(gas_sm3)) {
+          const ts = p.ts ? new Date(p.ts) : new Date();
+          const deviceId = p.deviceId || "unknown";
+          await pool.query(
+            `INSERT INTO gas_telemetry (t_stamp, gas_sm3, id_device) VALUES ($1, $2, $3)`,
+            [ts, gas_sm3, deviceId]
+          );
+          console.log(`Successfully synced gas_sm3 (${gas_sm3}) to PostgreSQL`);
+        }
+      }
+    } catch (err: any) {
+      console.error("Failed to sync gas telemetry to PostgreSQL:", err.message);
+    }
+  }
+
+
   // Update running hours for status points
   const statusPoints = points.filter(p => p.tagId && p.tagId.includes("status"));
   for (const p of statusPoints) {

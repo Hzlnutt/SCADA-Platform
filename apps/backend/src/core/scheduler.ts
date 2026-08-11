@@ -842,6 +842,48 @@ export const startWaterPolling = () => {
   waterPollingInterval = setInterval(poll, 5000);
 };
 
+let gasPollingInterval: NodeJS.Timeout | null = null;
+let lastGasTs: Date | null = null;
+
+export const startGasPolling = () => {
+  if (gasPollingInterval) return;
+
+  const poll = async () => {
+    try {
+      const pool = getPostgresPool();
+      const res = await pool.query("SELECT MAX(t_stamp) AS max_ts FROM gas_telemetry;");
+      const maxTs = res.rows[0]?.max_ts;
+
+      if (maxTs) {
+        const currentDateObj = new Date(maxTs);
+        if (lastGasTs === null) {
+          lastGasTs = currentDateObj;
+        } else if (currentDateObj.getTime() !== lastGasTs.getTime()) {
+          lastGasTs = currentDateObj;
+          const io = getSocketServer();
+          if (io) {
+            io.emit("gas:update");
+            logger.info("Detected new gas telemetry in Postgres, broadcasting gas:update");
+          }
+        }
+      } else if (lastGasTs !== null) {
+        lastGasTs = null;
+        const io = getSocketServer();
+        if (io) {
+          io.emit("gas:update");
+          logger.info("Detected gas telemetry cleared in Postgres, broadcasting gas:update");
+        }
+      }
+    } catch (err) {
+      logger.error({ err }, "Gas Postgres polling failed");
+    }
+  };
+
+  // Initial poll
+  poll();
+  // Poll every 5 seconds
+  gasPollingInterval = setInterval(poll, 5000);
+};
 
 export const startScheduler = () => {
   const minuteIntervalMs = env.rollupIntervalMs;
@@ -859,10 +901,12 @@ export const startScheduler = () => {
   startPowerFactorPolling();
   startCoolingTowerPolling();
   startWaterPolling();
+  startGasPolling();
   startIncomingElectricityPolling();
 
   // Initial rollup and cleanup on start
   runElectricityRollupAndCleanup().catch((err) => {
+
     logger.error({ err }, "Initial electricity rollup/cleanup failed");
   });
 

@@ -104,6 +104,7 @@ export const Sidebar = () => {
       penggunaanUtility: true,
       electricity: true,
       water: true,
+      gas: true,
       operasional: true
     };
   });
@@ -331,7 +332,26 @@ export const Sidebar = () => {
             )}
           </div>
 
-          <NavItem to="/gas" label="Gas" icon={<IconDevice />} tone="scada" />
+          {/* Collapsible Gas Item */}
+          <div className="mb-1">
+            <button
+              type="button"
+              onClick={() => toggleSection("gas")}
+              className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white"
+            >
+              <span className="flex items-center gap-1.5">
+                <IconDevice />
+                <span>Gas</span>
+              </span>
+              <IconChevron open={openSections.gas} />
+            </button>
+            {openSections.gas && (
+              <div className="flex flex-col gap-0.5 mt-1 border-l border-[#acd3ff] dark:border-slate-800 ml-2.5 pl-1.5">
+                <NavItem to="/gas" label="Overview" tone="scada" />
+                <NavItem to="/gas/distribusi" label="Distribusi Gas" tone="scada" />
+              </div>
+            )}
+          </div>
           {/* Collapsible Water Item */}
           <div className="mb-1">
             <button

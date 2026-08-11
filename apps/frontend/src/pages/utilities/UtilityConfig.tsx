@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
-import { useConfigStore, type WaterConfig, type ElectricityTariff } from "../../store/config.store";
+import { useConfigStore, type WaterConfig, type ElectricityTariff, type GasConfig, type GasCategory } from "../../store/config.store";
 
 export default function UtilityConfig() {
   const storeWbpRate = useConfigStore((state) => state.wbpRate);
   const storeLwbpRate = useConfigStore((state) => state.lwbpRate);
   const storeWaterConfig = useConfigStore((state) => state.waterConfig);
   const storeElectricityTariffs = useConfigStore((state) => state.electricityTariffs);
+  const storeGasConfig = useConfigStore((state) => state.gasConfig);
+  const storeGasCategories = useConfigStore((state) => state.gasCategories);
   const fetchRates = useConfigStore((state) => state.fetchRates);
   const setRates = useConfigStore((state) => state.setRates);
 
@@ -14,11 +16,19 @@ export default function UtilityConfig() {
   const [lwbpRate, setLwbpRate] = useState(storeLwbpRate);
   const [waterConfig, setWaterConfig] = useState<WaterConfig | null>(null);
   const [electricityTariffs, setElectricityTariffs] = useState<ElectricityTariff[]>(storeElectricityTariffs);
-
+  
+  // Gas configurations state
+  const [gasConfig, setGasConfig] = useState<GasConfig | null>(null);
+  const [gasCategories, setGasCategories] = useState<GasCategory[]>([]);
+  
   // Form states for registering new tariff
   const [newValidFrom, setNewValidFrom] = useState("");
   const [newWbpRate, setNewWbpRate] = useState<number | "">("");
   const [newLwbpRate, setNewLwbpRate] = useState<number | "">("");
+
+  // Form states for new gas category
+  const [newGasCatName, setNewGasCatName] = useState("");
+  const [newGasCatVal, setNewGasCatVal] = useState<number | "">("");
 
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -32,7 +42,9 @@ export default function UtilityConfig() {
     setLwbpRate(storeLwbpRate);
     if (storeWaterConfig) setWaterConfig(storeWaterConfig);
     if (storeElectricityTariffs) setElectricityTariffs(storeElectricityTariffs);
-  }, [storeWbpRate, storeLwbpRate, storeWaterConfig, storeElectricityTariffs]);
+    if (storeGasConfig) setGasConfig(storeGasConfig);
+    if (storeGasCategories) setGasCategories(storeGasCategories);
+  }, [storeWbpRate, storeLwbpRate, storeWaterConfig, storeElectricityTariffs, storeGasConfig, storeGasCategories]);
 
   const handleAddTariff = () => {
     if (!newValidFrom || newWbpRate === "" || newLwbpRate === "") {
@@ -90,7 +102,14 @@ export default function UtilityConfig() {
       const latestWbp = sorted[0]?.wbpRate ?? wbpRate;
       const latestLwbp = sorted[0]?.lwbpRate ?? lwbpRate;
       
-      await setRates(latestWbp, latestLwbp, waterConfig || undefined, electricityTariffs);
+      await setRates(
+        latestWbp,
+        latestLwbp,
+        waterConfig || undefined,
+        electricityTariffs,
+        gasConfig || undefined,
+        gasCategories
+      );
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
@@ -98,6 +117,35 @@ export default function UtilityConfig() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAddGasCategory = () => {
+    if (!newGasCatName || newGasCatVal === "") {
+      alert("Mohon isi semua input kategori gas.");
+      return;
+    }
+    const id = newGasCatName.toLowerCase().replace(/[^a-z0-9]/g, "_");
+    // Prevent duplicate ID
+    if (gasCategories.some(c => c.id === id)) {
+      alert("Kategori dengan nama ini sudah terdaftar.");
+      return;
+    }
+    setGasCategories(prev => [
+      ...prev,
+      { id, name: newGasCatName, val: Number(newGasCatVal), enabled: true }
+    ]);
+    setNewGasCatName("");
+    setNewGasCatVal("");
+  };
+
+  const handleDeleteGasCategory = (id: string) => {
+    if (confirm("Apakah Anda yakin ingin menghapus kategori gas ini?")) {
+      setGasCategories(prev => prev.filter(c => c.id !== id));
+    }
+  };
+
+  const handleToggleGasCategory = (id: string) => {
+    setGasCategories(prev => prev.map(c => c.id === id ? { ...c, enabled: !c.enabled } : c));
   };
 
   const formatMonth = (validFrom: string) => {
@@ -294,6 +342,142 @@ export default function UtilityConfig() {
               </div>
             </div>
           )}
+
+        {/* Gas Card */}
+        {gasConfig && (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
+            <h3 className="text-base font-bold text-slate-800 dark:text-white mb-1">
+              Parameter Tarif & Kategori Gas PGN
+            </h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mb-6">
+              Pengaturan harga gas per Sm³ (Nm³) dan referensi tarif USD/MMBTU untuk estimasi biaya operasional.
+            </p>
+
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">
+                  Harga Gas per Sm³ (Rp/Nm³)
+                </label>
+                <input
+                  type="number"
+                  value={gasConfig.pricePerSm3}
+                  onChange={(e) => setGasConfig(prev => ({ ...prev!, pricePerSm3: Number(e.target.value) }))}
+                  min="0"
+                  required
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">
+                  Referensi USD/MMBTU
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={gasConfig.usdPerMmbtu}
+                  onChange={(e) => setGasConfig(prev => ({ ...prev!, usdPerMmbtu: Number(e.target.value) }))}
+                  min="0"
+                  required
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition"
+                />
+              </div>
+            </div>
+
+            {/* Gas categories list editor */}
+            <div className="space-y-4 border-t border-slate-100 dark:border-slate-800/80 pt-5">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Kategori Biggest Consumption (Gas Fact)
+              </h4>
+
+              {gasCategories.length > 0 ? (
+                <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800">
+                  <table className="w-full border-collapse text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 font-bold border-b border-slate-100 dark:border-slate-800">
+                        <th className="p-3">Nama Kategori</th>
+                        <th className="p-3 text-right">Nilai Konsumsi (Nm³)</th>
+                        <th className="p-3 text-center w-24">Status</th>
+                        <th className="p-3 text-center w-16">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-semibold text-slate-700 dark:text-slate-300">
+                      {gasCategories.map((cat) => (
+                        <tr key={cat.id} className="hover:bg-slate-50/55 dark:hover:bg-slate-800/10">
+                          <td className="p-3">{cat.name}</td>
+                          <td className="p-3 text-right font-mono">{cat.val.toLocaleString("id-ID")} Nm³</td>
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleGasCategory(cat.id)}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                cat.enabled
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400"
+                                  : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-400"
+                              }`}
+                            >
+                              {cat.enabled ? "Enabled" : "Disabled"}
+                            </button>
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteGasCategory(cat.id)}
+                              className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded transition"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 dark:text-slate-500 italic py-2">
+                  Belum ada kategori terdaftar. Silakan tambahkan kategori di bawah.
+                </p>
+              )}
+
+              {/* Add Gas Category form */}
+              <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 p-4 space-y-4">
+                <h5 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Tambah Kategori Gas
+                </h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nama Kategori</label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Factory-1 Boiler"
+                      value={newGasCatName}
+                      onChange={(e) => setNewGasCatName(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Estimasi Konsumsi (Nm³)</label>
+                    <input
+                      type="number"
+                      placeholder="Contoh: 180"
+                      value={newGasCatVal}
+                      onChange={(e) => setNewGasCatVal(e.target.value ? Number(e.target.value) : "")}
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddGasCategory}
+                  className="w-full md:w-auto rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-white font-bold text-xs uppercase tracking-wider px-5 py-2.5 shadow transition-all active:scale-[0.98]"
+                >
+                  Tambah Kategori
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
           <div className="flex items-center gap-3 pt-2">
             <button

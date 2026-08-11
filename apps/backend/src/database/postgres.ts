@@ -88,6 +88,15 @@ export const ensurePostgresTables = async () => {
     await pool.query(`
       UPDATE water_telemetry SET water_kwh = water_m3 * 0.4 WHERE water_kwh IS NULL;
     `).catch(() => {});
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS gas_telemetry (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        gas_sm3 NUMERIC(15,3),
+        id_device VARCHAR(50) NOT NULL
+      );
+    `);
     
     await pool.query(`
       CREATE TABLE IF NOT EXISTS equipment_running_hours (

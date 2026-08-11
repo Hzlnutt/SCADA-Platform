@@ -18,14 +18,35 @@ export type ElectricityTariff = {
   lwbpRate: number;
 };
 
+export type GasConfig = {
+  pricePerSm3: number;
+  usdPerMmbtu: number;
+};
+
+export type GasCategory = {
+  id: string;
+  name: string;
+  val: number;
+  enabled: boolean;
+};
+
 type ConfigState = {
   wbpRate: number;
   lwbpRate: number;
   waterConfig: WaterConfig;
   electricityTariffs: ElectricityTariff[];
+  gasConfig: GasConfig | null;
+  gasCategories: GasCategory[];
   loading: boolean;
   fetchRates: () => Promise<void>;
-  setRates: (wbp: number, lwbp: number, waterConfig?: WaterConfig, electricityTariffs?: ElectricityTariff[]) => Promise<void>;
+  setRates: (
+    wbp: number,
+    lwbp: number,
+    waterConfig?: WaterConfig,
+    electricityTariffs?: ElectricityTariff[],
+    gasConfig?: GasConfig,
+    gasCategories?: GasCategory[]
+  ) => Promise<void>;
 };
 
 export const useConfigStore = create<ConfigState>((set) => ({
@@ -45,16 +66,29 @@ export const useConfigStore = create<ConfigState>((set) => ({
   electricityTariffs: [
     { validFrom: "2024-01", wbpRate: 1600, lwbpRate: 1112 }
   ],
+  gasConfig: null,
+  gasCategories: [],
   loading: false,
   fetchRates: async () => {
     try {
       set({ loading: true });
-      const res = await getJson<{ data: { wbpRate: number; lwbpRate: number; waterConfig?: WaterConfig; electricityTariffs?: ElectricityTariff[] } }>("/config/utility");
+      const res = await getJson<{
+        data: {
+          wbpRate: number;
+          lwbpRate: number;
+          waterConfig?: WaterConfig;
+          electricityTariffs?: ElectricityTariff[];
+          gasConfig?: GasConfig;
+          gasCategories?: GasCategory[];
+        }
+      }>("/config/utility");
       if (res && res.data) {
         set({ 
           wbpRate: res.data.wbpRate, 
           lwbpRate: res.data.lwbpRate,
           ...(res.data.waterConfig ? { waterConfig: res.data.waterConfig } : {}),
+          ...(res.data.gasConfig ? { gasConfig: res.data.gasConfig } : {}),
+          ...(res.data.gasCategories ? { gasCategories: res.data.gasCategories } : {}),
           electricityTariffs: res.data.electricityTariffs || [
             { validFrom: "2024-01", wbpRate: res.data.wbpRate, lwbpRate: res.data.lwbpRate }
           ]
@@ -66,7 +100,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
       set({ loading: false });
     }
   },
-  setRates: async (wbp, lwbp, waterConfig, electricityTariffs) => {
+  setRates: async (wbp, lwbp, waterConfig, electricityTariffs, gasConfig, gasCategories) => {
     try {
       set({ loading: true });
       const payload: any = {
@@ -79,12 +113,29 @@ export const useConfigStore = create<ConfigState>((set) => ({
       if (electricityTariffs) {
         payload.electricityTariffs = electricityTariffs;
       }
-      const res = await postJson<{ data: { wbpRate: number; lwbpRate: number; waterConfig?: WaterConfig; electricityTariffs?: ElectricityTariff[] } }>("/config/utility", payload);
+      if (gasConfig) {
+        payload.gasConfig = gasConfig;
+      }
+      if (gasCategories) {
+        payload.gasCategories = gasCategories;
+      }
+      const res = await postJson<{
+        data: {
+          wbpRate: number;
+          lwbpRate: number;
+          waterConfig?: WaterConfig;
+          electricityTariffs?: ElectricityTariff[];
+          gasConfig?: GasConfig;
+          gasCategories?: GasCategory[];
+        }
+      }>("/config/utility", payload);
       if (res && res.data) {
         set({ 
           wbpRate: res.data.wbpRate, 
           lwbpRate: res.data.lwbpRate,
           ...(res.data.waterConfig ? { waterConfig: res.data.waterConfig } : {}),
+          ...(res.data.gasConfig ? { gasConfig: res.data.gasConfig } : {}),
+          ...(res.data.gasCategories ? { gasCategories: res.data.gasCategories } : {}),
           electricityTariffs: res.data.electricityTariffs || [
             { validFrom: "2024-01", wbpRate: res.data.wbpRate, lwbpRate: res.data.lwbpRate }
           ]

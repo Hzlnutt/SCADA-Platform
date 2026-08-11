@@ -270,6 +270,18 @@ const waterTierSchema = z.object({
   rate: z.number()
 });
 
+const gasConfigSchema = z.object({
+  pricePerSm3: z.number().nonnegative(),
+  usdPerMmbtu: z.number().nonnegative()
+});
+
+const gasCategorySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  val: z.number(),
+  enabled: z.boolean()
+});
+
 const waterConfigSchema = z.object({
   taxRate: z.number(),
   ar: z.number(),
@@ -286,7 +298,9 @@ const utilityConfigSchema = z.object({
   wbpRate: z.number().nonnegative(),
   lwbpRate: z.number().nonnegative(),
   waterConfig: waterConfigSchema.optional(),
-  electricityTariffs: z.array(electricityTariffSchema).optional()
+  electricityTariffs: z.array(electricityTariffSchema).optional(),
+  gasConfig: gasConfigSchema.optional(),
+  gasCategories: z.array(gasCategorySchema).optional()
 });
 
 export const defaultWaterConfig = {
@@ -305,6 +319,17 @@ export const defaultElectricityTariffs = [
   { validFrom: "2024-01", wbpRate: 1600, lwbpRate: 1112 }
 ];
 
+export const defaultGasConfig = {
+  pricePerSm3: 11000,
+  usdPerMmbtu: 9.5
+};
+
+export const defaultGasCategories = [
+  { id: "boiler", name: "Boiler System", val: 22000, enabled: true },
+  { id: "genset", name: "Genset Caterpillar", val: 1600, enabled: true },
+  { id: "aux", name: "Auxiliary Supply", val: 800, enabled: true }
+];
+
 export const getUtilityConfigHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const db = getMongoDb();
@@ -317,7 +342,9 @@ export const getUtilityConfigHandler = async (req: Request, res: Response, next:
           waterConfig: config.waterConfig || defaultWaterConfig,
           electricityTariffs: config.electricityTariffs || [
             { validFrom: "2024-01", wbpRate: config.wbpRate || 1600, lwbpRate: config.lwbpRate || 1112 }
-          ]
+          ],
+          gasConfig: config.gasConfig || defaultGasConfig,
+          gasCategories: config.gasCategories || defaultGasCategories
         }
       });
     } else {
@@ -326,7 +353,9 @@ export const getUtilityConfigHandler = async (req: Request, res: Response, next:
           wbpRate: 1600,
           lwbpRate: 1112,
           waterConfig: defaultWaterConfig,
-          electricityTariffs: defaultElectricityTariffs
+          electricityTariffs: defaultElectricityTariffs,
+          gasConfig: defaultGasConfig,
+          gasCategories: defaultGasCategories
         }
       });
     }
@@ -347,6 +376,8 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
     const oldElectricityTariffs = beforeDoc?.electricityTariffs || [
       { validFrom: "2024-01", wbpRate: oldWbpRate, lwbpRate: oldLwbpRate }
     ];
+    const oldGasConfig = beforeDoc?.gasConfig || defaultGasConfig;
+    const oldGasCategories = beforeDoc?.gasCategories || defaultGasCategories;
 
     // Determine latest rates for top-level backward compatibility
     let wbpRate = parsed.wbpRate;
@@ -364,6 +395,8 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
       lwbpRate,
       waterConfig: parsed.waterConfig || oldWaterConfig,
       electricityTariffs: tariffs.length > 0 ? tariffs : oldElectricityTariffs,
+      gasConfig: parsed.gasConfig || oldGasConfig,
+      gasCategories: parsed.gasCategories || oldGasCategories,
       updatedAt: new Date()
     };
 
@@ -378,6 +411,7 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
       io.emit("config:update", doc);
     }
 
+
     // Record audit trail
     await recordAudit({
       actorId: req.user?.name || req.user?.id || "anonymous",
@@ -386,8 +420,8 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
       resourceId: "utility",
       ip: getClientIp(req),
       meta: {
-        before: { wbpRate: oldWbpRate, lwbpRate: oldLwbpRate, waterConfig: oldWaterConfig, electricityTariffs: oldElectricityTariffs },
-        after: { wbpRate: doc.wbpRate, lwbpRate: doc.lwbpRate, waterConfig: doc.waterConfig, electricityTariffs: doc.electricityTariffs }
+        before: { wbpRate: oldWbpRate, lwbpRate: oldLwbpRate, waterConfig: oldWaterConfig, electricityTariffs: oldElectricityTariffs, gasConfig: oldGasConfig },
+        after: { wbpRate: doc.wbpRate, lwbpRate: doc.lwbpRate, waterConfig: doc.waterConfig, electricityTariffs: doc.electricityTariffs, gasConfig: doc.gasConfig }
       }
     });
 
@@ -396,6 +430,7 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
     next(err);
   }
 };
+
 
 const defaultPidThresholds = {
   basin_lvl: { warning: 75, alarm: 70 },
