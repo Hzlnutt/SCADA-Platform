@@ -150,12 +150,8 @@ export const getActiveAlarms = async (query: ActiveQuery & { unit?: string }) =>
   }
   
   if (query.unit) {
-    if (query.unit.startsWith("cooling-water") || query.unit.startsWith("cooling-tower")) {
-      sql += ` AND (unit_id LIKE 'cooling-water%' OR unit_id LIKE 'cooling-tower%')`;
-    } else {
-      params.push(query.unit);
-      sql += ` AND unit_id = $${params.length}`;
-    }
+    params.push(query.unit);
+    sql += ` AND unit_id = $${params.length}`;
   }
   
   sql += " ORDER BY t_stamp DESC LIMIT $1";

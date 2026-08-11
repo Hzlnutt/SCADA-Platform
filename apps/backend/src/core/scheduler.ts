@@ -936,7 +936,8 @@ export const evaluateSensorRulesForPoints = async (points: any[]) => {
   try {
     const rulesRes = await pool.query(
       `SELECT unit_id, tag_key, tag_name, low_limit, baseline, high_limit, unit, enable_alert, suppress_alert, direction 
-       FROM sensor_rules`
+       FROM sensor_rules
+       WHERE unit_id LIKE 'cooling-water%'`
     );
     const rules = rulesRes.rows;
 
@@ -953,7 +954,6 @@ export const evaluateSensorRulesForPoints = async (points: any[]) => {
 
       if (isAlertEnabled && hasValidValue) {
         const value = point.value;
-        const warning = rule.baseline ? parseFloat(rule.baseline) : null;
         const alarm = rule.high_limit ? parseFloat(rule.high_limit) : null;
         const direction = (rule.direction || "above").toLowerCase();
 
@@ -962,20 +962,12 @@ export const evaluateSensorRulesForPoints = async (points: any[]) => {
             status = "active";
             severity = "high";
             msg = `[${rule.tag_name}] exceeds Alarm Limit of ${alarm} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
-          } else if (warning !== null && value >= warning) {
-            status = "active";
-            severity = "medium";
-            msg = `[${rule.tag_name}] exceeds Warning Limit of ${warning} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
           }
         } else {
           if (alarm !== null && value <= alarm) {
             status = "active";
             severity = "high";
             msg = `[${rule.tag_name}] is below Alarm Limit of ${alarm} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
-          } else if (warning !== null && value <= warning) {
-            status = "active";
-            severity = "medium";
-            msg = `[${rule.tag_name}] is below Warning Limit of ${warning} ${rule.unit || ""} (Current: ${value.toFixed(1)} ${rule.unit || ""})`;
           }
         }
       }

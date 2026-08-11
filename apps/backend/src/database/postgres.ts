@@ -217,6 +217,15 @@ export const ensurePostgresTables = async () => {
       EXECUTE FUNCTION block_pid_auto_resolve();
     `);
 
+    // Cleanup non-cooling-water alarms and warning-level alarms
+    await pool.query(`
+      DELETE FROM alarms 
+      WHERE unit_id NOT LIKE 'cooling-water%' 
+         OR severity = 'medium';
+    `).catch((err) => {
+      logger.warn({ err }, "Failed to perform startup alarms cleanup");
+    });
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS api_sources (
         id SERIAL PRIMARY KEY,
