@@ -79,12 +79,28 @@ export const getHistorianRangeFromPostgres = async (query: RangeQuery) => {
 
     if (query.from) {
       queryText += ` AND t_stamp >= $${paramIndex}`;
-      params.push(query.from);
+      const yr = query.from.getUTCFullYear();
+      const mo = String(query.from.getUTCMonth() + 1).padStart(2, "0");
+      const dy = String(query.from.getUTCDate()).padStart(2, "0");
+      const hr = String(query.from.getUTCHours()).padStart(2, "0");
+      const min = String(query.from.getUTCMinutes()).padStart(2, "0");
+      const sec = String(query.from.getUTCSeconds()).padStart(2, "0");
+      const fromStr = `${yr}-${mo}-${dy} ${hr}:${min}:${sec}`;
+      
+      params.push(fromStr);
       paramIndex++;
     }
     if (query.to) {
       queryText += ` AND t_stamp <= $${paramIndex}`;
-      params.push(query.to);
+      const yr = query.to.getUTCFullYear();
+      const mo = String(query.to.getUTCMonth() + 1).padStart(2, "0");
+      const dy = String(query.to.getUTCDate()).padStart(2, "0");
+      const hr = String(query.to.getUTCHours()).padStart(2, "0");
+      const min = String(query.to.getUTCMinutes()).padStart(2, "0");
+      const sec = String(query.to.getUTCSeconds()).padStart(2, "0");
+      const toStr = `${yr}-${mo}-${dy} ${hr}:${min}:${sec}`;
+
+      params.push(toStr);
       paramIndex++;
     }
 

@@ -191,7 +191,7 @@ export default function MachineStatistics() {
       from: fromStr,
       to: toStr,
       resolution: "1h",
-      limit: "20000"
+      limit: "15000"
     });
 
     getJson<{ data: any[] }>(`/historian/range?${params.toString()}`)

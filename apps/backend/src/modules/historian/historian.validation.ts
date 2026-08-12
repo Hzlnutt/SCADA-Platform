@@ -19,7 +19,7 @@ export const historianRangeQuerySchema = z.object({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
   resolution: z.enum(["1m", "1h"]).default("1m"),
-  limit: z.coerce.number().int().positive().max(10000).default(1000)
+  limit: z.coerce.number().int().positive().max(50000).default(1000)
 });
 
 export type HistorianPointInput = z.infer<typeof historianPointSchema>;
