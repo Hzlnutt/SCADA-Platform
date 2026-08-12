@@ -414,24 +414,46 @@ export default function MachinePidDiagram() {
   const [dbAlarms, setDbAlarms] = useState<Alarm[]>([]);
 
   const formatAlarmTitle = (code: string, rawMessage: string) => {
-    const codeStr = String(code || "");
-    const msgStr = String(rawMessage || "");
+    const codeStr = String(code || "").toLowerCase();
+    const msgStr = String(rawMessage || "").toLowerCase();
 
-    if (codeStr.includes("eq_press_bp03") || msgStr.includes("BP-3")) return "ALARM TEKANAN - MTR-5 (BP-3)";
-    if (codeStr.includes("eq_press_du03") || msgStr.includes("DU-3")) return "ALARM TEKANAN - MTR-4 (DU-3)";
-    if (codeStr.includes("eq_press_prep03") || msgStr.includes("SP-3")) return "ALARM TEKANAN - MTR-6 (SP-3)";
-    if (codeStr.includes("eq_press_st03") || msgStr.includes("ST-3")) return "ALARM TEKANAN - MTR-7 (ST-3)";
-    if (codeStr.includes("supply_temp")) return "ALARM SUHU SUPPLY WATER";
-    if (codeStr.includes("return_temp")) return "ALARM SUHU RETURN WATER";
-    if (codeStr.includes("cooling_tank_tds")) return "ALARM TDS COOLING TANK";
-    if (codeStr.includes("cooling_tank_ph")) return "ALARM PH COOLING TANK";
-    if (codeStr.includes("basin_lvl")) return "ALARM LEVEL COOLING TANK";
+    // Check by tag key or prefix first
+    if (codeStr.includes("bp03") || codeStr.includes("bp-3")) {
+      if (codeStr.includes("press") || msgStr.includes("tekanan") || msgStr.includes("press")) {
+        return "ALARM TEKANAN - MTR-5 (BP-3)";
+      }
+    }
+    if (codeStr.includes("du03") || codeStr.includes("du-3")) {
+      if (codeStr.includes("press") || msgStr.includes("tekanan") || msgStr.includes("press")) {
+        return "ALARM TEKANAN - MTR-4 (DU-3)";
+      }
+    }
+    if (codeStr.includes("prep03") || codeStr.includes("sp-3") || codeStr.includes("sp3")) {
+      if (codeStr.includes("press") || msgStr.includes("tekanan") || msgStr.includes("press")) {
+        return "ALARM TEKANAN - MTR-6 (SP-3)";
+      }
+    }
+    if (codeStr.includes("st03") || codeStr.includes("st-3") || codeStr.includes("st3")) {
+      if (codeStr.includes("press") || msgStr.includes("tekanan") || msgStr.includes("press")) {
+        return "ALARM TEKANAN - MTR-7 (ST-3)";
+      }
+      if (codeStr.includes("temp") || msgStr.includes("suhu") || msgStr.includes("temp")) {
+        return "ALARM SUHU - MTR-7 (ST-3)";
+      }
+    }
+
+    if (codeStr.includes("supply_temp") || msgStr.includes("supply temp")) return "ALARM SUHU SUPPLY WATER";
+    if (codeStr.includes("return_temp") || msgStr.includes("return temp")) return "ALARM SUHU RETURN WATER";
+    if (codeStr.includes("cooling_tank_tds") || msgStr.includes("tds")) return "ALARM TDS COOLING TANK";
+    if (codeStr.includes("cooling_tank_ph") || msgStr.includes("ph")) return "ALARM PH COOLING TANK";
+    if (codeStr.includes("basin_lvl") || msgStr.includes("level") || msgStr.includes("basin")) return "ALARM LEVEL COOLING TANK";
     if (codeStr.includes("chemical_357")) return "ALARM CHEMICAL 357";
     if (codeStr.includes("chemical_327")) return "ALARM CHEMICAL 327/317";
-    if (codeStr.includes("high_pressure")) return "ALARM TEKANAN TINGGI";
-    if (codeStr.includes("high_temp")) return "ALARM SUHU TINGGI";
+    
+    if (codeStr.includes("high_pressure") || msgStr.includes("tekanan tinggi")) return "ALARM TEKANAN TINGGI";
+    if (codeStr.includes("high_temp") || msgStr.includes("suhu tinggi")) return "ALARM SUHU TINGGI";
 
-    return codeStr
+    return String(code || "")
       .replace(/^(pid-threshold:|threshold:)/i, "")
       .replace(/^cooling-water\//i, "")
       .toUpperCase();
