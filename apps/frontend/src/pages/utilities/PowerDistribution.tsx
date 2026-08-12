@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Line, Bar } from "react-chartjs-2";
 import "../../components/charts/chartjs";
@@ -718,6 +718,50 @@ function ParamCell({ label, value, accent, warn }: { label: string; value: strin
   );
 }
 
+/* ═══════════ SLD SCALED CANVAS (RESPONSIVE) ═══════════ */
+const SLD_DESIGN_W = 1200;
+const SLD_DESIGN_H = 570;
+
+function SldScaledCanvas({ children }: { children: React.ReactNode }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const measure = () => {
+      const availableWidth = el.clientWidth;
+      const s = Math.min(availableWidth / SLD_DESIGN_W, 1);
+      setScale(s);
+    };
+
+    measure();
+
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div ref={containerRef} className="w-full overflow-hidden" style={{ padding: "0 16px 16px 16px" }}>
+      <div
+        style={{
+          width: SLD_DESIGN_W,
+          height: SLD_DESIGN_H,
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+          position: "relative",
+        }}
+      >
+        {children}
+      </div>
+      {/* Spacer to reserve the correct scaled height so content below doesn't overlap */}
+      <div style={{ height: Math.max(0, SLD_DESIGN_H * scale - SLD_DESIGN_H), marginTop: -(SLD_DESIGN_H - SLD_DESIGN_H * scale) }} />
+    </div>
+  );
+}
+
 /* ═══════════ SLD TRANSFORMER MINI CARD ═══════════ */
 function SldMiniCard({ tx, onClick, loadConfig }: { tx: TransformerData; onClick: () => void; loadConfig: { safeMax: number; cautionMax: number } }) {
   const loadPct = Math.round((tx.activePowerKw / tx.capacityKva) * 100);
@@ -1131,7 +1175,7 @@ export default function PowerDistribution() {
         </div>
 
         {/* SLD Canvas */}
-        <div className="p-6 overflow-x-auto relative" style={{ minWidth: 1200, height: 570 }}>
+        <SldScaledCanvas>
           
           {/* 1. SVG PIPELINE AND POWER LINES OVERLAY */}
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
@@ -1298,7 +1342,7 @@ export default function PowerDistribution() {
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500" /> Offline</span>
             <span className="text-[8px] text-slate-500 italic ml-2">Klik panel untuk detail</span>
           </div>
-        </div>
+        </SldScaledCanvas>
       </section>
 
       {/* ═══════════ SECTION B: DETAIL TRANSFORMATOR CARDS ═══════════ */}
