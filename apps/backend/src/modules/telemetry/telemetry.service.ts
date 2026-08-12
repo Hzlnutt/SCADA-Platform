@@ -138,6 +138,7 @@ export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
       p.tagId === "cooling-water/supply_temp" || 
       p.tagId === "cooling-water/st3_return_temp"
     );
+    console.log(`[PostgresTelemetrySync] now - lastPostgresTelemetrySyncTime: ${now - lastPostgresTelemetrySyncTime}, coolingPoints: ${coolingPoints.length}`);
     if (coolingPoints.length > 0) {
       try {
         const pool = getPostgresPool();
@@ -152,10 +153,13 @@ export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
         const supply_temp = suppPt ? Number(suppPt.value) : null;
         const st3_return_temp = st3Pt ? Number(st3Pt.value) : null;
 
+        console.log(`[PostgresTelemetrySync] parsed temps: return=${return_temp}, supply=${supply_temp}, st3=${st3_return_temp}`);
+
         if ((return_temp !== null && !isNaN(return_temp)) || 
             (supply_temp !== null && !isNaN(supply_temp)) || 
             (st3_return_temp !== null && !isNaN(st3_return_temp))) {
-          await pool.query(`
+          console.log(`[PostgresTelemetrySync] Executing insert to PostgreSQL...`);
+          const res = await pool.query(`
             INSERT INTO cooling_tower_telemetry (t_stamp, id_device, return_temp, supply_temp, st3_return_temp)
             VALUES ($1, $2, $3, $4, $5)
           `, [
@@ -166,10 +170,12 @@ export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
             st3_return_temp !== null && !isNaN(st3_return_temp) ? st3_return_temp : null
           ]);
           lastPostgresTelemetrySyncTime = now;
-          console.log(`Successfully synced throttled cooling tower temperatures to PostgreSQL`);
+          console.log(`[PostgresTelemetrySync] Insert query executed successfully. rowCount: ${res.rowCount}`);
+        } else {
+          console.log(`[PostgresTelemetrySync] All temperature values are null or NaN. Skipping insert.`);
         }
       } catch (err: any) {
-        console.error("Failed to sync cooling tower telemetry to PostgreSQL:", err.message);
+        console.error("[PostgresTelemetrySync] Failed to sync cooling tower telemetry to PostgreSQL:", err.message);
       }
     }
   }

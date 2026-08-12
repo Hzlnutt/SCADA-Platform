@@ -102,18 +102,8 @@ function VibrationOscilloscope({ equipmentName }: { equipmentName: string }) {
       ctx.lineWidth = 2;
       ctx.beginPath();
 
-      // We make the waveform vary slightly based on equipmentName hash
-      const charCodeSum = equipmentName.split("").reduce((sum, c) => sum + c.charCodeAt(0), 0);
-      const eqFreq = 0.03 + (charCodeSum % 5) * 0.005;
-      const eqAmp1 = 20 + (charCodeSum % 7) * 3;
-      const eqAmp2 = 8 + (charCodeSum % 3) * 2;
-
       for (let x = 0; x < w; x++) {
-        // Compose multiple sine waves for realistic raw vibration signals
-        const angle1 = (x + offset) * eqFreq;
-        const angle2 = (x + offset) * eqFreq * 2.3;
-        const noise = (Math.sin((x + offset) * 0.5) + Math.cos((x + offset) * 0.9)) * 1.5;
-        const y = centerY + Math.sin(angle1) * eqAmp1 + Math.cos(angle2) * eqAmp2 + noise;
+        const y = centerY;
 
         if (x === 0) {
           ctx.moveTo(x, y);
@@ -123,8 +113,6 @@ function VibrationOscilloscope({ equipmentName }: { equipmentName: string }) {
       }
       ctx.stroke();
 
-      // Increment scrolling speed
-      offset += 2;
       animationId = requestAnimationFrame(draw);
     };
 
@@ -468,26 +456,15 @@ export default function MachineStatistics() {
   };
 
   const handleExportVibration = () => {
-    const charCodeSum = selectedEq.split("").reduce((sum, c) => sum + c.charCodeAt(0), 0);
-    const eqFreq = 0.03 + (charCodeSum % 5) * 0.005;
-    const eqAmp1 = 20 + (charCodeSum % 7) * 3;
-    const eqAmp2 = 8 + (charCodeSum % 3) * 2;
-
     const rows = Array.from({ length: 100 }, (_, i) => {
-      const angle1 = i * eqFreq;
-      const angle2 = i * eqFreq * 2.3;
-      const noise = (Math.sin(i * 0.5) + Math.cos(i * 0.9)) * 1.5;
-      const velocity = Math.sin(angle1) * eqAmp1 + Math.cos(angle2) * eqAmp2 + noise;
-      const acceleration = (Math.cos(angle1) * eqAmp1 * 0.15 + Math.sin(angle2) * eqAmp2 * 0.3 + noise * 0.2);
-
       const time = new Date();
       time.setMilliseconds(time.getMilliseconds() - (100 - i) * 10);
 
       return {
         "Sample No": i + 1,
         "Timestamp": time.toISOString(),
-        "Vibration Velocity (mm/s)": Number(Math.abs(velocity).toFixed(2)),
-        "Vibration Acceleration (G)": Number(Math.abs(acceleration).toFixed(2))
+        "Vibration Velocity (mm/s)": 0,
+        "Vibration Acceleration (G)": 0
       };
     });
 
