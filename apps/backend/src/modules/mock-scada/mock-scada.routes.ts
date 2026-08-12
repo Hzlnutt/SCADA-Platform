@@ -92,25 +92,19 @@ const generatePmData = (pmId: number) => {
 };
 
 mockScadaRouter.get("/system/webdev/Utility_Dashboard/electric_ew21", (_req, res) => {
-  const result: Record<string, any> = {};
-  ew21PowerMeters.forEach((pmId) => {
-    Object.assign(result, generatePmData(pmId));
-  });
+  const sorted = [...ew21PowerMeters].sort((a, b) => a - b);
+  const result = sorted.map((pmId) => generatePmData(pmId));
   res.json(result);
 });
 
 mockScadaRouter.get("/system/webdev/Utility_Dashboard/electric_ew22", (_req, res) => {
-  const result: Record<string, any> = {};
-  ew22PowerMeters.forEach((pmId) => {
-    Object.assign(result, generatePmData(pmId));
-  });
+  const sorted = [...ew22PowerMeters].sort((a, b) => a - b);
+  const result = sorted.map((pmId) => generatePmData(pmId));
   res.json(result);
 });
 
 mockScadaRouter.get("/system/webdev/Utility_Dashboard/electric_ew23", (_req, res) => {
-  const result: Record<string, any> = {};
-  ew23PowerMeters.forEach((pmId) => {
-    Object.assign(result, generatePmData(pmId));
-  });
+  const sorted = [...ew23PowerMeters].sort((a, b) => a - b);
+  const result = sorted.map((pmId) => generatePmData(pmId));
   res.json(result);
 });
