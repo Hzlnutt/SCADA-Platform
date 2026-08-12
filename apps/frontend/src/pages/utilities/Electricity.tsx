@@ -1645,12 +1645,12 @@ export default function Electricity() {
       </div>
 
       {/* ═══════════ ROW 2: UTILITY DEPARTMENT ANALYSIS ═══════════ */}
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-        {/* Utility Details - Horizontal Bar Chart */}
-        <div className="flex flex-col">
-          <div className="flex items-center justify-between">
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+        {/* Utility Consumption - Horizontal Bar Chart Card */}
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col">
+          <div className="flex items-center justify-between gap-3 mb-4">
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Utility Department</h3>
+              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Utility Consumption</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Utility electricity consumption sorted by highest consumer.</p>
             </div>
             <select
@@ -1663,8 +1663,8 @@ export default function Electricity() {
             </select>
           </div>
 
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[220px] mt-3">
-            <div style={{ height: 220 }}>
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
+            <div style={{ height: 250 }}>
               {utilityData.items.length > 0 ? (
                 <Bar data={makeDeptHorizontalBarData(utilityData.items, "Utility")} options={horizontalBarOptions} />
               ) : (
@@ -1672,11 +1672,15 @@ export default function Electricity() {
               )}
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Utility Distribution Donut */}
-        <div className="flex flex-col md:flex-row items-center justify-around gap-6 border-l border-slate-100 dark:border-slate-800/60 pl-0 lg:pl-6">
-          <div className="flex justify-center py-2 flex-shrink-0">
+        {/* Utility Distribution Share Card */}
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Utility Distribution Share</h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Distribution breakdown of utility systems.</p>
+          </div>
+          <div className="my-4 flex justify-center flex-shrink-0">
             <DonutChart 
               segments={utilityDonutSegments.length > 0 ? utilityDonutSegments : [{ label: "No Data", value: 100, color: "#cbd5e1" }]} 
               size={140} 
@@ -1685,11 +1689,10 @@ export default function Electricity() {
               centerLabelSize="text-[10px]"
             />
           </div>
-          <div className="flex-1 w-full space-y-2">
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Distribution Breakdowns</h4>
+          <div className="space-y-1.5 flex-1 overflow-y-auto max-h-[140px] scrollbar-hide">
             {utilityDonutSegments.length > 0 ? (
               utilityDonutSegments.map((item) => (
-                <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                     <span className="font-semibold text-slate-600 dark:text-slate-300">{item.label}</span>
@@ -1701,16 +1704,16 @@ export default function Electricity() {
               <div className="text-xs text-slate-400 py-4 text-center">No active utility data matching filter.</div>
             )}
           </div>
-        </div>
+        </section>
       </div>
 
       {/* ═══════════ ROW 3: HVAC DEPARTMENT ANALYSIS ═══════════ */}
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-        {/* HVAC Details - Horizontal Bar Chart */}
-        <div className="flex flex-col">
-          <div className="flex items-center justify-between">
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+        {/* HVAC Consumption - Horizontal Bar Chart Card */}
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col">
+          <div className="flex items-center justify-between gap-3 mb-4">
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#06b6d4] dark:text-cyan-400">HVAC Department</h3>
+              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#06b6d4] dark:text-cyan-400">HVAC Consumption</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">HVAC electricity consumption sorted by highest consumer.</p>
             </div>
             <select
@@ -1723,8 +1726,8 @@ export default function Electricity() {
             </select>
           </div>
 
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[220px] mt-3">
-            <div style={{ height: 220 }}>
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
+            <div style={{ height: 250 }}>
               {hvacData.items.length > 0 ? (
                 <Bar data={makeDeptHorizontalBarData(hvacData.items, "HVAC")} options={horizontalBarOptions} />
               ) : (
@@ -1732,11 +1735,15 @@ export default function Electricity() {
               )}
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* HVAC Distribution Donut */}
-        <div className="flex flex-col md:flex-row items-center justify-around gap-6 border-l border-slate-100 dark:border-slate-800/60 pl-0 lg:pl-6">
-          <div className="flex justify-center py-2 flex-shrink-0">
+        {/* HVAC Distribution Share Card */}
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#06b6d4] dark:text-cyan-400">HVAC Distribution Share</h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Distribution breakdown of HVAC systems.</p>
+          </div>
+          <div className="my-4 flex justify-center flex-shrink-0">
             <DonutChart 
               segments={hvacDonutSegments.length > 0 ? hvacDonutSegments : [{ label: "No Data", value: 100, color: "#cbd5e1" }]} 
               size={140} 
@@ -1745,11 +1752,10 @@ export default function Electricity() {
               centerLabelSize="text-[10px]"
             />
           </div>
-          <div className="flex-1 w-full space-y-2">
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Distribution Breakdowns</h4>
+          <div className="space-y-1.5 flex-1 overflow-y-auto max-h-[140px] scrollbar-hide">
             {hvacDonutSegments.length > 0 ? (
               hvacDonutSegments.map((item) => (
-                <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                     <span className="font-semibold text-slate-600 dark:text-slate-300">{item.label}</span>
@@ -1761,7 +1767,7 @@ export default function Electricity() {
               <div className="text-xs text-slate-400 py-4 text-center">No active HVAC data matching filter.</div>
             )}
           </div>
-        </div>
+        </section>
       </div>
 
 

@@ -355,47 +355,80 @@ export default function MachineStatistics() {
   const aggregatedTrendPoints = useMemo(() => {
     if (rawPoints.length === 0) return [];
 
-    const groups: Record<string, { sum: number; count: number; sortTs: number; label: string }> = {};
+    // Parse the selected startDate to anchor the year and month
+    const anchorDate = startDate ? new Date(startDate) : new Date();
+    const anchorYr = anchorDate.getFullYear();
+    const anchorMo = anchorDate.getMonth();
 
-    rawPoints.forEach((pt) => {
-      const date = new Date(pt.ts);
-      const yr = date.getFullYear();
-      const mo = String(date.getMonth() + 1).padStart(2, "0");
-      const dy = String(date.getDate()).padStart(2, "0");
-      const hr = String(date.getHours()).padStart(2, "0");
+    if (resolution === "Hourly") {
+      // Fixed 24 Hours: 00:00 to 23:00
+      const result = [];
+      for (let h = 0; h < 24; h++) {
+        const label = `${String(h).padStart(2, "0")}:00`;
+        const matched = rawPoints.filter((pt) => {
+          const date = new Date(pt.ts);
+          return date.getHours() === h;
+        });
 
-      let key = "";
-      let label = "";
-      let sortTs = 0;
+        if (matched.length > 0) {
+          const sum = matched.reduce((s, pt) => s + pt.value, 0);
+          result.push({
+            label,
+            value: Number((sum / matched.length).toFixed(2))
+          });
+        } else {
+          result.push({ label, value: null });
+        }
+      }
+      return result;
+    }
 
-      if (resolution === "Hourly") {
-        key = `${yr}-${mo}-${dy} ${hr}:00`;
-        label = `${dy}/${mo} ${hr}:00`;
-        sortTs = new Date(yr, date.getMonth(), date.getDate(), date.getHours()).getTime();
-      } else if (resolution === "Daily") {
-        key = `${yr}-${mo}-${dy}`;
-        label = `${dy}/${mo}/${yr}`;
-        sortTs = new Date(yr, date.getMonth(), date.getDate()).getTime();
+    if (resolution === "Daily") {
+      // Fixed Days: 1 to end of month for the anchor date
+      const numDays = new Date(anchorYr, anchorMo + 1, 0).getDate();
+      const result = [];
+      for (let d = 1; d <= numDays; d++) {
+        const label = `${String(d).padStart(2, "0")}/${String(anchorMo + 1).padStart(2, "0")}`;
+        const matched = rawPoints.filter((pt) => {
+          const date = new Date(pt.ts);
+          return date.getDate() === d && date.getMonth() === anchorMo && date.getFullYear() === anchorYr;
+        });
+
+        if (matched.length > 0) {
+          const sum = matched.reduce((s, pt) => s + pt.value, 0);
+          result.push({
+            label,
+            value: Number((sum / matched.length).toFixed(2))
+          });
+        } else {
+          result.push({ label, value: null });
+        }
+      }
+      return result;
+    }
+
+    // Monthly: Jan to Des
+    const monthLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
+    const result = [];
+    for (let m = 0; m < 12; m++) {
+      const label = monthLabels[m];
+      const matched = rawPoints.filter((pt) => {
+        const date = new Date(pt.ts);
+        return date.getMonth() === m && date.getFullYear() === anchorYr;
+      });
+
+      if (matched.length > 0) {
+        const sum = matched.reduce((s, pt) => s + pt.value, 0);
+        result.push({
+          label,
+          value: Number((sum / matched.length).toFixed(2))
+        });
       } else {
-        key = `${yr}-${mo}`;
-        label = `${mo}/${yr}`;
-        sortTs = new Date(yr, date.getMonth(), 1).getTime();
+        result.push({ label, value: null });
       }
-
-      if (!groups[key]) {
-        groups[key] = { sum: 0, count: 0, sortTs, label };
-      }
-      groups[key].sum += pt.value;
-      groups[key].count += 1;
-    });
-
-    return Object.values(groups)
-      .sort((a, b) => a.sortTs - b.sortTs)
-      .map((g) => ({
-        label: g.label,
-        value: Number((g.sum / g.count).toFixed(2))
-      }));
-  }, [rawPoints, resolution]);
+    }
+    return result;
+  }, [rawPoints, resolution, startDate]);
 
   // 3. Left/Right parameter selector data (using brand blue #1f6fb5)
   const parameterTrendData = useMemo(() => {
