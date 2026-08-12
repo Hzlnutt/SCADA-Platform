@@ -152,22 +152,63 @@ export default function MachineStatistics() {
     setActiveParam(unitId === "cooling-water-1" ? "ST3 Return Temp" : "Supply Water Temp");
   }, [unitId]);
 
-  // Resolution selector state
-  const [resolution, setResolution] = useState<"Hourly" | "Daily" | "Monthly">("Hourly");
+  // ═══ Trend Range preset state (mirrors Electricity.tsx filter system) ═══
+  type TrendRangeId = "ytd" | "hour" | "day" | "month" | "custom";
+  const trendRanges: { id: TrendRangeId; label: string; resolution: "Hourly" | "Daily" | "Monthly" }[] = [
+    { id: "ytd",    label: "YTD",       resolution: "Monthly" },
+    { id: "hour",   label: "Per Jam",   resolution: "Hourly" },
+    { id: "day",    label: "Per Hari",  resolution: "Daily" },
+    { id: "month",  label: "Per Bulan", resolution: "Daily" },
+    { id: "custom", label: "Kustom",    resolution: "Hourly" }
+  ];
+
+  const getLocalTodayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+
+  const [trendRange, setTrendRange] = useState<TrendRangeId>("hour");
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
+  const [customStart, setCustomStart] = useState(getLocalTodayStr);
+  const [customEnd, setCustomEnd] = useState(getLocalTodayStr);
+
+  // Derived resolution from trendRange
+  const resolution = trendRanges.find(r => r.id === trendRange)?.resolution ?? "Hourly";
+
+  // Derived startDate and endDate for API query
+  const startDate = useMemo(() => {
+    if (trendRange === "custom") return customStart;
+    if (trendRange === "hour") return getLocalTodayStr();
+    if (trendRange === "day") {
+      const d = new Date(selectedYear, selectedMonth, 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+    }
+    if (trendRange === "month" || trendRange === "ytd") {
+      return `${selectedYear}-01-01`;
+    }
+    return getLocalTodayStr();
+  }, [trendRange, customStart, selectedYear, selectedMonth]);
+
+  const endDate = useMemo(() => {
+    if (trendRange === "custom") return customEnd;
+    if (trendRange === "hour") return getLocalTodayStr();
+    if (trendRange === "day") {
+      const d = new Date(selectedYear, selectedMonth + 1, 0);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
+    if (trendRange === "month" || trendRange === "ytd") {
+      return `${selectedYear}-12-31`;
+    }
+    return getLocalTodayStr();
+  }, [trendRange, customEnd, selectedYear, selectedMonth]);
+
+  const MONTH_NAMES_ID = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+  const AVAILABLE_YEARS = [2025, 2026, 2027];
 
   // Database-fetched Parameter Data states
   const [rawPoints, setRawPoints] = useState<{ ts: string; value: number }[]>([]);
   const [dbLoading, setDbLoading] = useState(false);
-
-  // Custom date range states (default 7 days ago to today)
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return d.toISOString().split("T")[0];
-  });
-  const [endDate, setEndDate] = useState(() => {
-    return new Date().toISOString().split("T")[0];
-  });
 
   const paramTagIdMap: Record<string, string> = {
     "ST3 Return Temp": "cooling-water/st3_return_temp",
@@ -544,43 +585,68 @@ export default function MachineStatistics() {
               Historical Parameters Detail
             </h3>
             <div className="flex flex-wrap items-center gap-2">
-              {/* Custom Date Range Picker */}
-              <div className="flex items-center gap-1.5 rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-2.5 py-1 text-xs font-bold text-[#47729f] dark:text-slate-400">
-                <span>Range:</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="bg-transparent text-[#002b5c] dark:text-slate-300 border-none outline-none focus:ring-0 text-xs w-28 p-0"
-                />
-                <span className="text-slate-400 font-bold">-</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="bg-transparent text-[#002b5c] dark:text-slate-300 border-none outline-none focus:ring-0 text-xs w-28 p-0"
-                />
-              </div>
+              {/* Year selector for YTD / Per Bulan / Per Hari */}
+              {(trendRange === "ytd" || trendRange === "month" || trendRange === "day") && (
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  className="rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-[#47729f] dark:text-slate-300 focus:outline-none cursor-pointer transition"
+                >
+                  {AVAILABLE_YEARS.map((yr) => <option key={yr} value={yr}>{yr}</option>)}
+                </select>
+              )}
 
+              {/* Month selector for Per Hari */}
+              {trendRange === "day" && (
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                  className="rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-[#47729f] dark:text-slate-300 focus:outline-none cursor-pointer transition"
+                >
+                  {MONTH_NAMES_ID.map((name, idx) => <option key={idx} value={idx}>{name}</option>)}
+                </select>
+              )}
+
+              {/* Custom date pickers */}
+              {trendRange === "custom" && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={customStart}
+                    onChange={(e) => setCustomStart(e.target.value)}
+                    className="rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-[#47729f] dark:text-slate-300 focus:outline-none cursor-pointer transition"
+                  />
+                  <span className="text-xs font-bold text-slate-400">s/d</span>
+                  <input
+                    type="date"
+                    value={customEnd}
+                    onChange={(e) => setCustomEnd(e.target.value)}
+                    className="rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-[#47729f] dark:text-slate-300 focus:outline-none cursor-pointer transition"
+                  />
+                </div>
+              )}
+
+              {/* Preset range buttons */}
               <div className="flex items-center gap-0.5 rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-0.5 text-xs">
-                {(["Hourly", "Daily", "Monthly"] as const).map((r) => (
+                {trendRanges.map((r) => (
                   <button
-                    key={r}
+                    key={r.id}
                     type="button"
-                    onClick={() => setResolution(r)}
+                    onClick={() => setTrendRange(r.id)}
                     className={`rounded-md px-2.5 py-1 font-bold transition ${
-                      resolution === r
+                      trendRange === r.id
                         ? "bg-[#1f6fb5] text-white"
                         : "text-[#47729f] dark:text-slate-400 hover:text-[#002b5c] dark:hover:text-slate-300"
                     }`}
                   >
-                    {r}
+                    {r.label}
                   </button>
                 ))}
               </div>
+
               {dbLoading && (
                 <span className="text-xs text-[#1f6fb5] font-bold animate-pulse mr-2">
-                  Loading DB Data...
+                  Loading...
                 </span>
               )}
               <button
