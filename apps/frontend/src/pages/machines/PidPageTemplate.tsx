@@ -91,9 +91,9 @@ export default function PidPageTemplate({
       : tasks.filter((t) => t.status === "close");
 
   return (
-    <div className="flex flex-col gap-4 w-full">
+    <div className="relative flex gap-4">
       {/* Canvas Area */}
-      <section className="w-full flex flex-col rounded-lg border border-slate-800 dark:border-slate-600 bg-slate-950/70 dark:bg-slate-950/90 p-3 sm:p-5">
+      <section className="flex-1 flex flex-col rounded-lg border border-slate-800 dark:border-slate-600 bg-slate-950/70 dark:bg-slate-950/90 p-3 sm:p-5 mr-[400px]">
         {/* Top Bar */}
         <div className="mb-4 flex items-center justify-between">
           <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
@@ -112,11 +112,12 @@ export default function PidPageTemplate({
         </div>
       </section>
 
-      {/* Bottom Sidebar Cards (Task & Alarm) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full h-[400px]">
+      {/* Right Sidebar (fixed) */}
+      <div className="absolute top-0 right-0 w-96 h-full flex flex-col gap-4">
         {/* Task Card */}
         <div
-          className="flex flex-col rounded-lg border border-slate-800 dark:border-slate-600 bg-slate-950/70 dark:bg-slate-950/90 p-4 overflow-hidden h-full"
+          className="flex flex-col rounded-lg border border-slate-800 dark:border-slate-600 bg-slate-950/70 dark:bg-slate-950/90 p-4 overflow-hidden"
+          style={{ flex: "3 1 0", minHeight: 0 }}
         >
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 font-semibold">
@@ -210,7 +211,8 @@ export default function PidPageTemplate({
 
         {/* Alarm Card */}
         <div
-          className="flex flex-col rounded-lg border border-slate-800 dark:border-slate-600 bg-slate-950/70 dark:bg-slate-950/90 p-4 overflow-hidden h-full"
+          className="flex flex-col rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 overflow-hidden"
+          style={{ flex: "2 1 0", minHeight: 0 }}
         >
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs uppercase tracking-[0.2em] text-slate-700 dark:text-slate-300 font-semibold">
