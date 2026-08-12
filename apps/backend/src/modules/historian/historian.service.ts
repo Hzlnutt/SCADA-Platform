@@ -116,7 +116,10 @@ export const getHistorianRange = async (query: RangeQuery) => {
     "cooling/flow",
     "cooling/tds",
     "cooling/ph",
-    "cooling/humidity"
+    "cooling/humidity",
+    "cooling-water/return_temp",
+    "cooling-water/supply_temp",
+    "cooling-water/st3_return_temp"
   ];
 
   if (pgTags.includes(query.tagId)) {
