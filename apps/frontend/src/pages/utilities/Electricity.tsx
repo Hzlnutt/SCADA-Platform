@@ -610,6 +610,137 @@ export default function Electricity() {
       .catch(() => {});
   }, []);
 
+  // Filters for Utility and HVAC Departments ("All", "Fact 1", "Fact 2")
+  const [utilityFilter, setUtilityFilter] = useState<"All" | "Fact 1" | "Fact 2">("All");
+  const [hvacFilter, setHvacFilter] = useState<"All" | "Fact 1" | "Fact 2">("All");
+
+  // Helper to classify category name into department and sub-area
+  const classifyArea = useCallback((label: string): { department: "Utility" | "HVAC" | "Other"; subArea: string } => {
+    const lbl = label.toLowerCase();
+    
+    // HVAC matchers
+    if (lbl.includes("chiller")) return { department: "HVAC", subArea: "Chillers" };
+    if (lbl.includes("ahu")) return { department: "HVAC", subArea: "AHUs" };
+    if (lbl.includes("ac ") || lbl.endsWith(" ac") || lbl.includes("split") || lbl.includes("fcu")) {
+      return { department: "HVAC", subArea: "AC Split / FCU" };
+    }
+    if (lbl.includes("hvac") || lbl.includes("cleanroom") || lbl.includes("stability") || lbl.includes("heater")) {
+      return { department: "HVAC", subArea: "Cleanroom HVAC" };
+    }
+    
+    // Utility matchers
+    if (lbl.includes("boiler")) return { department: "Utility", subArea: "Boiler" };
+    if (lbl.includes("compressor") || lbl.includes("dryer")) return { department: "Utility", subArea: "Compressors" };
+    if (lbl.includes("cooling tower") || lbl.includes("fan-") || lbl.includes("ct-")) return { department: "Utility", subArea: "Cooling Towers" };
+    if (lbl.includes("wtp") || lbl.includes("wwtp") || lbl.includes("pump") || lbl.includes("water")) {
+      return { department: "Utility", subArea: "Water / WTP" };
+    }
+    
+    // Default to Other
+    if (lbl.includes("production") || lbl.includes("machinery") || lbl.includes("line")) {
+      return { department: "Other", subArea: "Production Lines" };
+    }
+    return { department: "Other", subArea: "Others" };
+  }, []);
+
+  // Memoized lists of parsed categories by department and source Fact
+  const utilityData = useMemo(() => {
+    const items1 = factCategories1.filter(c => c.enabled).map(c => ({ ...c, fact: "Fact 1" as const }));
+    const items2 = factCategories2.filter(c => c.enabled).map(c => ({ ...c, fact: "Fact 2" as const }));
+    const combined = [...items1, ...items2];
+
+    const filtered = combined.filter(c => {
+      if (utilityFilter === "Fact 1") return c.fact === "Fact 1";
+      if (utilityFilter === "Fact 2") return c.fact === "Fact 2";
+      return true;
+    });
+
+    const categorized = filtered.map(c => ({
+      ...c,
+      info: classifyArea(c.label)
+    })).filter(c => c.info.department === "Utility");
+
+    const subAreaSums: Record<string, number> = {};
+    categorized.forEach(c => {
+      subAreaSums[c.info.subArea] = (subAreaSums[c.info.subArea] || 0) + (c.value?.kWh ?? 0);
+    });
+
+    const totalKwh = categorized.reduce((sum, c) => sum + (c.value?.kWh ?? 0), 0);
+    const activeCount = categorized.length;
+
+    return {
+      totalKwh,
+      activeCount,
+      subAreaSums
+    };
+  }, [factCategories1, factCategories2, utilityFilter, classifyArea]);
+
+  const hvacData = useMemo(() => {
+    const items1 = factCategories1.filter(c => c.enabled).map(c => ({ ...c, fact: "Fact 1" as const }));
+    const items2 = factCategories2.filter(c => c.enabled).map(c => ({ ...c, fact: "Fact 2" as const }));
+    const combined = [...items1, ...items2];
+
+    const filtered = combined.filter(c => {
+      if (hvacFilter === "Fact 1") return c.fact === "Fact 1";
+      if (hvacFilter === "Fact 2") return c.fact === "Fact 2";
+      return true;
+    });
+
+    const categorized = filtered.map(c => ({
+      ...c,
+      info: classifyArea(c.label)
+    })).filter(c => c.info.department === "HVAC");
+
+    const subAreaSums: Record<string, number> = {};
+    categorized.forEach(c => {
+      subAreaSums[c.info.subArea] = (subAreaSums[c.info.subArea] || 0) + (c.value?.kWh ?? 0);
+    });
+
+    const totalKwh = categorized.reduce((sum, c) => sum + (c.value?.kWh ?? 0), 0);
+    const activeCount = categorized.length;
+
+    return {
+      totalKwh,
+      activeCount,
+      subAreaSums
+    };
+  }, [factCategories1, factCategories2, hvacFilter, classifyArea]);
+
+  // Compute grand total of all enabled categories to get percentage shares
+  const allFactTotal = useMemo(() => {
+    const t1 = factCategories1.filter(c => c.enabled).reduce((sum, c) => sum + (c.value?.kWh ?? 0), 0);
+    const t2 = factCategories2.filter(c => c.enabled).reduce((sum, c) => sum + (c.value?.kWh ?? 0), 0);
+    return t1 + t2;
+  }, [factCategories1, factCategories2]);
+
+  const utilityDonutSegments = useMemo(() => {
+    const total = utilityData.totalKwh;
+    if (total === 0) return [];
+    
+    const colors = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#64748b"];
+    return Object.entries(utilityData.subAreaSums)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, val], idx) => ({
+        label,
+        value: Math.round((val / total) * 100),
+        color: colors[idx % colors.length]
+      }));
+  }, [utilityData]);
+
+  const hvacDonutSegments = useMemo(() => {
+    const total = hvacData.totalKwh;
+    if (total === 0) return [];
+    
+    const colors = ["#06b6d4", "#ec4899", "#84cc16", "#eab308", "#64748b"];
+    return Object.entries(hvacData.subAreaSums)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, val], idx) => ({
+        label,
+        value: Math.round((val / total) * 100),
+        color: colors[idx % colors.length]
+      }));
+  }, [hvacData]);
+
   const hasSummaryData = !!summaryData;
   const hasChartData = !!chartData;
 
@@ -837,13 +968,15 @@ export default function Electricity() {
 
   /* ═══ HORIZONTAL BAR FOR CONSUMPTION FACT ═══ */
   const makeHorizontalBarData = (categories: ConsumptionFactCategory[]) => {
-    const enabled = categories.filter(c => c.enabled);
+    const sortedEnabled = [...categories]
+      .filter(c => c.enabled)
+      .sort((a, b) => (b.value?.kWh ?? 0) - (a.value?.kWh ?? 0));
     return {
-      labels: enabled.map(c => c.label),
+      labels: sortedEnabled.map(c => c.label),
       datasets: [{
         label: "kWh",
-        data: enabled.map(c => c.value?.kWh ?? 0),
-        backgroundColor: "rgba(59,130,246,.8)",
+        data: sortedEnabled.map(c => c.value?.kWh ?? 0),
+        backgroundColor: "rgba(31, 111, 181, 0.8)",
         borderWidth: 0,
         borderRadius: 4,
         barPercentage: 0.55
@@ -1463,114 +1596,202 @@ export default function Electricity() {
         />
       </div>
 
-      {/* ═══════════ SECTION G: ELECTRICITY CONSUMPTION FACT ═══════════ */}
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        {/* Combined Bar Chart */}
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      {/* ═══════════ ROW 1: BIGGEST CONSUMPTION ═══════════ */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Biggest Consumption - Fact 1 */}
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col">
+          <div className="flex items-center justify-between gap-3 mb-4">
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-400">Electricity Consumption Facts (Fact-1 & Fact-2)</h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Timeline load distribution comparison per active categories.</p>
+              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 1</h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Fact-1 categories sorted by highest consumption.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => { setEditingFactSide(1); setShowFactEditor(true); }} 
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700"
-              >
-                ⚙️ Fact Categories
-              </button>
-            </div>
+            <button 
+              onClick={() => { setEditingFactSide(1); setShowFactEditor(true); }} 
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700"
+            >
+              ⚙️ Fact Categories
+            </button>
           </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
-            <div style={{ height: 260 }}>
-              <Bar data={factTimelineData} options={factBarOptions} />
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
+            <div style={{ height: 250 }}>
+              <Bar data={makeHorizontalBarData(factCategories1)} options={horizontalBarOptions} />
             </div>
           </div>
         </section>
 
-        {/* Donut Chart Breakdown */}
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
-          <div>
-            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-400">Fact Distribution Share</h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Comparison between Fact-1 and Fact-2 share.</p>
+        {/* Biggest Consumption - Fact 2 */}
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 2</h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Fact-2 categories sorted by highest consumption.</p>
+            </div>
+            <button 
+              onClick={() => { setEditingFactSide(2); setShowFactEditor(true); }} 
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700"
+            >
+              ⚙️ Fact Categories
+            </button>
           </div>
-          <div className="my-4 flex justify-center">
-            <DonutChart 
-              segments={factDonutSegments} 
-              size={140} 
-              thickness={16} 
-              centerLabel={`${(fact1Total + fact2Total).toLocaleString("id-ID")} kWh`} 
-              centerLabelSize="text-[10px]"
-            />
-          </div>
-          <div className="space-y-1.5">
-            {factDonutSegments.map((item) => (
-              <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="font-semibold text-slate-600 dark:text-slate-300">{item.label}</span>
-                </div>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">{item.value}%</span>
-              </div>
-            ))}
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
+            <div style={{ height: 250 }}>
+              <Bar data={makeHorizontalBarData(factCategories2)} options={horizontalBarOptions} />
+            </div>
           </div>
         </section>
       </div>
 
-      {/* Trend Panel Distribusi (Utility & HVAC) */}
-      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
-        <div>
-          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-[#47729f] dark:text-slate-400">
-            📊 Trend Panel Distribusi — Utility vs HVAC
-          </h3>
-          <p className="text-[10px] text-slate-400 mt-0.5">Real-time electricity load distribution comparison (24 Hour Trend)</p>
+      {/* ═══════════ ROW 2: UTILITY DEPARTMENT ANALYSIS ═══════════ */}
+      <div className="grid gap-6 lg:grid-cols-[1fr_1.5fr] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        {/* Utility Details */}
+        <div className="flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Utility Department</h3>
+              <select
+                value={utilityFilter}
+                onChange={(e) => setUtilityFilter(e.target.value as any)}
+                className="px-2.5 py-1 text-xs rounded border border-slate-300 bg-slate-50 text-slate-800 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 font-bold focus:outline-none"
+              >
+                <option value="All">All Facts</option>
+                <option value="Fact 1">Fact 1 Only</option>
+                <option value="Fact 2">Fact 2 Only</option>
+              </select>
+            </div>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Electricity consumption metrics for utility and auxiliary systems.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 my-2">
+            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-3 border border-slate-100 dark:border-slate-800/85">
+              <span className="text-[10px] uppercase font-bold text-slate-400">Total Consumption</span>
+              <div className="text-lg font-extrabold text-[#1f6fb5] dark:text-sky-400 mt-0.5">
+                {utilityData.totalKwh.toLocaleString("id-ID")} <span className="text-xs font-normal">kWh</span>
+              </div>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-3 border border-slate-100 dark:border-slate-800/85">
+              <span className="text-[10px] uppercase font-bold text-slate-400">Active Load Areas</span>
+              <div className="text-lg font-extrabold text-slate-800 dark:text-slate-100 mt-0.5">
+                {utilityData.activeCount} <span className="text-xs font-normal">systems</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-3 border border-[#1f6fb5]/20 dark:border-sky-500/25 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400">Percentage Share</span>
+              <div className="text-xs font-bold text-slate-500 dark:text-slate-300 mt-0.5">Utility vs Overall Consumption</div>
+            </div>
+            <div className="text-2xl font-black text-[#1f6fb5] dark:text-sky-400">
+              {allFactTotal > 0 ? Math.round((utilityData.totalKwh / allFactTotal) * 100) : 0}%
+            </div>
+          </div>
         </div>
-        <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80" style={{ height: 260 }}>
-          <Line
-            data={{
-              labels: Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`),
-              datasets: [
-                {
-                  label: "Utility Department (kW) — Boiler, Compressors, Cooling Towers",
-                  data: [350, 420, 290, 310, 410, 480, 520, 610, 680, 710, 640, 680, 720, 750, 730, 700, 680, 610, 580, 520, 480, 450, 410, 380],
-                  borderColor: "#3b82f6",
-                  backgroundColor: "rgba(59, 130, 246, 0.05)",
-                  borderWidth: 2,
-                  pointRadius: 0,
-                  fill: true,
-                  tension: 0.3
-                },
-                {
-                  label: "HVAC Department (kW) — Chillers & AHUs",
-                  data: [410, 490, 320, 340, 450, 550, 620, 780, 850, 920, 880, 910, 950, 990, 970, 930, 890, 790, 740, 650, 590, 540, 490, 440],
-                  borderColor: "#06b6d4",
-                  backgroundColor: "rgba(6, 182, 212, 0.05)",
-                  borderWidth: 2,
-                  pointRadius: 0,
-                  fill: true,
-                  tension: 0.3
-                }
-              ]
-            }}
-            options={{
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: {
-                legend: {
-                  labels: { color: isDark ? "#94a3b8" : "#475569", font: { size: 9, weight: "bold" } }
-                }
-              },
-              scales: {
-                x: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 8 } } },
-                y: {
-                  grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
-                  ticks: { color: "#64748b", font: { size: 8 } }
-                }
-              }
-            }}
-          />
+
+        {/* Utility Distribution Donut */}
+        <div className="flex flex-col md:flex-row items-center justify-around gap-6 border-l border-slate-100 dark:border-slate-800/60 pl-0 lg:pl-6">
+          <div className="flex justify-center py-2">
+            <DonutChart 
+              segments={utilityDonutSegments.length > 0 ? utilityDonutSegments : [{ label: "No Data", value: 100, color: "#cbd5e1" }]} 
+              size={150} 
+              thickness={18} 
+              centerLabel={utilityData.totalKwh > 0 ? `${utilityData.totalKwh.toLocaleString("id-ID")} kWh` : "0 kWh"} 
+              centerLabelSize="text-[10px]"
+            />
+          </div>
+          <div className="flex-1 w-full space-y-2">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Distribution Breakdowns</h4>
+            {utilityDonutSegments.length > 0 ? (
+              utilityDonutSegments.map((item) => (
+                <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">{item.label}</span>
+                  </div>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white">{item.value}%</span>
+                </div>
+              ))
+            ) : (
+              <div className="text-xs text-slate-400 py-4 text-center">No active utility data matching filter.</div>
+            )}
+          </div>
         </div>
-      </section>
+      </div>
+
+      {/* ═══════════ ROW 3: HVAC DEPARTMENT ANALYSIS ═══════════ */}
+      <div className="grid gap-6 lg:grid-cols-[1fr_1.5fr] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        {/* HVAC Details */}
+        <div className="flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#06b6d4] dark:text-cyan-400">HVAC Department</h3>
+              <select
+                value={hvacFilter}
+                onChange={(e) => setHvacFilter(e.target.value as any)}
+                className="px-2.5 py-1 text-xs rounded border border-slate-300 bg-slate-50 text-slate-800 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 font-bold focus:outline-none"
+              >
+                <option value="All">All Facts</option>
+                <option value="Fact 1">Fact 1 Only</option>
+                <option value="Fact 2">Fact 2 Only</option>
+              </select>
+            </div>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Electricity consumption metrics for chillers, AHUs, and stability rooms.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 my-2">
+            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-3 border border-slate-100 dark:border-slate-800/85">
+              <span className="text-[10px] uppercase font-bold text-slate-400">Total Consumption</span>
+              <div className="text-lg font-extrabold text-[#06b6d4] dark:text-cyan-400 mt-0.5">
+                {hvacData.totalKwh.toLocaleString("id-ID")} <span className="text-xs font-normal">kWh</span>
+              </div>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-3 border border-slate-100 dark:border-slate-800/85">
+              <span className="text-[10px] uppercase font-bold text-slate-400">Active Load Areas</span>
+              <div className="text-lg font-extrabold text-slate-800 dark:text-slate-100 mt-0.5">
+                {hvacData.activeCount} <span className="text-xs font-normal">systems</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-3 border border-[#06b6d4]/20 dark:border-cyan-500/25 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400">Percentage Share</span>
+              <div className="text-xs font-bold text-slate-500 dark:text-slate-300 mt-0.5">HVAC vs Overall Consumption</div>
+            </div>
+            <div className="text-2xl font-black text-[#06b6d4] dark:text-cyan-400">
+              {allFactTotal > 0 ? Math.round((hvacData.totalKwh / allFactTotal) * 100) : 0}%
+            </div>
+          </div>
+        </div>
+
+        {/* HVAC Distribution Donut */}
+        <div className="flex flex-col md:flex-row items-center justify-around gap-6 border-l border-slate-100 dark:border-slate-800/60 pl-0 lg:pl-6">
+          <div className="flex justify-center py-2">
+            <DonutChart 
+              segments={hvacDonutSegments.length > 0 ? hvacDonutSegments : [{ label: "No Data", value: 100, color: "#cbd5e1" }]} 
+              size={150} 
+              thickness={18} 
+              centerLabel={hvacData.totalKwh > 0 ? `${hvacData.totalKwh.toLocaleString("id-ID")} kWh` : "0 kWh"} 
+              centerLabelSize="text-[10px]"
+            />
+          </div>
+          <div className="flex-1 w-full space-y-2">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Distribution Breakdowns</h4>
+            {hvacDonutSegments.length > 0 ? (
+              hvacDonutSegments.map((item) => (
+                <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">{item.label}</span>
+                  </div>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white">{item.value}%</span>
+                </div>
+              ))
+            ) : (
+              <div className="text-xs text-slate-400 py-4 text-center">No active HVAC data matching filter.</div>
+            )}
+          </div>
+        </div>
+      </div>
 
 
       {/* ═══════════ SECTION H: EQUIPMENT MONTHLY CHARTS ═══════════ */}
