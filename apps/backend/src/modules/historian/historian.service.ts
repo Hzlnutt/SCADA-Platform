@@ -45,13 +45,18 @@ export const ingestHistorian = async (points: HistorianPointInput[]) => {
 
 export const getHistorianRangeFromPostgres = async (query: RangeQuery) => {
   const tagMappings: Record<string, { table: string; column: string }> = {
-    // Cooling Tower WF1-U3
+    // Cooling Tower WF1-U3 (Legacy)
     "cooling/return_temp": { table: "cooling_tower_telemetry", column: "return_temp" },
     "chiller/daikin_wf1u3_temp": { table: "cooling_tower_telemetry", column: "supply_temp" },
     "cooling/flow": { table: "cooling_tower_telemetry", column: "flow" },
     "cooling/tds": { table: "cooling_tower_telemetry", column: "tds" },
     "cooling/ph": { table: "cooling_tower_telemetry", column: "ph" },
     "cooling/humidity": { table: "cooling_tower_telemetry", column: "humidity" },
+
+    // Cooling Tower WF1-U3 (Current Configuration Keys)
+    "cooling-water/return_temp": { table: "cooling_tower_telemetry", column: "return_temp" },
+    "cooling-water/supply_temp": { table: "cooling_tower_telemetry", column: "supply_temp" },
+    "cooling-water/st3_return_temp": { table: "cooling_tower_telemetry", column: "st3_return_temp" },
 
     // Dashboard Utama
     "utility/electricity": { table: "electricity_telemetry", column: "electricity_kwh" },

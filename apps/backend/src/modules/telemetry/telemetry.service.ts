@@ -24,6 +24,8 @@ export type TelemetryDoc = {
   };
 };
 
+let lastPostgresTelemetrySyncTime = 0;
+
 export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
   const db = getMongoDb();
   const collection = db.collection(TELEMETRY_COLLECTION);
@@ -124,6 +126,51 @@ export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
       }
     } catch (err: any) {
       console.error("Failed to sync gas telemetry to PostgreSQL:", err.message);
+    }
+  }
+
+
+  // PostgreSQL Sync for cooling tower telemetry (throttled to 1 minute)
+  const now = Date.now();
+  if (now - lastPostgresTelemetrySyncTime >= 60000) {
+    const coolingPoints = points.filter(p => 
+      p.tagId === "cooling-water/return_temp" || 
+      p.tagId === "cooling-water/supply_temp" || 
+      p.tagId === "cooling-water/st3_return_temp"
+    );
+    if (coolingPoints.length > 0) {
+      try {
+        const pool = getPostgresPool();
+        const ts = coolingPoints[0].ts ? new Date(coolingPoints[0].ts) : new Date();
+        const deviceId = coolingPoints[0].deviceId || "cooling-water-1";
+
+        const retPt = coolingPoints.find(p => p.tagId === "cooling-water/return_temp");
+        const suppPt = coolingPoints.find(p => p.tagId === "cooling-water/supply_temp");
+        const st3Pt = coolingPoints.find(p => p.tagId === "cooling-water/st3_return_temp");
+
+        const return_temp = retPt ? Number(retPt.value) : null;
+        const supply_temp = suppPt ? Number(suppPt.value) : null;
+        const st3_return_temp = st3Pt ? Number(st3Pt.value) : null;
+
+        if ((return_temp !== null && !isNaN(return_temp)) || 
+            (supply_temp !== null && !isNaN(supply_temp)) || 
+            (st3_return_temp !== null && !isNaN(st3_return_temp))) {
+          await pool.query(`
+            INSERT INTO cooling_tower_telemetry (t_stamp, id_device, return_temp, supply_temp, st3_return_temp)
+            VALUES ($1, $2, $3, $4, $5)
+          `, [
+            ts, 
+            deviceId, 
+            return_temp !== null && !isNaN(return_temp) ? return_temp : null,
+            supply_temp !== null && !isNaN(supply_temp) ? supply_temp : null,
+            st3_return_temp !== null && !isNaN(st3_return_temp) ? st3_return_temp : null
+          ]);
+          lastPostgresTelemetrySyncTime = now;
+          console.log(`Successfully synced throttled cooling tower temperatures to PostgreSQL`);
+        }
+      } catch (err: any) {
+        console.error("Failed to sync cooling tower telemetry to PostgreSQL:", err.message);
+      }
     }
   }
 

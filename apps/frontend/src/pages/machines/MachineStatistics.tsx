@@ -167,106 +167,74 @@ export default function MachineStatistics() {
   // Resolution selector state
   const [resolution, setResolution] = useState<"Hourly" | "Daily" | "Monthly">("Hourly");
 
-  // Database-fetched Return Temperature Data state
-  const [dbData, setDbData] = useState<{
-    hourly: number[];
-    daily: number[];
-    monthly: number[];
-  } | null>(null);
+  // Database-fetched Parameter Data states
+  const [rawPoints, setRawPoints] = useState<{ ts: string; value: number }[]>([]);
   const [dbLoading, setDbLoading] = useState(false);
 
+  // Custom date range states (default 7 days ago to today)
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split("T")[0];
+  });
+  const [endDate, setEndDate] = useState(() => {
+    return new Date().toISOString().split("T")[0];
+  });
+
+  const paramTagIdMap: Record<string, string> = {
+    "ST3 Return Temp": "cooling-water/st3_return_temp",
+    "Supply Water Temp": "cooling-water/supply_temp",
+    "Return Water Temp": "cooling-water/return_temp"
+  };
+
   useEffect(() => {
-    if (unitId !== "cooling-water-1" || activeParam !== "ST3 Return Temp") {
+    const tagId = paramTagIdMap[activeParam];
+    if (!tagId) {
+      setRawPoints([]);
       return;
     }
 
     setDbLoading(true);
-    // Fetch data for 2025 range
-    const from = "2025-01-01T00:00:00.000Z";
-    const to = "2025-12-31T23:59:59.000Z";
+    const fromStr = `${startDate}T00:00:00.000Z`;
+    const toStr = `${endDate}T23:59:59.999Z`;
+
     const params = new URLSearchParams({
-      tagId: "cooling/return_temp",
-      from,
-      to,
+      tagId,
+      from: fromStr,
+      to: toStr,
       resolution: "1h",
-      limit: "10000"
+      limit: "20000"
     });
 
     getJson<{ data: any[] }>(`/historian/range?${params.toString()}`)
       .then((res) => {
         const points = res.data || [];
-        if (points.length === 0) {
-          setDbData(null);
-          return;
-        }
-
-        // Process hourly profile: 24 points (Hour 0 to Hour 23 averages)
-        const hourGroups = Array.from({ length: 24 }, () => [] as number[]);
-        points.forEach((pt) => {
-          const d = new Date(pt.ts);
-          const hr = d.getUTCHours(); // using UTC since database dates are stored in UTC
-          const val = typeof pt.value === "number" ? pt.value : Number(pt.value);
-          if (!isNaN(val)) {
-            hourGroups[hr].push(val);
-          }
-        });
-        const hourly = hourGroups.map((arr) =>
-          arr.length > 0 ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(3)) : 0
-        );
-
-        // Process daily profile: 30 points (Day of month 1 to 30 averages)
-        const dayGroups = Array.from({ length: 30 }, () => [] as number[]);
-        points.forEach((pt) => {
-          const d = new Date(pt.ts);
-          const dy = d.getUTCDate(); // 1-31
-          const val = typeof pt.value === "number" ? pt.value : Number(pt.value);
-          if (!isNaN(val) && dy <= 30) {
-            dayGroups[dy - 1].push(val);
-          }
-        });
-        const daily = dayGroups.map((arr) =>
-          arr.length > 0 ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(3)) : 0
-        );
-
-        // Process monthly profile: 12 points (Jan to Dec averages)
-        const monthGroups = Array.from({ length: 12 }, () => [] as number[]);
-        points.forEach((pt) => {
-          const d = new Date(pt.ts);
-          const mo = d.getUTCMonth(); // 0-11
-          const val = typeof pt.value === "number" ? pt.value : Number(pt.value);
-          if (!isNaN(val)) {
-            monthGroups[mo].push(val);
-          }
-        });
-        const monthly = monthGroups.map((arr) =>
-          arr.length > 0 ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(3)) : 0
-        );
-
-        setDbData({ hourly, daily, monthly });
+        const mapped = points
+          .map((pt: any) => ({
+            ts: pt.ts,
+            value: typeof pt.value === "number" ? pt.value : Number(pt.value)
+          }))
+          .filter((pt: any) => !isNaN(pt.value));
+        setRawPoints(mapped);
       })
       .catch((err) => {
-        console.error("Error fetching cooling ST3 Return Temp data:", err);
+        console.error(`Error fetching historical range for ${activeParam}:`, err);
+        setRawPoints([]);
       })
       .finally(() => {
         setDbLoading(false);
       });
-  }, [unitId, activeParam]);
+  }, [activeParam, startDate, endDate]);
 
-  // 1. Grafik CT Effectiveness (30 days mock data)
+  // 1. Grafik CT Effectiveness (Empty dummy data as requested)
   const ctEffectivenessData = useMemo(() => {
-    const days = Array.from({ length: 30 }, (_, i) => `Day ${i + 1}`);
-    
-    // Day-to-day base variables with tiny standard variations
-    const jam00Values = days.map((_, i) => 70 + Math.sin(i / 2) * 5 + Math.cos(i / 5) * 2 + Math.random() * 2);
-    const jam12Values = days.map((_, i) => 75 + Math.sin(i / 3) * 4 + Math.cos(i / 4) * 3 + Math.random() * 2);
-
     return {
-      labels: days,
+      labels: [],
       datasets: [
         {
           label: "Jam00",
-          data: jam00Values,
-          borderColor: "#f97316", // Orange
+          data: [],
+          borderColor: "#f97316",
           backgroundColor: "#f9731644",
           borderWidth: 2,
           tension: 0.35,
@@ -276,8 +244,8 @@ export default function MachineStatistics() {
         },
         {
           label: "Jam12",
-          data: jam12Values,
-          borderColor: "#94a3b8", // Grey
+          data: [],
+          borderColor: "#94a3b8",
           backgroundColor: "#94a3b844",
           borderWidth: 2,
           tension: 0.35,
@@ -314,26 +282,22 @@ export default function MachineStatistics() {
     }
   };
 
-  // 2. Daily Volume Makeup & Blowdown (30 days mock data)
+  // 2. Daily Volume Makeup & Blowdown (Empty dummy data as requested)
   const dailyVolumeData = useMemo(() => {
-    const days = Array.from({ length: 30 }, (_, i) => `Day ${i + 1}`);
-    const makeupValues = days.map((_, i) => 35 + Math.sin(i / 4) * 5 + Math.random() * 3);
-    const blowdownValues = days.map((_, i) => 15 + Math.sin(i / 4) * 2 + Math.random() * 1.5);
-
     return {
-      labels: days,
+      labels: [],
       datasets: [
         {
           label: "Daily Makeup Volume (m³)",
-          data: makeupValues,
-          backgroundColor: "rgba(56, 189, 248, 0.8)", // Light Blue
+          data: [],
+          backgroundColor: "rgba(56, 189, 248, 0.8)",
           borderWidth: 0,
           borderRadius: 2
         },
         {
           label: "Daily Blowdown Volume (m³)",
-          data: blowdownValues,
-          backgroundColor: "rgba(249, 115, 22, 0.8)", // Orange
+          data: [],
+          backgroundColor: "rgba(249, 115, 22, 0.8)",
           borderWidth: 0,
           borderRadius: 2
         }
@@ -400,43 +364,55 @@ export default function MachineStatistics() {
     "Makeup Water pH": "pH"
   };
 
-  // 3. Left/Right parameter selector data
-  const parameterTrendData = useMemo(() => {
-    let labels: string[] = [];
-    if (resolution === "Hourly") {
-      labels = Array.from({ length: 24 }, (_, i) => `${i}:00`);
-    } else if (resolution === "Daily") {
-      labels = Array.from({ length: 30 }, (_, i) => `Day ${i + 1}`);
-    } else {
-      labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    }
+  const aggregatedTrendPoints = useMemo(() => {
+    if (rawPoints.length === 0) return [];
 
-    // Helper to generate dynamic lines based on selected parameter name
-    const getValuesForParam = (paramName: string) => {
-      const liveST3Return = latest["cooling-water/st3_return_temp"]?.value;
-      const liveSupplyTemp = latest["cooling-water/supply_temp"]?.value;
-      const liveReturnTemp = latest["cooling-water/return_temp"]?.value;
+    const groups: Record<string, { sum: number; count: number; sortTs: number; label: string }> = {};
 
-      let baseVal = 25;
-      if (paramName === "ST3 Return Temp") {
-        baseVal = typeof liveST3Return === "number" ? liveST3Return : 32.2;
-      } else if (paramName === "Supply Water Temp") {
-        baseVal = typeof liveSupplyTemp === "number" ? liveSupplyTemp : 29.1;
-      } else if (paramName === "Return Water Temp") {
-        baseVal = typeof liveReturnTemp === "number" ? liveReturnTemp : 31.4;
+    rawPoints.forEach((pt) => {
+      const date = new Date(pt.ts);
+      const yr = date.getFullYear();
+      const mo = String(date.getMonth() + 1).padStart(2, "0");
+      const dy = String(date.getDate()).padStart(2, "0");
+      const hr = String(date.getHours()).padStart(2, "0");
+
+      let key = "";
+      let label = "";
+      let sortTs = 0;
+
+      if (resolution === "Hourly") {
+        key = `${yr}-${mo}-${dy} ${hr}:00`;
+        label = `${dy}/${mo} ${hr}:00`;
+        sortTs = new Date(yr, date.getMonth(), date.getDate(), date.getHours()).getTime();
+      } else if (resolution === "Daily") {
+        key = `${yr}-${mo}-${dy}`;
+        label = `${dy}/${mo}/${yr}`;
+        sortTs = new Date(yr, date.getMonth(), date.getDate()).getTime();
       } else {
-        const charCodeSum = paramName.split("").reduce((sum, c) => sum + c.charCodeAt(0), 0);
-        baseVal = 10 + (charCodeSum % 100);
+        key = `${yr}-${mo}`;
+        label = `${mo}/${yr}`;
+        sortTs = new Date(yr, date.getMonth(), 1).getTime();
       }
 
-      return labels.map((_, i) => {
-        // Generate a smooth simulated historical profile based on real base value
-        const val = baseVal + Math.sin(i / 3) * (baseVal * 0.02) + Math.random() * (baseVal * 0.005);
-        return Number(val.toFixed(2));
-      });
-    };
+      if (!groups[key]) {
+        groups[key] = { sum: 0, count: 0, sortTs, label };
+      }
+      groups[key].sum += pt.value;
+      groups[key].count += 1;
+    });
 
-    const yValues = getValuesForParam(activeParam);
+    return Object.values(groups)
+      .sort((a, b) => a.sortTs - b.sortTs)
+      .map((g) => ({
+        label: g.label,
+        value: Number((g.sum / g.count).toFixed(2))
+      }));
+  }, [rawPoints, resolution]);
+
+  // 3. Left/Right parameter selector data (using brand blue #1f6fb5)
+  const parameterTrendData = useMemo(() => {
+    const labels = aggregatedTrendPoints.map(pt => pt.label);
+    const dataVals = aggregatedTrendPoints.map(pt => pt.value);
 
     return {
       chartData: {
@@ -444,9 +420,9 @@ export default function MachineStatistics() {
         datasets: [
           {
             label: `${activeParam} (${unitMap[activeParam] ?? ""})`,
-            data: yValues,
-            borderColor: "#10b981", // Emerald Green
-            backgroundColor: "rgba(16, 185, 129, 0.1)",
+            data: dataVals,
+            borderColor: "#1f6fb5", // Brand Blue
+            backgroundColor: "rgba(31, 111, 181, 0.1)",
             borderWidth: 2.5,
             tension: 0.3,
             fill: true,
@@ -457,7 +433,7 @@ export default function MachineStatistics() {
       },
       unit: unitMap[activeParam] ?? ""
     };
-  }, [activeParam, resolution]);
+  }, [activeParam, aggregatedTrendPoints]);
 
   const parameterTrendOptions = {
     responsive: true,
@@ -478,44 +454,12 @@ export default function MachineStatistics() {
   };
 
   const handleExportParameters = () => {
-    let labels: string[] = [];
-    if (resolution === "Hourly") {
-      labels = Array.from({ length: 24 }, (_, i) => `${i}:00`);
-    } else if (resolution === "Daily") {
-      labels = Array.from({ length: 30 }, (_, i) => `Day ${i + 1}`);
-    } else {
-      labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    }
+    if (aggregatedTrendPoints.length === 0) return;
 
-    const getValuesForParam = (paramName: string) => {
-      if (paramName === "ST3 Supply Temp") {
-        if (resolution === "Hourly") return coolingSt3Data.hourly;
-        if (resolution === "Daily") return coolingSt3Data.daily;
-        return coolingSt3Data.monthly;
-      }
-      const charCodeSum = paramName.split("").reduce((sum, c) => sum + c.charCodeAt(0), 0);
-      const baseVal = 10 + (charCodeSum % 100);
-      return labels.map((_, i) => {
-        const val = baseVal + Math.sin(i / 3) * (baseVal * 0.05) + Math.random() * (baseVal * 0.01);
-        return Number(val.toFixed(2));
-      });
-    };
-
-    const paramDataMap: Record<string, number[]> = {};
-    parametersList.forEach((param) => {
-      paramDataMap[param] = getValuesForParam(param);
-    });
-
-    const rows = labels.map((label, index) => {
-      const row: Record<string, any> = {
-        Timestamp: label
-      };
-      parametersList.forEach((param) => {
-        const unit = unitMap[param] ? ` (${unitMap[param]})` : "";
-        row[`${param}${unit}`] = paramDataMap[param][index];
-      });
-      return row;
-    });
+    const rows = aggregatedTrendPoints.map((pt) => ({
+      Timestamp: pt.label,
+      [`${activeParam} (${unitMap[activeParam] ?? ""})`]: pt.value
+    }));
 
     const worksheet = utils.json_to_sheet(rows);
     const workbook = utils.book_new();
@@ -590,6 +534,24 @@ export default function MachineStatistics() {
               Historical Parameters Detail
             </h3>
             <div className="flex flex-wrap items-center gap-2">
+              {/* Custom Date Range Picker */}
+              <div className="flex items-center gap-1.5 rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-2.5 py-1 text-xs font-bold text-[#47729f] dark:text-slate-400">
+                <span>Range:</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="bg-transparent text-[#002b5c] dark:text-slate-300 border-none outline-none focus:ring-0 text-xs w-28 p-0"
+                />
+                <span className="text-slate-400 font-bold">-</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-transparent text-[#002b5c] dark:text-slate-300 border-none outline-none focus:ring-0 text-xs w-28 p-0"
+                />
+              </div>
+
               <div className="flex items-center gap-0.5 rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-0.5 text-xs">
                 {(["Hourly", "Daily", "Monthly"] as const).map((r) => (
                   <button
@@ -607,7 +569,7 @@ export default function MachineStatistics() {
                 ))}
               </div>
               {dbLoading && (
-                <span className="text-xs text-blue-500 font-bold animate-pulse mr-2">
+                <span className="text-xs text-[#1f6fb5] font-bold animate-pulse mr-2">
                   Loading DB Data...
                 </span>
               )}
@@ -618,7 +580,7 @@ export default function MachineStatistics() {
               >
                 📥 Export Excel
               </button>
-              <span className="text-xs text-emerald-500 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full">
+              <span className="text-xs text-[#1f6fb5] font-bold bg-[#1f6fb5]/10 px-2.5 py-0.5 rounded-full">
                 {activeParam}
               </span>
             </div>

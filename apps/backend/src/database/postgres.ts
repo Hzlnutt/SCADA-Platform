@@ -226,6 +226,15 @@ export const ensurePostgresTables = async () => {
       logger.warn({ err }, "Failed to perform startup alarms cleanup");
     });
 
+    // Alter cooling_tower_telemetry to add return_temp, supply_temp, st3_return_temp columns if they don't exist
+    await pool.query(`
+      ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS return_temp NUMERIC;
+      ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS supply_temp NUMERIC;
+      ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS st3_return_temp NUMERIC;
+    `).catch((err) => {
+      logger.warn({ err }, "Failed to add temperature columns to cooling_tower_telemetry");
+    });
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS api_sources (
         id SERIAL PRIMARY KEY,
