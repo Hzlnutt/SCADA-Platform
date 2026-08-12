@@ -726,38 +726,62 @@ function SldScaledCanvas({ children }: { children: React.ReactNode }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
 
-  useEffect(() => {
+  const measure = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    const measure = () => {
-      const availableWidth = el.clientWidth;
-      const s = Math.min(availableWidth / SLD_DESIGN_W, 1);
+    // Subtract total padding (16px left + 16px right = 32px) from clientWidth
+    const padding = 32;
+    const availableWidth = el.clientWidth - padding;
+    if (availableWidth > 0) {
+      const s = availableWidth / SLD_DESIGN_W;
       setScale(s);
-    };
-
-    measure();
-
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
+    }
   }, []);
 
+  useEffect(() => {
+    measure();
+
+    const el = containerRef.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver(() => {
+      measure();
+    });
+    ro.observe(el);
+    
+    window.addEventListener("resize", measure);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [measure]);
+
   return (
-    <div ref={containerRef} className="w-full overflow-hidden" style={{ padding: "0 16px 16px 16px" }}>
+    <div 
+      ref={containerRef} 
+      className="w-full overflow-hidden" 
+      style={{ 
+        padding: "16px", 
+        boxSizing: "border-box",
+        height: SLD_DESIGN_H * scale + 32, // design height scaled + padding
+        position: "relative"
+      }}
+    >
       <div
         style={{
           width: SLD_DESIGN_W,
           height: SLD_DESIGN_H,
           transform: `scale(${scale})`,
           transformOrigin: "top left",
-          position: "relative",
+          position: "absolute",
+          top: 16,
+          left: 16
         }}
       >
         {children}
       </div>
-      {/* Spacer to reserve the correct scaled height so content below doesn't overlap */}
-      <div style={{ height: Math.max(0, SLD_DESIGN_H * scale - SLD_DESIGN_H), marginTop: -(SLD_DESIGN_H - SLD_DESIGN_H * scale) }} />
     </div>
   );
 }
@@ -1156,7 +1180,7 @@ export default function PowerDistribution() {
       </div>
 
       {/* ═══════════ SECTION A: SINGLE LINE DIAGRAM ═══════════ */}
-      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-x-auto">
+      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden w-full">
         {/* SLD Header Bar */}
         <div className="px-6 py-3 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/20">
           <div className="flex items-center gap-2">
