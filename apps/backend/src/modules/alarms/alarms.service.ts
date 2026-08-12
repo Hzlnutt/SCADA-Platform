@@ -105,9 +105,9 @@ export const ingestAlarmEvents = async (events: AlarmEventInput[]) => {
         if (existing.severity !== event.severity || existing.message !== event.message) {
           await pool.query(
             `UPDATE alarms 
-             SET severity = $1, message = $2, t_stamp = $3
-             WHERE id = $4`,
-            [event.severity, event.message, ts, existing.id]
+             SET severity = $1, message = $2
+             WHERE id = $3`,
+            [event.severity, event.message, existing.id]
           );
         }
       }
