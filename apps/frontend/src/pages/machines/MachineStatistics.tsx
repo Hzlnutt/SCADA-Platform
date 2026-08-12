@@ -152,13 +152,12 @@ export default function MachineStatistics() {
     setActiveParam(unitId === "cooling-water-1" ? "ST3 Return Temp" : "Supply Water Temp");
   }, [unitId]);
 
-  // ═══ Trend Range preset state (mirrors Electricity.tsx filter system) ═══
-  type TrendRangeId = "ytd" | "hour" | "day" | "month" | "custom";
+  // ═══ Trend Range preset state ═══
+  type TrendRangeId = "hour" | "day" | "month" | "custom";
   const trendRanges: { id: TrendRangeId; label: string; resolution: "Hourly" | "Daily" | "Monthly" }[] = [
-    { id: "ytd",    label: "YTD",       resolution: "Monthly" },
     { id: "hour",   label: "Per Jam",   resolution: "Hourly" },
     { id: "day",    label: "Per Hari",  resolution: "Daily" },
-    { id: "month",  label: "Per Bulan", resolution: "Daily" },
+    { id: "month",  label: "Per Bulan", resolution: "Monthly" },
     { id: "custom", label: "Kustom",    resolution: "Hourly" }
   ];
 
@@ -168,8 +167,6 @@ export default function MachineStatistics() {
   };
 
   const [trendRange, setTrendRange] = useState<TrendRangeId>("hour");
-  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
   const [customStart, setCustomStart] = useState(getLocalTodayStr);
   const [customEnd, setCustomEnd] = useState(getLocalTodayStr);
 
@@ -181,30 +178,31 @@ export default function MachineStatistics() {
     if (trendRange === "custom") return customStart;
     if (trendRange === "hour") return getLocalTodayStr();
     if (trendRange === "day") {
-      const d = new Date(selectedYear, selectedMonth, 1);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+      // Full current month: 1st to last day
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
     }
-    if (trendRange === "month" || trendRange === "ytd") {
-      return `${selectedYear}-01-01`;
+    if (trendRange === "month") {
+      // Full current year: Jan 1 to Dec 31
+      return `${new Date().getFullYear()}-01-01`;
     }
     return getLocalTodayStr();
-  }, [trendRange, customStart, selectedYear, selectedMonth]);
+  }, [trendRange, customStart]);
 
   const endDate = useMemo(() => {
     if (trendRange === "custom") return customEnd;
     if (trendRange === "hour") return getLocalTodayStr();
     if (trendRange === "day") {
-      const d = new Date(selectedYear, selectedMonth + 1, 0);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      // Last day of current month
+      const now = new Date();
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      return `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, "0")}-${String(lastDay.getDate()).padStart(2, "0")}`;
     }
-    if (trendRange === "month" || trendRange === "ytd") {
-      return `${selectedYear}-12-31`;
+    if (trendRange === "month") {
+      return `${new Date().getFullYear()}-12-31`;
     }
     return getLocalTodayStr();
-  }, [trendRange, customEnd, selectedYear, selectedMonth]);
-
-  const MONTH_NAMES_ID = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-  const AVAILABLE_YEARS = [2025, 2026, 2027];
+  }, [trendRange, customEnd]);
 
   // Database-fetched Parameter Data states
   const [rawPoints, setRawPoints] = useState<{ ts: string; value: number }[]>([]);
@@ -216,7 +214,8 @@ export default function MachineStatistics() {
     "Return Water Temp": "cooling-water/return_temp"
   };
 
-  useEffect(() => {
+  // Fetch function (extracted so it can be called on interval too)
+  const fetchTrendData = useCallback(() => {
     const tagId = paramTagIdMap[activeParam];
     if (!tagId) {
       setRawPoints([]);
@@ -254,6 +253,13 @@ export default function MachineStatistics() {
         setDbLoading(false);
       });
   }, [activeParam, startDate, endDate]);
+
+  // Initial fetch + auto-refresh every 60 seconds
+  useEffect(() => {
+    fetchTrendData();
+    const interval = setInterval(fetchTrendData, 60000);
+    return () => clearInterval(interval);
+  }, [fetchTrendData]);
 
   // 1. Grafik CT Effectiveness (Empty dummy data as requested)
   const ctEffectivenessData = useMemo(() => {
@@ -585,29 +591,7 @@ export default function MachineStatistics() {
               Historical Parameters Detail
             </h3>
             <div className="flex flex-wrap items-center gap-2">
-              {/* Year selector for YTD / Per Bulan / Per Hari */}
-              {(trendRange === "ytd" || trendRange === "month" || trendRange === "day") && (
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(Number(e.target.value))}
-                  className="rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-[#47729f] dark:text-slate-300 focus:outline-none cursor-pointer transition"
-                >
-                  {AVAILABLE_YEARS.map((yr) => <option key={yr} value={yr}>{yr}</option>)}
-                </select>
-              )}
-
-              {/* Month selector for Per Hari */}
-              {trendRange === "day" && (
-                <select
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                  className="rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-[#47729f] dark:text-slate-300 focus:outline-none cursor-pointer transition"
-                >
-                  {MONTH_NAMES_ID.map((name, idx) => <option key={idx} value={idx}>{name}</option>)}
-                </select>
-              )}
-
-              {/* Custom date pickers */}
+              {/* Custom date pickers - only shown in Kustom mode */}
               {trendRange === "custom" && (
                 <div className="flex items-center gap-2">
                   <input
@@ -645,8 +629,8 @@ export default function MachineStatistics() {
               </div>
 
               {dbLoading && (
-                <span className="text-xs text-[#1f6fb5] font-bold animate-pulse mr-2">
-                  Loading...
+                <span className="text-xs text-[#1f6fb5] font-bold animate-pulse">
+                  ⏳
                 </span>
               )}
               <button
