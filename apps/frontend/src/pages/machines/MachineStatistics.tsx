@@ -231,31 +231,14 @@ export default function MachineStatistics() {
     return () => clearInterval(interval);
   }, [fetchTrendData]);
 
-  // 1. Grafik CT Effectiveness (Dynamic 30-day timeline)
+  // 1. Grafik CT Effectiveness (Empty - only loads from DB once configured)
   const ctEffectivenessData = useMemo(() => {
-    const labels = [];
-    const jam00Data = [];
-    const jam12Data = [];
-    const now = new Date();
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      const labelStr = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
-      labels.push(labelStr);
-      
-      const daySeed = d.getDate();
-      const val00 = 65 + (daySeed % 10) + (daySeed % 3) * 1.5;
-      const val12 = 70 + ((daySeed * 3) % 12) + (daySeed % 2) * 1.2;
-      
-      jam00Data.push(Number(val00.toFixed(1)));
-      jam12Data.push(Number(val12.toFixed(1)));
-    }
-
     return {
-      labels,
+      labels: [],
       datasets: [
         {
           label: "Jam00",
-          data: jam00Data,
+          data: [],
           borderColor: "#f97316",
           backgroundColor: "#f9731644",
           borderWidth: 2,
@@ -266,7 +249,7 @@ export default function MachineStatistics() {
         },
         {
           label: "Jam12",
-          data: jam12Data,
+          data: [],
           borderColor: "#94a3b8",
           backgroundColor: "#94a3b844",
           borderWidth: 2,
@@ -304,39 +287,21 @@ export default function MachineStatistics() {
     }
   };
 
-  // 2. Daily Volume Makeup & Blowdown (Dynamic 30-day timeline)
+  // 2. Daily Volume Makeup & Blowdown (Empty - only loads from DB once configured)
   const dailyVolumeData = useMemo(() => {
-    const labels = [];
-    const makeupData = [];
-    const blowdownData = [];
-    const now = new Date();
-    
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      const labelStr = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
-      labels.push(labelStr);
-      
-      const daySeed = d.getDate();
-      const makeup = 30 + (daySeed % 15);
-      const blowdown = 12 + (daySeed % 8);
-      
-      makeupData.push(makeup);
-      blowdownData.push(blowdown);
-    }
-
     return {
-      labels,
+      labels: [],
       datasets: [
         {
           label: "Daily Makeup Volume (m³)",
-          data: makeupData,
+          data: [],
           backgroundColor: "rgba(56, 189, 248, 0.8)",
           borderWidth: 0,
           borderRadius: 2
         },
         {
           label: "Daily Blowdown Volume (m³)",
-          data: blowdownData,
+          data: [],
           backgroundColor: "rgba(249, 115, 22, 0.8)",
           borderWidth: 0,
           borderRadius: 2
