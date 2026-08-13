@@ -447,7 +447,7 @@ export const runCoolingTowerRollupAndCleanup = async () => {
       SELECT 
         date_trunc('hour', t_stamp) as hour_bucket
       FROM cooling_tower_telemetry
-      WHERE t_stamp < date_trunc('hour', NOW())
+      WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
       GROUP BY hour_bucket
       HAVING COUNT(*) > 1
       ORDER BY hour_bucket ASC;
@@ -462,7 +462,16 @@ export const runCoolingTowerRollupAndCleanup = async () => {
 
     for (const b of buckets) {
       const hourStart = b.hour_bucket;
-      const hourStartStr = hourStart instanceof Date ? hourStart.toISOString() : String(hourStart);
+      if (!(hourStart instanceof Date)) {
+        continue;
+      }
+
+      // Convert to naive local WIB timestamp string YYYY-MM-DD HH:00:00
+      const yr = hourStart.getFullYear();
+      const mo = String(hourStart.getMonth() + 1).padStart(2, "0");
+      const dy = String(hourStart.getDate()).padStart(2, "0");
+      const hr = String(hourStart.getHours()).padStart(2, "0");
+      const hourStartStr = `${yr}-${mo}-${dy} ${hr}:00:00`;
 
       const client = await pool.connect();
       try {
