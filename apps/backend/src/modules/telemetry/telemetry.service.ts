@@ -179,13 +179,14 @@ export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
             (st3_return_temp !== null && !isNaN(st3_return_temp))) {
           console.log(`[PostgresTelemetrySync] Executing insert to PostgreSQL with t_stamp: ${wibTimestampStr}...`);
           const res = await pool.query(`
-            INSERT INTO cooling_tower_telemetry (t_stamp, return_temp, supply_temp, st3_return_temp)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO cooling_tower_telemetry (t_stamp, return_temp, supply_temp, st3_return_temp, id_device)
+            VALUES ($1, $2, $3, $4, $5)
           `, [
             wibTimestampStr, 
             return_temp !== null && !isNaN(return_temp) ? return_temp : null,
             supply_temp !== null && !isNaN(supply_temp) ? supply_temp : null,
-            st3_return_temp !== null && !isNaN(st3_return_temp) ? st3_return_temp : null
+            st3_return_temp !== null && !isNaN(st3_return_temp) ? st3_return_temp : null,
+            "cooling-water-1"
           ]);
           lastPostgresTelemetrySyncTime = now;
           console.log(`[PostgresTelemetrySync] Insert query executed successfully. rowCount: ${res.rowCount}`);
