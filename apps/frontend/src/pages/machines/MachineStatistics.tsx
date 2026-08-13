@@ -97,18 +97,13 @@ function VibrationOscilloscope({ equipmentName }: { equipmentName: string }) {
       ctx.fillStyle = "rgba(249, 115, 22, 0.9)";
       ctx.fillText("ACCEL: >10.0 G [DANGER]", 10, dangerY - 6);
 
-      // Draw Waveform Signal (Oscilloscope scrolling sine + noise)
+      // Draw Waveform Signal (Oscilloscope flat baseline - dummy cleared)
       ctx.strokeStyle = isDark ? "#38bdf8" : "#1f6fb5"; // Sky blue in dark mode, normal blue in light
       ctx.lineWidth = 2;
       ctx.beginPath();
 
-      offset += 0.25;
       for (let x = 0; x < w; x++) {
-        const angle = (x / 20) - offset;
-        const mainSine = Math.sin(angle) * 20;
-        const subSine = Math.sin(angle * 3.5) * 8;
-        const noise = Math.sin(x * 15.7 + offset * 7) * 2.5;
-        const y = centerY + mainSine + subSine + noise;
+        const y = centerY;
 
         if (x === 0) {
           ctx.moveTo(x, y);
@@ -560,17 +555,13 @@ export default function MachineStatistics() {
         
         for (let h = 0; h < 24; h++) {
           const timeLabel = `${String(h).padStart(2, "0")}:00`;
-          const hourSeed = h + currentD.getDate();
-          
-          const velocity = 1.5 + (hourSeed % 5) * 0.5 + Math.sin(h) * 0.3;
-          const acceleration = 0.2 + (hourSeed % 4) * 0.3 + Math.cos(h) * 0.1;
           
           rows.push({
             "Date": dateStr,
             "Hour": timeLabel,
             "Equipment": selectedEq,
-            "Vibration Velocity (mm/s)": Number(velocity.toFixed(2)),
-            "Vibration Acceleration (G)": Number(acceleration.toFixed(2))
+            "Vibration Velocity (mm/s)": 0,
+            "Vibration Acceleration (G)": 0
           });
         }
         
