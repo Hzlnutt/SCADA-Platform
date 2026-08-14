@@ -6,7 +6,7 @@ interface DashedLineProps {
   y?: number;
   w?: number;
   h?: number;
-  color?: string; // override manual
+  color?: string;
   strokeWidth?: number;
   dashArray?: string;
 }
@@ -17,11 +17,12 @@ const DashedLine: React.FC<DashedLineProps> = ({
   w = 100,
   h = 0,
   color,
-  strokeWidth = 2,
-  dashArray = "6,4",
+  strokeWidth = 1.5,
+  dashArray = "5,4",
 }) => {
   const isDark = useIsDark();
-  const defaultColor = isDark ? "#38bdf8" : "#0B3B60";
+  // ISA-101 Subdued Leader Line Color
+  const defaultColor = isDark ? "#475569" : "#64748b";
 
   return (
     <line

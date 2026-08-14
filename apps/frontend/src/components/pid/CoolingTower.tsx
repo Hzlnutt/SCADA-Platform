@@ -5,6 +5,8 @@ interface CoolingTowerProps {
   y?: number;
   size?: number;
   on?: boolean;
+  isAlarm?: boolean;
+  isWarning?: boolean;
 }
 
 const CoolingTower: React.FC<CoolingTowerProps> = ({
@@ -12,6 +14,8 @@ const CoolingTower: React.FC<CoolingTowerProps> = ({
   y = 0,
   size = 100,
   on = false,
+  isAlarm = false,
+  isWarning = false,
 }) => {
   const uid = useId();
   const s = (v: number) => (v / 100) * size;
@@ -19,6 +23,15 @@ const CoolingTower: React.FC<CoolingTowerProps> = ({
   // ─── Gradient Definitions ──────────────────────────────────────────────
   const gPipe   = `pipe_${uid}`;
   const gHub    = `hub_${uid}`;
+
+  // ISA-101 Stroke / Border (Monokromatik normal, menyala saat anomali)
+  const strokeColor = isAlarm
+    ? "#ef4444"
+    : isWarning
+    ? "#f59e0b"
+    : on
+    ? "#475569"
+    : "#334155";
 
   return (
     <g transform={`translate(${x}, ${y})`}>
@@ -51,23 +64,22 @@ const CoolingTower: React.FC<CoolingTowerProps> = ({
       {/* ─── MAIN BODY ────────────────────────────────────────────────────── */}
       <rect x={s(20)} y={s(20)} width={s(60)} height={s(60)} fill={`url(#${gPipe})`} rx={s(4)} />
       
-      {/* Outline dengan animasi blink saat ON */}
+      {/* Outline Monokromatik / Anomaly */}
       <rect
         x={s(20)}
         y={s(20)}
         width={s(60)}
         height={s(60)}
         fill="none"
-        stroke="#3a3b3c"
-        strokeWidth={s(2)}
+        stroke={strokeColor}
+        strokeWidth={isAlarm ? s(2.5) : s(2)}
         rx={s(4)}
       >
-        {/* Animasi outline ketika on: berkedip antara hijau gelap dan hijau terang */}
-        {on && (
+        {isAlarm && (
           <animate
-            attributeName="stroke"
-            values="#3a3b3c;#00E676;#3a3b3c"
-            dur="2.5s"
+            attributeName="stroke-opacity"
+            values="1;0.4;1"
+            dur="1s"
             repeatCount="indefinite"
           />
         )}
@@ -79,15 +91,14 @@ const CoolingTower: React.FC<CoolingTowerProps> = ({
       <rect x={s(64)} y={s(20)} width={s(2)} height={s(60)} fill="#3a3b3c" opacity={0.4} />
       <rect x={s(72)} y={s(20)} width={s(2)} height={s(60)} fill="#3a3b3c" opacity={0.4} />
 
-      {/* ─── FAN REALISTIS DI TENGAH ────────────────────────────────────── */}
+      {/* ─── FAN DI TENGAH (Animasi Rotasi Halus) ────────────────────────── */}
       <g clipPath={`url(#fanClip_${uid})`}>
         {/* Cincin luar fan */}
         <circle cx={s(50)} cy={s(50)} r={s(18)} fill={`url(#${gHub})`} />
         <circle cx={s(50)} cy={s(50)} r={s(18)} fill="none" stroke="#2a2b2c" strokeWidth={s(1.5)} opacity={0.6} />
 
-        {/* Grup Blade (Berputar saat on) */}
+        {/* Grup Blade (Berputar saat ON) */}
         <g>
-          {/* 4 Blade dengan bentuk yang bersih (menggunakan rotasi) */}
           {[0, 90, 180, 270].map((deg) => (
             <g key={deg} transform={`rotate(${deg}, ${s(50)}, ${s(50)})`}>
               <path
@@ -98,7 +109,7 @@ const CoolingTower: React.FC<CoolingTowerProps> = ({
             </g>
           ))}
 
-          {/* Hub tengah fan (terlihat lebih rapi) */}
+          {/* Hub tengah fan */}
           <circle cx={s(50)} cy={s(50)} r={s(7)} fill="#1f2937" />
           <circle cx={s(50)} cy={s(50)} r={s(4)} fill={`url(#${gHub})`} />
           <circle cx={s(50)} cy={s(50)} r={s(2)} fill="#e5e7eb" />
@@ -110,7 +121,7 @@ const CoolingTower: React.FC<CoolingTowerProps> = ({
               type="rotate"
               from={`0 ${s(50)} ${s(50)}`}
               to={`360 ${s(50)} ${s(50)}`}
-              dur="1s"
+              dur="1.2s"
               repeatCount="indefinite"
             />
           )}
@@ -120,6 +131,19 @@ const CoolingTower: React.FC<CoolingTowerProps> = ({
       {/* ─── HIGHLIGHT & SHADOW ──────────────────────────────────────────── */}
       <rect x={s(26)} y={s(22)} width={s(6)} height={s(56)} fill="#ffffff" opacity={0.08} rx={s(2)} />
       <rect x={s(68)} y={s(22)} width={s(6)} height={s(56)} fill="#000000" opacity={0.06} rx={s(2)} />
+
+      {/* Anomaly Badge */}
+      {isAlarm && (
+        <circle cx={s(76)} cy={s(24)} r={s(5)} fill="#ef4444" stroke="#ffffff" strokeWidth={s(1)} />
+      )}
+      {isWarning && (
+        <polygon
+          points={`${s(72)},${s(28)} ${s(80)},${s(28)} ${s(76)},${s(20)}`}
+          fill="#f59e0b"
+          stroke="#000000"
+          strokeWidth={s(0.8)}
+        />
+      )}
     </g>
   );
 };

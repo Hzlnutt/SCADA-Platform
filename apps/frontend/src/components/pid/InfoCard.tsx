@@ -22,8 +22,8 @@ const InfoCard: React.FC<InfoCardProps> = ({
   title,
   subtitle,
   lines = [],
-  color = "#0B3B60",
-  textColor = "#FFFFFF",
+  color = "#0f172a", // ISA-101 Monochromatic Slate
+  textColor = "#f8fafc",
   titleFontSize,
   contentFontSize,
 }) => {
@@ -76,12 +76,12 @@ const InfoCard: React.FC<InfoCardProps> = ({
   // ─── Konfigurasi Layout (Base) ──────────────────────────────────────────
   const paddingX = 12;
   const paddingY = 14;
-  const borderWidth = 2;
+  const borderWidth = 1.5;
   const availableWidth = width - paddingX * 2;
 
   // Base font sizes
-  const baseTitleFontSize = titleFontSize ?? 18;
-  const baseSubtitleFontSize = 14;
+  const baseTitleFontSize = titleFontSize ?? 17;
+  const baseSubtitleFontSize = 13;
   const baseContentFontSize = contentFontSize ?? (width <= 145 ? 10.5 : 11.5);
 
   // Base line heights & spacings
@@ -134,25 +134,25 @@ const InfoCard: React.FC<InfoCardProps> = ({
     <g transform={`translate(${x}, ${y})`}>
       <defs>
         <clipPath id={clipId}>
-          <rect x={1} y={1} width={Math.max(0, width - 2)} height={Math.max(0, finalHeight - 2)} rx={2} />
+          <rect x={1} y={1} width={Math.max(0, width - 2)} height={Math.max(0, finalHeight - 2)} rx={4} />
         </clipPath>
       </defs>
 
-      {/* ── Border / Card Background ────────────────────────────────────── */}
+      {/* ── Border / Card Background (ISA-101 Monochromatic Slate) ──────── */}
       <rect
         x={0}
         y={0}
         width={width}
         height={finalHeight}
         fill={color}
-        stroke={textColor}
+        stroke="#334155"
         strokeWidth={borderWidth}
-        opacity="0.9"
-        rx={2}
+        opacity="0.95"
+        rx={4}
       />
 
       <g clipPath={`url(#${clipId})`}>
-        {/* ── Title ────────────────────────────────────────────────────────── */}
+        {/* ── Title (Clean Slate / White) ─────────────────────────────────── */}
         {titleLines.map((line, index) => {
           const yPos = currentY + scaledTitleFontSize;
           currentY += index === 0 ? scaledTitleFontSize : scaledTitleLineHeight;
@@ -168,7 +168,8 @@ const InfoCard: React.FC<InfoCardProps> = ({
               fill={textColor}
               fontSize={scaledTitleFontSize}
               fontWeight="bold"
-              fontFamily="sans-serif"
+              fontFamily="'Plus Jakarta Sans', sans-serif"
+              letterSpacing="0.03em"
               {...(needsSqueeze ? { textLength: availableWidth, lengthAdjust: "spacingAndGlyphs" } : {})}
             >
               {line}
@@ -194,11 +195,10 @@ const InfoCard: React.FC<InfoCardProps> = ({
                   x={width / 2}
                   y={yPos}
                   textAnchor="middle"
-                  fill={textColor}
+                  fill="#94a3b8"
                   fontSize={scaledSubtitleFontSize}
                   fontWeight="bold"
-                  opacity="0.85"
-                  fontFamily="sans-serif"
+                  fontFamily="'Plus Jakarta Sans', sans-serif"
                   {...(needsSqueeze ? { textLength: availableWidth, lengthAdjust: "spacingAndGlyphs" } : {})}
                 >
                   {line}
@@ -209,7 +209,7 @@ const InfoCard: React.FC<InfoCardProps> = ({
           </>
         )}
 
-        {/* ── Content Lines ────────────────────────────────────────────────── */}
+        {/* ── Content Lines (Labels in calm muted light slate #94a3b8) ──────── */}
         {contentLines.map((line, index) => {
           const yPos = currentY + scaledContentFontSize;
           currentY += scaledContentLineHeight;
@@ -225,10 +225,10 @@ const InfoCard: React.FC<InfoCardProps> = ({
                   x={paddingX + 4}
                   y={yPos}
                   textAnchor="start"
-                  fill={textColor}
+                  fill="#94a3b8"
                   fontSize={scaledContentFontSize}
-                  fontWeight="bold"
-                  fontFamily="sans-serif"
+                  fontWeight="600"
+                  fontFamily="'Plus Jakarta Sans', sans-serif"
                 >
                   {labelText}
                 </text>
@@ -236,10 +236,10 @@ const InfoCard: React.FC<InfoCardProps> = ({
                   x={colonX}
                   y={yPos}
                   textAnchor="start"
-                  fill={textColor}
+                  fill="#64748b"
                   fontSize={scaledContentFontSize}
-                  fontWeight="bold"
-                  fontFamily="sans-serif"
+                  fontWeight="600"
+                  fontFamily="'Plus Jakarta Sans', sans-serif"
                 >
                   :
                 </text>
@@ -248,7 +248,7 @@ const InfoCard: React.FC<InfoCardProps> = ({
           }
 
           const lineEstWidth = getEstWidth(line, scaledContentFontSize);
-          const needsSqueeze = lineEstWidth > (availableWidth - 4);
+          const needsSqueeze = lineEstWidth > availableWidth;
 
           return (
             <text
@@ -256,11 +256,11 @@ const InfoCard: React.FC<InfoCardProps> = ({
               x={paddingX + 4}
               y={yPos}
               textAnchor="start"
-              fill={textColor}
+              fill="#94a3b8"
               fontSize={scaledContentFontSize}
-              fontWeight="bold"
-              fontFamily="sans-serif"
-              {...(needsSqueeze ? { textLength: availableWidth - 4, lengthAdjust: "spacingAndGlyphs" } : {})}
+              fontWeight="600"
+              fontFamily="'Plus Jakarta Sans', sans-serif"
+              {...(needsSqueeze ? { textLength: availableWidth, lengthAdjust: "spacingAndGlyphs" } : {})}
             >
               {line}
             </text>

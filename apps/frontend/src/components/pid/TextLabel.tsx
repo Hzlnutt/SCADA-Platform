@@ -1,5 +1,5 @@
 import React from "react";
-import { useIsDark } from "../../hooks/useIsDark"; // sesuaikan path
+import { useIsDark } from "../../hooks/useIsDark";
 
 type Props = {
   text: string;
@@ -9,7 +9,7 @@ type Props = {
   h?: number;
   hasBorder?: boolean;
   fontSize?: number;
-  bgColor?: string; // tambahan opsi warna background
+  bgColor?: string;
 };
 
 const LabelComponent: React.FC<Props> = ({
@@ -38,8 +38,7 @@ const LabelComponent: React.FC<Props> = ({
 
   const fontSize = customFontSize ?? autoFontSize;
 
-  // Tentukan warna background
-  const defaultBg = isDark ? "#1e293b" : "white";
+  const defaultBg = isDark ? "#0f172a" : "#f8fafc";
   const fillColor = bgColor ?? defaultBg;
 
   return (
@@ -51,7 +50,7 @@ const LabelComponent: React.FC<Props> = ({
           width={w}
           height={h}
           fill={fillColor}
-          rx={2}
+          rx={4}
         />
       )}
       {hasBorder && (
@@ -61,20 +60,21 @@ const LabelComponent: React.FC<Props> = ({
           width={w}
           height={h}
           fill="none"
-          stroke={isDark ? "#38bdf8" : "#0B3B60"}
-          strokeWidth="3"
-          rx={2}
+          stroke={isDark ? "#334155" : "#cbd5e1"}
+          strokeWidth="1.5"
+          rx={4}
         />
       )}
       <text
         x={x + w / 2}
-        y={y + h / 2}
+        y={y + h / 2 + 1}
         dominantBaseline="middle"
         textAnchor="middle"
         fontSize={fontSize}
-        fontFamily="Arial Black, sans-serif"
-        fontWeight="900"
-        fill={isDark ? "#f1f5f9" : "#000000"}
+        fontFamily="'Plus Jakarta Sans', sans-serif"
+        fontWeight="700"
+        fill={isDark ? "#f8fafc" : "#0f172a"}
+        letterSpacing="0.02em"
       >
         {text}
       </text>
