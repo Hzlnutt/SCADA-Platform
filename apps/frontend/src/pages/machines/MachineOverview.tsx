@@ -137,6 +137,7 @@ function StandardMachineOverview({
 }) {
   const machine = getUnitById(unitId);
   const groupId = machine?.groupId || "cooling-water-system";
+  const latest = useTelemetryStore((state) => state.latest);
 
   const isOfflineVal = (val: any) =>
     val === "API TIDAK TERKIRIM" || val === "Belum Ada API" || val === "xx";
