@@ -268,8 +268,16 @@ export const ensurePostgresTables = async () => {
 
       DELETE FROM cooling_tower_telemetry
       WHERE EXTRACT(MINUTE FROM t_stamp) != 0 OR EXTRACT(SECOND FROM t_stamp) != 0;
+
+      -- Deduplicate hourly records in cooling_tower_telemetry
+      DELETE FROM cooling_tower_telemetry
+      WHERE id NOT IN (
+        SELECT MIN(id)
+        FROM cooling_tower_telemetry
+        GROUP BY date_trunc('hour', t_stamp), id_device
+      );
     `).catch((err) => {
-      logger.warn({ err }, "Failed to migrate minute data to cooling_tower_telemetry_minute");
+      logger.warn({ err }, "Failed to migrate and clean minute data in cooling_tower_telemetry");
     });
 
     await pool.query(`
