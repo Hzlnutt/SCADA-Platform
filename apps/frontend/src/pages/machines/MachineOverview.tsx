@@ -1252,7 +1252,7 @@ function StandardMachineOverview({
                     allActiveAlarms.slice(0, 5).map((alarm) => {
                       const isCritical = alarm.description.toLowerCase().includes("critical") || alarm.description.toLowerCase().includes("overdue");
                       const isMajor = alarm.description.toLowerCase().includes("trip") || alarm.description.toLowerCase().includes("high");
-                      const type = isCritical ? "Critical" : isMajor ? "Major" : "Warning";
+                      const type = isCritical ? "Critical" : isMajor ? "Major" : "Alarm";
                       const tone = isCritical
                         ? "bg-rose-500/10 text-rose-500 border border-rose-500/30"
                         : isMajor
@@ -2144,7 +2144,7 @@ function HvacOverview({
                 allActiveAlarms.slice(0, 5).map((alarm) => {
                   const isCritical = alarm.description.toLowerCase().includes("critical") || alarm.description.toLowerCase().includes("overdue");
                   const isMajor = alarm.description.toLowerCase().includes("trip") || alarm.description.toLowerCase().includes("high");
-                  const type = isCritical ? "Critical" : isMajor ? "Major" : "Warning";
+                  const type = isCritical ? "Critical" : isMajor ? "Major" : "Alarm";
                   const tone = isCritical
                     ? "bg-rose-500/10 text-rose-500 border border-rose-500/30"
                     : isMajor
