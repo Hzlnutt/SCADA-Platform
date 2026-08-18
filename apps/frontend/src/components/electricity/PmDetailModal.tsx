@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Line } from "react-chartjs-2";
 import "../../components/charts/chartjs";
 import { getJson } from "../../services/api.client";
+import { getPmInfo } from "../../data/pmMapping";
 
 export type ElectricPmItem = {
   pm_id: string;
@@ -166,10 +167,13 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
               ⚡
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-base font-extrabold text-slate-800 dark:text-white tracking-wide">
-                  {pm.pm_id}
+                  {getPmInfo(pm.pm_id).name}
                 </h3>
+                <span className="text-xs font-bold font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                  {pm.pm_id} • {getPmInfo(pm.pm_id).model}
+                </span>
                 <span
                   className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
                     isOnline
@@ -185,8 +189,8 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
                   {isOnline ? "Live Online" : "Offline"}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-medium">
-                Sub-Distribution Feeder ({pm.group_id?.toUpperCase() || "EW23"})
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                {getPmInfo(pm.pm_id).category} — {getPmInfo(pm.pm_id).location} ({pm.group_id?.toUpperCase() || "EW23"})
               </p>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PmDetailModal } from "./PmDetailModal";
 import type { ElectricPmItem } from "./PmDetailModal";
+import { getPmInfo } from "../../data/pmMapping";
 
 type Props = {
   powerMeters: ElectricPmItem[];
@@ -13,14 +14,21 @@ export function EwPowerMetersGrid({
   powerMeters,
   isDark,
   groupId = "EW23",
-  title = "Sub-Distribution Power Meters Telemetry"
+  title = "Sub-Distribution Machine Telemetry"
 }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPm, setSelectedPm] = useState<ElectricPmItem | null>(null);
 
-  const filtered = powerMeters.filter((pm) =>
-    pm.pm_id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = powerMeters.filter((pm) => {
+    const info = getPmInfo(pm.pm_id);
+    const term = searchTerm.toLowerCase();
+    return (
+      pm.pm_id.toLowerCase().includes(term) ||
+      info.name.toLowerCase().includes(term) ||
+      info.model.toLowerCase().includes(term) ||
+      (info.category && info.category.toLowerCase().includes(term))
+    );
+  });
 
   const totalKw = powerMeters.reduce((sum, pm) => sum + (Number(pm.active_power_total) || 0), 0);
   const onlineCount = powerMeters.filter((pm) => pm.status !== false).length;
@@ -43,7 +51,7 @@ export function EwPowerMetersGrid({
               </span>
             </div>
             <p className="text-[10px] text-slate-400 font-medium">
-              Data telemetri langsung dari Power Meter sub-distribusi via Ignition SCADA
+              Monitoring beban daya dan kualitas listrik per unit mesin/panel sub-distribusi
             </p>
           </div>
         </div>
@@ -51,7 +59,7 @@ export function EwPowerMetersGrid({
         <div className="flex items-center gap-3">
           {/* Quick Total Load Badge */}
           <div className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm flex items-center gap-2">
-            <span className="text-[10px] font-extrabold uppercase text-slate-400">Total Daya:</span>
+            <span className="text-[10px] font-extrabold uppercase text-slate-400">Total Beban:</span>
             <span className="text-xs font-extrabold font-mono text-sky-500">
               {totalKw.toFixed(1)} <span className="text-[10px] font-bold text-slate-400">kW</span>
             </span>
@@ -61,10 +69,10 @@ export function EwPowerMetersGrid({
           <div className="relative">
             <input
               type="text"
-              placeholder="Cari PM (cth: PM327)..."
+              placeholder="Cari Mesin / PM (cth: Chiller, AHU)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="px-3 py-1.5 pl-8 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500 w-44"
+              className="px-3 py-1.5 pl-8 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500 w-60"
             />
             <span className="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
           </div>
@@ -75,11 +83,12 @@ export function EwPowerMetersGrid({
       <div className="p-6">
         {filtered.length === 0 ? (
           <div className="text-center py-10 text-slate-400 text-xs">
-            Tidak ada Power Meter yang sesuai dengan kata kunci pencarian.
+            Tidak ada mesin/Power Meter yang sesuai dengan kata kunci pencarian.
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
             {filtered.map((pm) => {
+              const info = getPmInfo(pm.pm_id);
               const isOnline = pm.status !== false;
               const pKw = Number(pm.active_power_total) || 0;
               const pf = Number(pm.power_factor) || 0;
@@ -94,14 +103,22 @@ export function EwPowerMetersGrid({
                 >
                   {/* Card Header */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-black font-mono text-slate-800 dark:text-slate-100 group-hover:text-sky-500 transition-colors">
-                          {pm.pm_id}
-                        </span>
+                    <div className="flex items-start justify-between gap-1 mb-1.5">
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 group-hover:text-sky-500 transition-colors leading-snug line-clamp-2">
+                          {info.name}
+                        </h4>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] font-bold font-mono text-slate-400">
+                            {pm.pm_id}
+                          </span>
+                          <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300">
+                            {info.model}
+                          </span>
+                        </div>
                       </div>
                       <span
-                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+                        className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
                           isOnline
                             ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
                             : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
@@ -117,7 +134,7 @@ export function EwPowerMetersGrid({
                     </div>
 
                     {/* Main Metric: Active Power */}
-                    <div className="my-2.5 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-100 dark:border-slate-700/50">
+                    <div className="my-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-100 dark:border-slate-700/50">
                       <span className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">
                         Active Power
                       </span>
@@ -156,7 +173,7 @@ export function EwPowerMetersGrid({
                       e.stopPropagation();
                       setSelectedPm(pm);
                     }}
-                    className="w-full mt-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700 group-hover:border-sky-500/40 text-[9px] font-bold text-slate-400 group-hover:text-sky-500 dark:group-hover:text-sky-400 bg-slate-50/50 dark:bg-slate-800/30 group-hover:bg-sky-500/5 transition-all text-center"
+                    className="w-full mt-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 group-hover:border-sky-500/40 text-[9px] font-bold text-slate-400 group-hover:text-sky-500 dark:group-hover:text-sky-400 bg-slate-50/50 dark:bg-slate-800/30 group-hover:bg-sky-500/5 transition-all text-center"
                   >
                     DETAIL PARAMETER ▾
                   </button>
