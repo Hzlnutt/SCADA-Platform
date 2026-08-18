@@ -177,9 +177,9 @@ export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
         if ((return_temp !== null && !isNaN(return_temp)) || 
             (supply_temp !== null && !isNaN(supply_temp)) || 
             (st3_return_temp !== null && !isNaN(st3_return_temp))) {
-          console.log(`[PostgresTelemetrySync] Executing insert to PostgreSQL with t_stamp: ${wibTimestampStr}...`);
+          console.log(`[PostgresTelemetrySync] Executing insert to temporary table (cooling_tower_telemetry_minute) with t_stamp: ${wibTimestampStr}...`);
           const res = await pool.query(`
-            INSERT INTO cooling_tower_telemetry (t_stamp, return_temp, supply_temp, st3_return_temp, id_device)
+            INSERT INTO cooling_tower_telemetry_minute (t_stamp, return_temp, supply_temp, st3_return_temp, id_device)
             VALUES ($1, $2, $3, $4, $5)
           `, [
             wibTimestampStr, 
@@ -189,7 +189,7 @@ export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
             "cooling-water-1"
           ]);
           lastPostgresTelemetrySyncTime = now;
-          console.log(`[PostgresTelemetrySync] Insert query executed successfully. rowCount: ${res.rowCount}`);
+          console.log(`[PostgresTelemetrySync] Insert to cooling_tower_telemetry_minute succeeded. rowCount: ${res.rowCount}`);
         } else {
           console.log(`[PostgresTelemetrySync] All temperature values are null or NaN. Skipping insert.`);
         }

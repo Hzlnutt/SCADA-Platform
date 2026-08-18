@@ -442,31 +442,107 @@ export const runElectricityRollupAndCleanup = async () => {
 export const runCoolingTowerRollupAndCleanup = async () => {
   const pool = getPostgresPool();
   try {
-    // 1. Find all completed hours in the past that have multiple rows (meaning they are raw minute data and not yet rolled up)
+    // 1. Find all completed hours in the past from the temporary table (cooling_tower_telemetry_minute)
     const findRes = await pool.query(`
+      SELECT 
+        date_trunc('hour', t_stamp) as hour_bucket
+      FROM cooling_tower_telemetry_minute
+      WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+      GROUP BY hour_bucket
+      ORDER BY hour_bucket ASC;
+    `);
+
+    const buckets = findRes.rows;
+    if (buckets.length > 0) {
+      logger.info(`[CoolingTowerRollup] Found ${buckets.length} completed hour buckets in temporary table to roll up to main table`);
+
+      for (const b of buckets) {
+        const hourStart = b.hour_bucket;
+        if (!(hourStart instanceof Date)) {
+          continue;
+        }
+
+        // Convert to naive local WIB timestamp string YYYY-MM-DD HH:00:00
+        const yr = hourStart.getFullYear();
+        const mo = String(hourStart.getMonth() + 1).padStart(2, "0");
+        const dy = String(hourStart.getDate()).padStart(2, "0");
+        const hr = String(hourStart.getHours()).padStart(2, "0");
+        const hourStartStr = `${yr}-${mo}-${dy} ${hr}:00:00`;
+
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+
+          // 1. Calculate averages for this hour from the temporary table
+          const avgRes = await client.query(`
+            SELECT 
+              AVG(return_temp) as avg_return,
+              AVG(supply_temp) as avg_supply,
+              AVG(st3_return_temp) as avg_st3
+            FROM cooling_tower_telemetry_minute
+            WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+          `, [hourStartStr]);
+
+          const avgs = avgRes.rows[0];
+          const avgReturn = avgs.avg_return !== null ? Number(Number(avgs.avg_return).toFixed(3)) : null;
+          const avgSupply = avgs.avg_supply !== null ? Number(Number(avgs.avg_supply).toFixed(3)) : null;
+          const avgSt3 = avgs.avg_st3 !== null ? Number(Number(avgs.avg_st3).toFixed(3)) : null;
+
+          // 2. Check if row already exists in main table for this hour
+          const existingRow = await client.query(`
+            SELECT id FROM cooling_tower_telemetry
+            WHERE t_stamp = $1 AND id_device = $2
+          `, [hourStartStr, "cooling-water-1"]);
+
+          if (existingRow.rows.length > 0) {
+            await client.query(`
+              UPDATE cooling_tower_telemetry
+              SET return_temp = $1, supply_temp = $2, st3_return_temp = $3
+              WHERE id = $4
+            `, [avgReturn, avgSupply, avgSt3, existingRow.rows[0].id]);
+          } else {
+            await client.query(`
+              INSERT INTO cooling_tower_telemetry (t_stamp, return_temp, supply_temp, st3_return_temp, id_device)
+              VALUES ($1, $2, $3, $4, $5)
+            `, [
+              hourStartStr,
+              avgReturn,
+              avgSupply,
+              avgSt3,
+              "cooling-water-1"
+            ]);
+          }
+
+          // 3. Delete all raw minute rows in this hour range from temporary table
+          await client.query(`
+            DELETE FROM cooling_tower_telemetry_minute
+            WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+          `, [hourStartStr]);
+
+          await client.query("COMMIT");
+          logger.info(`[CoolingTowerRollup] Successfully aggregated hour ${hourStartStr} to main table and deleted from temporary table: return=${avgReturn}, supply=${avgSupply}, st3=${avgSt3}`);
+        } catch (err: any) {
+          await client.query("ROLLBACK");
+          logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up cooling tower hour");
+        } finally {
+          client.release();
+        }
+      }
+    }
+
+    // Also clean up any legacy duplicate rows in main table if present
+    const legacyRes = await pool.query(`
       SELECT 
         date_trunc('hour', t_stamp) as hour_bucket
       FROM cooling_tower_telemetry
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
       GROUP BY hour_bucket
-      HAVING COUNT(*) > 1
-      ORDER BY hour_bucket ASC;
+      HAVING COUNT(*) > 1;
     `);
 
-    const buckets = findRes.rows;
-    if (buckets.length === 0) {
-      return;
-    }
-
-    logger.info(`[CoolingTowerRollup] Found ${buckets.length} hour buckets to roll up`);
-
-    for (const b of buckets) {
+    for (const b of legacyRes.rows) {
       const hourStart = b.hour_bucket;
-      if (!(hourStart instanceof Date)) {
-        continue;
-      }
-
-      // Convert to naive local WIB timestamp string YYYY-MM-DD HH:00:00
+      if (!(hourStart instanceof Date)) continue;
       const yr = hourStart.getFullYear();
       const mo = String(hourStart.getMonth() + 1).padStart(2, "0");
       const dy = String(hourStart.getDate()).padStart(2, "0");
@@ -476,8 +552,6 @@ export const runCoolingTowerRollupAndCleanup = async () => {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
-
-        // 1. Calculate averages for this hour
         const avgRes = await client.query(`
           SELECT 
             AVG(return_temp) as avg_return,
@@ -486,35 +560,23 @@ export const runCoolingTowerRollupAndCleanup = async () => {
           FROM cooling_tower_telemetry
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
         `, [hourStartStr]);
-
         const avgs = avgRes.rows[0];
-        const avgReturn = avgs.avg_return !== null ? Number(avgs.avg_return) : null;
-        const avgSupply = avgs.avg_supply !== null ? Number(avgs.avg_supply) : null;
-        const avgSt3 = avgs.avg_st3 !== null ? Number(avgs.avg_st3) : null;
+        const avgReturn = avgs.avg_return !== null ? Number(Number(avgs.avg_return).toFixed(3)) : null;
+        const avgSupply = avgs.avg_supply !== null ? Number(Number(avgs.avg_supply).toFixed(3)) : null;
+        const avgSt3 = avgs.avg_st3 !== null ? Number(Number(avgs.avg_st3).toFixed(3)) : null;
 
-        // 2. Delete all raw minute rows in this hour range
         await client.query(`
           DELETE FROM cooling_tower_telemetry
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
         `, [hourStartStr]);
 
-        // 3. Insert the single consolidated hourly average row
         await client.query(`
           INSERT INTO cooling_tower_telemetry (t_stamp, return_temp, supply_temp, st3_return_temp, id_device)
           VALUES ($1, $2, $3, $4, $5)
-        `, [
-          hourStartStr,
-          avgReturn,
-          avgSupply,
-          avgSt3,
-          "cooling-water-1"
-        ]);
-
+        `, [hourStartStr, avgReturn, avgSupply, avgSt3, "cooling-water-1"]);
         await client.query("COMMIT");
-        logger.info(`[CoolingTowerRollup] Rolled up hour ${hourStartStr}: return=${avgReturn}, supply=${avgSupply}, st3=${avgSt3}`);
-      } catch (err: any) {
+      } catch (e: any) {
         await client.query("ROLLBACK");
-        logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up cooling tower hour");
       } finally {
         client.release();
       }
@@ -998,13 +1060,17 @@ export const startScheduler = () => {
     logger.error({ err }, "Initial cooling tower rollup/cleanup failed");
   });
 
-  // Hourly rollup and cleanup
+  // Periodic cooling tower rollup (runs every 2 minutes to roll up completed hours immediately)
+  setInterval(() => {
+    runCoolingTowerRollupAndCleanup().catch((err) => {
+      logger.error({ err }, "Periodic cooling tower rollup/cleanup failed");
+    });
+  }, 2 * 60 * 1000);
+
+  // Hourly rollup and cleanup for electricity
   setInterval(() => {
     runElectricityRollupAndCleanup().catch((err) => {
       logger.error({ err }, "Periodic electricity rollup/cleanup failed");
-    });
-    runCoolingTowerRollupAndCleanup().catch((err) => {
-      logger.error({ err }, "Periodic cooling tower rollup/cleanup failed");
     });
   }, 60 * 60 * 1000);
 

@@ -236,6 +236,29 @@ export const ensurePostgresTables = async () => {
       logger.warn({ err }, "Failed to add columns to cooling_tower_telemetry");
     });
 
+    // Create temporary per-minute table for cooling tower telemetry buffer
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cooling_tower_telemetry_minute (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        id_device VARCHAR(50) NOT NULL DEFAULT 'cooling-water-1',
+        return_temp NUMERIC,
+        supply_temp NUMERIC,
+        st3_return_temp NUMERIC,
+        flow NUMERIC,
+        tds NUMERIC,
+        ph NUMERIC,
+        humidity NUMERIC,
+        press_ct_p1 NUMERIC,
+        press_ct_p2 NUMERIC,
+        press_ct3_p11 NUMERIC,
+        scaled_level_tank_cooling3 NUMERIC
+      );
+      CREATE INDEX IF NOT EXISTS idx_ct_minute_t_stamp ON cooling_tower_telemetry_minute (t_stamp);
+    `).catch((err) => {
+      logger.warn({ err }, "Failed to create cooling_tower_telemetry_minute table");
+    });
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS api_sources (
         id SERIAL PRIMARY KEY,
