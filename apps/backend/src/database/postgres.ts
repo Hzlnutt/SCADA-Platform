@@ -505,6 +505,40 @@ export const ensurePostgresTables = async () => {
       await pool.query(`ALTER TABLE ${table} ALTER COLUMN power_factor_min TYPE NUMERIC;`);
     }
 
+    // --- SUB-DISTRIBUTION POWER METER TELEMETRY TABLE ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS electric_pm_telemetry (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        group_id VARCHAR(20) NOT NULL,
+        pm_id VARCHAR(50) NOT NULL,
+        status BOOLEAN,
+        volt_ab NUMERIC,
+        volt_bc NUMERIC,
+        volt_ca NUMERIC,
+        volt_ll NUMERIC,
+        current_a NUMERIC,
+        current_b NUMERIC,
+        current_c NUMERIC,
+        frequency NUMERIC,
+        active_power_total NUMERIC,
+        reactive_power_total NUMERIC,
+        apparent_power_total NUMERIC,
+        power_factor NUMERIC,
+        voltage_unbalance NUMERIC,
+        current_unbalance NUMERIC,
+        thd_volt_a NUMERIC,
+        thd_volt_b NUMERIC,
+        thd_volt_c NUMERIC,
+        thd_current_a NUMERIC,
+        thd_current_b NUMERIC,
+        thd_current_c NUMERIC,
+        active_energy NUMERIC
+      );
+      CREATE INDEX IF NOT EXISTS idx_electric_pm_telemetry_pm_time ON electric_pm_telemetry (pm_id, t_stamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_electric_pm_telemetry_grp_time ON electric_pm_telemetry (group_id, t_stamp DESC);
+    `);
+
     logger.info("postgres tables ensured and migrated to NUMERIC successfully");
   } catch (err: any) {
     logger.error({ err }, "failed to ensure postgres tables");

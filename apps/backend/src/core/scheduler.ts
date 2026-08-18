@@ -122,6 +122,210 @@ const insertWfTelemetry = async (table: "electric_wf1_telemetry" | "electric_wf2
   ]);
 };
 
+export interface ElectricPmRecord {
+  t_stamp: Date;
+  group_id: string;
+  pm_id: string;
+  status: boolean | null;
+  volt_ab: number | null;
+  volt_bc: number | null;
+  volt_ca: number | null;
+  volt_ll: number | null;
+  current_a: number | null;
+  current_b: number | null;
+  current_c: number | null;
+  frequency: number | null;
+  active_power_total: number | null;
+  reactive_power_total: number | null;
+  apparent_power_total: number | null;
+  power_factor: number | null;
+  voltage_unbalance: number | null;
+  current_unbalance: number | null;
+  thd_volt_a: number | null;
+  thd_volt_b: number | null;
+  thd_volt_c: number | null;
+  thd_current_a: number | null;
+  thd_current_b: number | null;
+  thd_current_c: number | null;
+  active_energy: number | null;
+}
+
+export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmRecord[] => {
+  if (!data) return [];
+  const records: ElectricPmRecord[] = [];
+
+  const extractPm = (rawKey: string, obj: any): ElectricPmRecord => {
+    // Determine standardized PM ID e.g. "PM327"
+    let pmId = rawKey.toUpperCase();
+    if (!pmId.startsWith("PM")) {
+      const match = rawKey.match(/(\d+)/);
+      pmId = match ? `PM${match[1]}` : rawKey;
+    }
+    const cleanNum = pmId.replace(/\D/g, "");
+
+    const getVal = (prefixList: string[]): number | null => {
+      for (const p of prefixList) {
+        // Direct key
+        if (obj[p] !== undefined && obj[p] !== null) {
+          const num = Number(obj[p]);
+          return isNaN(num) ? null : num;
+        }
+        // With PM suffix e.g. Active_Power_Total_PM327, Active_Power_Total_pm327, Active_Power_Total_327
+        const candidateKeys = [
+          `${p}_${pmId}`,
+          `${p}_${pmId.toLowerCase()}`,
+          `${p}_pm${cleanNum}`,
+          `${p}_PM${cleanNum}`,
+          `${p}_${cleanNum}`,
+          `${p}__${pmId}`,
+          `${p}__pm${cleanNum}`
+        ];
+        for (const ck of candidateKeys) {
+          if (obj[ck] !== undefined && obj[ck] !== null) {
+            const num = Number(obj[ck]);
+            return isNaN(num) ? null : num;
+          }
+        }
+      }
+      return null;
+    };
+
+    const getStatus = (): boolean | null => {
+      const statusCandidates = [
+        `Status_${pmId}`,
+        `Status_${pmId.toLowerCase()}`,
+        `Status_PM5500_WF1_${pmId}`,
+        `Status_PM5500_WF1_${pmId.toLowerCase()}`,
+        `Status__${pmId}`,
+        `Status_pm${cleanNum}`,
+        `Status_PM${cleanNum}`,
+        "Status"
+      ];
+      for (const sk of statusCandidates) {
+        if (obj[sk] !== undefined && obj[sk] !== null) {
+          return Boolean(obj[sk]);
+        }
+      }
+      return true;
+    };
+
+    return {
+      t_stamp: ts,
+      group_id: groupId,
+      pm_id: pmId,
+      status: getStatus(),
+      volt_ab: getVal(["VoltAB"]),
+      volt_bc: getVal(["VoltBC"]),
+      volt_ca: getVal(["VoltCA"]),
+      volt_ll: getVal(["Volt_LL", "VoltLL"]),
+      current_a: getVal(["Current_A"]),
+      current_b: getVal(["Current_B"]),
+      current_c: getVal(["Current_C"]),
+      frequency: getVal(["Frequency"]),
+      active_power_total: getVal(["Active_Power_Total", "Active_Power"]),
+      reactive_power_total: getVal(["Reactive_Power_Total", "Reactive_Power"]),
+      apparent_power_total: getVal(["Apparent_Power_Total", "Apparent_Power"]),
+      power_factor: getVal(["Power_Factor", "PF"]),
+      voltage_unbalance: getVal(["Volatage_Unbalance", "Voltage_Unbalance"]),
+      current_unbalance: getVal(["Current_Umbalance", "Current_Unbalance"]),
+      thd_volt_a: getVal(["THD_Volt_A"]),
+      thd_volt_b: getVal(["THD_Volt_B"]),
+      thd_volt_c: getVal(["THD_Volt_C"]),
+      thd_current_a: getVal(["THD_Current_A"]),
+      thd_current_b: getVal(["THD_Current_B"]),
+      thd_current_c: getVal(["THD_Current_C"]),
+      active_energy: getVal(["ActiveEnergy", "Active_Energy"])
+    };
+  };
+
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      if (!item || typeof item !== "object") continue;
+      // Find PM ID from keys
+      const keys = Object.keys(item);
+      let detectedPm = "PM_UNKNOWN";
+      for (const k of keys) {
+        const m = k.match(/(?:PM|pm)(\d+)/i);
+        if (m) {
+          detectedPm = `PM${m[1]}`;
+          break;
+        }
+      }
+      records.push(extractPm(detectedPm, item));
+    }
+  } else if (typeof data === "object") {
+    for (const [key, val] of Object.entries(data)) {
+      if (val && typeof val === "object" && !Array.isArray(val)) {
+        records.push(extractPm(key, val));
+      } else {
+        // Flat object (legacy)
+        const m = key.match(/(?:PM|pm)(\d+)/i);
+        if (m) {
+          const pmKey = `PM${m[1]}`;
+          let existing = records.find(r => r.pm_id === pmKey);
+          if (!existing) {
+            existing = extractPm(pmKey, data);
+            records.push(existing);
+          }
+        }
+      }
+    }
+  }
+
+  return records;
+};
+
+const insertPmTelemetryBatch = async (records: ElectricPmRecord[]) => {
+  if (!records.length) return;
+  const pool = getPostgresPool();
+  try {
+    const valueClauses: string[] = [];
+    const params: any[] = [];
+    let paramIdx = 1;
+
+    for (const r of records) {
+      valueClauses.push(
+        `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`
+      );
+      params.push(
+        r.t_stamp, r.group_id, r.pm_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
+        r.current_a, r.current_b, r.current_c, r.frequency, r.active_power_total,
+        r.reactive_power_total, r.apparent_power_total, r.power_factor,
+        r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
+        r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy
+      );
+    }
+
+    await pool.query(`
+      INSERT INTO electric_pm_telemetry (
+        t_stamp, group_id, pm_id, status, volt_ab, volt_bc, volt_ca, volt_ll,
+        current_a, current_b, current_c, frequency, active_power_total,
+        reactive_power_total, apparent_power_total, power_factor,
+        voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+        thd_current_a, thd_current_b, thd_current_c, active_energy
+      ) VALUES ${valueClauses.join(", ")}
+    `, params);
+  } catch (err: any) {
+    logger.warn(`Failed to insert PM telemetry batch: ${err.message}`);
+  }
+};
+
+const broadcastEwLiveTelemetry = (groupId: string, records: ElectricPmRecord[]) => {
+  const io = getSocketServer();
+  if (!io) return;
+
+  io.emit(`electricity:${groupId}_live`, {
+    groupId,
+    t_stamp: new Date(),
+    data: records
+  });
+  io.emit("electricity:pm_live_update", {
+    groupId,
+    t_stamp: new Date(),
+    data: records
+  });
+};
+
 const fetchJsonWithTimeout = async (url: string, timeoutMs: number = 800): Promise<any> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -277,6 +481,58 @@ export const startIncomingElectricityPolling = () => {
     } catch (err: any) {
       logger.warn(`Incoming WF2 polling failed: ${err.message}`);
       broadcastLiveTelemetryOffline("Feeder_WF2_PM5500");
+    }
+
+    // Fetch and store EW23 (Sub-distribution Power Meters)
+    try {
+      let data: any = null;
+      try {
+        data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew23");
+      } catch {
+        // Fallback for local testing if remote ignition IP is unreachable
+        data = await fetchJsonWithTimeout("http://127.0.0.1:3001/system/webdev/Utility_Dashboard/electric_ew23").catch(() => null);
+      }
+      if (data) {
+        const parsed = parseEwApi(data, ts, "ew23");
+        await insertPmTelemetryBatch(parsed);
+        broadcastEwLiveTelemetry("ew23", parsed);
+      }
+    } catch (err: any) {
+      logger.warn(`Incoming EW23 polling failed: ${err.message}`);
+    }
+
+    // Fetch and store EW21
+    try {
+      let data: any = null;
+      try {
+        data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew21");
+      } catch {
+        data = await fetchJsonWithTimeout("http://127.0.0.1:3001/system/webdev/Utility_Dashboard/electric_ew21").catch(() => null);
+      }
+      if (data) {
+        const parsed = parseEwApi(data, ts, "ew21");
+        await insertPmTelemetryBatch(parsed);
+        broadcastEwLiveTelemetry("ew21", parsed);
+      }
+    } catch (err: any) {
+      logger.warn(`Incoming EW21 polling failed: ${err.message}`);
+    }
+
+    // Fetch and store EW22
+    try {
+      let data: any = null;
+      try {
+        data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew22");
+      } catch {
+        data = await fetchJsonWithTimeout("http://127.0.0.1:3001/system/webdev/Utility_Dashboard/electric_ew22").catch(() => null);
+      }
+      if (data) {
+        const parsed = parseEwApi(data, ts, "ew22");
+        await insertPmTelemetryBatch(parsed);
+        broadcastEwLiveTelemetry("ew22", parsed);
+      }
+    } catch (err: any) {
+      logger.warn(`Incoming EW22 polling failed: ${err.message}`);
     }
   };
 

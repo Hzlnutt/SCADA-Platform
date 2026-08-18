@@ -4,6 +4,9 @@ import { Line, Bar } from "react-chartjs-2";
 import "../../components/charts/chartjs";
 import { useSystemStore } from "../../store/system.store";
 import { getJson, postJson } from "../../services/api.client";
+import { getSocket } from "../../services/socket.service";
+import { EwPowerMetersGrid } from "../../components/electricity/EwPowerMetersGrid";
+import type { ElectricPmItem } from "../../components/electricity/PmDetailModal";
 
 /* ═══════════ DETAILED COVERED DIRECTORY ═══════════ */
 const COVERED_EQUIPMENT: Record<string, { group?: string; breaker: string; load: string; label: string }[]> = {
@@ -915,6 +918,42 @@ export default function PowerDistribution() {
   const [telemetryTransformers, setTelemetryTransformers] = useState<TransformerData[]>(INITIAL_TRANSFORMERS);
   const [selectedTx, setSelectedTx] = useState<TransformerData | null>(null);
 
+  // Sub-Distribution Power Meters (EW23, EW21, EW22)
+  const [selectedEwGroup, setSelectedEwGroup] = useState<"ew23" | "ew21" | "ew22">("ew23");
+  const [ewPowerMeters, setEwPowerMeters] = useState<ElectricPmItem[]>([]);
+
+  // Fetch initial EW power meters and listen to live socket updates
+  useEffect(() => {
+    let active = true;
+    const fetchPmData = () => {
+      getJson<{ data: ElectricPmItem[] }>(`/analytics/electricity/power-meters?group=${selectedEwGroup}&_t=${Date.now()}`)
+        .then((res) => {
+          if (active && res?.data) {
+            setEwPowerMeters(res.data);
+          }
+        })
+        .catch((err) => console.error("Failed to load EW power meters:", err));
+    };
+
+    fetchPmData();
+
+    const socket = getSocket();
+    const handleLiveUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
+      if (payload?.groupId?.toLowerCase() === selectedEwGroup && Array.isArray(payload.data)) {
+        setEwPowerMeters(payload.data);
+      }
+    };
+
+    socket.on(`electricity:${selectedEwGroup}_live`, handleLiveUpdate);
+    socket.on("electricity:pm_live_update", handleLiveUpdate);
+
+    return () => {
+      active = false;
+      socket.off(`electricity:${selectedEwGroup}_live`, handleLiveUpdate);
+      socket.off("electricity:pm_live_update", handleLiveUpdate);
+    };
+  }, [selectedEwGroup]);
+
   const [customSpecs, setCustomSpecs] = useState<Record<string, any>>({});
   const [customCoverage, setCustomCoverage] = useState<Record<string, any[]>>({});
 
@@ -1368,6 +1407,41 @@ export default function PowerDistribution() {
           </div>
         </SldScaledCanvas>
       </section>
+
+      {/* ═══════════ SECTION: SUB-DISTRIBUTION POWER METERS ═══════════ */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-extrabold text-sky-500">⚡</span>
+            <h3 className="text-sm font-extrabold text-slate-800 dark:text-white">
+              Sub-Distribution Power Meters Telemetry
+            </h3>
+          </div>
+
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            {(["ew23", "ew21", "ew22"] as const).map((grp) => (
+              <button
+                key={grp}
+                onClick={() => setSelectedEwGroup(grp)}
+                className={`px-3 py-1 rounded-lg text-xs font-extrabold uppercase transition-all ${
+                  selectedEwGroup === grp
+                    ? "bg-white dark:bg-slate-900 text-sky-500 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                }`}
+              >
+                {grp.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <EwPowerMetersGrid
+          powerMeters={ewPowerMeters}
+          isDark={isDark}
+          groupId={selectedEwGroup}
+          title={`Sub-Distribution ${selectedEwGroup.toUpperCase()}`}
+        />
+      </div>
 
       {/* ═══════════ SECTION B: DETAIL TRANSFORMATOR CARDS ═══════════ */}
       <section className="space-y-6">
