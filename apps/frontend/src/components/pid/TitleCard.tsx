@@ -11,7 +11,7 @@ interface TitleCardProps {
   fontSize?: number;
   borderWidth?: number;
   borderRadius?: number;
-  paddingTop?: number;
+  paddingTop?: number; // jarak judul dari atas
 }
 
 const TitleCard: React.FC<TitleCardProps> = ({
@@ -20,13 +20,14 @@ const TitleCard: React.FC<TitleCardProps> = ({
   width = 160,
   height = 80,
   title,
-  color = "#0f172a", // ISA-101 Monochromatic Slate
-  textColor = "#f8fafc",
-  fontSize = 17,
-  borderWidth = 1.5,
-  borderRadius = 4,
+  color = "#0B3B60",
+  textColor = "#FFFFFF",
+  fontSize = 18,
+  borderWidth = 2,
+  borderRadius = 2,
   paddingTop = 12,
 }) => {
+  // ─── Wrap teks ──────────────────────────────────────────────────────────
   const wrapText = (text: string, maxWidth: number): string[] => {
     const charWidth = fontSize * 0.65;
     const maxChars = Math.floor((maxWidth - 8) / charWidth);
@@ -53,7 +54,7 @@ const TitleCard: React.FC<TitleCardProps> = ({
     }
     if (currentLine) result.push(currentLine);
 
-    return result.map((line) =>
+    return result.map(line => 
       line.length > maxChars ? line.slice(0, maxChars - 1) + "…" : line
     );
   };
@@ -62,22 +63,23 @@ const TitleCard: React.FC<TitleCardProps> = ({
   const titleLines = wrapText(title, availableWidth);
   const lineHeight = fontSize * 1.2;
 
+  // ─── Render ──────────────────────────────────────────────────────────────
   return (
     <g transform={`translate(${x}, ${y})`}>
-      {/* Background card (ISA-101 Monochromatic) */}
+      {/* Background card */}
       <rect
         x={0}
         y={0}
         width={width}
         height={height}
         fill={color}
-        stroke="#334155"
+        stroke={textColor}
         strokeWidth={borderWidth}
         rx={borderRadius}
-        opacity="0.95"
+        opacity="0.9"
       />
 
-      {/* Judul */}
+      {/* Judul di atas */}
       {titleLines.map((line, index) => {
         const yPos = paddingTop + index * lineHeight + fontSize;
         return (
@@ -89,8 +91,7 @@ const TitleCard: React.FC<TitleCardProps> = ({
             fill={textColor}
             fontSize={fontSize}
             fontWeight="bold"
-            fontFamily="'Plus Jakarta Sans', sans-serif"
-            letterSpacing="0.03em"
+            fontFamily="sans-serif"
           >
             {line}
           </text>

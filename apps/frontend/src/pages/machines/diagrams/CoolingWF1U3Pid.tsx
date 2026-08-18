@@ -547,81 +547,21 @@ export default function CoolingWF1U3Pid({
       <YStrainer x={1629} y={478} size={15} />
       <YStrainer x={1735} y={478} size={15} />
 
-      {/* Pump MTR (ISA-101 Monochromatic with Anomaly Focus) */}
-      <PumpMotor
-        x={105} y={370} size={100}
-        on={motorStatus["MTR-1"]}
-        isAlarm={typeof runningHours["cooling-water/mtr1_running_hours"] === "number" && runningHours["cooling-water/mtr1_running_hours"] >= getRhConfig("MTR-1").alarm}
-        isWarning={typeof runningHours["cooling-water/mtr1_running_hours"] === "number" && runningHours["cooling-water/mtr1_running_hours"] >= getRhConfig("MTR-1").warning}
-      />
-      <PumpMotor
-        x={318} y={370} size={100}
-        on={motorStatus["MTR-2"]}
-        isAlarm={typeof runningHours["cooling-water/mtr2_running_hours"] === "number" && runningHours["cooling-water/mtr2_running_hours"] >= getRhConfig("MTR-2").alarm}
-        isWarning={typeof runningHours["cooling-water/mtr2_running_hours"] === "number" && runningHours["cooling-water/mtr2_running_hours"] >= getRhConfig("MTR-2").warning}
-      />
-      <PumpMotor
-        x={537} y={370} size={100}
-        on={motorStatus["MTR-3"]}
-        isAlarm={typeof runningHours["cooling-water/mtr3_running_hours"] === "number" && runningHours["cooling-water/mtr3_running_hours"] >= getRhConfig("MTR-3").alarm}
-        isWarning={typeof runningHours["cooling-water/mtr3_running_hours"] === "number" && runningHours["cooling-water/mtr3_running_hours"] >= getRhConfig("MTR-3").warning}
-      />
-      <PumpMotor
-        x={1164} y={370} size={100}
-        on={motorStatus["MTR-4"]}
-        isAlarm={typeof runningHours["cooling-water/eq_hrs_du03"] === "number" && runningHours["cooling-water/eq_hrs_du03"] >= getRhConfig("MTR-4").alarm}
-        isWarning={typeof runningHours["cooling-water/eq_hrs_du03"] === "number" && runningHours["cooling-water/eq_hrs_du03"] >= getRhConfig("MTR-4").warning}
-      />
-      <PumpMotor
-        x={1270} y={370} size={100}
-        on={motorStatus["MTR-5"]}
-        isAlarm={typeof runningHours["cooling-water/eq_hrs_bp03"] === "number" && runningHours["cooling-water/eq_hrs_bp03"] >= getRhConfig("MTR-5").alarm}
-        isWarning={typeof runningHours["cooling-water/eq_hrs_bp03"] === "number" && runningHours["cooling-water/eq_hrs_bp03"] >= getRhConfig("MTR-5").warning}
-      />
-      <PumpMotor
-        x={1376} y={370} size={100}
-        on={motorStatus["MTR-6"]}
-        isAlarm={typeof runningHours["cooling-water/eq_hrs_prep03"] === "number" && runningHours["cooling-water/eq_hrs_prep03"] >= getRhConfig("MTR-6").alarm}
-        isWarning={typeof runningHours["cooling-water/eq_hrs_prep03"] === "number" && runningHours["cooling-water/eq_hrs_prep03"] >= getRhConfig("MTR-6").warning}
-      />
-      <PumpMotor
-        x={1481} y={370} size={100}
-        on={motorStatus["MTR-7"]}
-        isAlarm={typeof runningHours["cooling-water/eq_hrs_st03"] === "number" && runningHours["cooling-water/eq_hrs_st03"] >= getRhConfig("MTR-7").alarm}
-        isWarning={typeof runningHours["cooling-water/eq_hrs_st03"] === "number" && runningHours["cooling-water/eq_hrs_st03"] >= getRhConfig("MTR-7").warning}
-      />
-      <PumpMotor
-        x={1586} y={370} size={100}
-        on={motorStatus["MTR-8"]}
-        isAlarm={typeof runningHours["cooling-water/eq_hrs_washing"] === "number" && runningHours["cooling-water/eq_hrs_washing"] >= getRhConfig("MTR-8").alarm}
-        isWarning={typeof runningHours["cooling-water/eq_hrs_washing"] === "number" && runningHours["cooling-water/eq_hrs_washing"] >= getRhConfig("MTR-8").warning}
-      />
-      <PumpMotor
-        x={1692} y={370} size={100}
-        on={motorStatus["MTR-9"]}
-        isAlarm={typeof runningHours["cooling-water/eq_hrs_minilab"] === "number" && runningHours["cooling-water/eq_hrs_minilab"] >= getRhConfig("MTR-9").alarm}
-        isWarning={typeof runningHours["cooling-water/eq_hrs_minilab"] === "number" && runningHours["cooling-water/eq_hrs_minilab"] >= getRhConfig("MTR-9").warning}
-      />
+      {/* Pump MTR */}
+      <PumpMotor x={105} y={370} size={100} on={motorStatus["MTR-1"]} />
+      <PumpMotor x={318} y={370} size={100} on={motorStatus["MTR-2"]} />
+      <PumpMotor x={537} y={370} size={100} on={motorStatus["MTR-3"]} />
+      <PumpMotor x={1164} y={370} size={100} on={motorStatus["MTR-4"]} />
+      <PumpMotor x={1270} y={370} size={100} on={motorStatus["MTR-5"]} />
+      <PumpMotor x={1376} y={370} size={100} on={motorStatus["MTR-6"]} />
+      <PumpMotor x={1481} y={370} size={100} on={motorStatus["MTR-7"]} />
+      <PumpMotor x={1586} y={370} size={100} on={motorStatus["MTR-8"]} />
+      <PumpMotor x={1692} y={370} size={100} on={motorStatus["MTR-9"]} />
 
-      {/* Cooling Tower (ISA-101 Monochromatic with Anomaly Focus) */}
-      <CoolingTower
-        x={55} y={-12} size={200}
-        on={motorStatus["FAN-1"]}
-        isAlarm={typeof runningHours["cooling-water/ct1_running_hours"] === "number" && runningHours["cooling-water/ct1_running_hours"] >= getRhConfig("FAN-1").alarm}
-        isWarning={typeof runningHours["cooling-water/ct1_running_hours"] === "number" && runningHours["cooling-water/ct1_running_hours"] >= getRhConfig("FAN-1").warning}
-      />
-      <CoolingTower
-        x={269} y={-12} size={200}
-        on={motorStatus["FAN-2"]}
-        isAlarm={typeof runningHours["cooling-water/ct2_running_hours"] === "number" && runningHours["cooling-water/ct2_running_hours"] >= getRhConfig("FAN-2").alarm}
-        isWarning={typeof runningHours["cooling-water/ct2_running_hours"] === "number" && runningHours["cooling-water/ct2_running_hours"] >= getRhConfig("FAN-2").warning}
-      />
-      <CoolingTower
-        x={487} y={-12} size={200}
-        on={motorStatus["FAN-3"]}
-        isAlarm={typeof runningHours["cooling-water/ct3_running_hours"] === "number" && runningHours["cooling-water/ct3_running_hours"] >= getRhConfig("FAN-3").alarm}
-        isWarning={typeof runningHours["cooling-water/ct3_running_hours"] === "number" && runningHours["cooling-water/ct3_running_hours"] >= getRhConfig("FAN-3").warning}
-      />
+      {/* Cooling Tower */}
+      <CoolingTower x={55} y={-12} size={200} on={motorStatus["FAN-1"]} />
+      <CoolingTower x={269} y={-12} size={200} on={motorStatus["FAN-2"]} />
+      <CoolingTower x={487} y={-12} size={200} on={motorStatus["FAN-3"]} />
 
       {/* Info Card */}
 

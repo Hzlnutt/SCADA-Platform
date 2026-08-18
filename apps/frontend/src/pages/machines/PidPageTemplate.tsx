@@ -95,30 +95,9 @@ export default function PidPageTemplate({
       {/* Canvas Area */}
       <section className="flex-1 flex flex-col rounded-lg border border-slate-800 dark:border-slate-600 bg-slate-950/70 dark:bg-slate-950/90 p-3 sm:p-5 mr-[400px]">
         {/* Top Bar */}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase tracking-[0.2em] text-slate-400 font-bold">
-              P&ID Diagram Canvas — {machineName}
-            </span>
-            <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-300 border border-slate-700">
-              ISA-101 TBL HMI
-            </span>
-          </div>
-
-          {/* ISA-101 Legend */}
-          <div className="flex items-center gap-3 text-[11px] font-medium text-slate-400">
-            <span className="flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-slate-400 inline-block" />
-              Normal (Monokromatik)
-            </span>
-            <span className="flex items-center gap-1 text-amber-400">
-              <span>▲</span>
-              Warning (Level 2)
-            </span>
-            <span className="flex items-center gap-1 text-rose-400 font-semibold">
-              <span>■</span>
-              Alarm (Level 1)
-            </span>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+            P&ID Diagram Canvas — {machineName}
           </div>
         </div>
 

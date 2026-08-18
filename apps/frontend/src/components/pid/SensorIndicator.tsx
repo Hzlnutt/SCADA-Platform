@@ -1,6 +1,6 @@
 import React from "react";
 
-type StatusType = "on" | "off" | "standby" | "maintenance";
+type StatusType = 'on' | 'off' | 'standby' | 'maintenance';
 
 interface SensorIndicatorProps {
   x: number;
@@ -9,12 +9,12 @@ interface SensorIndicatorProps {
   w?: number;
   h?: number;
   unit?: string;
-  warningThreshold?: number | null;
-  alarmThreshold?: number | null;
+  warningThreshold?: number | null; // Tidak ada nilai default
+  alarmThreshold?: number | null;   // Tidak ada nilai default
   decimalPlaces?: number;
   padding?: number;
-  thresholdDirection?: "above" | "below";
-  mode?: "numeric" | "onoff";
+  thresholdDirection?: 'above' | 'below';
+  mode?: 'numeric' | 'onoff';
   color?: string;
   enableAlert?: boolean;
   suppressAlert?: boolean;
@@ -30,9 +30,9 @@ export function SensorIndicator({
   warningThreshold,
   alarmThreshold,
   decimalPlaces = 0,
-  padding = 4,
-  thresholdDirection = "above",
-  mode = "numeric",
+  padding = 5,
+  thresholdDirection = 'above',
+  mode = 'numeric',
   color: customColor,
   enableAlert = true,
   suppressAlert = false,
@@ -40,255 +40,115 @@ export function SensorIndicator({
   const cx = x + w / 2;
   const cy = y + h / 2;
 
-  const getIsaState = (): {
-    textColor: string;
-    borderColor: string;
-    bgColor: string;
-    display: string;
-    isAlarm: boolean;
-    isWarning: boolean;
-  } => {
-    // ── 1. Value Null / Kosong ──────────────────────────────────────
-    if (value === null || value === undefined) {
-      return {
-        textColor: "#64748b",
-        borderColor: "#334155",
-        bgColor: "#0f172a",
-        display: "--",
-        isAlarm: false,
-        isWarning: false,
-      };
+  const getColorAndText = (): { color: string; display: string } => {
+    // ── Jika value null ────────────────────────────────────────────────
+    if (value === null) {
+      return { color: "#444444", display: "--" };
     }
 
-    // ── 2. Custom Color Override (jika diberikan secara eksplisit) ──
+    // ── Jika customColor diberikan (berguna untuk info non-threshold seperti running hours) ──
     if (customColor) {
       const display = unit ? `${value}${unit}` : String(value);
-      return {
-        textColor: customColor,
-        borderColor: customColor === "#00cc00" ? "#334155" : customColor,
-        bgColor: "#0f172a",
-        display,
-        isAlarm: false,
-        isWarning: false,
-      };
+      return { color: customColor, display };
     }
 
-    // ── 3. String status Offline / "XX" / Belum Ada API ─────────────
-    if (typeof value === "string") {
-      const upper = value.toUpperCase().trim();
-      if (
-        upper.includes("BELUM") ||
-        upper.includes("NO API") ||
-        upper === "XX" ||
-        upper.includes("TIDAK")
-      ) {
-        return {
-          textColor: "#64748b", // Dimmed neutral slate (tidak memicu alarm palsu)
-          borderColor: "#334155",
-          bgColor: "#0f172a",
-          display: "xx",
-          isAlarm: false,
-          isWarning: false,
-        };
+    // ── Jika value adalah string info status (seperti "Belum Ada API" atau "XX") ──
+    if (typeof value === 'string') {
+      const upper = value.toUpperCase();
+      if (upper.includes("BELUM") || upper.includes("NO API") || upper === "XX" || upper.includes("TIDAK")) {
+        return { color: "#ff2222", display: "xx" };
       }
     }
 
-    // ── 4. Mode ON/OFF (ISA-101 Monokromatik) ───────────────────────
-    if (mode === "onoff") {
-      let isOn = false;
-      let isOff = false;
-      let isStandby = false;
-      let isMaint = false;
 
-      if (typeof value === "string") {
-        const valLower = value.toLowerCase().trim();
-        isOn = valLower === "on" || valLower === "running" || valLower === "1" || valLower === "true";
-        isOff = valLower === "off" || valLower === "stop" || valLower === "0" || valLower === "false";
-        isStandby = valLower === "standby";
-        isMaint = valLower === "maintenance";
-      } else if (typeof value === "boolean") {
-        isOn = value;
-        isOff = !value;
-      } else if (typeof value === "number") {
-        isOn = value === 1;
-        isOff = value === 0;
+    // ── Mode ON/OFF dengan status khusus ──────────────────────────────
+    if (mode === 'onoff') {
+      if (typeof value === 'string') {
+        switch (value) {
+          case 'on':  return { color: "#00cc00", display: "ON" };
+          case 'off': return { color: "#ff2222", display: "OFF" };
+          case 'standby': return { color: "#ffaa00", display: "STANDBY" };
+          case 'maintenance': return { color: "#888888", display: "MAINTENANCE" };
+          default: return { color: "#444444", display: "??" };
+        }
       }
-
-      if (isOn) {
-        return {
-          textColor: "#f8fafc", // White neutral
-          borderColor: "#475569", // Medium slate
-          bgColor: "#1e293b", // Active slate container
-          display: "ON",
-          isAlarm: false,
-          isWarning: false,
-        };
+      if (typeof value === 'boolean') {
+        return value 
+          ? { color: "#00cc00", display: "ON" }
+          : { color: "#ff2222", display: "OFF" };
       }
-      if (isOff) {
-        return {
-          textColor: "#64748b", // Muted slate
-          borderColor: "#1e293b",
-          bgColor: "#090d16",
-          display: "OFF",
-          isAlarm: false,
-          isWarning: false,
-        };
+      if (typeof value === 'number') {
+        return value === 1
+          ? { color: "#00cc00", display: "ON" }
+          : { color: "#ff2222", display: "OFF" };
       }
-      if (isStandby) {
-        return {
-          textColor: "#94a3b8",
-          borderColor: "#334155",
-          bgColor: "#0f172a",
-          display: "STBY",
-          isAlarm: false,
-          isWarning: false,
-        };
-      }
-      if (isMaint) {
-        return {
-          textColor: "#cbd5e1",
-          borderColor: "#475569",
-          bgColor: "#1e293b",
-          display: "MAINT",
-          isAlarm: false,
-          isWarning: false,
-        };
-      }
-
-      return {
-        textColor: "#64748b",
-        borderColor: "#334155",
-        bgColor: "#0f172a",
-        display: String(value),
-        isAlarm: false,
-        isWarning: false,
-      };
     }
 
-    // ── 5. Mode NUMERIK (ISA-101 Anomaly Focus) ─────────────────────
+    // ── Mode NUMERIC ──────────────────────────────────────────────────
     let numValue = 0;
-    if (typeof value === "number") {
+    if (typeof value === 'number') {
       numValue = value;
-    } else if (typeof value === "string") {
+    } else if (typeof value === 'string') {
       const parsed = parseFloat(value);
       if (!isNaN(parsed)) {
         numValue = parsed;
       }
     }
-
+    
     const isAlertActive = enableAlert !== false && suppressAlert !== true;
-    let isAlarm = false;
-    let isWarning = false;
 
-    if (isAlertActive) {
-      if (thresholdDirection === "above") {
-        if (alarmThreshold !== null && alarmThreshold !== undefined && numValue >= alarmThreshold) {
-          isAlarm = true;
-        } else if (warningThreshold !== null && warningThreshold !== undefined && numValue >= warningThreshold) {
-          isWarning = true;
-        }
-      } else {
-        if (alarmThreshold !== null && alarmThreshold !== undefined && numValue <= alarmThreshold) {
-          isAlarm = true;
-        } else if (warningThreshold !== null && warningThreshold !== undefined && numValue <= warningThreshold) {
-          isWarning = true;
-        }
-      }
+    // Jika alert tidak diaktifkan, warna tetap hijau
+    if (!isAlertActive) {
+      const baseValue = numValue.toFixed(decimalPlaces);
+      const display = unit ? `${baseValue}${unit}` : baseValue;
+      return { color: "#00cc00", display };
+    }
+
+    // Jika threshold diberikan, jalankan logika
+    let color = "#00cc00"; // default green
+    if (thresholdDirection === 'above') {
+      if (alarmThreshold !== null && alarmThreshold !== undefined && numValue >= alarmThreshold) color = "#ff2222";
+      else if (warningThreshold !== null && warningThreshold !== undefined && numValue >= warningThreshold) color = "#ffaa00";
+    } else {
+      if (alarmThreshold !== null && alarmThreshold !== undefined && numValue <= alarmThreshold) color = "#ff2222";
+      else if (warningThreshold !== null && warningThreshold !== undefined && numValue <= warningThreshold) color = "#ffaa00";
     }
 
     const baseValue = numValue.toFixed(decimalPlaces);
     const display = unit ? `${baseValue}${unit}` : baseValue;
-
-    if (isAlarm) {
-      return {
-        textColor: "#f87171", // Vibrant High-contrast Alarm Red
-        borderColor: "#ef4444",
-        bgColor: "#2d0a0a",
-        display,
-        isAlarm: true,
-        isWarning: false,
-      };
-    }
-
-    if (isWarning) {
-      return {
-        textColor: "#fbbf24", // Vibrant High-contrast Warning Amber
-        borderColor: "#f59e0b",
-        bgColor: "#261a05",
-        display,
-        isAlarm: false,
-        isWarning: true,
-      };
-    }
-
-    // Kondisi Normal: Monokromatik slate/putih bersih (Bukan hijau neon)
-    return {
-      textColor: "#f8fafc",
-      borderColor: "#334155",
-      bgColor: "#0f172a",
-      display,
-      isAlarm: false,
-      isWarning: false,
-    };
+    return { color, display };
   };
 
-  const { textColor, borderColor, bgColor, display, isAlarm, isWarning } = getIsaState();
+  const { color, display } = getColorAndText();
 
   const availableW = w - padding * 2;
   const availableH = h - padding * 2;
-  const fontSize = Math.max(
-    10,
-    Math.min(availableH * 0.72, availableW / (Math.max(display.length, 1) * 0.62))
-  );
+  const fontSize = Math.max(10, Math.min(
+    availableH * 0.75,
+    availableW / (display.length * 0.6)
+  ));
 
   return (
     <g>
-      {/* Box Container Monokromatik / Anomaly */}
       <rect
-        x={x}
-        y={y}
-        width={w}
-        height={h}
+        x={x} y={y}
+        width={w} height={h}
         rx={3}
-        fill={bgColor}
-        stroke={borderColor}
-        strokeWidth={isAlarm ? 2 : isWarning ? 1.5 : 1}
-      >
-        {isAlarm && (
-          <animate
-            attributeName="stroke-opacity"
-            values="1;0.4;1"
-            dur="1s"
-            repeatCount="indefinite"
-          />
-        )}
-      </rect>
-
-      {/* Nilai Sensor / Status */}
+        fill="#111111"
+        stroke={color}
+        strokeWidth={2}
+      />
       <text
-        x={cx}
-        y={cy + 1}
+        x={cx} y={cy}
         textAnchor="middle"
         dominantBaseline="middle"
-        fontFamily="'Plus Jakarta Sans', 'IBM Plex Mono', 'Segoe UI', sans-serif"
-        fontWeight="800"
+        fontFamily="'Arial Black', sans-serif"
+        fontWeight="900"
         fontSize={fontSize}
-        fill={textColor}
-        letterSpacing="0.02em"
+        fill={color}
       >
         {display}
       </text>
-
-      {/* Anomaly Indicator Badge (Level 1 Alarm / Level 2 Warning) */}
-      {isAlarm && (
-        <circle cx={x + w - 4} cy={y + 4} r={2.5} fill="#ef4444" />
-      )}
-      {isWarning && (
-        <polygon
-          points={`${x + w - 7},${y + 7} ${x + w - 2},${y + 7} ${x + w - 4.5},${y + 2}`}
-          fill="#f59e0b"
-        />
-      )}
     </g>
   );
 }

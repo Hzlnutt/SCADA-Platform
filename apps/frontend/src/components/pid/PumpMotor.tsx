@@ -5,8 +5,6 @@ interface PumpMotorProps {
   y?: number;
   size?: number;
   on?: boolean;
-  isAlarm?: boolean;
-  isWarning?: boolean;
 }
 
 const PumpMotor: React.FC<PumpMotorProps> = ({
@@ -14,25 +12,14 @@ const PumpMotor: React.FC<PumpMotorProps> = ({
   y = 0,
   size = 100,
   on = false,
-  isAlarm = false,
-  isWarning = false,
 }) => {
   const uid = useId();
   const s = (v: number) => (v / 100) * size;
 
-  // ─── Gradient Definitions ──────────────────────────────────────────────
+  // ─── Gradient Definitions (Persis dari YStrainer) ──────────────────────
   const gPipe   = `pipe_${uid}`; // -bv style
   const gFlange = `flange_${uid}`; // -fl style
   const gHub    = `hub_${uid}`; // -hub style
-
-  // ISA-101 Anomaly Highlight Border
-  const strokeColor = isAlarm
-    ? "#ef4444" // Anomaly Red
-    : isWarning
-    ? "#f59e0b" // Anomaly Amber
-    : on
-    ? "#475569" // Normal Running Slate
-    : "#334155"; // Stopped Slate
 
   return (
     <g transform={`translate(${x}, ${y})`}>
@@ -74,10 +61,19 @@ const PumpMotor: React.FC<PumpMotorProps> = ({
       <path
         d={`M${s(25)},${s(85)} L${s(35)},${s(95)} L${s(65)},${s(95)} L${s(75)},${s(85)} Z`}
         fill="none"
-        stroke={strokeColor}
+        stroke="#3a3b3c"
         strokeWidth={s(2)}
-        opacity={0.7}
-      />
+        opacity={0.5}
+      >
+        {on && (
+          <animate
+            attributeName="stroke"
+            values="#3a3b3c;#00E676;#3a3b3c"
+            dur="2.5s"
+            repeatCount="indefinite"
+          />
+        )}
+      </path>
 
       {/* ─── BODY UTAMA (Gaya Pipa) ──────────────────────────────────────── */}
       <rect
@@ -88,27 +84,28 @@ const PumpMotor: React.FC<PumpMotorProps> = ({
         fill={`url(#${gPipe})`}
       />
       
-      {/* ─── OUTLINE TERLUAR BODY (ISA-101 Monochromatic) ──────────────────── */}
+      {/* ─── OUTLINE TERLUAR BODY ────────────────────────────────────────── */}
       <rect
         x={s(25)}
         y={s(30)}
         width={s(50)}
         height={s(55)}
         fill="none"
-        stroke={strokeColor}
-        strokeWidth={isAlarm ? s(2.5) : s(2)}
+        stroke="#3a3b3c"
+        strokeWidth={s(2)}
       >
-        {isAlarm && (
+        {on && (
           <animate
-            attributeName="stroke-opacity"
-            values="1;0.4;1"
-            dur="1s"
+            attributeName="stroke"
+            values="#3a3b3c;#00E676;#3a3b3c"
+            dur="2.5s"
             repeatCount="indefinite"
           />
         )}
       </rect>
 
       {/* ─── SIRIP PENDINGIN (Warna Solid seperti edge) ──────────────────── */}
+      {/* Sirip kiri */}
       {[27, 29, 31, 33, 35].map((xPos) => (
         <rect
           key={`l-${xPos}`}
@@ -119,6 +116,7 @@ const PumpMotor: React.FC<PumpMotorProps> = ({
           fill="#3a3b3c"
         />
       ))}
+      {/* Sirip kanan */}
       {[65, 67, 69, 71, 73].map((xPos) => (
         <rect
           key={`r-${xPos}`}
@@ -148,16 +146,26 @@ const PumpMotor: React.FC<PumpMotorProps> = ({
         opacity={0.15}
         rx={s(1)}
       />
+      {/* Outline flange atas */}
       <rect
         x={s(22)}
         y={s(26)}
         width={s(56)}
         height={s(5)}
         fill="none"
-        stroke={strokeColor}
+        stroke="#3a3b3c"
         strokeWidth={s(2)}
         rx={s(1)}
-      />
+      >
+        {on && (
+          <animate
+            attributeName="stroke"
+            values="#3a3b3c;#00E676;#3a3b3c"
+            dur="2.5s"
+            repeatCount="indefinite"
+          />
+        )}
+      </rect>
 
       {/* ─── SHAFT ATAS (Gaya Pipa) ──────────────────────────────────────── */}
       <rect
@@ -185,16 +193,26 @@ const PumpMotor: React.FC<PumpMotorProps> = ({
         stroke="#3a3b3c"
         strokeWidth={s(0.5)}
       />
+      {/* Outline shaft atas */}
       <rect
         x={s(42)}
         y={s(10)}
         width={s(16)}
         height={s(16)}
         fill="none"
-        stroke={strokeColor}
+        stroke="#3a3b3c"
         strokeWidth={s(1)}
         rx={s(1)}
-      />
+      >
+        {on && (
+          <animate
+            attributeName="stroke"
+            values="#3a3b3c;#00E676;#3a3b3c"
+            dur="2.5s"
+            repeatCount="indefinite"
+          />
+        )}
+      </rect>
 
       {/* ─── MOTOR DI TENGAH (Gaya Hub) ────────────────────────────────────── */}
       <g>
@@ -232,20 +250,21 @@ const PumpMotor: React.FC<PumpMotorProps> = ({
         <circle cx={s(50)} cy={s(57)} r={s(4)} fill="#c8c8c8" />
         <circle cx={s(50)} cy={s(57)} r={s(2)} fill="#3a3b3c" />
 
-        {/* Animasi rotor saat ON (Halus & Bersih) */}
+        {/* Animasi rotor */}
         {on && (
           <animateTransform
             attributeName="transform"
             type="rotate"
             from={`0 ${s(50)} ${s(57)}`}
             to={`360 ${s(50)} ${s(57)}`}
-            dur="1.2s"
+            dur="1s"
             repeatCount="indefinite"
           />
         )}
       </g>
 
       {/* ─── HIGHLIGHT & SHADOW (Gaya YStrainer) ──────────────────────────── */}
+      {/* Highlight silinder */}
       <rect
         x={s(36)}
         y={s(32)}
@@ -254,24 +273,12 @@ const PumpMotor: React.FC<PumpMotorProps> = ({
         fill="#ffffff"
         opacity={0.08}
       />
+      {/* Shadow di base */}
       <path
         d={`M${s(25)},${s(85)} L${s(27)},${s(88)} L${s(73)},${s(88)} L${s(75)},${s(85)} Z`}
         fill="#0a0a0a"
         opacity={0.45}
       />
-
-      {/* Anomaly Badge */}
-      {isAlarm && (
-        <circle cx={s(72)} cy={s(28)} r={s(5)} fill="#ef4444" stroke="#ffffff" strokeWidth={s(1)} />
-      )}
-      {isWarning && (
-        <polygon
-          points={`${s(68)},${s(32)} ${s(76)},${s(32)} ${s(72)},${s(24)}`}
-          fill="#f59e0b"
-          stroke="#000000"
-          strokeWidth={s(0.8)}
-        />
-      )}
     </g>
   );
 };
