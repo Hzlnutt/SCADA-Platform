@@ -280,6 +280,40 @@ export const ensurePostgresTables = async () => {
       logger.warn({ err }, "Failed to migrate and clean minute data in cooling_tower_telemetry");
     });
 
+    // Create trigger to automatically intercept and redirect any minute-level insert to cooling_tower_telemetry_minute
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION trg_route_cooling_telemetry()
+      RETURNS TRIGGER AS $$
+      BEGIN
+          IF EXTRACT(MINUTE FROM NEW.t_stamp) != 0 OR EXTRACT(SECOND FROM NEW.t_stamp) != 0 THEN
+              INSERT INTO public.cooling_tower_telemetry_minute (
+                  t_stamp, 
+                  id_device, 
+                  return_temp, 
+                  supply_temp, 
+                  st3_return_temp
+              ) VALUES (
+                  NEW.t_stamp, 
+                  NEW.id_device, 
+                  NEW.return_temp, 
+                  NEW.supply_temp, 
+                  NEW.st3_return_temp
+              );
+              RETURN NULL;
+          END IF;
+          RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS trg_cooling_telemetry_minute_filter ON public.cooling_tower_telemetry;
+      CREATE TRIGGER trg_cooling_telemetry_minute_filter
+      BEFORE INSERT ON public.cooling_tower_telemetry
+      FOR EACH ROW
+      EXECUTE FUNCTION trg_route_cooling_telemetry();
+    `).catch((err) => {
+      logger.warn({ err }, "Failed to create trg_cooling_telemetry_minute_filter trigger");
+    });
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS api_sources (
         id SERIAL PRIMARY KEY,
