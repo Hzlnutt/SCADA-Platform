@@ -16,8 +16,8 @@ import MachineAHU03Pid from "./diagrams/MachineAHU03Pid";
 import MachineUtilityPid from "./diagrams/MachineUtilityPid";
 
 const TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
-  "cooling-water/supply_temp": "Scaled_Temp_Tank_Cooling3_Supp",
-  "cooling-water/return_temp": "Scaled_Temp_Tank_Cooling3_Return",
+  "cooling-water/supply_temp": "Scaled_Temp_Tank_Colling3_Supp",
+  "cooling-water/return_temp": "Scaled_Temp_Tank_Colling3_Return",
   "cooling-water/st3_return_temp": "Scaled_Temp_ST3_Return",
   "cooling-water/eq_temp_st03_supply": "Scaled_Temp_ST3_Supply",
   "cooling-water/eq_press_du03": "Scaled_Press_DUU3",
@@ -46,7 +46,13 @@ const TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
   "cooling-water/jumo_pieces": "Jumo Pieces",
   "cooling-water/pressure_1": "Scaled_Press_CT_P1",
   "cooling-water/pressure_2": "Scaled_Press_CT_P2",
-  "cooling-water/pressure_3": "Scaled_Press_CT3_P11"
+  "cooling-water/pressure_3": "Scaled_Press_CT3_P11",
+  "cooling-water/cooling_tank_tds": "Scaled_TDS_Tank_Cooling",
+  "cooling-water/cooling_tank_ph": "Scaled_PH_Tank_Cooling",
+  "cooling-water/makeup_wtr_tds": "Scaled_TDS_Makeup",
+  "cooling-water/makeup_wtr_ph": "Scaled_PH_Makeup",
+  "cooling-water/makeup_wtr_vol": "Scaled_Vol_Makeup",
+  "cooling-water/blowdown_vol": "Scaled_Vol_Blowdown",
 };
 
 // ═══════════════════════════════════════════════
@@ -349,8 +355,8 @@ export default function MachinePidDiagram() {
           const suppKey = jsonKeyMap["cooling-water/supply_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
           const retUrl = apiSourceUrls["cooling-water/return_temp"] || "";
           const suppUrl = apiSourceUrls["cooling-water/supply_temp"] || "";
-          const retVal = retKey && retUrl ? apiLiveData[retUrl]?.[retKey] : undefined;
-          const suppVal = suppKey && suppUrl ? apiLiveData[suppUrl]?.[suppKey] : undefined;
+          const retVal = retKey && retUrl ? (apiLiveData[retUrl]?.[retKey] ?? apiLiveData[retUrl]?.[retKey === "Scaled_Temp_Tank_Cooling3_Return" ? "Scaled_Temp_Tank_Colling3_Return" : retKey]) : undefined;
+          const suppVal = suppKey && suppUrl ? (apiLiveData[suppUrl]?.[suppKey] ?? apiLiveData[suppUrl]?.[suppKey === "Scaled_Temp_Tank_Cooling3_Supp" ? "Scaled_Temp_Tank_Colling3_Supp" : suppKey]) : undefined;
 
           if (typeof retVal === "number" && typeof suppVal === "number") {
             merged[tagKey] = {
@@ -370,7 +376,7 @@ export default function MachinePidDiagram() {
           return;
         }
 
-        const jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
+        let jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
         if (!jsonKey) {
           merged[tagKey] = {
             ts: new Date().toISOString(),
@@ -381,7 +387,15 @@ export default function MachinePidDiagram() {
           return;
         }
 
-        const val = apiLiveData[url]?.[jsonKey];
+        let val = apiLiveData[url]?.[jsonKey];
+        if (val === undefined && jsonKey) {
+          if (jsonKey === "Scaled_Temp_Tank_Cooling3_Supp") val = apiLiveData[url]?.["Scaled_Temp_Tank_Colling3_Supp"];
+          else if (jsonKey === "Scaled_Temp_Tank_Colling3_Supp") val = apiLiveData[url]?.["Scaled_Temp_Tank_Cooling3_Supp"];
+          else if (jsonKey === "Scaled_Temp_Tank_Cooling3_Return") val = apiLiveData[url]?.["Scaled_Temp_Tank_Colling3_Return"];
+          else if (jsonKey === "Scaled_Temp_Tank_Colling3_Return") val = apiLiveData[url]?.["Scaled_Temp_Tank_Cooling3_Return"];
+          else if (jsonKey === "Scaled_Press_DUU3") val = apiLiveData[url]?.["Scaled_Press_DU3"];
+          else if (jsonKey === "Scaled_Press_PrepU3") val = apiLiveData[url]?.["Scaled_Press_Prep3"];
+        }
 
         if (val === undefined || val === null) {
           merged[tagKey] = {
@@ -402,6 +416,18 @@ export default function MachinePidDiagram() {
     }
     return merged;
   }, [latest, apiSourceUrls, apiLiveData, unitId, jsonKeyMap]);
+
+  // Load sensor configurations from Configuration page (local storage or default)
+  const sensorConfigs = useMemo(() => {
+    let configs = getDefaultSensorConfigs(unitId);
+    const savedSensor = localStorage.getItem(`scada.config.sensor.${unitId}`);
+    if (savedSensor) {
+      try {
+        configs = JSON.parse(savedSensor);
+      } catch (e) {}
+    }
+    return configs;
+  }, [unitId]);
 
   const [selectedTaskFilter, setSelectedTaskFilter] = useState<
     "all" | "overdue" | "open" | "close"
@@ -463,30 +489,65 @@ export default function MachinePidDiagram() {
     if (!rawMessage) return "Terdeteksi kondisi alarm pada sensor.";
 
     let msg = rawMessage;
-    const liveObj = mergedLatest[tagId];
-    const liveVal = liveObj?.value;
+    
+    // Resolve live value from tagId or message content
+    let liveVal: any = undefined;
+    if (tagId && mergedLatest[tagId]?.value !== undefined) {
+      liveVal = mergedLatest[tagId].value;
+    } else if (tagId && !tagId.startsWith("cooling-water/") && mergedLatest[`cooling-water/${tagId}`]?.value !== undefined) {
+      liveVal = mergedLatest[`cooling-water/${tagId}`].value;
+    } else if (tagId && tagId.startsWith("cooling-water/") && mergedLatest[tagId.replace("cooling-water/", "")]?.value !== undefined) {
+      liveVal = mergedLatest[tagId.replace("cooling-water/", "")].value;
+    }
+
+    // If still not resolved, try matching equip name from message against sensorConfigs
+    if (liveVal === undefined || liveVal === "xx" || liveVal === "XX") {
+      const match = rawMessage.match(/\[(.*?)\]/);
+      if (match && match[1]) {
+        const equipName = match[1].toLowerCase().trim();
+        const foundSensor = sensorConfigs.find(
+          (s) =>
+            s.tagName.toLowerCase() === equipName ||
+            s.tagKey.toLowerCase() === equipName ||
+            s.tagKey.replace(/^cooling-water\//i, "").toLowerCase() === equipName ||
+            equipName.includes(s.tagName.toLowerCase()) ||
+            s.tagName.toLowerCase().includes(equipName)
+        );
+        if (foundSensor && mergedLatest[foundSensor.tagKey]?.value !== undefined) {
+          liveVal = mergedLatest[foundSensor.tagKey].value;
+        }
+      }
+    }
+
     const hasLive = liveVal !== undefined && liveVal !== null && liveVal !== "xx" && liveVal !== "XX";
 
-    if (msg.includes("Limit of")) {
-      msg = msg.replace(/\[(.*?)\] (exceeds|is below) (Alarm|Warning) Limit of (.*?) \(Current: (.*?)\)/gi, 
-        (_, equip, direction, type, limit, curr) => {
+    if (msg.includes("Limit of") || msg.includes("limit of")) {
+      msg = msg.replace(
+        /\[(.*?)\] (exceeds|is below) (Alarm|Warning) Limit of (.*?) \((Current|Nilai saat ini): (.*?)\)/gi,
+        (_, equip, direction, type, limit, _currLabel, curr) => {
           let valStr = curr;
           if (hasLive) {
-            const unitMatch = limit.trim().match(/[a-zA-Z°%]+/);
+            const unitMatch = limit.trim().match(/[a-zA-Z°%µ/³]+/);
             const unit = unitMatch ? " " + unitMatch[0] : "";
             const numVal = typeof liveVal === "number" ? liveVal.toFixed(1) : String(liveVal);
             valStr = numVal + unit;
           }
           const dirText = direction.toLowerCase() === "exceeds" ? "melebihi" : "di bawah";
           const typeText = type.toLowerCase() === "alarm" ? "batas aman" : "batas warning";
-          const labelPrefix = (equip.toLowerCase().includes("press") || equip.toLowerCase().includes("bar"))
-            ? "Tekanan pada "
-            : (equip.toLowerCase().includes("temp") || equip.toLowerCase().includes("suhu"))
-            ? "Suhu pada "
-            : "";
+          const labelPrefix =
+            equip.toLowerCase().includes("press") || equip.toLowerCase().includes("bar")
+              ? "Tekanan pada "
+              : equip.toLowerCase().includes("temp") || equip.toLowerCase().includes("suhu")
+              ? "Suhu pada "
+              : "";
           return `${labelPrefix}${equip} ${dirText} ${typeText} (${limit}). Nilai saat ini: ${valStr}`;
         }
       );
+    } else if (msg.includes("Nilai saat ini:") && hasLive) {
+      msg = msg.replace(/Nilai saat ini:\s*([^\s.,)]+)(\s*[a-zA-Z°%µ/³]*)/i, () => {
+        const numVal = typeof liveVal === "number" ? liveVal.toFixed(1) : String(liveVal);
+        return `Nilai saat ini: ${numVal}`;
+      });
     }
 
     return msg;
