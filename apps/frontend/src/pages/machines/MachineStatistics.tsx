@@ -459,8 +459,15 @@ export default function MachineStatistics() {
             borderWidth: 2.5,
             tension: 0.3,
             fill: true,
-            pointRadius: 1,
-            pointHoverRadius: 4
+            pointRadius: 2.5,
+            pointBackgroundColor: "#1f6fb5",
+            pointBorderColor: "#ffffff",
+            pointBorderWidth: 1.5,
+            pointHoverRadius: 8,
+            pointHoverBackgroundColor: "#1f6fb5",
+            pointHoverBorderColor: "#ffffff",
+            pointHoverBorderWidth: 3,
+            pointHitRadius: 15
           }
         ]
       },
@@ -471,6 +478,10 @@ export default function MachineStatistics() {
   const parameterTrendOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: {
+      mode: "index" as const,
+      intersect: false
+    },
     plugins: {
       legend: { display: false }
     },
