@@ -17,6 +17,7 @@ export default function MachineOverview() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
+  const latest = useTelemetryStore((state) => state.latest);
 
   const { machines, categories } = useMachineConfig();
   const machineConfig = machines?.find((m) => m.id === unitId);
@@ -518,7 +519,6 @@ function StandardMachineOverview({
     ]
   });
 
-  const latest = useTelemetryStore((state) => state.latest);
   const liveData = useMemo(() => {
     if (unitId.startsWith("cooling-water")) {
       const getApiVal = (tagKey: string) => {
