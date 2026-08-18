@@ -553,42 +553,47 @@ export default function MachinePidDiagram() {
     return msg;
   };
 
+  const [rawDbAlarms, setRawDbAlarms] = useState<any[]>([]);
+
   const fetchActiveAlarms = async () => {
     try {
       const res = await getJson<{ data: any[] }>(`/alarms/active?unit=${unitId}&limit=20`);
       if (res && Array.isArray(res.data)) {
-        const mapped: Alarm[] = res.data.map((item: any) => {
-          const severity: "critical" | "warning" | "info" =
-            item.severity === "critical" || item.severity === "high"
-              ? "critical"
-              : item.severity === "warning" || item.severity === "medium"
-              ? "warning"
-              : "info";
-
-          const ts = item.lastTs
-            ? new Date(item.lastTs).toLocaleTimeString("en-US", { hour12: false })
-            : new Date().toLocaleTimeString("en-US", { hour12: false });
-
-          return {
-            id: Number(item.id) || item.id,
-            code: formatAlarmTitle(item.alarmKey || item.tagId || "ALM", item.message || ""),
-            message: formatAlarmMessage(item.message || "", item.tagId || ""),
-            severity,
-            timestamp: ts,
-            status: item.status || "Active",
-            clearedAt: item.clearedAt ? new Date(item.clearedAt).toLocaleTimeString("en-US", { hour12: false }) : "—",
-            rtn: item.rtn || "—",
-            operatorName: item.operatorName || "—",
-            operatorAction: item.operatorAction || "—",
-            approverName: item.approverName || "—"
-          };
-        });
-        setDbAlarms(mapped);
+        setRawDbAlarms(res.data);
       }
     } catch (err) {
       console.error("Failed to fetch active alarms from DB:", err);
     }
   };
+
+  const dynamicAlarmsList = useMemo<Alarm[]>(() => {
+    return rawDbAlarms.map((item: any) => {
+      const severity: "critical" | "warning" | "info" =
+        item.severity === "critical" || item.severity === "high"
+          ? "critical"
+          : item.severity === "warning" || item.severity === "medium"
+          ? "warning"
+          : "info";
+
+      const ts = item.lastTs
+        ? new Date(item.lastTs).toLocaleTimeString("en-US", { hour12: false })
+        : new Date().toLocaleTimeString("en-US", { hour12: false });
+
+      return {
+        id: Number(item.id) || item.id,
+        code: formatAlarmTitle(item.alarmKey || item.tagId || "ALM", item.message || ""),
+        message: formatAlarmMessage(item.message || "", item.tagId || ""),
+        severity,
+        timestamp: ts,
+        status: item.status || "Active",
+        clearedAt: item.clearedAt ? new Date(item.clearedAt).toLocaleTimeString("en-US", { hour12: false }) : "—",
+        rtn: item.rtn || "—",
+        operatorName: item.operatorName || "—",
+        operatorAction: item.operatorAction || "—",
+        approverName: item.approverName || "—"
+      };
+    });
+  }, [rawDbAlarms, mergedLatest, sensorConfigs]);
 
   useEffect(() => {
     fetchActiveAlarms();
@@ -869,7 +874,7 @@ export default function MachinePidDiagram() {
       selectedTaskFilter={selectedTaskFilter}
       onFilterChange={setSelectedTaskFilter}
       taskInfo={taskInfo}
-      alarms={dbAlarms}
+      alarms={dynamicAlarmsList}
       onToggleCompleteTask={handleToggleCompleteTask}
       dateRange={dateRange}
       onChangeDateRange={setDateRange}

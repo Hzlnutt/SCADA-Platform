@@ -112,7 +112,13 @@ const TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
   "cooling-water/eq_status_bp03": "Status_MTR_BP",
   "cooling-water/eq_status_prep03": "Status_MTR_Prep3",
   "cooling-water/eq_status_st03": "Status_MTR_ST3_P3",
-  "cooling-water/eq_status_washing": "Status_MTR_Washing"
+  "cooling-water/eq_status_washing": "Status_MTR_Washing",
+  "cooling-water/cooling_tank_tds": "Scaled_TDS_Tank_Cooling",
+  "cooling-water/cooling_tank_ph": "Scaled_PH_Tank_Cooling",
+  "cooling-water/makeup_wtr_tds": "Scaled_TDS_Makeup",
+  "cooling-water/makeup_wtr_ph": "Scaled_PH_Makeup",
+  "cooling-water/makeup_wtr_vol": "Scaled_Vol_Makeup",
+  "cooling-water/blowdown_vol": "Scaled_Vol_Blowdown",
 };
 
 function StandardMachineOverview({
@@ -314,6 +320,135 @@ function StandardMachineOverview({
   const allActiveAlarms = useMemo(() => {
     return [...dynamicAlarms, ...dbAlarms];
   }, [dbAlarms, dynamicAlarms]);
+
+  // Load sensor configurations from Configuration page (local storage or default)
+  const sensorConfigs = useMemo(() => {
+    let configs = getDefaultSensorConfigs(unitId);
+    const savedSensor = localStorage.getItem(`scada.config.sensor.${unitId}`);
+    if (savedSensor) {
+      try {
+        configs = JSON.parse(savedSensor);
+      } catch (e) {}
+    }
+    return configs;
+  }, [unitId]);
+
+  const mergedLatest = useMemo(() => {
+    const merged = { ...latest };
+    if (unitId.startsWith("cooling-water")) {
+      Object.entries(apiSourceUrls).forEach(([tagKey, url]) => {
+        if (!url || !url.trim()) return;
+
+        if (tagKey === "cooling-water/delta_temp") {
+          const retKey = jsonKeyMap["cooling-water/return_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/return_temp"];
+          const suppKey = jsonKeyMap["cooling-water/supply_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
+          const retUrl = apiSourceUrls["cooling-water/return_temp"] || "";
+          const suppUrl = apiSourceUrls["cooling-water/supply_temp"] || "";
+          const retVal = retKey && retUrl ? (apiLiveData[retUrl]?.[retKey] ?? apiLiveData[retUrl]?.[retKey === "Scaled_Temp_Tank_Cooling3_Return" ? "Scaled_Temp_Tank_Colling3_Return" : retKey]) : undefined;
+          const suppVal = suppKey && suppUrl ? (apiLiveData[suppUrl]?.[suppKey] ?? apiLiveData[suppUrl]?.[suppKey === "Scaled_Temp_Tank_Cooling3_Supp" ? "Scaled_Temp_Tank_Colling3_Supp" : suppKey]) : undefined;
+
+          if (typeof retVal === "number" && typeof suppVal === "number") {
+            merged[tagKey] = {
+              ts: new Date().toISOString(),
+              value: Number((retVal - suppVal).toFixed(2)),
+              quality: "good",
+              meta: { tagId: tagKey }
+            };
+          }
+          return;
+        }
+
+        let jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
+        let val = apiLiveData[url]?.[jsonKey];
+        if (val === undefined && jsonKey) {
+          if (jsonKey === "Scaled_Temp_Tank_Cooling3_Supp") val = apiLiveData[url]?.["Scaled_Temp_Tank_Colling3_Supp"];
+          else if (jsonKey === "Scaled_Temp_Tank_Colling3_Supp") val = apiLiveData[url]?.["Scaled_Temp_Tank_Cooling3_Supp"];
+          else if (jsonKey === "Scaled_Temp_Tank_Cooling3_Return") val = apiLiveData[url]?.["Scaled_Temp_Tank_Colling3_Return"];
+          else if (jsonKey === "Scaled_Temp_Tank_Colling3_Return") val = apiLiveData[url]?.["Scaled_Temp_Tank_Cooling3_Return"];
+          else if (jsonKey === "Scaled_Press_DUU3") val = apiLiveData[url]?.["Scaled_Press_DU3"];
+          else if (jsonKey === "Scaled_Press_PrepU3") val = apiLiveData[url]?.["Scaled_Press_Prep3"];
+        }
+
+        if (val !== undefined && val !== null) {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: val,
+            quality: "good",
+            meta: { tagId: tagKey }
+          };
+        }
+      });
+    }
+    return merged;
+  }, [latest, apiSourceUrls, apiLiveData, unitId, jsonKeyMap]);
+
+  const formatAlarmMessage = (rawMessage: string, tagId: string) => {
+    if (!rawMessage) return "Terdeteksi kondisi alarm pada sensor.";
+
+    let msg = rawMessage;
+    
+    // Resolve live value from tagId or message content
+    let liveVal: any = undefined;
+    if (tagId && mergedLatest[tagId]?.value !== undefined) {
+      liveVal = mergedLatest[tagId].value;
+    } else if (tagId && !tagId.startsWith("cooling-water/") && mergedLatest[`cooling-water/${tagId}`]?.value !== undefined) {
+      liveVal = mergedLatest[`cooling-water/${tagId}`].value;
+    } else if (tagId && tagId.startsWith("cooling-water/") && mergedLatest[tagId.replace("cooling-water/", "")]?.value !== undefined) {
+      liveVal = mergedLatest[tagId.replace("cooling-water/", "")].value;
+    }
+
+    // If still not resolved, try matching equip name from message against sensorConfigs
+    if (liveVal === undefined || liveVal === "xx" || liveVal === "XX") {
+      const match = rawMessage.match(/\[(.*?)\]/);
+      if (match && match[1]) {
+        const equipName = match[1].toLowerCase().trim();
+        const foundSensor = sensorConfigs.find(
+          (s) =>
+            s.tagName.toLowerCase() === equipName ||
+            s.tagKey.toLowerCase() === equipName ||
+            s.tagKey.replace(/^cooling-water\//i, "").toLowerCase() === equipName ||
+            equipName.includes(s.tagName.toLowerCase()) ||
+            s.tagName.toLowerCase().includes(equipName)
+        );
+        if (foundSensor && mergedLatest[foundSensor.tagKey]?.value !== undefined) {
+          liveVal = mergedLatest[foundSensor.tagKey].value;
+        }
+      }
+    }
+
+    const hasLive = liveVal !== undefined && liveVal !== null && liveVal !== "xx" && liveVal !== "XX";
+
+    if (msg.includes("Limit of") || msg.includes("limit of")) {
+      msg = msg.replace(
+        /\[(.*?)\] (exceeds|is below) (Alarm|Warning) Limit of (.*?) \((Current|Nilai saat ini): (.*?)\)/gi,
+        (_, equip, direction, type, limit, _currLabel, curr) => {
+          let valStr = curr;
+          if (hasLive) {
+            const unitMatch = limit.trim().match(/[a-zA-Z°%µ/³]+/);
+            const unit = unitMatch ? " " + unitMatch[0] : "";
+            const numVal = typeof liveVal === "number" ? liveVal.toFixed(1) : String(liveVal);
+            valStr = numVal + unit;
+          }
+          const dirText = direction.toLowerCase() === "exceeds" ? "melebihi" : "di bawah";
+          const typeText = type.toLowerCase() === "alarm" ? "batas aman" : "batas warning";
+          const labelPrefix =
+            equip.toLowerCase().includes("press") || equip.toLowerCase().includes("bar")
+              ? "Tekanan pada "
+              : equip.toLowerCase().includes("temp") || equip.toLowerCase().includes("suhu")
+              ? "Suhu pada "
+              : "";
+          return `${labelPrefix}${equip} ${dirText} ${typeText} (${limit}). Nilai saat ini: ${valStr}`;
+        }
+      );
+    } else if (msg.includes("Nilai saat ini:") && hasLive) {
+      msg = msg.replace(/Nilai saat ini:\s*([^\s.,)]+)(\s*[a-zA-Z°%µ/³]*)/i, () => {
+        const numVal = typeof liveVal === "number" ? liveVal.toFixed(1) : String(liveVal);
+        return `Nilai saat ini: ${numVal}`;
+      });
+    }
+
+    return msg;
+  };
 
   // Dynamic baselines from config (localStorage)
   const baselines = useMemo(() => {
@@ -1127,7 +1262,7 @@ function StandardMachineOverview({
                         <div key={alarm.id} className="flex items-start justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 hover:border-sky-300 dark:hover:border-slate-700 transition">
                           <div className="space-y-1">
                             <div className="text-[11px] font-bold text-[#002b5c] dark:text-slate-200 line-clamp-1">
-                              {alarm.description}
+                              {formatAlarmMessage(alarm.description, alarm.equipment)}
                             </div>
                             <div className="text-[9px] text-[#47729f] dark:text-slate-500 font-mono">
                               {alarm.equipment} | {alarm.timestamp}
