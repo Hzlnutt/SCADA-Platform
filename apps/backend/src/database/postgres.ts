@@ -259,6 +259,19 @@ export const ensurePostgresTables = async () => {
       logger.warn({ err }, "Failed to create cooling_tower_telemetry_minute table");
     });
 
+    // Move any existing minute-level rows from main table to temporary table
+    await pool.query(`
+      INSERT INTO cooling_tower_telemetry_minute (t_stamp, id_device, return_temp, supply_temp, st3_return_temp)
+      SELECT t_stamp, id_device, return_temp, supply_temp, st3_return_temp
+      FROM cooling_tower_telemetry
+      WHERE EXTRACT(MINUTE FROM t_stamp) != 0 OR EXTRACT(SECOND FROM t_stamp) != 0;
+
+      DELETE FROM cooling_tower_telemetry
+      WHERE EXTRACT(MINUTE FROM t_stamp) != 0 OR EXTRACT(SECOND FROM t_stamp) != 0;
+    `).catch((err) => {
+      logger.warn({ err }, "Failed to migrate minute data to cooling_tower_telemetry_minute");
+    });
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS api_sources (
         id SERIAL PRIMARY KEY,
