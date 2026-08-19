@@ -440,7 +440,7 @@ export default function Electricity() {
     };
 
     fetchPmData();
-    const interval = setInterval(fetchPmData, 3000);
+    const interval = setInterval(fetchPmData, 1000);
 
     const socket = getSocket();
     const handleLiveUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
@@ -526,12 +526,12 @@ export default function Electricity() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 3000);
+    const interval = setInterval(fetchActiveApiData, 1000);
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [apiSourceUrls]);
+  }, [apiSourceUrls, isPageActive]);
 
   const getApiVal = useCallback((tagKey: string) => {
     const isPlnTag = tagKey.startsWith("pln/") || tagKey === "electricity/p_grid";

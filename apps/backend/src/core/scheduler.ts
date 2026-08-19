@@ -1024,8 +1024,8 @@ export const startPowerFactorPolling = () => {
 
   // Initial poll
   poll();
-  // Poll every 5 seconds for power factor
-  pfPollingInterval = setInterval(poll, 5000);
+  // Poll every 1 second for live power factor status
+  pfPollingInterval = setInterval(poll, 1000);
 };
 
 let coolingPollingInterval: NodeJS.Timeout | null = null;
@@ -1306,8 +1306,8 @@ export const startCoolingTowerPolling = () => {
 
   // Initial poll
   poll();
-  // Poll every 5 seconds for real-time SCADA updates
-  coolingPollingInterval = setInterval(poll, 5000);
+  // Poll every 1 second for live real-time SCADA updates
+  coolingPollingInterval = setInterval(poll, 1000);
 };
 
 let waterPollingInterval: NodeJS.Timeout | null = null;

@@ -227,7 +227,7 @@ export default function WaterOverview() {
     };
 
     pollApi();
-    const interval = setInterval(pollApi, 4000);
+    const interval = setInterval(pollApi, 1000);
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -299,7 +299,7 @@ export default function WaterOverview() {
       });
     };
 
-    const interval = setInterval(runJitter, 3000);
+    const interval = setInterval(runJitter, 1000);
     return () => clearInterval(interval);
   }, [dw3PumpState, dw4PumpState, isPageActive]);
 

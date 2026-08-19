@@ -262,7 +262,7 @@ function StandardMachineOverview({
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 4000);
+    const interval = setInterval(fetchActiveApiData, 1000);
     return () => {
       isMounted = false;
       clearInterval(interval);

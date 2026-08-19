@@ -331,7 +331,7 @@ export default function MachinePidDiagram() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 4000);
+    const interval = setInterval(fetchActiveApiData, 1000);
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -738,7 +738,7 @@ export default function MachinePidDiagram() {
       }
     };
     fetchLatestTelemetry();
-    const telInterval = setInterval(fetchLatestTelemetry, 4000);
+    const telInterval = setInterval(fetchLatestTelemetry, 1000);
     return () => clearInterval(telInterval);
   }, [isPageActive]);
 

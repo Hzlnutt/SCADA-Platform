@@ -939,7 +939,7 @@ export default function PowerDistribution() {
     };
 
     fetchPmData();
-    const interval = setInterval(fetchPmData, 3000);
+    const interval = setInterval(fetchPmData, 1000);
 
     const socket = getSocket();
     const handleLiveUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {

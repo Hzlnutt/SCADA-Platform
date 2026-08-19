@@ -324,7 +324,7 @@ export default function IncomingPln() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 3000);
+    const interval = setInterval(fetchActiveApiData, 1000);
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -505,7 +505,7 @@ export default function IncomingPln() {
     fetchTelemetry();
     const interval = setInterval(() => {
       if (isPageActive) fetchTelemetry();
-    }, 3000);
+    }, 1000);
     return () => clearInterval(interval);
   }, [config, isPageActive]);
 
