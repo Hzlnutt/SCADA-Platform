@@ -12,6 +12,35 @@ import { ApiSourcesPanel } from "../machines/MachineConfig";
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
+const DEFAULT_API_URLS: Record<string, string> = {
+  pln: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln",
+  fact1: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1",
+  fact2: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2"
+};
+
+const DEFAULT_JSON_KEYS: Record<string, string> = {
+  voltage: "Volt_LL",
+  frequency: "Frequency",
+  active_power: "Active_Power",
+  power_factor: "Power_Factor",
+  reactive_power: "Reactive_Power_Total",
+  apparent_power: "Apparent_Power_Total",
+  unbalance_v: "Volatage_Unbalance",
+  unbalance_i: "Current_Unbalance",
+  v_r: "VoltAB",
+  v_s: "VoltBC",
+  v_t: "VoltCA",
+  i_r: "Current_A",
+  i_s: "Current_B",
+  i_t: "Current_C",
+  thd_v_r: "THD_Volt_A",
+  thd_v_s: "THD_Volt_B",
+  thd_v_t: "THD_Volt_C",
+  thd_i_r: "THD_Current_A",
+  thd_i_s: "THD_Current_B",
+  thd_i_t: "THD_Current_C"
+};
+
 // Event logs mock data matching the mockup
 const MOCK_EVENTS: any[] = [];
 
@@ -261,7 +290,8 @@ export default function IncomingPln() {
   useEffect(() => {
     let isMounted = true;
     const fetchActiveApiData = async () => {
-      const uniqueUrls = Array.from(new Set(Object.values(apiSourceUrls).filter((u) => u.trim())));
+      const defaultUrl = DEFAULT_API_URLS[mode] || "";
+      const uniqueUrls = Array.from(new Set([...Object.values(apiSourceUrls), defaultUrl].filter((u) => u && u.trim())));
       if (uniqueUrls.length === 0) {
         if (isMounted) setApiLiveData({});
         return;
@@ -290,24 +320,86 @@ export default function IncomingPln() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 4000);
+    const interval = setInterval(fetchActiveApiData, 1000);
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [apiSourceUrls]);
+  }, [apiSourceUrls, mode]);
 
   const getApiVal = useCallback((tagKey: string) => {
-    const url = apiSourceUrls[tagKey] || "";
-    if (!url.trim()) return "BELUM ADA API";
-    
-    const jsonKey = jsonKeyMap[tagKey] || tagKey.split("/")[1];
-    if (!jsonKey) return "API TIDAK TERKIRIM";
+    const rawKey = tagKey.includes("/") ? tagKey.split("/")[1] : tagKey;
+    const defaultUrl = DEFAULT_API_URLS[mode] || "";
+    const url = apiSourceUrls[tagKey] || defaultUrl;
+    const jsonKey = jsonKeyMap[tagKey] || DEFAULT_JSON_KEYS[rawKey] || rawKey;
 
-    const val = apiLiveData[url]?.[jsonKey];
-    if (val === undefined || val === null) return "API TIDAK TERKIRIM";
-    return val;
-  }, [apiSourceUrls, jsonKeyMap, apiLiveData]);
+    if (url && apiLiveData[url]) {
+      let val = apiLiveData[url][jsonKey];
+      if (val === undefined && rawKey === "active_power") {
+        val = apiLiveData[url]["Active_Power_Total"] ?? apiLiveData[url]["active_power_total"] ?? apiLiveData[url]["Active_Power"];
+      }
+      if (val === undefined && rawKey === "voltage") {
+        val = apiLiveData[url]["Volt_LL"] ?? apiLiveData[url]["volt_ll"];
+      }
+      if (val === undefined && rawKey === "unbalance_v") {
+        val = apiLiveData[url]["Voltage_Unbalance"] ?? apiLiveData[url]["voltage_unbalance"] ?? apiLiveData[url]["Volatage_Unbalance"];
+      }
+      if (val === undefined && rawKey === "unbalance_i") {
+        val = apiLiveData[url]["Current_Unbalance"] ?? apiLiveData[url]["current_unbalance"];
+      }
+
+      if (val !== undefined && val !== null) {
+        // Power parameters (convert Watts to kW/kVAR/kVA if large)
+        if (rawKey === "active_power" || rawKey === "reactive_power" || rawKey === "apparent_power") {
+          if (typeof val === "number" && val > 10000) val = val / 1000.0;
+        }
+        // Voltage LL (convert Volts to kV)
+        if (rawKey === "voltage" && typeof val === "number" && val > 1000) {
+          val = val / 1000.0;
+        }
+        // Voltage L-N (convert Volts to kV L-N)
+        if ((rawKey === "v_r" || rawKey === "v_s" || rawKey === "v_t") && typeof val === "number" && val > 1000) {
+          val = (val / Math.sqrt(3)) / 1000.0;
+        }
+        // Unbalances & THD (convert decimal 0.0055 to %)
+        if ((rawKey.startsWith("unbalance_") || rawKey.startsWith("thd_")) && typeof val === "number" && val < 1.0) {
+          val = val * 100.0;
+        }
+        // Power factor convert negative to positive
+        if (rawKey === "power_factor" && typeof val === "number") {
+          val = Math.abs(val);
+        }
+        return val;
+      }
+    }
+
+    // Fallback to metrics from backend WebSocket
+    if (metrics) {
+      if (rawKey === "voltage" && metrics.voltage > 0) return metrics.voltage;
+      if (rawKey === "frequency" && metrics.frequency > 0) return metrics.frequency;
+      if (rawKey === "active_power" && metrics.activePower > 0) return metrics.activePower;
+      if (rawKey === "power_factor" && metrics.powerFactor !== 0) return Math.abs(metrics.powerFactor);
+      if (rawKey === "reactive_power" && metrics.reactivePower > 0) return metrics.reactivePower;
+      if (rawKey === "apparent_power" && metrics.apparentPower > 0) return metrics.apparentPower;
+      if (rawKey === "unbalance_v" && metrics.unbalanceV > 0) return metrics.unbalanceV;
+      if (rawKey === "unbalance_i" && metrics.unbalanceI > 0) return metrics.unbalanceI;
+      if (rawKey === "v_r" && metrics.vR > 0) return metrics.vR;
+      if (rawKey === "v_s" && metrics.vS > 0) return metrics.vS;
+      if (rawKey === "v_t" && metrics.vT > 0) return metrics.vT;
+      if (rawKey === "i_r" && metrics.iR > 0) return metrics.iR;
+      if (rawKey === "i_s" && metrics.iS > 0) return metrics.iS;
+      if (rawKey === "i_t" && metrics.iT > 0) return metrics.iT;
+      if (rawKey === "thd_v_r" && metrics.thdV_R > 0) return metrics.thdV_R;
+      if (rawKey === "thd_v_s" && metrics.thdV_S > 0) return metrics.thdV_S;
+      if (rawKey === "thd_v_t" && metrics.thdV_T > 0) return metrics.thdV_T;
+      if (rawKey === "thd_i_r" && metrics.thdI_R > 0) return metrics.thdI_R;
+      if (rawKey === "thd_i_s" && metrics.thdI_S > 0) return metrics.thdI_S;
+      if (rawKey === "thd_i_t" && metrics.thdI_T > 0) return metrics.thdI_T;
+    }
+
+    if (!url.trim()) return "BELUM ADA API";
+    return "API TIDAK TERKIRIM";
+  }, [mode, apiSourceUrls, jsonKeyMap, apiLiveData, metrics]);
 
   const isOfflineVal = useCallback((val: any) => {
     return val === "BELUM ADA API" || val === "API TIDAK TERKIRIM" || val === "xx";
@@ -406,7 +498,7 @@ export default function IncomingPln() {
 
   useEffect(() => {
     fetchTelemetry();
-    const interval = setInterval(fetchTelemetry, 3000);
+    const interval = setInterval(fetchTelemetry, 1000);
     return () => clearInterval(interval);
   }, [config]);
 

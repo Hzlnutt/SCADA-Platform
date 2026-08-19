@@ -67,13 +67,11 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
   });
 
   const powerChartData = {
-    labels: historyLabels.length > 0 ? historyLabels : Array.from({ length: 12 }, (_, i) => `${i * 2}:00`),
+    labels: historyLabels,
     datasets: [
       {
         label: "Active Power (kW)",
-        data: historyData.length > 0
-          ? historyData.map((d) => d.active_power_total || 0)
-          : Array.from({ length: 12 }, () => Math.round(Number(pm.active_power_total || 50) + (Math.random() - 0.5) * 8)),
+        data: historyData.map((d) => d.active_power_total || 0),
         borderColor: "#38bdf8",
         backgroundColor: "rgba(56,189,248,0.1)",
         borderWidth: 2,
@@ -85,11 +83,11 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
   };
 
   const currentChartData = {
-    labels: historyLabels.length > 0 ? historyLabels : Array.from({ length: 12 }, (_, i) => `${i * 2}:00`),
+    labels: historyLabels,
     datasets: [
       {
         label: "Phase A (A)",
-        data: historyData.length > 0 ? historyData.map((d) => d.current_a || 0) : Array.from({ length: 12 }, () => Number(pm.current_a || 100)),
+        data: historyData.map((d) => d.current_a || 0),
         borderColor: "#ef4444",
         backgroundColor: "transparent",
         borderWidth: 1.5,
@@ -98,7 +96,7 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
       },
       {
         label: "Phase B (A)",
-        data: historyData.length > 0 ? historyData.map((d) => d.current_b || 0) : Array.from({ length: 12 }, () => Number(pm.current_b || 98)),
+        data: historyData.map((d) => d.current_b || 0),
         borderColor: "#f59e0b",
         backgroundColor: "transparent",
         borderWidth: 1.5,
@@ -107,7 +105,7 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
       },
       {
         label: "Phase C (A)",
-        data: historyData.length > 0 ? historyData.map((d) => d.current_c || 0) : Array.from({ length: 12 }, () => Number(pm.current_c || 102)),
+        data: historyData.map((d) => d.current_c || 0),
         borderColor: "#10b981",
         backgroundColor: "transparent",
         borderWidth: 1.5,

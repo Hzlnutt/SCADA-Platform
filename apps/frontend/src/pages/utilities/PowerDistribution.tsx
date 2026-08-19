@@ -936,6 +936,7 @@ export default function PowerDistribution() {
     };
 
     fetchPmData();
+    const interval = setInterval(fetchPmData, 1000);
 
     const socket = getSocket();
     const handleLiveUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
@@ -949,6 +950,7 @@ export default function PowerDistribution() {
 
     return () => {
       active = false;
+      clearInterval(interval);
       socket.off(`electricity:${selectedEwGroup}_live`, handleLiveUpdate);
       socket.off("electricity:pm_live_update", handleLiveUpdate);
     };
@@ -1105,31 +1107,6 @@ export default function PowerDistribution() {
   const totalCapacityKva = useMemo(() => {
     return transformers.reduce((sum, tx) => sum + tx.capacityKva, 0);
   }, [transformers]);
-
-  // Real-time ticking simulation
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTelemetryTransformers(prev =>
-        prev.map(tx => {
-          const jitter = (Math.random() - 0.5) * 12;
-          const newPower = Math.max(50, Math.min(tx.capacityKva * 0.95, Math.round(tx.activePowerKw + jitter)));
-          const newTemp = Math.max(30, Math.min(110, +(tx.tempCc + (Math.random() - 0.5) * 0.4).toFixed(1)));
-          const baseV = tx.voltageOutL2L || 400;
-          return {
-            ...tx,
-            activePowerKw: newPower,
-            tempCc: newTemp,
-            currentR: Math.round((newPower * 1000) / (Math.sqrt(3) * baseV * tx.powerFactor || 1)),
-            currentS: Math.round((newPower * 1000) / (Math.sqrt(3) * baseV * tx.powerFactor || 1) * 0.98),
-            currentT: Math.round((newPower * 1000) / (Math.sqrt(3) * baseV * tx.powerFactor || 1) * 1.02),
-            apparentPowerKva: Math.round(newPower / tx.powerFactor),
-            reactivePowerKvar: Math.round(Math.sqrt(Math.pow(newPower / tx.powerFactor, 2) - Math.pow(newPower, 2)))
-          };
-        })
-      );
-    }, 4000);
-    return () => clearInterval(timer);
-  }, []);
 
   const factory1 = transformers.filter(tx => tx.factory === 1);
   const factory2 = transformers.filter(tx => tx.factory === 2);

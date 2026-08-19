@@ -252,50 +252,6 @@ export const getPowerMetersLatestHandler = async (
 
     let data = dbRes.rows;
 
-    // Fallback if DB table has not accumulated rows yet
-    if (data.length === 0) {
-      const pmIds = group === "ew21"
-        ? [132, 133, 134, 135, 136, 138, 139, 140, 151, 152, 153, 154, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185]
-        : group === "ew22"
-        ? [201, 202, 203, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 226, 229, 271, 272, 273, 274, 288]
-        : [318, 319, 320, 321, 322, 323, 324, 325, 327, 337, 410, 411, 412];
-
-      const now = new Date();
-      data = pmIds.map((id) => {
-        const pKw = +(10 + (id % 50) * 3.5 + Math.random() * 4).toFixed(2);
-        const vL = +(380 + Math.random() * 8).toFixed(1);
-        const cur = +(pKw * 1000 / (1.732 * vL * 0.92)).toFixed(1);
-        return {
-          id: id,
-          t_stamp: now,
-          group_id: group,
-          pm_id: `PM${id}`,
-          status: true,
-          volt_ab: vL,
-          volt_bc: vL,
-          volt_ca: vL,
-          volt_ll: vL,
-          current_a: cur,
-          current_b: +(cur * 0.98).toFixed(1),
-          current_c: +(cur * 1.02).toFixed(1),
-          frequency: 50.0,
-          active_power_total: pKw,
-          reactive_power_total: +(pKw * 0.35).toFixed(2),
-          apparent_power_total: +(pKw / 0.92).toFixed(2),
-          power_factor: 0.92,
-          voltage_unbalance: +(0.2 + Math.random() * 0.3).toFixed(2),
-          current_unbalance: +(0.8 + Math.random() * 0.5).toFixed(2),
-          thd_volt_a: +(1.5 + Math.random() * 0.8).toFixed(2),
-          thd_volt_b: +(1.5 + Math.random() * 0.8).toFixed(2),
-          thd_volt_c: +(1.5 + Math.random() * 0.8).toFixed(2),
-          thd_current_a: +(3.2 + Math.random() * 1.2).toFixed(2),
-          thd_current_b: +(3.2 + Math.random() * 1.2).toFixed(2),
-          thd_current_c: +(3.2 + Math.random() * 1.2).toFixed(2),
-          active_energy: +(id * 12345 + Math.random() * 500).toFixed(0)
-        };
-      });
-    }
-
     // For ew23, ensure the 3 incoming cubicles (PLN, WF1, WF2) are included if not present in the PM array
     if (group === "ew23") {
       const existingPmIds = new Set(data.map((r: any) => String(r.pm_id).toUpperCase()));
@@ -414,7 +370,6 @@ export const getPowerMetersLatestHandler = async (
         } catch {}
       }
     }
-
     // Sort ascending by PM numerical ID
     data.sort((a: any, b: any) => {
       const numA = parseInt(String(a.pm_id).replace(/\D/g, "") || "0");

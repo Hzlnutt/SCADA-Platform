@@ -91,8 +91,8 @@ export function EwPowerMetersGrid({
               const info = getPmInfo(pm.pm_id);
               const isOnline = pm.status !== false;
               const pKw = Number(pm.active_power_total) || 0;
-              const pf = Number(pm.power_factor) || 0;
-              const vL = Number(pm.volt_ab) || Number(pm.volt_ll) || 380;
+              const pf = Math.abs(Number(pm.power_factor) || 0);
+              const vL = Number(pm.volt_ab) || Number(pm.volt_ll) || 0;
               const iAvg = ((Number(pm.current_a) || 0) + (Number(pm.current_b) || 0) + (Number(pm.current_c) || 0)) / 3;
 
               return (

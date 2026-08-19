@@ -383,63 +383,6 @@ export default function Electricity() {
   const [cubicleSelector, setCubicleSelector] = useState<"pln" | "wf1" | "wf2" | "poi1" | "poi2">("pln");
   const [cubiclePoiView, setCubiclePoiView] = useState(false);
 
-  // Computed summary metrics based on selected source
-  const cubicleSummary = useMemo(() => {
-    switch (cubicleSelector) {
-      case "pln":
-        return {
-          peakDemand: 2150,
-          lwbpKwh: 85400,
-          wbpKwh: 24500,
-          monthlyKwh: 109900,
-          cost: 122500000,
-          poi1Kwh: 50,
-          poi2Kwh: 1000
-        };
-      case "wf1":
-        return {
-          peakDemand: 1120,
-          lwbpKwh: 42100,
-          wbpKwh: 12300,
-          monthlyKwh: 54400,
-          cost: 60600000,
-          poi1Kwh: 40,
-          poi2Kwh: 800
-        };
-      case "wf2":
-        return {
-          peakDemand: 1030,
-          lwbpKwh: 43300,
-          wbpKwh: 12200,
-          monthlyKwh: 55500,
-          cost: 61900000,
-          poi1Kwh: 10,
-          poi2Kwh: 200
-        };
-      case "poi1":
-        return {
-          peakDemand: 50,
-          lwbpKwh: 12000,
-          wbpKwh: 3000,
-          monthlyKwh: 15000,
-          cost: 0,
-          poi1Kwh: 15000,
-          poi2Kwh: 0
-        };
-      case "poi2":
-      default:
-        return {
-          peakDemand: 1000,
-          lwbpKwh: 24000,
-          wbpKwh: 6000,
-          monthlyKwh: 30000,
-          cost: 0,
-          poi1Kwh: 0,
-          poi2Kwh: 30000
-        };
-    }
-  }, [cubicleSelector]);
-
   // Consumption Fact categories
   const [factCategories1, setFactCategories1] = useState<ConsumptionFactCategory[]>([]);
   const [factCategories2, setFactCategories2] = useState<ConsumptionFactCategory[]>([]);
@@ -474,6 +417,7 @@ export default function Electricity() {
     };
 
     fetchPmData();
+    const interval = setInterval(fetchPmData, 1000);
 
     const socket = getSocket();
     const handleLiveUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
@@ -487,6 +431,7 @@ export default function Electricity() {
 
     return () => {
       active = false;
+      clearInterval(interval);
       socket.off(`electricity:${selectedEwGroup}_live`, handleLiveUpdate);
       socket.off("electricity:pm_live_update", handleLiveUpdate);
     };
@@ -557,7 +502,7 @@ export default function Electricity() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 3000);
+    const interval = setInterval(fetchActiveApiData, 1000);
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -681,7 +626,7 @@ export default function Electricity() {
   // Auto-refresh & socket
   useEffect(() => {
     let active = true;
-    const interval = setInterval(() => { if (active) fetchData(false); }, 2000);
+    const interval = setInterval(() => { if (active) fetchData(false); }, 1000);
     const socket = getSocket();
     const handleConfigUpdate = () => { useConfigStore.getState().fetchRates().then(() => { if (active) fetchData(false); }); };
     const handleElectricityUpdate = () => { if (active) fetchData(false); };
@@ -1247,13 +1192,15 @@ export default function Electricity() {
               } flex flex-col justify-between`}>
                 <div className="flex items-center justify-between">
                   <span className="text-[8px] font-extrabold uppercase text-slate-400">Caterpillar</span>
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" style={{ boxShadow: "0 0 4px #10b981" }} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${Number(getApiVal("electricity/genset_running")) > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
                 </div>
                 <div className="mt-1">
                   <div className={`text-sm font-extrabold font-mono ${isDark ? 'text-white' : 'text-amber-950'}`}>
-                    {getApiVal("electricity/genset_running") > 0 ? "850" : "0"} <span className="text-[8px] font-bold text-slate-400">kW</span>
+                    {Number(getApiVal("electricity/genset_running")) > 0 ? "850" : "0"} <span className="text-[8px] font-bold text-slate-400">kW</span>
                   </div>
-                  <span className="text-[8px] font-extrabold text-emerald-500">ON (Gas)</span>
+                  <span className={`text-[8px] font-extrabold ${Number(getApiVal("electricity/genset_running")) > 0 ? "text-emerald-500" : "text-slate-400"}`}>
+                    {Number(getApiVal("electricity/genset_running")) > 0 ? "ON (Gas)" : "OFF"}
+                  </span>
                 </div>
               </div>
 
@@ -1263,14 +1210,14 @@ export default function Electricity() {
               } flex flex-col justify-between`}>
                 <div className="flex items-center justify-between">
                   <span className="text-[8px] font-extrabold uppercase text-slate-400">Perkins</span>
-                  <span className={`h-1.5 w-1.5 rounded-full ${getApiVal("electricity/genset_running") > 1 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${Number(getApiVal("electricity/genset_running")) > 1 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
                 </div>
                 <div className="mt-1">
                   <div className={`text-sm font-extrabold font-mono ${isDark ? 'text-white' : 'text-amber-950'}`}>
-                    {getApiVal("electricity/genset_running") > 1 ? "1000" : "0"} <span className="text-[8px] font-bold text-slate-400">kW</span>
+                    {Number(getApiVal("electricity/genset_running")) > 1 ? "1000" : "0"} <span className="text-[8px] font-bold text-slate-400">kW</span>
                   </div>
-                  <span className={`text-[8px] font-extrabold ${getApiVal("electricity/genset_running") > 1 ? "text-emerald-500" : "text-slate-400"}`}>
-                    {getApiVal("electricity/genset_running") > 1 ? "ON (Diesel)" : "OFF"}
+                  <span className={`text-[8px] font-extrabold ${Number(getApiVal("electricity/genset_running")) > 1 ? "text-emerald-500" : "text-slate-400"}`}>
+                    {Number(getApiVal("electricity/genset_running")) > 1 ? "ON (Diesel)" : "OFF"}
                   </span>
                 </div>
               </div>
