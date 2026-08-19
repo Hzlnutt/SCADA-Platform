@@ -845,29 +845,33 @@ export const runCoolingTowerRollupAndCleanup = async () => {
           const avgSupply = avgs.avg_supply !== null ? Number(Number(avgs.avg_supply).toFixed(3)) : null;
           const avgSt3 = avgs.avg_st3 !== null ? Number(Number(avgs.avg_st3).toFixed(3)) : null;
 
-          // 2. Check if row already exists in main table for this hour
-          const existingRow = await client.query(`
-            SELECT id FROM cooling_tower_telemetry
-            WHERE t_stamp = $1 AND id_device = $2
-          `, [hourStartStr, "cooling-water-1"]);
+          // 2. Only update or insert if at least one sensor value is valid (non-null)
+          if (avgReturn !== null || avgSupply !== null || avgSt3 !== null) {
+            const existingRow = await client.query(`
+              SELECT id FROM cooling_tower_telemetry
+              WHERE t_stamp = $1 AND id_device = $2
+            `, [hourStartStr, "cooling-water-1"]);
 
-          if (existingRow.rows.length > 0) {
-            await client.query(`
-              UPDATE cooling_tower_telemetry
-              SET return_temp = $1, supply_temp = $2, st3_return_temp = $3
-              WHERE id = $4
-            `, [avgReturn, avgSupply, avgSt3, existingRow.rows[0].id]);
-          } else {
-            await client.query(`
-              INSERT INTO cooling_tower_telemetry (t_stamp, return_temp, supply_temp, st3_return_temp, id_device)
-              VALUES ($1, $2, $3, $4, $5)
-            `, [
-              hourStartStr,
-              avgReturn,
-              avgSupply,
-              avgSt3,
-              "cooling-water-1"
-            ]);
+            if (existingRow.rows.length > 0) {
+              await client.query(`
+                UPDATE cooling_tower_telemetry
+                SET return_temp = COALESCE($1, return_temp), 
+                    supply_temp = COALESCE($2, supply_temp), 
+                    st3_return_temp = COALESCE($3, st3_return_temp)
+                WHERE id = $4
+              `, [avgReturn, avgSupply, avgSt3, existingRow.rows[0].id]);
+            } else {
+              await client.query(`
+                INSERT INTO cooling_tower_telemetry (t_stamp, return_temp, supply_temp, st3_return_temp, id_device)
+                VALUES ($1, $2, $3, $4, $5)
+              `, [
+                hourStartStr,
+                avgReturn,
+                avgSupply,
+                avgSt3,
+                "cooling-water-1"
+              ]);
+            }
           }
 
           // 3. Delete all raw minute rows in this hour range from temporary table
@@ -877,7 +881,7 @@ export const runCoolingTowerRollupAndCleanup = async () => {
           `, [hourStartStr]);
 
           await client.query("COMMIT");
-          logger.info(`[CoolingTowerRollup] Successfully aggregated hour ${hourStartStr} to main table and deleted from temporary table: return=${avgReturn}, supply=${avgSupply}, st3=${avgSt3}`);
+          logger.info(`[CoolingTowerRollup] Successfully processed hour ${hourStartStr}: return=${avgReturn}, supply=${avgSupply}, st3=${avgSt3}`);
         } catch (err: any) {
           await client.query("ROLLBACK");
           logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up cooling tower hour");
@@ -927,10 +931,12 @@ export const runCoolingTowerRollupAndCleanup = async () => {
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
         `, [hourStartStr]);
 
-        await client.query(`
-          INSERT INTO cooling_tower_telemetry (t_stamp, return_temp, supply_temp, st3_return_temp, id_device)
-          VALUES ($1, $2, $3, $4, $5)
-        `, [hourStartStr, avgReturn, avgSupply, avgSt3, "cooling-water-1"]);
+        if (avgReturn !== null || avgSupply !== null || avgSt3 !== null) {
+          await client.query(`
+            INSERT INTO cooling_tower_telemetry (t_stamp, return_temp, supply_temp, st3_return_temp, id_device)
+            VALUES ($1, $2, $3, $4, $5)
+          `, [hourStartStr, avgReturn, avgSupply, avgSt3, "cooling-water-1"]);
+        }
         await client.query("COMMIT");
       } catch (e: any) {
         await client.query("ROLLBACK");

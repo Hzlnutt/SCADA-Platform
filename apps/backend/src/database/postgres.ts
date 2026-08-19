@@ -276,6 +276,10 @@ export const ensurePostgresTables = async () => {
         FROM cooling_tower_telemetry
         GROUP BY date_trunc('hour', t_stamp), id_device
       );
+
+      -- Clean up any empty rows where all sensor values are null
+      DELETE FROM cooling_tower_telemetry
+      WHERE return_temp IS NULL AND supply_temp IS NULL AND st3_return_temp IS NULL AND flow IS NULL AND tds IS NULL AND ph IS NULL AND humidity IS NULL;
     `).catch((err) => {
       logger.warn({ err }, "Failed to migrate and clean minute data in cooling_tower_telemetry");
     });
