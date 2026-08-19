@@ -602,7 +602,7 @@ export default function Electricity() {
 
   /* ═══ DATA FETCHING ═══ */
   const fetchData = useCallback((showLoading = false) => {
-    if (showLoading) {
+    if (showLoading && !summaryData) {
       setSummaryLoading(true);
       setChartLoading(true);
     }
@@ -625,28 +625,24 @@ export default function Electricity() {
           setLivePf(res.data.pqData.pf);
           setPfStatus(res.data.pqData.pfStatus || "offline");
         }
-        if (showLoading) {
-          setSummaryLoading(false);
-          setChartLoading(false);
-        }
+        setSummaryLoading(false);
+        setChartLoading(false);
       })
       .catch((err) => {
         console.error("Failed to load electricity data", err);
-        if (showLoading) {
-          setSummaryLoading(false);
-          setChartLoading(false);
-        }
+        setSummaryLoading(false);
+        setChartLoading(false);
       });
-  }, [range, selectedYear, chartStartDate, chartEndDate]);
+  }, [range, selectedYear, chartStartDate, chartEndDate, summaryData]);
 
   useEffect(() => {
     fetchData(true);
   }, [fetchData]);
 
-  // Auto-refresh & socket
+  // Database historical auto-refresh & socket (polling every 30s for database analytics to avoid DB locking)
   useEffect(() => {
     let active = true;
-    const interval = setInterval(() => { if (active) fetchData(false); }, 1000);
+    const interval = setInterval(() => { if (active) fetchData(false); }, 30000);
     const socket = getSocket();
     const handleConfigUpdate = () => { useConfigStore.getState().fetchRates().then(() => { if (active) fetchData(false); }); };
     const handleElectricityUpdate = () => { if (active) fetchData(false); };
@@ -829,6 +825,25 @@ export default function Electricity() {
     if (!hasSummaryData || !summaryData) {
       return { totalCost: 0, totalKwh: 0, peakDemand: 0, peakDemandTs: null, loadFactor: 0, wbpKwh: 0, lwbpKwh: 0, wbpCost: 0, lwbpCost: 0 };
     }
+    if (range === "hour") {
+      const todayKwh = (summaryData.summary?.todayWbpKwh ?? 0) + (summaryData.summary?.todayLwbpKwh ?? 0) || (summaryData.summary?.todayKwh ?? 0);
+      const todayWbpKwh = summaryData.summary?.todayWbpKwh ?? 0;
+      const todayLwbpKwh = summaryData.summary?.todayLwbpKwh ?? 0;
+      const todayWbpCost = summaryData.summary?.todayWbpCost ?? (todayWbpKwh * wbpRate);
+      const todayLwbpCost = summaryData.summary?.todayLwbpCost ?? (todayLwbpKwh * lwbpRate);
+      const todayCost = (todayWbpCost + todayLwbpCost) || (summaryData.summary?.todayCost ?? 0);
+      return {
+        totalCost: todayCost || (summaryData.summary?.totalCost ?? 0),
+        totalKwh: todayKwh || (summaryData.summary?.totalKwh ?? 0),
+        peakDemand: summaryData.summary?.peakDemand || summaryData.pqData?.activePower || 0,
+        peakDemandTs: summaryData.summary?.peakDemandTs || summaryData.pqData?.activePowerTs,
+        loadFactor: summaryData.pqData?.pf ? Math.abs(summaryData.pqData.pf) * 100 : 0,
+        wbpKwh: todayWbpKwh || (summaryData.summary?.wbpKwh ?? 0),
+        lwbpKwh: todayLwbpKwh || (summaryData.summary?.lwbpKwh ?? 0),
+        wbpCost: todayWbpCost || (summaryData.summary?.wbpCost ?? 0),
+        lwbpCost: todayLwbpCost || (summaryData.summary?.lwbpCost ?? 0)
+      };
+    }
     if (range === "day" && summaryData.summary?.perMonthSummary) {
       const monthData = summaryData.summary.perMonthSummary[selectedMonth];
       if (monthData) {
@@ -856,7 +871,7 @@ export default function Electricity() {
       wbpCost: summaryData.summary?.wbpCost ?? 0,
       lwbpCost: summaryData.summary?.lwbpCost ?? 0
     };
-  }, [hasSummaryData, summaryData, range, selectedMonth]);
+  }, [hasSummaryData, summaryData, range, selectedMonth, wbpRate, lwbpRate]);
 
   /* ═══ COMPUTED: CHART DATA ═══ */
   const barLabels = useMemo(() => {
@@ -1285,10 +1300,10 @@ export default function Electricity() {
               <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500"><IconMoney /></div>
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-              {summaryLoading ? "..." : formatCurrency(cardSummary.totalCost)}
+              {summaryLoading && !summaryData ? "..." : formatCurrency(cardSummary.totalCost)}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-              {summaryLoading ? "" : `${cardSummary.totalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
+              {summaryLoading && !summaryData ? "" : `${cardSummary.totalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
             </div>
           </div>
 
@@ -1296,18 +1311,18 @@ export default function Electricity() {
           <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition">
             <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">Beban LWBP</span>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {summaryLoading ? "..." : `${cardSummary.lwbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
+              {summaryLoading && !summaryData ? "..." : `${cardSummary.lwbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-blue-500">{summaryLoading ? "" : formatCurrency(cardSummary.lwbpCost)}</div>
+            <div className="mt-1 text-[10px] font-semibold text-blue-500">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.lwbpCost)}</div>
           </div>
 
           {/* Beban WBP */}
           <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30 p-4 hover:border-rose-400 transition">
             <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">Beban WBP</span>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {summaryLoading ? "..." : `${cardSummary.wbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
+              {summaryLoading && !summaryData ? "..." : `${cardSummary.wbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-rose-500">{summaryLoading ? "" : formatCurrency(cardSummary.wbpCost)}</div>
+            <div className="mt-1 text-[10px] font-semibold text-rose-500">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.wbpCost)}</div>
           </div>
 
           {/* PF / Power Factor */}
@@ -1323,7 +1338,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Peak Demand</span>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {summaryLoading ? "..." : `${cardSummary.peakDemand.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`}
+              {summaryLoading && !summaryData ? "..." : `${cardSummary.peakDemand.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`}
             </div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
             {cardSummary.peakDemandTs && (

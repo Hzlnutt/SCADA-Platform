@@ -235,6 +235,25 @@ export const getElectricityAnalytics = async (
     ? (toStr.includes("T") ? toStr.replace("T", " ").split(".")[0] : `${toStr} 23:59:59.999`)
     : `${selectedYear}-12-31 23:59:59.999`;
 
+  // Select appropriate PostgreSQL table based on device
+  let tableName = "electric_pln_telemetry";
+  let energyCol = "active_energy";
+  if (deviceId === "Feeder_WF1_PM5560" || deviceId === "Cubicle_WF1_PM5560") {
+    tableName = "electric_wf1_telemetry";
+    energyCol = "active_energy";
+  } else if (deviceId === "Feeder_WF2_PM5500" || deviceId === "Cubicle_WF2_PM5500") {
+    tableName = "electric_wf2_telemetry";
+    energyCol = "active_energy";
+  } else if (deviceId !== "Cubicle_PLN_PM8000") {
+    tableName = "electricity_telemetry";
+    energyCol = "electricity_kwh";
+  }
+
+  // Fetch baseline starting 2 hours before range for accurate hourly difference calculation
+  const fromQueryDate = new Date(from.getTime() - 2 * 60 * 60 * 1000);
+  const fromQueryIso = fromQueryDate.toISOString();
+  const toQueryIso = to.toISOString();
+
   // Always calculate using Active Energy Delivered of PLN (PM8000)
   const activeEnergyTag = "electricity/Cubicle_PLN_PM8000/active_energy";
 
@@ -242,25 +261,52 @@ export const getElectricityAnalytics = async (
   let hourlyRecords: { ts: Date; value: number }[] = [];
   const pool = getPostgresPool();
   try {
-    const res = await pool.query(`
-      SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
-        t_stamp AS ts, 
-        electricity_kwh::float AS value
-      FROM electricity_telemetry
-      WHERE id_device = $1 AND t_stamp >= $2 AND t_stamp <= $3
-      ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
-    `, [deviceId, fromQueryVal, toQueryVal]);
-    hourlyRecords = res.rows;
+    if (tableName === "electricity_telemetry") {
+      const res = await pool.query(`
+        SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
+          t_stamp AS ts, 
+          electricity_kwh::float AS value
+        FROM electricity_telemetry
+        WHERE id_device = $1 AND t_stamp >= $2 AND t_stamp <= $3
+        ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
+      `, [deviceId, fromQueryIso, toQueryIso]);
+      hourlyRecords = res.rows;
+    } else {
+      const res = await pool.query(`
+        SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
+          t_stamp AS ts, 
+          ${energyCol}::float AS value
+        FROM ${tableName}
+        WHERE t_stamp >= $1 AND t_stamp <= $2
+        ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
+      `, [fromQueryIso, toQueryIso]);
+      hourlyRecords = res.rows;
+    }
   } catch (err) {
-    console.warn("PostgreSQL query failed for electricity analytics, falling back to MongoDB:", err);
+    console.warn("PostgreSQL query failed for electricity analytics, falling back:", err);
   }
 
-  // If no records found in Postgres, fall back to MongoDB
+  // If no records found in primary table, fall back to legacy electricity_telemetry
+  if (hourlyRecords.length === 0 && tableName !== "electricity_telemetry") {
+    try {
+      const res = await pool.query(`
+        SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
+          t_stamp AS ts, 
+          electricity_kwh::float AS value
+        FROM electricity_telemetry
+        WHERE id_device = $1 AND t_stamp >= $2 AND t_stamp <= $3
+        ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
+      `, [deviceId, fromQueryIso, toQueryIso]);
+      hourlyRecords = res.rows;
+    } catch {}
+  }
+
+  // If still no records found in Postgres, fall back to MongoDB
   if (hourlyRecords.length === 0) {
     const mongoRecords = await hourlyCollection
       .find({
         "meta.tagId": activeEnergyTag,
-        ts: { $gte: from, $lte: to }
+        ts: { $gte: fromQueryDate, $lte: to }
       })
       .sort({ ts: 1 })
       .toArray();
@@ -312,9 +358,11 @@ export const getElectricityAnalytics = async (
   const dailyHourlyMap = new Map<string, number[]>();
   const dailyHourlyWbpMap = new Map<string, number[]>();
   const dailyHourlyLwbpMap = new Map<string, number[]>();
-  let latestWibDate = hourlyRecords.length > 0
-    ? getWibDateString(hourlyRecords[hourlyRecords.length - 1].ts)
-    : getWibDateString(new Date());
+  let latestWibDate = fromStr 
+    ? getWibDateString(from)
+    : (hourlyRecords.length > 0
+      ? getWibDateString(hourlyRecords[hourlyRecords.length - 1].ts)
+      : getWibDateString(new Date()));
 
   for (let i = 1; i < hourlyRecords.length; i++) {
     const prevRecord = hourlyRecords[i - 1];

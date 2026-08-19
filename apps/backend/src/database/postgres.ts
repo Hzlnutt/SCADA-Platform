@@ -505,6 +505,13 @@ export const ensurePostgresTables = async () => {
       await pool.query(`ALTER TABLE ${table} ALTER COLUMN power_factor_min TYPE NUMERIC;`);
     }
 
+    // Ensure timestamp indexes for fast telemetry queries
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_electric_pln_tstamp ON electric_pln_telemetry (t_stamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_electric_wf1_tstamp ON electric_wf1_telemetry (t_stamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_electric_wf2_tstamp ON electric_wf2_telemetry (t_stamp DESC);
+    `);
+
     // --- SUB-DISTRIBUTION POWER METER TELEMETRY TABLE ---
     await pool.query(`
       CREATE TABLE IF NOT EXISTS electric_pm_telemetry (
