@@ -383,6 +383,26 @@ export default function Electricity() {
   const [cubicleSelector, setCubicleSelector] = useState<"pln" | "wf1" | "wf2" | "poi1" | "poi2">("pln");
   const [cubiclePoiView, setCubiclePoiView] = useState(false);
 
+  // Computed summary metrics based on actual telemetry summaryData
+  const cubicleSummary = useMemo(() => {
+    const s = summaryData || {};
+    const peak = Number(s.peakDemand) || 0;
+    const lwbp = Number(s.monthlyLwbpKwh ?? s.todayLwbpKwh) || 0;
+    const wbp = Number(s.monthlyWbpKwh ?? s.todayWbpKwh) || 0;
+    const total = Number(s.monthlyKwh ?? s.totalKwh ?? (lwbp + wbp)) || 0;
+    const cost = Number(s.cost ?? s.totalCost ?? (lwbp * lwbpRate + wbp * wbpRate)) || 0;
+
+    return {
+      peakDemand: peak,
+      lwbpKwh: lwbp,
+      wbpKwh: wbp,
+      monthlyKwh: total,
+      cost: cost,
+      poi1Kwh: 0,
+      poi2Kwh: 0
+    };
+  }, [summaryData, lwbpRate, wbpRate]);
+
   // Consumption Fact categories
   const [factCategories1, setFactCategories1] = useState<ConsumptionFactCategory[]>([]);
   const [factCategories2, setFactCategories2] = useState<ConsumptionFactCategory[]>([]);
