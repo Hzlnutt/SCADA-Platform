@@ -631,10 +631,14 @@ export const startIncomingElectricityPolling = () => {
     } catch (err: any) {
       logger.warn(`Incoming EW22 polling failed: ${err.message}`);
     }
+
+    // Schedule next poll 2500ms after current one completes to prevent queuing and high CPU
+    if (incomingElectricityPollingInterval) {
+      incomingElectricityPollingInterval = setTimeout(poll, 2500) as any;
+    }
   };
 
-  poll();
-  incomingElectricityPollingInterval = setInterval(poll, 1000);
+  incomingElectricityPollingInterval = setTimeout(poll, 100) as any;
 };
 
 const rollupMonthlyForMonth = async (yearMonth: string) => {
