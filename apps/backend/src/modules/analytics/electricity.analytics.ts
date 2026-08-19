@@ -125,6 +125,8 @@ export interface ElectricityAnalyticsResult {
     todayLwbpKwh: number;
     monthlyWbpKwh: number;
     monthlyLwbpKwh: number;
+    peakDemand: number;
+    peakDemandTs: string | null;
     // Per-month summaries for period selector
     perMonthSummary: {
       month: string;
@@ -688,6 +690,8 @@ export const getElectricityAnalytics = async (
       todayLwbpKwh: Number(todayLwbpKwh.toFixed(0)),
       monthlyWbpKwh: Number(monthlyWbpKwh.toFixed(0)),
       monthlyLwbpKwh: Number(monthlyLwbpKwh.toFixed(0)),
+      peakDemand: Number(maxDiff.toFixed(1)),
+      peakDemandTs: maxDiff > 0 && peakDemandTs ? peakDemandTs.toISOString() : null,
       perMonthSummary
     },
     charts: {

@@ -63,6 +63,26 @@ const formatPeakTs = (tsStr: string) => {
   return `${day} ${month} ${year}, ${hrs}:${mins} WIB`;
 };
 
+const DEFAULT_PLN_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln";
+
+const DEFAULT_PLN_JSON_KEYS: Record<string, string> = {
+  "pln/active_power": "Active_Power",
+  "pln/reactive_power": "Reactive_Power_Total",
+  "pln/apparent_power": "Apparent_Power_Total",
+  "pln/power_factor": "Power_Factor",
+  "pln/voltage": "Volt_LL",
+  "pln/frequency": "Frequency",
+  "pln/current_r": "Current_A",
+  "pln/current_s": "Current_B",
+  "pln/current_t": "Current_C",
+  "pln/voltage_rn": "VoltAB",
+  "pln/voltage_sn": "VoltBC",
+  "pln/voltage_tn": "VoltCA",
+  "pln/unbalance_v": "Volatage_Unbalance",
+  "pln/unbalance_i": "Current_Unbalance",
+  "electricity/p_grid": "Active_Power"
+};
+
 /* ═══════════ TYPES ═══════════ */
 type ConsumptionFactCategory = {
   id: number;
@@ -508,7 +528,7 @@ export default function Electricity() {
   useEffect(() => {
     let isMounted = true;
     const fetchActiveApiData = async () => {
-      const uniqueUrls = Array.from(new Set(Object.values(apiSourceUrls).filter((u) => u.trim())));
+      const uniqueUrls = Array.from(new Set([...Object.values(apiSourceUrls), DEFAULT_PLN_API_URL].filter((u) => u && u.trim())));
       if (uniqueUrls.length === 0) {
         if (isMounted) setApiLiveData({});
         return;
@@ -537,7 +557,7 @@ export default function Electricity() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 4000);
+    const interval = setInterval(fetchActiveApiData, 3000);
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -545,16 +565,57 @@ export default function Electricity() {
   }, [apiSourceUrls]);
 
   const getApiVal = useCallback((tagKey: string) => {
-    const url = apiSourceUrls[tagKey] || "";
-    if (!url.trim()) return "BELUM ADA API";
-    
-    const jsonKey = jsonKeyMap[tagKey] || tagKey.split("/")[1];
-    if (!jsonKey) return "API TIDAK TERKIRIM";
+    const isPlnTag = tagKey.startsWith("pln/") || tagKey === "electricity/p_grid";
+    const url = apiSourceUrls[tagKey] || (isPlnTag ? DEFAULT_PLN_API_URL : "");
+    const jsonKey = jsonKeyMap[tagKey] || (isPlnTag ? DEFAULT_PLN_JSON_KEYS[tagKey] : undefined) || tagKey.split("/")[1];
 
-    const val = apiLiveData[url]?.[jsonKey];
-    if (val === undefined || val === null) return "API TIDAK TERKIRIM";
-    return val;
-  }, [apiSourceUrls, jsonKeyMap, apiLiveData]);
+    if (url && apiLiveData[url] && jsonKey && apiLiveData[url][jsonKey] !== undefined && apiLiveData[url][jsonKey] !== null) {
+      let val = apiLiveData[url][jsonKey];
+      // Power parameters (convert Watts to kW/kVAR/kVA if large)
+      if (tagKey === "pln/active_power" || tagKey === "pln/reactive_power" || tagKey === "pln/apparent_power" || tagKey === "electricity/p_grid") {
+        if (typeof val === "number" && val > 10000) val = val / 1000.0;
+      }
+      // Voltage LL (convert Volts to kV)
+      if (tagKey === "pln/voltage" && typeof val === "number" && val > 1000) {
+        val = val / 1000.0;
+      }
+      // Voltage L-N (convert Volts to kV)
+      if ((tagKey === "pln/voltage_rn" || tagKey === "pln/voltage_sn" || tagKey === "pln/voltage_tn") && typeof val === "number" && val > 1000) {
+        val = (val / Math.sqrt(3)) / 1000.0;
+      }
+      // Unbalances (convert decimal 0.0055 to %)
+      if ((tagKey === "pln/unbalance_v" || tagKey === "pln/unbalance_i") && typeof val === "number" && val < 1.0) {
+        val = val * 100.0;
+      }
+      // Power factor convert negative to positive
+      if (tagKey === "pln/power_factor" && typeof val === "number") {
+        val = Math.abs(val);
+      }
+      return val;
+    }
+
+    // Fallback to live pqData from backend WebSocket / summaryData
+    if (summaryData?.pqData && (isPlnTag || tagKey.startsWith("pln/"))) {
+      const pq = summaryData.pqData;
+      if (tagKey === "pln/active_power" || tagKey === "electricity/p_grid") return pq.activePower;
+      if (tagKey === "pln/reactive_power") return pq.reactivePower;
+      if (tagKey === "pln/apparent_power") return pq.apparentPower;
+      if (tagKey === "pln/power_factor") return pq.pf !== null && pq.pf !== undefined ? Math.abs(pq.pf) : null;
+      if (tagKey === "pln/voltage") return pq.voltage;
+      if (tagKey === "pln/frequency") return pq.freq;
+      if (tagKey === "pln/current_r") return pq.current1 ?? pq.iR;
+      if (tagKey === "pln/current_s") return pq.current2 ?? pq.iS;
+      if (tagKey === "pln/current_t") return pq.current3 ?? pq.iT;
+      if (tagKey === "pln/voltage_rn") return pq.vR ?? pq.vln1;
+      if (tagKey === "pln/voltage_sn") return pq.vS ?? pq.vln2;
+      if (tagKey === "pln/voltage_tn") return pq.vT ?? pq.vln3;
+      if (tagKey === "pln/unbalance_v") return pq.vUnb;
+      if (tagKey === "pln/unbalance_i") return pq.iUnb;
+    }
+
+    if (!url.trim()) return "BELUM ADA API";
+    return "API TIDAK TERKIRIM";
+  }, [apiSourceUrls, jsonKeyMap, apiLiveData, summaryData]);
 
   const isOfflineVal = useCallback((val: any) => {
     return val === "BELUM ADA API" || val === "API TIDAK TERKIRIM" || val === "xx";
@@ -803,14 +864,34 @@ export default function Electricity() {
     if (!hasSummaryData || !summaryData) {
       return { totalCost: 0, totalKwh: 0, peakDemand: 0, peakDemandTs: null, loadFactor: 0, wbpKwh: 0, lwbpKwh: 0, wbpCost: 0, lwbpCost: 0 };
     }
-    if (range === "day" && summaryData.summary.perMonthSummary) {
+    if (range === "day" && summaryData.summary?.perMonthSummary) {
       const monthData = summaryData.summary.perMonthSummary[selectedMonth];
       if (monthData) {
-        return { totalCost: monthData.totalCost, totalKwh: monthData.totalKwh, peakDemand: monthData.peakDemand, peakDemandTs: monthData.peakDemandTs, loadFactor: summaryData.pqData.pf ? summaryData.pqData.pf * 100 : 0, wbpKwh: monthData.wbpKwh, lwbpKwh: monthData.lwbpKwh, wbpCost: monthData.wbpCost, lwbpCost: monthData.lwbpCost };
+        return {
+          totalCost: monthData.totalCost,
+          totalKwh: monthData.totalKwh,
+          peakDemand: monthData.peakDemand,
+          peakDemandTs: monthData.peakDemandTs,
+          loadFactor: summaryData.pqData?.pf ? Math.abs(summaryData.pqData.pf) * 100 : 0,
+          wbpKwh: monthData.wbpKwh,
+          lwbpKwh: monthData.lwbpKwh,
+          wbpCost: monthData.wbpCost,
+          lwbpCost: monthData.lwbpCost
+        };
       }
     }
-    return { totalCost: summaryData.summary.totalCost, totalKwh: summaryData.summary.totalKwh, peakDemand: summaryData.pqData.activePower, peakDemandTs: summaryData.pqData.activePowerTs, loadFactor: summaryData.pqData.pf ? summaryData.pqData.pf * 100 : 0, wbpKwh: summaryData.summary.wbpKwh, lwbpKwh: summaryData.summary.lwbpKwh, wbpCost: summaryData.summary.wbpCost, lwbpCost: summaryData.summary.lwbpCost };
-  }, [hasSummaryData, summaryData, range, selectedMonth, config]);
+    return {
+      totalCost: summaryData.summary?.totalCost ?? 0,
+      totalKwh: summaryData.summary?.totalKwh ?? 0,
+      peakDemand: summaryData.summary?.peakDemand || summaryData.pqData?.activePower || 0,
+      peakDemandTs: summaryData.summary?.peakDemandTs || summaryData.pqData?.activePowerTs,
+      loadFactor: summaryData.pqData?.pf ? Math.abs(summaryData.pqData.pf) * 100 : 0,
+      wbpKwh: summaryData.summary?.wbpKwh ?? 0,
+      lwbpKwh: summaryData.summary?.lwbpKwh ?? 0,
+      wbpCost: summaryData.summary?.wbpCost ?? 0,
+      lwbpCost: summaryData.summary?.lwbpCost ?? 0
+    };
+  }, [hasSummaryData, summaryData, range, selectedMonth]);
 
   /* ═══ COMPUTED: CHART DATA ═══ */
   const barLabels = useMemo(() => {
@@ -1266,7 +1347,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 dark:bg-purple-950/30 p-4 hover:border-purple-400 transition">
             <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">PF</span>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-              {renderMetricVal(getApiVal("pln/power_factor"), (v) => `${v.toFixed(3)}`)}
+              {renderMetricVal(getApiVal("pln/power_factor"), (v) => `${Math.abs(v).toFixed(2)}`)}
             </div>
             <div className="mt-1 text-[10px] text-slate-400">Stabilitas beban listrik</div>
           </div>
@@ -1275,7 +1356,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Peak Demand</span>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {summaryLoading ? "..." : `${cardSummary.peakDemand.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW`}
+              {summaryLoading ? "..." : `${cardSummary.peakDemand.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`}
             </div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
             {cardSummary.peakDemandTs && (
@@ -1300,20 +1381,20 @@ export default function Electricity() {
             <div className="p-4 bg-slate-50/50 dark:bg-slate-950/30 rounded-xl border border-slate-100 dark:border-slate-800/60 shadow-inner">
               <div className="flex justify-between items-baseline mb-2">
                 <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">Voltage L-N</span>
-                <span className="text-[9px] font-bold text-slate-400">Nominal 230V</span>
+                <span className="text-[9px] font-bold text-slate-400">Nominal 12kV</span>
               </div>
               <div className="space-y-1.5 font-semibold text-xs text-slate-700 dark:text-slate-300">
                 <div className="flex justify-between items-center">
                   <span>Phase R-N</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/voltage_rn") || 229.1, (v) => `${Number(v).toFixed(1)} V`)}</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/voltage_rn"), (v) => `${(v > 1000 ? (v / Math.sqrt(3)) / 1000 : v).toFixed(2)} kV`)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span>Phase S-N</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/voltage_sn") || 229.2, (v) => `${Number(v).toFixed(1)} V`)}</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/voltage_sn"), (v) => `${(v > 1000 ? (v / Math.sqrt(3)) / 1000 : v).toFixed(2)} kV`)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span>Phase T-N</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/voltage_tn") || 228.9, (v) => `${Number(v).toFixed(1)} V`)}</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/voltage_tn"), (v) => `${(v > 1000 ? (v / Math.sqrt(3)) / 1000 : v).toFixed(2)} kV`)}</span>
                 </div>
               </div>
             </div>
@@ -1327,15 +1408,15 @@ export default function Electricity() {
               <div className="space-y-1.5 font-semibold text-xs text-slate-700 dark:text-slate-300">
                 <div className="flex justify-between items-center">
                   <span>Phase R</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/current_r") || 165.3, (v) => `${Number(v).toFixed(1)} A`)}</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/current_r"), (v) => `${Number(v).toFixed(1)} A`)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span>Phase S</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/current_s") || 163.7, (v) => `${Number(v).toFixed(1)} A`)}</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/current_s"), (v) => `${Number(v).toFixed(1)} A`)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span>Phase T</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/current_t") || 165.2, (v) => `${Number(v).toFixed(1)} A`)}</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/current_t"), (v) => `${Number(v).toFixed(1)} A`)}</span>
                 </div>
               </div>
             </div>
@@ -1349,15 +1430,15 @@ export default function Electricity() {
               <div className="space-y-1.5 font-semibold text-xs text-slate-700 dark:text-slate-300">
                 <div className="flex justify-between items-center">
                   <span>Active Power</span>
-                  <span className="font-mono text-emerald-500 font-extrabold">{renderMetricVal(getApiVal("pln/active_power"), (v) => `${Number(v).toFixed(2)} kW`)}</span>
+                  <span className="font-mono text-emerald-500 font-extrabold">{renderMetricVal(getApiVal("pln/active_power"), (v) => `${(v > 10000 ? v / 1000 : v).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kW`)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span>Reactive Power</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/reactive_power") || 46.1, (v) => `${Number(v).toFixed(2)} kVAR`)}</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/reactive_power"), (v) => `${(v > 10000 ? v / 1000 : v).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kVAR`)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span>Apparent Power</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/apparent_power") || 111.4, (v) => `${Number(v).toFixed(2)} kVA`)}</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/apparent_power"), (v) => `${(v > 10000 ? v / 1000 : v).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kVA`)}</span>
                 </div>
               </div>
             </div>
@@ -1375,11 +1456,11 @@ export default function Electricity() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span>V Unbalanced</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/unbalance_v"), (v) => `${Number(v).toFixed(2)} %`)}</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/unbalance_v"), (v) => `${(v < 1.0 ? v * 100 : v).toFixed(2)} %`)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span>I Unbalanced</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/unbalance_i"), (v) => `${Number(v).toFixed(2)} %`)}</span>
+                  <span className="font-mono">{renderMetricVal(getApiVal("pln/unbalance_i"), (v) => `${(v < 1.0 ? v * 100 : v).toFixed(2)} %`)}</span>
                 </div>
               </div>
             </div>
