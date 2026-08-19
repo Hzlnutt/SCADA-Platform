@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Bar, Line } from "react-chartjs-2";
 import "../../components/charts/chartjs";
@@ -600,8 +600,11 @@ export default function Electricity() {
     return formatFn(num);
   }, []);
 
+  const reqIdRef = useRef(0);
+
   /* ═══ DATA FETCHING ═══ */
   const fetchData = useCallback((showLoading = false) => {
+    const currentReqId = ++reqIdRef.current;
     if (showLoading && !summaryData) {
       setSummaryLoading(true);
       setChartLoading(true);
@@ -619,16 +622,20 @@ export default function Electricity() {
 
     getJson<{ data: any }>(url)
       .then((res) => {
-        setSummaryData(res.data);
-        setChartData(res.data);
-        if (res.data?.pqData) {
-          setLivePf(res.data.pqData.pf);
-          setPfStatus(res.data.pqData.pfStatus || "offline");
+        if (currentReqId !== reqIdRef.current) return;
+        if (res?.data) {
+          setSummaryData(res.data);
+          setChartData(res.data);
+          if (res.data.pqData) {
+            setLivePf(res.data.pqData.pf);
+            setPfStatus(res.data.pqData.pfStatus || "offline");
+          }
         }
         setSummaryLoading(false);
         setChartLoading(false);
       })
       .catch((err) => {
+        if (currentReqId !== reqIdRef.current) return;
         console.error("Failed to load electricity data", err);
         setSummaryLoading(false);
         setChartLoading(false);
@@ -639,22 +646,19 @@ export default function Electricity() {
     fetchData(true);
   }, [fetchData]);
 
-  // Database historical auto-refresh & socket (polling every 30s for database analytics to avoid DB locking)
+  // Database historical auto-refresh in background (polling every 30s)
   useEffect(() => {
     let active = true;
     const interval = setInterval(() => { if (active) fetchData(false); }, 30000);
     const socket = getSocket();
     const handleConfigUpdate = () => { useConfigStore.getState().fetchRates().then(() => { if (active) fetchData(false); }); };
-    const handleElectricityUpdate = () => { if (active) fetchData(false); };
     const handlePfStatus = (payload: any) => { if (active) { setLivePf(payload.value); setPfStatus(payload.status); } };
     socket.on("config:update", handleConfigUpdate);
-    socket.on("electricity:update", handleElectricityUpdate);
     socket.on("power_factor:status", handlePfStatus);
     return () => {
       active = false;
       clearInterval(interval);
       socket.off("config:update", handleConfigUpdate);
-      socket.off("electricity:update", handleElectricityUpdate);
       socket.off("power_factor:status", handlePfStatus);
     };
   }, [fetchData]);
@@ -1498,7 +1502,12 @@ export default function Electricity() {
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Perbandingan konsumsi WBP vs LWBP.</p>
           </div>
           <div className="my-6 flex justify-center">
-            <DonutChart segments={donutSegments} size={150} thickness={18} centerLabel={`${donutSegments[0]?.value || 0}%`} />
+            <DonutChart 
+              segments={donutSegments} 
+              size={150} 
+              thickness={18} 
+              centerLabel={donutSegments[0]?.value > 0 ? `WBP ${donutSegments[0].value}%` : `LWBP 100%`} 
+            />
           </div>
           <div className="space-y-2">
             {donutSegments.map((item) => (
@@ -1526,31 +1535,31 @@ export default function Electricity() {
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Estimasi Biaya</span>
               <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500"><IconMoney /></div>
             </div>
-            <div className="mt-2 text-sm font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
-            <div className="mt-1 text-[10px] font-semibold text-emerald-500">—</div>
+            <div className="mt-2 text-xs font-bold text-slate-400 dark:text-slate-500 font-mono">BELUM ADA API</div>
+            <div className="mt-1 text-[10px] font-semibold text-slate-400">—</div>
           </div>
 
           <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">POI-1</span>
-            <div className="mt-2 text-sm font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
-            <div className="mt-1 text-[10px] font-semibold text-blue-500">—</div>
+            <div className="mt-2 text-xs font-bold text-slate-400 dark:text-slate-500 font-mono">BELUM ADA API</div>
+            <div className="mt-1 text-[10px] font-semibold text-slate-400">—</div>
           </div>
 
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand</span>
-            <div className="mt-2 text-sm font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
+            <div className="mt-2 text-xs font-bold text-slate-400 dark:text-slate-500 font-mono">BELUM ADA API</div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
           </div>
 
           <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-500 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20">POI-2</span>
-            <div className="mt-2 text-sm font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
-            <div className="mt-1 text-[10px] font-semibold text-cyan-500">—</div>
+            <div className="mt-2 text-xs font-bold text-slate-400 dark:text-slate-500 font-mono">BELUM ADA API</div>
+            <div className="mt-1 text-[10px] font-semibold text-slate-400">—</div>
           </div>
 
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand</span>
-            <div className="mt-2 text-sm font-bold text-red-500 font-mono">API TIDAK TERSEDIA</div>
+            <div className="mt-2 text-xs font-bold text-slate-400 dark:text-slate-500 font-mono">BELUM ADA API</div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
           </div>
         </div>
