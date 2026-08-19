@@ -327,6 +327,30 @@ export default function IncomingPln() {
     };
   }, [apiSourceUrls, mode]);
 
+  // Real-time metrics states
+  const [metrics, setMetrics] = useState({
+    voltage: 0,
+    frequency: 0,
+    activePower: 0,
+    powerFactor: 0,
+    reactivePower: 0,
+    apparentPower: 0,
+    unbalanceV: 0,
+    unbalanceI: 0,
+    // Phase values
+    vR: 0, vS: 0, vT: 0,
+    iR: 0, iS: 0, iT: 0,
+    thdV_R: 0, thdV_S: 0, thdV_T: 0,
+    thdI_R: 0, thdI_S: 0, thdI_T: 0,
+    isConnected: true
+  });
+
+  const [voltageTrend, setVoltageTrend] = useState<{ hour: string; value: number }[]>([]);
+  const [activePowerTrend, setActivePowerTrend] = useState<{ hour: string; value: number }[]>([]);
+
+  // Event & alarm logs
+  const [events, setEvents] = useState(MOCK_EVENTS);
+
   const getApiVal = useCallback((tagKey: string) => {
     const rawKey = tagKey.includes("/") ? tagKey.split("/")[1] : tagKey;
     const defaultUrl = DEFAULT_API_URLS[mode] || "";
@@ -404,30 +428,6 @@ export default function IncomingPln() {
   const isOfflineVal = useCallback((val: any) => {
     return val === "BELUM ADA API" || val === "API TIDAK TERKIRIM" || val === "xx";
   }, []);
-
-  // Real-time metrics states
-  const [metrics, setMetrics] = useState({
-    voltage: 0,
-    frequency: 0,
-    activePower: 0,
-    powerFactor: 0,
-    reactivePower: 0,
-    apparentPower: 0,
-    unbalanceV: 0,
-    unbalanceI: 0,
-    // Phase values
-    vR: 0, vS: 0, vT: 0,
-    iR: 0, iS: 0, iT: 0,
-    thdV_R: 0, thdV_S: 0, thdV_T: 0,
-    thdI_R: 0, thdI_S: 0, thdI_T: 0,
-    isConnected: true
-  });
-
-  const [voltageTrend, setVoltageTrend] = useState<{ hour: string; value: number }[]>([]);
-  const [activePowerTrend, setActivePowerTrend] = useState<{ hour: string; value: number }[]>([]);
-
-  // Event & alarm logs
-  const [events, setEvents] = useState(MOCK_EVENTS);
 
   // Load database analytics fallback
   const fetchTelemetry = () => {
