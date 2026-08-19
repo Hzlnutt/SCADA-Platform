@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePageActive } from "../../hooks/usePageActive";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Bar, Line } from "react-chartjs-2";
 import "../../components/charts/chartjs";
@@ -354,6 +355,7 @@ function DynamicSelectionChart({ isDark }: { isDark: boolean }) {
 
 /* ═══════════ MAIN COMPONENT ═══════════ */
 export default function Electricity() {
+  const isPageActive = usePageActive();
   const [range, setRange] = useState<(typeof ranges)[number]["id"]>("ytd");
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
@@ -427,6 +429,7 @@ export default function Electricity() {
   useEffect(() => {
     let active = true;
     const fetchPmData = () => {
+      if (!isPageActive) return;
       getJson<{ data: ElectricPmItem[] }>(`/analytics/electricity/power-meters?group=${selectedEwGroup}&_t=${Date.now()}`)
         .then((res) => {
           if (active && res?.data) {
@@ -437,7 +440,7 @@ export default function Electricity() {
     };
 
     fetchPmData();
-    const interval = setInterval(fetchPmData, 1000);
+    const interval = setInterval(fetchPmData, 3000);
 
     const socket = getSocket();
     const handleLiveUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
@@ -455,7 +458,7 @@ export default function Electricity() {
       socket.off(`electricity:${selectedEwGroup}_live`, handleLiveUpdate);
       socket.off("electricity:pm_live_update", handleLiveUpdate);
     };
-  }, [selectedEwGroup]);
+  }, [selectedEwGroup, isPageActive]);
 
   // Sync API configurations for both targets
   useEffect(() => {
@@ -493,6 +496,7 @@ export default function Electricity() {
   useEffect(() => {
     let isMounted = true;
     const fetchActiveApiData = async () => {
+      if (!isPageActive) return;
       const uniqueUrls = Array.from(new Set([...Object.values(apiSourceUrls), DEFAULT_PLN_API_URL].filter((u) => u && u.trim())));
       if (uniqueUrls.length === 0) {
         if (isMounted) setApiLiveData({});
@@ -522,7 +526,7 @@ export default function Electricity() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 1000);
+    const interval = setInterval(fetchActiveApiData, 3000);
     return () => {
       isMounted = false;
       clearInterval(interval);

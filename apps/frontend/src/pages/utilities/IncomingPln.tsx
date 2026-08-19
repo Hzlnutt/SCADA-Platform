@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useLocation } from "react-router-dom";
+import { usePageActive } from "../../hooks/usePageActive";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Line, Radar } from "react-chartjs-2";
 import "../../components/charts/chartjs";
@@ -286,10 +287,13 @@ export default function IncomingPln() {
       });
   }, [config.deviceId]);
 
+  const isPageActive = usePageActive();
+
   // Poll active URLs
   useEffect(() => {
     let isMounted = true;
     const fetchActiveApiData = async () => {
+      if (!isPageActive) return;
       const defaultUrl = DEFAULT_API_URLS[mode] || "";
       const uniqueUrls = Array.from(new Set([...Object.values(apiSourceUrls), defaultUrl].filter((u) => u && u.trim())));
       if (uniqueUrls.length === 0) {
@@ -320,12 +324,12 @@ export default function IncomingPln() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 1000);
+    const interval = setInterval(fetchActiveApiData, 3000);
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [apiSourceUrls, mode]);
+  }, [apiSourceUrls, mode, isPageActive]);
 
   // Real-time metrics states
   const [metrics, setMetrics] = useState({
@@ -497,10 +501,13 @@ export default function IncomingPln() {
   }, [config]);
 
   useEffect(() => {
+    if (!isPageActive) return;
     fetchTelemetry();
-    const interval = setInterval(fetchTelemetry, 1000);
+    const interval = setInterval(() => {
+      if (isPageActive) fetchTelemetry();
+    }, 3000);
     return () => clearInterval(interval);
-  }, [config]);
+  }, [config, isPageActive]);
 
   // Handle socket updates fallback
   useEffect(() => {

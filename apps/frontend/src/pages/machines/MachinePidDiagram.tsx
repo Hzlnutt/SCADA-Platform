@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
+import { usePageActive } from "../../hooks/usePageActive";
 import { getUnitById } from "../../data/machines";
 import type { MachineOutletContext } from "./MachineLayout";
 import PidPageTemplate from "./PidPageTemplate";
@@ -295,9 +296,12 @@ export default function MachinePidDiagram() {
 
   const [apiLiveData, setApiLiveData] = useState<Record<string, any>>({});
 
+  const isPageActive = usePageActive();
+
   useEffect(() => {
     let isMounted = true;
     const fetchActiveApiData = async () => {
+      if (!isPageActive) return;
       const uniqueUrls = Array.from(new Set(Object.values(apiSourceUrls).filter((u) => u.trim())));
       if (uniqueUrls.length === 0) {
         if (isMounted) setApiLiveData({});
@@ -332,7 +336,7 @@ export default function MachinePidDiagram() {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [apiSourceUrls]);
+  }, [apiSourceUrls, isPageActive]);
 
   const latest = useTelemetryStore((state) => state.latest);
 
@@ -597,9 +601,11 @@ export default function MachinePidDiagram() {
 
   useEffect(() => {
     fetchActiveAlarms();
-    const alarmInterval = setInterval(fetchActiveAlarms, 3000);
+    const alarmInterval = setInterval(() => {
+      if (isPageActive) fetchActiveAlarms();
+    }, 6000);
     return () => clearInterval(alarmInterval);
-  }, [unitId]);
+  }, [unitId, isPageActive]);
 
   const [runningHours, setRunningHours] = useState<Record<string, number>>({});
   const [pidThresholds, setPidThresholds] = useState<any>(null);
@@ -634,6 +640,7 @@ export default function MachinePidDiagram() {
   const isCooling = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
 
   const fetchTasks = async () => {
+    if (!isPageActive) return;
     try {
       const query = `unitId=${unitId}&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
       const res = await getJson<{ data: any[] }>(`/config/rh-tasks?${query}`);
@@ -693,9 +700,10 @@ export default function MachinePidDiagram() {
       .catch((err) => console.error("Failed to fetch initial threshold data:", err));
   }, []);
 
-  // 2. Poll running hours every 15 seconds
+  // 2. Poll running hours every 30 seconds
   useEffect(() => {
     const fetchRH = async () => {
+      if (!isPageActive) return;
       try {
         const res = await getJson<{ data: Record<string, number> }>("/analytics/running-hours");
         if (res && res.data) {
@@ -706,13 +714,14 @@ export default function MachinePidDiagram() {
       }
     };
     fetchRH();
-    const rhInterval = setInterval(fetchRH, 15000);
+    const rhInterval = setInterval(fetchRH, 30000);
     return () => clearInterval(rhInterval);
-  }, []);
+  }, [isPageActive]);
 
-  // 3. Poll latest telemetry every 3 seconds
+  // 3. Poll latest telemetry every 4 seconds
   useEffect(() => {
     const fetchLatestTelemetry = async () => {
+      if (!isPageActive) return;
       try {
         const res = await getJson<{ data: any[] }>(`/telemetry/latest?tagIds=${telemetryTagIds.join(",")}`);
         if (res && Array.isArray(res.data)) {
@@ -729,17 +738,17 @@ export default function MachinePidDiagram() {
       }
     };
     fetchLatestTelemetry();
-    const telInterval = setInterval(fetchLatestTelemetry, 3000);
+    const telInterval = setInterval(fetchLatestTelemetry, 4000);
     return () => clearInterval(telInterval);
-  }, []);
+  }, [isPageActive]);
 
   useEffect(() => {
     if (isCooling) {
       fetchTasks();
-      const interval = setInterval(fetchTasks, 15000);
+      const interval = setInterval(fetchTasks, 30000);
       return () => clearInterval(interval);
     }
-  }, [unitId, dateRange.startDate, dateRange.endDate]);
+  }, [unitId, dateRange.startDate, dateRange.endDate, isPageActive]);
 
   const getStatus = (tagId: string) => {
     const val = mergedLatest[tagId]?.value;

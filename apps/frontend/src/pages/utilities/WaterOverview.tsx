@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { usePageActive } from "../../hooks/usePageActive";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 import { PageHeader } from "../../components/ui/PageHeader";
 import "../../components/charts/chartjs";
@@ -126,6 +127,7 @@ function WaterSubNav() {
 }
 
 export default function WaterOverview() {
+  const isPageActive = usePageActive();
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
   const waterConfig = useConfigStore((state) => state.waterConfig);
@@ -198,6 +200,7 @@ export default function WaterOverview() {
   useEffect(() => {
     let isMounted = true;
     const pollApi = async () => {
+      if (!isPageActive) return;
       const uniqueUrls = Array.from(new Set(Object.values(apiSourceUrls).filter((u) => u.trim())));
       if (uniqueUrls.length === 0) return;
 
@@ -229,10 +232,11 @@ export default function WaterOverview() {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [apiSourceUrls]);
+  }, [apiSourceUrls, isPageActive]);
 
   // Fetch PostgreSQL/MongoDB consolidated telemetry analytics
   const fetchAnalyticsData = useCallback(() => {
+    if (!isPageActive) return;
     setChartLoading(true);
     let url = `/analytics/water?`;
     if (range === "custom") {
@@ -253,7 +257,7 @@ export default function WaterOverview() {
         console.error("Failed to load water telemetry analytics:", err);
         setChartLoading(false);
       });
-  }, [range, chartStartDate, chartEndDate]);
+  }, [range, chartStartDate, chartEndDate, isPageActive]);
 
   useEffect(() => {
     fetchAnalyticsData();
@@ -262,6 +266,7 @@ export default function WaterOverview() {
   // Real-time jitter simulator for telemetry values
   useEffect(() => {
     const runJitter = () => {
+      if (!isPageActive) return;
       setScadaJitter((prev) => {
         const factor = (v: number, min: number, max: number, delta: number) => {
           const next = v + (Math.random() * 2 - 1) * delta;
@@ -296,7 +301,7 @@ export default function WaterOverview() {
 
     const interval = setInterval(runJitter, 3000);
     return () => clearInterval(interval);
-  }, [dw3PumpState, dw4PumpState]);
+  }, [dw3PumpState, dw4PumpState, isPageActive]);
 
   // Bind values to configured API endpoint, or fall back to simulated jitter
   const getVal = useCallback((tagKey: string, fallback: number) => {

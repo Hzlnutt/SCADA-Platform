@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useOutletContext, Link } from "react-router-dom";
+import { usePageActive } from "../../hooks/usePageActive";
 import { Line } from "react-chartjs-2";
 import { getUnitById } from "../../data/machines";
 import { useTelemetryStore } from "../../store/telemetry.store";
@@ -14,6 +15,7 @@ import { getSocket } from "../../services/socket.service";
 import { getJson, postJson } from "../../services/api.client";
 
 export default function MachineOverview() {
+  const isPageActive = usePageActive();
   const { unitId } = useOutletContext<MachineOutletContext>();
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
@@ -135,6 +137,7 @@ function StandardMachineOverview({
   machineConfig?: any;
   category?: any;
 }) {
+  const isPageActive = usePageActive();
   const machine = getUnitById(unitId);
   const groupId = machine?.groupId || "cooling-water-system";
   const latest = useTelemetryStore((state) => state.latest);
@@ -264,13 +267,14 @@ function StandardMachineOverview({
       isMounted = false;
       clearInterval(interval);
     };
-  }, [apiSourceUrls]);
+  }, [apiSourceUrls, isPageActive]);
 
   useEffect(() => {
     setSubTab("telemetry");
   }, [unitId]);
 
   const fetchDbAlarms = () => {
+    if (!isPageActive) return;
     getJson<{ data: any[] }>(`/alarms/active?unit=${unitId}&limit=5`)
       .then((res: { data: any[] }) => {
         if (res && res.data) {
@@ -288,9 +292,9 @@ function StandardMachineOverview({
 
   useEffect(() => {
     fetchDbAlarms();
-    const interval = setInterval(fetchDbAlarms, 3000);
+    const interval = setInterval(fetchDbAlarms, 6000);
     return () => clearInterval(interval);
-  }, [unitId]);
+  }, [unitId, isPageActive]);
 
   const eqConfigs = useMemo(() => {
     let configs = getDefaultEqConfigs(unitId);

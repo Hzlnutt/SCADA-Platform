@@ -987,8 +987,8 @@ export const startPostgresPolling = () => {
 
   // Initial poll
   poll();
-  // Poll every 1 second
-  pollingInterval = setInterval(poll, 1000);
+  // Poll every 15 seconds to check for new records without overloading CPU
+  pollingInterval = setInterval(poll, 15000);
 };
 
 export const startPowerFactorPolling = () => {
@@ -1024,8 +1024,8 @@ export const startPowerFactorPolling = () => {
 
   // Initial poll
   poll();
-  // Poll every 2 seconds for real-time responsiveness
-  pfPollingInterval = setInterval(poll, 2000);
+  // Poll every 5 seconds for power factor
+  pfPollingInterval = setInterval(poll, 5000);
 };
 
 let coolingPollingInterval: NodeJS.Timeout | null = null;
@@ -1306,8 +1306,8 @@ export const startCoolingTowerPolling = () => {
 
   // Initial poll
   poll();
-  // Poll every 3 seconds for real-time SCADA updates
-  coolingPollingInterval = setInterval(poll, 3000);
+  // Poll every 5 seconds for real-time SCADA updates
+  coolingPollingInterval = setInterval(poll, 5000);
 };
 
 let waterPollingInterval: NodeJS.Timeout | null = null;
@@ -1349,8 +1349,8 @@ export const startWaterPolling = () => {
 
   // Initial poll
   poll();
-  // Poll every 5 seconds (water data comes in hourly, no need for faster)
-  waterPollingInterval = setInterval(poll, 5000);
+  // Poll every 10 seconds (water data comes in hourly, no need for faster)
+  waterPollingInterval = setInterval(poll, 10000);
 };
 
 let gasPollingInterval: NodeJS.Timeout | null = null;
@@ -1392,8 +1392,8 @@ export const startGasPolling = () => {
 
   // Initial poll
   poll();
-  // Poll every 5 seconds
-  gasPollingInterval = setInterval(poll, 5000);
+  // Poll every 10 seconds
+  gasPollingInterval = setInterval(poll, 10000);
 };
 
 export const startScheduler = () => {
@@ -1423,12 +1423,12 @@ export const startScheduler = () => {
     logger.error({ err }, "Initial cooling tower rollup/cleanup failed");
   });
 
-  // Periodic cooling tower rollup (runs every 2 minutes to roll up completed hours immediately)
+  // Periodic cooling tower rollup (runs every 15 minutes to roll up completed hours)
   setInterval(() => {
     runCoolingTowerRollupAndCleanup().catch((err) => {
       logger.error({ err }, "Periodic cooling tower rollup/cleanup failed");
     });
-  }, 2 * 60 * 1000);
+  }, 15 * 60 * 1000);
 
   // Hourly rollup and cleanup for electricity
   setInterval(() => {

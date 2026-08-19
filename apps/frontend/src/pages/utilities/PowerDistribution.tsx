@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { usePageActive } from "../../hooks/usePageActive";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Line, Bar } from "react-chartjs-2";
 import "../../components/charts/chartjs";
@@ -912,6 +913,7 @@ function TransformerSymbol() {
 
 /* ═══════════ MAIN COMPONENT ═══════════ */
 export default function PowerDistribution() {
+  const isPageActive = usePageActive();
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
 
@@ -926,6 +928,7 @@ export default function PowerDistribution() {
   useEffect(() => {
     let active = true;
     const fetchPmData = () => {
+      if (!isPageActive) return;
       getJson<{ data: ElectricPmItem[] }>(`/analytics/electricity/power-meters?group=${selectedEwGroup}&_t=${Date.now()}`)
         .then((res) => {
           if (active && res?.data) {
@@ -936,7 +939,7 @@ export default function PowerDistribution() {
     };
 
     fetchPmData();
-    const interval = setInterval(fetchPmData, 1000);
+    const interval = setInterval(fetchPmData, 3000);
 
     const socket = getSocket();
     const handleLiveUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
@@ -954,7 +957,7 @@ export default function PowerDistribution() {
       socket.off(`electricity:${selectedEwGroup}_live`, handleLiveUpdate);
       socket.off("electricity:pm_live_update", handleLiveUpdate);
     };
-  }, [selectedEwGroup]);
+  }, [selectedEwGroup, isPageActive]);
 
   const [customSpecs, setCustomSpecs] = useState<Record<string, any>>({});
   const [customCoverage, setCustomCoverage] = useState<Record<string, any[]>>({});

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { usePageActive } from "../hooks/usePageActive";
 import { utils, writeFile } from "xlsx";
 import { PageHeader } from "../components/ui/PageHeader";
 import { ProgressRing } from "../components/ui/ProgressRing";
@@ -114,13 +115,16 @@ export default function Dashboard() {
   const [electricityData, setElectricityData] = useState<any>(null);
   const [waterData, setWaterData] = useState<any>(null);
 
+  const isPageActive = usePageActive();
+
   useEffect(() => {
     let active = true;
     const fetchElectricity = () => {
+      if (!isPageActive) return;
       const currentYear = new Date().getFullYear();
       getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${currentYear}&_t=${Date.now()}`)
         .then((res) => {
-          if (active) {
+          if (active && res?.data) {
             setElectricityData(res.data);
           }
         })
@@ -130,10 +134,11 @@ export default function Dashboard() {
     };
 
     const fetchWater = () => {
+      if (!isPageActive) return;
       const currentYear = new Date().getFullYear();
       getJson<{ data: any }>(`/analytics/water?year=${currentYear}&_t=${Date.now()}`)
         .then((res) => {
-          if (active) setWaterData(res.data);
+          if (active && res?.data) setWaterData(res.data);
         })
         .catch((err) => console.error("Dashboard failed to fetch water data", err));
     };
@@ -141,40 +146,27 @@ export default function Dashboard() {
     fetchElectricity();
     fetchWater();
     const interval = setInterval(() => {
-      fetchElectricity();
-      fetchWater();
-    }, 30000); // auto-fetch every 30 seconds
+      if (isPageActive) {
+        fetchElectricity();
+        fetchWater();
+      }
+    }, 60000); // auto-fetch every 60 seconds
 
     const socket = getSocket();
 
     const handleConfigUpdate = () => {
-      console.log("Dashboard: config updated, reloading electricity...");
       useConfigStore.getState().fetchRates();
-      if (active) fetchElectricity();
-    };
-
-    const handleElectricityUpdate = () => {
-      console.log("Dashboard: electricity telemetry updated, reloading electricity...");
-      if (active) fetchElectricity();
-    };
-
-    const handleWaterUpdate = () => {
-      console.log("Dashboard: water telemetry updated, reloading water...");
-      if (active) fetchWater();
+      if (active && isPageActive) fetchElectricity();
     };
 
     socket.on("config:update", handleConfigUpdate);
-    socket.on("electricity:update", handleElectricityUpdate);
-    socket.on("water:update", handleWaterUpdate);
 
     return () => {
       active = false;
       clearInterval(interval);
       socket.off("config:update", handleConfigUpdate);
-      socket.off("electricity:update", handleElectricityUpdate);
-      socket.off("water:update", handleWaterUpdate);
     };
-  }, []);
+  }, [isPageActive]);
 
   const { range, compare } = useTimeRangeStore();
   const latest = useTelemetryStore((state) => state.latest);
