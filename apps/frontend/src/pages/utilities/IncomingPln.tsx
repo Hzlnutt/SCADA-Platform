@@ -545,30 +545,38 @@ export default function IncomingPln() {
   const prefix = mode === "pln" ? "pln" : mode === "fact1" ? "wf1" : "wf2";
 
   const liveMetrics = useMemo(() => {
-    return {
-      voltage: getApiVal(`${prefix}/voltage`),
-      frequency: getApiVal(`${prefix}/frequency`),
-      activePower: getApiVal(`${prefix}/active_power`),
-      powerFactor: getApiVal(`${prefix}/power_factor`),
-      reactivePower: getApiVal(`${prefix}/reactive_power`),
-      apparentPower: getApiVal(`${prefix}/apparent_power`),
-      unbalanceV: getApiVal(`${prefix}/unbalance_v`),
-      unbalanceI: getApiVal(`${prefix}/unbalance_i`),
-      vR: getApiVal(`${prefix}/v_r`),
-      vS: getApiVal(`${prefix}/v_s`),
-      vT: getApiVal(`${prefix}/v_t`),
-      iR: getApiVal(`${prefix}/i_r`),
-      iS: getApiVal(`${prefix}/i_s`),
-      iT: getApiVal(`${prefix}/i_t`),
-      thdV_R: getApiVal(`${prefix}/thd_v_r`),
-      thdV_S: getApiVal(`${prefix}/thd_v_s`),
-      thdV_T: getApiVal(`${prefix}/thd_v_t`),
-      thdI_R: getApiVal(`${prefix}/thd_i_r`),
-      thdI_S: getApiVal(`${prefix}/thd_i_s`),
-      thdI_T: getApiVal(`${prefix}/thd_i_t`),
-      isConnected: getApiVal(`${prefix}/active_power`) !== "BELUM ADA API" && getApiVal(`${prefix}/active_power`) !== "API TIDAK TERKIRIM"
+    const pickVal = (tag: string, metricVal: any) => {
+      const apiV = getApiVal(`${prefix}/${tag}`);
+      if (apiV !== "BELUM ADA API" && apiV !== "API TIDAK TERKIRIM" && apiV !== "xx") {
+        return apiV;
+      }
+      return metricVal;
     };
-  }, [prefix, getApiVal]);
+
+    return {
+      voltage: pickVal("voltage", metrics.voltage),
+      frequency: pickVal("frequency", metrics.frequency),
+      activePower: pickVal("active_power", metrics.activePower),
+      powerFactor: pickVal("power_factor", metrics.powerFactor),
+      reactivePower: pickVal("reactive_power", metrics.reactivePower),
+      apparentPower: pickVal("apparent_power", metrics.apparentPower),
+      unbalanceV: pickVal("unbalance_v", metrics.unbalanceV),
+      unbalanceI: pickVal("unbalance_i", metrics.unbalanceI),
+      vR: pickVal("v_r", metrics.vR),
+      vS: pickVal("v_s", metrics.vS),
+      vT: pickVal("v_t", metrics.vT),
+      iR: pickVal("i_r", metrics.iR),
+      iS: pickVal("i_s", metrics.iS),
+      iT: pickVal("i_t", metrics.iT),
+      thdV_R: pickVal("thd_v_r", metrics.thdV_R),
+      thdV_S: pickVal("thd_v_s", metrics.thdV_S),
+      thdV_T: pickVal("thd_v_t", metrics.thdV_T),
+      thdI_R: pickVal("thd_i_r", metrics.thdI_R),
+      thdI_S: pickVal("thd_i_s", metrics.thdI_S),
+      thdI_T: pickVal("thd_i_t", metrics.thdI_T),
+      isConnected: metrics.isConnected || (getApiVal(`${prefix}/active_power`) !== "BELUM ADA API" && getApiVal(`${prefix}/active_power`) !== "API TIDAK TERKIRIM")
+    };
+  }, [prefix, getApiVal, metrics]);
 
   const renderMetricVal = useCallback((val: any, formatFn: (v: number) => string) => {
     if (val === "BELUM ADA API") {
@@ -775,7 +783,7 @@ export default function IncomingPln() {
           </div>
           <div className="mt-4">
             <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
-              {renderMetricVal(liveMetrics.voltage, (v) => `${v.toFixed(2)} kV`)}
+              {renderMetricVal(liveMetrics.voltage, (v) => `${v > 1000 ? (v / 1000).toFixed(2) : v.toFixed(2)} kV`)}
             </div>
             <p className="text-[9px] text-slate-400 mt-1">Nominal: 20 kV</p>
           </div>

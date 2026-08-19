@@ -648,7 +648,7 @@ export const getElectricityAnalytics = async (
       const voltRes = await pool.query(`
         SELECT 
           to_char(t_stamp, 'HH24:00') AS hour_str,
-          AVG(volt_ll)::float AS avg_val
+          (AVG(CASE WHEN volt_ll > 1000 THEN volt_ll / 1000.0 ELSE volt_ll END))::float AS avg_val
         FROM ${tableName}
         WHERE t_stamp >= NOW() - INTERVAL '24 hours'
         GROUP BY date_trunc('hour', t_stamp), to_char(t_stamp, 'HH24:00')
@@ -658,15 +658,15 @@ export const getElectricityAnalytics = async (
       const powerRes = await pool.query(`
         SELECT 
           to_char(t_stamp, 'HH24:00') AS hour_str,
-          AVG(${activePowerCol})::float AS avg_val
+          (AVG(CASE WHEN ${activePowerCol} > 1000 THEN ${activePowerCol} / 1000.0 ELSE ${activePowerCol} END))::float AS avg_val
         FROM ${tableName}
         WHERE t_stamp >= NOW() - INTERVAL '24 hours'
         GROUP BY date_trunc('hour', t_stamp), to_char(t_stamp, 'HH24:00')
         ORDER BY date_trunc('hour', t_stamp)
       `);
       
-      voltageTrend = voltRes.rows.map(r => ({ hour: r.hour_str, value: r.avg_val }));
-      powerTrend = powerRes.rows.map(r => ({ hour: r.hour_str, value: r.avg_val }));
+      voltageTrend = voltRes.rows.map(r => ({ hour: r.hour_str, value: Number(r.avg_val.toFixed(2)) }));
+      powerTrend = powerRes.rows.map(r => ({ hour: r.hour_str, value: Number(r.avg_val.toFixed(1)) }));
     }
   } catch (err) {
     console.warn("Failed to query voltage/power 24h trend:", err);
