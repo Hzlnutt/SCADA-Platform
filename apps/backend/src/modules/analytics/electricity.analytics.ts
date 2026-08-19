@@ -261,16 +261,33 @@ export const getElectricityAnalytics = async (
   let hourlyRecords: { ts: Date; value: number }[] = [];
   const pool = getPostgresPool();
   try {
-    if (tableName === "electricity_telemetry") {
+    if (deviceId === "Cubicle_PLN_PM8000" || tableName === "electricity_telemetry") {
       const res = await pool.query(`
-        SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
-          t_stamp AS ts, 
-          electricity_kwh::float AS value
+        SELECT t_stamp AS ts, electricity_kwh::float AS value
         FROM electricity_telemetry
-        WHERE id_device = $1 AND t_stamp >= $2 AND t_stamp <= $3
-        ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
-      `, [deviceId, fromQueryIso, toQueryIso]);
+        WHERE t_stamp >= $1 AND t_stamp <= $2
+        ORDER BY t_stamp ASC
+      `, [fromQueryIso, toQueryIso]);
       hourlyRecords = res.rows;
+
+      // Append latest real-time reading from electric_pln_telemetry if available and newer
+      if (to >= new Date()) {
+        try {
+          const latestRes = await pool.query(`
+            SELECT t_stamp AS ts, active_energy::float AS value
+            FROM electric_pln_telemetry
+            ORDER BY t_stamp DESC LIMIT 1
+          `);
+          if (latestRes.rows.length > 0) {
+            const latest = latestRes.rows[0];
+            const latestTs = new Date(latest.ts);
+            const lastTs = hourlyRecords.length > 0 ? new Date(hourlyRecords[hourlyRecords.length - 1].ts) : new Date(0);
+            if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
+              hourlyRecords.push(latest);
+            }
+          }
+        } catch {}
+      }
     } else {
       const res = await pool.query(`
         SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
@@ -284,21 +301,6 @@ export const getElectricityAnalytics = async (
     }
   } catch (err) {
     console.warn("PostgreSQL query failed for electricity analytics, falling back:", err);
-  }
-
-  // If no records found in primary table, fall back to legacy electricity_telemetry
-  if (hourlyRecords.length === 0 && tableName !== "electricity_telemetry") {
-    try {
-      const res = await pool.query(`
-        SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
-          t_stamp AS ts, 
-          electricity_kwh::float AS value
-        FROM electricity_telemetry
-        WHERE id_device = $1 AND t_stamp >= $2 AND t_stamp <= $3
-        ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
-      `, [deviceId, fromQueryIso, toQueryIso]);
-      hourlyRecords = res.rows;
-    } catch {}
   }
 
   // If still no records found in Postgres, fall back to MongoDB
