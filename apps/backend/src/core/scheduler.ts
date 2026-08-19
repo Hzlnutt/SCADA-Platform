@@ -449,6 +449,9 @@ export const startIncomingElectricityPolling = () => {
 
   const poll = async () => {
     const ts = new Date();
+    let lastPlnRec: ElectricPmRecord | null = null;
+    let lastWf1Rec: ElectricPmRecord | null = null;
+    let lastWf2Rec: ElectricPmRecord | null = null;
     
     // Fetch and store PLN
     try {
@@ -456,6 +459,33 @@ export const startIncomingElectricityPolling = () => {
       const parsed = parsePlnApi(data, ts);
       await insertPlnTelemetry(parsed);
       broadcastLiveTelemetry("Cubicle_PLN_PM8000", parsed);
+      lastPlnRec = {
+        t_stamp: ts,
+        group_id: "ew23",
+        pm_id: "PM410",
+        status: parsed.status_pm8000 !== null ? !!parsed.status_pm8000 : true,
+        volt_ab: parsed.volt_ab,
+        volt_bc: parsed.volt_bc,
+        volt_ca: parsed.volt_ca,
+        volt_ll: parsed.volt_ll,
+        current_a: parsed.current_a,
+        current_b: parsed.current_b,
+        current_c: parsed.current_c,
+        frequency: parsed.frequency,
+        active_power_total: parsed.active_power,
+        reactive_power_total: parsed.reactive_power_total,
+        apparent_power_total: parsed.apparent_power_total,
+        power_factor: parsed.power_factor,
+        voltage_unbalance: parsed.voltage_unbalance,
+        current_unbalance: parsed.current_unbalance,
+        thd_volt_a: parsed.thd_volt_a,
+        thd_volt_b: parsed.thd_volt_b,
+        thd_volt_c: parsed.thd_volt_c,
+        thd_current_a: parsed.thd_current_a,
+        thd_current_b: parsed.thd_current_b,
+        thd_current_c: parsed.thd_current_c,
+        active_energy: parsed.active_energy
+      };
     } catch (err: any) {
       logger.warn(`Incoming PLN polling failed: ${err.message}`);
       broadcastLiveTelemetryOffline("Cubicle_PLN_PM8000");
@@ -467,6 +497,33 @@ export const startIncomingElectricityPolling = () => {
       const parsed = parseWfApi(data, ts);
       await insertWfTelemetry("electric_wf1_telemetry", parsed);
       broadcastLiveTelemetry("Feeder_WF1_PM5560", parsed);
+      lastWf1Rec = {
+        t_stamp: ts,
+        group_id: "ew23",
+        pm_id: "PM411",
+        status: parsed.status_pm5500 !== null ? !!parsed.status_pm5500 : true,
+        volt_ab: parsed.volt_ab,
+        volt_bc: parsed.volt_bc,
+        volt_ca: parsed.volt_ca,
+        volt_ll: parsed.volt_ll,
+        current_a: parsed.current_a,
+        current_b: parsed.current_b,
+        current_c: parsed.current_c,
+        frequency: parsed.frequency,
+        active_power_total: parsed.active_power_total,
+        reactive_power_total: parsed.reactive_power_total,
+        apparent_power_total: parsed.apparent_power_total,
+        power_factor: parsed.power_factor,
+        voltage_unbalance: parsed.voltage_unbalance,
+        current_unbalance: parsed.current_unbalance,
+        thd_volt_a: parsed.thd_volt_a,
+        thd_volt_b: parsed.thd_volt_b,
+        thd_volt_c: parsed.thd_volt_c,
+        thd_current_a: parsed.thd_current_a,
+        thd_current_b: parsed.thd_current_b,
+        thd_current_c: parsed.thd_current_c,
+        active_energy: parsed.active_energy
+      };
     } catch (err: any) {
       logger.warn(`Incoming WF1 polling failed: ${err.message}`);
       broadcastLiveTelemetryOffline("Feeder_WF1_PM5560");
@@ -478,6 +535,33 @@ export const startIncomingElectricityPolling = () => {
       const parsed = parseWfApi(data, ts);
       await insertWfTelemetry("electric_wf2_telemetry", parsed);
       broadcastLiveTelemetry("Feeder_WF2_PM5500", parsed);
+      lastWf2Rec = {
+        t_stamp: ts,
+        group_id: "ew23",
+        pm_id: "PM412",
+        status: parsed.status_pm5500 !== null ? !!parsed.status_pm5500 : true,
+        volt_ab: parsed.volt_ab,
+        volt_bc: parsed.volt_bc,
+        volt_ca: parsed.volt_ca,
+        volt_ll: parsed.volt_ll,
+        current_a: parsed.current_a,
+        current_b: parsed.current_b,
+        current_c: parsed.current_c,
+        frequency: parsed.frequency,
+        active_power_total: parsed.active_power_total,
+        reactive_power_total: parsed.reactive_power_total,
+        apparent_power_total: parsed.apparent_power_total,
+        power_factor: parsed.power_factor,
+        voltage_unbalance: parsed.voltage_unbalance,
+        current_unbalance: parsed.current_unbalance,
+        thd_volt_a: parsed.thd_volt_a,
+        thd_volt_b: parsed.thd_volt_b,
+        thd_volt_c: parsed.thd_volt_c,
+        thd_current_a: parsed.thd_current_a,
+        thd_current_b: parsed.thd_current_b,
+        thd_current_c: parsed.thd_current_c,
+        active_energy: parsed.active_energy
+      };
     } catch (err: any) {
       logger.warn(`Incoming WF2 polling failed: ${err.message}`);
       broadcastLiveTelemetryOffline("Feeder_WF2_PM5500");
@@ -494,6 +578,19 @@ export const startIncomingElectricityPolling = () => {
       }
       if (data) {
         const parsed = parseEwApi(data, ts, "ew23");
+        
+        // Ensure the 3 incoming cubicles are merged into the list if not already present in the EW23 JSON payload
+        const existing = new Set(parsed.map(p => p.pm_id.toUpperCase()));
+        if (!existing.has("PM410") && !existing.has("PM8000") && lastPlnRec) {
+          parsed.push(lastPlnRec);
+        }
+        if (!existing.has("PM411") && !existing.has("PM5560") && !existing.has("PM5560_WF1") && lastWf1Rec) {
+          parsed.push(lastWf1Rec);
+        }
+        if (!existing.has("PM412") && !existing.has("PM5560_WF2") && !existing.has("PM5500") && lastWf2Rec) {
+          parsed.push(lastWf2Rec);
+        }
+
         await insertPmTelemetryBatch(parsed);
         broadcastEwLiveTelemetry("ew23", parsed);
       }

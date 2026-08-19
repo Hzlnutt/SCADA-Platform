@@ -296,6 +296,125 @@ export const getPowerMetersLatestHandler = async (
       });
     }
 
+    // For ew23, ensure the 3 incoming cubicles (PLN, WF1, WF2) are included if not present in the PM array
+    if (group === "ew23") {
+      const existingPmIds = new Set(data.map((r: any) => String(r.pm_id).toUpperCase()));
+
+      // 1. Incoming Cubicle PLN
+      if (!existingPmIds.has("PM410") && !existingPmIds.has("PM8000") && !existingPmIds.has("CUBICLE_PLN_PM8000")) {
+        try {
+          const plnRes = await pool.query(`SELECT * FROM electric_pln_telemetry ORDER BY t_stamp DESC LIMIT 1`);
+          if (plnRes.rows.length > 0) {
+            const pln = plnRes.rows[0];
+            data.push({
+              id: 410,
+              t_stamp: pln.t_stamp,
+              group_id: "ew23",
+              pm_id: "PM410",
+              status: pln.status_pm8000 !== null ? !!pln.status_pm8000 : true,
+              volt_ab: pln.volt_ab ? Number(pln.volt_ab) : null,
+              volt_bc: pln.volt_bc ? Number(pln.volt_bc) : null,
+              volt_ca: pln.volt_ca ? Number(pln.volt_ca) : null,
+              volt_ll: pln.volt_ll ? Number(pln.volt_ll) : null,
+              current_a: pln.current_a ? Number(pln.current_a) : null,
+              current_b: pln.current_b ? Number(pln.current_b) : null,
+              current_c: pln.current_c ? Number(pln.current_c) : null,
+              frequency: pln.frequency ? Number(pln.frequency) : 50.0,
+              active_power_total: pln.active_power ? Number(pln.active_power) : null,
+              reactive_power_total: pln.reactive_power_total ? Number(pln.reactive_power_total) : null,
+              apparent_power_total: pln.apparent_power_total ? Number(pln.apparent_power_total) : null,
+              power_factor: pln.power_factor ? Number(pln.power_factor) : null,
+              voltage_unbalance: pln.voltage_unbalance ? Number(pln.voltage_unbalance) : null,
+              current_unbalance: pln.current_unbalance ? Number(pln.current_unbalance) : null,
+              thd_volt_a: pln.thd_volt_a ? Number(pln.thd_volt_a) : null,
+              thd_volt_b: pln.thd_volt_b ? Number(pln.thd_volt_b) : null,
+              thd_volt_c: pln.thd_volt_c ? Number(pln.thd_volt_c) : null,
+              thd_current_a: pln.thd_current_a ? Number(pln.thd_current_a) : null,
+              thd_current_b: pln.thd_current_b ? Number(pln.thd_current_b) : null,
+              thd_current_c: pln.thd_current_c ? Number(pln.thd_current_c) : null,
+              active_energy: pln.active_energy ? Number(pln.active_energy) : null
+            });
+          }
+        } catch {}
+      }
+
+      // 2. Incoming Cubicle WF1
+      if (!existingPmIds.has("PM411") && !existingPmIds.has("PM5560") && !existingPmIds.has("PM5560_WF1") && !existingPmIds.has("FEEDER_WF1_PM5560")) {
+        try {
+          const wf1Res = await pool.query(`SELECT * FROM electric_wf1_telemetry ORDER BY t_stamp DESC LIMIT 1`);
+          if (wf1Res.rows.length > 0) {
+            const wf1 = wf1Res.rows[0];
+            data.push({
+              id: 411,
+              t_stamp: wf1.t_stamp,
+              group_id: "ew23",
+              pm_id: "PM411",
+              status: wf1.status_pm5500 !== null ? !!wf1.status_pm5500 : true,
+              volt_ab: wf1.volt_ab ? Number(wf1.volt_ab) : null,
+              volt_bc: wf1.volt_bc ? Number(wf1.volt_bc) : null,
+              volt_ca: wf1.volt_ca ? Number(wf1.volt_ca) : null,
+              volt_ll: wf1.volt_ll ? Number(wf1.volt_ll) : null,
+              current_a: wf1.current_a ? Number(wf1.current_a) : null,
+              current_b: wf1.current_b ? Number(wf1.current_b) : null,
+              current_c: wf1.current_c ? Number(wf1.current_c) : null,
+              frequency: wf1.frequency ? Number(wf1.frequency) : 50.0,
+              active_power_total: wf1.active_power_total ? Number(wf1.active_power_total) : null,
+              reactive_power_total: wf1.reactive_power_total ? Number(wf1.reactive_power_total) : null,
+              apparent_power_total: wf1.apparent_power_total ? Number(wf1.apparent_power_total) : null,
+              power_factor: wf1.power_factor ? Number(wf1.power_factor) : null,
+              voltage_unbalance: wf1.voltage_unbalance ? Number(wf1.voltage_unbalance) : null,
+              current_unbalance: wf1.current_unbalance ? Number(wf1.current_unbalance) : null,
+              thd_volt_a: wf1.thd_volt_a ? Number(wf1.thd_volt_a) : null,
+              thd_volt_b: wf1.thd_volt_b ? Number(wf1.thd_volt_b) : null,
+              thd_volt_c: wf1.thd_volt_c ? Number(wf1.thd_volt_c) : null,
+              thd_current_a: wf1.thd_current_a ? Number(wf1.thd_current_a) : null,
+              thd_current_b: wf1.thd_current_b ? Number(wf1.thd_current_b) : null,
+              thd_current_c: wf1.thd_current_c ? Number(wf1.thd_current_c) : null,
+              active_energy: wf1.active_energy ? Number(wf1.active_energy) : null
+            });
+          }
+        } catch {}
+      }
+
+      // 3. Incoming Cubicle WF2
+      if (!existingPmIds.has("PM412") && !existingPmIds.has("PM5560_WF2") && !existingPmIds.has("PM5500") && !existingPmIds.has("FEEDER_WF2_PM5500")) {
+        try {
+          const wf2Res = await pool.query(`SELECT * FROM electric_wf2_telemetry ORDER BY t_stamp DESC LIMIT 1`);
+          if (wf2Res.rows.length > 0) {
+            const wf2 = wf2Res.rows[0];
+            data.push({
+              id: 412,
+              t_stamp: wf2.t_stamp,
+              group_id: "ew23",
+              pm_id: "PM412",
+              status: wf2.status_pm5500 !== null ? !!wf2.status_pm5500 : true,
+              volt_ab: wf2.volt_ab ? Number(wf2.volt_ab) : null,
+              volt_bc: wf2.volt_bc ? Number(wf2.volt_bc) : null,
+              volt_ca: wf2.volt_ca ? Number(wf2.volt_ca) : null,
+              volt_ll: wf2.volt_ll ? Number(wf2.volt_ll) : null,
+              current_a: wf2.current_a ? Number(wf2.current_a) : null,
+              current_b: wf2.current_b ? Number(wf2.current_b) : null,
+              current_c: wf2.current_c ? Number(wf2.current_c) : null,
+              frequency: wf2.frequency ? Number(wf2.frequency) : 50.0,
+              active_power_total: wf2.active_power_total ? Number(wf2.active_power_total) : null,
+              reactive_power_total: wf2.reactive_power_total ? Number(wf2.reactive_power_total) : null,
+              apparent_power_total: wf2.apparent_power_total ? Number(wf2.apparent_power_total) : null,
+              power_factor: wf2.power_factor ? Number(wf2.power_factor) : null,
+              voltage_unbalance: wf2.voltage_unbalance ? Number(wf2.voltage_unbalance) : null,
+              current_unbalance: wf2.current_unbalance ? Number(wf2.current_unbalance) : null,
+              thd_volt_a: wf2.thd_volt_a ? Number(wf2.thd_volt_a) : null,
+              thd_volt_b: wf2.thd_volt_b ? Number(wf2.thd_volt_b) : null,
+              thd_volt_c: wf2.thd_volt_c ? Number(wf2.thd_volt_c) : null,
+              thd_current_a: wf2.thd_current_a ? Number(wf2.thd_current_a) : null,
+              thd_current_b: wf2.thd_current_b ? Number(wf2.thd_current_b) : null,
+              thd_current_c: wf2.thd_current_c ? Number(wf2.thd_current_c) : null,
+              active_energy: wf2.active_energy ? Number(wf2.active_energy) : null
+            });
+          }
+        } catch {}
+      }
+    }
+
     // Sort ascending by PM numerical ID
     data.sort((a: any, b: any) => {
       const numA = parseInt(String(a.pm_id).replace(/\D/g, "") || "0");
