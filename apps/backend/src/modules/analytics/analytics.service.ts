@@ -38,7 +38,7 @@ export const getAnalyticsSummary = async () => {
   );
 
   const alarmsBySeverity = await alarmEvents
-    .aggregate<{ _id: string; count: number }>([
+    .aggregate([
       { $match: { ts: { $gte: lastDay } } },
       { $group: { _id: "$severity", count: { $sum: 1 } } },
       { $sort: { count: -1 } }
@@ -46,7 +46,7 @@ export const getAnalyticsSummary = async () => {
     .toArray();
 
   const telemetryByArea = await telemetry
-    .aggregate<{ _id: string; count: number }>([
+    .aggregate([
       { $match: { ts: { $gte: lastHour } } },
       { $group: { _id: "$meta.area", count: { $sum: 1 } } },
       { $sort: { count: -1 } }
@@ -64,11 +64,11 @@ export const getAnalyticsSummary = async () => {
     alarmEventsLastDay,
     activeAlarmCount,
     deviceStatus,
-    alarmsBySeverity: alarmsBySeverity.map((item) => ({
+    alarmsBySeverity: alarmsBySeverity.map((item: any) => ({
       severity: item._id ?? "unknown",
       count: item.count
     })),
-    telemetryByArea: telemetryByArea.map((item) => ({
+    telemetryByArea: telemetryByArea.map((item: any) => ({
       area: item._id ?? "Unknown",
       count: item.count
     }))

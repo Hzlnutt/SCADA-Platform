@@ -99,7 +99,7 @@ const getRecipients = async () => {
     .find({ role: { $in: ["operator", "team_head", "leader"] } })
     .project({ email: 1 })
     .toArray();
-  return rows.map((row) => row.email).filter(Boolean);
+  return rows.map((row: any) => row.email).filter(Boolean);
 };
 
 const evaluatePoint = async (doc: TelemetryDoc) => {

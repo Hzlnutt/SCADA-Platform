@@ -313,7 +313,7 @@ export const getElectricityAnalytics = async (
       .sort({ ts: 1 })
       .toArray();
     
-    hourlyRecords = mongoRecords.map(r => ({
+    hourlyRecords = mongoRecords.map((r: any) => ({
       ts: r.ts,
       value: r.value
     }));

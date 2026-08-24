@@ -491,7 +491,7 @@ export const getHvacStates = async () => {
   const collection = db.collection(STATE_COLLECTION);
   
   const docs = await collection.find({ key: { $regex: /^hvac_state_/ } }).toArray();
-  const stateMap = new Map(docs.map((doc) => [doc.key, doc]));
+  const stateMap = new Map(docs.map((doc: any) => [doc.key, doc]));
 
   const defaults: Record<string, { temp: number; humid: number; mode: string; status: string }> = {
     "hvac_state_ahu-01": { temp: 46.8, humid: 75.0, mode: "Auto", status: "Running" },
@@ -502,7 +502,7 @@ export const getHvacStates = async () => {
 
   const result: Record<string, any> = {};
   for (const [key, defValue] of Object.entries(defaults)) {
-    const doc = stateMap.get(key);
+    const doc = stateMap.get(key) as any;
     result[key] = doc ? {
       temp: doc.temp !== undefined ? doc.temp : defValue.temp,
       humid: doc.humid !== undefined ? doc.humid : defValue.humid,
@@ -527,7 +527,7 @@ export const updateHvacState = async (
   const collection = db.collection(STATE_COLLECTION);
   const key = `hvac_state_${unitId}`;
 
-  const current = await collection.findOne({ key });
+  const current = (await collection.findOne({ key })) as any;
   const defaults: Record<string, { temp: number; humid: number; mode: string; status: string }> = {
     "ahu-01": { temp: 46.8, humid: 75.0, mode: "Auto", status: "Running" },
     "ahu-02": { temp: 22.4, humid: 55.0, mode: "Auto", status: "Running" },
@@ -568,9 +568,9 @@ export const getHvacLogs = async (limit: number = 50) => {
     .limit(limit)
     .toArray();
 
-  const actorIds = [...new Set(logs.map(log => log.actorId))].filter(Boolean).map(id => {
+  const actorIds = [...new Set(logs.map((log: any) => log.actorId))].filter(Boolean).map((id: any) => {
     try {
-      return new ObjectId(id);
+      return new ObjectId(String(id));
     } catch {
       return null;
     }
@@ -581,9 +581,9 @@ export const getHvacLogs = async (limit: number = 50) => {
     .project({ _id: 1, name: 1 })
     .toArray();
 
-  const userMap = new Map(users.map(u => [u._id.toString(), u.name]));
+  const userMap = new Map(users.map((u: any) => [u._id.toString(), u.name]));
 
-  return logs.map(log => ({
+  return logs.map((log: any) => ({
     id: log._id.toString(),
     action: log.meta?.actionLabel ? `${log.meta.roomName} - ${log.meta.actionLabel}` : log.action,
     user: userMap.get(log.actorId) || "System / Unknown",

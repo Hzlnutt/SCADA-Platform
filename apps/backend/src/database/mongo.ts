@@ -10,21 +10,28 @@ export const connectMongo = async () => {
     return db;
   }
 
-  client = new MongoClient(env.mongoUri, {
-    maxPoolSize: 20
-  });
+  try {
+    client = new MongoClient(env.mongoUri, {
+      maxPoolSize: 20,
+      serverSelectionTimeoutMS: 2000
+    });
 
-  await client.connect();
-  db = client.db(env.mongoDb);
+    await client.connect();
+    db = client.db(env.mongoDb);
 
-  logger.info({ db: env.mongoDb }, "mongo connected");
+    logger.info({ db: env.mongoDb }, "mongo connected");
 
-  return db;
+    return db;
+  } catch (err: any) {
+    logger.warn(`Mongo connection failed (operating in PostgreSQL-only mode): ${err.message}`);
+    return null;
+  }
 };
 
-export const getMongoDb = () => {
+export const getMongoDb = (): Db => {
   if (!db) {
-    throw new Error("Mongo not connected");
+    logger.debug("Mongo not connected, requested getMongoDb");
+    return {} as unknown as Db;
   }
 
   return db;

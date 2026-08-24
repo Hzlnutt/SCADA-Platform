@@ -550,6 +550,210 @@ export const ensurePostgresTables = async () => {
       CREATE INDEX IF NOT EXISTS idx_electric_pm_telemetry_grp_time ON electric_pm_telemetry (group_id, t_stamp DESC);
     `);
 
+    // --- TEMPORARY PER-MINUTE BUFFER TABLES FOR ELECTRICITY ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS electric_pln_telemetry_minute (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        status_pm8000 BOOLEAN,
+        volt_ab NUMERIC,
+        volt_bc NUMERIC,
+        volt_ca NUMERIC,
+        volt_ll NUMERIC,
+        current_a NUMERIC,
+        current_b NUMERIC,
+        current_c NUMERIC,
+        frequency NUMERIC,
+        active_power NUMERIC,
+        reactive_power_total NUMERIC,
+        apparent_power_total NUMERIC,
+        power_factor NUMERIC,
+        voltage_unbalance NUMERIC,
+        current_unbalance NUMERIC,
+        thd_volt_a NUMERIC,
+        thd_volt_b NUMERIC,
+        thd_volt_c NUMERIC,
+        thd_current_a NUMERIC,
+        thd_current_b NUMERIC,
+        thd_current_c NUMERIC,
+        active_energy NUMERIC
+      );
+      CREATE INDEX IF NOT EXISTS idx_electric_pln_minute_tstamp ON electric_pln_telemetry_minute (t_stamp DESC);
+
+      CREATE TABLE IF NOT EXISTS electric_wf1_telemetry_minute (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        status_pm5500 BOOLEAN,
+        volt_ab NUMERIC,
+        volt_bc NUMERIC,
+        volt_ca NUMERIC,
+        volt_ll NUMERIC,
+        current_a NUMERIC,
+        current_b NUMERIC,
+        current_c NUMERIC,
+        frequency NUMERIC,
+        active_power_total NUMERIC,
+        reactive_power_total NUMERIC,
+        apparent_power_total NUMERIC,
+        power_factor NUMERIC,
+        voltage_unbalance NUMERIC,
+        current_unbalance NUMERIC,
+        thd_volt_a NUMERIC,
+        thd_volt_b NUMERIC,
+        thd_volt_c NUMERIC,
+        thd_current_a NUMERIC,
+        thd_current_b NUMERIC,
+        thd_current_c NUMERIC,
+        active_energy NUMERIC
+      );
+      CREATE INDEX IF NOT EXISTS idx_electric_wf1_minute_tstamp ON electric_wf1_telemetry_minute (t_stamp DESC);
+
+      CREATE TABLE IF NOT EXISTS electric_wf2_telemetry_minute (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        status_pm5500 BOOLEAN,
+        volt_ab NUMERIC,
+        volt_bc NUMERIC,
+        volt_ca NUMERIC,
+        volt_ll NUMERIC,
+        current_a NUMERIC,
+        current_b NUMERIC,
+        current_c NUMERIC,
+        frequency NUMERIC,
+        active_power_total NUMERIC,
+        reactive_power_total NUMERIC,
+        apparent_power_total NUMERIC,
+        power_factor NUMERIC,
+        voltage_unbalance NUMERIC,
+        current_unbalance NUMERIC,
+        thd_volt_a NUMERIC,
+        thd_volt_b NUMERIC,
+        thd_volt_c NUMERIC,
+        thd_current_a NUMERIC,
+        thd_current_b NUMERIC,
+        thd_current_c NUMERIC,
+        active_energy NUMERIC
+      );
+      CREATE INDEX IF NOT EXISTS idx_electric_wf2_minute_tstamp ON electric_wf2_telemetry_minute (t_stamp DESC);
+
+      CREATE TABLE IF NOT EXISTS electric_pm_telemetry_minute (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        group_id VARCHAR(20) NOT NULL,
+        pm_id VARCHAR(50) NOT NULL,
+        status BOOLEAN,
+        volt_ab NUMERIC,
+        volt_bc NUMERIC,
+        volt_ca NUMERIC,
+        volt_ll NUMERIC,
+        current_a NUMERIC,
+        current_b NUMERIC,
+        current_c NUMERIC,
+        frequency NUMERIC,
+        active_power_total NUMERIC,
+        reactive_power_total NUMERIC,
+        apparent_power_total NUMERIC,
+        power_factor NUMERIC,
+        voltage_unbalance NUMERIC,
+        current_unbalance NUMERIC,
+        thd_volt_a NUMERIC,
+        thd_volt_b NUMERIC,
+        thd_volt_c NUMERIC,
+        thd_current_a NUMERIC,
+        thd_current_b NUMERIC,
+        thd_current_c NUMERIC,
+        active_energy NUMERIC
+      );
+      CREATE INDEX IF NOT EXISTS idx_electric_pm_minute_time ON electric_pm_telemetry_minute (pm_id, t_stamp DESC);
+    `).catch((err) => {
+      logger.warn({ err }, "Failed to create minute buffer tables");
+    });
+
+    // Migrate existing non-hourly data from main tables into minute buffer tables
+    await pool.query(`
+      -- PLN: Move non-hourly records
+      INSERT INTO electric_pln_telemetry_minute (
+        t_stamp, status_pm8000, volt_ab, volt_bc, volt_ca, volt_ll,
+        current_a, current_b, current_c, frequency, active_power,
+        reactive_power_total, apparent_power_total, power_factor,
+        voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+        thd_current_a, thd_current_b, thd_current_c, active_energy
+      )
+      SELECT 
+        t_stamp, status_pm8000, volt_ab, volt_bc, volt_ca, volt_ll,
+        current_a, current_b, current_c, frequency, active_power,
+        reactive_power_total, apparent_power_total, power_factor,
+        voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+        thd_current_a, thd_current_b, thd_current_c, active_energy
+      FROM electric_pln_telemetry
+      WHERE EXTRACT(MINUTE FROM t_stamp) != 0 OR EXTRACT(SECOND FROM t_stamp) != 0;
+
+      DELETE FROM electric_pln_telemetry
+      WHERE EXTRACT(MINUTE FROM t_stamp) != 0 OR EXTRACT(SECOND FROM t_stamp) != 0;
+
+      -- WF1: Move non-hourly records
+      INSERT INTO electric_wf1_telemetry_minute (
+        t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
+        current_a, current_b, current_c, frequency, active_power_total,
+        reactive_power_total, apparent_power_total, power_factor,
+        voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+        thd_current_a, thd_current_b, thd_current_c, active_energy
+      )
+      SELECT 
+        t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
+        current_a, current_b, current_c, frequency, active_power_total,
+        reactive_power_total, apparent_power_total, power_factor,
+        voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+        thd_current_a, thd_current_b, thd_current_c, active_energy
+      FROM electric_wf1_telemetry
+      WHERE EXTRACT(MINUTE FROM t_stamp) != 0 OR EXTRACT(SECOND FROM t_stamp) != 0;
+
+      DELETE FROM electric_wf1_telemetry
+      WHERE EXTRACT(MINUTE FROM t_stamp) != 0 OR EXTRACT(SECOND FROM t_stamp) != 0;
+
+      -- WF2: Move non-hourly records
+      INSERT INTO electric_wf2_telemetry_minute (
+        t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
+        current_a, current_b, current_c, frequency, active_power_total,
+        reactive_power_total, apparent_power_total, power_factor,
+        voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+        thd_current_a, thd_current_b, thd_current_c, active_energy
+      )
+      SELECT 
+        t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
+        current_a, current_b, current_c, frequency, active_power_total,
+        reactive_power_total, apparent_power_total, power_factor,
+        voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+        thd_current_a, thd_current_b, thd_current_c, active_energy
+      FROM electric_wf2_telemetry
+      WHERE EXTRACT(MINUTE FROM t_stamp) != 0 OR EXTRACT(SECOND FROM t_stamp) != 0;
+
+      DELETE FROM electric_wf2_telemetry
+      WHERE EXTRACT(MINUTE FROM t_stamp) != 0 OR EXTRACT(SECOND FROM t_stamp) != 0;
+
+      -- Sub-distribution PM: Move non-hourly records
+      INSERT INTO electric_pm_telemetry_minute (
+        t_stamp, group_id, pm_id, status, volt_ab, volt_bc, volt_ca, volt_ll,
+        current_a, current_b, current_c, frequency, active_power_total,
+        reactive_power_total, apparent_power_total, power_factor,
+        voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+        thd_current_a, thd_current_b, thd_current_c, active_energy
+      )
+      SELECT 
+        t_stamp, group_id, pm_id, status, volt_ab, volt_bc, volt_ca, volt_ll,
+        current_a, current_b, current_c, frequency, active_power_total,
+        reactive_power_total, apparent_power_total, power_factor,
+        voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+        thd_current_a, thd_current_b, thd_current_c, active_energy
+      FROM electric_pm_telemetry
+      WHERE EXTRACT(MINUTE FROM t_stamp) != 0 OR EXTRACT(SECOND FROM t_stamp) != 0;
+
+      DELETE FROM electric_pm_telemetry
+      WHERE EXTRACT(MINUTE FROM t_stamp) != 0 OR EXTRACT(SECOND FROM t_stamp) != 0;
+    `).catch((err) => {
+      logger.warn({ err }, "Migration of legacy non-hourly electricity data completed or skipped");
+    });
+
     logger.info("postgres tables ensured and migrated to NUMERIC successfully");
   } catch (err: any) {
     logger.error({ err }, "failed to ensure postgres tables");

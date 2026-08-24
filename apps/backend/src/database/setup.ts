@@ -131,7 +131,10 @@ const ensureThresholdCollections = async (db: Db) => {
 
 export const ensureMongoCollections = async () => {
   const db = await connectMongo();
-
+  if (!db) {
+    logger.warn("Skipping MongoDB collections setup (operating in PostgreSQL-only mode)");
+    return;
+  }
   const telemetryExpire = env.telemetryRetentionDays * 24 * 60 * 60;
   const historianExpire = env.historianRetentionDays * 24 * 60 * 60;
   const historianHourlyExpire =

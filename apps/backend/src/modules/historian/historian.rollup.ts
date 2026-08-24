@@ -21,6 +21,7 @@ type RollupState = {
 
 const loadRollupState = async (key: string) => {
   const db = getMongoDb();
+  if (!db) return null;
   const stateCollection = db.collection<RollupState>(STATE_COLLECTION);
 
   return stateCollection.findOne({ key });
@@ -28,6 +29,7 @@ const loadRollupState = async (key: string) => {
 
 const saveRollupState = async (key: string, lastTs: Date) => {
   const db = getMongoDb();
+  if (!db) return;
   const stateCollection = db.collection<RollupState>(STATE_COLLECTION);
 
   await stateCollection.updateOne(
@@ -46,6 +48,7 @@ export const rollupTelemetryMinute = async () => {
   minuteRunning = true;
   try {
     const db = getMongoDb();
+    if (!db) return;
     const telemetryCollection = db.collection(TELEMETRY_COLLECTION);
     const historianCollection = db.collection(HISTORIAN_COLLECTION);
 
@@ -139,6 +142,7 @@ export const rollupHistorianHour = async () => {
   hourRunning = true;
   try {
     const db = getMongoDb();
+    if (!db) return;
     const minuteCollection = db.collection(HISTORIAN_COLLECTION);
     const hourlyCollection = db.collection(HISTORIAN_HOURLY_COLLECTION);
 

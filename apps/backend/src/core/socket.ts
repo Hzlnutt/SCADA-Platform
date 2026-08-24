@@ -21,10 +21,10 @@ const telemetrySubscribeSchema = z.object({
 });
 
 const serializeTelemetryDocs = (
-  docs: Awaited<ReturnType<typeof getLatestTelemetryByTags>>
+  docs: any[]
 ) =>
-  docs.map((doc) => ({
-    ts: doc.ts.toISOString(),
+  docs.map((doc: any) => ({
+    ts: doc.ts.toISOString ? doc.ts.toISOString() : new Date(doc.ts).toISOString(),
     value: doc.value,
     quality: doc.quality,
     meta: doc.meta

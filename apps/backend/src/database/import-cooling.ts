@@ -34,6 +34,7 @@ async function importCoolingCsv() {
   console.log("Connecting to MongoDB...");
   await ensureMongoCollections();
   const db = await connectMongo();
+  if (!db) throw new Error("MongoDB not connected");
   const telemetryCollection = db.collection(TELEMETRY_COLLECTION);
   const historianCollection = db.collection(HISTORIAN_COLLECTION);
   const hourlyCollection = db.collection(HISTORIAN_HOURLY_COLLECTION);

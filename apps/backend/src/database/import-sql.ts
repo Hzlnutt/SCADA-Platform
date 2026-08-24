@@ -100,6 +100,7 @@ async function importSql() {
   console.log("Connecting to MongoDB...");
   await ensureMongoCollections();
   const db = await connectMongo();
+  if (!db) throw new Error("MongoDB not connected");
   const telemetryCollection = db.collection(ELECTRICITY_RAW_COLLECTION);
   const historianCollection = db.collection(ELECTRICITY_1M_COLLECTION);
   const hourlyCollection = db.collection(ELECTRICITY_1H_COLLECTION);

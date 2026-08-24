@@ -80,10 +80,19 @@ const parseWfApi = (data: any, ts: Date) => {
   };
 };
 
-const insertPlnTelemetry = async (payload: ReturnType<typeof parsePlnApi>) => {
+export const formatMinuteString = (d: Date = new Date()): string => {
+  const yr = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const dy = String(d.getDate()).padStart(2, "0");
+  const hr = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${yr}-${mo}-${dy} ${hr}:${mi}:00`;
+};
+
+const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>, minuteTs: Date) => {
   const pool = getPostgresPool();
   await pool.query(`
-    INSERT INTO electric_pln_telemetry (
+    INSERT INTO electric_pln_telemetry_minute (
       t_stamp, status_pm8000, volt_ab, volt_bc, volt_ca, volt_ll,
       current_a, current_b, current_c, frequency, active_power,
       reactive_power_total, apparent_power_total, power_factor,
@@ -93,15 +102,17 @@ const insertPlnTelemetry = async (payload: ReturnType<typeof parsePlnApi>) => {
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
     )
   `, [
-    payload.t_stamp, payload.status_pm8000, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
+    minuteTs, payload.status_pm8000, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
     payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power,
     payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
     payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
     payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy
-  ]);
+  ]).catch((err) => {
+    logger.warn(`Failed to insert PLN minute telemetry: ${err.message}`);
+  });
 };
 
-const insertWfTelemetry = async (table: "electric_wf1_telemetry" | "electric_wf2_telemetry", payload: ReturnType<typeof parseWfApi>) => {
+const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | "electric_wf2_telemetry_minute", payload: ReturnType<typeof parseWfApi>, minuteTs: Date) => {
   const pool = getPostgresPool();
   await pool.query(`
     INSERT INTO ${table} (
@@ -114,12 +125,14 @@ const insertWfTelemetry = async (table: "electric_wf1_telemetry" | "electric_wf2
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
     )
   `, [
-    payload.t_stamp, payload.status_pm5500, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
+    minuteTs, payload.status_pm5500, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
     payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power_total,
     payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
     payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
     payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy
-  ]);
+  ]).catch((err) => {
+    logger.warn(`Failed to insert WF minute telemetry to ${table}: ${err.message}`);
+  });
 };
 
 export interface ElectricPmRecord {
@@ -275,7 +288,7 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
   return records;
 };
 
-const insertPmTelemetryBatch = async (records: ElectricPmRecord[]) => {
+const insertPmMinuteTelemetryBatch = async (records: ElectricPmRecord[], minuteTs: Date) => {
   if (!records.length) return;
   const pool = getPostgresPool();
   try {
@@ -288,7 +301,7 @@ const insertPmTelemetryBatch = async (records: ElectricPmRecord[]) => {
         `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`
       );
       params.push(
-        r.t_stamp, r.group_id, r.pm_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
+        minuteTs, r.group_id, r.pm_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
         r.current_a, r.current_b, r.current_c, r.frequency, r.active_power_total,
         r.reactive_power_total, r.apparent_power_total, r.power_factor,
         r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
@@ -297,7 +310,7 @@ const insertPmTelemetryBatch = async (records: ElectricPmRecord[]) => {
     }
 
     await pool.query(`
-      INSERT INTO electric_pm_telemetry (
+      INSERT INTO electric_pm_telemetry_minute (
         t_stamp, group_id, pm_id, status, volt_ab, volt_bc, volt_ca, volt_ll,
         current_a, current_b, current_c, frequency, active_power_total,
         reactive_power_total, apparent_power_total, power_factor,
@@ -306,7 +319,7 @@ const insertPmTelemetryBatch = async (records: ElectricPmRecord[]) => {
       ) VALUES ${valueClauses.join(", ")}
     `, params);
   } catch (err: any) {
-    logger.warn(`Failed to insert PM telemetry batch: ${err.message}`);
+    logger.warn(`Failed to insert PM minute telemetry batch: ${err.message}`);
   }
 };
 
@@ -444,11 +457,20 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
   });
 };
 
+let lastElectricityMinuteStr = "";
+
 export const startIncomingElectricityPolling = () => {
   if (incomingElectricityPollingInterval) return;
 
   const poll = async () => {
     const ts = new Date();
+    const currentMinuteStr = formatMinuteString(ts);
+    const isNewMinute = currentMinuteStr !== lastElectricityMinuteStr;
+    if (isNewMinute) {
+      lastElectricityMinuteStr = currentMinuteStr;
+    }
+    const minuteTs = new Date(currentMinuteStr);
+
     let lastPlnRec: ElectricPmRecord | null = null;
     let lastWf1Rec: ElectricPmRecord | null = null;
     let lastWf2Rec: ElectricPmRecord | null = null;
@@ -457,7 +479,9 @@ export const startIncomingElectricityPolling = () => {
     try {
       const data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln");
       const parsed = parsePlnApi(data, ts);
-      await insertPlnTelemetry(parsed);
+      if (isNewMinute) {
+        await insertPlnMinuteTelemetry(parsed, minuteTs);
+      }
       broadcastLiveTelemetry("Cubicle_PLN_PM8000", parsed);
       lastPlnRec = {
         t_stamp: ts,
@@ -495,7 +519,9 @@ export const startIncomingElectricityPolling = () => {
     try {
       const data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1");
       const parsed = parseWfApi(data, ts);
-      await insertWfTelemetry("electric_wf1_telemetry", parsed);
+      if (isNewMinute) {
+        await insertWfMinuteTelemetry("electric_wf1_telemetry_minute", parsed, minuteTs);
+      }
       broadcastLiveTelemetry("Feeder_WF1_PM5560", parsed);
       lastWf1Rec = {
         t_stamp: ts,
@@ -533,7 +559,9 @@ export const startIncomingElectricityPolling = () => {
     try {
       const data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2");
       const parsed = parseWfApi(data, ts);
-      await insertWfTelemetry("electric_wf2_telemetry", parsed);
+      if (isNewMinute) {
+        await insertWfMinuteTelemetry("electric_wf2_telemetry_minute", parsed, minuteTs);
+      }
       broadcastLiveTelemetry("Feeder_WF2_PM5500", parsed);
       lastWf2Rec = {
         t_stamp: ts,
@@ -573,7 +601,6 @@ export const startIncomingElectricityPolling = () => {
       try {
         data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew23");
       } catch {
-        // Fallback for local testing if remote ignition IP is unreachable
         data = await fetchJsonWithTimeout("http://127.0.0.1:3001/system/webdev/Utility_Dashboard/electric_ew23").catch(() => null);
       }
       if (data) {
@@ -591,7 +618,9 @@ export const startIncomingElectricityPolling = () => {
           parsed.push(lastWf2Rec);
         }
 
-        await insertPmTelemetryBatch(parsed);
+        if (isNewMinute) {
+          await insertPmMinuteTelemetryBatch(parsed, minuteTs);
+        }
         broadcastEwLiveTelemetry("ew23", parsed);
       }
     } catch (err: any) {
@@ -608,7 +637,9 @@ export const startIncomingElectricityPolling = () => {
       }
       if (data) {
         const parsed = parseEwApi(data, ts, "ew21");
-        await insertPmTelemetryBatch(parsed);
+        if (isNewMinute) {
+          await insertPmMinuteTelemetryBatch(parsed, minuteTs);
+        }
         broadcastEwLiveTelemetry("ew21", parsed);
       }
     } catch (err: any) {
@@ -625,16 +656,18 @@ export const startIncomingElectricityPolling = () => {
       }
       if (data) {
         const parsed = parseEwApi(data, ts, "ew22");
-        await insertPmTelemetryBatch(parsed);
+        if (isNewMinute) {
+          await insertPmMinuteTelemetryBatch(parsed, minuteTs);
+        }
         broadcastEwLiveTelemetry("ew22", parsed);
       }
     } catch (err: any) {
       logger.warn(`Incoming EW22 polling failed: ${err.message}`);
     }
 
-    // Schedule next poll 10000ms (10s) after current one completes to prevent high CPU and database write overload
+    // Poll every 2500ms for live WebSocket updates
     if (incomingElectricityPollingInterval) {
-      incomingElectricityPollingInterval = setTimeout(poll, 10000) as any;
+      incomingElectricityPollingInterval = setTimeout(poll, 2500) as any;
     }
   };
 
@@ -771,28 +804,374 @@ const rollupMonthlyForMonth = async (yearMonth: string) => {
 };
 
 export const runElectricityRollupAndCleanup = async () => {
+  const pool = getPostgresPool();
   try {
+    // 1. Rollup completed hours from electric_pln_telemetry_minute -> electric_pln_telemetry & electricity_telemetry
+    const plnBuckets = await pool.query(`
+      SELECT 
+        date_trunc('hour', t_stamp) as hour_bucket
+      FROM electric_pln_telemetry_minute
+      WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+      GROUP BY hour_bucket
+      ORDER BY hour_bucket ASC;
+    `);
+
+    for (const b of plnBuckets.rows) {
+      const hourStart = b.hour_bucket;
+      if (!(hourStart instanceof Date)) continue;
+      const yr = hourStart.getFullYear();
+      const mo = String(hourStart.getMonth() + 1).padStart(2, "0");
+      const dy = String(hourStart.getDate()).padStart(2, "0");
+      const hr = String(hourStart.getHours()).padStart(2, "0");
+      const hourStartStr = `${yr}-${mo}-${dy} ${hr}:00:00`;
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const aggRes = await client.query(`
+          SELECT 
+            AVG(volt_ab) as volt_ab,
+            AVG(volt_bc) as volt_bc,
+            AVG(volt_ca) as volt_ca,
+            AVG(volt_ll) as volt_ll,
+            AVG(current_a) as current_a,
+            AVG(current_b) as current_b,
+            AVG(current_c) as current_c,
+            AVG(frequency) as frequency,
+            AVG(active_power) as active_power,
+            AVG(reactive_power_total) as reactive_power_total,
+            AVG(apparent_power_total) as apparent_power_total,
+            AVG(power_factor) as power_factor,
+            AVG(voltage_unbalance) as voltage_unbalance,
+            AVG(current_unbalance) as current_unbalance,
+            AVG(thd_volt_a) as thd_volt_a,
+            AVG(thd_volt_b) as thd_volt_b,
+            AVG(thd_volt_c) as thd_volt_c,
+            AVG(thd_current_a) as thd_current_a,
+            AVG(thd_current_b) as thd_current_b,
+            AVG(thd_current_c) as thd_current_c,
+            MAX(active_energy) as active_energy,
+            bool_or(status_pm8000) as status_pm8000
+          FROM electric_pln_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
+        const r = aggRes.rows[0];
+        if (r && r.active_energy !== null) {
+          await client.query(`DELETE FROM electric_pln_telemetry WHERE t_stamp = $1`, [hourStartStr]);
+          await client.query(`
+            INSERT INTO electric_pln_telemetry (
+              t_stamp, status_pm8000, volt_ab, volt_bc, volt_ca, volt_ll,
+              current_a, current_b, current_c, frequency, active_power,
+              reactive_power_total, apparent_power_total, power_factor,
+              voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+              thd_current_a, thd_current_b, thd_current_c, active_energy
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+            )
+          `, [
+            hourStartStr, r.status_pm8000, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
+            r.current_a, r.current_b, r.current_c, r.frequency, r.active_power,
+            r.reactive_power_total, r.apparent_power_total, r.power_factor,
+            r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
+            r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy
+          ]);
+
+          // Sync to electricity_telemetry for dashboard overview
+          await client.query(`DELETE FROM electricity_telemetry WHERE t_stamp = $1 AND id_device = $2`, [hourStartStr, "Cubicle_PLN_PM8000"]);
+          await client.query(`
+            INSERT INTO electricity_telemetry (t_stamp, electricity_kwh, id_device)
+            VALUES ($1, $2, $3)
+          `, [hourStartStr, r.active_energy, "Cubicle_PLN_PM8000"]);
+        }
+
+        // Delete minute records from buffer
+        await client.query(`
+          DELETE FROM electric_pln_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
+        await client.query("COMMIT");
+      } catch (err: any) {
+        await client.query("ROLLBACK");
+        logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up PLN hourly telemetry");
+      } finally {
+        client.release();
+      }
+    }
+
+    // 2. Rollup completed hours from electric_wf1_telemetry_minute -> electric_wf1_telemetry
+    const wf1Buckets = await pool.query(`
+      SELECT 
+        date_trunc('hour', t_stamp) as hour_bucket
+      FROM electric_wf1_telemetry_minute
+      WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+      GROUP BY hour_bucket
+      ORDER BY hour_bucket ASC;
+    `);
+
+    for (const b of wf1Buckets.rows) {
+      const hourStart = b.hour_bucket;
+      if (!(hourStart instanceof Date)) continue;
+      const yr = hourStart.getFullYear();
+      const mo = String(hourStart.getMonth() + 1).padStart(2, "0");
+      const dy = String(hourStart.getDate()).padStart(2, "0");
+      const hr = String(hourStart.getHours()).padStart(2, "0");
+      const hourStartStr = `${yr}-${mo}-${dy} ${hr}:00:00`;
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const aggRes = await client.query(`
+          SELECT 
+            AVG(volt_ab) as volt_ab,
+            AVG(volt_bc) as volt_bc,
+            AVG(volt_ca) as volt_ca,
+            AVG(volt_ll) as volt_ll,
+            AVG(current_a) as current_a,
+            AVG(current_b) as current_b,
+            AVG(current_c) as current_c,
+            AVG(frequency) as frequency,
+            AVG(active_power_total) as active_power_total,
+            AVG(reactive_power_total) as reactive_power_total,
+            AVG(apparent_power_total) as apparent_power_total,
+            AVG(power_factor) as power_factor,
+            AVG(voltage_unbalance) as voltage_unbalance,
+            AVG(current_unbalance) as current_unbalance,
+            AVG(thd_volt_a) as thd_volt_a,
+            AVG(thd_volt_b) as thd_volt_b,
+            AVG(thd_volt_c) as thd_volt_c,
+            AVG(thd_current_a) as thd_current_a,
+            AVG(thd_current_b) as thd_current_b,
+            AVG(thd_current_c) as thd_current_c,
+            MAX(active_energy) as active_energy,
+            bool_or(status_pm5500) as status_pm5500
+          FROM electric_wf1_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
+        const r = aggRes.rows[0];
+        if (r && r.active_energy !== null) {
+          await client.query(`DELETE FROM electric_wf1_telemetry WHERE t_stamp = $1`, [hourStartStr]);
+          await client.query(`
+            INSERT INTO electric_wf1_telemetry (
+              t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
+              current_a, current_b, current_c, frequency, active_power_total,
+              reactive_power_total, apparent_power_total, power_factor,
+              voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+              thd_current_a, thd_current_b, thd_current_c, active_energy
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+            )
+          `, [
+            hourStartStr, r.status_pm5500, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
+            r.current_a, r.current_b, r.current_c, r.frequency, r.active_power_total,
+            r.reactive_power_total, r.apparent_power_total, r.power_factor,
+            r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
+            r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy
+          ]);
+        }
+
+        await client.query(`
+          DELETE FROM electric_wf1_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
+        await client.query("COMMIT");
+      } catch (err: any) {
+        await client.query("ROLLBACK");
+        logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up WF1 hourly telemetry");
+      } finally {
+        client.release();
+      }
+    }
+
+    // 3. Rollup completed hours from electric_wf2_telemetry_minute -> electric_wf2_telemetry
+    const wf2Buckets = await pool.query(`
+      SELECT 
+        date_trunc('hour', t_stamp) as hour_bucket
+      FROM electric_wf2_telemetry_minute
+      WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+      GROUP BY hour_bucket
+      ORDER BY hour_bucket ASC;
+    `);
+
+    for (const b of wf2Buckets.rows) {
+      const hourStart = b.hour_bucket;
+      if (!(hourStart instanceof Date)) continue;
+      const yr = hourStart.getFullYear();
+      const mo = String(hourStart.getMonth() + 1).padStart(2, "0");
+      const dy = String(hourStart.getDate()).padStart(2, "0");
+      const hr = String(hourStart.getHours()).padStart(2, "0");
+      const hourStartStr = `${yr}-${mo}-${dy} ${hr}:00:00`;
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const aggRes = await client.query(`
+          SELECT 
+            AVG(volt_ab) as volt_ab,
+            AVG(volt_bc) as volt_bc,
+            AVG(volt_ca) as volt_ca,
+            AVG(volt_ll) as volt_ll,
+            AVG(current_a) as current_a,
+            AVG(current_b) as current_b,
+            AVG(current_c) as current_c,
+            AVG(frequency) as frequency,
+            AVG(active_power_total) as active_power_total,
+            AVG(reactive_power_total) as reactive_power_total,
+            AVG(apparent_power_total) as apparent_power_total,
+            AVG(power_factor) as power_factor,
+            AVG(voltage_unbalance) as voltage_unbalance,
+            AVG(current_unbalance) as current_unbalance,
+            AVG(thd_volt_a) as thd_volt_a,
+            AVG(thd_volt_b) as thd_volt_b,
+            AVG(thd_volt_c) as thd_volt_c,
+            AVG(thd_current_a) as thd_current_a,
+            AVG(thd_current_b) as thd_current_b,
+            AVG(thd_current_c) as thd_current_c,
+            MAX(active_energy) as active_energy,
+            bool_or(status_pm5500) as status_pm5500
+          FROM electric_wf2_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
+        const r = aggRes.rows[0];
+        if (r && r.active_energy !== null) {
+          await client.query(`DELETE FROM electric_wf2_telemetry WHERE t_stamp = $1`, [hourStartStr]);
+          await client.query(`
+            INSERT INTO electric_wf2_telemetry (
+              t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
+              current_a, current_b, current_c, frequency, active_power_total,
+              reactive_power_total, apparent_power_total, power_factor,
+              voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+              thd_current_a, thd_current_b, thd_current_c, active_energy
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+            )
+          `, [
+            hourStartStr, r.status_pm5500, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
+            r.current_a, r.current_b, r.current_c, r.frequency, r.active_power_total,
+            r.reactive_power_total, r.apparent_power_total, r.power_factor,
+            r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
+            r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy
+          ]);
+        }
+
+        await client.query(`
+          DELETE FROM electric_wf2_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
+        await client.query("COMMIT");
+      } catch (err: any) {
+        await client.query("ROLLBACK");
+        logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up WF2 hourly telemetry");
+      } finally {
+        client.release();
+      }
+    }
+
+    // 4. Rollup completed hours from electric_pm_telemetry_minute -> electric_pm_telemetry
+    const pmBuckets = await pool.query(`
+      SELECT 
+        date_trunc('hour', t_stamp) as hour_bucket
+      FROM electric_pm_telemetry_minute
+      WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+      GROUP BY hour_bucket
+      ORDER BY hour_bucket ASC;
+    `);
+
+    for (const b of pmBuckets.rows) {
+      const hourStart = b.hour_bucket;
+      if (!(hourStart instanceof Date)) continue;
+      const yr = hourStart.getFullYear();
+      const mo = String(hourStart.getMonth() + 1).padStart(2, "0");
+      const dy = String(hourStart.getDate()).padStart(2, "0");
+      const hr = String(hourStart.getHours()).padStart(2, "0");
+      const hourStartStr = `${yr}-${mo}-${dy} ${hr}:00:00`;
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const aggRes = await client.query(`
+          SELECT 
+            group_id,
+            pm_id,
+            bool_or(status) as status,
+            AVG(volt_ab) as volt_ab,
+            AVG(volt_bc) as volt_bc,
+            AVG(volt_ca) as volt_ca,
+            AVG(volt_ll) as volt_ll,
+            AVG(current_a) as current_a,
+            AVG(current_b) as current_b,
+            AVG(current_c) as current_c,
+            AVG(frequency) as frequency,
+            AVG(active_power_total) as active_power_total,
+            AVG(reactive_power_total) as reactive_power_total,
+            AVG(apparent_power_total) as apparent_power_total,
+            AVG(power_factor) as power_factor,
+            AVG(voltage_unbalance) as voltage_unbalance,
+            AVG(current_unbalance) as current_unbalance,
+            AVG(thd_volt_a) as thd_volt_a,
+            AVG(thd_volt_b) as thd_volt_b,
+            AVG(thd_volt_c) as thd_volt_c,
+            AVG(thd_current_a) as thd_current_a,
+            AVG(thd_current_b) as thd_current_b,
+            AVG(thd_current_c) as thd_current_c,
+            MAX(active_energy) as active_energy
+          FROM electric_pm_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+          GROUP BY group_id, pm_id
+        `, [hourStartStr]);
+
+        for (const r of aggRes.rows) {
+          await client.query(`DELETE FROM electric_pm_telemetry WHERE t_stamp = $1 AND group_id = $2 AND pm_id = $3`, [hourStartStr, r.group_id, r.pm_id]);
+          await client.query(`
+            INSERT INTO electric_pm_telemetry (
+              t_stamp, group_id, pm_id, status, volt_ab, volt_bc, volt_ca, volt_ll,
+              current_a, current_b, current_c, frequency, active_power_total,
+              reactive_power_total, apparent_power_total, power_factor,
+              voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+              thd_current_a, thd_current_b, thd_current_c, active_energy
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
+            )
+          `, [
+            hourStartStr, r.group_id, r.pm_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
+            r.current_a, r.current_b, r.current_c, r.frequency, r.active_power_total,
+            r.reactive_power_total, r.apparent_power_total, r.power_factor,
+            r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
+            r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy
+          ]);
+        }
+
+        await client.query(`
+          DELETE FROM electric_pm_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
+        await client.query("COMMIT");
+      } catch (err: any) {
+        await client.query("ROLLBACK");
+        logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up PM hourly telemetry");
+      } finally {
+        client.release();
+      }
+    }
+
+    // 5. Monthly Rollup
     const now = new Date();
-    // Rollup current month
     const yearMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}`;
     await rollupMonthlyForMonth(yearMonth);
 
-    // Rollup previous month
     const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const prevYearMonth = `${prevMonthDate.getFullYear()}-${(prevMonthDate.getMonth() + 1).toString().padStart(2, "0")}`;
     await rollupMonthlyForMonth(prevYearMonth);
 
-    logger.info({ yearMonth, prevYearMonth }, "Electricity monthly rollup updated successfully");
-
-    // Cleanup raw telemetry data older than 1 month
-    const pool = getPostgresPool();
-    await pool.query(`DELETE FROM electric_pln_telemetry WHERE t_stamp < NOW() - INTERVAL '1 month';`);
-    await pool.query(`DELETE FROM electric_wf1_telemetry WHERE t_stamp < NOW() - INTERVAL '1 month';`);
-    await pool.query(`DELETE FROM electric_wf2_telemetry WHERE t_stamp < NOW() - INTERVAL '1 month';`);
-
-    logger.info("Cleared raw electricity telemetry older than 1 month from PostgreSQL");
+    logger.info("Electricity hourly rollup and monthly rollup completed successfully");
   } catch (err: any) {
-    logger.error({ err: err.message }, "Electricity rollup/cleanup job failed");
+    logger.error({ err: err.message }, "Electricity hourly rollup job failed");
   }
 };
 
@@ -1069,7 +1448,7 @@ let cachedCoolingConfigs: {
   ts: number;
 } | null = null;
 
-let lastCoolingMongoIngestTs = 0;
+let lastCoolingMinuteStr = "";
 
 export const startCoolingTowerPolling = () => {
   if (coolingPollingInterval) return;
@@ -1245,21 +1624,29 @@ export const startCoolingTowerPolling = () => {
         }
       }));
 
-      // Ingest telemetry into MongoDB raw collection every 5 seconds to reduce Disk I/O and CPU load
-      if (now - lastCoolingMongoIngestTs >= 5000) {
-        lastCoolingMongoIngestTs = now;
-        const ingestPoints = activePoints.map((p) => ({
-          tagId: p.tagId,
-          value: p.value,
-          quality: "good" as const,
-          ts: ts,
-          deviceId: "cooling-water-1",
-          unit: "cooling-water-1",
-          area: "Utilities"
-        }));
-        
-        await ingestTelemetry(ingestPoints).catch((err) => {
-          logger.error({ err }, "Failed to save polled cooling tower telemetry to MongoDB");
+      // On the minute mark, record 1 snapshot into cooling_tower_telemetry_minute
+      const currentMinuteStr = formatMinuteString(ts);
+      const isNewMinute = currentMinuteStr !== lastCoolingMinuteStr;
+      if (isNewMinute) {
+        lastCoolingMinuteStr = currentMinuteStr;
+        const minuteTs = new Date(currentMinuteStr);
+        await pool.query(`
+          INSERT INTO cooling_tower_telemetry_minute (
+            t_stamp, id_device, return_temp, supply_temp, st3_return_temp,
+            press_ct_p1, press_ct_p2, press_ct3_p11, scaled_level_tank_cooling3
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [
+          minuteTs,
+          "cooling-water-1",
+          retVal ?? null,
+          suppVal ?? null,
+          getVal("cooling-water/st3_return_temp") ?? null,
+          getVal("cooling-water/pressure_1") ?? null,
+          getVal("cooling-water/pressure_2") ?? null,
+          getVal("cooling-water/pressure_3") ?? null,
+          getVal("cooling-water/basin_lvl") ?? null
+        ]).catch((err) => {
+          logger.warn({ err: err.message }, "Failed to insert minute cooling tower telemetry to postgres");
         });
       }
 
@@ -1440,19 +1827,19 @@ export const startScheduler = () => {
     logger.error({ err }, "Initial cooling tower rollup/cleanup failed");
   });
 
-  // Periodic cooling tower rollup (runs every 15 minutes to roll up completed hours)
+  // Periodic cooling tower rollup (runs every 5 minutes to roll up completed hours)
   setInterval(() => {
     runCoolingTowerRollupAndCleanup().catch((err) => {
       logger.error({ err }, "Periodic cooling tower rollup/cleanup failed");
     });
-  }, 15 * 60 * 1000);
+  }, 5 * 60 * 1000);
 
-  // Hourly rollup and cleanup for electricity
+  // Periodic electricity rollup (runs every 5 minutes to roll up completed hours)
   setInterval(() => {
     runElectricityRollupAndCleanup().catch((err) => {
       logger.error({ err }, "Periodic electricity rollup/cleanup failed");
     });
-  }, 60 * 60 * 1000);
+  }, 5 * 60 * 1000);
 
   setInterval(() => {
     rollupTelemetryMinute().catch((err) => {

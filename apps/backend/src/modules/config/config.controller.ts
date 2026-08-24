@@ -219,7 +219,7 @@ export const upsertThresholdsHandler = async (req: Request, res: Response, next:
       resourceId: parsed.machineId,
       ip: getClientIp(req),
       meta: {
-        before: beforeThresholds.map(t => ({
+        before: beforeThresholds.map((t: any) => ({
           parameter: t.parameter,
           warningHigh: t.warningHigh,
           alarmHigh: t.alarmHigh,
