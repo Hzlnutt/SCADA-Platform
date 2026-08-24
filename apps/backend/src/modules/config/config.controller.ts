@@ -1224,6 +1224,9 @@ export const deleteApiSourceHandler = async (req: Request, res: Response, next: 
   }
 };
 
+// In-memory cache for API proxy requests to eliminate duplicate outbound calls and CPU overload
+const apiProxyCache = new Map<string, { data: any; status: number; success: boolean; error?: string; ts: number }>();
+
 export const testApiSourceHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { url, method, headers: customHeaders } = req.body;
@@ -1233,11 +1236,28 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
       return;
     }
 
+    const reqMethod = (method || "GET").toUpperCase();
+    const now = Date.now();
+
+    // Cache GET requests for 1000ms so multiple components or tabs sharing the same URL don't flood the server with HTTP fetches
+    if (reqMethod === "GET") {
+      const cached = apiProxyCache.get(url);
+      if (cached && now - cached.ts < 1000) {
+        res.json({
+          success: cached.success,
+          status: cached.status,
+          data: cached.data,
+          error: cached.error
+        });
+        return;
+      }
+    }
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
 
     const fetchOptions: RequestInit = {
-      method: method || "GET",
+      method: reqMethod,
       headers: {
         "Cache-Control": "no-cache",
         "Pragma": "no-cache",
@@ -1250,28 +1270,36 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
     clearTimeout(timeoutId);
 
     if (!apiRes.ok) {
-      res.json({
+      const result = {
         success: false,
         status: apiRes.status,
         statusText: apiRes.statusText,
-        data: null
-      });
+        data: null,
+        ts: now
+      };
+      if (reqMethod === "GET") apiProxyCache.set(url, result);
+      res.json(result);
       return;
     }
 
     const data = await apiRes.json();
-    res.json({
+    const result = {
       success: true,
       status: apiRes.status,
-      data
-    });
+      data,
+      ts: now
+    };
+    if (reqMethod === "GET") apiProxyCache.set(url, result);
+    res.json(result);
   } catch (err: any) {
-    res.json({
+    const result = {
       success: false,
       status: 0,
-      error: err.name === "AbortError" ? "Request timed out (8s)" : err.message,
-      data: null
-    });
+      error: err.name === "AbortError" ? "Request timed out" : err.message,
+      data: null,
+      ts: Date.now()
+    };
+    res.json(result);
   }
 };
 

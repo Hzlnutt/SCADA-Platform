@@ -632,9 +632,9 @@ export const startIncomingElectricityPolling = () => {
       logger.warn(`Incoming EW22 polling failed: ${err.message}`);
     }
 
-    // Schedule next poll 2500ms after current one completes to prevent queuing and high CPU
+    // Schedule next poll 10000ms (10s) after current one completes to prevent high CPU and database write overload
     if (incomingElectricityPollingInterval) {
-      incomingElectricityPollingInterval = setTimeout(poll, 2500) as any;
+      incomingElectricityPollingInterval = setTimeout(poll, 10000) as any;
     }
   };
 
@@ -1063,46 +1063,62 @@ const DEFAULT_TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
   "cooling-water/pressure_3": "Scaled_Press_CT3_P11"
 };
 
+let cachedCoolingConfigs: {
+  tagToUrlMap: Record<string, string>;
+  tagToJsonKeyMap: Record<string, string>;
+  ts: number;
+} | null = null;
+
+let lastCoolingMongoIngestTs = 0;
+
 export const startCoolingTowerPolling = () => {
   if (coolingPollingInterval) return;
 
   const poll = async () => {
     try {
       const pool = getPostgresPool();
+      const now = Date.now();
       
-      // Load custom URL and jsonKey configs
-      const tagToUrlMap: Record<string, string> = {};
-      const tagToJsonKeyMap: Record<string, string> = {};
+      let tagToUrlMap: Record<string, string> = {};
+      let tagToJsonKeyMap: Record<string, string> = {};
       const defaultUrl = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3";
 
-      try {
-        const listRes = await pool.query(
-          "SELECT value FROM global_configs WHERE key IN ($1, $2)", 
-          ["api_sources_list_cooling-water-1", "api_sources_list_cooling-water_1"]
-        );
-        listRes.rows.forEach((r) => {
-          const list = r.value;
-          if (Array.isArray(list)) {
-            list.forEach((row: any) => {
-              if (row.tagKey) {
-                let ep = row.url || row.endpoint || "";
-                tagToUrlMap[row.tagKey] = ep;
-                tagToJsonKeyMap[row.tagKey] = row.jsonKey || "";
-              }
-            });
-          }
-        });
-      } catch (e) {
-        logger.warn("Failed to load custom API sources list from global_configs");
-      }
+      // Cache configs for 60s to avoid querying PostgreSQL every poll tick
+      if (cachedCoolingConfigs && now - cachedCoolingConfigs.ts < 60000) {
+        tagToUrlMap = { ...cachedCoolingConfigs.tagToUrlMap };
+        tagToJsonKeyMap = { ...cachedCoolingConfigs.tagToJsonKeyMap };
+      } else {
+        try {
+          const listRes = await pool.query(
+            "SELECT value FROM global_configs WHERE key IN ($1, $2)", 
+            ["api_sources_list_cooling-water-1", "api_sources_list_cooling-water_1"]
+          );
+          listRes.rows.forEach((r) => {
+            const list = r.value;
+            if (Array.isArray(list)) {
+              list.forEach((row: any) => {
+                if (row.tagKey) {
+                  let ep = row.url || row.endpoint || "";
+                  tagToUrlMap[row.tagKey] = ep;
+                  tagToJsonKeyMap[row.tagKey] = row.jsonKey || "";
+                }
+              });
+            }
+          });
 
-      // Add default fallbacks for any keys not configured
-      Object.keys(DEFAULT_TAG_KEY_TO_API_JSON_KEY).forEach((tagKey) => {
-        if (tagToUrlMap[tagKey] === undefined) {
-          tagToUrlMap[tagKey] = defaultUrl;
-          tagToJsonKeyMap[tagKey] = DEFAULT_TAG_KEY_TO_API_JSON_KEY[tagKey];
+          // Add default fallbacks for any keys not configured
+          Object.keys(DEFAULT_TAG_KEY_TO_API_JSON_KEY).forEach((tagKey) => {
+            if (tagToUrlMap[tagKey] === undefined) {
+              tagToUrlMap[tagKey] = defaultUrl;
+              tagToJsonKeyMap[tagKey] = DEFAULT_TAG_KEY_TO_API_JSON_KEY[tagKey];
+            }
+          });
+
+          cachedCoolingConfigs = { tagToUrlMap, tagToJsonKeyMap, ts: now };
+        } catch (e) {
+          logger.warn("Failed to load custom API sources list from global_configs");
         }
-      });
+      }
 
       // Poll unique URLs
       const uniqueUrls = Array.from(
@@ -1229,20 +1245,23 @@ export const startCoolingTowerPolling = () => {
         }
       }));
 
-      // Ingest telemetry into MongoDB raw collection for historical and latest queries
-      const ingestPoints = activePoints.map((p) => ({
-        tagId: p.tagId,
-        value: p.value,
-        quality: "good" as const,
-        ts: ts,
-        deviceId: "cooling-water-1",
-        unit: "cooling-water-1",
-        area: "Utilities"
-      }));
-      
-      await ingestTelemetry(ingestPoints).catch((err) => {
-        logger.error({ err }, "Failed to save polled cooling tower telemetry to MongoDB");
-      });
+      // Ingest telemetry into MongoDB raw collection every 5 seconds to reduce Disk I/O and CPU load
+      if (now - lastCoolingMongoIngestTs >= 5000) {
+        lastCoolingMongoIngestTs = now;
+        const ingestPoints = activePoints.map((p) => ({
+          tagId: p.tagId,
+          value: p.value,
+          quality: "good" as const,
+          ts: ts,
+          deviceId: "cooling-water-1",
+          unit: "cooling-water-1",
+          area: "Utilities"
+        }));
+        
+        await ingestTelemetry(ingestPoints).catch((err) => {
+          logger.error({ err }, "Failed to save polled cooling tower telemetry to MongoDB");
+        });
+      }
 
       // Update in-memory cache
       updateTelemetryCache(points);
@@ -1277,7 +1296,6 @@ export const startCoolingTowerPolling = () => {
             raw: urlDataMap[defaultUrl] || null
           });
         }
-        logger.info("Cooling tower WF1-U3 API polled, saved to DB, and emitted via WebSocket");
       } else {
         const io = getSocketServer();
         if (io) {
@@ -1288,7 +1306,6 @@ export const startCoolingTowerPolling = () => {
             raw: null
           });
         }
-        logger.warn("Cooling tower API polling returned no data from any configured URLs");
       }
     } catch (err: any) {
       const io = getSocketServer();
@@ -1306,8 +1323,8 @@ export const startCoolingTowerPolling = () => {
 
   // Initial poll
   poll();
-  // Poll every 1 second for live real-time SCADA updates
-  coolingPollingInterval = setInterval(poll, 1000);
+  // Poll every 2 seconds for real-time SCADA updates without overwhelming CPU
+  coolingPollingInterval = setInterval(poll, 2000);
 };
 
 let waterPollingInterval: NodeJS.Timeout | null = null;
@@ -1451,15 +1468,25 @@ export const startScheduler = () => {
 
   logger.info({ minuteIntervalMs, hourlyIntervalMs }, "scheduler started");
 };
+let cachedSensorRules: { rules: any[]; ts: number } | null = null;
+
 export const evaluateSensorRulesForPoints = async (points: any[]) => {
   const pool = getPostgresPool();
   try {
-    const rulesRes = await pool.query(
-      `SELECT unit_id, tag_key, tag_name, low_limit, baseline, high_limit, unit, enable_alert, suppress_alert, direction 
-       FROM sensor_rules
-       WHERE unit_id LIKE 'cooling-water%'`
-    );
-    const rules = rulesRes.rows;
+    const now = Date.now();
+    let rules: any[] = [];
+
+    if (cachedSensorRules && now - cachedSensorRules.ts < 60000) {
+      rules = cachedSensorRules.rules;
+    } else {
+      const rulesRes = await pool.query(
+        `SELECT unit_id, tag_key, tag_name, low_limit, baseline, high_limit, unit, enable_alert, suppress_alert, direction 
+         FROM sensor_rules
+         WHERE unit_id LIKE 'cooling-water%'`
+      );
+      rules = rulesRes.rows;
+      cachedSensorRules = { rules, ts: now };
+    }
 
     const activeEvents: any[] = [];
 
