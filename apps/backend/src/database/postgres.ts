@@ -754,6 +754,157 @@ export const ensurePostgresTables = async () => {
       logger.warn({ err }, "Migration of legacy non-hourly electricity data completed or skipped");
     });
 
+    // --- CREATE TRIGGERS TO ROUTE EXTERNAL / IGNITION PER-SECOND INSERTS TO BUFFER TABLES ---
+    await pool.query(`
+      -- 1. PLN Routing Trigger
+      CREATE OR REPLACE FUNCTION trg_route_pln_telemetry()
+      RETURNS TRIGGER AS $$
+      BEGIN
+          IF EXTRACT(MINUTE FROM NEW.t_stamp) != 0 OR EXTRACT(SECOND FROM NEW.t_stamp) != 0 THEN
+              IF NOT EXISTS (
+                  SELECT 1 FROM public.electric_pln_telemetry_minute 
+                  WHERE t_stamp >= date_trunc('minute', NEW.t_stamp) 
+                    AND t_stamp < date_trunc('minute', NEW.t_stamp) + INTERVAL '1 minute'
+              ) THEN
+                  INSERT INTO public.electric_pln_telemetry_minute (
+                      t_stamp, status_pm8000, volt_ab, volt_bc, volt_ca, volt_ll,
+                      current_a, current_b, current_c, frequency, active_power,
+                      reactive_power_total, apparent_power_total, power_factor,
+                      voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+                      thd_current_a, thd_current_b, thd_current_c, active_energy
+                  ) VALUES (
+                      date_trunc('minute', NEW.t_stamp), NEW.status_pm8000, NEW.volt_ab, NEW.volt_bc, NEW.volt_ca, NEW.volt_ll,
+                      NEW.current_a, NEW.current_b, NEW.current_c, NEW.frequency, NEW.active_power,
+                      NEW.reactive_power_total, NEW.apparent_power_total, NEW.power_factor,
+                      NEW.voltage_unbalance, NEW.current_unbalance, NEW.thd_volt_a, NEW.thd_volt_b, NEW.thd_volt_c,
+                      NEW.thd_current_a, NEW.thd_current_b, NEW.thd_current_c, NEW.active_energy
+                  );
+              END IF;
+              RETURN NULL;
+          END IF;
+          RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS trg_pln_telemetry_minute_filter ON public.electric_pln_telemetry;
+      CREATE TRIGGER trg_pln_telemetry_minute_filter
+      BEFORE INSERT ON public.electric_pln_telemetry
+      FOR EACH ROW
+      EXECUTE FUNCTION trg_route_pln_telemetry();
+
+      -- 2. WF1 Routing Trigger
+      CREATE OR REPLACE FUNCTION trg_route_wf1_telemetry()
+      RETURNS TRIGGER AS $$
+      BEGIN
+          IF EXTRACT(MINUTE FROM NEW.t_stamp) != 0 OR EXTRACT(SECOND FROM NEW.t_stamp) != 0 THEN
+              IF NOT EXISTS (
+                  SELECT 1 FROM public.electric_wf1_telemetry_minute 
+                  WHERE t_stamp >= date_trunc('minute', NEW.t_stamp) 
+                    AND t_stamp < date_trunc('minute', NEW.t_stamp) + INTERVAL '1 minute'
+              ) THEN
+                  INSERT INTO public.electric_wf1_telemetry_minute (
+                      t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
+                      current_a, current_b, current_c, frequency, active_power_total,
+                      reactive_power_total, apparent_power_total, power_factor,
+                      voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+                      thd_current_a, thd_current_b, thd_current_c, active_energy
+                  ) VALUES (
+                      date_trunc('minute', NEW.t_stamp), NEW.status_pm5500, NEW.volt_ab, NEW.volt_bc, NEW.volt_ca, NEW.volt_ll,
+                      NEW.current_a, NEW.current_b, NEW.current_c, NEW.frequency, NEW.active_power_total,
+                      NEW.reactive_power_total, NEW.apparent_power_total, NEW.power_factor,
+                      NEW.voltage_unbalance, NEW.current_unbalance, NEW.thd_volt_a, NEW.thd_volt_b, NEW.thd_volt_c,
+                      NEW.thd_current_a, NEW.thd_current_b, NEW.thd_current_c, NEW.active_energy
+                  );
+              END IF;
+              RETURN NULL;
+          END IF;
+          RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS trg_wf1_telemetry_minute_filter ON public.electric_wf1_telemetry;
+      CREATE TRIGGER trg_wf1_telemetry_minute_filter
+      BEFORE INSERT ON public.electric_wf1_telemetry
+      FOR EACH ROW
+      EXECUTE FUNCTION trg_route_wf1_telemetry();
+
+      -- 3. WF2 Routing Trigger
+      CREATE OR REPLACE FUNCTION trg_route_wf2_telemetry()
+      RETURNS TRIGGER AS $$
+      BEGIN
+          IF EXTRACT(MINUTE FROM NEW.t_stamp) != 0 OR EXTRACT(SECOND FROM NEW.t_stamp) != 0 THEN
+              IF NOT EXISTS (
+                  SELECT 1 FROM public.electric_wf2_telemetry_minute 
+                  WHERE t_stamp >= date_trunc('minute', NEW.t_stamp) 
+                    AND t_stamp < date_trunc('minute', NEW.t_stamp) + INTERVAL '1 minute'
+              ) THEN
+                  INSERT INTO public.electric_wf2_telemetry_minute (
+                      t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
+                      current_a, current_b, current_c, frequency, active_power_total,
+                      reactive_power_total, apparent_power_total, power_factor,
+                      voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+                      thd_current_a, thd_current_b, thd_current_c, active_energy
+                  ) VALUES (
+                      date_trunc('minute', NEW.t_stamp), NEW.status_pm5500, NEW.volt_ab, NEW.volt_bc, NEW.volt_ca, NEW.volt_ll,
+                      NEW.current_a, NEW.current_b, NEW.current_c, NEW.frequency, NEW.active_power_total,
+                      NEW.reactive_power_total, NEW.apparent_power_total, NEW.power_factor,
+                      NEW.voltage_unbalance, NEW.current_unbalance, NEW.thd_volt_a, NEW.thd_volt_b, NEW.thd_volt_c,
+                      NEW.thd_current_a, NEW.thd_current_b, NEW.thd_current_c, NEW.active_energy
+                  );
+              END IF;
+              RETURN NULL;
+          END IF;
+          RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS trg_wf2_telemetry_minute_filter ON public.electric_wf2_telemetry;
+      CREATE TRIGGER trg_wf2_telemetry_minute_filter
+      BEFORE INSERT ON public.electric_wf2_telemetry
+      FOR EACH ROW
+      EXECUTE FUNCTION trg_route_wf2_telemetry();
+
+      -- 4. Sub-distribution PM Routing Trigger
+      CREATE OR REPLACE FUNCTION trg_route_pm_telemetry()
+      RETURNS TRIGGER AS $$
+      BEGIN
+          IF EXTRACT(MINUTE FROM NEW.t_stamp) != 0 OR EXTRACT(SECOND FROM NEW.t_stamp) != 0 THEN
+              IF NOT EXISTS (
+                  SELECT 1 FROM public.electric_pm_telemetry_minute 
+                  WHERE group_id = NEW.group_id 
+                    AND pm_id = NEW.pm_id 
+                    AND t_stamp >= date_trunc('minute', NEW.t_stamp) 
+                    AND t_stamp < date_trunc('minute', NEW.t_stamp) + INTERVAL '1 minute'
+              ) THEN
+                  INSERT INTO public.electric_pm_telemetry_minute (
+                      t_stamp, group_id, pm_id, status, volt_ab, volt_bc, volt_ca, volt_ll,
+                      current_a, current_b, current_c, frequency, active_power_total,
+                      reactive_power_total, apparent_power_total, power_factor,
+                      voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+                      thd_current_a, thd_current_b, thd_current_c, active_energy
+                  ) VALUES (
+                      date_trunc('minute', NEW.t_stamp), NEW.group_id, NEW.pm_id, NEW.status, NEW.volt_ab, NEW.volt_bc, NEW.volt_ca, NEW.volt_ll,
+                      NEW.current_a, NEW.current_b, NEW.current_c, NEW.frequency, NEW.active_power_total,
+                      NEW.reactive_power_total, NEW.apparent_power_total, NEW.power_factor,
+                      NEW.voltage_unbalance, NEW.current_unbalance, NEW.thd_volt_a, NEW.thd_volt_b, NEW.thd_volt_c,
+                      NEW.thd_current_a, NEW.thd_current_b, NEW.thd_current_c, NEW.active_energy
+                  );
+              END IF;
+              RETURN NULL;
+          END IF;
+          RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS trg_pm_telemetry_minute_filter ON public.electric_pm_telemetry;
+      CREATE TRIGGER trg_pm_telemetry_minute_filter
+      BEFORE INSERT ON public.electric_pm_telemetry
+      FOR EACH ROW
+      EXECUTE FUNCTION trg_route_pm_telemetry();
+    `).catch((err) => {
+      logger.warn({ err }, "Failed to create electricity routing triggers");
+    });
+
     logger.info("postgres tables ensured and migrated to NUMERIC successfully");
   } catch (err: any) {
     logger.error({ err }, "failed to ensure postgres tables");

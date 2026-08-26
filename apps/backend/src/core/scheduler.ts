@@ -81,11 +81,23 @@ const parseWfApi = (data: any, ts: Date) => {
 };
 
 export const formatMinuteString = (d: Date = new Date()): string => {
-  const yr = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, "0");
-  const dy = String(d.getDate()).padStart(2, "0");
-  const hr = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+  const parts = formatter.formatToParts(d);
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || "00";
+  const yr = getPart("year");
+  const mo = getPart("month");
+  const dy = getPart("day");
+  const hr = getPart("hour");
+  const mi = getPart("minute");
   return `${yr}-${mo}-${dy} ${hr}:${mi}:00`;
 };
 
@@ -809,21 +821,16 @@ export const runElectricityRollupAndCleanup = async () => {
     // 1. Rollup completed hours from electric_pln_telemetry_minute -> electric_pln_telemetry & electricity_telemetry
     const plnBuckets = await pool.query(`
       SELECT 
-        date_trunc('hour', t_stamp) as hour_bucket
+        to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_pln_telemetry_minute
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-      GROUP BY hour_bucket
-      ORDER BY hour_bucket ASC;
+      GROUP BY hour_bucket_str
+      ORDER BY hour_bucket_str ASC;
     `);
 
     for (const b of plnBuckets.rows) {
-      const hourStart = b.hour_bucket;
-      if (!(hourStart instanceof Date)) continue;
-      const yr = hourStart.getFullYear();
-      const mo = String(hourStart.getMonth() + 1).padStart(2, "0");
-      const dy = String(hourStart.getDate()).padStart(2, "0");
-      const hr = String(hourStart.getHours()).padStart(2, "0");
-      const hourStartStr = `${yr}-${mo}-${dy} ${hr}:00:00`;
+      const hourStartStr = b.hour_bucket_str;
+      if (!hourStartStr) continue;
 
       const client = await pool.connect();
       try {
@@ -903,21 +910,16 @@ export const runElectricityRollupAndCleanup = async () => {
     // 2. Rollup completed hours from electric_wf1_telemetry_minute -> electric_wf1_telemetry
     const wf1Buckets = await pool.query(`
       SELECT 
-        date_trunc('hour', t_stamp) as hour_bucket
+        to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_wf1_telemetry_minute
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-      GROUP BY hour_bucket
-      ORDER BY hour_bucket ASC;
+      GROUP BY hour_bucket_str
+      ORDER BY hour_bucket_str ASC;
     `);
 
     for (const b of wf1Buckets.rows) {
-      const hourStart = b.hour_bucket;
-      if (!(hourStart instanceof Date)) continue;
-      const yr = hourStart.getFullYear();
-      const mo = String(hourStart.getMonth() + 1).padStart(2, "0");
-      const dy = String(hourStart.getDate()).padStart(2, "0");
-      const hr = String(hourStart.getHours()).padStart(2, "0");
-      const hourStartStr = `${yr}-${mo}-${dy} ${hr}:00:00`;
+      const hourStartStr = b.hour_bucket_str;
+      if (!hourStartStr) continue;
 
       const client = await pool.connect();
       try {
@@ -989,21 +991,16 @@ export const runElectricityRollupAndCleanup = async () => {
     // 3. Rollup completed hours from electric_wf2_telemetry_minute -> electric_wf2_telemetry
     const wf2Buckets = await pool.query(`
       SELECT 
-        date_trunc('hour', t_stamp) as hour_bucket
+        to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_wf2_telemetry_minute
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-      GROUP BY hour_bucket
-      ORDER BY hour_bucket ASC;
+      GROUP BY hour_bucket_str
+      ORDER BY hour_bucket_str ASC;
     `);
 
     for (const b of wf2Buckets.rows) {
-      const hourStart = b.hour_bucket;
-      if (!(hourStart instanceof Date)) continue;
-      const yr = hourStart.getFullYear();
-      const mo = String(hourStart.getMonth() + 1).padStart(2, "0");
-      const dy = String(hourStart.getDate()).padStart(2, "0");
-      const hr = String(hourStart.getHours()).padStart(2, "0");
-      const hourStartStr = `${yr}-${mo}-${dy} ${hr}:00:00`;
+      const hourStartStr = b.hour_bucket_str;
+      if (!hourStartStr) continue;
 
       const client = await pool.connect();
       try {
@@ -1075,21 +1072,16 @@ export const runElectricityRollupAndCleanup = async () => {
     // 4. Rollup completed hours from electric_pm_telemetry_minute -> electric_pm_telemetry
     const pmBuckets = await pool.query(`
       SELECT 
-        date_trunc('hour', t_stamp) as hour_bucket
+        to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_pm_telemetry_minute
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-      GROUP BY hour_bucket
-      ORDER BY hour_bucket ASC;
+      GROUP BY hour_bucket_str
+      ORDER BY hour_bucket_str ASC;
     `);
 
     for (const b of pmBuckets.rows) {
-      const hourStart = b.hour_bucket;
-      if (!(hourStart instanceof Date)) continue;
-      const yr = hourStart.getFullYear();
-      const mo = String(hourStart.getMonth() + 1).padStart(2, "0");
-      const dy = String(hourStart.getDate()).padStart(2, "0");
-      const hr = String(hourStart.getHours()).padStart(2, "0");
-      const hourStartStr = `${yr}-${mo}-${dy} ${hr}:00:00`;
+      const hourStartStr = b.hour_bucket_str;
+      if (!hourStartStr) continue;
 
       const client = await pool.connect();
       try {
@@ -1181,11 +1173,11 @@ export const runCoolingTowerRollupAndCleanup = async () => {
     // 1. Find all completed hours in the past from the temporary table (cooling_tower_telemetry_minute)
     const findRes = await pool.query(`
       SELECT 
-        date_trunc('hour', t_stamp) as hour_bucket
+        to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM cooling_tower_telemetry_minute
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-      GROUP BY hour_bucket
-      ORDER BY hour_bucket ASC;
+      GROUP BY hour_bucket_str
+      ORDER BY hour_bucket_str ASC;
     `);
 
     const buckets = findRes.rows;
@@ -1193,17 +1185,10 @@ export const runCoolingTowerRollupAndCleanup = async () => {
       logger.info(`[CoolingTowerRollup] Found ${buckets.length} completed hour buckets in temporary table to roll up to main table`);
 
       for (const b of buckets) {
-        const hourStart = b.hour_bucket;
-        if (!(hourStart instanceof Date)) {
+        const hourStartStr = b.hour_bucket_str;
+        if (!hourStartStr) {
           continue;
         }
-
-        // Convert to naive local WIB timestamp string YYYY-MM-DD HH:00:00
-        const yr = hourStart.getFullYear();
-        const mo = String(hourStart.getMonth() + 1).padStart(2, "0");
-        const dy = String(hourStart.getDate()).padStart(2, "0");
-        const hr = String(hourStart.getHours()).padStart(2, "0");
-        const hourStartStr = `${yr}-${mo}-${dy} ${hr}:00:00`;
 
         const client = await pool.connect();
         try {
@@ -1220,9 +1205,9 @@ export const runCoolingTowerRollupAndCleanup = async () => {
           `, [hourStartStr]);
 
           const avgs = avgRes.rows[0];
-          const avgReturn = avgs.avg_return !== null ? Number(Number(avgs.avg_return).toFixed(3)) : null;
-          const avgSupply = avgs.avg_supply !== null ? Number(Number(avgs.avg_supply).toFixed(3)) : null;
-          const avgSt3 = avgs.avg_st3 !== null ? Number(Number(avgs.avg_st3).toFixed(3)) : null;
+          const avgReturn = avgs && avgs.avg_return !== null ? Number(Number(avgs.avg_return).toFixed(3)) : null;
+          const avgSupply = avgs && avgs.avg_supply !== null ? Number(Number(avgs.avg_supply).toFixed(3)) : null;
+          const avgSt3 = avgs && avgs.avg_st3 !== null ? Number(Number(avgs.avg_st3).toFixed(3)) : null;
 
           // 2. Only update or insert if at least one sensor value is valid (non-null)
           if (avgReturn !== null || avgSupply !== null || avgSt3 !== null) {
@@ -1273,21 +1258,16 @@ export const runCoolingTowerRollupAndCleanup = async () => {
     // Also clean up any legacy duplicate rows in main table if present
     const legacyRes = await pool.query(`
       SELECT 
-        date_trunc('hour', t_stamp) as hour_bucket
+        to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM cooling_tower_telemetry
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-      GROUP BY hour_bucket
+      GROUP BY hour_bucket_str
       HAVING COUNT(*) > 1;
     `);
 
     for (const b of legacyRes.rows) {
-      const hourStart = b.hour_bucket;
-      if (!(hourStart instanceof Date)) continue;
-      const yr = hourStart.getFullYear();
-      const mo = String(hourStart.getMonth() + 1).padStart(2, "0");
-      const dy = String(hourStart.getDate()).padStart(2, "0");
-      const hr = String(hourStart.getHours()).padStart(2, "0");
-      const hourStartStr = `${yr}-${mo}-${dy} ${hr}:00:00`;
+      const hourStartStr = b.hour_bucket_str;
+      if (!hourStartStr) continue;
 
       const client = await pool.connect();
       try {
@@ -1301,9 +1281,9 @@ export const runCoolingTowerRollupAndCleanup = async () => {
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
         `, [hourStartStr]);
         const avgs = avgRes.rows[0];
-        const avgReturn = avgs.avg_return !== null ? Number(Number(avgs.avg_return).toFixed(3)) : null;
-        const avgSupply = avgs.avg_supply !== null ? Number(Number(avgs.avg_supply).toFixed(3)) : null;
-        const avgSt3 = avgs.avg_st3 !== null ? Number(Number(avgs.avg_st3).toFixed(3)) : null;
+        const avgReturn = avgs && avgs.avg_return !== null ? Number(Number(avgs.avg_return).toFixed(3)) : null;
+        const avgSupply = avgs && avgs.avg_supply !== null ? Number(Number(avgs.avg_supply).toFixed(3)) : null;
+        const avgSt3 = avgs && avgs.avg_st3 !== null ? Number(Number(avgs.avg_st3).toFixed(3)) : null;
 
         await client.query(`
           DELETE FROM cooling_tower_telemetry

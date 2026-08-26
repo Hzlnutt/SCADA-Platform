@@ -219,8 +219,8 @@ export const getElectricityAnalytics = async (
   const hourlyCollection = db.collection(ELECTRICITY_1H_COLLECTION);
   const telemetryCollection = db.collection(ELECTRICITY_RAW_COLLECTION);
 
-  // If year is provided, use full year range; otherwise use from/to or default to 2025
-  const selectedYear = year || (fromStr ? parseInt(fromStr.split("-")[0]) : 2025);
+  // If year is provided, use full year range; otherwise use from/to or default to current year
+  const selectedYear = year || (fromStr ? parseInt(fromStr.split("-")[0]) : new Date().getFullYear());
   const from = fromStr
     ? new Date(fromStr.includes("T") ? fromStr : `${fromStr}T00:00:00.000+07:00`)
     : new Date(`${selectedYear}-01-01T00:00:00.000+07:00`);
@@ -265,9 +265,9 @@ export const getElectricityAnalytics = async (
       const res = await pool.query(`
         SELECT t_stamp AS ts, electricity_kwh::float AS value
         FROM electricity_telemetry
-        WHERE t_stamp >= $1 AND t_stamp <= $2
+        WHERE t_stamp >= $1 AND t_stamp <= $2 AND (id_device = $3 OR id_device IS NULL)
         ORDER BY t_stamp ASC
-      `, [fromQueryIso, toQueryIso]);
+      `, [fromQueryIso, toQueryIso, deviceId]);
       hourlyRecords = res.rows;
 
       // Append latest real-time reading from electric_pln_telemetry if available and newer
