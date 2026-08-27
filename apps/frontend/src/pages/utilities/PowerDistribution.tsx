@@ -1234,75 +1234,73 @@ export default function PowerDistribution() {
               </marker>
             </defs>
 
-            {/* Main PLN line down and split to Factories */}
-            <path d="M 600 115 L 600 135 M 260 135 L 805 135" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            {/* Main PLN line down and split symmetrically to Factory 1 (285) & Factory 2 (915) */}
+            <path d="M 600 112 L 600 134 M 285 134 L 915 134" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
             
             {/* Feeder line into Incoming Fact-1 */}
-            <path d="M 260 135 L 260 155" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <path d="M 285 134 L 285 150" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
             
             {/* Feeder line into Incoming Fact-2 */}
-            <path d="M 805 135 L 805 155" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <path d="M 915 134 L 915 150" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
 
-            {/* Blue lines from Incoming Feeders to Yellow Busbars */}
-            <path d="M 260 235 L 260 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
-            <path d="M 805 235 L 805 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            {/* Blue lines from Incoming Feeders down to Yellow Busbars */}
+            <path d="M 285 226 L 285 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <path d="M 915 226 L 915 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
 
-            {/* Busbars: Thick Yellow Lines */}
-            {/* Factory 1 Busbar */}
-            <path d="M 60 265 L 460 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
-            <text x="65" y="258" fill="#ca8a04" fontSize="8" fontWeight="800" letterSpacing="0.08em">21 kV BUS (F1)</text>
+            {/* Busbars: Thick Yellow Lines with Ambient Glow */}
+            {/* Factory 1 Busbar (Centered at X = 285, Width = 410) */}
+            <path d="M 80 265 L 490 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
+            <text x="85" y="258" fill="#ca8a04" fontSize="8" fontWeight="800" letterSpacing="0.08em">21 kV BUS (FACTORY 1)</text>
 
-            {/* Factory 2 Busbar */}
-            <path d="M 675 265 L 1025 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
-            <text x="680" y="258" fill="#ca8a04" fontSize="8" fontWeight="800" letterSpacing="0.08em">21 kV BUS (F2)</text>
+            {/* Factory 2 Busbar (Centered at X = 915, Width = 350) */}
+            <path d="M 740 265 L 1090 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
+            <text x="745" y="258" fill="#ca8a04" fontSize="8" fontWeight="800" letterSpacing="0.08em">21 kV BUS (FACTORY 2)</text>
 
-            {/* Factory 1: 4 Transformer Branches with 21kV / 400V double overlapping circles */}
-            {[80, 190, 300, 410].map((x) => (
+            {/* Factory 1: 4 Symmetrical Transformer Branches (Centers: 120, 230, 340, 450) */}
+            {[120, 230, 340, 450].map((x) => (
               <g key={x}>
                 <path d={`M ${x} 265 L ${x} 288`} fill="none" stroke={activeLineColor} strokeWidth="2" />
-                {/* Transformer Dual Circles */}
-                <circle cx={x} cy="298" r="12" fill={isDark ? "#0f172a" : "#ffffff"} stroke={activeLineColor} strokeWidth="1.8" />
-                <text x={x} y="301" textAnchor="middle" fill={isDark ? "#94a3b8" : "#475569"} fontSize="6.5" fontWeight="bold">21 kV</text>
-                <circle cx={x} cy="314" r="12" fill={isDark ? "#0f172a" : "#ffffff"} stroke={activeLineColor} strokeWidth="1.8" />
-                <text x={x} y="317" textAnchor="middle" fill={isDark ? "#94a3b8" : "#475569"} fontSize="6.5" fontWeight="bold">400 V</text>
-                <path d={`M ${x} 326 L ${x} 355`} fill="none" stroke={activeLineColor} strokeWidth="2" />
+                {/* Transformer Dual Circles with Voltage Text */}
+                <circle cx={x} cy="300" r="12.5" fill={isDark ? "#0f172a" : "#ffffff"} stroke={activeLineColor} strokeWidth="1.8" />
+                <text x={x} y="303" textAnchor="middle" fill={isDark ? "#94a3b8" : "#475569"} fontSize="6.5" fontWeight="bold">21 kV</text>
+                <circle cx={x} cy="318" r="12.5" fill={isDark ? "#0f172a" : "#ffffff"} stroke={activeLineColor} strokeWidth="1.8" />
+                <text x={x} y="321" textAnchor="middle" fill={isDark ? "#94a3b8" : "#475569"} fontSize="6.5" fontWeight="bold">400 V</text>
+                <path d={`M ${x} 331 L ${x} 360`} fill="none" stroke={activeLineColor} strokeWidth="2" />
               </g>
             ))}
 
-            {/* Factory 2: 3 Transformer Branches with 21kV / 400V double overlapping circles */}
-            {[715, 850, 985].map((x) => (
+            {/* Factory 2: 3 Symmetrical Transformer Branches (Centers: 795, 915, 1035) */}
+            {[795, 915, 1035].map((x) => (
               <g key={x}>
                 <path d={`M ${x} 265 L ${x} 288`} fill="none" stroke={activeLineColor} strokeWidth="2" />
-                {/* Transformer Dual Circles */}
-                <circle cx={x} cy="298" r="12" fill={isDark ? "#0f172a" : "#ffffff"} stroke={activeLineColor} strokeWidth="1.8" />
-                <text x={x} y="301" textAnchor="middle" fill={isDark ? "#94a3b8" : "#475569"} fontSize="6.5" fontWeight="bold">21 kV</text>
-                <circle cx={x} cy="314" r="12" fill={isDark ? "#0f172a" : "#ffffff"} stroke={activeLineColor} strokeWidth="1.8" />
-                <text x={x} y="317" textAnchor="middle" fill={isDark ? "#94a3b8" : "#475569"} fontSize="6.5" fontWeight="bold">400 V</text>
-                <path d={`M ${x} 326 L ${x} 355`} fill="none" stroke={activeLineColor} strokeWidth="2" />
+                {/* Transformer Dual Circles with Voltage Text */}
+                <circle cx={x} cy="300" r="12.5" fill={isDark ? "#0f172a" : "#ffffff"} stroke={activeLineColor} strokeWidth="1.8" />
+                <text x={x} y="303" textAnchor="middle" fill={isDark ? "#94a3b8" : "#475569"} fontSize="6.5" fontWeight="bold">21 kV</text>
+                <circle cx={x} cy="318" r="12.5" fill={isDark ? "#0f172a" : "#ffffff"} stroke={activeLineColor} strokeWidth="1.8" />
+                <text x={x} y="321" textAnchor="middle" fill={isDark ? "#94a3b8" : "#475569"} fontSize="6.5" fontWeight="bold">400 V</text>
+                <path d={`M ${x} 331 L ${x} 360`} fill="none" stroke={activeLineColor} strokeWidth="2" />
               </g>
             ))}
 
-            {/* --- FACTORY 1 AUXILIARY FEEDER LINES --- */}
-            {/* 1. Genset Natural Gas (95, 235) -> Green Dashed to MDP-1.1 (80, 355) and MDP-2 (300, 355) */}
-            <path d="M 95 235 L 95 342 L 300 342" fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="4 3" />
-            <path d="M 80 342 L 80 355" fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="4 3" markerEnd="url(#arrow-green)" />
-            <path d="M 300 342 L 300 355" fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="4 3" markerEnd="url(#arrow-green)" />
+            {/* --- ZERO-COLLISION AUXILIARY POWER ROUTING --- */}
+            {/* 1. Genset Natural Gas (95, 226) -> Clean outer track (X = 45) -> Feeds MDP-1.1 (X = 70) and MDP-2 (X = 290) */}
+            <path d="M 95 226 L 95 245 L 45 245 L 45 420 L 70 420" fill="none" stroke="#10b981" strokeWidth="1.8" strokeDasharray="4 3" markerEnd="url(#arrow-green)" />
+            <path d="M 45 420 L 45 460 L 290 460" fill="none" stroke="#10b981" strokeWidth="1.8" strokeDasharray="4 3" markerEnd="url(#arrow-green)" />
 
-            {/* 2. Solar PV POI-1 (395, 235) -> Red Dotted to right side of MDP-3 (460, 420) */}
-            <path d="M 395 235 L 395 248 L 485 248 L 485 420 L 460 420" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="3 3" markerEnd="url(#arrow-red)" />
+            {/* 2. Solar PV POI-1 (475, 226) -> Clean inner track (X = 525) -> Feeds right side of MDP-3 (X = 500) */}
+            <path d="M 475 226 L 475 245 L 525 245 L 525 420 L 500 420" fill="none" stroke="#ef4444" strokeWidth="1.8" strokeDasharray="3 3" markerEnd="url(#arrow-red)" />
 
-            {/* --- FACTORY 2 AUXILIARY FEEDER LINES --- */}
-            {/* 3. Solar PV POI-2 (950, 235) -> Red Dotted straight down to right side of PUTR-2 (905, 420) */}
-            <path d="M 950 235 L 950 420 L 905 420" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="3 3" markerEnd="url(#arrow-red)" />
+            {/* 3. Solar PV POI-2 (725, 226) -> Clean inner track (X = 675) -> Feeds right side of PUTR-2 (X = 861) */}
+            <path d="M 725 226 L 725 245 L 675 245 L 675 420 L 741 420" fill="none" stroke="#ef4444" strokeWidth="1.8" strokeDasharray="3 3" markerEnd="url(#arrow-red)" />
 
-            {/* 4. Genset Diesel Fuel (1100, 235) -> Green Dashed to top-right of PUTR-NEW (985, 355) */}
-            <path d="M 1100 235 L 1100 342 L 985 342 L 985 355" fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="4 3" markerEnd="url(#arrow-green)" />
+            {/* 4. Genset Diesel Fuel (1105, 226) -> Clean outer track (X = 1155) -> Feeds right side of PUTR-NEW (X = 1089) */}
+            <path d="M 1105 226 L 1105 245 L 1155 245 L 1155 420 L 1089 420" fill="none" stroke="#10b981" strokeWidth="1.8" strokeDasharray="4 3" markerEnd="url(#arrow-green)" />
           </svg>
 
           {/* 2. ABSOLUTE CARDS LAYOUT */}
-          {/* Main PLN card at top */}
-          <div className="absolute z-10" style={{ left: 520, top: 15 }}>
-            <div className={`text-center p-3 w-[160px] rounded-2xl border shadow-md transition duration-300 ${
+          {/* Main PLN card at top center (X = 600) */}
+          <div className="absolute z-10" style={{ left: 515, top: 16 }}>
+            <div className={`text-center p-3 w-[170px] rounded-2xl border shadow-md transition duration-300 ${
               isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
             }`}>
               <div className="text-xs font-black text-blue-600 dark:text-blue-400 tracking-wide">PLN-21 kV</div>
@@ -1317,9 +1315,9 @@ export default function PowerDistribution() {
             </div>
           </div>
 
-          {/* Factory 1 Sources (Genset, Feeder, Solar) */}
-          {/* Genset Natural Gas */}
-          <div className="absolute z-10" style={{ left: 30, top: 175 }}>
+          {/* ═══════════ FACTORY 1 SOURCES (Left Wing, Center = 285) ═══════════ */}
+          {/* 1. Genset Natural Gas (Outer Left) */}
+          <div className="absolute z-10" style={{ left: 30, top: 160 }}>
             <div className={`p-2.5 w-[130px] text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
             }`}>
@@ -1329,8 +1327,8 @@ export default function PowerDistribution() {
             </div>
           </div>
 
-          {/* Incoming Fact-1 */}
-          <div className="absolute z-10" style={{ left: 190, top: 155 }}>
+          {/* 2. Incoming Fact-1 (Center F1) */}
+          <div className="absolute z-10" style={{ left: 215, top: 150 }}>
             <div className={`p-2.5 w-[140px] text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
             }`}>
@@ -1346,8 +1344,8 @@ export default function PowerDistribution() {
             </div>
           </div>
 
-          {/* Solar PV POI-1 */}
-          <div className="absolute z-10" style={{ left: 330, top: 175 }}>
+          {/* 3. Solar PV POI-1 (Inner Left) */}
+          <div className="absolute z-10" style={{ left: 410, top: 160 }}>
             <div className={`p-2.5 w-[130px] text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
             }`}>
@@ -1362,9 +1360,25 @@ export default function PowerDistribution() {
             </div>
           </div>
 
-          {/* Factory 2 Sources (Feeder, Solar, Genset) */}
-          {/* Incoming Fact-2 */}
-          <div className="absolute z-10" style={{ left: 735, top: 155 }}>
+          {/* ═══════════ FACTORY 2 SOURCES (Right Wing, Center = 915) ═══════════ */}
+          {/* 1. Solar PV POI-2 (Inner Right) */}
+          <div className="absolute z-10" style={{ left: 660, top: 160 }}>
+            <div className={`p-2.5 w-[130px] text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
+            }`}>
+              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
+              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">POI-2</div>
+              <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                Active Power: <span className="font-bold font-mono">1000 kW</span>
+              </div>
+              <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
+                PF : <span className="font-bold font-mono">0,967</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Incoming Fact-2 (Center F2) */}
+          <div className="absolute z-10" style={{ left: 845, top: 150 }}>
             <div className={`p-2.5 w-[140px] text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
             }`}>
@@ -1380,24 +1394,8 @@ export default function PowerDistribution() {
             </div>
           </div>
 
-          {/* Solar PV POI-2 */}
-          <div className="absolute z-10" style={{ left: 885, top: 175 }}>
-            <div className={`p-2.5 w-[130px] text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
-            }`}>
-              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
-              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">POI-2</div>
-              <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                Active Power: <span className="font-bold font-mono">1000 kW</span>
-              </div>
-              <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono">0,967</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Genset Diesel Fuel */}
-          <div className="absolute z-10" style={{ left: 1035, top: 175 }}>
+          {/* 3. Genset Diesel Fuel (Outer Right) */}
+          <div className="absolute z-10" style={{ left: 1040, top: 160 }}>
             <div className={`p-2.5 w-[130px] text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
             }`}>
@@ -1407,47 +1405,52 @@ export default function PowerDistribution() {
             </div>
           </div>
 
-          {/* Factory 1 Transformer Cards */}
+          {/* ═══════════ FACTORY 1 TRANSFORMER CARDS (4 Units) ═══════════ */}
           {factory1.map((tx, idx) => {
-            const cardLeft = 30 + idx * 110;
-            const isFirst = idx === 0;
+            const cardLeft = 70 + idx * 110;
+            const loadPct = Math.round((tx.activePowerKw / tx.capacityKva) * 100);
             return (
-              <div key={tx.id} className="absolute z-10" style={{ left: cardLeft, top: 355, width: 100 }}>
+              <div key={tx.id} className="absolute z-10" style={{ left: cardLeft, top: 360, width: 100 }}>
                 <div
                   onClick={() => setSelectedTx(tx)}
-                  className={`rounded-2xl border p-2 text-center cursor-pointer transition-all duration-300 hover:shadow-lg ${
-                    isFirst
+                  className={`rounded-2xl border p-2.5 text-center cursor-pointer transition-all duration-300 hover:shadow-lg ${
+                    idx === 0
                       ? "bg-slate-900 border-slate-700 text-white"
                       : isDark
                         ? "bg-slate-800/80 border-slate-700 text-slate-200"
                         : "bg-slate-100/90 border-slate-300 text-slate-800"
                   }`}
                 >
-                  <div className={`text-[11px] font-black ${isFirst ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
+                  <div className={`text-[11px] font-black ${idx === 0 ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
                     {tx.capacityKva} kVa
                   </div>
-                  <div className={`text-[9px] font-black tracking-wider uppercase ${isFirst ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
+                  <div className={`text-[9px] font-black tracking-wider uppercase ${idx === 0 ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
                     {tx.name}
                   </div>
                   <div className="mt-1 text-[8px] text-slate-400 font-semibold">Active Power</div>
-                  <div className={`text-[11px] font-extrabold font-mono ${isFirst ? "text-sky-400" : "text-slate-800 dark:text-slate-100"}`}>
+                  <div className={`text-[11px] font-extrabold font-mono ${idx === 0 ? "text-sky-400" : "text-slate-800 dark:text-slate-100"}`}>
                     {tx.activePowerKw} kW
                   </div>
                   <div className="text-[8px] text-slate-400">
                     PF: <span className="font-bold">{tx.powerFactor.toFixed(3)}</span>
                   </div>
-                  {isFirst && (
-                    <div className="mt-1.5 pt-1 border-t border-slate-800">
-                      <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                        <div className="bg-amber-400 h-full rounded-full" style={{ width: "72.2%" }} />
-                      </div>
-                      <div className="text-[7.5px] font-bold text-amber-400 text-center mt-0.5">72.2%</div>
+                  
+                  {/* Load progress bar */}
+                  <div className="mt-1.5 pt-1 border-t border-slate-200 dark:border-slate-700/60">
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${loadPct > 80 ? "bg-rose-500" : loadPct > 50 ? "bg-amber-400" : "bg-emerald-500"}`}
+                        style={{ width: `${Math.min(100, loadPct)}%` }}
+                      />
                     </div>
-                  )}
+                    <div className={`text-[7.5px] font-bold text-center mt-0.5 ${loadPct > 80 ? "text-rose-500" : loadPct > 50 ? "text-amber-500" : "text-emerald-500"}`}>
+                      {loadPct}%
+                    </div>
+                  </div>
                 </div>
 
-                {/* 400V/230V Label */}
-                <div className="mt-2 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-700 dark:text-slate-300 tracking-wider">
+                {/* 400V/230V Label Box */}
+                <div className="mt-1.5 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-700 dark:text-slate-300 tracking-wider">
                   400V/230V
                 </div>
 
@@ -1462,47 +1465,52 @@ export default function PowerDistribution() {
             );
           })}
 
-          {/* Factory 2 Transformer Cards */}
+          {/* ═══════════ FACTORY 2 TRANSFORMER CARDS (3 Units) ═══════════ */}
           {factory2.map((tx, idx) => {
-            const cardLeft = 660 + idx * 135;
-            const isFirst = idx === 0;
+            const cardLeft = 741 + idx * 120;
+            const loadPct = Math.round((tx.activePowerKw / tx.capacityKva) * 100);
             return (
-              <div key={tx.id} className="absolute z-10" style={{ left: cardLeft, top: 355, width: 110 }}>
+              <div key={tx.id} className="absolute z-10" style={{ left: cardLeft, top: 360, width: 108 }}>
                 <div
                   onClick={() => setSelectedTx(tx)}
-                  className={`rounded-2xl border p-2 text-center cursor-pointer transition-all duration-300 hover:shadow-lg ${
-                    isFirst
+                  className={`rounded-2xl border p-2.5 text-center cursor-pointer transition-all duration-300 hover:shadow-lg ${
+                    idx === 0
                       ? "bg-slate-900 border-slate-700 text-white"
                       : isDark
                         ? "bg-slate-800/80 border-slate-700 text-slate-200"
                         : "bg-slate-100/90 border-slate-300 text-slate-800"
                   }`}
                 >
-                  <div className={`text-[11px] font-black ${isFirst ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
+                  <div className={`text-[11px] font-black ${idx === 0 ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
                     {tx.capacityKva} kVa
                   </div>
-                  <div className={`text-[9px] font-black tracking-wider uppercase ${isFirst ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
+                  <div className={`text-[9px] font-black tracking-wider uppercase ${idx === 0 ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
                     {tx.name}
                   </div>
                   <div className="mt-1 text-[8px] text-slate-400 font-semibold">Active Power</div>
-                  <div className={`text-[11px] font-extrabold font-mono ${isFirst ? "text-emerald-400" : "text-slate-800 dark:text-slate-100"}`}>
+                  <div className={`text-[11px] font-extrabold font-mono ${idx === 0 ? "text-emerald-400" : "text-slate-800 dark:text-slate-100"}`}>
                     {tx.activePowerKw} kW
                   </div>
                   <div className="text-[8px] text-slate-400">
                     PF: <span className="font-bold">{tx.powerFactor.toFixed(3)}</span>
                   </div>
-                  {isFirst && (
-                    <div className="mt-1.5 pt-1 border-t border-slate-800">
-                      <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                        <div className="bg-emerald-500 h-full rounded-full" style={{ width: "67.3%" }} />
-                      </div>
-                      <div className="text-[7.5px] font-bold text-emerald-400 text-center mt-0.5">67.3%</div>
+
+                  {/* Load progress bar */}
+                  <div className="mt-1.5 pt-1 border-t border-slate-200 dark:border-slate-700/60">
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${loadPct > 80 ? "bg-rose-500" : loadPct > 50 ? "bg-amber-400" : "bg-emerald-500"}`}
+                        style={{ width: `${Math.min(100, loadPct)}%` }}
+                      />
                     </div>
-                  )}
+                    <div className={`text-[7.5px] font-bold text-center mt-0.5 ${loadPct > 80 ? "text-rose-500" : loadPct > 50 ? "text-amber-500" : "text-emerald-500"}`}>
+                      {loadPct}%
+                    </div>
+                  </div>
                 </div>
 
-                {/* 400V/230V Label */}
-                <div className="mt-2 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-700 dark:text-slate-300 tracking-wider">
+                {/* 400V/230V Label Box */}
+                <div className="mt-1.5 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-700 dark:text-slate-300 tracking-wider">
                   400V/230V
                 </div>
 
