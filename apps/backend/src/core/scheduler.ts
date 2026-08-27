@@ -487,41 +487,56 @@ export const startIncomingElectricityPolling = () => {
     let lastWf1Rec: ElectricPmRecord | null = null;
     let lastWf2Rec: ElectricPmRecord | null = null;
     
+    // Helper for resilient fetching
+    const fetchApiData = async (endpoint: string) => {
+      try {
+        return await fetchJsonWithTimeout(`https://utility.widatra.com/system/webdev/Utility_Dashboard/${endpoint}`);
+      } catch {
+        try {
+          return await fetchJsonWithTimeout(`http://10.3.164.3:8088/system/webdev/Utility_Dashboard/${endpoint}`);
+        } catch {
+          return await fetchJsonWithTimeout(`http://127.0.0.1:3001/system/webdev/Utility_Dashboard/${endpoint}`).catch(() => null);
+        }
+      }
+    };
+    
     // Fetch and store PLN
     try {
-      const data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln");
-      const parsed = parsePlnApi(data, ts);
-      if (isNewMinute) {
-        await insertPlnMinuteTelemetry(parsed, minuteTs);
+      const data = await fetchApiData("electric_pln");
+      if (data) {
+        const parsed = parsePlnApi(data, ts);
+        if (isNewMinute) {
+          await insertPlnMinuteTelemetry(parsed, minuteTs);
+        }
+        broadcastLiveTelemetry("Cubicle_PLN_PM8000", parsed);
+        lastPlnRec = {
+          t_stamp: ts,
+          group_id: "ew23",
+          pm_id: "PM410",
+          status: parsed.status_pm8000 !== null ? !!parsed.status_pm8000 : true,
+          volt_ab: parsed.volt_ab,
+          volt_bc: parsed.volt_bc,
+          volt_ca: parsed.volt_ca,
+          volt_ll: parsed.volt_ll,
+          current_a: parsed.current_a,
+          current_b: parsed.current_b,
+          current_c: parsed.current_c,
+          frequency: parsed.frequency,
+          active_power_total: parsed.active_power,
+          reactive_power_total: parsed.reactive_power_total,
+          apparent_power_total: parsed.apparent_power_total,
+          power_factor: parsed.power_factor,
+          voltage_unbalance: parsed.voltage_unbalance,
+          current_unbalance: parsed.current_unbalance,
+          thd_volt_a: parsed.thd_volt_a,
+          thd_volt_b: parsed.thd_volt_b,
+          thd_volt_c: parsed.thd_volt_c,
+          thd_current_a: parsed.thd_current_a,
+          thd_current_b: parsed.thd_current_b,
+          thd_current_c: parsed.thd_current_c,
+          active_energy: parsed.active_energy
+        };
       }
-      broadcastLiveTelemetry("Cubicle_PLN_PM8000", parsed);
-      lastPlnRec = {
-        t_stamp: ts,
-        group_id: "ew23",
-        pm_id: "PM410",
-        status: parsed.status_pm8000 !== null ? !!parsed.status_pm8000 : true,
-        volt_ab: parsed.volt_ab,
-        volt_bc: parsed.volt_bc,
-        volt_ca: parsed.volt_ca,
-        volt_ll: parsed.volt_ll,
-        current_a: parsed.current_a,
-        current_b: parsed.current_b,
-        current_c: parsed.current_c,
-        frequency: parsed.frequency,
-        active_power_total: parsed.active_power,
-        reactive_power_total: parsed.reactive_power_total,
-        apparent_power_total: parsed.apparent_power_total,
-        power_factor: parsed.power_factor,
-        voltage_unbalance: parsed.voltage_unbalance,
-        current_unbalance: parsed.current_unbalance,
-        thd_volt_a: parsed.thd_volt_a,
-        thd_volt_b: parsed.thd_volt_b,
-        thd_volt_c: parsed.thd_volt_c,
-        thd_current_a: parsed.thd_current_a,
-        thd_current_b: parsed.thd_current_b,
-        thd_current_c: parsed.thd_current_c,
-        active_energy: parsed.active_energy
-      };
     } catch (err: any) {
       logger.warn(`Incoming PLN polling failed: ${err.message}`);
       broadcastLiveTelemetryOffline("Cubicle_PLN_PM8000");
@@ -529,39 +544,41 @@ export const startIncomingElectricityPolling = () => {
 
     // Fetch and store WF1
     try {
-      const data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1");
-      const parsed = parseWfApi(data, ts);
-      if (isNewMinute) {
-        await insertWfMinuteTelemetry("electric_wf1_telemetry_minute", parsed, minuteTs);
+      const data = await fetchApiData("electric_wf1");
+      if (data) {
+        const parsed = parseWfApi(data, ts);
+        if (isNewMinute) {
+          await insertWfMinuteTelemetry("electric_wf1_telemetry_minute", parsed, minuteTs);
+        }
+        broadcastLiveTelemetry("Feeder_WF1_PM5560", parsed);
+        lastWf1Rec = {
+          t_stamp: ts,
+          group_id: "ew23",
+          pm_id: "PM411",
+          status: parsed.status_pm5500 !== null ? !!parsed.status_pm5500 : true,
+          volt_ab: parsed.volt_ab,
+          volt_bc: parsed.volt_bc,
+          volt_ca: parsed.volt_ca,
+          volt_ll: parsed.volt_ll,
+          current_a: parsed.current_a,
+          current_b: parsed.current_b,
+          current_c: parsed.current_c,
+          frequency: parsed.frequency,
+          active_power_total: parsed.active_power_total,
+          reactive_power_total: parsed.reactive_power_total,
+          apparent_power_total: parsed.apparent_power_total,
+          power_factor: parsed.power_factor,
+          voltage_unbalance: parsed.voltage_unbalance,
+          current_unbalance: parsed.current_unbalance,
+          thd_volt_a: parsed.thd_volt_a,
+          thd_volt_b: parsed.thd_volt_b,
+          thd_volt_c: parsed.thd_volt_c,
+          thd_current_a: parsed.thd_current_a,
+          thd_current_b: parsed.thd_current_b,
+          thd_current_c: parsed.thd_current_c,
+          active_energy: parsed.active_energy
+        };
       }
-      broadcastLiveTelemetry("Feeder_WF1_PM5560", parsed);
-      lastWf1Rec = {
-        t_stamp: ts,
-        group_id: "ew23",
-        pm_id: "PM411",
-        status: parsed.status_pm5500 !== null ? !!parsed.status_pm5500 : true,
-        volt_ab: parsed.volt_ab,
-        volt_bc: parsed.volt_bc,
-        volt_ca: parsed.volt_ca,
-        volt_ll: parsed.volt_ll,
-        current_a: parsed.current_a,
-        current_b: parsed.current_b,
-        current_c: parsed.current_c,
-        frequency: parsed.frequency,
-        active_power_total: parsed.active_power_total,
-        reactive_power_total: parsed.reactive_power_total,
-        apparent_power_total: parsed.apparent_power_total,
-        power_factor: parsed.power_factor,
-        voltage_unbalance: parsed.voltage_unbalance,
-        current_unbalance: parsed.current_unbalance,
-        thd_volt_a: parsed.thd_volt_a,
-        thd_volt_b: parsed.thd_volt_b,
-        thd_volt_c: parsed.thd_volt_c,
-        thd_current_a: parsed.thd_current_a,
-        thd_current_b: parsed.thd_current_b,
-        thd_current_c: parsed.thd_current_c,
-        active_energy: parsed.active_energy
-      };
     } catch (err: any) {
       logger.warn(`Incoming WF1 polling failed: ${err.message}`);
       broadcastLiveTelemetryOffline("Feeder_WF1_PM5560");
@@ -569,39 +586,41 @@ export const startIncomingElectricityPolling = () => {
 
     // Fetch and store WF2
     try {
-      const data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2");
-      const parsed = parseWfApi(data, ts);
-      if (isNewMinute) {
-        await insertWfMinuteTelemetry("electric_wf2_telemetry_minute", parsed, minuteTs);
+      const data = await fetchApiData("electric_wf2");
+      if (data) {
+        const parsed = parseWfApi(data, ts);
+        if (isNewMinute) {
+          await insertWfMinuteTelemetry("electric_wf2_telemetry_minute", parsed, minuteTs);
+        }
+        broadcastLiveTelemetry("Feeder_WF2_PM5500", parsed);
+        lastWf2Rec = {
+          t_stamp: ts,
+          group_id: "ew23",
+          pm_id: "PM412",
+          status: parsed.status_pm5500 !== null ? !!parsed.status_pm5500 : true,
+          volt_ab: parsed.volt_ab,
+          volt_bc: parsed.volt_bc,
+          volt_ca: parsed.volt_ca,
+          volt_ll: parsed.volt_ll,
+          current_a: parsed.current_a,
+          current_b: parsed.current_b,
+          current_c: parsed.current_c,
+          frequency: parsed.frequency,
+          active_power_total: parsed.active_power_total,
+          reactive_power_total: parsed.reactive_power_total,
+          apparent_power_total: parsed.apparent_power_total,
+          power_factor: parsed.power_factor,
+          voltage_unbalance: parsed.voltage_unbalance,
+          current_unbalance: parsed.current_unbalance,
+          thd_volt_a: parsed.thd_volt_a,
+          thd_volt_b: parsed.thd_volt_b,
+          thd_volt_c: parsed.thd_volt_c,
+          thd_current_a: parsed.thd_current_a,
+          thd_current_b: parsed.thd_current_b,
+          thd_current_c: parsed.thd_current_c,
+          active_energy: parsed.active_energy
+        };
       }
-      broadcastLiveTelemetry("Feeder_WF2_PM5500", parsed);
-      lastWf2Rec = {
-        t_stamp: ts,
-        group_id: "ew23",
-        pm_id: "PM412",
-        status: parsed.status_pm5500 !== null ? !!parsed.status_pm5500 : true,
-        volt_ab: parsed.volt_ab,
-        volt_bc: parsed.volt_bc,
-        volt_ca: parsed.volt_ca,
-        volt_ll: parsed.volt_ll,
-        current_a: parsed.current_a,
-        current_b: parsed.current_b,
-        current_c: parsed.current_c,
-        frequency: parsed.frequency,
-        active_power_total: parsed.active_power_total,
-        reactive_power_total: parsed.reactive_power_total,
-        apparent_power_total: parsed.apparent_power_total,
-        power_factor: parsed.power_factor,
-        voltage_unbalance: parsed.voltage_unbalance,
-        current_unbalance: parsed.current_unbalance,
-        thd_volt_a: parsed.thd_volt_a,
-        thd_volt_b: parsed.thd_volt_b,
-        thd_volt_c: parsed.thd_volt_c,
-        thd_current_a: parsed.thd_current_a,
-        thd_current_b: parsed.thd_current_b,
-        thd_current_c: parsed.thd_current_c,
-        active_energy: parsed.active_energy
-      };
     } catch (err: any) {
       logger.warn(`Incoming WF2 polling failed: ${err.message}`);
       broadcastLiveTelemetryOffline("Feeder_WF2_PM5500");
@@ -609,12 +628,7 @@ export const startIncomingElectricityPolling = () => {
 
     // Fetch and store EW23 (Sub-distribution Power Meters)
     try {
-      let data: any = null;
-      try {
-        data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew23");
-      } catch {
-        data = await fetchJsonWithTimeout("http://127.0.0.1:3001/system/webdev/Utility_Dashboard/electric_ew23").catch(() => null);
-      }
+      const data = await fetchApiData("electric_ew23");
       if (data) {
         const parsed = parseEwApi(data, ts, "ew23");
         
@@ -641,12 +655,7 @@ export const startIncomingElectricityPolling = () => {
 
     // Fetch and store EW21
     try {
-      let data: any = null;
-      try {
-        data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew21");
-      } catch {
-        data = await fetchJsonWithTimeout("http://127.0.0.1:3001/system/webdev/Utility_Dashboard/electric_ew21").catch(() => null);
-      }
+      const data = await fetchApiData("electric_ew21");
       if (data) {
         const parsed = parseEwApi(data, ts, "ew21");
         if (isNewMinute) {
@@ -660,12 +669,7 @@ export const startIncomingElectricityPolling = () => {
 
     // Fetch and store EW22
     try {
-      let data: any = null;
-      try {
-        data = await fetchJsonWithTimeout("http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew22");
-      } catch {
-        data = await fetchJsonWithTimeout("http://127.0.0.1:3001/system/webdev/Utility_Dashboard/electric_ew22").catch(() => null);
-      }
+      const data = await fetchApiData("electric_ew22");
       if (data) {
         const parsed = parseEwApi(data, ts, "ew22");
         if (isNewMinute) {
