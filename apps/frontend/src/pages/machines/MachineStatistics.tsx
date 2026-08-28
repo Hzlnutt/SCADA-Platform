@@ -931,32 +931,47 @@ export default function MachineStatistics() {
                         {selectedExportParams.length === parametersList.length ? "Hapus Semua" : "Pilih Semua"}
                       </button>
                     </div>
-                    <div className="max-h-44 overflow-y-auto space-y-1 p-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 pr-1.5">
+                    <div className="max-h-48 overflow-y-auto space-y-1.5 p-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 pr-1.5">
                       {parametersList.map((param) => {
                         const isChecked = selectedExportParams.includes(param);
                         return (
-                          <label
+                          <div
                             key={param}
+                            role="button"
+                            tabIndex={0}
                             onClick={() => toggleParamSelection(param)}
-                            className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer transition select-none border ${
+                            onKeyDown={(e) => {
+                              if (e.key === " " || e.key === "Enter") {
+                                e.preventDefault();
+                                toggleParamSelection(param);
+                              }
+                            }}
+                            className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all select-none border ${
                               isChecked
-                                ? "bg-[#1f6fb5]/10 dark:bg-[#1f6fb5]/20 border-[#1f6fb5]/30 text-[#002b5c] dark:text-sky-200"
-                                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
+                                ? "bg-[#1f6fb5]/10 dark:bg-[#1f6fb5]/20 border-[#1f6fb5] text-[#002b5c] dark:text-sky-200 shadow-sm"
+                                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/80 dark:hover:bg-slate-850"
                             }`}
                           >
-                            <div className="flex items-center gap-2.5">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => {}}
-                                className="h-4 w-4 rounded text-[#1f6fb5] focus:ring-[#1f6fb5] cursor-pointer"
-                              />
-                              <span>{param}</span>
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${
+                                  isChecked
+                                    ? "bg-[#1f6fb5] border-[#1f6fb5] text-white"
+                                    : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                                }`}
+                              >
+                                {isChecked && (
+                                  <svg className="h-3 w-3 fill-current" viewBox="0 0 20 20">
+                                    <path d="M0 11l2-2 5 5L18 3l2 2L7 18z" />
+                                  </svg>
+                                )}
+                              </div>
+                              <span className="font-semibold">{param}</span>
                             </div>
-                            <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                            <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500">
                               {unitMap[param] || ""}
                             </span>
-                          </label>
+                          </div>
                         );
                       })}
                     </div>
