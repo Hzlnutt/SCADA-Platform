@@ -164,6 +164,8 @@ export default function MachineStatistics() {
   const [exportEnd, setExportEnd] = useState(getLocalTodayStr);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportType, setExportType] = useState<"parameter" | "vibration">("parameter");
+  const [exportScope, setExportScope] = useState<"single" | "multiple">("single");
+  const [selectedExportParams, setSelectedExportParams] = useState<string[]>([]);
 
   // Hardcoded to exactly today's 24 hours
   const resolution = "Hourly";
@@ -525,6 +527,8 @@ export default function MachineStatistics() {
 
   const handleExportParameters = () => {
     setExportType("parameter");
+    setExportScope("single");
+    setSelectedExportParams([...parametersList]);
     setExportStart(getLocalTodayStr());
     setExportEnd(getLocalTodayStr());
     setShowExportModal(true);
@@ -537,50 +541,113 @@ export default function MachineStatistics() {
     setShowExportModal(true);
   };
 
-  const executeExport = () => {
-    const tagId = paramTagIdMap[activeParam];
-    if (exportType === "parameter" && !tagId) return;
+  const toggleParamSelection = (param: string) => {
+    setSelectedExportParams((prev) =>
+      prev.includes(param) ? prev.filter((p) => p !== param) : [...prev, param]
+    );
+  };
 
-    setExportLoading(true);
+  const handleSelectAllParams = () => {
+    if (selectedExportParams.length === parametersList.length) {
+      setSelectedExportParams([]);
+    } else {
+      setSelectedExportParams([...parametersList]);
+    }
+  };
 
+  const executeExport = async () => {
     if (exportType === "parameter") {
+      const targets = exportScope === "single" ? [activeParam] : selectedExportParams;
+      if (targets.length === 0) {
+        alert("Pilih minimal satu parameter untuk di-export.");
+        return;
+      }
+
+      setExportLoading(true);
+
       const fromStr = `${exportStart}T00:00:00.000Z`;
       const toStr = `${exportEnd}T23:59:59.999Z`;
 
-      const params = new URLSearchParams({
-        tagId,
-        from: fromStr,
-        to: toStr,
-        resolution: "1h",
-        limit: "50000"
-      });
+      try {
+        // Fetch all target parameters concurrently
+        const fetchPromises = targets.map(async (param) => {
+          const tagId = paramTagIdMap[param];
+          if (!tagId) return { param, points: [] };
 
-      getJson<{ data: any[] }>(`/historian/range?${params.toString()}`)
-        .then((res) => {
-          const points = res.data || [];
-          const rows = points.map((pt: any) => {
-            const dateObj = new Date(pt.ts);
-            const formattedDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")} ${String(dateObj.getHours()).padStart(2, "0")}:${String(dateObj.getMinutes()).padStart(2, "0")}`;
-            return {
-              "Timestamp": formattedDate,
-              [`${activeParam} (${unitMap[activeParam] ?? ""})`]: typeof pt.value === "number" ? Number(pt.value.toFixed(2)) : pt.value
-            };
+          const params = new URLSearchParams({
+            tagId,
+            from: fromStr,
+            to: toStr,
+            resolution: "1h",
+            limit: "50000"
           });
 
-          const worksheet = utils.json_to_sheet(rows);
-          const workbook = utils.book_new();
-          utils.book_append_sheet(workbook, worksheet, "Parameter History");
-          writeFile(workbook, `${activeParam.toLowerCase().replace(/\s+/g, "-")}-${exportStart}-to-${exportEnd}.xlsx`);
-          setShowExportModal(false);
-        })
-        .catch((err) => {
-          console.error("Export failed:", err);
-          alert("Failed to export data. Please try again.");
-        })
-        .finally(() => {
-          setExportLoading(false);
+          try {
+            const res = await getJson<{ data: any[] }>(`/historian/range?${params.toString()}`);
+            return { param, points: res.data || [] };
+          } catch (e) {
+            console.error(`Failed to fetch range for ${param}:`, e);
+            return { param, points: [] };
+          }
         });
+
+        const results = await Promise.all(fetchPromises);
+
+        // Group by Timestamp string (YYYY-MM-DD HH:mm)
+        const rowMap = new Map<string, Record<string, any>>();
+
+        results.forEach(({ param, points }) => {
+          const unit = unitMap[param] ? ` (${unitMap[param]})` : "";
+          const colName = `${param}${unit}`;
+
+          points.forEach((pt: any) => {
+            const dateObj = new Date(pt.ts);
+            const formattedDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")} ${String(dateObj.getHours()).padStart(2, "0")}:${String(dateObj.getMinutes()).padStart(2, "0")}`;
+
+            if (!rowMap.has(formattedDate)) {
+              rowMap.set(formattedDate, {
+                "Timestamp": formattedDate
+              });
+            }
+
+            const row = rowMap.get(formattedDate)!;
+            row[colName] = typeof pt.value === "number" ? Number(pt.value.toFixed(2)) : pt.value;
+          });
+        });
+
+        // Convert map to sorted array by timestamp ASC
+        const rows = Array.from(rowMap.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([, r]) => r);
+
+        if (rows.length === 0) {
+          const fallbackRow: Record<string, any> = { "Timestamp": "No Data in Selected Range" };
+          targets.forEach(p => {
+            const unit = unitMap[p] ? ` (${unitMap[p]})` : "";
+            fallbackRow[`${p}${unit}`] = "-";
+          });
+          rows.push(fallbackRow);
+        }
+
+        const worksheet = utils.json_to_sheet(rows);
+        const workbook = utils.book_new();
+        const sheetTitle = targets.length === 1 ? targets[0].slice(0, 30) : "Parameters History";
+        utils.book_append_sheet(workbook, worksheet, sheetTitle);
+
+        const fileName = targets.length === 1
+          ? `${targets[0].toLowerCase().replace(/\s+/g, "-")}-${exportStart}-to-${exportEnd}.xlsx`
+          : `cooling-tower-parameters-${exportStart}-to-${exportEnd}.xlsx`;
+
+        writeFile(workbook, fileName);
+        setShowExportModal(false);
+      } catch (err) {
+        console.error("Export failed:", err);
+        alert("Gagal mengunduh data. Silakan coba lagi.");
+      } finally {
+        setExportLoading(false);
+      }
     } else {
+      setExportLoading(true);
       const startD = new Date(exportStart);
       const endD = new Date(exportEnd);
       const rows = [];
@@ -771,77 +838,173 @@ export default function MachineStatistics() {
         </div>
       </div>
 
-      {/* 5. Custom range Export Excel Modal */}
+      {/* 5. Custom range Export Excel Modal with Glassmorphism and Multi-Select */}
       {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all duration-300">
-            <div className="mb-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-900 pb-3">
-              <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
-                Export Data to Excel
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 dark:bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-white/40 dark:border-slate-800 bg-white/85 dark:bg-slate-950/85 backdrop-blur-2xl p-6 shadow-2xl transition-all duration-300">
+            {/* Modal Header */}
+            <div className="mb-4 flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800/80 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#1f6fb5]/10 text-[#1f6fb5] text-sm">
+                  📊
+                </span>
+                <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
+                  Export Data to Excel
+                </h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowExportModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-200 transition"
               >
                 ✕
               </button>
             </div>
             
-            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed font-semibold">
-              Pilih rentang tanggal kustom untuk mengunduh log data historis{" "}
-              <span className="text-[#1f6fb5]">
-                {exportType === "parameter" ? activeParam : selectedEq}
-              </span>.
-            </p>
+            {/* Export Scope Selector (Single vs Multi) for Parameters */}
+            {exportType === "parameter" && (
+              <div className="mb-4 space-y-3">
+                <label className="block text-[11px] font-bold text-slate-400 uppercase">
+                  Pilihan Mode Export
+                </label>
+                <div className="grid grid-cols-2 gap-2 bg-slate-100/70 dark:bg-slate-900/70 p-1 rounded-xl border border-slate-200/50 dark:border-slate-800/50">
+                  <button
+                    type="button"
+                    onClick={() => setExportScope("single")}
+                    className={`px-3 py-2 text-xs font-bold rounded-lg transition ${
+                      exportScope === "single"
+                        ? "bg-white dark:bg-slate-800 text-[#1f6fb5] dark:text-sky-400 shadow-sm"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    1 Parameter Saja
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExportScope("multiple")}
+                    className={`px-3 py-2 text-xs font-bold rounded-lg transition ${
+                      exportScope === "multiple"
+                        ? "bg-white dark:bg-slate-800 text-[#1f6fb5] dark:text-sky-400 shadow-sm"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    Banyak Parameter
+                  </button>
+                </div>
 
-            <div className="space-y-4">
+                {exportScope === "single" ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    Mengunduh data log historis parameter aktif:{" "}
+                    <span className="font-bold text-[#1f6fb5] dark:text-sky-400">
+                      {activeParam}
+                    </span>
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                        Pilih Parameter ({selectedExportParams.length}/{parametersList.length} Dipilih)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleSelectAllParams}
+                        className="text-[11px] font-bold text-[#1f6fb5] dark:text-sky-400 hover:underline"
+                      >
+                        {selectedExportParams.length === parametersList.length ? "Hapus Semua" : "Pilih Semua"}
+                      </button>
+                    </div>
+                    <div className="max-h-40 overflow-y-auto space-y-1.5 p-2 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800/80 pr-1">
+                      {parametersList.map((param) => {
+                        const isChecked = selectedExportParams.includes(param);
+                        return (
+                          <label
+                            key={param}
+                            onClick={() => toggleParamSelection(param)}
+                            className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition select-none ${
+                              isChecked
+                                ? "bg-[#1f6fb5]/10 dark:bg-[#1f6fb5]/20 text-[#002b5c] dark:text-slate-200 font-bold"
+                                : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {}}
+                                className="rounded text-[#1f6fb5] focus:ring-[#1f6fb5] cursor-pointer"
+                              />
+                              <span>{param}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {unitMap[param] || ""}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {exportType === "vibration" && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed font-semibold">
+                Pilih rentang tanggal kustom untuk mengunduh log data vibrasi{" "}
+                <span className="text-[#1f6fb5] dark:text-sky-400">{selectedEq}</span>.
+              </p>
+            )}
+
+            {/* Date Range Inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
               <div>
                 <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1.5">
-                  Tanggal Mulai (Start Date)
+                  Tanggal Mulai
                 </label>
                 <input
                   type="date"
                   value={exportStart}
                   onChange={(e) => setExportStart(e.target.value)}
-                  className="w-full rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-3 py-2 text-xs font-bold text-[#002b5c] dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 px-3 py-2 text-xs font-bold text-[#002b5c] dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
                 />
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1.5">
-                  Tanggal Selesai (End Date)
+                  Tanggal Selesai
                 </label>
                 <input
                   type="date"
                   value={exportEnd}
                   onChange={(e) => setExportEnd(e.target.value)}
-                  className="w-full rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-3 py-2 text-xs font-bold text-[#002b5c] dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 px-3 py-2 text-xs font-bold text-[#002b5c] dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
                 />
               </div>
             </div>
 
-            <div className="mt-6 flex justify-end gap-2.5">
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-2.5 border-t border-slate-200/60 dark:border-slate-800/80 pt-4">
               <button
                 type="button"
                 onClick={() => setShowExportModal(false)}
-                className="rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent px-4 py-2 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition"
+                className="rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent px-4 py-2 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={executeExport}
-                disabled={exportLoading}
-                className="flex items-center gap-2 rounded-lg bg-[#1f6fb5] px-4 py-2 text-xs font-bold text-white shadow-md shadow-[#1f6fb5]/20 hover:bg-[#1b5f9b] transition disabled:opacity-50"
+                disabled={exportLoading || (exportType === "parameter" && exportScope === "multiple" && selectedExportParams.length === 0)}
+                className="flex items-center gap-2 rounded-xl bg-[#1f6fb5] px-5 py-2 text-xs font-bold text-white shadow-lg shadow-[#1f6fb5]/25 hover:bg-[#1b5f9b] transition disabled:opacity-50"
               >
                 {exportLoading ? (
                   <>
-                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    Memproses...
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Mengunduh...
                   </>
                 ) : (
-                  "Unduh Excel"
+                  <>
+                    📥 Unduh File Excel
+                  </>
                 )}
               </button>
             </div>
