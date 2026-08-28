@@ -374,6 +374,8 @@ export const ensurePostgresTables = async () => {
         updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(config_type, config_key)
       );
+
+      DELETE FROM electricity_config WHERE config_type IN ('consumption_fact_1', 'consumption_fact_2');
     `);
 
     // --- ELECTRICITY TELEMETRY RAW TABLES ---

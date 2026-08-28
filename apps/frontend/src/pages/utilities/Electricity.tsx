@@ -403,14 +403,9 @@ export default function Electricity() {
     };
   }, [summaryData, lwbpRate, wbpRate]);
 
-  // Consumption Fact categories
+  // Consumption Fact categories (Empty until populated by real data)
   const [factCategories1, setFactCategories1] = useState<ConsumptionFactCategory[]>([]);
   const [factCategories2, setFactCategories2] = useState<ConsumptionFactCategory[]>([]);
-  const [showFactEditor, setShowFactEditor] = useState(false);
-  const [editingFactSide, setEditingFactSide] = useState<1 | 2>(1);
-  const [newCatKey, setNewCatKey] = useState("");
-  const [newCatLabel, setNewCatLabel] = useState("");
-  const [newCatValue, setNewCatValue] = useState("");
 
   // Config panel
   const [showConfigPanel, setShowConfigPanel] = useState(false);
@@ -1066,47 +1061,6 @@ export default function Electricity() {
   const dummyMonthlyData = useMemo(() => [], []);
   const dummyPreviousData = useMemo(() => [], []);
 
-  /* ═══ CONSUMPTION FACT EDITOR HANDLERS ═══ */
-  const handleAddCategory = async () => {
-    if (!newCatKey.trim() || !newCatLabel.trim()) return;
-    const configType = editingFactSide === 1 ? "consumption_fact_1" : "consumption_fact_2";
-    const cats = editingFactSide === 1 ? factCategories1 : factCategories2;
-    try {
-      await postJson("/config/electricity", {
-        config_type: configType,
-        config_key: newCatKey.trim(),
-        label: newCatLabel.trim(),
-        value: { kWh: parseFloat(newCatValue) || 0 },
-        sort_order: cats.length,
-        enabled: true
-      });
-      // Reload
-      const res = await getJson<{ data: ConsumptionFactCategory[] }>(`/config/electricity?configType=${configType}`);
-      if (res?.data) {
-        editingFactSide === 1 ? setFactCategories1(res.data) : setFactCategories2(res.data);
-      }
-      setNewCatKey("");
-      setNewCatLabel("");
-      setNewCatValue("");
-    } catch (err) {
-      console.error("Failed to add category:", err);
-    }
-  };
-
-  const handleDeleteCategory = async (id: number, side: 1 | 2) => {
-    if (!confirm("Hapus kategori ini?")) return;
-    try {
-      await deleteJson(`/config/electricity/${id}`);
-      const configType = side === 1 ? "consumption_fact_1" : "consumption_fact_2";
-      const res = await getJson<{ data: ConsumptionFactCategory[] }>(`/config/electricity?configType=${configType}`);
-      if (res?.data) {
-        side === 1 ? setFactCategories1(res.data) : setFactCategories2(res.data);
-      }
-    } catch (err) {
-      console.error("Failed to delete category:", err);
-    }
-  };
-
   /* ═══ RENDER ═══ */
   return (
     <div className="space-y-6">
@@ -1654,20 +1608,8 @@ export default function Electricity() {
             cubicleSelector === "wf2" ? "Incoming Cubicle WF2" :
             cubicleSelector === "poi1" ? "Solar PV POI-1" : "Solar PV POI-2"
           }`}
-          currentData={
-            cubicleSelector === "pln" ? [24000, 38000, 6000, 10000, 4000, 6000, 10000, 18000, 22000, 28000, 22000, 26000] :
-            cubicleSelector === "wf1" ? [12000, 19000, 3000, 5000, 2000, 3000, 5000, 9000, 11000, 14000, 11000, 13000] :
-            cubicleSelector === "wf2" ? [11400, 18050, 2850, 4750, 1900, 2850, 4750, 8550, 10450, 13300, 10450, 12350] :
-            cubicleSelector === "poi1" ? [3600, 5700, 900, 1500, 600, 900, 1500, 2700, 3300, 4200, 3300, 3900] :
-            [7200, 11400, 1800, 3000, 1200, 1800, 3000, 5400, 6600, 8400, 6600, 7800]
-          }
-          previousData={
-            cubicleSelector === "pln" ? [22000, 34000, 8000, 12000, 6000, 4000, 8000, 16000, 20000, 26000, 24000, 24000] :
-            cubicleSelector === "wf1" ? [11000, 17000, 4000, 6000, 3000, 2000, 4000, 8000, 10000, 13000, 12000, 12000] :
-            cubicleSelector === "wf2" ? [10450, 16150, 3800, 5700, 2850, 1900, 3800, 7600, 9500, 12350, 11400, 11400] :
-            cubicleSelector === "poi1" ? [3300, 5100, 1200, 1800, 900, 600, 1200, 2400, 3000, 3900, 3600, 3600] :
-            [6600, 10200, 2400, 3600, 1800, 1200, 2400, 4800, 6000, 7800, 7200, 7200]
-          }
+          currentData={[]}
+          previousData={[]}
           isDark={isDark}
         />
       </div>
@@ -1681,12 +1623,6 @@ export default function Electricity() {
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 1</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Fact-1 categories sorted by highest consumption.</p>
             </div>
-            <button 
-              onClick={() => { setEditingFactSide(1); setShowFactEditor(true); }} 
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700"
-            >
-              ⚙️ Fact Categories
-            </button>
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
             <div style={{ height: 250 }}>
@@ -1702,12 +1638,6 @@ export default function Electricity() {
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 2</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Fact-2 categories sorted by highest consumption.</p>
             </div>
-            <button 
-              onClick={() => { setEditingFactSide(2); setShowFactEditor(true); }} 
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700"
-            >
-              ⚙️ Fact Categories
-            </button>
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
             <div style={{ height: 250 }}>
@@ -1926,51 +1856,6 @@ export default function Electricity() {
         <DynamicSelectionChart isDark={isDark} />
       </div>
 
-      {/* ═══════════ CONSUMPTION FACT EDITOR MODAL ═══════════ */}
-      {showFactEditor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowFactEditor(false)}>
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-white">
-                Edit Consumption Fact-{editingFactSide}
-              </h3>
-              <button onClick={() => setShowFactEditor(false)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
-            </div>
-
-            {/* Existing categories */}
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {(editingFactSide === 1 ? factCategories1 : factCategories2).map((cat) => (
-                <div key={cat.id} className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-800/40 rounded-lg border border-slate-200 dark:border-slate-700">
-                  <div>
-                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{cat.label}</span>
-                    <span className="ml-2 text-[10px] text-slate-400 font-mono">{cat.value?.kWh ?? 0} kWh</span>
-                  </div>
-                  <button onClick={() => handleDeleteCategory(cat.id, editingFactSide)} className="px-2 py-0.5 text-[10px] font-bold text-rose-500 bg-rose-500/10 rounded hover:bg-rose-500/20 transition">
-                    Hapus
-                  </button>
-                </div>
-              ))}
-              {(editingFactSide === 1 ? factCategories1 : factCategories2).length === 0 && (
-                <p className="text-xs text-slate-400 text-center py-4">Belum ada kategori.</p>
-              )}
-            </div>
-
-            {/* Add new category */}
-            <div className="border-t border-slate-200 dark:border-slate-800 pt-4">
-              <h4 className="text-xs font-bold text-slate-500 mb-2">Tambah Kategori Baru</h4>
-              <div className="grid grid-cols-3 gap-2">
-                <input value={newCatKey} onChange={(e) => setNewCatKey(e.target.value)} placeholder="Key (e.g. production)" className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono outline-none focus:ring-1 focus:ring-blue-500" />
-                <input value={newCatLabel} onChange={(e) => setNewCatLabel(e.target.value)} placeholder="Label (e.g. Production)" className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold outline-none focus:ring-1 focus:ring-blue-500" />
-                <input value={newCatValue} onChange={(e) => setNewCatValue(e.target.value)} placeholder="kWh (e.g. 170967)" type="number" className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono outline-none focus:ring-1 focus:ring-blue-500" />
-              </div>
-              <button onClick={handleAddCategory} disabled={!newCatKey.trim() || !newCatLabel.trim()} className="mt-3 w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow transition">
-                + Tambah Kategori
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ═══════════ CONFIGURATION PANEL (API Sources) ═══════════ */}
       {showConfigPanel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowConfigPanel(false)}>
@@ -1978,7 +1863,7 @@ export default function Electricity() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-white">Konfigurasi Electricity Dashboard</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Kelola API Sources, Chart Data Sources, dan kategori untuk halaman Electricity.</p>
+                <p className="text-xs text-slate-400 mt-0.5">Kelola API Sources dan Chart Data Sources untuk halaman Electricity.</p>
               </div>
               <button onClick={() => setShowConfigPanel(false)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
             </div>
@@ -1992,19 +1877,6 @@ export default function Electricity() {
             <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">🔌 API Sources - PLN Cubicle (PM8000)</h4>
               <ApiSourcesPanel unitId="Cubicle_PLN_PM8000" />
-            </div>
-
-            {/* Quick management for consumption fact categories */}
-            <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Consumption Fact Categories</h4>
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => { setEditingFactSide(1); setShowFactEditor(true); setShowConfigPanel(false); }} className="px-4 py-3 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-xs font-bold text-blue-500 transition">
-                  Edit Fact-1 Categories ({factCategories1.length} items)
-                </button>
-                <button onClick={() => { setEditingFactSide(2); setShowFactEditor(true); setShowConfigPanel(false); }} className="px-4 py-3 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-xs font-bold text-cyan-500 transition">
-                  Edit Fact-2 Categories ({factCategories2.length} items)
-                </button>
-              </div>
             </div>
           </div>
         </div>
