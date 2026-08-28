@@ -231,6 +231,15 @@ export const ensurePostgresTables = async () => {
       ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS return_temp NUMERIC;
       ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS supply_temp NUMERIC;
       ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS st3_return_temp NUMERIC;
+      ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS flow NUMERIC;
+      ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS tds NUMERIC;
+      ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS ph NUMERIC;
+      ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS humidity NUMERIC;
+      ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS ambient_temp NUMERIC;
+      ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS makeup_vol NUMERIC;
+      ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS makeup_tds NUMERIC;
+      ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS blowdown_vol NUMERIC;
+      ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS makeup_ph NUMERIC;
       ALTER TABLE cooling_tower_telemetry ADD COLUMN IF NOT EXISTS id_device VARCHAR(50) DEFAULT 'cooling-water-1';
     `).catch((err) => {
       logger.warn({ err }, "Failed to add columns to cooling_tower_telemetry");
@@ -249,12 +258,22 @@ export const ensurePostgresTables = async () => {
         tds NUMERIC,
         ph NUMERIC,
         humidity NUMERIC,
+        ambient_temp NUMERIC,
+        makeup_vol NUMERIC,
+        makeup_tds NUMERIC,
+        blowdown_vol NUMERIC,
+        makeup_ph NUMERIC,
         press_ct_p1 NUMERIC,
         press_ct_p2 NUMERIC,
         press_ct3_p11 NUMERIC,
         scaled_level_tank_cooling3 NUMERIC
       );
       CREATE INDEX IF NOT EXISTS idx_ct_minute_t_stamp ON cooling_tower_telemetry_minute (t_stamp);
+      ALTER TABLE cooling_tower_telemetry_minute ADD COLUMN IF NOT EXISTS ambient_temp NUMERIC;
+      ALTER TABLE cooling_tower_telemetry_minute ADD COLUMN IF NOT EXISTS makeup_vol NUMERIC;
+      ALTER TABLE cooling_tower_telemetry_minute ADD COLUMN IF NOT EXISTS makeup_tds NUMERIC;
+      ALTER TABLE cooling_tower_telemetry_minute ADD COLUMN IF NOT EXISTS blowdown_vol NUMERIC;
+      ALTER TABLE cooling_tower_telemetry_minute ADD COLUMN IF NOT EXISTS makeup_ph NUMERIC;
     `).catch((err) => {
       logger.warn({ err }, "Failed to create cooling_tower_telemetry_minute table");
     });

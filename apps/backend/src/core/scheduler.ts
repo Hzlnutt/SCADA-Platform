@@ -1203,7 +1203,16 @@ export const runCoolingTowerRollupAndCleanup = async () => {
             SELECT 
               AVG(return_temp) as avg_return,
               AVG(supply_temp) as avg_supply,
-              AVG(st3_return_temp) as avg_st3
+              AVG(st3_return_temp) as avg_st3,
+              AVG(flow) as avg_flow,
+              AVG(tds) as avg_tds,
+              AVG(ph) as avg_ph,
+              AVG(humidity) as avg_humidity,
+              AVG(ambient_temp) as avg_ambient_temp,
+              AVG(makeup_vol) as avg_makeup_vol,
+              AVG(makeup_tds) as avg_makeup_tds,
+              AVG(blowdown_vol) as avg_blowdown_vol,
+              AVG(makeup_ph) as avg_makeup_ph
             FROM cooling_tower_telemetry_minute
             WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
           `, [hourStartStr]);
@@ -1212,9 +1221,22 @@ export const runCoolingTowerRollupAndCleanup = async () => {
           const avgReturn = avgs && avgs.avg_return !== null ? Number(Number(avgs.avg_return).toFixed(3)) : null;
           const avgSupply = avgs && avgs.avg_supply !== null ? Number(Number(avgs.avg_supply).toFixed(3)) : null;
           const avgSt3 = avgs && avgs.avg_st3 !== null ? Number(Number(avgs.avg_st3).toFixed(3)) : null;
+          const avgFlow = avgs && avgs.avg_flow !== null ? Number(Number(avgs.avg_flow).toFixed(3)) : null;
+          const avgTds = avgs && avgs.avg_tds !== null ? Number(Number(avgs.avg_tds).toFixed(3)) : null;
+          const avgPh = avgs && avgs.avg_ph !== null ? Number(Number(avgs.avg_ph).toFixed(3)) : null;
+          const avgHumidity = avgs && avgs.avg_humidity !== null ? Number(Number(avgs.avg_humidity).toFixed(3)) : null;
+          const avgAmbientTemp = avgs && avgs.avg_ambient_temp !== null ? Number(Number(avgs.avg_ambient_temp).toFixed(3)) : null;
+          const avgMakeupVol = avgs && avgs.avg_makeup_vol !== null ? Number(Number(avgs.avg_makeup_vol).toFixed(3)) : null;
+          const avgMakeupTds = avgs && avgs.avg_makeup_tds !== null ? Number(Number(avgs.avg_makeup_tds).toFixed(3)) : null;
+          const avgBlowdownVol = avgs && avgs.avg_blowdown_vol !== null ? Number(Number(avgs.avg_blowdown_vol).toFixed(3)) : null;
+          const avgMakeupPh = avgs && avgs.avg_makeup_ph !== null ? Number(Number(avgs.avg_makeup_ph).toFixed(3)) : null;
+
+          const hasAnyVal = avgReturn !== null || avgSupply !== null || avgSt3 !== null || 
+            avgFlow !== null || avgTds !== null || avgPh !== null || avgHumidity !== null ||
+            avgAmbientTemp !== null || avgMakeupVol !== null || avgMakeupTds !== null || avgBlowdownVol !== null || avgMakeupPh !== null;
 
           // 2. Only update or insert if at least one sensor value is valid (non-null)
-          if (avgReturn !== null || avgSupply !== null || avgSt3 !== null) {
+          if (hasAnyVal) {
             const existingRow = await client.query(`
               SELECT id FROM cooling_tower_telemetry
               WHERE t_stamp = $1 AND id_device = $2
@@ -1225,19 +1247,33 @@ export const runCoolingTowerRollupAndCleanup = async () => {
                 UPDATE cooling_tower_telemetry
                 SET return_temp = COALESCE($1, return_temp), 
                     supply_temp = COALESCE($2, supply_temp), 
-                    st3_return_temp = COALESCE($3, st3_return_temp)
-                WHERE id = $4
-              `, [avgReturn, avgSupply, avgSt3, existingRow.rows[0].id]);
+                    st3_return_temp = COALESCE($3, st3_return_temp),
+                    flow = COALESCE($4, flow),
+                    tds = COALESCE($5, tds),
+                    ph = COALESCE($6, ph),
+                    humidity = COALESCE($7, humidity),
+                    ambient_temp = COALESCE($8, ambient_temp),
+                    makeup_vol = COALESCE($9, makeup_vol),
+                    makeup_tds = COALESCE($10, makeup_tds),
+                    blowdown_vol = COALESCE($11, blowdown_vol),
+                    makeup_ph = COALESCE($12, makeup_ph)
+                WHERE id = $13
+              `, [
+                avgReturn, avgSupply, avgSt3, avgFlow, avgTds, avgPh, avgHumidity,
+                avgAmbientTemp, avgMakeupVol, avgMakeupTds, avgBlowdownVol, avgMakeupPh,
+                existingRow.rows[0].id
+              ]);
             } else {
               await client.query(`
-                INSERT INTO cooling_tower_telemetry (t_stamp, return_temp, supply_temp, st3_return_temp, id_device)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO cooling_tower_telemetry (
+                  t_stamp, return_temp, supply_temp, st3_return_temp,
+                  flow, tds, ph, humidity, ambient_temp, makeup_vol,
+                  makeup_tds, blowdown_vol, makeup_ph, id_device
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
               `, [
-                hourStartStr,
-                avgReturn,
-                avgSupply,
-                avgSt3,
-                "cooling-water-1"
+                hourStartStr, avgReturn, avgSupply, avgSt3,
+                avgFlow, avgTds, avgPh, avgHumidity, avgAmbientTemp, avgMakeupVol,
+                avgMakeupTds, avgBlowdownVol, avgMakeupPh, "cooling-water-1"
               ]);
             }
           }

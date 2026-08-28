@@ -9,6 +9,7 @@ import { utils, writeFile } from "xlsx";
 import "../../components/charts/chartjs";
 import coolingSt3Data from "../../data/cooling_st3_data.json";
 import { getJson } from "../../services/api.client";
+import { getSocket } from "../../services/socket.service";
 
 // Dedicated Vibration Telemetry Waveform component using Canvas
 function VibrationOscilloscope({ equipmentName }: { equipmentName: string }) {
@@ -176,7 +177,16 @@ export default function MachineStatistics() {
   const paramTagIdMap: Record<string, string> = {
     "ST3 Return Temp": "cooling-water/st3_return_temp",
     "Supply Water Temp": "cooling-water/supply_temp",
-    "Return Water Temp": "cooling-water/return_temp"
+    "Return Water Temp": "cooling-water/return_temp",
+    "Supply Water TDS": "cooling-water/tds",
+    "Supply Water pH": "cooling-water/ph",
+    "Supply Water Flow": "cooling-water/flow",
+    "Ambient Temp": "cooling-water/ambient_temp",
+    "Ambient Humidity": "cooling-water/humidity",
+    "Makeup Water Vol": "cooling-water/makeup_vol",
+    "Makeup Water TDS": "cooling-water/makeup_tds",
+    "Blowdown Vol": "cooling-water/blowdown_vol",
+    "Makeup Water pH": "cooling-water/makeup_ph"
   };
 
   // Fetch function (extracted so it can be called on interval too)
@@ -219,10 +229,25 @@ export default function MachineStatistics() {
       });
   }, [activeParam, startDate, endDate]);
 
-  // Initial fetch + auto-refresh every 60 seconds
+  // Initial fetch + auto-refresh every 15 seconds + on socket update
   useEffect(() => {
     fetchTrendData();
-    const interval = setInterval(fetchTrendData, 60000);
+    const interval = setInterval(fetchTrendData, 15000);
+
+    const socket = getSocket();
+    if (socket) {
+      const handleUpdate = () => {
+        fetchTrendData();
+      };
+      socket.on("cooling_tower:update", handleUpdate);
+      socket.on("telemetry:update", handleUpdate);
+      return () => {
+        clearInterval(interval);
+        socket.off("cooling_tower:update", handleUpdate);
+        socket.off("telemetry:update", handleUpdate);
+      };
+    }
+
     return () => clearInterval(interval);
   }, [fetchTrendData]);
 
