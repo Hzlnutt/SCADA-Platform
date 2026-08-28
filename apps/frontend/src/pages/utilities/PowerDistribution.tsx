@@ -8,6 +8,7 @@ import { getJson, postJson } from "../../services/api.client";
 import { getSocket } from "../../services/socket.service";
 import { EwPowerMetersGrid } from "../../components/electricity/EwPowerMetersGrid";
 import type { ElectricPmItem } from "../../components/electricity/PmDetailModal";
+import { getPmSortIndex } from "../../data/pmMapping";
 
 /* ═══════════ DETAILED COVERED DIRECTORY ═══════════ */
 const COVERED_EQUIPMENT: Record<string, { group?: string; breaker: string; load: string; label: string }[]> = {
@@ -932,7 +933,8 @@ export default function PowerDistribution() {
       getJson<{ data: ElectricPmItem[] }>(`/analytics/electricity/power-meters?group=${selectedEwGroup}&_t=${Date.now()}`)
         .then((res) => {
           if (active && res?.data) {
-            setEwPowerMeters(res.data);
+            const sorted = [...res.data].sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
+            setEwPowerMeters(sorted);
           }
         })
         .catch((err) => console.error("Failed to load EW power meters:", err));
@@ -944,7 +946,8 @@ export default function PowerDistribution() {
     const socket = getSocket();
     const handleLiveUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
       if (payload?.groupId?.toLowerCase() === selectedEwGroup && Array.isArray(payload.data)) {
-        setEwPowerMeters(payload.data);
+        const sorted = [...payload.data].sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
+        setEwPowerMeters(sorted);
       }
     };
 

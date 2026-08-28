@@ -370,11 +370,24 @@ export const getPowerMetersLatestHandler = async (
         } catch {}
       }
     }
-    // Sort ascending by PM numerical ID
+    const pmOrder: Record<string, number> = {
+      PM318: 10, PM319: 20, PM320: 30, PM321: 40, PM322: 50,
+      PM323: 60, PM324: 70, PM325: 80, PM327: 90, PM337: 100,
+      PM201: 201, PM202: 202, PM203: 203, PM205: 205, PM206: 206,
+      PM207: 207, PM208: 208, PM209: 209, PM210: 210, PM211: 211,
+      PM212: 212, PM213: 213, PM214: 214, PM215: 215, PM226: 226,
+      PM229: 229, PM271: 271, PM272: 272, PM273: 273, PM274: 274,
+      PM288: 288,
+      PM410: 410, PM8000: 410, CUBICLE_PLN_PM8000: 410,
+      PM411: 411, PM5560: 411, PM5560_WF1: 411, FEEDER_WF1_PM5560: 411,
+      PM412: 412, PM5560_WF2: 412, PM5500: 412, FEEDER_WF2_PM5500: 412
+    };
     data.sort((a: any, b: any) => {
-      const numA = parseInt(String(a.pm_id).replace(/\D/g, "") || "0");
-      const numB = parseInt(String(b.pm_id).replace(/\D/g, "") || "0");
-      return numA - numB;
+      const normA = String(a.pm_id).toUpperCase().trim();
+      const normB = String(b.pm_id).toUpperCase().trim();
+      const idxA = pmOrder[normA] ?? (parseInt(normA.replace(/\D/g, "") || "9999", 10) + 1000);
+      const idxB = pmOrder[normB] ?? (parseInt(normB.replace(/\D/g, "") || "9999", 10) + 1000);
+      return idxA - idxB;
     });
 
     res.json({ data });

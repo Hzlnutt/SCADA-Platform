@@ -70,3 +70,61 @@ export const getPmInfo = (pmId: string): PowerMeterInfo => {
     location: "Factory Utility"
   };
 };
+
+export const PM_ORDER_INDEX: Record<string, number> = {
+  // EW23 Sub-Distribution Power Meters (Fixed Static Order)
+  PM318: 10,
+  PM319: 20,
+  PM320: 30,
+  PM321: 40,
+  PM322: 50,
+  PM323: 60,
+  PM324: 70,
+  PM325: 80,
+  PM327: 90,
+  PM337: 100,
+
+  // EW22 Sub-Distribution Power Meters
+  PM201: 201,
+  PM202: 202,
+  PM203: 203,
+  PM205: 205,
+  PM206: 206,
+  PM207: 207,
+  PM208: 208,
+  PM209: 209,
+  PM210: 210,
+  PM211: 211,
+  PM212: 212,
+  PM213: 213,
+  PM214: 214,
+  PM215: 215,
+  PM226: 226,
+  PM229: 229,
+  PM271: 271,
+  PM272: 272,
+  PM273: 273,
+  PM274: 274,
+  PM288: 288,
+
+  // Incoming Cubicles
+  PM410: 410,
+  PM8000: 410,
+  CUBICLE_PLN_PM8000: 410,
+  PM411: 411,
+  PM5560: 411,
+  PM5560_WF1: 411,
+  FEEDER_WF1_PM5560: 411,
+  PM412: 412,
+  PM5560_WF2: 412,
+  PM5500: 412,
+  FEEDER_WF2_PM5500: 412
+};
+
+export const getPmSortIndex = (pmId: string): number => {
+  const normalized = (pmId || "").trim().toUpperCase();
+  if (PM_ORDER_INDEX[normalized] !== undefined) return PM_ORDER_INDEX[normalized];
+  const m = normalized.match(/\d+/);
+  if (m) return parseInt(m[0], 10) + 1000;
+  return 99999;
+};

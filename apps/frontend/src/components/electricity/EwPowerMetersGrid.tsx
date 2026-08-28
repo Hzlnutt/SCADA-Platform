@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { PmDetailModal } from "./PmDetailModal";
 import type { ElectricPmItem } from "./PmDetailModal";
-import { getPmInfo } from "../../data/pmMapping";
+import { getPmInfo, getPmSortIndex } from "../../data/pmMapping";
 
 type Props = {
   powerMeters: ElectricPmItem[];
@@ -19,16 +19,20 @@ export function EwPowerMetersGrid({
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPm, setSelectedPm] = useState<ElectricPmItem | null>(null);
 
-  const filtered = powerMeters.filter((pm) => {
-    const info = getPmInfo(pm.pm_id);
-    const term = searchTerm.toLowerCase();
-    return (
-      pm.pm_id.toLowerCase().includes(term) ||
-      info.name.toLowerCase().includes(term) ||
-      info.model.toLowerCase().includes(term) ||
-      (info.category && info.category.toLowerCase().includes(term))
-    );
-  });
+  const filtered = useMemo(() => {
+    return [...powerMeters]
+      .filter((pm) => {
+        const info = getPmInfo(pm.pm_id);
+        const term = searchTerm.toLowerCase();
+        return (
+          pm.pm_id.toLowerCase().includes(term) ||
+          info.name.toLowerCase().includes(term) ||
+          info.model.toLowerCase().includes(term) ||
+          (info.category && info.category.toLowerCase().includes(term))
+        );
+      })
+      .sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
+  }, [powerMeters, searchTerm]);
 
   const totalKw = powerMeters.reduce((sum, pm) => sum + (Number(pm.active_power_total) || 0), 0);
   const onlineCount = powerMeters.filter((pm) => pm.status !== false).length;
