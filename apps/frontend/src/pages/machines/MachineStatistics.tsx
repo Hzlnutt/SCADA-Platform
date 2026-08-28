@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useOutletContext } from "react-router-dom";
 import { Bar, Line } from "react-chartjs-2";
 import { getUnitById } from "../../data/machines";
@@ -838,10 +839,18 @@ export default function MachineStatistics() {
         </div>
       </div>
 
-      {/* 5. Custom range Export Excel Modal (Clean Transparent Backdrop & Crisp Solid Modal) */}
-      {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/70 animate-in fade-in duration-150">
-          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-2xl transition-all duration-200">
+      {/* 5. Custom range Export Excel Modal (Mounted to body via createPortal for true 100% fullscreen overlay without gaps) */}
+      {showExportModal && typeof document !== "undefined" && createPortal(
+        <div 
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 dark:bg-black/80 animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowExportModal(false);
+          }}
+        >
+          <div 
+            className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-2xl transition-all duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="mb-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
@@ -1020,7 +1029,8 @@ export default function MachineStatistics() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
