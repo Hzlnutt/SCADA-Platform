@@ -274,6 +274,11 @@ export const ensurePostgresTables = async () => {
       ALTER TABLE cooling_tower_telemetry_minute ADD COLUMN IF NOT EXISTS makeup_tds NUMERIC;
       ALTER TABLE cooling_tower_telemetry_minute ADD COLUMN IF NOT EXISTS blowdown_vol NUMERIC;
       ALTER TABLE cooling_tower_telemetry_minute ADD COLUMN IF NOT EXISTS makeup_ph NUMERIC;
+
+      -- Deduplicate any existing duplicate minute entries and create unique index
+      DELETE FROM cooling_tower_telemetry_minute a USING cooling_tower_telemetry_minute b
+      WHERE a.id < b.id AND a.t_stamp = b.t_stamp AND a.id_device = b.id_device;
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_ct_minute_t_stamp_device ON cooling_tower_telemetry_minute (t_stamp, id_device);
     `).catch((err) => {
       logger.warn({ err }, "Failed to create cooling_tower_telemetry_minute table");
     });

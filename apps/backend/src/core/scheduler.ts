@@ -81,6 +81,8 @@ const parseWfApi = (data: any, ts: Date) => {
 };
 
 export const formatMinuteString = (d: Date = new Date()): string => {
+  // Correct 1-minute server clock skew by subtracting 60 seconds to match local time
+  const adjustedDate = new Date(d.getTime() - 60000);
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Jakarta",
     year: "numeric",
@@ -91,7 +93,7 @@ export const formatMinuteString = (d: Date = new Date()): string => {
     second: "2-digit",
     hour12: false
   });
-  const parts = formatter.formatToParts(d);
+  const parts = formatter.formatToParts(adjustedDate);
   const getPart = (type: string) => parts.find(p => p.type === type)?.value || "00";
   const yr = getPart("year");
   const mo = getPart("month");
@@ -1666,6 +1668,22 @@ export const startCoolingTowerPolling = () => {
             flow, tds, ph, humidity, ambient_temp, makeup_vol, makeup_tds, blowdown_vol,
             press_ct_p1, press_ct_p2, press_ct3_p11, scaled_level_tank_cooling3
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+          ON CONFLICT (t_stamp, id_device) DO UPDATE SET
+            return_temp = EXCLUDED.return_temp,
+            supply_temp = EXCLUDED.supply_temp,
+            st3_return_temp = EXCLUDED.st3_return_temp,
+            flow = COALESCE(EXCLUDED.flow, cooling_tower_telemetry_minute.flow),
+            tds = COALESCE(EXCLUDED.tds, cooling_tower_telemetry_minute.tds),
+            ph = COALESCE(EXCLUDED.ph, cooling_tower_telemetry_minute.ph),
+            humidity = COALESCE(EXCLUDED.humidity, cooling_tower_telemetry_minute.humidity),
+            ambient_temp = COALESCE(EXCLUDED.ambient_temp, cooling_tower_telemetry_minute.ambient_temp),
+            makeup_vol = COALESCE(EXCLUDED.makeup_vol, cooling_tower_telemetry_minute.makeup_vol),
+            makeup_tds = COALESCE(EXCLUDED.makeup_tds, cooling_tower_telemetry_minute.makeup_tds),
+            blowdown_vol = COALESCE(EXCLUDED.blowdown_vol, cooling_tower_telemetry_minute.blowdown_vol),
+            press_ct_p1 = COALESCE(EXCLUDED.press_ct_p1, cooling_tower_telemetry_minute.press_ct_p1),
+            press_ct_p2 = COALESCE(EXCLUDED.press_ct_p2, cooling_tower_telemetry_minute.press_ct_p2),
+            press_ct3_p11 = COALESCE(EXCLUDED.press_ct3_p11, cooling_tower_telemetry_minute.press_ct3_p11),
+            scaled_level_tank_cooling3 = COALESCE(EXCLUDED.scaled_level_tank_cooling3, cooling_tower_telemetry_minute.scaled_level_tank_cooling3)
         `, [
           minuteTs,
           "cooling-water-1",

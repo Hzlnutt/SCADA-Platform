@@ -24,8 +24,6 @@ export type TelemetryDoc = {
   };
 };
 
-let lastPostgresTelemetrySyncTime = 0;
-
 export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
   const db = getMongoDb();
   const collection = db.collection(TELEMETRY_COLLECTION);
@@ -130,74 +128,7 @@ export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
   }
 
 
-  // PostgreSQL Sync for cooling tower telemetry (throttled to 1 minute)
-  const now = Date.now();
-  if (now - lastPostgresTelemetrySyncTime >= 60000) {
-    const coolingPoints = points.filter(p => 
-      p.tagId === "cooling-water/return_temp" || 
-      p.tagId === "cooling-water/supply_temp" || 
-      p.tagId === "cooling-water/st3_return_temp"
-    );
-    console.log(`[PostgresTelemetrySync] now - lastPostgresTelemetrySyncTime: ${now - lastPostgresTelemetrySyncTime}, coolingPoints: ${coolingPoints.length}`);
-    if (coolingPoints.length > 0) {
-      try {
-        const pool = getPostgresPool();
-        // Get base timestamp from points or fallback to current time
-        const baseTs = coolingPoints[0].ts ? new Date(coolingPoints[0].ts) : new Date();
-        
-        // Correct 1-minute server clock skew by subtracting 1 minute (60,000 ms)
-        const correctedTs = new Date(baseTs.getTime() - 60000);
-        
-        // Round to exact start of the minute (00 seconds, 000 milliseconds)
-        correctedTs.setSeconds(0, 0);
 
-        // Convert the corrected date to WIB (+07:00) date parts
-        const wibTimeMs = correctedTs.getTime() + (7 * 60 * 60 * 1000);
-        const wibDate = new Date(wibTimeMs);
-
-        const yr = wibDate.getUTCFullYear();
-        const mo = String(wibDate.getUTCMonth() + 1).padStart(2, "0");
-        const dy = String(wibDate.getUTCDate()).padStart(2, "0");
-        const hr = String(wibDate.getUTCHours()).padStart(2, "0");
-        const min = String(wibDate.getUTCMinutes()).padStart(2, "0");
-
-        // Storing as YYYY-MM-DD HH:MM:00 string ensures it goes into timestamp without time zone as exact WIB local time
-        const wibTimestampStr = `${yr}-${mo}-${dy} ${hr}:${min}:00`;
-
-        const retPt = coolingPoints.find(p => p.tagId === "cooling-water/return_temp");
-        const suppPt = coolingPoints.find(p => p.tagId === "cooling-water/supply_temp");
-        const st3Pt = coolingPoints.find(p => p.tagId === "cooling-water/st3_return_temp");
-
-        const return_temp = retPt ? Number(retPt.value) : null;
-        const supply_temp = suppPt ? Number(suppPt.value) : null;
-        const st3_return_temp = st3Pt ? Number(st3Pt.value) : null;
-
-        console.log(`[PostgresTelemetrySync] parsed temps: return=${return_temp}, supply=${supply_temp}, st3=${st3_return_temp}`);
-
-        if ((return_temp !== null && !isNaN(return_temp)) || 
-            (supply_temp !== null && !isNaN(supply_temp)) || 
-            (st3_return_temp !== null && !isNaN(st3_return_temp))) {
-          console.log(`[PostgresTelemetrySync] Executing insert to temporary table (cooling_tower_telemetry_minute) with t_stamp: ${wibTimestampStr}...`);
-          const res = await pool.query(`
-            INSERT INTO cooling_tower_telemetry_minute (t_stamp, return_temp, supply_temp, st3_return_temp, id_device)
-            VALUES ($1, $2, $3, $4, $5)
-          `, [
-            wibTimestampStr, 
-            return_temp !== null && !isNaN(return_temp) ? return_temp : null,
-            supply_temp !== null && !isNaN(supply_temp) ? supply_temp : null,
-            st3_return_temp !== null && !isNaN(st3_return_temp) ? st3_return_temp : null,
-            "cooling-water-1"
-          ]);
-          lastPostgresTelemetrySyncTime = now;
-          console.log(`[PostgresTelemetrySync] Insert to cooling_tower_telemetry_minute succeeded. rowCount: ${res.rowCount}`);
-        } else {
-          console.log(`[PostgresTelemetrySync] All temperature values are null or NaN. Skipping insert.`);
-        }
-      } catch (err: any) {
-        console.error("[PostgresTelemetrySync] Failed to sync cooling tower telemetry to PostgreSQL:", err.message);
-      }
-    }
-  }
 
 
   // Update running hours for status points
