@@ -78,7 +78,7 @@ const DEFAULT_PLN_JSON_KEYS: Record<string, string> = {
   "pln/voltage_sn": "VoltBC",
   "pln/voltage_tn": "VoltCA",
   "pln/unbalance_v": "Volatage_Unbalance",
-  "pln/unbalance_i": "Current_Unbalance",
+  "pln/unbalance_i": "Current_Umbalance",
   "electricity/p_grid": "Active_Power"
 };
 
@@ -490,11 +490,16 @@ export default function Electricity() {
 
   const getApiVal = useCallback((tagKey: string) => {
     const isPlnTag = tagKey.startsWith("pln/") || tagKey === "electricity/p_grid";
-    const url = apiSourceUrls[tagKey] || (isPlnTag ? DEFAULT_PLN_API_URL : "");
-    const jsonKey = jsonKeyMap[tagKey] || (isPlnTag ? DEFAULT_PLN_JSON_KEYS[tagKey] : undefined) || tagKey.split("/")[1];
+    const rawJsonKey = jsonKeyMap[tagKey] || (isPlnTag ? DEFAULT_PLN_JSON_KEYS[tagKey] : undefined) || tagKey.split("/")[1];
 
-    if (url && apiLiveData[url] && jsonKey && apiLiveData[url][jsonKey] !== undefined && apiLiveData[url][jsonKey] !== null) {
-      let val = apiLiveData[url][jsonKey];
+    if (url && apiLiveData[url] && rawJsonKey) {
+      let val = apiLiveData[url][rawJsonKey] ?? 
+        (rawJsonKey === "Current_Umbalance" ? apiLiveData[url]["Current_Unbalance"] : undefined) ??
+        (rawJsonKey === "Current_Unbalance" ? apiLiveData[url]["Current_Umbalance"] : undefined) ??
+        (rawJsonKey === "Volatage_Unbalance" ? apiLiveData[url]["Voltage_Unbalance"] : undefined) ??
+        (rawJsonKey === "Voltage_Unbalance" ? apiLiveData[url]["Volatage_Unbalance"] : undefined);
+
+      if (val !== undefined && val !== null) {
       // Power parameters (convert Watts to kW/kVAR/kVA if large)
       if (tagKey === "pln/active_power" || tagKey === "pln/reactive_power" || tagKey === "pln/apparent_power" || tagKey === "electricity/p_grid") {
         if (typeof val === "number" && val > 10000) val = val / 1000.0;

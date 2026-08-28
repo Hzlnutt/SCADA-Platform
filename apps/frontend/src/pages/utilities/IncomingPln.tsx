@@ -27,7 +27,7 @@ const DEFAULT_JSON_KEYS: Record<string, string> = {
   reactive_power: "Reactive_Power_Total",
   apparent_power: "Apparent_Power_Total",
   unbalance_v: "Volatage_Unbalance",
-  unbalance_i: "Current_Unbalance",
+  unbalance_i: "Current_Umbalance",
   v_r: "VoltAB",
   v_s: "VoltBC",
   v_t: "VoltCA",
@@ -370,10 +370,10 @@ export default function IncomingPln() {
         val = apiLiveData[url]["Volt_LL"] ?? apiLiveData[url]["volt_ll"];
       }
       if (val === undefined && rawKey === "unbalance_v") {
-        val = apiLiveData[url]["Voltage_Unbalance"] ?? apiLiveData[url]["voltage_unbalance"] ?? apiLiveData[url]["Volatage_Unbalance"];
+        val = apiLiveData[url]["Volatage_Unbalance"] ?? apiLiveData[url]["Voltage_Unbalance"] ?? apiLiveData[url]["voltage_unbalance"] ?? apiLiveData[url]["volatage_unbalance"];
       }
       if (val === undefined && rawKey === "unbalance_i") {
-        val = apiLiveData[url]["Current_Unbalance"] ?? apiLiveData[url]["current_unbalance"];
+        val = apiLiveData[url]["Current_Umbalance"] ?? apiLiveData[url]["current_umbalance"] ?? apiLiveData[url]["Current_Unbalance"] ?? apiLiveData[url]["current_unbalance"];
       }
 
       if (val !== undefined && val !== null) {
