@@ -681,6 +681,16 @@ export const startIncomingElectricityPolling = () => {
       logger.warn(`Incoming EW22 polling failed: ${err.message}`);
     }
 
+    if (isNewMinute) {
+      const io = getSocketServer();
+      if (io) {
+        io.emit("historian:minute_update", {
+          unitId: "electricity",
+          t_stamp: currentMinuteStr
+        });
+      }
+    }
+
     // Poll every 2500ms for live WebSocket updates
     if (incomingElectricityPollingInterval) {
       incomingElectricityPollingInterval = setTimeout(poll, 2500) as any;
@@ -1653,14 +1663,23 @@ export const startCoolingTowerPolling = () => {
         await pool.query(`
           INSERT INTO cooling_tower_telemetry_minute (
             t_stamp, id_device, return_temp, supply_temp, st3_return_temp,
+            flow, tds, ph, humidity, ambient_temp, makeup_vol, makeup_tds, blowdown_vol,
             press_ct_p1, press_ct_p2, press_ct3_p11, scaled_level_tank_cooling3
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         `, [
           minuteTs,
           "cooling-water-1",
           retVal ?? null,
           suppVal ?? null,
           getVal("cooling-water/st3_return_temp") ?? null,
+          getVal("cooling-water/makeup_wtr_flow") ?? null,
+          getVal("cooling-water/cooling_tank_tds") ?? null,
+          getVal("cooling-water/cooling_tank_ph") ?? null,
+          getVal("cooling-water/ambient_humidity") ?? null,
+          getVal("cooling-water/ambient_temp") ?? null,
+          getVal("cooling-water/makeup_wtr_vol") ?? null,
+          getVal("cooling-water/makeup_wtr_tds") ?? null,
+          getVal("cooling-water/blowdown_vol") ?? null,
           getVal("cooling-water/pressure_1") ?? null,
           getVal("cooling-water/pressure_2") ?? null,
           getVal("cooling-water/pressure_3") ?? null,
@@ -1668,6 +1687,15 @@ export const startCoolingTowerPolling = () => {
         ]).catch((err) => {
           logger.warn({ err: err.message }, "Failed to insert minute cooling tower telemetry to postgres");
         });
+
+        // Broadcast to WebSocket clients immediately when new minute data is recorded in DB
+        if (io) {
+          io.emit("historian:minute_update", {
+            unitId: "cooling-water-1",
+            t_stamp: currentMinuteStr,
+            deviceId: "cooling-water-1"
+          });
+        }
       }
 
       // Update in-memory cache

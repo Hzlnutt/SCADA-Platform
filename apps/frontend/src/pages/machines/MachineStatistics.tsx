@@ -229,22 +229,23 @@ export default function MachineStatistics() {
       });
   }, [activeParam, startDate, endDate]);
 
-  // Initial fetch + auto-refresh every 15 seconds + on socket update
+  // Auto-refresh immediately when new minute data arrives in database (data-driven) + fallback polling
   useEffect(() => {
     fetchTrendData();
-    const interval = setInterval(fetchTrendData, 15000);
+    const interval = setInterval(fetchTrendData, 30000);
 
     const socket = getSocket();
     if (socket) {
-      const handleUpdate = () => {
+      const handleMinuteUpdate = () => {
+        // When a new minute data point is recorded into the database, immediately refresh the progressive chart!
         fetchTrendData();
       };
-      socket.on("cooling_tower:update", handleUpdate);
-      socket.on("telemetry:update", handleUpdate);
+      socket.on("historian:minute_update", handleMinuteUpdate);
+      socket.on("cooling_tower:minute_update", handleMinuteUpdate);
       return () => {
         clearInterval(interval);
-        socket.off("cooling_tower:update", handleUpdate);
-        socket.off("telemetry:update", handleUpdate);
+        socket.off("historian:minute_update", handleMinuteUpdate);
+        socket.off("cooling_tower:minute_update", handleMinuteUpdate);
       };
     }
 
