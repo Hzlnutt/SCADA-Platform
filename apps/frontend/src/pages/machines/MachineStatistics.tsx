@@ -838,24 +838,29 @@ export default function MachineStatistics() {
         </div>
       </div>
 
-      {/* 5. Custom range Export Excel Modal with Glassmorphism and Multi-Select */}
+      {/* 5. Custom range Export Excel Modal (Clean Transparent Backdrop & Crisp Solid Modal) */}
       {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 dark:bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-white/40 dark:border-slate-800 bg-white/85 dark:bg-slate-950/85 backdrop-blur-2xl p-6 shadow-2xl transition-all duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/70 animate-in fade-in duration-150">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-2xl transition-all duration-200">
             {/* Modal Header */}
-            <div className="mb-4 flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800/80 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#1f6fb5]/10 text-[#1f6fb5] text-sm">
+            <div className="mb-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#1f6fb5]/10 text-[#1f6fb5] dark:text-sky-400 text-base">
                   📊
                 </span>
-                <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
-                  Export Data to Excel
-                </h3>
+                <div>
+                  <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wider">
+                    Export Data ke Excel
+                  </h3>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
+                    Unduh data historis dalam format spreadsheet (.xlsx)
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowExportModal(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-200 transition"
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition text-sm font-bold"
               >
                 ✕
               </button>
@@ -864,45 +869,49 @@ export default function MachineStatistics() {
             {/* Export Scope Selector (Single vs Multi) for Parameters */}
             {exportType === "parameter" && (
               <div className="mb-4 space-y-3">
-                <label className="block text-[11px] font-bold text-slate-400 uppercase">
-                  Pilihan Mode Export
-                </label>
-                <div className="grid grid-cols-2 gap-2 bg-slate-100/70 dark:bg-slate-900/70 p-1 rounded-xl border border-slate-200/50 dark:border-slate-800/50">
-                  <button
-                    type="button"
-                    onClick={() => setExportScope("single")}
-                    className={`px-3 py-2 text-xs font-bold rounded-lg transition ${
-                      exportScope === "single"
-                        ? "bg-white dark:bg-slate-800 text-[#1f6fb5] dark:text-sky-400 shadow-sm"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                    }`}
-                  >
-                    1 Parameter Saja
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setExportScope("multiple")}
-                    className={`px-3 py-2 text-xs font-bold rounded-lg transition ${
-                      exportScope === "multiple"
-                        ? "bg-white dark:bg-slate-800 text-[#1f6fb5] dark:text-sky-400 shadow-sm"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                    }`}
-                  >
-                    Banyak Parameter
-                  </button>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
+                    Pilihan Mode Export
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setExportScope("single")}
+                      className={`px-3 py-2 text-xs font-bold rounded-lg transition ${
+                        exportScope === "single"
+                          ? "bg-white dark:bg-slate-800 text-[#1f6fb5] dark:text-sky-400 shadow-sm border border-slate-200/80 dark:border-slate-700"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                      }`}
+                    >
+                      1 Parameter Saja
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExportScope("multiple")}
+                      className={`px-3 py-2 text-xs font-bold rounded-lg transition ${
+                        exportScope === "multiple"
+                          ? "bg-white dark:bg-slate-800 text-[#1f6fb5] dark:text-sky-400 shadow-sm border border-slate-200/80 dark:border-slate-700"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                      }`}
+                    >
+                      Banyak Parameter
+                    </button>
+                  </div>
                 </div>
 
                 {exportScope === "single" ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                    Mengunduh data log historis parameter aktif:{" "}
-                    <span className="font-bold text-[#1f6fb5] dark:text-sky-400">
-                      {activeParam}
-                    </span>
-                  </p>
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3">
+                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                      Parameter yang akan di-export:{" "}
+                      <span className="font-bold text-[#1f6fb5] dark:text-sky-400">
+                        {activeParam} ({unitMap[activeParam] || ""})
+                      </span>
+                    </p>
+                  </div>
                 ) : (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                      <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
                         Pilih Parameter ({selectedExportParams.length}/{parametersList.length} Dipilih)
                       </span>
                       <button
@@ -913,29 +922,29 @@ export default function MachineStatistics() {
                         {selectedExportParams.length === parametersList.length ? "Hapus Semua" : "Pilih Semua"}
                       </button>
                     </div>
-                    <div className="max-h-40 overflow-y-auto space-y-1.5 p-2 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800/80 pr-1">
+                    <div className="max-h-44 overflow-y-auto space-y-1 p-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 pr-1.5">
                       {parametersList.map((param) => {
                         const isChecked = selectedExportParams.includes(param);
                         return (
                           <label
                             key={param}
                             onClick={() => toggleParamSelection(param)}
-                            className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition select-none ${
+                            className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer transition select-none border ${
                               isChecked
-                                ? "bg-[#1f6fb5]/10 dark:bg-[#1f6fb5]/20 text-[#002b5c] dark:text-slate-200 font-bold"
-                                : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                                ? "bg-[#1f6fb5]/10 dark:bg-[#1f6fb5]/20 border-[#1f6fb5]/30 text-[#002b5c] dark:text-sky-200"
+                                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
                             }`}
                           >
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2.5">
                               <input
                                 type="checkbox"
                                 checked={isChecked}
                                 onChange={() => {}}
-                                className="rounded text-[#1f6fb5] focus:ring-[#1f6fb5] cursor-pointer"
+                                className="h-4 w-4 rounded text-[#1f6fb5] focus:ring-[#1f6fb5] cursor-pointer"
                               />
                               <span>{param}</span>
                             </div>
-                            <span className="text-[10px] text-slate-400 font-mono">
+                            <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
                               {unitMap[param] || ""}
                             </span>
                           </label>
@@ -948,45 +957,47 @@ export default function MachineStatistics() {
             )}
 
             {exportType === "vibration" && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed font-semibold">
-                Pilih rentang tanggal kustom untuk mengunduh log data vibrasi{" "}
-                <span className="text-[#1f6fb5] dark:text-sky-400">{selectedEq}</span>.
-              </p>
+              <div className="mb-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3">
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  Data vibrasi yang akan di-export:{" "}
+                  <span className="font-bold text-[#1f6fb5] dark:text-sky-400">{selectedEq}</span>
+                </p>
+              </div>
             )}
 
             {/* Date Range Inputs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
               <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1.5">
+                <label className="block text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
                   Tanggal Mulai
                 </label>
                 <input
                   type="date"
                   value={exportStart}
                   onChange={(e) => setExportStart(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 px-3 py-2 text-xs font-bold text-[#002b5c] dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3.5 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1.5">
+                <label className="block text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
                   Tanggal Selesai
                 </label>
                 <input
                   type="date"
                   value={exportEnd}
                   onChange={(e) => setExportEnd(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 px-3 py-2 text-xs font-bold text-[#002b5c] dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3.5 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
                 />
               </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex justify-end gap-2.5 border-t border-slate-200/60 dark:border-slate-800/80 pt-4">
+            <div className="flex justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800 pt-4">
               <button
                 type="button"
                 onClick={() => setShowExportModal(false)}
-                className="rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent px-4 py-2 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                className="rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
               >
                 Batal
               </button>
@@ -994,7 +1005,7 @@ export default function MachineStatistics() {
                 type="button"
                 onClick={executeExport}
                 disabled={exportLoading || (exportType === "parameter" && exportScope === "multiple" && selectedExportParams.length === 0)}
-                className="flex items-center gap-2 rounded-xl bg-[#1f6fb5] px-5 py-2 text-xs font-bold text-white shadow-lg shadow-[#1f6fb5]/25 hover:bg-[#1b5f9b] transition disabled:opacity-50"
+                className="flex items-center gap-2 rounded-xl bg-[#1f6fb5] hover:bg-[#185c96] px-5 py-2 text-xs font-bold text-white shadow-md shadow-[#1f6fb5]/20 transition disabled:opacity-50"
               >
                 {exportLoading ? (
                   <>
