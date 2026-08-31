@@ -1182,24 +1182,24 @@ export default function IncomingPln() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full table-fixed text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
-                <th className="pb-3 px-3">Parameter</th>
-                <th className="pb-3 px-3">Nilai</th>
-                <th className="pb-3 px-3">Satuan</th>
-                <th className="pb-3 px-3">Standar</th>
-                <th className="pb-3 px-3 text-right">Status</th>
+                <th className="pb-3 px-3 w-[28%] min-w-[160px]">Parameter</th>
+                <th className="pb-3 px-3 w-[22%] min-w-[130px]">Nilai</th>
+                <th className="pb-3 px-3 w-[14%] min-w-[70px]">Satuan</th>
+                <th className="pb-3 px-3 w-[20%] min-w-[110px]">Standar</th>
+                <th className="pb-3 px-3 w-[16%] min-w-[90px] text-right">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-semibold text-slate-800 dark:text-slate-200">
               {/* Tegangan */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                <td className="py-3 px-3">Tegangan</td>
-                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.voltage, (v) => `${v.toFixed(2)}`)}</td>
-                <td className="py-3 px-3">kV</td>
-                <td className="py-3 px-3 font-mono">{standards.voltageNominal} ± {standards.voltageTolerance}%</td>
-                <td className="py-3 px-3 text-right">
+                <td className="py-3 px-3 truncate">Tegangan</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{renderMetricVal(liveMetrics.voltage, (v) => `${v.toFixed(2)}`)}</td>
+                <td className="py-3 px-3 whitespace-nowrap">kV</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{standards.voltageNominal} ± {standards.voltageTolerance}%</td>
+                <td className="py-3 px-3 text-right whitespace-nowrap">
                   {isOfflineVal(liveMetrics.voltage) ? (
                     <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
                   ) : Math.abs(Number(liveMetrics.voltage) - standards.voltageNominal) <= (standards.voltageNominal * standards.voltageTolerance / 100) ? (
@@ -1211,11 +1211,11 @@ export default function IncomingPln() {
               </tr>
               {/* Frekuensi */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                <td className="py-3 px-3">Frekuensi</td>
-                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.frequency, (v) => `${v.toFixed(2)}`)}</td>
-                <td className="py-3 px-3">Hz</td>
-                <td className="py-3 px-3 font-mono">{standards.frequencyNominal} ± {standards.frequencyTolerance}</td>
-                <td className="py-3 px-3 text-right">
+                <td className="py-3 px-3 truncate">Frekuensi</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{renderMetricVal(liveMetrics.frequency, (v) => `${v.toFixed(2)}`)}</td>
+                <td className="py-3 px-3 whitespace-nowrap">Hz</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{standards.frequencyNominal} ± {standards.frequencyTolerance}</td>
+                <td className="py-3 px-3 text-right whitespace-nowrap">
                   {isOfflineVal(liveMetrics.frequency) ? (
                     <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
                   ) : Math.abs(Number(liveMetrics.frequency) - standards.frequencyNominal) <= standards.frequencyTolerance ? (
@@ -1227,11 +1227,11 @@ export default function IncomingPln() {
               </tr>
               {/* Active Power */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                <td className="py-3 px-3">Active Power</td>
-                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.activePower, (v) => `${v.toLocaleString("id-ID")}`)}</td>
-                <td className="py-3 px-3">kW</td>
-                <td className="py-3 px-3 font-mono">{standards.activePowerMax > 0 ? `≤ ${standards.activePowerMax}` : "—"}</td>
-                <td className="py-3 px-3 text-right">
+                <td className="py-3 px-3 truncate">Active Power</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{renderMetricVal(liveMetrics.activePower, (v) => `${v.toLocaleString("id-ID")}`)}</td>
+                <td className="py-3 px-3 whitespace-nowrap">kW</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{standards.activePowerMax > 0 ? `≤ ${standards.activePowerMax}` : "—"}</td>
+                <td className="py-3 px-3 text-right whitespace-nowrap">
                   {isOfflineVal(liveMetrics.activePower) ? (
                     <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
                   ) : (standards.activePowerMax > 0 && Number(liveMetrics.activePower) > standards.activePowerMax) ? (
@@ -1243,11 +1243,11 @@ export default function IncomingPln() {
               </tr>
               {/* Reactive Power */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                <td className="py-3 px-3">Reactive Power</td>
-                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.reactivePower, (v) => `${v.toLocaleString("id-ID")}`)}</td>
-                <td className="py-3 px-3">kVAR</td>
-                <td className="py-3 px-3 font-mono">{standards.reactivePowerMax > 0 ? `≤ ${standards.reactivePowerMax}` : "—"}</td>
-                <td className="py-3 px-3 text-right">
+                <td className="py-3 px-3 truncate">Reactive Power</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{renderMetricVal(liveMetrics.reactivePower, (v) => `${v.toLocaleString("id-ID")}`)}</td>
+                <td className="py-3 px-3 whitespace-nowrap">kVAR</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{standards.reactivePowerMax > 0 ? `≤ ${standards.reactivePowerMax}` : "—"}</td>
+                <td className="py-3 px-3 text-right whitespace-nowrap">
                   {isOfflineVal(liveMetrics.reactivePower) ? (
                     <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
                   ) : (standards.reactivePowerMax > 0 && Number(liveMetrics.reactivePower) > standards.reactivePowerMax) ? (
@@ -1259,11 +1259,11 @@ export default function IncomingPln() {
               </tr>
               {/* Apparent Power */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                <td className="py-3 px-3">Apparent Power</td>
-                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.apparentPower, (v) => `${v.toLocaleString("id-ID")}`)}</td>
-                <td className="py-3 px-3">kVA</td>
-                <td className="py-3 px-3 font-mono">{standards.apparentPowerMax > 0 ? `≤ ${standards.apparentPowerMax}` : "—"}</td>
-                <td className="py-3 px-3 text-right">
+                <td className="py-3 px-3 truncate">Apparent Power</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{renderMetricVal(liveMetrics.apparentPower, (v) => `${v.toLocaleString("id-ID")}`)}</td>
+                <td className="py-3 px-3 whitespace-nowrap">kVA</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{standards.apparentPowerMax > 0 ? `≤ ${standards.apparentPowerMax}` : "—"}</td>
+                <td className="py-3 px-3 text-right whitespace-nowrap">
                   {isOfflineVal(liveMetrics.apparentPower) ? (
                     <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
                   ) : (standards.apparentPowerMax > 0 && Number(liveMetrics.apparentPower) > standards.apparentPowerMax) ? (
@@ -1275,11 +1275,11 @@ export default function IncomingPln() {
               </tr>
               {/* Power Factor */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                <td className="py-3 px-3">Power Factor</td>
-                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.powerFactor, (v) => `${v.toFixed(3)}`)}</td>
-                <td className="py-3 px-3">PF</td>
-                <td className="py-3 px-3 font-mono">≥ {standards.powerFactorMin}</td>
-                <td className="py-3 px-3 text-right">
+                <td className="py-3 px-3 truncate">Power Factor</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{renderMetricVal(liveMetrics.powerFactor, (v) => `${v.toFixed(3)}`)}</td>
+                <td className="py-3 px-3 whitespace-nowrap">PF</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">≥ {standards.powerFactorMin}</td>
+                <td className="py-3 px-3 text-right whitespace-nowrap">
                   {isOfflineVal(liveMetrics.powerFactor) ? (
                     <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
                   ) : Number(liveMetrics.powerFactor) >= standards.powerFactorMin ? (
@@ -1291,11 +1291,11 @@ export default function IncomingPln() {
               </tr>
               {/* Voltage Unbalanced */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                <td className="py-3 px-3">Voltage Unbalanced</td>
-                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.unbalanceV, (v) => `${v.toFixed(2)}`)}</td>
-                <td className="py-3 px-3">%</td>
-                <td className="py-3 px-3 font-mono">≤ {standards.unbalanceVMax}%</td>
-                <td className="py-3 px-3 text-right">
+                <td className="py-3 px-3 truncate">Voltage Unbalanced</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{renderMetricVal(liveMetrics.unbalanceV, (v) => `${v.toFixed(2)}`)}</td>
+                <td className="py-3 px-3 whitespace-nowrap">%</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">≤ {standards.unbalanceVMax}%</td>
+                <td className="py-3 px-3 text-right whitespace-nowrap">
                   {isOfflineVal(liveMetrics.unbalanceV) ? (
                     <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
                   ) : Number(liveMetrics.unbalanceV) <= standards.unbalanceVMax ? (
@@ -1307,11 +1307,11 @@ export default function IncomingPln() {
               </tr>
               {/* Current Unbalanced */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                <td className="py-3 px-3">Current Unbalanced</td>
-                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.unbalanceI, (v) => `${v.toFixed(2)}`)}</td>
-                <td className="py-3 px-3">%</td>
-                <td className="py-3 px-3 font-mono">≤ {standards.unbalanceIMax}%</td>
-                <td className="py-3 px-3 text-right">
+                <td className="py-3 px-3 truncate">Current Unbalanced</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{renderMetricVal(liveMetrics.unbalanceI, (v) => `${v.toFixed(2)}`)}</td>
+                <td className="py-3 px-3 whitespace-nowrap">%</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">≤ {standards.unbalanceIMax}%</td>
+                <td className="py-3 px-3 text-right whitespace-nowrap">
                   {isOfflineVal(liveMetrics.unbalanceI) ? (
                     <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
                   ) : Number(liveMetrics.unbalanceI) <= standards.unbalanceIMax ? (
@@ -1323,11 +1323,11 @@ export default function IncomingPln() {
               </tr>
               {/* THD Voltage */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                <td className="py-3 px-3">THD Voltage (Avg)</td>
-                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.thdV_R === "BELUM ADA API" || liveMetrics.thdV_S === "BELUM ADA API" || liveMetrics.thdV_T === "BELUM ADA API" ? "BELUM ADA API" : liveMetrics.thdV_R === "API TIDAK TERKIRIM" || liveMetrics.thdV_S === "API TIDAK TERKIRIM" || liveMetrics.thdV_T === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : statsThdV.avg, (v) => `${v.toFixed(2)}`)}</td>
-                <td className="py-3 px-3">%</td>
-                <td className="py-3 px-3 font-mono">≤ {standards.thdVoltageMax}%</td>
-                <td className="py-3 px-3 text-right">
+                <td className="py-3 px-3 truncate">THD Voltage (Avg)</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{renderMetricVal(liveMetrics.thdV_R === "BELUM ADA API" || liveMetrics.thdV_S === "BELUM ADA API" || liveMetrics.thdV_T === "BELUM ADA API" ? "BELUM ADA API" : liveMetrics.thdV_R === "API TIDAK TERKIRIM" || liveMetrics.thdV_S === "API TIDAK TERKIRIM" || liveMetrics.thdV_T === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : statsThdV.avg, (v) => `${v.toFixed(2)}`)}</td>
+                <td className="py-3 px-3 whitespace-nowrap">%</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">≤ {standards.thdVoltageMax}%</td>
+                <td className="py-3 px-3 text-right whitespace-nowrap">
                   {isOfflineVal(liveMetrics.thdV_R) ? (
                     <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
                   ) : statsThdV.avg <= standards.thdVoltageMax ? (
@@ -1339,11 +1339,11 @@ export default function IncomingPln() {
               </tr>
               {/* THD Current */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                <td className="py-3 px-3">THD Current (Avg)</td>
-                <td className="py-3 px-3 font-mono">{renderMetricVal(liveMetrics.thdI_R === "BELUM ADA API" || liveMetrics.thdI_S === "BELUM ADA API" || liveMetrics.thdI_T === "BELUM ADA API" ? "BELUM ADA API" : liveMetrics.thdI_R === "API TIDAK TERKIRIM" || liveMetrics.thdI_S === "API TIDAK TERKIRIM" || liveMetrics.thdI_T === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : statsThdI.avg, (v) => `${v.toFixed(2)}`)}</td>
-                <td className="py-3 px-3">%</td>
-                <td className="py-3 px-3 font-mono">≤ {standards.thdCurrentMax}%</td>
-                <td className="py-3 px-3 text-right">
+                <td className="py-3 px-3 truncate">THD Current (Avg)</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{renderMetricVal(liveMetrics.thdI_R === "BELUM ADA API" || liveMetrics.thdI_S === "BELUM ADA API" || liveMetrics.thdI_T === "BELUM ADA API" ? "BELUM ADA API" : liveMetrics.thdI_R === "API TIDAK TERKIRIM" || liveMetrics.thdI_S === "API TIDAK TERKIRIM" || liveMetrics.thdI_T === "API TIDAK TERKIRIM" ? "API TIDAK TERKIRIM" : statsThdI.avg, (v) => `${v.toFixed(2)}`)}</td>
+                <td className="py-3 px-3 whitespace-nowrap">%</td>
+                <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">≤ {standards.thdCurrentMax}%</td>
+                <td className="py-3 px-3 text-right whitespace-nowrap">
                   {isOfflineVal(liveMetrics.thdI_R) ? (
                     <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
                   ) : statsThdI.avg <= standards.thdCurrentMax ? (
