@@ -27,15 +27,12 @@ import {
 } from "../utils/series";
 import { useMachineConfig } from "../hooks/useMachineConfig";
 
-const staticDailyEnergyTotal = machineGroups.reduce((sum, group) => {
-  const energy = group.summaryCards.find((card) => card.label === "Total Energy")?.value ?? 0;
-  return sum + energy;
-}, 0);
+const staticDailyEnergyTotal = 0;
 
 const staticUtilityBase = {
-  electricityKwh: staticDailyEnergyTotal,
-  gasSm3: staticDailyEnergyTotal / 7,
-  waterM3: staticDailyEnergyTotal / 25
+  electricityKwh: 0,
+  gasSm3: 0,
+  waterM3: 0
 };
 
 const utilityRates = {
@@ -174,33 +171,13 @@ export default function Dashboard() {
 
   const { machines } = useMachineConfig();
 
-  const dailyEnergyTotal = useMemo(() => {
-    if (machines && machines.length > 0) {
-      const costMapping: Record<string, number> = {
-        "cooling-water-1": 1500,
-        "cooling-tower-2": 1100,
-        "cooling-tower-3": 502.1,
-        "boiler-1": 900,
-        "boiler-2": 602.1,
-        "ro-1": 450,
-        "ro-2": 353.1,
-        "chiller-1": 1600,
-        "chiller-2": 1502.1,
-        "distillate-1": 800,
-        "distillate-2": 397.9,
-        "purified-water-1": 350,
-        "purified-water-2": 252.1
-      };
-      return machines.reduce((sum, m) => sum + (costMapping[m.id] ?? 0), 0);
-    }
-    return staticDailyEnergyTotal;
-  }, [machines]);
+  const dailyEnergyTotal = 0;
 
   const utilityBase = useMemo(() => ({
-    electricityKwh: dailyEnergyTotal,
+    electricityKwh: 0,
     gasSm3: 0,
     waterM3: 0
-  }), [dailyEnergyTotal]);
+  }), []);
 
   const [waterTarget, setWaterTarget] = useState(() => Number(localStorage.getItem("scada.makeupWaterTarget") ?? 1000));
   const [elRange, setElRange] = useState<keyof typeof compareRanges>("1d");
@@ -248,7 +225,7 @@ export default function Dashboard() {
 
   // Dynamic electricity calculations based on the period selector
   const electricityKwh = useMemo(() => {
-    if (!electricityData) return utilityBase.electricityKwh * period.scale;
+    if (!electricityData) return 0;
     if (period.id === "daily") {
       return electricityData.summary.todayKwh;
     } else if (period.id === "monthly") {
@@ -256,10 +233,10 @@ export default function Dashboard() {
     } else {
       return electricityData.summary.yearlyMwh * 1000;
     }
-  }, [electricityData, period.id, utilityBase.electricityKwh, period.scale]);
+  }, [electricityData, period.id]);
 
   const electricityCost = useMemo(() => {
-    if (!electricityData) return electricityKwh * utilityRates.electricityIdr;
+    if (!electricityData) return 0;
     if (period.id === "daily") {
       return electricityData.summary.todayCost;
     } else if (period.id === "monthly") {
@@ -267,94 +244,88 @@ export default function Dashboard() {
     } else {
       return electricityData.summary.totalCost;
     }
-  }, [electricityData, period.id, electricityKwh]);
+  }, [electricityData, period.id]);
 
-  const gasSm3 = utilityBase.gasSm3 * period.scale;
+  const gasSm3 = 0;
   
   const waterM3 = useMemo(() => {
-    if (!waterData) return utilityBase.waterM3 * period.scale;
+    if (!waterData) return 0;
     if (period.id === "daily") return waterData.summary.todayM3;
     if (period.id === "monthly") return waterData.summary.monthlyM3;
     return waterData.summary.yearlyM3;
-  }, [waterData, period.id, utilityBase.waterM3, period.scale]);
+  }, [waterData, period.id]);
 
   const monthlyWaterVolume = useMemo(() => {
     if (waterData) return waterData.summary.monthlyM3;
-    return utilityBase.waterM3 * 30;
-  }, [waterData, utilityBase.waterM3]);
+    return 0;
+  }, [waterData]);
 
   const waterCost = useMemo(() => {
     const fullMonthCost = calculateWaterCost(monthlyWaterVolume, waterConfig);
-    if (!waterData) return calculateWaterCost(waterM3, waterConfig);
+    if (!waterData) return 0;
     if (period.id === "monthly") return fullMonthCost;
     if (monthlyWaterVolume === 0) return 0;
     return (waterM3 / monthlyWaterVolume) * fullMonthCost;
   }, [monthlyWaterVolume, waterM3, waterData, period.id, waterConfig]);
 
-  const gasCostUsd = gasSm3 * utilityRates.gasUsd;
-  const gasCostIdr = gasCostUsd * usdToIdr;
+  const gasCostUsd = 0;
+  const gasCostIdr = 0;
   const totalCostIdr = electricityCost + waterCost + gasCostIdr;
 
-  const gasEnergyKwh = gasSm3 * gasEnergyFactor;
+  const gasEnergyKwh = 0;
   const waterEnergyKwh = useMemo(() => {
-    if (!waterData) return (utilityBase.waterM3 * period.scale) * waterEnergyFactor;
+    if (!waterData) return 0;
     if (period.id === "daily") return waterData.summary.todayKwh;
     if (period.id === "monthly") return waterData.summary.monthlyKwh;
     return waterData.summary.yearlyKwh;
-  }, [waterData, period.id, utilityBase.waterM3, period.scale]);
+  }, [waterData, period.id]);
   const totalEnergyKwh = electricityKwh + gasEnergyKwh + waterEnergyKwh;
   const energyTarget = totalEnergyKwh * 1.12;
   const costTarget = totalCostIdr * 1.08;
 
-  const solarKwh = electricityKwh * solarShare;
-  const solarSavings = solarKwh * utilityRates.electricityIdr;
-  const solarCoverage = Math.min(100, (solarKwh / Math.max(electricityKwh, 1)) * 100);
+  const solarKwh = 0;
+  const solarSavings = 0;
+  const solarCoverage = 0;
 
   const { currentElectric, currentGasEnergy, currentWaterEnergy, currentSolarPanel, currentSolarFuel, currentEnergyLabel } = useMemo(() => {
     if (consumptionRange === "hour") {
-      const elec = electricityData ? electricityData.summary.todayKwh : utilityBase.electricityKwh;
-      const gas = utilityBase.gasSm3 * gasEnergyFactor;
-      const water = waterData ? waterData.summary.todayKwh : utilityBase.waterM3 * waterEnergyFactor;
-      const solarPanel = elec * 0.15;
-      const solarFuel = 120 * 10; // 120 L * 10 kWh/L
+      const elec = electricityData ? electricityData.summary.todayKwh : 0;
+      const gas = 0;
+      const water = waterData ? waterData.summary.todayKwh : 0;
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
         currentWaterEnergy: water,
-        currentSolarPanel: solarPanel,
-        currentSolarFuel: solarFuel,
+        currentSolarPanel: 0,
+        currentSolarFuel: 0,
         currentEnergyLabel: "Today"
       };
     } else if (consumptionRange === "day") {
-      const elec = electricityData ? electricityData.summary.monthlyMwh * 1000 : utilityBase.electricityKwh * 30;
-      const gas = utilityBase.gasSm3 * 30 * gasEnergyFactor;
-      const water = waterData ? waterData.summary.monthlyKwh : (utilityBase.waterM3 * 30) * waterEnergyFactor;
-      const solarPanel = elec * 0.15;
-      const solarFuel = 2400 * 10; // 2400 L * 10 kWh/L
+      const elec = electricityData ? electricityData.summary.monthlyMwh * 1000 : 0;
+      const gas = 0;
+      const water = waterData ? waterData.summary.monthlyKwh : 0;
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
         currentWaterEnergy: water,
-        currentSolarPanel: solarPanel,
-        currentSolarFuel: solarFuel,
+        currentSolarPanel: 0,
+        currentSolarFuel: 0,
         currentEnergyLabel: "This Month"
       };
     } else {
-      const elec = electricityData ? electricityData.summary.totalKwh : utilityBase.electricityKwh * 365;
-      const gas = utilityBase.gasSm3 * 365 * gasEnergyFactor;
-      const water = waterData ? waterData.summary.yearlyKwh : (utilityBase.waterM3 * 365) * waterEnergyFactor;
-      const solarPanel = elec * 0.15;
-      const solarFuel = 29200 * 10; // 29200 L * 10 kWh/L
+      const elec = electricityData ? electricityData.summary.totalKwh : 0;
+      const gas = 0;
+      const water = waterData ? waterData.summary.yearlyKwh : 0;
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
         currentWaterEnergy: water,
-        currentSolarPanel: solarPanel,
-        currentSolarFuel: solarFuel,
+        currentSolarPanel: 0,
+        currentSolarFuel: 0,
         currentEnergyLabel: "This Year"
       };
     }
-  }, [consumptionRange, electricityData, waterData, utilityBase]);
+  }, [consumptionRange, electricityData, waterData]);
 
   const totalCurrentEnergy = currentElectric + currentGasEnergy + currentWaterEnergy + currentSolarPanel + currentSolarFuel;
   const co2Emission = totalCurrentEnergy * emissionFactor;
@@ -389,9 +360,8 @@ export default function Dashboard() {
         return electricityData.charts.monthly.map((m: any) => m.value * 1000);
       }
     }
-    const base = utilityBase.electricityKwh * consumptionConfig.scale;
-    return buildTimeAwareSeries(consumptionConfig.points, base, base * 0.35, 1, maxIndex);
-  }, [consumptionConfig, maxIndex, utilityBase, electricityData, consumptionRange, monthlyDailyRecords]);
+    return Array.from({ length: consumptionConfig.points }, () => 0);
+  }, [consumptionConfig.points, electricityData, consumptionRange, monthlyDailyRecords]);
 
   const consumptionElectricityCost = useMemo(() => {
     if (!electricityData) {
@@ -460,7 +430,7 @@ export default function Dashboard() {
     const totalM3 = waterSeries.reduce((sum: number, v: number) => sum + v, 0);
     if (!waterData) return calculateWaterCost(totalM3, waterConfig);
     
-    const currentMonthTotal = waterData.summary.monthlyM3 || utilityBase.waterM3 * 30;
+    const currentMonthTotal = waterData.summary.monthlyM3 || 0;
     const fullMonthCost = calculateWaterCost(currentMonthTotal, waterConfig);
 
     if (currentMonthTotal === 0 && totalM3 === 0) return 0;
@@ -468,19 +438,15 @@ export default function Dashboard() {
       return calculateWaterCost(totalM3, waterConfig); 
     }
     return currentMonthTotal > 0 ? (totalM3 / currentMonthTotal) * fullMonthCost : 0;
-  }, [waterSeries, waterData, waterConfig, consumptionRange, utilityBase.waterM3]);
+  }, [waterSeries, waterData, waterConfig, consumptionRange]);
 
   const solarPanelSeries = useMemo(() => {
-    return electricitySeries.map((v: number) => Math.round(v * 0.15));
-  }, [electricitySeries]);
+    return Array.from({ length: electricitySeries.length }, () => 0);
+  }, [electricitySeries.length]);
 
   const solarFuelSeries = useMemo(() => {
-    return electricitySeries.map((v: number, i: number) => {
-      const baseLiters = consumptionRange === "hour" ? 5 : consumptionRange === "day" ? 80 : 2400;
-      const variance = baseLiters * 0.2;
-      return Math.round(baseLiters + Math.sin(i / 2) * variance + Math.random() * 5);
-    });
-  }, [electricitySeries, consumptionRange]);
+    return Array.from({ length: electricitySeries.length }, () => 0);
+  }, [electricitySeries.length]);
 
   const consumptionLabels = useMemo(() => {
     if (electricityData) {
@@ -511,8 +477,8 @@ export default function Dashboard() {
         return m.value * 1000; // MWh to kWh
       });
     }
-    return buildTimeAwareSeries(12, utilityBase.electricityKwh * 30, utilityBase.electricityKwh * 12, 1, ytdMonthIndex);
-  }, [ytdMonthIndex, utilityBase, electricityData]);
+    return Array.from({ length: 12 }, () => 0);
+  }, [ytdMonthIndex, electricityData]);
 
   const ytdGasSeries = useMemo(() => {
     return Array.from({ length: 12 }, () => 0);
@@ -544,27 +510,16 @@ export default function Dashboard() {
   );
 
   const ytdSolarSeries = useMemo(() => {
-    return ytdElectricitySeries.map((v: number | null) => v ? Math.round(v * 0.15) : 0);
-  }, [ytdElectricitySeries]);
+    return Array.from({ length: 12 }, () => 0);
+  }, []);
 
-  const ytdSolarTotal = useMemo(
-    () => ytdSolarSeries.reduce((sum: number, v: number | null) => sum + (v ?? 0), 0),
-    [ytdSolarSeries]
-  );
+  const ytdSolarTotal = 0;
 
   const ytdSolarFuelSeries = useMemo(() => {
-    return ytdElectricitySeries.map((v: number | null, i: number) => {
-      if (i > ytdMonthIndex) return null as unknown as number;
-      const baseLiters = 72000;
-      const variance = baseLiters * 0.15;
-      return Math.round(baseLiters + Math.sin(i / 1.5) * variance + (v ? (v % 2000) : 0));
-    });
-  }, [ytdElectricitySeries, ytdMonthIndex]);
+    return Array.from({ length: 12 }, () => 0);
+  }, []);
 
-  const ytdSolarFuelTotal = useMemo(
-    () => ytdSolarFuelSeries.reduce((sum: number, v: number | null) => sum + (v ?? 0), 0),
-    [ytdSolarFuelSeries]
-  );
+  const ytdSolarFuelTotal = 0;
 
   const ytdLabels = useMemo(() => buildTimeLabels(12, "month"), []);
 
@@ -585,16 +540,12 @@ export default function Dashboard() {
     const config = compareRanges[elRange];
     if (!electricityData) {
       const labels = buildLabels(config.points, config.stepMs, config.label);
-      const current = buildSeries(config.points, utilityBase.electricityKwh / 24, (utilityBase.electricityKwh / 24) * 0.3, 1);
-      const previous = current.map(() => 0);
+      const current = Array.from({ length: config.points }, () => 0);
+      const previous = Array.from({ length: config.points }, () => 0);
       return { elCompareLabels: labels, elCurrent: current, elPrevious: previous };
     }
 
     const now = new Date();
-    const todayStr = new Date(now.getTime() + 7 * 60 * 60 * 1000).toISOString().split("T")[0];
-    const todayIdx = electricityData.charts.daily.findIndex((d: any) => d.day === todayStr) !== -1 
-      ? electricityData.charts.daily.findIndex((d: any) => d.day === todayStr)
-      : electricityData.charts.daily.length - 1;
 
     let labels: string[] = [];
     let current: number[] = [];
@@ -659,13 +610,13 @@ export default function Dashboard() {
     }
 
     return { elCompareLabels: labels, elCurrent: current, elPrevious: previous };
-  }, [elRange, electricityData, utilityBase]);
+  }, [elRange, electricityData]);
 
   const { gasCompareLabels, gasCurrent, gasPrevious } = useMemo(() => {
     const config = compareRanges[gasRange];
     const labels = buildLabels(config.points, config.stepMs, config.label);
-    const current = buildSeries(config.points, 45, 12, 1);
-    const previous = current.map((v) => Math.max(0, Number((v * 0.9).toFixed(1))));
+    const current = Array.from({ length: config.points }, () => 0);
+    const previous = Array.from({ length: config.points }, () => 0);
     return { gasCompareLabels: labels, gasCurrent: current, gasPrevious: previous };
   }, [gasRange]);
 
@@ -740,8 +691,8 @@ export default function Dashboard() {
     const hasData = current.some((v) => v > 0) || previous.some((v) => v > 0);
     if (!hasData) {
       const generatedLabels = buildLabels(config.points, config.stepMs, config.label);
-      const generatedCurrent = buildSeries(config.points, 12, 3, 1);
-      const generatedPrevious = generatedCurrent.map((v) => Math.max(0, Number((v * 0.88).toFixed(1))));
+      const generatedCurrent = Array.from({ length: config.points }, () => 0);
+      const generatedPrevious = Array.from({ length: config.points }, () => 0);
       return {
         waterCompareLabels: labels.length > 0 ? labels : generatedLabels,
         waterCurrent: generatedCurrent,
@@ -753,26 +704,25 @@ export default function Dashboard() {
   }, [waterRange, waterData]);
 
   const { carbonCompareLabels, carbonCurrent, carbonPrevious } = useMemo(() => {
-    const config = compareRanges[carbonRange];
-    const labels = buildLabels(config.points, config.stepMs, config.label);
-    const current = buildSeries(config.points, 15, 4, 1);
-    const previous = current.map((v) => Math.max(0, Number((v * 0.85).toFixed(1))));
+    const labels = elCompareLabels;
+    const current = elCurrent.map((kwh: number) => +(kwh * emissionFactor).toFixed(2));
+    const previous = elPrevious.map((kwh: number) => +(kwh * emissionFactor).toFixed(2));
     return { carbonCompareLabels: labels, carbonCurrent: current, carbonPrevious: previous };
-  }, [carbonRange]);
+  }, [elCompareLabels, elCurrent, elPrevious]);
 
   const { solarCompareLabels, solarCurrent, solarPrevious } = useMemo(() => {
     const config = compareRanges[solarRange];
     const labels = buildLabels(config.points, config.stepMs, config.label);
-    const current = buildSeries(config.points, 250, 40, 1);
-    const previous = current.map((v) => Math.max(0, Math.round(v * 0.9)));
+    const current = Array.from({ length: config.points }, () => 0);
+    const previous = Array.from({ length: config.points }, () => 0);
     return { solarCompareLabels: labels, solarCurrent: current, solarPrevious: previous };
   }, [solarRange]);
 
   const { fuelCompareLabels, fuelCurrent, fuelPrevious } = useMemo(() => {
     const config = compareRanges[fuelRange];
     const labels = buildLabels(config.points, config.stepMs, config.label);
-    const current = buildSeries(config.points, 85, 15, 1);
-    const previous = current.map((v) => Math.max(0, Math.round(v * 1.05)));
+    const current = Array.from({ length: config.points }, () => 0);
+    const previous = Array.from({ length: config.points }, () => 0);
     return { fuelCompareLabels: labels, fuelCurrent: current, fuelPrevious: previous };
   }, [fuelRange]);
 
@@ -846,40 +796,12 @@ export default function Dashboard() {
     });
   }, [machines, latest]);
 
-  const alarmPreview =
-    activeAlarms.length > 0
-      ? activeAlarms.slice(0, 4).map((alarm) => ({
-          id: alarm.alarmKey,
-          title: alarm.message,
-          detail: alarm.tagId,
-          severity: alarm.severity
-        }))
-      : [
-          {
-            id: "alarm-electricity",
-            title: "Electricity Consumption",
-            detail: "Exceeds threshold",
-            severity: "high"
-          },
-          {
-            id: "alarm-gas",
-            title: "Boiler 1 Gas Pressure",
-            detail: "Below normal",
-            severity: "medium"
-          },
-          {
-            id: "alarm-water",
-            title: "Cooling Tower 1 Water Level",
-            detail: "Below normal",
-            severity: "medium"
-          },
-          {
-            id: "alarm-flow",
-            title: "Clean Water Flow",
-            detail: "Below normal",
-            severity: "critical"
-          }
-        ];
+  const alarmPreview = activeAlarms.map((alarm) => ({
+    id: alarm.alarmKey,
+    title: alarm.message,
+    detail: alarm.tagId,
+    severity: alarm.severity
+  }));
 
   const handleExportYtd = () => {
     const rows = ytdLabels.map((label, index) => {
@@ -1496,7 +1418,7 @@ export default function Dashboard() {
                 Most Active Alarms
               </div>
               <div className="text-xs text-[#47729f] dark:text-slate-400">
-                {activeAlarms.length > 0 ? `${activeAlarms.length} active alarms` : "Demo alarm"}
+                {activeAlarms.length > 0 ? `${activeAlarms.length} active alarms` : "Tidak ada alarm aktif"}
               </div>
             </div>
             <Link to="/alarms" className="text-xs font-semibold text-[#1f6fb5] dark:text-sky-400 hover:underline">
@@ -1504,31 +1426,37 @@ export default function Dashboard() {
             </Link>
           </div>
           <div className="mt-3 space-y-2">
-            {alarmPreview.map((alarm) => (
-              <div
-                key={alarm.id}
-                className="flex items-start gap-3 rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/80 px-3 py-2.5 transition-colors duration-300"
-              >
+            {alarmPreview.length > 0 ? (
+              alarmPreview.map((alarm) => (
                 <div
-                  className={[
-                    "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-black",
-                    alarm.severity === "critical" || alarm.severity === "high"
-                      ? "bg-rose-500/10 text-rose-500 dark:text-rose-300 border border-rose-500/20"
-                      : "bg-amber-500/10 text-amber-500 dark:text-amber-300 border border-amber-500/20"
-                  ].join(" ")}
+                  key={alarm.id}
+                  className="flex items-start gap-3 rounded-lg border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/80 px-3 py-2.5 transition-colors duration-300"
                 >
-                  !
-                </div>
-                <div className="min-w-0">
-                  <div className="truncate text-xs font-semibold text-[#002b5c] dark:text-slate-200">
-                    {alarm.title}
+                  <div
+                    className={[
+                      "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-black",
+                      alarm.severity === "critical" || alarm.severity === "high"
+                        ? "bg-rose-500/10 text-rose-500 dark:text-rose-300 border border-rose-500/20"
+                        : "bg-amber-500/10 text-amber-500 dark:text-amber-300 border border-amber-500/20"
+                    ].join(" ")}
+                  >
+                    !
                   </div>
-                  <div className="mt-0.5 truncate text-xs text-[#47729f] dark:text-slate-400">
-                    {alarm.detail}
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-semibold text-[#002b5c] dark:text-slate-200">
+                      {alarm.title}
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-[#47729f] dark:text-slate-400">
+                      {alarm.detail}
+                    </div>
                   </div>
                 </div>
+              ))
+            ) : (
+              <div className="py-6 text-center text-xs text-slate-400 dark:text-slate-500 border border-dashed border-[#acd3ff]/60 dark:border-slate-800 rounded-lg">
+                <span className="text-emerald-500 font-bold mr-1">✓</span> Semua parameter dalam batas normal
               </div>
-            ))}
+            )}
           </div>
         </section>
       </div>
