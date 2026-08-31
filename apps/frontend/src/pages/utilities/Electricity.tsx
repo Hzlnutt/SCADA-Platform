@@ -490,6 +490,7 @@ export default function Electricity() {
 
   const getApiVal = useCallback((tagKey: string) => {
     const isPlnTag = tagKey.startsWith("pln/") || tagKey === "electricity/p_grid";
+    const url = apiSourceUrls[tagKey] || (isPlnTag ? DEFAULT_PLN_API_URL : "");
     const rawJsonKey = jsonKeyMap[tagKey] || (isPlnTag ? DEFAULT_PLN_JSON_KEYS[tagKey] : undefined) || tagKey.split("/")[1];
 
     if (url && apiLiveData[url] && rawJsonKey) {
@@ -500,27 +501,28 @@ export default function Electricity() {
         (rawJsonKey === "Voltage_Unbalance" ? apiLiveData[url]["Volatage_Unbalance"] : undefined);
 
       if (val !== undefined && val !== null) {
-      // Power parameters (convert Watts to kW/kVAR/kVA if large)
-      if (tagKey === "pln/active_power" || tagKey === "pln/reactive_power" || tagKey === "pln/apparent_power" || tagKey === "electricity/p_grid") {
-        if (typeof val === "number" && val > 10000) val = val / 1000.0;
+        // Power parameters (convert Watts to kW/kVAR/kVA if large)
+        if (tagKey === "pln/active_power" || tagKey === "pln/reactive_power" || tagKey === "pln/apparent_power" || tagKey === "electricity/p_grid") {
+          if (typeof val === "number" && val > 10000) val = val / 1000.0;
+        }
+        // Voltage LL (convert Volts to kV)
+        if (tagKey === "pln/voltage" && typeof val === "number" && val > 1000) {
+          val = val / 1000.0;
+        }
+        // Voltage L-N (convert Volts to kV)
+        if ((tagKey === "pln/voltage_rn" || tagKey === "pln/voltage_sn" || tagKey === "pln/voltage_tn") && typeof val === "number" && val > 1000) {
+          val = (val / Math.sqrt(3)) / 1000.0;
+        }
+        // Unbalances (convert decimal 0.0055 to %)
+        if ((tagKey === "pln/unbalance_v" || tagKey === "pln/unbalance_i") && typeof val === "number" && val < 1.0) {
+          val = val * 100.0;
+        }
+        // Power factor convert negative to positive
+        if (tagKey === "pln/power_factor" && typeof val === "number") {
+          val = Math.abs(val);
+        }
+        return val;
       }
-      // Voltage LL (convert Volts to kV)
-      if (tagKey === "pln/voltage" && typeof val === "number" && val > 1000) {
-        val = val / 1000.0;
-      }
-      // Voltage L-N (convert Volts to kV)
-      if ((tagKey === "pln/voltage_rn" || tagKey === "pln/voltage_sn" || tagKey === "pln/voltage_tn") && typeof val === "number" && val > 1000) {
-        val = (val / Math.sqrt(3)) / 1000.0;
-      }
-      // Unbalances (convert decimal 0.0055 to %)
-      if ((tagKey === "pln/unbalance_v" || tagKey === "pln/unbalance_i") && typeof val === "number" && val < 1.0) {
-        val = val * 100.0;
-      }
-      // Power factor convert negative to positive
-      if (tagKey === "pln/power_factor" && typeof val === "number") {
-        val = Math.abs(val);
-      }
-      return val;
     }
 
     // Fallback to live pqData from backend WebSocket / summaryData
