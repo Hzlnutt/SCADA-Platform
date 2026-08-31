@@ -543,8 +543,17 @@ export default function IncomingPln() {
       }
     };
 
+    const handleMinuteUpdate = () => {
+      fetchTelemetry();
+    };
+
+    socket.on("electricity:minute_update", handleMinuteUpdate);
+    socket.on("historian:minute_update", handleMinuteUpdate);
     socket.on("electricity:live_update", handleLiveUpdate);
+
     return () => {
+      socket.off("electricity:minute_update", handleMinuteUpdate);
+      socket.off("historian:minute_update", handleMinuteUpdate);
       socket.off("electricity:live_update", handleLiveUpdate);
     };
   }, [config.deviceId]);
@@ -677,54 +686,74 @@ export default function IncomingPln() {
     }
   };
 
-  // 24 Hour Line Trend Data
+  // 24 Hour Line Trend Data (00:00 to 23:00)
   const trendLabels = useMemo(() => Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`), []);
 
   const voltageTrendData = useMemo(() => {
     const dataMap = new Map(voltageTrend.map(item => [item.hour, item.value]));
     const dataPoints = trendLabels.map(label => dataMap.get(label) ?? null);
-    const hasData = voltageTrend.length > 0;
     
     return {
       labels: trendLabels,
       datasets: [
         {
-          label: "Tegangan (kV)",
-          data: hasData ? dataPoints : [],
+          label: "Tegangan",
+          data: dataPoints,
           borderColor: "#eab308",
-          backgroundColor: "rgba(234, 179, 8, 0.05)",
-          tension: 0.3,
-          borderWidth: 2,
-          pointRadius: 0
+          backgroundColor: "rgba(234, 179, 8, 0.08)",
+          fill: true,
+          tension: 0.35,
+          borderWidth: 2.5,
+          pointRadius: 2.5,
+          pointBackgroundColor: "#eab308",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          pointHoverRadius: 8,
+          pointHoverBackgroundColor: "#eab308",
+          pointHoverBorderColor: "#ffffff",
+          pointHoverBorderWidth: 3,
+          spanGaps: false
         }
       ]
     };
-  }, [voltageTrend, trendLabels]);
+  }, [voltageTrend, trendLabels, isDark]);
 
   const activePowerTrendData = useMemo(() => {
     const dataMap = new Map(activePowerTrend.map(item => [item.hour, item.value]));
     const dataPoints = trendLabels.map(label => dataMap.get(label) ?? null);
-    const hasData = activePowerTrend.length > 0;
     
     return {
       labels: trendLabels,
       datasets: [
         {
-          label: "Daya Aktif (kW)",
-          data: hasData ? dataPoints : [],
+          label: "Daya Aktif",
+          data: dataPoints,
           borderColor: "#10b981",
-          backgroundColor: "rgba(16, 185, 129, 0.05)",
-          tension: 0.3,
-          borderWidth: 2,
-          pointRadius: 0
+          backgroundColor: "rgba(16, 185, 129, 0.08)",
+          fill: true,
+          tension: 0.35,
+          borderWidth: 2.5,
+          pointRadius: 2.5,
+          pointBackgroundColor: "#10b981",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          pointHoverRadius: 8,
+          pointHoverBackgroundColor: "#10b981",
+          pointHoverBorderColor: "#ffffff",
+          pointHoverBorderWidth: 3,
+          spanGaps: false
         }
       ]
     };
-  }, [activePowerTrend, trendLabels]);
+  }, [activePowerTrend, trendLabels, isDark]);
 
   const lineOptions = (title: string, color: string, unit: string) => ({
     responsive: true,
     maintainAspectRatio: false,
+    interaction: {
+      mode: "index" as const,
+      intersect: false
+    },
     plugins: {
       legend: { display: false },
       title: {
@@ -733,13 +762,37 @@ export default function IncomingPln() {
         color: isDark ? "#94a3b8" : "#475569",
         align: "start" as const,
         font: { size: 11, weight: "bold" as const }
+      },
+      tooltip: {
+        enabled: true,
+        backgroundColor: isDark ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.98)",
+        titleColor: isDark ? "#f8fafc" : "#0f172a",
+        bodyColor: isDark ? "#cbd5e1" : "#334155",
+        borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.1)",
+        borderWidth: 1,
+        padding: 8,
+        displayColors: false,
+        callbacks: {
+          title: (items: any[]) => {
+            if (!items.length) return "";
+            return `Pukul ${items[0].label}`;
+          },
+          label: (context: any) => {
+            const val = context.parsed.y;
+            if (val === null || val === undefined) return "Tidak ada data";
+            return `${context.dataset.label || "Nilai"}: ${val.toFixed(2)} ${unit}`;
+          }
+        }
       }
     },
     scales: {
-      x: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 8 } } },
+      x: {
+        grid: { display: false },
+        ticks: { color: "#64748b", font: { size: 8.5 } }
+      },
       y: {
         grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
-        ticks: { color: "#64748b", font: { size: 8 } }
+        ticks: { color: "#64748b", font: { size: 8.5 } }
       }
     }
   });

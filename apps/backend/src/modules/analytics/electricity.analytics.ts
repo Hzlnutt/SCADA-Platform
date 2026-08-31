@@ -682,37 +682,67 @@ export const getElectricityAnalytics = async (
   const monthlyMwh = (monthlyMap.get(currentMonthStr) || 0) / 1000;
   const yearlyMwh = totalKwh / 1000;
 
-  // Fetch last 24 hours of hourly average voltage and active power from postgres
+  // Fetch today's 24 hours of hourly average voltage and active power progressively from postgres
   let voltageTrend: { hour: string; value: number }[] = [];
   let powerTrend: { hour: string; value: number }[] = [];
   try {
-    const tableMap: Record<string, string> = {
-      "Cubicle_PLN_PM8000": "electric_pln_telemetry",
-      "Feeder_WF1_PM5560": "electric_wf1_telemetry",
-      "Feeder_WF2_PM5500": "electric_wf2_telemetry"
+    const tableMap: Record<string, { main: string; minute: string }> = {
+      "Cubicle_PLN_PM8000": { main: "electric_pln_telemetry", minute: "electric_pln_telemetry_minute" },
+      "Feeder_WF1_PM5560": { main: "electric_wf1_telemetry", minute: "electric_wf1_telemetry_minute" },
+      "Feeder_WF2_PM5500": { main: "electric_wf2_telemetry", minute: "electric_wf2_telemetry_minute" }
     };
-    const tableName = tableMap[deviceId];
-    if (tableName) {
+    const tblConfig = tableMap[deviceId];
+    if (tblConfig) {
       const activePowerCol = deviceId === "Cubicle_PLN_PM8000" ? "active_power" : "active_power_total";
       
       const voltRes = await pool.query(`
-        SELECT 
-          to_char(t_stamp, 'HH24:00') AS hour_str,
-          (AVG(CASE WHEN volt_ll > 1000 THEN volt_ll / 1000.0 ELSE volt_ll END))::float AS avg_val
-        FROM ${tableName}
-        WHERE t_stamp >= NOW() - INTERVAL '24 hours'
-        GROUP BY date_trunc('hour', t_stamp), to_char(t_stamp, 'HH24:00')
-        ORDER BY date_trunc('hour', t_stamp)
+        WITH today_hours AS (
+          SELECT 
+            to_char(t_stamp, 'HH24:00') AS hour_str,
+            AVG(CASE WHEN volt_ll > 1000 THEN volt_ll / 1000.0 ELSE volt_ll END)::float AS avg_val
+          FROM ${tblConfig.main}
+          WHERE t_stamp >= (NOW() AT TIME ZONE 'Asia/Jakarta')::date
+            AND t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+          GROUP BY to_char(t_stamp, 'HH24:00')
+
+          UNION ALL
+
+          SELECT 
+            to_char(date_trunc('hour', t_stamp), 'HH24:00') AS hour_str,
+            AVG(CASE WHEN volt_ll > 1000 THEN volt_ll / 1000.0 ELSE volt_ll END)::float AS avg_val
+          FROM ${tblConfig.minute}
+          WHERE t_stamp >= date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+          GROUP BY to_char(date_trunc('hour', t_stamp), 'HH24:00')
+        )
+        SELECT hour_str, avg_val
+        FROM today_hours
+        WHERE avg_val IS NOT NULL
+        ORDER BY hour_str ASC
       `);
       
       const powerRes = await pool.query(`
-        SELECT 
-          to_char(t_stamp, 'HH24:00') AS hour_str,
-          (AVG(CASE WHEN ${activePowerCol} > 1000 THEN ${activePowerCol} / 1000.0 ELSE ${activePowerCol} END))::float AS avg_val
-        FROM ${tableName}
-        WHERE t_stamp >= NOW() - INTERVAL '24 hours'
-        GROUP BY date_trunc('hour', t_stamp), to_char(t_stamp, 'HH24:00')
-        ORDER BY date_trunc('hour', t_stamp)
+        WITH today_hours AS (
+          SELECT 
+            to_char(t_stamp, 'HH24:00') AS hour_str,
+            AVG(CASE WHEN ${activePowerCol} > 1000 THEN ${activePowerCol} / 1000.0 ELSE ${activePowerCol} END)::float AS avg_val
+          FROM ${tblConfig.main}
+          WHERE t_stamp >= (NOW() AT TIME ZONE 'Asia/Jakarta')::date
+            AND t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+          GROUP BY to_char(t_stamp, 'HH24:00')
+
+          UNION ALL
+
+          SELECT 
+            to_char(date_trunc('hour', t_stamp), 'HH24:00') AS hour_str,
+            AVG(CASE WHEN ${activePowerCol} > 1000 THEN ${activePowerCol} / 1000.0 ELSE ${activePowerCol} END)::float AS avg_val
+          FROM ${tblConfig.minute}
+          WHERE t_stamp >= date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+          GROUP BY to_char(date_trunc('hour', t_stamp), 'HH24:00')
+        )
+        SELECT hour_str, avg_val
+        FROM today_hours
+        WHERE avg_val IS NOT NULL
+        ORDER BY hour_str ASC
       `);
       
       voltageTrend = voltRes.rows.map(r => ({ hour: r.hour_str, value: Number(r.avg_val.toFixed(2)) }));
