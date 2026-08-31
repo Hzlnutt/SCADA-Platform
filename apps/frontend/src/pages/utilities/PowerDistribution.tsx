@@ -1251,17 +1251,53 @@ export default function PowerDistribution() {
             ))}
 
             {/* --- ZERO-COLLISION AUXILIARY POWER ROUTING --- */}
-            {/* 1. Genset Natural Gas (95, 220) -> Clean outer track (X = 35) -> Feeds left of MDP-1.1 (X = 70, Y = 410) */}
-            <path d="M 95 220 L 95 245 L 35 245 L 35 410 L 70 410" fill="none" stroke="#10b981" strokeWidth="2" strokeDasharray="5 3" markerEnd="url(#arrow-green)" />
+            {/* 1. Genset Natural Gas (95, 220) -> Feeds MDP-2 (left side X=290, Y=410) and MDP-3 (left side X=400, Y=410) */}
+            <path
+              d="M 95 220 L 95 245 L 35 245 L 35 455 L 285 455 L 285 410 L 290 410"
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="2"
+              strokeDasharray="5 3"
+              markerEnd="url(#arrow-green)"
+            />
+            <path
+              d="M 285 455 L 395 455 L 395 410 L 400 410"
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="2"
+              strokeDasharray="5 3"
+              markerEnd="url(#arrow-green)"
+            />
 
-            {/* 2. Solar PV POI-1 (475, 220) -> Clean inner track (X = 535) -> Feeds right side of MDP-3 (X = 500, Y = 410) */}
-            <path d="M 475 220 L 475 245 L 535 245 L 535 410 L 500 410" fill="none" stroke="#f97316" strokeWidth="2" strokeDasharray="5 3" markerEnd="url(#arrow-orange)" />
+            {/* 2. Solar PV POI-1 (475, 220) -> Feeds right side of MDP-3 (X=500, Y=410) */}
+            <path
+              d="M 475 220 L 475 245 L 535 245 L 535 410 L 500 410"
+              fill="none"
+              stroke="#f97316"
+              strokeWidth="2"
+              strokeDasharray="5 3"
+              markerEnd="url(#arrow-orange)"
+            />
 
-            {/* 3. Solar PV POI-2 (725, 220) -> Clean inner track (X = 705) -> Feeds left side of PUTR-1 (X = 741, Y = 410) */}
-            <path d="M 725 220 L 725 245 L 705 245 L 705 410 L 741 410" fill="none" stroke="#f97316" strokeWidth="2" strokeDasharray="5 3" markerEnd="url(#arrow-orange)" />
+            {/* 3. Solar PV POI-2 (725, 220) -> Feeds left side of PUTR-2 (X=861, Y=410) */}
+            <path
+              d="M 725 220 L 725 245 L 675 245 L 675 455 L 855 455 L 855 410 L 861 410"
+              fill="none"
+              stroke="#f97316"
+              strokeWidth="2"
+              strokeDasharray="5 3"
+              markerEnd="url(#arrow-orange)"
+            />
 
-            {/* 4. Genset Diesel Fuel (1105, 220) -> Clean outer track (X = 1125) -> Feeds right side of PUTR-NEW (X = 1089, Y = 410) */}
-            <path d="M 1105 220 L 1105 245 L 1125 245 L 1125 410 L 1089 410" fill="none" stroke="#10b981" strokeWidth="2" strokeDasharray="5 3" markerEnd="url(#arrow-green)" />
+            {/* 4. Genset Diesel Fuel (1105, 220) -> Feeds right side of PUTR-NEW (X=1089, Y=410) */}
+            <path
+              d="M 1105 220 L 1105 245 L 1125 245 L 1125 410 L 1089 410"
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="2"
+              strokeDasharray="5 3"
+              markerEnd="url(#arrow-green)"
+            />
           </svg>
 
           {/* 2. ABSOLUTE CARDS LAYOUT */}
