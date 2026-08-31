@@ -112,21 +112,21 @@ type TransformerData = {
   name: string;
   factory: 1 | 2;
   capacityKva: number;
-  activePowerKw: number;
-  reactivePowerKvar: number;
-  apparentPowerKva: number;
-  powerFactor: number;
-  frequencyHz: number;
-  tempCc: number;
-  voltageInKv: number;
-  voltageOutL2L: number;
-  voltageOutL2N: number;
-  currentR: number;
-  currentS: number;
-  currentT: number;
-  thdVoltage: number;
-  thdCurrent: number;
-  kwh: number;
+  activePowerKw: number | null;
+  reactivePowerKvar: number | null;
+  apparentPowerKva: number | null;
+  powerFactor: number | null;
+  frequencyHz: number | null;
+  tempCc: number | null;
+  voltageInKv: number | null;
+  voltageOutL2L: number | null;
+  voltageOutL2N: number | null;
+  currentR: number | null;
+  currentS: number | null;
+  currentT: number | null;
+  thdVoltage: number | null;
+  thdCurrent: number | null;
+  kwh: number | null;
   status: "online" | "warning" | "offline";
   vectorGroup?: string;
   impedance?: number;
@@ -134,51 +134,51 @@ type TransformerData = {
   manufacturer?: string;
 };
 
-/* ═══════════ INITIAL MOCK DATA ═══════════ */
+/* ═══════════ INITIAL TRANSFORMER DATA (EMPTY TELEMETRY) ═══════════ */
 const INITIAL_TRANSFORMERS: TransformerData[] = [
   // Factory 1
   {
-    id: "mdp-1.1", name: "MDP-1.1", factory: 1, capacityKva: 630, activePowerKw: 594, reactivePowerKvar: 128,
-    apparentPowerKva: 608, powerFactor: 0.942, frequencyHz: 49.98, tempCc: 54.2, voltageInKv: 20.8,
-    voltageOutL2L: 399.2, voltageOutL2N: 229.4, currentR: 512, currentS: 508, currentT: 515,
-    thdVoltage: 2.81, thdCurrent: 7.42, kwh: 170967, status: "online"
+    id: "mdp-1.1", name: "MDP-1.1", factory: 1, capacityKva: 630, activePowerKw: null, reactivePowerKvar: null,
+    apparentPowerKva: null, powerFactor: null, frequencyHz: null, tempCc: null, voltageInKv: null,
+    voltageOutL2L: null, voltageOutL2N: null, currentR: null, currentS: null, currentT: null,
+    thdVoltage: null, thdCurrent: null, kwh: null, status: "offline"
   },
   {
-    id: "mdp-1.2", name: "MDP-1.2", factory: 1, capacityKva: 630, activePowerKw: 521, reactivePowerKvar: 112,
-    apparentPowerKva: 533, powerFactor: 0.952, frequencyHz: 49.97, tempCc: 51.8, voltageInKv: 20.7,
-    voltageOutL2L: 400.1, voltageOutL2N: 230.1, currentR: 448, currentS: 452, currentT: 445,
-    thdVoltage: 2.65, thdCurrent: 6.91, kwh: 149832, status: "online"
+    id: "mdp-1.2", name: "MDP-1.2", factory: 1, capacityKva: 630, activePowerKw: null, reactivePowerKvar: null,
+    apparentPowerKva: null, powerFactor: null, frequencyHz: null, tempCc: null, voltageInKv: null,
+    voltageOutL2L: null, voltageOutL2N: null, currentR: null, currentS: null, currentT: null,
+    thdVoltage: null, thdCurrent: null, kwh: null, status: "offline"
   },
   {
-    id: "mdp-2", name: "MDP-2", factory: 1, capacityKva: 1000, activePowerKw: 715, reactivePowerKvar: 168,
-    apparentPowerKva: 734, powerFactor: 0.958, frequencyHz: 49.99, tempCc: 57.5, voltageInKv: 20.9,
-    voltageOutL2L: 401.3, voltageOutL2N: 231.2, currentR: 615, currentS: 620, currentT: 618,
-    thdVoltage: 3.12, thdCurrent: 8.15, kwh: 206541, status: "online"
+    id: "mdp-2", name: "MDP-2", factory: 1, capacityKva: 1000, activePowerKw: null, reactivePowerKvar: null,
+    apparentPowerKva: null, powerFactor: null, frequencyHz: null, tempCc: null, voltageInKv: null,
+    voltageOutL2L: null, voltageOutL2N: null, currentR: null, currentS: null, currentT: null,
+    thdVoltage: null, thdCurrent: null, kwh: null, status: "offline"
   },
   {
-    id: "mdp-3", name: "MDP-3", factory: 1, capacityKva: 1000, activePowerKw: 718, reactivePowerKvar: 175,
-    apparentPowerKva: 739, powerFactor: 0.960, frequencyHz: 49.98, tempCc: 59.1, voltageInKv: 20.8,
-    voltageOutL2L: 400.8, voltageOutL2N: 230.6, currentR: 622, currentS: 618, currentT: 625,
-    thdVoltage: 2.94, thdCurrent: 7.88, kwh: 211423, status: "online"
+    id: "mdp-3", name: "MDP-3", factory: 1, capacityKva: 1000, activePowerKw: null, reactivePowerKvar: null,
+    apparentPowerKva: null, powerFactor: null, frequencyHz: null, tempCc: null, voltageInKv: null,
+    voltageOutL2L: null, voltageOutL2N: null, currentR: null, currentS: null, currentT: null,
+    thdVoltage: null, thdCurrent: null, kwh: null, status: "offline"
   },
   // Factory 2
   {
-    id: "putr-1", name: "PUTR-1", factory: 2, capacityKva: 2000, activePowerKw: 491, reactivePowerKvar: 105,
-    apparentPowerKva: 502, powerFactor: 0.947, frequencyHz: 49.99, tempCc: 48.3, voltageInKv: 20.9,
-    voltageOutL2L: 400.5, voltageOutL2N: 230.8, currentR: 425, currentS: 430, currentT: 422,
-    thdVoltage: 2.45, thdCurrent: 6.52, kwh: 142876, status: "online"
+    id: "putr-1", name: "PUTR-1", factory: 2, capacityKva: 2000, activePowerKw: null, reactivePowerKvar: null,
+    apparentPowerKva: null, powerFactor: null, frequencyHz: null, tempCc: null, voltageInKv: null,
+    voltageOutL2L: null, voltageOutL2N: null, currentR: null, currentS: null, currentT: null,
+    thdVoltage: null, thdCurrent: null, kwh: null, status: "offline"
   },
   {
-    id: "putr-2", name: "PUTR-2", factory: 2, capacityKva: 2000, activePowerKw: 563, reactivePowerKvar: 118,
-    apparentPowerKva: 575, powerFactor: 0.985, frequencyHz: 49.98, tempCc: 50.1, voltageInKv: 20.8,
-    voltageOutL2L: 399.8, voltageOutL2N: 229.9, currentR: 486, currentS: 490, currentT: 484,
-    thdVoltage: 2.68, thdCurrent: 7.15, kwh: 163254, status: "online"
+    id: "putr-2", name: "PUTR-2", factory: 2, capacityKva: 2000, activePowerKw: null, reactivePowerKvar: null,
+    apparentPowerKva: null, powerFactor: null, frequencyHz: null, tempCc: null, voltageInKv: null,
+    voltageOutL2L: null, voltageOutL2N: null, currentR: null, currentS: null, currentT: null,
+    thdVoltage: null, thdCurrent: null, kwh: null, status: "offline"
   },
   {
-    id: "putr-new", name: "PUTR-New", factory: 2, capacityKva: 1600, activePowerKw: 406, reactivePowerKvar: 92,
-    apparentPowerKva: 416, powerFactor: 0.952, frequencyHz: 49.97, tempCc: 46.7, voltageInKv: 20.7,
-    voltageOutL2L: 400.3, voltageOutL2N: 230.5, currentR: 352, currentS: 348, currentT: 355,
-    thdVoltage: 2.32, thdCurrent: 5.94, kwh: 118742, status: "online"
+    id: "putr-new", name: "PUTR-New", factory: 2, capacityKva: 1600, activePowerKw: null, reactivePowerKvar: null,
+    apparentPowerKva: null, powerFactor: null, frequencyHz: null, tempCc: null, voltageInKv: null,
+    voltageOutL2L: null, voltageOutL2N: null, currentR: null, currentS: null, currentT: null,
+    thdVoltage: null, thdCurrent: null, kwh: null, status: "offline"
   }
 ];
 
@@ -218,56 +218,6 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
   const [newBreaker, setNewBreaker] = useState("");
   const [newLoad, setNewLoad] = useState("");
   const [newLabel, setNewLabel] = useState("");
-
-  const trendLabels = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
-
-  const voltageData = {
-    labels: trendLabels,
-    datasets: [
-      { label: "VAB (V)", data: Array.from({ length: 24 }, () => 398 + Math.random() * 4), borderColor: "#f43f5e", borderWidth: 2, pointRadius: 0, fill: false },
-      { label: "VBC (V)", data: Array.from({ length: 24 }, () => 399 + Math.random() * 4), borderColor: "#eab308", borderWidth: 2, pointRadius: 0, fill: false },
-      { label: "VCA (V)", data: Array.from({ length: 24 }, () => 400 + Math.random() * 4), borderColor: "#3b82f6", borderWidth: 2, pointRadius: 0, fill: false }
-    ]
-  };
-
-  const ampereData = {
-    labels: trendLabels,
-    datasets: [
-      { label: "Phase R (A)", data: Array.from({ length: 24 }, () => 320 + Math.random() * 40), borderColor: "#f43f5e", borderWidth: 2, pointRadius: 0, fill: false },
-      { label: "Phase S (A)", data: Array.from({ length: 24 }, () => 310 + Math.random() * 35), borderColor: "#eab308", borderWidth: 2, pointRadius: 0, fill: false },
-      { label: "Phase T (A)", data: Array.from({ length: 24 }, () => 330 + Math.random() * 45), borderColor: "#3b82f6", borderWidth: 2, pointRadius: 0, fill: false }
-    ]
-  };
-
-  const powerData = {
-    labels: trendLabels,
-    datasets: [
-      {
-        label: "Daya Aktif (kW)",
-        data: Array.from({ length: 24 }, () => 520 + Math.random() * 60),
-        backgroundColor: "rgba(16, 185, 129, 0.4)",
-        borderColor: "#10b981",
-        borderWidth: 1.5
-      }
-    ]
-  };
-
-  const lineOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        labels: { color: isDark ? "#94a3b8" : "#475569", font: { size: 9, weight: "bold" as const } }
-      }
-    },
-    scales: {
-      x: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 8 } } },
-      y: {
-        grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
-        ticks: { color: "#64748b", font: { size: 8 } }
-      }
-    }
-  };
 
   const tabs = [
     { key: "voltage" as const, label: "Voltage Record" },
@@ -370,10 +320,11 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
             </div>
 
             {/* Chart View */}
-            <div className="relative flex-1" style={{ minHeight: 260, height: "100%" }}>
-              {activeTab === "voltage" && <Line data={voltageData} options={lineOptions} />}
-              {activeTab === "ampere" && <Line data={ampereData} options={lineOptions} />}
-              {activeTab === "power" && <Bar data={powerData} options={lineOptions as any} />}
+            <div className="relative flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl" style={{ minHeight: 260, height: "100%" }}>
+              <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA HISTORIS BELUM TERSEDIA</span>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 max-w-sm">
+                Data sensor histori untuk {transformer.name} belum terhubung ke API atau database pencatatan telemetri.
+              </p>
             </div>
           </div>
 
@@ -557,32 +508,31 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
 
 /* ═══════════ TRANSFORMER DETAIL CARD (Section B) ═══════════ */
 function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: TransformerData; factoryLabel: string; loadConfig: { safeMax: number; cautionMax: number } }) {
-  const loadPct = Math.round((tx.activePowerKw / tx.capacityKva) * 100);
+  const hasData = tx.activePowerKw !== null && tx.activePowerKw !== undefined;
+  const loadPct = hasData && tx.capacityKva && tx.activePowerKw !== null ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null;
   
   // Dynamic load colors based on Postgres threshold configs
-  const loadColor = loadPct <= loadConfig.safeMax 
-    ? "#10b981" 
-    : loadPct <= loadConfig.cautionMax 
-      ? "#eab308" 
-      : "#ef4444";
+  const loadColor = loadPct !== null 
+    ? (loadPct <= loadConfig.safeMax ? "#10b981" : loadPct <= loadConfig.cautionMax ? "#eab308" : "#ef4444")
+    : "#94a3b8";
 
-  // Mock voltages per phase for display
-  const vR_400 = (tx.voltageOutL2L + 0.8).toFixed(1);
-  const vS_400 = (tx.voltageOutL2L - 1.2).toFixed(1);
-  const vT_400 = (tx.voltageOutL2L + 0.4).toFixed(1);
+  // Voltages per phase for display
+  const vR_400 = tx.voltageOutL2L !== null ? `${(tx.voltageOutL2L).toFixed(1)}` : "—";
+  const vS_400 = tx.voltageOutL2L !== null ? `${(tx.voltageOutL2L).toFixed(1)}` : "—";
+  const vT_400 = tx.voltageOutL2L !== null ? `${(tx.voltageOutL2L).toFixed(1)}` : "—";
 
-  const vR_230 = (tx.voltageOutL2N + 0.5).toFixed(1);
-  const vS_230 = (tx.voltageOutL2N - 0.9).toFixed(1);
-  const vT_230 = (tx.voltageOutL2N + 0.3).toFixed(1);
+  const vR_230 = tx.voltageOutL2N !== null ? `${(tx.voltageOutL2N).toFixed(1)}` : "—";
+  const vS_230 = tx.voltageOutL2N !== null ? `${(tx.voltageOutL2N).toFixed(1)}` : "—";
+  const vT_230 = tx.voltageOutL2N !== null ? `${(tx.voltageOutL2N).toFixed(1)}` : "—";
 
-  // Mock THD per phase
-  const thdv_R = tx.thdVoltage.toFixed(2);
-  const thdv_S = (tx.thdVoltage * 0.96).toFixed(2);
-  const thdv_T = (tx.thdVoltage * 1.04).toFixed(2);
+  // THD per phase
+  const thdv_R = tx.thdVoltage !== null ? tx.thdVoltage.toFixed(2) : "—";
+  const thdv_S = tx.thdVoltage !== null ? tx.thdVoltage.toFixed(2) : "—";
+  const thdv_T = tx.thdVoltage !== null ? tx.thdVoltage.toFixed(2) : "—";
 
-  const thdi_R = tx.thdCurrent.toFixed(2);
-  const thdi_S = (tx.thdCurrent * 0.93).toFixed(2);
-  const thdi_T = (tx.thdCurrent * 1.07).toFixed(2);
+  const thdi_R = tx.thdCurrent !== null ? tx.thdCurrent.toFixed(2) : "—";
+  const thdi_S = tx.thdCurrent !== null ? tx.thdCurrent.toFixed(2) : "—";
+  const thdi_T = tx.thdCurrent !== null ? tx.thdCurrent.toFixed(2) : "—";
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
@@ -593,8 +543,8 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
             className="rounded-full"
             style={{
               width: 8, height: 8,
-              backgroundColor: tx.status === "online" ? "#10b981" : "#f59e0b",
-              boxShadow: tx.status === "online" ? "0 0 6px #10b981" : "0 0 6px #f59e0b",
+              backgroundColor: hasData ? (tx.status === "online" ? "#10b981" : "#f59e0b") : "#94a3b8",
+              boxShadow: hasData ? "0 0 6px #10b981" : "none",
             }}
           />
           <span className="text-sm font-extrabold text-slate-800 dark:text-white">{tx.name}</span>
@@ -611,11 +561,11 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
             >
               <div
                 className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${Math.min(100, loadPct)}%`, backgroundColor: loadColor }}
+                style={{ width: `${loadPct ? Math.min(100, loadPct) : 0}%`, backgroundColor: loadColor }}
               />
             </div>
-            <span className="text-[10px] font-extrabold font-mono" style={{ color: loadColor }}>
-              {loadPct}%
+            <span className="text-[10px] font-extrabold font-mono text-slate-400">
+              {loadPct !== null ? `${loadPct}%` : "—%"}
             </span>
           </div>
         </div>
@@ -624,17 +574,17 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
       {/* Parameters Grid */}
       <div className="p-5">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 16px" }} className="text-xs">
-          <ParamCell label="Input Voltage" value={`${tx.voltageInKv.toFixed(2)} kV`} />
-          <ParamCell label="Output Volt 400V" value={`R:${vR_400} S:${vS_400} T:${vT_400} V`} />
-          <ParamCell label="Output Volt 230V" value={`R:${vR_230} S:${vS_230} T:${vT_230} V`} />
+          <ParamCell label="Input Voltage" value={tx.voltageInKv !== null ? `${tx.voltageInKv.toFixed(2)} kV` : "—"} />
+          <ParamCell label="Output Volt 400V" value={tx.voltageOutL2L !== null ? `R:${vR_400} S:${vS_400} T:${vT_400} V` : "R: —  S: —  T: — V"} />
+          <ParamCell label="Output Volt 230V" value={tx.voltageOutL2N !== null ? `R:${vR_230} S:${vS_230} T:${vT_230} V` : "R: —  S: —  T: — V"} />
           
-          <ParamCell label="Active Power" value={`${tx.activePowerKw} kW`} accent />
-          <ParamCell label="Reactive Power" value={`${tx.reactivePowerKvar} kVAR`} />
-          <ParamCell label="Apparent Power" value={`${tx.apparentPowerKva} kVA`} />
+          <ParamCell label="Active Power" value={tx.activePowerKw !== null ? `${tx.activePowerKw} kW` : "—"} accent={hasData} />
+          <ParamCell label="Reactive Power" value={tx.reactivePowerKvar !== null ? `${tx.reactivePowerKvar} kVAR` : "—"} />
+          <ParamCell label="Apparent Power" value={tx.apparentPowerKva !== null ? `${tx.apparentPowerKva} kVA` : "—"} />
           
-          <ParamCell label="Power Factor" value={tx.powerFactor.toFixed(3)} />
-          <ParamCell label="Frequency" value={`${tx.frequencyHz.toFixed(2)} Hz`} />
-          <ParamCell label="Temperature" value={`${tx.tempCc.toFixed(1)} °C`} warn={tx.tempCc > 60} />
+          <ParamCell label="Power Factor" value={tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"} />
+          <ParamCell label="Frequency" value={tx.frequencyHz !== null ? `${tx.frequencyHz.toFixed(2)} Hz` : "—"} />
+          <ParamCell label="Temperature" value={tx.tempCc !== null ? `${tx.tempCc.toFixed(1)} °C` : "—"} warn={tx.tempCc !== null && tx.tempCc > 60} />
 
           <ParamCell label="Impedance" value={`${tx.impedance ?? 4.5} %`} />
           <ParamCell label="Vector Group" value={tx.vectorGroup ?? "Dyn11"} />
@@ -647,28 +597,28 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
         >
           <div className="flex justify-between items-center text-xs">
             <span className="text-[9px] text-slate-400 uppercase font-extrabold tracking-wider">Arus Per Fasa (A)</span>
-            <div className="font-mono font-bold text-slate-700 dark:text-slate-300">
-              R: <span className="text-rose-500 mr-2">{Math.round(tx.currentR)}</span>
-              S: <span className="text-amber-500 mr-2">{Math.round(tx.currentS)}</span>
-              T: <span className="text-blue-500">{Math.round(tx.currentT)}</span>
+            <div className="font-mono font-bold text-slate-400">
+              R: <span className="text-slate-400 mr-2">{tx.currentR !== null ? Math.round(tx.currentR) : "—"}</span>
+              S: <span className="text-slate-400 mr-2">{tx.currentS !== null ? Math.round(tx.currentS) : "—"}</span>
+              T: <span className="text-slate-400">{tx.currentT !== null ? Math.round(tx.currentT) : "—"}</span>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/40 text-xs">
             <div>
               <span className="text-[9px] text-slate-400 uppercase block font-extrabold tracking-wider mb-0.5">THDV Per Fasa (%)</span>
-              <div className="font-mono font-bold text-slate-700 dark:text-slate-300">
-                R:<span className="text-sky-500 mr-1">{thdv_R}</span>
-                S:<span className="text-sky-500 mr-1">{thdv_S}</span>
-                T:<span className="text-sky-500">{thdv_T}</span>
+              <div className="font-mono font-bold text-slate-400">
+                R:<span className="mr-1">{thdv_R}</span>
+                S:<span className="mr-1">{thdv_S}</span>
+                T:<span>{thdv_T}</span>
               </div>
             </div>
             <div>
               <span className="text-[9px] text-slate-400 uppercase block font-extrabold tracking-wider mb-0.5">THDi Per Fasa (%)</span>
-              <div className="font-mono font-bold text-slate-700 dark:text-slate-300">
-                R:<span className="text-indigo-500 mr-1">{thdi_R}</span>
-                S:<span className="text-indigo-500 mr-1">{thdi_S}</span>
-                T:<span className="text-indigo-500">{thdi_T}</span>
+              <div className="font-mono font-bold text-slate-400">
+                R:<span className="mr-1">{thdi_R}</span>
+                S:<span className="mr-1">{thdi_S}</span>
+                T:<span>{thdi_T}</span>
               </div>
             </div>
           </div>
@@ -676,11 +626,11 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
           <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/40 text-[10px] font-bold text-slate-500">
             <div>
               <span>Voltage Unbalanced: </span>
-              <span className="text-slate-700 dark:text-slate-300 font-mono">0.95%</span>
+              <span className="text-slate-400 font-mono">—</span>
             </div>
             <div>
               <span>Current Unbalanced: </span>
-              <span className="text-slate-700 dark:text-slate-300 font-mono">1.56%</span>
+              <span className="text-slate-400 font-mono">—</span>
             </div>
           </div>
         </div>
@@ -692,14 +642,14 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
         >
           <div>
             <span className="text-[9px] text-slate-400 uppercase block font-bold">Total Konsumsi</span>
-            <span className="text-xs font-bold text-[#002b5c] dark:text-sky-400 font-mono">
-              {tx.kwh.toLocaleString("id-ID")} <span className="text-[9px] text-slate-400 font-bold">kWh</span>
+            <span className="text-xs font-bold text-slate-400 font-mono">
+              {tx.kwh !== null ? tx.kwh.toLocaleString("id-ID") : "—"} <span className="text-[9px] text-slate-400 font-bold">kWh</span>
             </span>
           </div>
           <div>
             <span className="text-[9px] text-slate-400 uppercase block font-bold">Estimasi Cost</span>
-            <span className="text-xs font-bold text-emerald-500 font-mono">
-              {formatCurrencyIDR(tx.kwh * TARIF_PER_KWH)}
+            <span className="text-xs font-bold text-slate-400 font-mono">
+              {tx.kwh !== null ? formatCurrencyIDR(tx.kwh * TARIF_PER_KWH) : "Rp —"}
             </span>
           </div>
         </div>
@@ -793,14 +743,13 @@ function SldScaledCanvas({ children }: { children: React.ReactNode }) {
 
 /* ═══════════ SLD TRANSFORMER MINI CARD ═══════════ */
 function SldMiniCard({ tx, onClick, loadConfig }: { tx: TransformerData; onClick: () => void; loadConfig: { safeMax: number; cautionMax: number } }) {
-  const loadPct = Math.round((tx.activePowerKw / tx.capacityKva) * 100);
+  const hasData = tx.activePowerKw !== null && tx.activePowerKw !== undefined;
+  const loadPct = hasData && tx.capacityKva && tx.activePowerKw !== null ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null;
   
   // Dynamic color thresholds based on user parameters
-  const loadColor = loadPct <= loadConfig.safeMax 
-    ? "#10b981" 
-    : loadPct <= loadConfig.cautionMax 
-      ? "#eab308" 
-      : "#ef4444";
+  const loadColor = loadPct !== null 
+    ? (loadPct <= loadConfig.safeMax ? "#10b981" : loadPct <= loadConfig.cautionMax ? "#eab308" : "#ef4444")
+    : "#94a3b8";
 
   return (
     <div
@@ -815,8 +764,8 @@ function SldMiniCard({ tx, onClick, loadConfig }: { tx: TransformerData; onClick
             className="rounded-full flex-shrink-0"
             style={{
               width: 6, height: 6,
-              backgroundColor: tx.status === "online" ? "#10b981" : "#f59e0b",
-              boxShadow: tx.status === "online" ? "0 0 4px #10b981" : "0 0 4px #f59e0b",
+              backgroundColor: hasData ? (tx.status === "online" ? "#10b981" : "#f59e0b") : "#94a3b8",
+              boxShadow: hasData ? "0 0 4px #10b981" : "none",
             }}
           />
           {tx.name}
@@ -826,11 +775,11 @@ function SldMiniCard({ tx, onClick, loadConfig }: { tx: TransformerData; onClick
 
       {/* Power value */}
       <div className="py-2 space-y-0.5">
-        <div className="text-xs font-extrabold font-mono text-slate-800 dark:text-slate-100">
-          {tx.activePowerKw} <span className="text-[8px] font-semibold text-slate-400">kW</span>
+        <div className={`text-xs font-extrabold font-mono ${hasData ? "text-slate-800 dark:text-slate-100" : "text-slate-400"}`}>
+          {hasData ? `${tx.activePowerKw} kW` : "— kW"}
         </div>
         <div className="text-[9px] font-bold text-slate-500">
-          PF: <span className="font-mono text-slate-700 dark:text-slate-300">{tx.powerFactor.toFixed(3)}</span>
+          PF: <span className="font-mono text-slate-400">{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"}</span>
         </div>
       </div>
 
@@ -838,7 +787,7 @@ function SldMiniCard({ tx, onClick, loadConfig }: { tx: TransformerData; onClick
       <div className="space-y-1">
         <div className="flex justify-between text-[7px] font-extrabold text-slate-400">
           <span>LOAD</span>
-          <span style={{ color: loadColor }}>{loadPct}%</span>
+          <span style={{ color: loadColor }}>{loadPct !== null ? `${loadPct}%` : "—%"}</span>
         </div>
         <div
           className="w-full rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700/60"
@@ -846,7 +795,7 @@ function SldMiniCard({ tx, onClick, loadConfig }: { tx: TransformerData; onClick
         >
           <div
             className="h-full rounded-full transition-all duration-1000"
-            style={{ width: `${Math.min(100, loadPct)}%`, backgroundColor: loadColor }}
+            style={{ width: `${loadPct ? Math.min(100, loadPct) : 0}%`, backgroundColor: loadColor }}
           />
         </div>
       </div>
@@ -921,6 +870,73 @@ export default function PowerDistribution() {
   const [telemetryTransformers, setTelemetryTransformers] = useState<TransformerData[]>(INITIAL_TRANSFORMERS);
   const [selectedTx, setSelectedTx] = useState<TransformerData | null>(null);
 
+  // Incoming live telemetry data
+  const [incomingData, setIncomingData] = useState<{
+    plnKw: number | null;
+    plnPf: number | null;
+    wf1Kw: number | null;
+    wf1Pf: number | null;
+    wf2Kw: number | null;
+    wf2Pf: number | null;
+  }>({
+    plnKw: null,
+    plnPf: null,
+    wf1Kw: null,
+    wf1Pf: null,
+    wf2Kw: null,
+    wf2Pf: null,
+  });
+
+  // Fetch incoming telemetries for PLN, Fact-1, Fact-2
+  useEffect(() => {
+    if (!isPageActive) return;
+    const fetchIncomingData = async () => {
+      try {
+        const [plnRes, wf1Res, wf2Res] = await Promise.all([
+          getJson<{ data: any }>("/analytics/electricity?deviceId=Cubicle_PLN_PM8000"),
+          getJson<{ data: any }>("/analytics/electricity?deviceId=Feeder_WF1_PM5560"),
+          getJson<{ data: any }>("/analytics/electricity?deviceId=Feeder_WF2_PM5500"),
+        ]);
+        setIncomingData({
+          plnKw: plnRes?.data?.pqData?.activePower !== undefined ? plnRes.data.pqData.activePower : null,
+          plnPf: plnRes?.data?.pqData?.pf !== undefined ? plnRes.data.pqData.pf : null,
+          wf1Kw: wf1Res?.data?.pqData?.activePower !== undefined ? wf1Res.data.pqData.activePower : null,
+          wf1Pf: wf1Res?.data?.pqData?.pf !== undefined ? wf1Res.data.pqData.pf : null,
+          wf2Kw: wf2Res?.data?.pqData?.activePower !== undefined ? wf2Res.data.pqData.activePower : null,
+          wf2Pf: wf2Res?.data?.pqData?.pf !== undefined ? wf2Res.data.pqData.pf : null,
+        });
+      } catch (err) {
+        console.error("Failed to load incoming telemetries for SLD:", err);
+      }
+    };
+
+    fetchIncomingData();
+    const interval = setInterval(fetchIncomingData, 5000);
+
+    const socket = getSocket();
+    const handleIncomingLive = (payload: any) => {
+      if (!payload || !payload.deviceId || !payload.pqData) return;
+      setIncomingData(prev => {
+        if (payload.deviceId === "Cubicle_PLN_PM8000") {
+          return { ...prev, plnKw: payload.pqData.activePower, plnPf: payload.pqData.pf };
+        }
+        if (payload.deviceId === "Feeder_WF1_PM5560") {
+          return { ...prev, wf1Kw: payload.pqData.activePower, wf1Pf: payload.pqData.pf };
+        }
+        if (payload.deviceId === "Feeder_WF2_PM5500") {
+          return { ...prev, wf2Kw: payload.pqData.activePower, wf2Pf: payload.pqData.pf };
+        }
+        return prev;
+      });
+    };
+
+    socket.on("electricity:live_update", handleIncomingLive);
+    return () => {
+      clearInterval(interval);
+      socket.off("electricity:live_update", handleIncomingLive);
+    };
+  }, [isPageActive]);
+
   // Sub-Distribution Power Meters (EW23, EW21, EW22)
   const [selectedEwGroup, setSelectedEwGroup] = useState<"ew23" | "ew21" | "ew22">("ew23");
   const [ewPowerMeters, setEwPowerMeters] = useState<ElectricPmItem[]>([]);
@@ -941,7 +957,7 @@ export default function PowerDistribution() {
     };
 
     fetchPmData();
-    const interval = setInterval(fetchPmData, 1000);
+    const interval = setInterval(fetchPmData, 10000);
 
     const socket = getSocket();
     const handleLiveUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
@@ -1107,8 +1123,9 @@ export default function PowerDistribution() {
   };
 
   const totalLoadKw = useMemo(() => {
-    return transformers.reduce((sum, tx) => sum + tx.activePowerKw, 0);
-  }, [transformers]);
+    const sumIncoming = (incomingData.wf1Kw || 0) + (incomingData.wf2Kw || 0);
+    return sumIncoming > 0 ? sumIncoming : (incomingData.plnKw || 0);
+  }, [incomingData]);
 
   const totalCapacityKva = useMemo(() => {
     return transformers.reduce((sum, tx) => sum + tx.capacityKva, 0);
@@ -1116,58 +1133,6 @@ export default function PowerDistribution() {
 
   const factory1 = transformers.filter(tx => tx.factory === 1);
   const factory2 = transformers.filter(tx => tx.factory === 2);
-
-  // Bottom historical trend datasets (Gambar 2)
-  const trendHours = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
-
-  const bottomVoltageData = useMemo(() => {
-    const baseV = bottomTx.voltageOutL2L || 400;
-    return {
-      labels: trendHours,
-      datasets: [
-        { label: "VAB (V)", data: Array.from({ length: 24 }, (_, i) => +(baseV - 0.8 + Math.sin(i / 2) * 1.5).toFixed(1)), borderColor: "#f43f5e", borderWidth: 2, pointRadius: 0, tension: 0.3 },
-        { label: "VBC (V)", data: Array.from({ length: 24 }, (_, i) => +(baseV + 1.2 + Math.cos(i / 2) * 1.3).toFixed(1)), borderColor: "#eab308", borderWidth: 2, pointRadius: 0, tension: 0.3 },
-        { label: "VCA (V)", data: Array.from({ length: 24 }, (_, i) => +(baseV - 0.4 + Math.sin(i / 3) * 1.8).toFixed(1)), borderColor: "#3b82f6", borderWidth: 2, pointRadius: 0, tension: 0.3 }
-      ]
-    };
-  }, [trendHours, bottomTx]);
-
-  const bottomPowerData = useMemo(() => {
-    const baseP = bottomTx.activePowerKw || 500;
-    return {
-      labels: trendHours,
-      datasets: [
-        { label: "Daya Aktif (kW)", data: Array.from({ length: 24 }, (_, i) => Math.round(baseP - 30 + Math.sin(i / 4) * 45)), borderColor: "#10b981", backgroundColor: "rgba(16, 185, 129, 0.05)", borderWidth: 2.5, pointRadius: 0, fill: true, tension: 0.3 }
-      ]
-    };
-  }, [trendHours, bottomTx]);
-
-  const bottomAmpereData = useMemo(() => {
-    const baseI = bottomTx.currentR || 400;
-    return {
-      labels: trendHours,
-      datasets: [
-        { label: "Phase R (A)", data: Array.from({ length: 24 }, (_, i) => Math.round(baseI - 15 + Math.sin(i / 2) * 20)), borderColor: "#f43f5e", borderWidth: 2, pointRadius: 0, tension: 0.3 },
-        { label: "Phase S (A)", data: Array.from({ length: 24 }, (_, i) => Math.round(baseI * 0.98 - 12 + Math.cos(i / 2) * 18)), borderColor: "#eab308", borderWidth: 2, pointRadius: 0, tension: 0.3 },
-        { label: "Phase T (A)", data: Array.from({ length: 24 }, (_, i) => Math.round(baseI * 1.02 - 18 + Math.sin(i / 3) * 22)), borderColor: "#3b82f6", borderWidth: 2, pointRadius: 0, tension: 0.3 }
-      ]
-    };
-  }, [trendHours, bottomTx]);
-
-  const chartOptions = (yTitle: string) => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: true, position: "top" as const, labels: { color: isDark ? "#94a3b8" : "#475569", font: { size: 9, weight: "bold" as const } } }
-    },
-    scales: {
-      x: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 8 } } },
-      y: {
-        grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
-        ticks: { color: "#64748b", font: { size: 8 } }
-      }
-    }
-  });
 
   const activeLineColor = isDark ? "#06b6d4" : "#3b82f6";
 
@@ -1189,7 +1154,7 @@ export default function PowerDistribution() {
           <div className="px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm flex items-center gap-3">
             <span className="text-[10px] font-extrabold uppercase text-slate-400">Total Load</span>
             <span className="text-base font-extrabold font-mono text-slate-800 dark:text-white">
-              {totalLoadKw.toLocaleString("id-ID")} <span className="text-xs text-slate-400 font-bold">kW</span>
+              {totalLoadKw > 0 ? `${totalLoadKw.toLocaleString("id-ID")} kW` : "— kW"}
             </span>
           </div>
           <div className="px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm flex items-center gap-3">
@@ -1223,22 +1188,22 @@ export default function PowerDistribution() {
         {/* SLD Canvas */}
         <SldScaledCanvas>
           
-          {/* 1. SVG PIPELINE AND POWER LINES OVERLAY */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+          {/* 1. SVG PIPELINE AND POWER LINES OVERLAY (z-20 on top so never occluded) */}
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-20">
             <defs>
-              <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 2 L 8 5 L 0 8 z" fill="#10b981" />
+              <marker id="arrow-green" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10b981" />
               </marker>
-              <marker id="arrow-red" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 2 L 8 5 L 0 8 z" fill="#ef4444" />
+              <marker id="arrow-orange" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#f97316" />
               </marker>
-              <marker id="arrow-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 2 L 8 5 L 0 8 z" fill={activeLineColor} />
+              <marker id="arrow-blue" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill={activeLineColor} />
               </marker>
             </defs>
 
             {/* Main PLN line down and split symmetrically to Factory 1 (285) & Factory 2 (915) */}
-            <path d="M 600 112 L 600 134 M 285 134 L 915 134" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <path d="M 600 114 L 600 134 M 285 134 L 915 134" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
             
             {/* Feeder line into Incoming Fact-1 */}
             <path d="M 285 134 L 285 150" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
@@ -1251,13 +1216,13 @@ export default function PowerDistribution() {
             <path d="M 915 226 L 915 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
 
             {/* Busbars: Thick Yellow Lines with Ambient Glow */}
-            {/* Factory 1 Busbar (Centered at X = 285, Width = 410) */}
-            <path d="M 80 265 L 490 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
-            <text x="85" y="258" fill="#ca8a04" fontSize="8" fontWeight="800" letterSpacing="0.08em">21 kV BUS (FACTORY 1)</text>
+            {/* Factory 1 Busbar (Centered at X = 285, Width = 430) */}
+            <path d="M 70 265 L 500 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
+            <text x="75" y="258" fill="#ca8a04" fontSize="8" fontWeight="800" letterSpacing="0.08em">21 kV BUS (FACTORY 1)</text>
 
             {/* Factory 2 Busbar (Centered at X = 915, Width = 350) */}
-            <path d="M 740 265 L 1090 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
-            <text x="745" y="258" fill="#ca8a04" fontSize="8" fontWeight="800" letterSpacing="0.08em">21 kV BUS (FACTORY 2)</text>
+            <path d="M 741 265 L 1089 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
+            <text x="746" y="258" fill="#ca8a04" fontSize="8" fontWeight="800" letterSpacing="0.08em">21 kV BUS (FACTORY 2)</text>
 
             {/* Factory 1: 4 Symmetrical Transformer Branches (Centers: 120, 230, 340, 450) */}
             {[120, 230, 340, 450].map((x) => (
@@ -1286,18 +1251,17 @@ export default function PowerDistribution() {
             ))}
 
             {/* --- ZERO-COLLISION AUXILIARY POWER ROUTING --- */}
-            {/* 1. Genset Natural Gas (95, 226) -> Clean outer track (X = 45) -> Feeds MDP-1.1 (X = 70) and MDP-2 (X = 290) */}
-            <path d="M 95 226 L 95 245 L 45 245 L 45 420 L 70 420" fill="none" stroke="#10b981" strokeWidth="1.8" strokeDasharray="4 3" markerEnd="url(#arrow-green)" />
-            <path d="M 45 420 L 45 460 L 290 460" fill="none" stroke="#10b981" strokeWidth="1.8" strokeDasharray="4 3" markerEnd="url(#arrow-green)" />
+            {/* 1. Genset Natural Gas (95, 220) -> Clean outer track (X = 35) -> Feeds left of MDP-1.1 (X = 70, Y = 410) */}
+            <path d="M 95 220 L 95 245 L 35 245 L 35 410 L 70 410" fill="none" stroke="#10b981" strokeWidth="2" strokeDasharray="5 3" markerEnd="url(#arrow-green)" />
 
-            {/* 2. Solar PV POI-1 (475, 226) -> Clean inner track (X = 525) -> Feeds right side of MDP-3 (X = 500) */}
-            <path d="M 475 226 L 475 245 L 525 245 L 525 420 L 500 420" fill="none" stroke="#ef4444" strokeWidth="1.8" strokeDasharray="3 3" markerEnd="url(#arrow-red)" />
+            {/* 2. Solar PV POI-1 (475, 220) -> Clean inner track (X = 535) -> Feeds right side of MDP-3 (X = 500, Y = 410) */}
+            <path d="M 475 220 L 475 245 L 535 245 L 535 410 L 500 410" fill="none" stroke="#f97316" strokeWidth="2" strokeDasharray="5 3" markerEnd="url(#arrow-orange)" />
 
-            {/* 3. Solar PV POI-2 (725, 226) -> Clean inner track (X = 675) -> Feeds right side of PUTR-2 (X = 861) */}
-            <path d="M 725 226 L 725 245 L 675 245 L 675 420 L 741 420" fill="none" stroke="#ef4444" strokeWidth="1.8" strokeDasharray="3 3" markerEnd="url(#arrow-red)" />
+            {/* 3. Solar PV POI-2 (725, 220) -> Clean inner track (X = 705) -> Feeds left side of PUTR-1 (X = 741, Y = 410) */}
+            <path d="M 725 220 L 725 245 L 705 245 L 705 410 L 741 410" fill="none" stroke="#f97316" strokeWidth="2" strokeDasharray="5 3" markerEnd="url(#arrow-orange)" />
 
-            {/* 4. Genset Diesel Fuel (1105, 226) -> Clean outer track (X = 1155) -> Feeds right side of PUTR-NEW (X = 1089) */}
-            <path d="M 1105 226 L 1105 245 L 1155 245 L 1155 420 L 1089 420" fill="none" stroke="#10b981" strokeWidth="1.8" strokeDasharray="4 3" markerEnd="url(#arrow-green)" />
+            {/* 4. Genset Diesel Fuel (1105, 220) -> Clean outer track (X = 1125) -> Feeds right side of PUTR-NEW (X = 1089, Y = 410) */}
+            <path d="M 1105 220 L 1105 245 L 1125 245 L 1125 410 L 1089 410" fill="none" stroke="#10b981" strokeWidth="2" strokeDasharray="5 3" markerEnd="url(#arrow-green)" />
           </svg>
 
           {/* 2. ABSOLUTE CARDS LAYOUT */}
@@ -1310,10 +1274,12 @@ export default function PowerDistribution() {
               <div className="text-[11px] font-extrabold text-blue-700 dark:text-blue-300">5,540 kVa</div>
               <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-1">
                 Active Power <br />
-                <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">1.850 kW</span>
+                <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                  {incomingData.plnKw !== null ? `${incomingData.plnKw.toLocaleString("id-ID")} kW` : "— kW"}
+                </span>
               </div>
               <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono">0,967</span>
+                PF : <span className="font-bold font-mono">{incomingData.plnPf !== null ? incomingData.plnPf.toFixed(3) : "—"}</span>
               </div>
             </div>
           </div>
@@ -1327,6 +1293,7 @@ export default function PowerDistribution() {
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Genset</div>
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Natural Gas</div>
               <div className="text-[10px] font-bold text-slate-600 dark:text-slate-300 mt-0.5">1350 kVa</div>
+              <div className="text-[8px] text-slate-400 mt-1 font-mono">Belum Ada Sensor</div>
             </div>
           </div>
 
@@ -1339,10 +1306,12 @@ export default function PowerDistribution() {
               <div className="text-[11px] font-black text-blue-600 dark:text-blue-400">Fact-1</div>
               <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
-                <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">850 kW</span>
+                <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                  {incomingData.wf1Kw !== null ? `${incomingData.wf1Kw.toLocaleString("id-ID")} kW` : "— kW"}
+                </span>
               </div>
               <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono">0,967</span>
+                PF : <span className="font-bold font-mono">{incomingData.wf1Pf !== null ? incomingData.wf1Pf.toFixed(3) : "—"}</span>
               </div>
             </div>
           </div>
@@ -1355,10 +1324,10 @@ export default function PowerDistribution() {
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">POI-1</div>
               <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                Active Power: <span className="font-bold font-mono">50 kW</span>
+                Active Power: <span className="font-bold font-mono text-slate-400">—</span>
               </div>
               <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono">0,967</span>
+                PF : <span className="font-bold font-mono text-slate-400">—</span>
               </div>
             </div>
           </div>
@@ -1372,10 +1341,10 @@ export default function PowerDistribution() {
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">POI-2</div>
               <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                Active Power: <span className="font-bold font-mono">1000 kW</span>
+                Active Power: <span className="font-bold font-mono text-slate-400">—</span>
               </div>
               <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono">0,967</span>
+                PF : <span className="font-bold font-mono text-slate-400">—</span>
               </div>
             </div>
           </div>
@@ -1389,10 +1358,12 @@ export default function PowerDistribution() {
               <div className="text-[11px] font-black text-blue-600 dark:text-blue-400">Fact-2</div>
               <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
-                <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">1.000 kW</span>
+                <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                  {incomingData.wf2Kw !== null ? `${incomingData.wf2Kw.toLocaleString("id-ID")} kW` : "— kW"}
+                </span>
               </div>
               <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono">0,967</span>
+                PF : <span className="font-bold font-mono">{incomingData.wf2Pf !== null ? incomingData.wf2Pf.toFixed(3) : "—"}</span>
               </div>
             </div>
           </div>
@@ -1405,13 +1376,15 @@ export default function PowerDistribution() {
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Genset</div>
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Diesel Fuel</div>
               <div className="text-[10px] font-bold text-slate-600 dark:text-slate-300 mt-0.5">1000 kVa</div>
+              <div className="text-[8px] text-slate-400 mt-1 font-mono">Belum Ada Sensor</div>
             </div>
           </div>
 
           {/* ═══════════ FACTORY 1 TRANSFORMER CARDS (4 Units) ═══════════ */}
           {factory1.map((tx, idx) => {
             const cardLeft = 70 + idx * 110;
-            const loadPct = Math.round((tx.activePowerKw / tx.capacityKva) * 100);
+            const hasData = tx.activePowerKw !== null;
+            const loadPct = hasData && tx.capacityKva && tx.activePowerKw !== null ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null;
             return (
               <div key={tx.id} className="absolute z-10" style={{ left: cardLeft, top: 360, width: 100 }}>
                 <div
@@ -1431,23 +1404,23 @@ export default function PowerDistribution() {
                     {tx.name}
                   </div>
                   <div className="mt-1 text-[8px] text-slate-400 font-semibold">Active Power</div>
-                  <div className={`text-[11px] font-extrabold font-mono ${idx === 0 ? "text-sky-400" : "text-slate-800 dark:text-slate-100"}`}>
-                    {tx.activePowerKw} kW
+                  <div className={`text-[11px] font-extrabold font-mono ${hasData ? (idx === 0 ? "text-sky-400" : "text-slate-800 dark:text-slate-100") : "text-slate-400"}`}>
+                    {hasData ? `${tx.activePowerKw} kW` : "— kW"}
                   </div>
                   <div className="text-[8px] text-slate-400">
-                    PF: <span className="font-bold">{tx.powerFactor.toFixed(3)}</span>
+                    PF: <span className="font-bold">{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"}</span>
                   </div>
                   
                   {/* Load progress bar */}
                   <div className="mt-1.5 pt-1 border-t border-slate-200 dark:border-slate-700/60">
                     <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${loadPct > 80 ? "bg-rose-500" : loadPct > 50 ? "bg-amber-400" : "bg-emerald-500"}`}
-                        style={{ width: `${Math.min(100, loadPct)}%` }}
+                        className="h-full rounded-full bg-slate-300 dark:bg-slate-600"
+                        style={{ width: `${loadPct ? Math.min(100, loadPct) : 0}%` }}
                       />
                     </div>
-                    <div className={`text-[7.5px] font-bold text-center mt-0.5 ${loadPct > 80 ? "text-rose-500" : loadPct > 50 ? "text-amber-500" : "text-emerald-500"}`}>
-                      {loadPct}%
+                    <div className="text-[7.5px] font-bold text-center mt-0.5 text-slate-400">
+                      {loadPct !== null ? `${loadPct}%` : "—%"}
                     </div>
                   </div>
                 </div>
@@ -1471,7 +1444,8 @@ export default function PowerDistribution() {
           {/* ═══════════ FACTORY 2 TRANSFORMER CARDS (3 Units) ═══════════ */}
           {factory2.map((tx, idx) => {
             const cardLeft = 741 + idx * 120;
-            const loadPct = Math.round((tx.activePowerKw / tx.capacityKva) * 100);
+            const hasData = tx.activePowerKw !== null;
+            const loadPct = hasData && tx.capacityKva && tx.activePowerKw !== null ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null;
             return (
               <div key={tx.id} className="absolute z-10" style={{ left: cardLeft, top: 360, width: 108 }}>
                 <div
@@ -1491,23 +1465,23 @@ export default function PowerDistribution() {
                     {tx.name}
                   </div>
                   <div className="mt-1 text-[8px] text-slate-400 font-semibold">Active Power</div>
-                  <div className={`text-[11px] font-extrabold font-mono ${idx === 0 ? "text-emerald-400" : "text-slate-800 dark:text-slate-100"}`}>
-                    {tx.activePowerKw} kW
+                  <div className={`text-[11px] font-extrabold font-mono ${hasData ? (idx === 0 ? "text-emerald-400" : "text-slate-800 dark:text-slate-100") : "text-slate-400"}`}>
+                    {hasData ? `${tx.activePowerKw} kW` : "— kW"}
                   </div>
                   <div className="text-[8px] text-slate-400">
-                    PF: <span className="font-bold">{tx.powerFactor.toFixed(3)}</span>
+                    PF: <span className="font-bold">{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"}</span>
                   </div>
 
                   {/* Load progress bar */}
                   <div className="mt-1.5 pt-1 border-t border-slate-200 dark:border-slate-700/60">
                     <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${loadPct > 80 ? "bg-rose-500" : loadPct > 50 ? "bg-amber-400" : "bg-emerald-500"}`}
-                        style={{ width: `${Math.min(100, loadPct)}%` }}
+                        className="h-full rounded-full bg-slate-300 dark:bg-slate-600"
+                        style={{ width: `${loadPct ? Math.min(100, loadPct) : 0}%` }}
                       />
                     </div>
-                    <div className={`text-[7.5px] font-bold text-center mt-0.5 ${loadPct > 80 ? "text-rose-500" : loadPct > 50 ? "text-amber-500" : "text-emerald-500"}`}>
-                      {loadPct}%
+                    <div className="text-[7.5px] font-bold text-center mt-0.5 text-slate-400">
+                      {loadPct !== null ? `${loadPct}%` : "—%"}
                     </div>
                   </div>
                 </div>
@@ -1532,7 +1506,7 @@ export default function PowerDistribution() {
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-4 text-[9px] font-bold text-slate-400 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-1.5 rounded-full border border-slate-200/50 dark:border-slate-800/40">
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Online</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> Warning</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500" /> Offline</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-400" /> Belum Ada Sensor</span>
             <span className="text-[8px] text-slate-500 italic ml-2">Klik panel / Detail untuk info lengkap</span>
           </div>
         </SldScaledCanvas>
@@ -1609,7 +1583,7 @@ export default function PowerDistribution() {
         </div>
       </section>
 
-      {/* ═══════════ SECTION C: HISTORICAL TREND BOTTOM CHARTS (Gambar 2) ═══════════ */}
+      {/* ═══════════ SECTION C: HISTORICAL TREND BOTTOM CHARTS ═══════════ */}
       <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-5">
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3.5">
           <div className="flex items-center gap-2">
@@ -1628,35 +1602,38 @@ export default function PowerDistribution() {
                 <option key={t.id} value={t.id}>{t.factory === 1 ? "F1" : "F2"} {t.name}</option>
               ))}
             </select>
-            <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
-              ON
+            <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-slate-500/10 text-slate-400 border border-slate-500/20 uppercase tracking-wider">
+              OFFLINE
             </span>
           </div>
         </div>
 
-        {/* 3 Line Charts grid */}
+        {/* 3 Line Charts empty state */}
         <div className="grid gap-6 grid-cols-1">
           {/* Voltage */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
             <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-2">Voltage Record (V)</h4>
-            <div style={{ height: 180 }}>
-              <Line data={bottomVoltageData} options={chartOptions("Tegangan (V)")} />
+            <div className="h-[120px] flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+              <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA BELUM TERSEDIA</span>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Data sensor dan histori transformator belum terintegrasi ke database/API.</p>
             </div>
           </div>
 
           {/* Daya Aktif */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
             <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-2">Daya Aktif Record (kW)</h4>
-            <div style={{ height: 180 }}>
-              <Line data={bottomPowerData} options={chartOptions("Daya (kW)")} />
+            <div className="h-[120px] flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+              <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA BELUM TERSEDIA</span>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Data sensor dan histori transformator belum terintegrasi ke database/API.</p>
             </div>
           </div>
 
           {/* Ampere */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
             <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-2">Ampere Record (A)</h4>
-            <div style={{ height: 180 }}>
-              <Line data={bottomAmpereData} options={chartOptions("Arus (A)")} />
+            <div className="h-[120px] flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+              <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA BELUM TERSEDIA</span>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Data sensor dan histori transformator belum terintegrasi ke database/API.</p>
             </div>
           </div>
         </div>

@@ -244,9 +244,13 @@ export const getPowerMetersLatestHandler = async (
     const pool = getPostgresPool();
 
     const dbRes = await pool.query(`
+      WITH combined AS (
+        SELECT * FROM electric_pm_telemetry_minute WHERE LOWER(group_id) = $1
+        UNION ALL
+        SELECT * FROM electric_pm_telemetry WHERE LOWER(group_id) = $1
+      )
       SELECT DISTINCT ON (pm_id) *
-      FROM electric_pm_telemetry
-      WHERE LOWER(group_id) = $1
+      FROM combined
       ORDER BY pm_id, t_stamp DESC
     `, [group]);
 
@@ -259,7 +263,14 @@ export const getPowerMetersLatestHandler = async (
       // 1. Incoming Cubicle PLN
       if (!existingPmIds.has("PM410") && !existingPmIds.has("PM8000") && !existingPmIds.has("CUBICLE_PLN_PM8000")) {
         try {
-          const plnRes = await pool.query(`SELECT * FROM electric_pln_telemetry ORDER BY t_stamp DESC LIMIT 1`);
+          const plnRes = await pool.query(`
+            SELECT * FROM (
+              SELECT * FROM electric_pln_telemetry_minute
+              UNION ALL
+              SELECT * FROM electric_pln_telemetry
+            ) combined
+            ORDER BY t_stamp DESC LIMIT 1
+          `);
           if (plnRes.rows.length > 0) {
             const pln = plnRes.rows[0];
             data.push({
@@ -297,7 +308,14 @@ export const getPowerMetersLatestHandler = async (
       // 2. Incoming Cubicle WF1
       if (!existingPmIds.has("PM411") && !existingPmIds.has("PM5560") && !existingPmIds.has("PM5560_WF1") && !existingPmIds.has("FEEDER_WF1_PM5560")) {
         try {
-          const wf1Res = await pool.query(`SELECT * FROM electric_wf1_telemetry ORDER BY t_stamp DESC LIMIT 1`);
+          const wf1Res = await pool.query(`
+            SELECT * FROM (
+              SELECT * FROM electric_wf1_telemetry_minute
+              UNION ALL
+              SELECT * FROM electric_wf1_telemetry
+            ) combined
+            ORDER BY t_stamp DESC LIMIT 1
+          `);
           if (wf1Res.rows.length > 0) {
             const wf1 = wf1Res.rows[0];
             data.push({
@@ -335,7 +353,14 @@ export const getPowerMetersLatestHandler = async (
       // 3. Incoming Cubicle WF2
       if (!existingPmIds.has("PM412") && !existingPmIds.has("PM5560_WF2") && !existingPmIds.has("PM5500") && !existingPmIds.has("FEEDER_WF2_PM5500")) {
         try {
-          const wf2Res = await pool.query(`SELECT * FROM electric_wf2_telemetry ORDER BY t_stamp DESC LIMIT 1`);
+          const wf2Res = await pool.query(`
+            SELECT * FROM (
+              SELECT * FROM electric_wf2_telemetry_minute
+              UNION ALL
+              SELECT * FROM electric_wf2_telemetry
+            ) combined
+            ORDER BY t_stamp DESC LIMIT 1
+          `);
           if (wf2Res.rows.length > 0) {
             const wf2 = wf2Res.rows[0];
             data.push({
