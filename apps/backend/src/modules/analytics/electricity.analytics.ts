@@ -271,16 +271,17 @@ export const getElectricityAnalytics = async (
   const activeEnergyTag = "electricity/Cubicle_PLN_PM8000/active_energy";
 
   // 1. Fetch hourly values of active energy for the range
-  let hourlyRecords: { ts_text?: string; ts?: Date; value: number }[] = [];
+  let hourlyRecords: { ts_text: string; value: number }[] = [];
   const pool = getPostgresPool();
   try {
     if (poiFilter) {
       const res = await pool.query(`
         SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
-          t_stamp AS ts, 
+          t_stamp::text AS ts_text, 
           ${energyCol}::float AS value
         FROM ${tableName}
         WHERE t_stamp >= $1 AND t_stamp <= $2 AND poi_id = $3
+          AND ${energyCol} IS NOT NULL
         ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
       `, [fromQueryVal, toQueryVal, poiFilter]);
       hourlyRecords = res.rows;
@@ -288,16 +289,16 @@ export const getElectricityAnalytics = async (
       // Append latest from minute table if available
       try {
         const minRes = await pool.query(`
-          SELECT t_stamp AS ts, ${energyCol}::float AS value
+          SELECT t_stamp::text AS ts_text, ${energyCol}::float AS value
           FROM electric_plts_telemetry_minute
-          WHERE poi_id = $1
+          WHERE poi_id = $1 AND ${energyCol} IS NOT NULL
           ORDER BY t_stamp DESC LIMIT 1
         `, [poiFilter]);
         if (minRes.rows.length > 0) {
           const latest = minRes.rows[0];
-          const latestTs = latest.ts ? new Date(latest.ts) : new Date(0);
-          const lastTsRec = hourlyRecords.length > 0 ? hourlyRecords[hourlyRecords.length - 1] : null;
-          const lastTs = (lastTsRec && (lastTsRec.ts || lastTsRec.ts_text)) ? new Date(lastTsRec.ts || lastTsRec.ts_text!) : new Date(0);
+          const latestTs = latest.ts_text ? new Date(latest.ts_text) : new Date(0);
+          const lastTsStr = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "") : "";
+          const lastTs = lastTsStr ? new Date(lastTsStr) : new Date(0);
           if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
             hourlyRecords.push(latest);
           }
@@ -349,15 +350,16 @@ export const getElectricityAnalytics = async (
           : tableName === "electric_wf1_telemetry" ? "electric_wf1_telemetry_minute"
           : "electric_wf2_telemetry_minute";
         const minRes = await pool.query(`
-          SELECT t_stamp AS ts, ${energyCol}::float AS value
+          SELECT t_stamp::text AS ts_text, ${energyCol}::float AS value
           FROM ${minuteTable}
+          WHERE ${energyCol} IS NOT NULL
           ORDER BY t_stamp DESC LIMIT 1
         `);
         if (minRes.rows.length > 0) {
           const latest = minRes.rows[0];
-          const latestTs = latest.ts ? new Date(latest.ts) : new Date(0);
-          const lastTsRec = hourlyRecords.length > 0 ? hourlyRecords[hourlyRecords.length - 1] : null;
-          const lastTs = (lastTsRec && (lastTsRec.ts || lastTsRec.ts_text)) ? new Date(lastTsRec.ts || lastTsRec.ts_text!) : new Date(0);
+          const latestTs = latest.ts_text ? new Date(latest.ts_text) : new Date(0);
+          const lastTsStr = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "") : "";
+          const lastTs = lastTsStr ? new Date(lastTsStr) : new Date(0);
           if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
             hourlyRecords.push(latest);
           }
@@ -439,8 +441,8 @@ export const getElectricityAnalytics = async (
       if (diff < 0) diff = 0; // Guard against resets or anomalies
     }
 
-    const prevTsStr = (prevRecord.ts_text || (prevRecord.ts instanceof Date ? getWibDateString(prevRecord.ts) : String(prevRecord.ts || ""))).split(".")[0];
-    const currTsStr = (currRecord.ts_text || (currRecord.ts instanceof Date ? getWibDateString(currRecord.ts) : String(currRecord.ts || ""))).split(".")[0];
+    const prevTsStr = (prevRecord.ts_text || "").split(".")[0];
+    const currTsStr = (currRecord.ts_text || "").split(".")[0];
 
     const [prevDateStr, prevTimeStr = "00:00:00"] = prevTsStr.split(" ");
     const [currDateStr, currTimeStr = "00:00:00"] = currTsStr.split(" ");
@@ -507,12 +509,12 @@ export const getElectricityAnalytics = async (
       // Track peak demand
       if (diff > maxDiff) {
         maxDiff = diff;
-        peakDemandTs = currRecord.ts_text ? new Date(currRecord.ts_text) : (currRecord.ts || null);
+        peakDemandTs = currRecord.ts_text ? new Date(currRecord.ts_text) : null;
       }
       const currentMonthPeak = monthlyPeakMap.get(monthStr) || 0;
       if (diff > currentMonthPeak) {
         monthlyPeakMap.set(monthStr, diff);
-        monthlyPeakTsMap.set(monthStr, currRecord.ts_text ? new Date(currRecord.ts_text) : (currRecord.ts || new Date()));
+        monthlyPeakTsMap.set(monthStr, currRecord.ts_text ? new Date(currRecord.ts_text) : new Date());
       }
     }
 

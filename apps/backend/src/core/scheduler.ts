@@ -618,7 +618,7 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
 let lastElectricityMinuteStr = "";
 let lastSolarHourStr = "";
 
-const parseSolarLiveState = (data: any, ts: Date): SolarLiveState => {
+const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   const p1 = data?.POI_1 || {};
   const p2 = data?.POI_2 || {};
   const poi1Status = Boolean(p1.Status_POI_1);
@@ -865,7 +865,7 @@ export const startIncomingElectricityPolling = () => {
     try {
       const data = await fetchApiData("electric_plts");
       if (data) {
-        pltsParsed = parseSolarLiveState(data, ts);
+        pltsParsed = parseSolarApi(data, ts);
       } else {
         throw new Error("No data");
       }
