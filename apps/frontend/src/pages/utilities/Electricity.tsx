@@ -211,8 +211,22 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
   const options: any = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
-    animation: false,
-    events: ["mousemove", "mouseout", "click", "touchstart", "touchmove"],
+    animation: {
+      duration: 350,
+      easing: "easeOutQuart"
+    },
+    transitions: {
+      active: {
+        animation: {
+          duration: 180,
+          easing: "easeOutQuad"
+        }
+      }
+    },
+    interaction: {
+      mode: "index",
+      intersect: false
+    },
     plugins: {
       legend: {
         display: true,
@@ -226,7 +240,10 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         }
       },
       tooltip: {
-        animation: false,
+        animation: {
+          duration: 180,
+          easing: "easeOutQuad"
+        },
         backgroundColor: isDark ? "rgba(13, 21, 39, 0.95)" : "rgba(255, 255, 255, 0.95)",
         titleColor: isDark ? "#f1f5f9" : "#0f172a",
         bodyColor: isDark ? "#f1f5f9" : "#0f172a",
@@ -1091,11 +1108,29 @@ export default function Electricity() {
   const stackedBarOptions: any = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
-    animation: false,
+    animation: {
+      duration: 350,
+      easing: "easeOutQuart"
+    },
+    transitions: {
+      active: {
+        animation: {
+          duration: 180,
+          easing: "easeOutQuad"
+        }
+      }
+    },
+    interaction: {
+      mode: "index",
+      intersect: false
+    },
     plugins: {
       legend: { display: true, position: "top", align: "end", labels: { color: isDark ? "rgba(148,163,184,.9)" : "rgba(71,85,105,.9)", font: { size: 10, weight: "600" as const }, usePointStyle: true, pointStyle: "rectRounded", padding: 12 } },
       tooltip: {
-        animation: false,
+        animation: {
+          duration: 180,
+          easing: "easeOutQuad"
+        },
         mode: "index",
         intersect: false,
         backgroundColor: isDark ? "rgba(15, 23, 42, 0.98)" : "rgba(255, 255, 255, 1)",
@@ -1178,7 +1213,22 @@ export default function Electricity() {
   const solarBarOptions: any = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
-    animation: false,
+    animation: {
+      duration: 350,
+      easing: "easeOutQuart"
+    },
+    transitions: {
+      active: {
+        animation: {
+          duration: 180,
+          easing: "easeOutQuad"
+        }
+      }
+    },
+    interaction: {
+      mode: "index",
+      intersect: false
+    },
     plugins: {
       legend: {
         display: true,
@@ -1193,7 +1243,10 @@ export default function Electricity() {
         }
       },
       tooltip: {
-        animation: false,
+        animation: {
+          duration: 180,
+          easing: "easeOutQuad"
+        },
         mode: "index",
         intersect: false,
         backgroundColor: isDark ? "rgba(15, 23, 42, 0.98)" : "rgba(255, 255, 255, 1)",
@@ -1338,8 +1391,36 @@ export default function Electricity() {
   };
 
   const horizontalBarOptions: any = useMemo(() => ({
-    indexAxis: "y", responsive: true, maintainAspectRatio: false, animation: false,
-    plugins: { legend: { display: false }, tooltip: { animation: false, callbacks: { label: (ctx: any) => `${Number(ctx.parsed.x).toLocaleString("id-ID")} kWh` } } },
+    indexAxis: "y",
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: {
+      duration: 350,
+      easing: "easeOutQuart"
+    },
+    transitions: {
+      active: {
+        animation: {
+          duration: 180,
+          easing: "easeOutQuad"
+        }
+      }
+    },
+    interaction: {
+      mode: "nearest",
+      axis: "y",
+      intersect: false
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        animation: {
+          duration: 180,
+          easing: "easeOutQuad"
+        },
+        callbacks: { label: (ctx: any) => `${Number(ctx.parsed.x).toLocaleString("id-ID")} kWh` }
+      }
+    },
     scales: {
       x: { grid: { color: isDark ? "rgba(51,65,85,.4)" : "rgba(203,213,225,.5)" }, ticks: { color: isDark ? "rgba(148,163,184,.7)" : "rgba(71,85,105,.7)", font: { size: 10 } } },
       y: { grid: { display: false }, ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", font: { size: 10 }, autoSkip: false } }
