@@ -545,8 +545,10 @@ let lastSolarHourStr = "";
 const parsePltsApi = (data: any, ts: Date) => {
   const p1 = data?.POI_1 || {};
   const p2 = data?.POI_2 || {};
+  const poi1Status = Boolean(p1.Status_POI_1);
+  const poi2Status = Boolean(p2.Status_POI_2);
   const poi1 = {
-    status: p1.Status_POI_1 !== undefined ? !!p1.Status_POI_1 : true,
+    status: poi1Status,
     totalKwh: typeof p1.Total_KWH_POI_1 === "number" ? p1.Total_KWH_POI_1 : 0,
     totalKvarh: typeof p1.Total_KVARH_POI_1 === "number" ? p1.Total_KVARH_POI_1 : 0,
     frequency: typeof p1.Frequency_POI_1 === "number" ? p1.Frequency_POI_1 : 50,
@@ -558,7 +560,7 @@ const parsePltsApi = (data: any, ts: Date) => {
     voltCn: typeof p1.Volt_CN_POI_1 === "number" ? p1.Volt_CN_POI_1 : 0,
   };
   const poi2 = {
-    status: p2.Status_POI_2 !== undefined ? !!p2.Status_POI_2 : true,
+    status: poi2Status,
     totalKwh: typeof p2.Total_KWH_POI_2 === "number" ? p2.Total_KWH_POI_2 : 0,
     totalKvarh: typeof p2.Total_KVARH_POI_2 === "number" ? p2.Total_KVARH_POI_2 : 0,
     frequency: typeof p2.Frequency_POI_2 === "number" ? p2.Frequency_POI_2 : 50,
@@ -580,20 +582,21 @@ const parsePltsApi = (data: any, ts: Date) => {
 const insertSolarHourlyTelemetry = async (
   pool: any,
   hourStr: string,
-  poi1Kwh: number,
-  poi2Kwh: number
+  poi1Kwh: number | null,
+  poi2Kwh: number | null
 ) => {
-  const totKwh = poi1Kwh + poi2Kwh;
+  let totKwh: number | null = null;
+  if (poi1Kwh !== null || poi2Kwh !== null) {
+    totKwh = (poi1Kwh ?? 0) + (poi2Kwh ?? 0);
+  }
   try {
     await pool.query(
-      `DELETE FROM solar_telemetry WHERE t_stamp = $1`,
-      [hourStr]
-    );
-    await pool.query(
-      `INSERT INTO solar_telemetry (t_stamp, solar_kwh, id_device) VALUES 
-        ($1, $2, 'POI_1'),
-        ($1, $3, 'POI_2'),
-        ($1, $4, 'Solar_Panel_Total')`,
+      `INSERT INTO solar_telemetry (t_stamp, poi_1, poi_2, total)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (t_stamp) DO UPDATE SET
+         poi_1 = EXCLUDED.poi_1,
+         poi_2 = EXCLUDED.poi_2,
+         total = EXCLUDED.total;`,
       [hourStr, poi1Kwh, poi2Kwh, totKwh]
     );
     logger.info({ hour: hourStr, poi1Kwh, poi2Kwh, totKwh }, "Saved hourly solar telemetry to Postgres");
@@ -792,26 +795,35 @@ export const startIncomingElectricityPolling = () => {
       logger.warn(`Incoming PLTS polling failed: ${err.message}`);
     }
 
-    if (pltsParsed) {
-      setLatestSolarLiveState(pltsParsed);
-      const io = getSocketServer();
-      if (io) {
-        io.emit("electricity:solar_live", pltsParsed);
-        io.emit("solar:live_update", pltsParsed);
-      }
+    if (!pltsParsed) {
+      pltsParsed = {
+        t_stamp: ts,
+        poi1: { status: false, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
+        poi2: { status: false, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
+        totalKwh: 0
+      };
+    }
 
-      // Check for top-of-hour recording to solar_telemetry (e.g. 10:00:00, 11:00:00)
-      const wibTime = new Date(ts.getTime() + 7 * 60 * 60 * 1000);
-      const padZero = (n: number) => String(n).padStart(2, "0");
-      const currentHourStr = `${wibTime.getUTCFullYear()}-${padZero(wibTime.getUTCMonth() + 1)}-${padZero(wibTime.getUTCDate())} ${padZero(wibTime.getUTCHours())}:00:00`;
-      if (currentHourStr !== lastSolarHourStr) {
-        lastSolarHourStr = currentHourStr;
-        const pool = getPostgresPool();
-        await insertSolarHourlyTelemetry(pool, currentHourStr, pltsParsed.poi1.totalKwh, pltsParsed.poi2.totalKwh);
-        if (io) {
-          io.emit("electricity:update");
-          io.emit("solar:update");
-        }
+    setLatestSolarLiveState(pltsParsed);
+    const io = getSocketServer();
+    if (io) {
+      io.emit("electricity:solar_live", pltsParsed);
+      io.emit("solar:live_update", pltsParsed);
+    }
+
+    // Check for top-of-hour recording to solar_telemetry (e.g. 10:00:00, 11:00:00)
+    const wibTime = new Date(ts.getTime() + 7 * 60 * 60 * 1000);
+    const padZero = (n: number) => String(n).padStart(2, "0");
+    const currentHourStr = `${wibTime.getUTCFullYear()}-${padZero(wibTime.getUTCMonth() + 1)}-${padZero(wibTime.getUTCDate())} ${padZero(wibTime.getUTCHours())}:00:00`;
+    if (currentHourStr !== lastSolarHourStr) {
+      lastSolarHourStr = currentHourStr;
+      const pool = getPostgresPool();
+      const p1Kwh = pltsParsed.poi1.status ? pltsParsed.poi1.totalKwh : null;
+      const p2Kwh = pltsParsed.poi2.status ? pltsParsed.poi2.totalKwh : null;
+      await insertSolarHourlyTelemetry(pool, currentHourStr, p1Kwh, p2Kwh);
+      if (io) {
+        io.emit("electricity:update");
+        io.emit("solar:update");
       }
     }
 

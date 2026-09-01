@@ -1630,16 +1630,34 @@ export default function Electricity() {
           </div>
 
           {/* POI-1 */}
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4">
+          <div className={`rounded-xl border p-4 transition-all ${
+            solarLive?.poi1?.status === false
+              ? "border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30"
+              : "border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30"
+          }`}>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">POI-1</span>
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
+                solarLive?.poi1?.status === false
+                  ? "text-rose-500 bg-rose-500/10 border-rose-500/20"
+                  : "text-blue-500 bg-blue-500/10 border-blue-500/20"
+              }`}>
+                {solarLive?.poi1?.status === false ? "POI-1 (TIDAK AKTIF)" : "POI-1"}
+              </span>
+              <span className={`h-2 w-2 rounded-full ${
+                solarLive?.poi1?.status === false
+                  ? "bg-rose-500"
+                  : "bg-emerald-500 animate-ping"
+              }`} />
             </div>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {formatNumber(solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 24558.67)} kWh
+              {solarLive?.poi1?.status === false
+                ? "TIDAK AKTIF"
+                : `${formatNumber(solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 24558.67)} kWh`}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-              {solarLive?.poi1?.voltAb ? `${solarLive.poi1.voltAb.toFixed(1)} V | ${solarLive.poi1.frequency.toFixed(2)} Hz` : "391.9 V | 49.96 Hz"}
+              {solarLive?.poi1?.status === false
+                ? "Status: TIDAK AKTIF"
+                : (solarLive?.poi1?.voltAb ? `${solarLive.poi1.voltAb.toFixed(1)} V | ${solarLive.poi1.frequency.toFixed(2)} Hz` : "391.9 V | 49.96 Hz")}
             </div>
           </div>
 
@@ -1653,16 +1671,34 @@ export default function Electricity() {
           </div>
 
           {/* POI-2 */}
-          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30 p-4">
+          <div className={`rounded-xl border p-4 transition-all ${
+            solarLive?.poi2?.status === false
+              ? "border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30"
+              : "border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30"
+          }`}>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-500 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20">POI-2</span>
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
+                solarLive?.poi2?.status === false
+                  ? "text-rose-500 bg-rose-500/10 border-rose-500/20"
+                  : "text-cyan-500 bg-cyan-500/10 border-cyan-500/20"
+              }`}>
+                {solarLive?.poi2?.status === false ? "POI-2 (TIDAK AKTIF)" : "POI-2"}
+              </span>
+              <span className={`h-2 w-2 rounded-full ${
+                solarLive?.poi2?.status === false
+                  ? "bg-rose-500"
+                  : "bg-emerald-500 animate-ping"
+              }`} />
             </div>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {formatNumber(solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 95707.05)} kWh
+              {solarLive?.poi2?.status === false
+                ? "TIDAK AKTIF"
+                : `${formatNumber(solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 95707.05)} kWh`}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-              {solarLive?.poi2?.voltAb ? `${solarLive.poi2.voltAb.toFixed(1)} V | ${solarLive.poi2.frequency.toFixed(2)} Hz` : "384.6 V | 49.96 Hz"}
+              {solarLive?.poi2?.status === false
+                ? "Status: TIDAK AKTIF"
+                : (solarLive?.poi2?.voltAb ? `${solarLive.poi2.voltAb.toFixed(1)} V | ${solarLive.poi2.frequency.toFixed(2)} Hz` : "384.6 V | 49.96 Hz")}
             </div>
           </div>
 
@@ -1723,7 +1759,11 @@ export default function Electricity() {
                       <span className="h-2 w-2 rounded-full bg-blue-500" />POI-1
                     </span>
                     <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
-                      {p1Pct}% ({formatNumber(p1)} kWh)
+                      {solarLive?.poi1?.status === false ? (
+                        <span className="text-rose-500">TIDAK AKTIF</span>
+                      ) : (
+                        `${p1Pct}% (${formatNumber(p1)} kWh)`
+                      )}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
@@ -1731,7 +1771,11 @@ export default function Electricity() {
                       <span className="h-2 w-2 rounded-full bg-cyan-500" />POI-2
                     </span>
                     <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
-                      {p2Pct}% ({formatNumber(p2)} kWh)
+                      {solarLive?.poi2?.status === false ? (
+                        <span className="text-rose-500">TIDAK AKTIF</span>
+                      ) : (
+                        `${p2Pct}% (${formatNumber(p2)} kWh)`
+                      )}
                     </span>
                   </div>
                 </div>
@@ -1761,7 +1805,20 @@ export default function Electricity() {
               <option value="poi1">Solar PV POI-1</option>
               <option value="poi2">Solar PV POI-2</option>
             </select>
-            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">ON</span>
+            {(() => {
+              let isOnline = true;
+              if (cubicleSelector === "poi1") isOnline = solarLive?.poi1?.status !== false;
+              if (cubicleSelector === "poi2") isOnline = solarLive?.poi2?.status !== false;
+              return (
+                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
+                  isOnline
+                    ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                    : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                }`}>
+                  {isOnline ? "ON" : "TIDAK AKTIF"}
+                </span>
+              );
+            })()}
             <button
               onClick={() => setCubiclePoiView(!cubiclePoiView)}
               className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-blue-500 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 transition"

@@ -99,10 +99,14 @@ export const getSolarAnalytics = async (
     }
   } catch {}
 
-  let records: { ts_text: string; solar_kwh: number; id_device: string }[] = [];
+  let records: { ts_text: string; poi_1: number | null; poi_2: number | null; total: number | null }[] = [];
   try {
     const res = await pool.query(`
-      SELECT t_stamp::text AS ts_text, solar_kwh::float AS solar_kwh, id_device
+      SELECT 
+        t_stamp::text AS ts_text,
+        poi_1::float AS poi_1,
+        poi_2::float AS poi_2,
+        total::float AS total
       FROM solar_telemetry
       WHERE t_stamp >= $1 AND t_stamp <= $2
       ORDER BY t_stamp ASC
@@ -114,34 +118,27 @@ export const getSolarAnalytics = async (
 
   // If live data is available and toDate is today, append latest live counter reading
   const live = getLatestSolarLiveState();
-  if (live && live.poi1 && live.poi2) {
+  if (live && (live.poi1?.status || live.poi2?.status)) {
     const nowWibStr = `${todayStr} ${pad(new Date().getHours())}:${pad(new Date().getMinutes())}:${pad(new Date().getSeconds())}`;
-    records.push({ ts_text: nowWibStr, solar_kwh: live.poi1.totalKwh, id_device: "POI_1" });
-    records.push({ ts_text: nowWibStr, solar_kwh: live.poi2.totalKwh, id_device: "POI_2" });
-    records.push({ ts_text: nowWibStr, solar_kwh: live.totalKwh, id_device: "Solar_Panel_Total" });
+    records.push({
+      ts_text: nowWibStr,
+      poi_1: live.poi1?.status ? live.poi1.totalKwh : null,
+      poi_2: live.poi2?.status ? live.poi2.totalKwh : null,
+      total: (live.poi1?.status ? live.poi1.totalKwh : 0) + (live.poi2?.status ? live.poi2.totalKwh : 0)
+    });
   }
 
-  // Separate records by device
-  const recordsByDevice = new Map<string, { ts_text: string; solar_kwh: number }[]>();
-  for (const r of records) {
-    const dev = r.id_device || "Solar_Panel_Total";
-    if (!recordsByDevice.has(dev)) {
-      recordsByDevice.set(dev, []);
-    }
-    recordsByDevice.get(dev)!.push({ ts_text: r.ts_text, solar_kwh: r.solar_kwh });
-  }
-
-  // Hourly map per device: DateStr -> Array(24)
+  // Hourly maps: DateStr -> Array(24)
   const hourlyMapPoi1 = new Map<string, number[]>();
   const hourlyMapPoi2 = new Map<string, number[]>();
   const hourlyMapTotal = new Map<string, number[]>();
 
-  // Daily map per device
+  // Daily maps: DateStr -> number
   const dailyMapPoi1 = new Map<string, number>();
   const dailyMapPoi2 = new Map<string, number>();
   const dailyMapTotal = new Map<string, number>();
 
-  // Monthly map per device
+  // Monthly maps: MonthStr -> number
   const monthlyMapPoi1 = new Map<string, number>();
   const monthlyMapPoi2 = new Map<string, number>();
   const monthlyMapTotal = new Map<string, number>();
@@ -157,69 +154,79 @@ export const getSolarAnalytics = async (
   let poi2PeakDemand = 0;
   let peakDemand = 0;
 
-  const processDevice = (devId: string, hMap: Map<string, number[]>, dMap: Map<string, number>, mMap: Map<string, number>) => {
-    const devRecs = recordsByDevice.get(devId) || [];
-    let maxDiff = 0;
+  for (let i = 1; i < records.length; i++) {
+    const prev = records[i - 1];
+    const curr = records[i];
 
-    for (let i = 1; i < devRecs.length; i++) {
-      const prev = devRecs[i - 1];
-      const curr = devRecs[i];
-      let diff = curr.solar_kwh - prev.solar_kwh;
-      if (diff < 0) diff = 0;
+    let diffPoi1 = 0;
+    if (curr.poi_1 !== null && prev.poi_1 !== null) {
+      diffPoi1 = Math.max(0, curr.poi_1 - prev.poi_1);
+    }
 
-      const prevTs = prev.ts_text.split(".")[0];
-      const [prevDateStr, prevTimeStr = "00:00:00"] = prevTs.split(" ");
-      const prevHour = parseInt(prevTimeStr.split(":")[0], 10);
+    let diffPoi2 = 0;
+    if (curr.poi_2 !== null && prev.poi_2 !== null) {
+      diffPoi2 = Math.max(0, curr.poi_2 - prev.poi_2);
+    }
 
-      const dateStr = prevDateStr;
-      const monthStr = dateStr.substring(0, 7);
-      const isToday = dateStr === todayStr;
-      const isCurrentMonth = monthStr === currentMonthStr;
+    let diffTot = 0;
+    if (curr.total !== null && prev.total !== null) {
+      diffTot = Math.max(0, curr.total - prev.total);
+    } else {
+      diffTot = diffPoi1 + diffPoi2;
+    }
 
-      const inRange = (!fromStr || dateStr >= fromStr) && (!toStr || dateStr <= toStr);
+    const prevTs = prev.ts_text.split(".")[0];
+    const [prevDateStr, prevTimeStr = "00:00:00"] = prevTs.split(" ");
+    const prevHour = parseInt(prevTimeStr.split(":")[0], 10);
 
-      if (inRange) {
-        dMap.set(dateStr, (dMap.get(dateStr) || 0) + diff);
-        mMap.set(monthStr, (mMap.get(monthStr) || 0) + diff);
+    const dateStr = prevDateStr;
+    const monthStr = dateStr.substring(0, 7);
+    const isToday = dateStr === todayStr;
+    const isCurrentMonth = monthStr === currentMonthStr;
 
-        if (diff > maxDiff) maxDiff = diff;
+    const inRange = (!fromStr || dateStr >= fromStr) && (!toStr || dateStr <= toStr);
 
-        if (devId === "Solar_Panel_Total" || devId === "TOTAL") {
-          totalKwh += diff;
-          yearlyKwh += diff;
-          if (isToday) todayKwh += diff;
-          if (isCurrentMonth) monthlyKwh += diff;
-        } else if (devId === "POI_1") {
-          if (isToday) poi1TodayKwh += diff;
-        } else if (devId === "POI_2") {
-          if (isToday) poi2TodayKwh += diff;
-        }
+    if (inRange) {
+      dailyMapPoi1.set(dateStr, (dailyMapPoi1.get(dateStr) || 0) + diffPoi1);
+      dailyMapPoi2.set(dateStr, (dailyMapPoi2.get(dateStr) || 0) + diffPoi2);
+      dailyMapTotal.set(dateStr, (dailyMapTotal.get(dateStr) || 0) + diffTot);
+
+      monthlyMapPoi1.set(monthStr, (monthlyMapPoi1.get(monthStr) || 0) + diffPoi1);
+      monthlyMapPoi2.set(monthStr, (monthlyMapPoi2.get(monthStr) || 0) + diffPoi2);
+      monthlyMapTotal.set(monthStr, (monthlyMapTotal.get(monthStr) || 0) + diffTot);
+
+      if (diffPoi1 > poi1PeakDemand) poi1PeakDemand = diffPoi1;
+      if (diffPoi2 > poi2PeakDemand) poi2PeakDemand = diffPoi2;
+      if (diffTot > peakDemand) peakDemand = diffTot;
+
+      totalKwh += diffTot;
+      yearlyKwh += diffTot;
+      if (isToday) {
+        todayKwh += diffTot;
+        poi1TodayKwh += diffPoi1;
+        poi2TodayKwh += diffPoi2;
       }
-
-      if (!hMap.has(dateStr)) {
-        hMap.set(dateStr, Array.from({ length: 24 }, () => 0));
-      }
-      if (prevHour >= 0 && prevHour < 24) {
-        hMap.get(dateStr)![prevHour] += diff;
+      if (isCurrentMonth) {
+        monthlyKwh += diffTot;
       }
     }
 
-    return maxDiff;
-  };
+    if (!hourlyMapPoi1.has(dateStr)) hourlyMapPoi1.set(dateStr, Array.from({ length: 24 }, () => 0));
+    if (!hourlyMapPoi2.has(dateStr)) hourlyMapPoi2.set(dateStr, Array.from({ length: 24 }, () => 0));
+    if (!hourlyMapTotal.has(dateStr)) hourlyMapTotal.set(dateStr, Array.from({ length: 24 }, () => 0));
 
-  poi1PeakDemand = processDevice("POI_1", hourlyMapPoi1, dailyMapPoi1, monthlyMapPoi1);
-  poi2PeakDemand = processDevice("POI_2", hourlyMapPoi2, dailyMapPoi2, monthlyMapPoi2);
-  peakDemand = processDevice("Solar_Panel_Total", hourlyMapTotal, dailyMapTotal, monthlyMapTotal);
+    if (prevHour >= 0 && prevHour < 24) {
+      hourlyMapPoi1.get(dateStr)![prevHour] += diffPoi1;
+      hourlyMapPoi2.get(dateStr)![prevHour] += diffPoi2;
+      hourlyMapTotal.get(dateStr)![prevHour] += diffTot;
+    }
+  }
 
   if (peakDemand === 0 && (poi1PeakDemand > 0 || poi2PeakDemand > 0)) {
     peakDemand = poi1PeakDemand + poi2PeakDemand;
   }
-  if (totalKwh === 0 && (poi1TodayKwh > 0 || poi2TodayKwh > 0)) {
-    todayKwh = poi1TodayKwh + poi2TodayKwh;
-    totalKwh = todayKwh;
-  }
 
-  // Selected date for hourly charts
+  // Target date for hourly charts
   let targetDate = fromStr || toStr;
   if (!targetDate) {
     const dates = Array.from(hourlyMapTotal.keys()).sort();
@@ -230,7 +237,7 @@ export const getSolarAnalytics = async (
   const hourlyPoi2 = hourlyMapPoi2.get(targetDate) || Array.from({ length: 24 }, () => 0);
   const hourly = hourlyMapTotal.get(targetDate) || hourlyPoi1.map((v, i) => v + (hourlyPoi2[i] || 0));
 
-  // Build daily records for range
+  // Daily records
   const allDates = Array.from(new Set([...dailyMapPoi1.keys(), ...dailyMapPoi2.keys(), ...dailyMapTotal.keys()])).sort();
   const daily = allDates.map(day => ({
     day,
@@ -239,7 +246,7 @@ export const getSolarAnalytics = async (
     total: dailyMapTotal.get(day) || ((dailyMapPoi1.get(day) || 0) + (dailyMapPoi2.get(day) || 0))
   }));
 
-  // Build monthly records for selected year (12 months)
+  // Monthly records
   const monthly: { month: string; poi1: number; poi2: number; total: number }[] = [];
   for (let m = 1; m <= 12; m++) {
     const mStr = `${selectedYear}-${String(m).padStart(2, "0")}`;
