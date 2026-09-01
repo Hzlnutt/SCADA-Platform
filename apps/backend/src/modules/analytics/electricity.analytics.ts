@@ -442,10 +442,18 @@ export const getElectricityAnalytics = async (
     const prevVal = prevRecord.value;
     const currVal = currRecord.value;
     
+    const prevDateObj = new Date(prevRecord.ts_text);
+    const currDateObj = new Date(currRecord.ts_text);
+    const timeDiffMs = currDateObj.getTime() - prevDateObj.getTime();
+
     let diff = 0;
+    // Only calculate diff if consecutive records are consecutive hours (<= 90 minutes)
+    // If there is a gap (power meter was offline / null in between), do not assume consumption -> diff = 0
     if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal)) {
-      diff = currVal - prevVal;
-      if (diff < 0) diff = 0; // Guard against resets or anomalies
+      if (timeDiffMs <= 90 * 60 * 1000) {
+        diff = currVal - prevVal;
+        if (diff < 0) diff = 0; // Guard against resets or anomalies
+      }
     }
 
     const prevTsStr = (prevRecord.ts_text || "").split(".")[0];
