@@ -618,7 +618,7 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
 let lastElectricityMinuteStr = "";
 let lastSolarHourStr = "";
 
-const parsePltsApi = (data: any, ts: Date) => {
+const parseSolarApi = (data: any, ts: Date) => {
   const p1 = data?.POI_1 || {};
   const p2 = data?.POI_2 || {};
   const poi1Status = Boolean(p1.Status_POI_1);
@@ -861,11 +861,11 @@ export const startIncomingElectricityPolling = () => {
     };
 
     // Fetch and store Solar Panel (PLTS)
-    let pltsParsed: ReturnType<typeof parsePltsApi> | null = null;
+    let pltsParsed: ReturnType<typeof parseSolarApi> | null = null;
     try {
       const data = await fetchApiData("electric_plts");
       if (data) {
-        pltsParsed = parsePltsApi(data, ts);
+        pltsParsed = parseSolarApi(data, ts);
       }
     } catch (err: any) {
       logger.warn(`Incoming PLTS polling failed: ${err.message}`);

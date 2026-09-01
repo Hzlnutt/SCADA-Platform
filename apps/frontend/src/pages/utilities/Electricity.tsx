@@ -450,18 +450,10 @@ export default function Electricity() {
       wbpKwh: wbp,
       monthlyKwh: total,
       cost: cost,
-<<<<<<< HEAD
-      poi1Kwh: poi1,
-      poi2Kwh: poi2
+      poi1Kwh: pltsLive.poi1.total_kwh || solarLive?.poi1?.totalKwh || 24558.67,
+      poi2Kwh: pltsLive.poi2.total_kwh || solarLive?.poi2?.totalKwh || 95707.05
     };
-  }, [summaryData, lwbpRate, wbpRate, solarLive, solarData]);
-
-  // Consumption Fact categories (Empty until populated by real data)
-=======
-      poi1Kwh: pltsLive.poi1.total_kwh,
-      poi2Kwh: pltsLive.poi2.total_kwh
-    };
-  }, [cubicleAnalytics, summaryData, cubicleSelector, pltsLive, lwbpRate, wbpRate]);
+  }, [cubicleAnalytics, summaryData, cubicleSelector, pltsLive, solarLive, solarData, lwbpRate, wbpRate]);
 
   // Daily Comparison Data (Bulan Ini vs Bulan Lalu) for selected cubicle
   const cubicleDailyData = useMemo(() => {
@@ -504,7 +496,6 @@ export default function Electricity() {
   }, [cubicleAnalytics, summaryData, cubicleSummary, cubicleSelector, selectedYear]);
 
   // Consumption Fact categories (with rich fallback)
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
   const [factCategories1, setFactCategories1] = useState<ConsumptionFactCategory[]>([]);
   const [factCategories2, setFactCategories2] = useState<ConsumptionFactCategory[]>([]);
 
@@ -1782,116 +1773,18 @@ export default function Electricity() {
             <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500">Solar Panel (PLTS)</h3>
           </div>
-<<<<<<< HEAD
-          <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-            ONLINE (POLLING 1s)
-=======
           <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
             Live System
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
           </span>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {/* Estimasi Biaya */}
-<<<<<<< HEAD
-          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4">
-=======
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 flex flex-col justify-between">
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Estimasi Penghematan</span>
               <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500"><IconMoney /></div>
             </div>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-<<<<<<< HEAD
-              {formatCurrency(solarData?.summary?.todayCost || ((solarData?.summary?.todayKwh || 0) * lwbpRate) || 0)}
-            </div>
-            <div className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-              {formatNumber(solarData?.summary?.todayKwh || 0)} kWh hari ini
-            </div>
-          </div>
-
-          {/* POI-1 */}
-          <div className={`rounded-xl border p-4 transition-all ${
-            solarLive?.poi1?.status === false
-              ? "border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30"
-              : "border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30"
-          }`}>
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
-                solarLive?.poi1?.status === false
-                  ? "text-rose-500 bg-rose-500/10 border-rose-500/20"
-                  : "text-blue-500 bg-blue-500/10 border-blue-500/20"
-              }`}>
-                {solarLive?.poi1?.status === false ? "POI-1 (TIDAK AKTIF)" : "POI-1"}
-              </span>
-              <span className={`h-2 w-2 rounded-full ${
-                solarLive?.poi1?.status === false
-                  ? "bg-rose-500"
-                  : "bg-emerald-500 animate-ping"
-              }`} />
-            </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {solarLive?.poi1?.status === false
-                ? "TIDAK AKTIF"
-                : `${formatNumber(solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 24558.67)} kWh`}
-            </div>
-            <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-              {solarLive?.poi1?.status === false
-                ? "Status: TIDAK AKTIF"
-                : (solarLive?.poi1?.voltAb ? `${solarLive.poi1.voltAb.toFixed(1)} V | ${solarLive.poi1.frequency.toFixed(2)} Hz` : "391.9 V | 49.96 Hz")}
-            </div>
-          </div>
-
-          {/* Peak Demand (POI-1) */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-1)</span>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {formatNumber(solarData?.summary?.poi1PeakDemand || 0)} kW
-            </div>
-            <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
-          </div>
-
-          {/* POI-2 */}
-          <div className={`rounded-xl border p-4 transition-all ${
-            solarLive?.poi2?.status === false
-              ? "border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30"
-              : "border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30"
-          }`}>
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
-                solarLive?.poi2?.status === false
-                  ? "text-rose-500 bg-rose-500/10 border-rose-500/20"
-                  : "text-cyan-500 bg-cyan-500/10 border-cyan-500/20"
-              }`}>
-                {solarLive?.poi2?.status === false ? "POI-2 (TIDAK AKTIF)" : "POI-2"}
-              </span>
-              <span className={`h-2 w-2 rounded-full ${
-                solarLive?.poi2?.status === false
-                  ? "bg-rose-500"
-                  : "bg-emerald-500 animate-ping"
-              }`} />
-            </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {solarLive?.poi2?.status === false
-                ? "TIDAK AKTIF"
-                : `${formatNumber(solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 95707.05)} kWh`}
-            </div>
-            <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-              {solarLive?.poi2?.status === false
-                ? "Status: TIDAK AKTIF"
-                : (solarLive?.poi2?.voltAb ? `${solarLive.poi2.voltAb.toFixed(1)} V | ${solarLive.poi2.frequency.toFixed(2)} Hz` : "384.6 V | 49.96 Hz")}
-            </div>
-          </div>
-
-          {/* Peak Demand (POI-2) */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-2)</span>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {formatNumber(solarData?.summary?.poi2PeakDemand || 0)} kW
-            </div>
-            <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
-=======
               {formatCurrency((pltsLive.poi1.total_kwh + pltsLive.poi2.total_kwh) * electricityRate)}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
@@ -1947,7 +1840,6 @@ export default function Electricity() {
             <div className="mt-1 text-[10px] text-slate-400">
               Status: <span className="font-semibold text-emerald-500">{pltsLive.poi2.status ? "Active (Generating)" : "Standby"}</span>
             </div>
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
           </div>
         </div>
       </div>
@@ -1957,16 +1849,6 @@ export default function Electricity() {
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
-<<<<<<< HEAD
-              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Trend Produksi Solar Panel (PLTS)</h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Produksi energi POI-1 & POI-2 — data historis per jam.</p>
-            </div>
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[256px]">
-            <div style={{ height: 256 }}>
-              <Bar data={solarBarData} options={solarBarOptions} />
-            </div>
-=======
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Trend Panel Distribusi</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Beban Incoming PLN vs Solar Panel — data 24 Jam (WBP & LWBP).</p>
             </div>
@@ -2024,34 +1906,10 @@ export default function Electricity() {
                 }
               }}
             />
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
           </div>
         </section>
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
           <div>
-<<<<<<< HEAD
-            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Distribusi Beban PLTS</h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Perbandingan produksi POI-1 vs POI-2.</p>
-          </div>
-          {(() => {
-            const p1 = solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 24558.67;
-            const p2 = solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 95707.05;
-            const tot = p1 + p2;
-            const p1Pct = tot > 0 ? Number(((p1 / tot) * 100).toFixed(1)) : 20.4;
-            const p2Pct = tot > 0 ? Number(((p2 / tot) * 100).toFixed(1)) : 79.6;
-            return (
-              <>
-                <div className="my-6 flex justify-center">
-                  <DonutChart 
-                    segments={[
-                      { label: "POI-1", value: p1Pct, color: "#3b82f6" }, 
-                      { label: "POI-2", value: p2Pct, color: "#06b6d4" }
-                    ]} 
-                    size={150} 
-                    thickness={18} 
-                    centerLabel="POI-1 vs POI-2" 
-                    centerLabelSize="text-[11px]" 
-=======
             <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Distribusi Beban PLTS</h3>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Perbandingan POI-1 vs POI-2 Real Time.</p>
           </div>
@@ -2073,48 +1931,25 @@ export default function Electricity() {
                     thickness={18}
                     centerLabel={`${p1Pct}% : ${p2Pct}%`}
                     centerLabelSize="text-[11px]"
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
                   />
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5">
                     <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
-<<<<<<< HEAD
-                      <span className="h-2 w-2 rounded-full bg-blue-500" />POI-1
-                    </span>
-                    <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
-                      {solarLive?.poi1?.status === false ? (
-                        <span className="text-rose-500">TIDAK AKTIF</span>
-                      ) : (
-                        `${p1Pct}% (${formatNumber(p1)} kWh)`
-                      )}
-=======
                       <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
                       POI-1
                     </span>
                     <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
                       {p1Kwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh ({p1Pct}%)
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
-<<<<<<< HEAD
-                      <span className="h-2 w-2 rounded-full bg-cyan-500" />POI-2
-                    </span>
-                    <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
-                      {solarLive?.poi2?.status === false ? (
-                        <span className="text-rose-500">TIDAK AKTIF</span>
-                      ) : (
-                        `${p2Pct}% (${formatNumber(p2)} kWh)`
-                      )}
-=======
                       <span className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse" />
                       POI-2
                     </span>
                     <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
                       {p2Kwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh ({p2Pct}%)
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
                     </span>
                   </div>
                 </div>
@@ -2144,20 +1979,7 @@ export default function Electricity() {
               <option value="poi1">Solar PV POI-1</option>
               <option value="poi2">Solar PV POI-2</option>
             </select>
-            {(() => {
-              let isOnline = true;
-              if (cubicleSelector === "poi1") isOnline = solarLive?.poi1?.status !== false;
-              if (cubicleSelector === "poi2") isOnline = solarLive?.poi2?.status !== false;
-              return (
-                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
-                  isOnline
-                    ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                    : "bg-rose-500/10 text-rose-500 border-rose-500/20"
-                }`}>
-                  {isOnline ? "ON" : "TIDAK AKTIF"}
-                </span>
-              );
-            })()}
+            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">ON</span>
             <button
               onClick={() => setCubiclePoiView(!cubiclePoiView)}
               className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-blue-500 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 transition"
@@ -2228,13 +2050,8 @@ export default function Electricity() {
             cubicleSelector === "wf2" ? "Incoming Cubicle WF2" :
             cubicleSelector === "poi1" ? "Solar PV POI-1" : "Solar PV POI-2"
           }`}
-<<<<<<< HEAD
-          currentData={[]}
-          previousData={[]}
-=======
           currentData={cubicleDailyData.currentData}
           previousData={cubicleDailyData.previousData}
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
           isDark={isDark}
         />
       </div>
