@@ -232,12 +232,15 @@ export const getElectricityAnalytics = async (
   const fromBase = fromStr ? `${fromStr} 00:00:00` : `${selectedYear}-01-01 00:00:00`;
   const toBase = toStr ? `${toStr} 23:59:59` : `${selectedYear}-12-31 23:59:59`;
 
-  // Fetch baseline starting 2 hours before range for accurate hourly difference calculation
+  // Fetch baseline starting 2 hours before range and 2 hours after range for accurate hourly difference calculation
   const fromDate = new Date(`${fromStr || `${selectedYear}-01-01`}T00:00:00`);
   const baselineDate = new Date(fromDate.getTime() - 2 * 60 * 60 * 1000);
   const pad = (n: number) => String(n).padStart(2, "0");
   const fromQueryVal = `${baselineDate.getFullYear()}-${pad(baselineDate.getMonth() + 1)}-${pad(baselineDate.getDate())} ${pad(baselineDate.getHours())}:${pad(baselineDate.getMinutes())}:${pad(baselineDate.getSeconds())}`;
-  const toQueryVal = toBase;
+  
+  const toDate = new Date(`${toStr || `${selectedYear}-12-31`}T23:59:59`);
+  const toPlusDate = new Date(toDate.getTime() + 2 * 60 * 60 * 1000);
+  const toQueryVal = `${toPlusDate.getFullYear()}-${pad(toPlusDate.getMonth() + 1)}-${pad(toPlusDate.getDate())} ${pad(toPlusDate.getHours())}:${pad(toPlusDate.getMinutes())}:${pad(toPlusDate.getSeconds())}`;
 
   // Select appropriate PostgreSQL table based on device
   let tableName = "electric_pln_telemetry";
@@ -541,9 +544,11 @@ export const getElectricityAnalytics = async (
     }
   }
 
-  let latestWibDate = fromStr || toStr;
+  let latestWibDate = toStr || fromStr;
   if (!latestWibDate) {
-    const dates = Array.from(dailyHourlyMap.keys()).sort();
+    const dates = Array.from(dailyHourlyMap.keys())
+      .filter(d => (!fromStr || d >= fromStr) && (!toStr || d <= toStr) && d <= todayStr)
+      .sort();
     latestWibDate = dates.length > 0 ? dates[dates.length - 1] : todayStr;
   }
 
