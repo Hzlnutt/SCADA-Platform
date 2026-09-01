@@ -1116,14 +1116,12 @@ export const runElectricityRollupAndCleanup = async () => {
             r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy
           ]);
 
-          if (r.active_energy !== null) {
-            // Sync to electricity_telemetry for dashboard overview
-            await client.query(`DELETE FROM electricity_telemetry WHERE t_stamp = $1 AND id_device = $2`, [hourStartStr, "Cubicle_PLN_PM8000"]);
-            await client.query(`
-              INSERT INTO electricity_telemetry (t_stamp, electricity_kwh, id_device)
-              VALUES ($1, $2, $3)
-            `, [hourStartStr, r.active_energy, "Cubicle_PLN_PM8000"]);
-          }
+          // Sync to electricity_telemetry for dashboard overview (consistently insert even if active_energy is null)
+          await client.query(`DELETE FROM electricity_telemetry WHERE t_stamp = $1 AND id_device = $2`, [hourStartStr, "Cubicle_PLN_PM8000"]);
+          await client.query(`
+            INSERT INTO electricity_telemetry (t_stamp, electricity_kwh, id_device)
+            VALUES ($1, $2, $3)
+          `, [hourStartStr, r.active_energy ?? null, "Cubicle_PLN_PM8000"]);
         }
 
         // Delete minute records from buffer

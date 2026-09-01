@@ -366,8 +366,11 @@ export const getElectricityAnalytics = async (
     const prevVal = prevRecord.value;
     const currVal = currRecord.value;
     
-    let diff = currVal - prevVal;
-    if (diff < 0) diff = 0; // Guard against resets or anomalies
+    let diff = 0;
+    if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal)) {
+      diff = currVal - prevVal;
+      if (diff < 0) diff = 0; // Guard against resets or anomalies
+    }
 
     const prevTsStr = (prevRecord.ts_text || (prevRecord.ts instanceof Date ? getWibDateString(prevRecord.ts) : String(prevRecord.ts || ""))).split(".")[0];
     const currTsStr = (currRecord.ts_text || (currRecord.ts instanceof Date ? getWibDateString(currRecord.ts) : String(currRecord.ts || ""))).split(".")[0];

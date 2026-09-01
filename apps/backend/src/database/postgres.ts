@@ -981,6 +981,18 @@ export const ensurePostgresTables = async () => {
         ) h
         LEFT JOIN cooling_tower_telemetry p ON p.t_stamp = h.t_stamp AND p.id_device = 'cooling-water-1'
         WHERE p.t_stamp IS NULL AND h.t_stamp IS NOT NULL;
+
+        INSERT INTO electricity_telemetry (t_stamp, electricity_kwh, id_device)
+        SELECT h.t_stamp, NULL, 'Cubicle_PLN_PM8000'
+        FROM (
+          SELECT generate_series(
+            (SELECT MIN(date_trunc('hour', t_stamp)) FROM electricity_telemetry),
+            (SELECT MAX(date_trunc('hour', t_stamp)) FROM electricity_telemetry),
+            INTERVAL '1 hour'
+          ) AS t_stamp
+        ) h
+        LEFT JOIN electricity_telemetry p ON p.t_stamp = h.t_stamp AND p.id_device = 'Cubicle_PLN_PM8000'
+        WHERE p.t_stamp IS NULL AND h.t_stamp IS NOT NULL;
       `);
       logger.info("Historical hourly telemetry gaps populated with NULL values successfully");
     } catch (err: any) {
