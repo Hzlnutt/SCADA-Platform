@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { usePageActive } from "../../hooks/usePageActive";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Bar, Line } from "react-chartjs-2";
@@ -172,7 +172,7 @@ const Sparkline = ({ color = "#4ade80" }: { color?: string }) => {
 };
 
 /* ═══════════ MONTHLY COMPARISON BAR CHART ═══════════ */
-function MonthlyComparisonBarChart({
+const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
   currentData,
   previousData,
   isDark
@@ -182,9 +182,9 @@ function MonthlyComparisonBarChart({
   isDark: boolean;
 }) {
   const daysInMonth = Math.max(currentData.length, previousData.length, 28);
-  const dayLabels = Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, "0"));
+  const dayLabels = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, "0")), [daysInMonth]);
 
-  const data = {
+  const data = useMemo(() => ({
     labels: dayLabels,
     datasets: [
       {
@@ -206,12 +206,13 @@ function MonthlyComparisonBarChart({
         categoryPercentage: 0.8
       }
     ]
-  };
+  }), [dayLabels, currentData, previousData]);
 
-  const options: any = {
+  const options: any = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
-    animation: { duration: 0 },
+    animation: false,
+    events: ["mousemove", "mouseout", "click", "touchstart", "touchmove"],
     plugins: {
       legend: {
         display: true,
@@ -225,6 +226,7 @@ function MonthlyComparisonBarChart({
         }
       },
       tooltip: {
+        animation: false,
         backgroundColor: isDark ? "rgba(13, 21, 39, 0.95)" : "rgba(255, 255, 255, 0.95)",
         titleColor: isDark ? "#f1f5f9" : "#0f172a",
         bodyColor: isDark ? "#f1f5f9" : "#0f172a",
@@ -251,12 +253,12 @@ function MonthlyComparisonBarChart({
         }
       }
     }
-  };
+  }), [isDark]);
 
   return <Bar data={data} options={options} />;
-}
+});
 
-function MonthlyComparisonChart({
+const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   title,
   currentData,
   previousData,
@@ -275,9 +277,9 @@ function MonthlyComparisonChart({
       </div>
     </div>
   );
-}
+});
 
-function DynamicSelectionChart({ isDark }: { isDark: boolean }) {
+const DynamicSelectionChart = memo(function DynamicSelectionChart({ isDark }: { isDark: boolean }) {
   const [factory, setFactory] = useState<"wf1" | "wf2">("wf1");
   const [machine, setMachine] = useState("F1 MAIN SUPPLY QC OFFICE & LAB");
 
@@ -369,7 +371,7 @@ function DynamicSelectionChart({ isDark }: { isDark: boolean }) {
       </div>
     </div>
   );
-}
+});
 
 /* ═══════════ MAIN COMPONENT ═══════════ */
 export default function Electricity() {
@@ -592,7 +594,7 @@ export default function Electricity() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 2000);
+    const interval = setInterval(fetchActiveApiData, 10000); // 10s fallback polling (WebSocket handles real-time)
 
     const socket = getSocket();
     const handlePltsLive = (payload: any) => {
@@ -1078,19 +1080,22 @@ export default function Electricity() {
   }, [hasChartData, chartData, range, customDailyRecords, chartStartDate, chartEndDate]);
 
   /* ═══ PLN STACKED BAR ═══ */
-  const stackedBarData = {
+  const stackedBarData = useMemo(() => ({
     labels: barLabels,
     datasets: [
       { label: `LWBP ${barUnit}`, data: barLwbpValues, backgroundColor: "rgba(59,130,246,.8)", borderWidth: 0, borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 }, barPercentage: 0.65, stack: "beban" },
       { label: `WBP ${barUnit}`, data: barWbpValues, backgroundColor: "rgba(239,68,68,.8)", borderWidth: 0, borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }, barPercentage: 0.65, stack: "beban" }
     ]
-  };
+  }), [barLabels, barUnit, barLwbpValues, barWbpValues]);
 
-  const stackedBarOptions: any = {
-    responsive: true, maintainAspectRatio: false, animation: { duration: 0 },
+  const stackedBarOptions: any = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
     plugins: {
       legend: { display: true, position: "top", align: "end", labels: { color: isDark ? "rgba(148,163,184,.9)" : "rgba(71,85,105,.9)", font: { size: 10, weight: "600" as const }, usePointStyle: true, pointStyle: "rectRounded", padding: 12 } },
       tooltip: {
+        animation: false,
         mode: "index",
         intersect: false,
         backgroundColor: isDark ? "rgba(15, 23, 42, 0.98)" : "rgba(255, 255, 255, 1)",
@@ -1128,7 +1133,7 @@ export default function Electricity() {
       x: { stacked: true, grid: { display: false }, ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
       y: { stacked: true, grid: { color: isDark ? "rgba(51,65,85,.4)" : "rgba(203,213,225,.6)" }, ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", callback: (v: number) => `${v}` } }
     }
-  };
+  }), [isDark, barWbpValues, barLwbpValues, barUnit, wbpRate, lwbpRate]);
 
   /* ═══ SOLAR STACKED BAR ═══ */
   const solarBarData = useMemo(() => {
@@ -1170,10 +1175,10 @@ export default function Electricity() {
     };
   }, [barLabels, range, solarData]);
 
-  const solarBarOptions: any = {
+  const solarBarOptions: any = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
-    animation: { duration: 0 },
+    animation: false,
     plugins: {
       legend: {
         display: true,
@@ -1188,6 +1193,7 @@ export default function Electricity() {
         }
       },
       tooltip: {
+        animation: false,
         mode: "index",
         intersect: false,
         backgroundColor: isDark ? "rgba(15, 23, 42, 0.98)" : "rgba(255, 255, 255, 1)",
@@ -1225,7 +1231,7 @@ export default function Electricity() {
         ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", callback: (v: number) => `${v}` }
       }
     }
-  };
+  }), [isDark, solarBarData, lwbpRate]);
 
   /* ═══ COMBINED FACT TIMELINE CHART & DONUT STATE ═══ */
   const fact1Total = useMemo(() => {
@@ -1331,14 +1337,14 @@ export default function Electricity() {
     };
   };
 
-  const horizontalBarOptions: any = {
-    indexAxis: "y", responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx: any) => `${Number(ctx.parsed.x).toLocaleString("id-ID")} kWh` } } },
+  const horizontalBarOptions: any = useMemo(() => ({
+    indexAxis: "y", responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: false }, tooltip: { animation: false, callbacks: { label: (ctx: any) => `${Number(ctx.parsed.x).toLocaleString("id-ID")} kWh` } } },
     scales: {
       x: { grid: { color: isDark ? "rgba(51,65,85,.4)" : "rgba(203,213,225,.5)" }, ticks: { color: isDark ? "rgba(148,163,184,.7)" : "rgba(71,85,105,.7)", font: { size: 10 } } },
       y: { grid: { display: false }, ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", font: { size: 10 }, autoSkip: false } }
     }
-  };
+  }), [isDark]);
 
   /* ═══ REALISTIC EQUIPMENT SERIES GENERATOR ═══ */
   const makeEquipmentSeries = (baseDaily: number) => {
