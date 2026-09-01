@@ -89,22 +89,27 @@ export const getWaterAnalytics = async (
 
   const selectedYear =
     year || (fromStr ? parseInt(fromStr.split("-")[0]) : new Date().getFullYear());
-  const from = fromStr
-    ? new Date(fromStr.includes("T") ? fromStr : `${fromStr}T00:00:00.000+07:00`)
-    : new Date(`${selectedYear}-01-01T00:00:00.000+07:00`);
-  const to = toStr
-    ? new Date(toStr.includes("T") ? toStr : `${toStr}T23:59:59.999+07:00`)
-    : new Date(`${selectedYear}-12-31T23:59:59.999+07:00`);
+
+  // Helper to format date string as YYYY-MM-DD HH:mm:ss for PostgreSQL timestamp without time zone
+  const fromBase = fromStr ? `${fromStr} 00:00:00` : `${selectedYear}-01-01 00:00:00`;
+  const toBase = toStr ? `${toStr} 23:59:59` : `${selectedYear}-12-31 23:59:59`;
+
+  // Fetch baseline starting 2 hours before range for accurate hourly difference calculation
+  const fromDate = new Date(`${fromStr || `${selectedYear}-01-01`}T00:00:00`);
+  const baselineDate = new Date(fromDate.getTime() - 2 * 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const fromQueryVal = `${baselineDate.getFullYear()}-${pad(baselineDate.getMonth() + 1)}-${pad(baselineDate.getDate())} ${pad(baselineDate.getHours())}:${pad(baselineDate.getMinutes())}:${pad(baselineDate.getSeconds())}`;
+  const toQueryVal = toBase;
 
   // ── Fetch hourly records from water_telemetry ──────────────────────────
   // Water_m3 is a cumulative counter; consumption = diff between consecutive records.
   // When a specific deviceId is provided, filter by it; otherwise fetch all.
   let query = `
-    SELECT t_stamp AS ts, water_m3::float AS value, COALESCE(water_kwh::float, water_m3::float * 0.4) AS value_kwh, id_device
+    SELECT t_stamp::text AS ts_text, water_m3::float AS value, COALESCE(water_kwh::float, water_m3::float * 0.4) AS value_kwh, id_device
     FROM water_telemetry
     WHERE t_stamp >= $1 AND t_stamp <= $2
   `;
-  const params: any[] = [from, to];
+  const params: any[] = [fromQueryVal, toQueryVal];
 
   if (deviceId) {
     query += ` AND id_device = $3`;
@@ -113,11 +118,12 @@ export const getWaterAnalytics = async (
 
   query += ` ORDER BY id_device, t_stamp ASC`;
 
-  let records: { ts: Date; value: number; valueKwh: number; id_device: string }[] = [];
+  let records: { ts_text: string; ts: Date; value: number; valueKwh: number; id_device: string }[] = [];
   try {
     const res = await pool.query(query, params);
     records = res.rows.map((row) => ({
-      ts: row.ts,
+      ts_text: row.ts_text,
+      ts: new Date(row.ts_text),
       value: row.value,
       valueKwh: row.value_kwh,
       id_device: row.id_device
@@ -134,12 +140,12 @@ export const getWaterAnalytics = async (
   const devices = Array.from(deviceSet).sort();
 
   // ── Group records by device ────────────────────────────────────────────
-  const recordsByDevice = new Map<string, { ts: Date; value: number; valueKwh: number }[]>();
+  const recordsByDevice = new Map<string, { ts_text: string; ts: Date; value: number; valueKwh: number }[]>();
   for (const r of records) {
     if (!recordsByDevice.has(r.id_device)) {
       recordsByDevice.set(r.id_device, []);
     }
-    recordsByDevice.get(r.id_device)!.push({ ts: r.ts, value: r.value, valueKwh: r.valueKwh });
+    recordsByDevice.get(r.id_device)!.push({ ts_text: r.ts_text, ts: r.ts, value: r.value, valueKwh: r.valueKwh });
   }
 
   // ── Compute diffs (consumption) per device ─────────────────────────────
@@ -199,90 +205,95 @@ export const getWaterAnalytics = async (
       let diffKwh = curr.valueKwh - prev.valueKwh;
       if (diffKwh < 0) diffKwh = 0;
 
-      const dateStr = getWibDateString(prev.ts);
-      const monthStr = dateStr.substring(0, 7);
-      const hour = getWibHour(prev.ts);
-      const isToday = dateStr === todayStr;
+      const prevTsStr = (prev.ts_text || (prev.ts instanceof Date ? getWibDateString(prev.ts) : String(prev.ts || ""))).split(".")[0];
+      const currTsStr = (curr.ts_text || (curr.ts instanceof Date ? getWibDateString(curr.ts) : String(curr.ts || ""))).split(".")[0];
+
+      const [prevDateStr, prevTimeStr = "00:00:00"] = prevTsStr.split(" ");
+      const [currDateStr, currTimeStr = "00:00:00"] = currTsStr.split(" ");
+
+      const prevHour = parseInt(prevTimeStr.split(":")[0], 10);
+      const monthStr = currDateStr.substring(0, 7);
+      const isToday = currDateStr === todayStr;
       const isCurrentMonth = monthStr === currentMonthStr;
 
-      // Track peak hourly
-      if (diff > peakHourlyM3) peakHourlyM3 = diff;
-      if (diffKwh > peakHourlyKwh) peakHourlyKwh = diffKwh;
+      const inRange = (!fromStr || currDateStr >= fromStr) && (!toStr || currDateStr <= toStr);
 
-      // ── Aggregate totals ──
-      totalM3 += diff;
-      yearlyM3 += diff;
-      totalKwh += diffKwh;
-      yearlyKwh += diffKwh;
+      if (inRange) {
+        // Track peak hourly
+        if (diff > peakHourlyM3) peakHourlyM3 = diff;
+        if (diffKwh > peakHourlyKwh) peakHourlyKwh = diffKwh;
 
-      if (isToday) {
-        todayM3 += diff;
-        todayKwh += diffKwh;
-      }
-      if (isCurrentMonth) {
-        monthlyM3 += diff;
-        monthlyKwh += diffKwh;
-      }
+        // ── Aggregate totals ──
+        totalM3 += diff;
+        yearlyM3 += diff;
+        totalKwh += diffKwh;
+        yearlyKwh += diffKwh;
 
-      // ── Daily aggregation ──
-      dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + diff);
-      dailyKwhMap.set(dateStr, (dailyKwhMap.get(dateStr) || 0) + diffKwh);
+        if (isToday) {
+          todayM3 += diff;
+          todayKwh += diffKwh;
+        }
+        if (isCurrentMonth) {
+          monthlyM3 += diff;
+          monthlyKwh += diffKwh;
+        }
 
-      // ── Monthly aggregation ──
-      monthlyMap.set(monthStr, (monthlyMap.get(monthStr) || 0) + diff);
-      monthlyKwhMap.set(monthStr, (monthlyKwhMap.get(monthStr) || 0) + diffKwh);
+        // Daily
+        dailyMap.set(currDateStr, (dailyMap.get(currDateStr) || 0) + diff);
+        dailyKwhMap.set(currDateStr, (dailyKwhMap.get(currDateStr) || 0) + diffKwh);
 
-      // ── Hourly aggregation (per day) ──
-      if (!dailyHourlyMap.has(dateStr)) {
-        dailyHourlyMap.set(dateStr, Array.from({ length: 24 }, () => 0));
-        dailyHourlyKwhMap.set(dateStr, Array.from({ length: 24 }, () => 0));
-      }
-      const dayHours = dailyHourlyMap.get(dateStr)!;
-      const dayHoursKwh = dailyHourlyKwhMap.get(dateStr)!;
-      if (hour >= 0 && hour < 24) {
-        dayHours[hour] += diff;
-        dayHoursKwh[hour] += diffKwh;
-      }
+        // Monthly
+        monthlyMap.set(monthStr, (monthlyMap.get(monthStr) || 0) + diff);
+        monthlyKwhMap.set(monthStr, (monthlyKwhMap.get(monthStr) || 0) + diffKwh);
 
-      // ── Per-device aggregation ──
-      perDeviceTotal.set(devId, (perDeviceTotal.get(devId) || 0) + diff);
-      perDeviceTotalKwh.set(devId, (perDeviceTotalKwh.get(devId) || 0) + diffKwh);
+        // Per-device totals
+        perDeviceTotal.set(devId, (perDeviceTotal.get(devId) || 0) + diff);
+        perDeviceTotalKwh.set(devId, (perDeviceTotalKwh.get(devId) || 0) + diffKwh);
 
-      const devMonthMap = perDeviceMonthly.get(devId)!;
-      devMonthMap.set(monthStr, (devMonthMap.get(monthStr) || 0) + diff);
-      const devMonthMapKwh = perDeviceMonthlyKwh.get(devId)!;
-      devMonthMapKwh.set(monthStr, (devMonthMapKwh.get(monthStr) || 0) + diffKwh);
-      
-      const devDayMap = perDeviceDaily.get(devId)!;
-      devDayMap.set(dateStr, (devDayMap.get(dateStr) || 0) + diff);
-      const devDayMapKwh = perDeviceDailyKwh.get(devId)!;
-      devDayMapKwh.set(dateStr, (devDayMapKwh.get(dateStr) || 0) + diffKwh);
+        if (isToday) {
+          perDeviceToday.set(devId, (perDeviceToday.get(devId) || 0) + diff);
+          perDeviceTodayKwh.set(devId, (perDeviceTodayKwh.get(devId) || 0) + diffKwh);
+        }
+        if (isCurrentMonth) {
+          perDeviceCurrentMonth.set(devId, (perDeviceCurrentMonth.get(devId) || 0) + diff);
+          perDeviceCurrentMonthKwh.set(devId, (perDeviceCurrentMonthKwh.get(devId) || 0) + diffKwh);
+        }
 
-      const devHourMap = perDeviceHourly.get(devId)!;
-      if (!devHourMap.has(dateStr)) {
-        devHourMap.set(dateStr, Array.from({ length: 24 }, () => 0));
-      }
-      const devDayHours = devHourMap.get(dateStr)!;
-      if (hour >= 0 && hour < 24) {
-        devDayHours[hour] += diff;
+        // Per-device monthly
+        const devMonthly = perDeviceMonthly.get(devId)!;
+        devMonthly.set(monthStr, (devMonthly.get(monthStr) || 0) + diff);
+        const devMonthlyKwh = perDeviceMonthlyKwh.get(devId)!;
+        devMonthlyKwh.set(monthStr, (devMonthlyKwh.get(monthStr) || 0) + diffKwh);
+
+        // Per-device daily
+        const devDaily = perDeviceDaily.get(devId)!;
+        devDaily.set(currDateStr, (devDaily.get(currDateStr) || 0) + diff);
+        const devDailyKwh = perDeviceDailyKwh.get(devId)!;
+        devDailyKwh.set(currDateStr, (devDailyKwh.get(currDateStr) || 0) + diffKwh);
       }
 
-      const devHourMapKwh = perDeviceHourlyKwh.get(devId)!;
-      if (!devHourMapKwh.has(dateStr)) {
-        devHourMapKwh.set(dateStr, Array.from({ length: 24 }, () => 0));
+      // Hourly (aggregate across devices)
+      if (!dailyHourlyMap.has(currDateStr)) {
+        dailyHourlyMap.set(currDateStr, Array.from({ length: 24 }, () => 0));
+        dailyHourlyKwhMap.set(currDateStr, Array.from({ length: 24 }, () => 0));
       }
-      const devDayHoursKwh = devHourMapKwh.get(dateStr)!;
-      if (hour >= 0 && hour < 24) {
-        devDayHoursKwh[hour] += diffKwh;
+      if (prevHour >= 0 && prevHour < 24) {
+        dailyHourlyMap.get(currDateStr)![prevHour] += diff;
+        dailyHourlyKwhMap.get(currDateStr)![prevHour] += diffKwh;
       }
 
-      if (isToday) {
-        perDeviceToday.set(devId, (perDeviceToday.get(devId) || 0) + diff);
-        perDeviceTodayKwh.set(devId, (perDeviceTodayKwh.get(devId) || 0) + diffKwh);
+      // Per-device hourly
+      const devHourly = perDeviceHourly.get(devId)!;
+      if (!devHourly.has(currDateStr)) {
+        devHourly.set(currDateStr, Array.from({ length: 24 }, () => 0));
       }
-      if (isCurrentMonth) {
-        perDeviceCurrentMonth.set(devId, (perDeviceCurrentMonth.get(devId) || 0) + diff);
-        perDeviceCurrentMonthKwh.set(devId, (perDeviceCurrentMonthKwh.get(devId) || 0) + diffKwh);
+      const devHourlyKwh = perDeviceHourlyKwh.get(devId)!;
+      if (!devHourlyKwh.has(currDateStr)) {
+        devHourlyKwh.set(currDateStr, Array.from({ length: 24 }, () => 0));
+      }
+      if (prevHour >= 0 && prevHour < 24) {
+        devHourly.get(currDateStr)![prevHour] += diff;
+        devHourlyKwh.get(currDateStr)![prevHour] += diffKwh;
       }
     }
   }

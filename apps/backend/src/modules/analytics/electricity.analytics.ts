@@ -228,12 +228,16 @@ export const getElectricityAnalytics = async (
     ? new Date(toStr.includes("T") ? toStr : `${toStr}T23:59:59.999+07:00`)
     : new Date(`${selectedYear}-12-31T23:59:59.999+07:00`);
 
-  const fromQueryVal = fromStr
-    ? (fromStr.includes("T") ? fromStr.replace("T", " ").split(".")[0] : `${fromStr} 00:00:00.000`)
-    : `${selectedYear}-01-01 00:00:00.000`;
-  const toQueryVal = toStr
-    ? (toStr.includes("T") ? toStr.replace("T", " ").split(".")[0] : `${toStr} 23:59:59.999`)
-    : `${selectedYear}-12-31 23:59:59.999`;
+  // Helper to format date string as YYYY-MM-DD HH:mm:ss for PostgreSQL timestamp without time zone
+  const fromBase = fromStr ? `${fromStr} 00:00:00` : `${selectedYear}-01-01 00:00:00`;
+  const toBase = toStr ? `${toStr} 23:59:59` : `${selectedYear}-12-31 23:59:59`;
+
+  // Fetch baseline starting 2 hours before range for accurate hourly difference calculation
+  const fromDate = new Date(`${fromStr || `${selectedYear}-01-01`}T00:00:00`);
+  const baselineDate = new Date(fromDate.getTime() - 2 * 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const fromQueryVal = `${baselineDate.getFullYear()}-${pad(baselineDate.getMonth() + 1)}-${pad(baselineDate.getDate())} ${pad(baselineDate.getHours())}:${pad(baselineDate.getMinutes())}:${pad(baselineDate.getSeconds())}`;
+  const toQueryVal = toBase;
 
   // Select appropriate PostgreSQL table based on device
   let tableName = "electric_pln_telemetry";
@@ -249,40 +253,34 @@ export const getElectricityAnalytics = async (
     energyCol = "electricity_kwh";
   }
 
-  // Fetch baseline starting 2 hours before range for accurate hourly difference calculation
-  const fromQueryDate = new Date(from.getTime() - 2 * 60 * 60 * 1000);
-  const fromQueryIso = fromQueryDate.toISOString();
-  const toQueryIso = to.toISOString();
-
   // Always calculate using Active Energy Delivered of PLN (PM8000)
   const activeEnergyTag = "electricity/Cubicle_PLN_PM8000/active_energy";
 
   // 1. Fetch hourly values of active energy for the range
-  let hourlyRecords: { ts: Date; value: number }[] = [];
+  let hourlyRecords: { ts_text?: string; ts?: Date; value: number }[] = [];
   const pool = getPostgresPool();
   try {
     if (deviceId === "Cubicle_PLN_PM8000" || tableName === "electricity_telemetry") {
       const res = await pool.query(`
-        SELECT t_stamp AS ts, electricity_kwh::float AS value
+        SELECT t_stamp::text AS ts_text, electricity_kwh::float AS value
         FROM electricity_telemetry
         WHERE t_stamp >= $1 AND t_stamp <= $2 AND (id_device = $3 OR id_device IS NULL)
         ORDER BY t_stamp ASC
-      `, [fromQueryIso, toQueryIso, deviceId]);
+      `, [fromQueryVal, toQueryVal, deviceId]);
       hourlyRecords = res.rows;
 
       // Append latest real-time reading from electric_pln_telemetry if available and newer
       if (to >= new Date()) {
         try {
           const latestRes = await pool.query(`
-            SELECT t_stamp AS ts, active_energy::float AS value
+            SELECT t_stamp::text AS ts_text, active_energy::float AS value
             FROM electric_pln_telemetry
             ORDER BY t_stamp DESC LIMIT 1
           `);
           if (latestRes.rows.length > 0) {
             const latest = latestRes.rows[0];
-            const latestTs = new Date(latest.ts);
-            const lastTs = hourlyRecords.length > 0 ? new Date(hourlyRecords[hourlyRecords.length - 1].ts) : new Date(0);
-            if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
+            const lastTs = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "") : "";
+            if (latest.ts_text !== lastTs && latest.value > 0) {
               hourlyRecords.push(latest);
             }
           }
@@ -291,12 +289,12 @@ export const getElectricityAnalytics = async (
     } else {
       const res = await pool.query(`
         SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
-          t_stamp AS ts, 
+          t_stamp::text AS ts_text, 
           ${energyCol}::float AS value
         FROM ${tableName}
         WHERE t_stamp >= $1 AND t_stamp <= $2
         ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
-      `, [fromQueryIso, toQueryIso]);
+      `, [fromQueryVal, toQueryVal]);
       hourlyRecords = res.rows;
     }
   } catch (err) {
@@ -308,13 +306,14 @@ export const getElectricityAnalytics = async (
     const mongoRecords = await hourlyCollection
       .find({
         "meta.tagId": activeEnergyTag,
-        ts: { $gte: fromQueryDate, $lte: to }
+        ts: { $gte: baselineDate, $lte: to }
       })
       .sort({ ts: 1 })
       .toArray();
     
     hourlyRecords = mongoRecords.map((r: any) => ({
       ts: r.ts,
+      ts_text: getWibDateString(r.ts) + " " + String(getWibHour(r.ts)).padStart(2, "0") + ":00:00",
       value: r.value
     }));
   }
@@ -360,11 +359,6 @@ export const getElectricityAnalytics = async (
   const dailyHourlyMap = new Map<string, number[]>();
   const dailyHourlyWbpMap = new Map<string, number[]>();
   const dailyHourlyLwbpMap = new Map<string, number[]>();
-  let latestWibDate = fromStr 
-    ? getWibDateString(from)
-    : (hourlyRecords.length > 0
-      ? getWibDateString(hourlyRecords[hourlyRecords.length - 1].ts)
-      : getWibDateString(new Date()));
 
   for (let i = 1; i < hourlyRecords.length; i++) {
     const prevRecord = hourlyRecords[i - 1];
@@ -375,92 +369,104 @@ export const getElectricityAnalytics = async (
     let diff = currVal - prevVal;
     if (diff < 0) diff = 0; // Guard against resets or anomalies
 
-    if (diff > maxDiff) {
-      maxDiff = diff;
-      peakDemandTs = currRecord.ts;
-    }
+    const prevTsStr = (prevRecord.ts_text || (prevRecord.ts instanceof Date ? getWibDateString(prevRecord.ts) : String(prevRecord.ts || ""))).split(".")[0];
+    const currTsStr = (currRecord.ts_text || (currRecord.ts instanceof Date ? getWibDateString(currRecord.ts) : String(currRecord.ts || ""))).split(".")[0];
 
-    const hour = getWibHour(prevRecord.ts);
-    const dateStr = getWibDateString(prevRecord.ts);
-    const monthStr = dateStr.substring(0, 7);
+    const [prevDateStr, prevTimeStr = "00:00:00"] = prevTsStr.split(" ");
+    const [currDateStr, currTimeStr = "00:00:00"] = currTsStr.split(" ");
 
-    const isToday = dateStr === todayStr;
+    const prevHour = parseInt(prevTimeStr.split(":")[0], 10);
+    const currHour = parseInt(currTimeStr.split(":")[0], 10);
+
+    const monthStr = currDateStr.substring(0, 7);
+    const isToday = currDateStr === todayStr;
     const isCurrentMonth = monthStr === currentMonthStr;
 
+    // Check if current interval falls within the requested date range [fromStr, toStr]
+    const inRange = (!fromStr || currDateStr >= fromStr) && (!toStr || currDateStr <= toStr);
+
     // Get matching tariff for this date
-    const recordTariff = getTariffForDate(dateStr, tariffs);
+    const recordTariff = getTariffForDate(currDateStr, tariffs);
 
     // If the hourly interval ends at 18:00 to 22:00 WIB, it started at WBP hours (17:00-21:00)
-    const endHour = getWibHour(currRecord.ts);
-    const isWbp = endHour >= 18 && endHour <= 22;
-    if (isWbp) {
-      const cost = diff * recordTariff.wbpRate;
-      wbpKwh += diff;
-      totalWbpCost += cost;
-      if (isToday) {
-        todayWbpKwh += diff;
-        todayWbpCost += cost;
-      }
-      if (isCurrentMonth) {
-        monthlyWbpKwh += diff;
-        monthlyWbpCost += cost;
-      }
-      monthlyWbpCostMap.set(monthStr, (monthlyWbpCostMap.get(monthStr) || 0) + cost);
-    } else {
-      const cost = diff * recordTariff.lwbpRate;
-      lwbpKwh += diff;
-      totalLwbpCost += cost;
-      if (isToday) {
-        todayLwbpKwh += diff;
-        todayLwbpCost += cost;
-      }
-      if (isCurrentMonth) {
-        monthlyLwbpKwh += diff;
-        monthlyLwbpCost += cost;
-      }
-      monthlyLwbpCostMap.set(monthStr, (monthlyLwbpCostMap.get(monthStr) || 0) + cost);
-    }
+    const isWbp = currHour >= 18 && currHour <= 22;
 
-    // Group by Day (total + WBP/LWBP split)
-    dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + diff);
-    if (isWbp) {
-      dailyWbpMap.set(dateStr, (dailyWbpMap.get(dateStr) || 0) + diff);
-    } else {
-      dailyLwbpMap.set(dateStr, (dailyLwbpMap.get(dateStr) || 0) + diff);
-    }
+    if (inRange) {
+      if (isWbp) {
+        const cost = diff * recordTariff.wbpRate;
+        wbpKwh += diff;
+        totalWbpCost += cost;
+        if (isToday) {
+          todayWbpKwh += diff;
+          todayWbpCost += cost;
+        }
+        if (isCurrentMonth) {
+          monthlyWbpKwh += diff;
+          monthlyWbpCost += cost;
+        }
+        monthlyWbpCostMap.set(monthStr, (monthlyWbpCostMap.get(monthStr) || 0) + cost);
+        dailyWbpMap.set(currDateStr, (dailyWbpMap.get(currDateStr) || 0) + diff);
+      } else {
+        const cost = diff * recordTariff.lwbpRate;
+        lwbpKwh += diff;
+        totalLwbpCost += cost;
+        if (isToday) {
+          todayLwbpKwh += diff;
+          todayLwbpCost += cost;
+        }
+        if (isCurrentMonth) {
+          monthlyLwbpKwh += diff;
+          monthlyLwbpCost += cost;
+        }
+        monthlyLwbpCostMap.set(monthStr, (monthlyLwbpCostMap.get(monthStr) || 0) + cost);
+        dailyLwbpMap.set(currDateStr, (dailyLwbpMap.get(currDateStr) || 0) + diff);
+      }
 
-    // Group by Month (total + WBP/LWBP split)
-    monthlyMap.set(monthStr, (monthlyMap.get(monthStr) || 0) + diff);
-    if (isWbp) {
-      monthlyWbpMap.set(monthStr, (monthlyWbpMap.get(monthStr) || 0) + diff);
-    } else {
-      monthlyLwbpMap.set(monthStr, (monthlyLwbpMap.get(monthStr) || 0) + diff);
-    }
+      dailyMap.set(currDateStr, (dailyMap.get(currDateStr) || 0) + diff);
 
-    // Track peak demand per month
-    const currentMonthPeak = monthlyPeakMap.get(monthStr) || 0;
-    if (diff > currentMonthPeak) {
-      monthlyPeakMap.set(monthStr, diff);
-      monthlyPeakTsMap.set(monthStr, currRecord.ts);
+      // Group by Month (total + WBP/LWBP split)
+      monthlyMap.set(monthStr, (monthlyMap.get(monthStr) || 0) + diff);
+      if (isWbp) {
+        monthlyWbpMap.set(monthStr, (monthlyWbpMap.get(monthStr) || 0) + diff);
+      } else {
+        monthlyLwbpMap.set(monthStr, (monthlyLwbpMap.get(monthStr) || 0) + diff);
+      }
+
+      // Track peak demand
+      if (diff > maxDiff) {
+        maxDiff = diff;
+        peakDemandTs = currRecord.ts_text ? new Date(currRecord.ts_text) : (currRecord.ts || null);
+      }
+      const currentMonthPeak = monthlyPeakMap.get(monthStr) || 0;
+      if (diff > currentMonthPeak) {
+        monthlyPeakMap.set(monthStr, diff);
+        monthlyPeakTsMap.set(monthStr, currRecord.ts_text ? new Date(currRecord.ts_text) : (currRecord.ts || new Date()));
+      }
     }
 
     // Accumulate for daily hourly map (total + WBP/LWBP split)
-    if (!dailyHourlyMap.has(dateStr)) {
-      dailyHourlyMap.set(dateStr, Array.from({ length: 24 }, () => 0));
-      dailyHourlyWbpMap.set(dateStr, Array.from({ length: 24 }, () => 0));
-      dailyHourlyLwbpMap.set(dateStr, Array.from({ length: 24 }, () => 0));
+    if (!dailyHourlyMap.has(currDateStr)) {
+      dailyHourlyMap.set(currDateStr, Array.from({ length: 24 }, () => 0));
+      dailyHourlyWbpMap.set(currDateStr, Array.from({ length: 24 }, () => 0));
+      dailyHourlyLwbpMap.set(currDateStr, Array.from({ length: 24 }, () => 0));
     }
-    const dayHours = dailyHourlyMap.get(dateStr)!;
-    const dayWbpHours = dailyHourlyWbpMap.get(dateStr)!;
-    const dayLwbpHours = dailyHourlyLwbpMap.get(dateStr)!;
-    if (hour >= 0 && hour < 24) {
-      dayHours[hour] += diff;
+    const dayHours = dailyHourlyMap.get(currDateStr)!;
+    const dayWbpHours = dailyHourlyWbpMap.get(currDateStr)!;
+    const dayLwbpHours = dailyHourlyLwbpMap.get(currDateStr)!;
+    if (prevHour >= 0 && prevHour < 24) {
+      dayHours[prevHour] += diff;
       if (isWbp) {
-        dayWbpHours[hour] += diff;
+        dayWbpHours[prevHour] += diff;
       } else {
-        dayLwbpHours[hour] += diff;
+        dayLwbpHours[prevHour] += diff;
       }
     }
+  }
+
+  let latestWibDate = toStr || fromStr;
+  if (!latestWibDate) {
+    const dates = Array.from(dailyHourlyMap.keys()).sort();
+    latestWibDate = dates.length > 0 ? dates[dates.length - 1] : todayStr;
   }
 
   const hourlyValues = dailyHourlyMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
