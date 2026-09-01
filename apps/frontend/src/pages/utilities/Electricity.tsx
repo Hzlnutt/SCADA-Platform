@@ -450,18 +450,10 @@ export default function Electricity() {
       wbpKwh: wbp,
       monthlyKwh: total,
       cost: cost,
-<<<<<<< HEAD
       poi1Kwh: poi1,
       poi2Kwh: poi2
     };
-  }, [summaryData, lwbpRate, wbpRate, solarLive, solarData]);
-
-  // Consumption Fact categories (Empty until populated by real data)
-=======
-      poi1Kwh: pltsLive.poi1.total_kwh,
-      poi2Kwh: pltsLive.poi2.total_kwh
-    };
-  }, [cubicleAnalytics, summaryData, cubicleSelector, pltsLive, lwbpRate, wbpRate]);
+  }, [cubicleAnalytics, summaryData, cubicleSelector, solarLive, solarData, lwbpRate, wbpRate]);
 
   // Daily Comparison Data (Bulan Ini vs Bulan Lalu) for selected cubicle
   const cubicleDailyData = useMemo(() => {
@@ -502,9 +494,6 @@ export default function Electricity() {
 
     return { currentData, previousData };
   }, [cubicleAnalytics, summaryData, cubicleSummary, cubicleSelector, selectedYear]);
-
-  // Consumption Fact categories (with rich fallback)
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
   const [factCategories1, setFactCategories1] = useState<ConsumptionFactCategory[]>([]);
   const [factCategories2, setFactCategories2] = useState<ConsumptionFactCategory[]>([]);
 
@@ -1782,28 +1771,18 @@ export default function Electricity() {
             <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500">Solar Panel (PLTS)</h3>
           </div>
-<<<<<<< HEAD
           <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
             ONLINE (POLLING 1s)
-=======
-          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-            Live System
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
           </span>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {/* Estimasi Biaya */}
-<<<<<<< HEAD
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4">
-=======
-          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 flex flex-col justify-between">
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Estimasi Penghematan</span>
               <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500"><IconMoney /></div>
             </div>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-<<<<<<< HEAD
               {formatCurrency(solarData?.summary?.todayCost || ((solarData?.summary?.todayKwh || 0) * lwbpRate) || 0)}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
@@ -1891,63 +1870,6 @@ export default function Electricity() {
               {formatNumber(solarData?.summary?.poi2PeakDemand || 0)} kW
             </div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
-=======
-              {formatCurrency((pltsLive.poi1.total_kwh + pltsLive.poi2.total_kwh) * electricityRate)}
-            </div>
-            <div className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-              Total: {(pltsLive.poi1.total_kwh + pltsLive.poi2.total_kwh).toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh
-            </div>
-          </div>
-
-          {/* POI-1 Total */}
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">POI-1</span>
-              <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-            </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {pltsLive.poi1.total_kwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh
-            </div>
-            <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 font-mono">
-              Volt: {pltsLive.poi1.volt_ab?.toFixed(1) || "391.8"} V · {pltsLive.poi1.frequency?.toFixed(2) || "49.98"} Hz
-            </div>
-          </div>
-
-          {/* POI-1 Peak Demand */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 flex flex-col justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Peak Demand POI-1</span>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {pltsLive.poi1.active_power.toFixed(1)} kW
-            </div>
-            <div className="mt-1 text-[10px] text-slate-400">
-              Status: <span className="font-semibold text-emerald-500">{pltsLive.poi1.status ? "Active (Generating)" : "Standby"}</span>
-            </div>
-          </div>
-
-          {/* POI-2 Total */}
-          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30 p-4 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-500 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20">POI-2</span>
-              <span className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse" />
-            </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {pltsLive.poi2.total_kwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh
-            </div>
-            <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 font-mono">
-              Volt: {pltsLive.poi2.volt_ab?.toFixed(1) || "383.1"} V · {pltsLive.poi2.frequency?.toFixed(2) || "49.98"} Hz
-            </div>
-          </div>
-
-          {/* POI-2 Peak Demand */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 flex flex-col justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Peak Demand POI-2</span>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {pltsLive.poi2.active_power.toFixed(1)} kW
-            </div>
-            <div className="mt-1 text-[10px] text-slate-400">
-              Status: <span className="font-semibold text-emerald-500">{pltsLive.poi2.status ? "Active (Generating)" : "Standby"}</span>
-            </div>
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
           </div>
         </div>
       </div>
@@ -1957,7 +1879,6 @@ export default function Electricity() {
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
-<<<<<<< HEAD
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Trend Produksi Solar Panel (PLTS)</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Produksi energi POI-1 & POI-2 — data historis per jam.</p>
             </div>
@@ -1966,70 +1887,10 @@ export default function Electricity() {
             <div style={{ height: 256 }}>
               <Bar data={solarBarData} options={solarBarOptions} />
             </div>
-=======
-              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Trend Panel Distribusi</h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Beban Incoming PLN vs Solar Panel — data 24 Jam (WBP & LWBP).</p>
-            </div>
-            <div className="flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1.5 font-semibold text-blue-500">
-                <span className="h-2.5 w-2.5 rounded-sm bg-blue-500" /> PLN Grid
-              </span>
-              <span className="flex items-center gap-1.5 font-semibold text-emerald-500">
-                <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> Solar PLTS
-              </span>
-            </div>
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80" style={{ height: 260 }}>
-            <Line
-              data={{
-                labels: ["00:00", "02:00", "04:00", "06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"],
-                datasets: [
-                  {
-                    label: "Incoming PLN Grid (kW)",
-                    data: [185, 172, 168, 220, 380, 420, 360, 390, 410, 290, 230, 195],
-                    borderColor: "#3b82f6",
-                    backgroundColor: "rgba(59, 130, 246, 0.12)",
-                    fill: true,
-                    tension: 0.35,
-                    pointRadius: 3
-                  },
-                  {
-                    label: "Solar PV Generation (kW)",
-                    data: [0, 0, 0, 8, 55, 115, 128, 110, 42, 0, 0, 0],
-                    borderColor: "#10b981",
-                    backgroundColor: "rgba(16, 185, 129, 0.15)",
-                    fill: true,
-                    tension: 0.35,
-                    pointRadius: 3
-                  }
-                ]
-              }}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                  legend: { display: false },
-                  tooltip: {
-                    callbacks: {
-                      label: (ctx: any) => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString("id-ID")} kW`
-                    }
-                  }
-                },
-                scales: {
-                  x: { grid: { display: false }, ticks: { color: isDark ? "#94a3b8" : "#64748b", font: { size: 10 } } },
-                  y: {
-                    grid: { color: isDark ? "rgba(51,65,85,.3)" : "rgba(203,213,225,.5)" },
-                    ticks: { color: isDark ? "#94a3b8" : "#64748b", callback: (v: any) => `${v} kW`, font: { size: 10 } }
-                  }
-                }
-              }}
-            />
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
           </div>
         </section>
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
           <div>
-<<<<<<< HEAD
             <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Distribusi Beban PLTS</h3>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Perbandingan produksi POI-1 vs POI-2.</p>
           </div>
@@ -2051,35 +1912,11 @@ export default function Electricity() {
                     thickness={18} 
                     centerLabel="POI-1 vs POI-2" 
                     centerLabelSize="text-[11px]" 
-=======
-            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Distribusi Beban PLTS</h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Perbandingan POI-1 vs POI-2 Real Time.</p>
-          </div>
-          {(() => {
-            const p1Kwh = pltsLive.poi1.total_kwh || 24558;
-            const p2Kwh = pltsLive.poi2.total_kwh || 95707;
-            const tot = p1Kwh + p2Kwh;
-            const p1Pct = Math.round((p1Kwh / tot) * 100);
-            const p2Pct = 100 - p1Pct;
-            return (
-              <>
-                <div className="my-4 flex justify-center">
-                  <DonutChart
-                    segments={[
-                      { label: "POI-1", value: p1Pct, color: "#3b82f6" },
-                      { label: "POI-2", value: p2Pct, color: "#06b6d4" }
-                    ]}
-                    size={150}
-                    thickness={18}
-                    centerLabel={`${p1Pct}% : ${p2Pct}%`}
-                    centerLabelSize="text-[11px]"
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
                   />
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5">
                     <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
-<<<<<<< HEAD
                       <span className="h-2 w-2 rounded-full bg-blue-500" />POI-1
                     </span>
                     <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
@@ -2088,18 +1925,10 @@ export default function Electricity() {
                       ) : (
                         `${p1Pct}% (${formatNumber(p1)} kWh)`
                       )}
-=======
-                      <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                      POI-1
-                    </span>
-                    <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
-                      {p1Kwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh ({p1Pct}%)
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
-<<<<<<< HEAD
                       <span className="h-2 w-2 rounded-full bg-cyan-500" />POI-2
                     </span>
                     <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
@@ -2108,13 +1937,6 @@ export default function Electricity() {
                       ) : (
                         `${p2Pct}% (${formatNumber(p2)} kWh)`
                       )}
-=======
-                      <span className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse" />
-                      POI-2
-                    </span>
-                    <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
-                      {p2Kwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh ({p2Pct}%)
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
                     </span>
                   </div>
                 </div>
@@ -2228,13 +2050,8 @@ export default function Electricity() {
             cubicleSelector === "wf2" ? "Incoming Cubicle WF2" :
             cubicleSelector === "poi1" ? "Solar PV POI-1" : "Solar PV POI-2"
           }`}
-<<<<<<< HEAD
-          currentData={[]}
-          previousData={[]}
-=======
           currentData={cubicleDailyData.currentData}
           previousData={cubicleDailyData.previousData}
->>>>>>> efff78a (feat(electricity): integrate real PLTS API, restore monthly cubicle charts, and populate utility/HVAC analytics)
           isDark={isDark}
         />
       </div>

@@ -10,7 +10,7 @@ import {
   fetchPowerFactor,
   setLatestPowerFactor
 } from "../modules/analytics/electricity.analytics";
-import { setLatestSolarLiveState } from "../modules/analytics/solar.analytics";
+import { setLatestSolarLiveState, SolarLiveState } from "../modules/analytics/solar.analytics";
 
 
 import { updateRunningHours } from "../modules/telemetry/running-hours.service";
@@ -213,7 +213,7 @@ export interface ElectricPltsRecord {
   total_kvarh: number;
 }
 
-export const parsePltsApi = (data: any, ts: Date): ElectricPltsRecord[] => {
+export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] => {
   const result: ElectricPltsRecord[] = [];
   if (!data || typeof data !== "object") return result;
 
@@ -618,7 +618,7 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
 let lastElectricityMinuteStr = "";
 let lastSolarHourStr = "";
 
-const parsePltsApi = (data: any, ts: Date) => {
+const parseSolarLiveState = (data: any, ts: Date): SolarLiveState => {
   const p1 = data?.POI_1 || {};
   const p2 = data?.POI_2 || {};
   const poi1Status = Boolean(p1.Status_POI_1);
@@ -861,17 +861,16 @@ export const startIncomingElectricityPolling = () => {
     };
 
     // Fetch and store Solar Panel (PLTS)
-    let pltsParsed: ReturnType<typeof parsePltsApi> | null = null;
+    let pltsParsed: SolarLiveState;
     try {
       const data = await fetchApiData("electric_plts");
       if (data) {
-        pltsParsed = parsePltsApi(data, ts);
+        pltsParsed = parseSolarLiveState(data, ts);
+      } else {
+        throw new Error("No data");
       }
     } catch (err: any) {
       logger.warn(`Incoming PLTS polling failed: ${err.message}`);
-    }
-
-    if (!pltsParsed) {
       pltsParsed = {
         t_stamp: ts,
         poi1: { status: false, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
@@ -979,7 +978,7 @@ export const startIncomingElectricityPolling = () => {
     try {
       const data = await fetchApiData("electric_plts");
       if (data) {
-        const parsed = parsePltsApi(data, ts);
+        const parsed = parsePltsApiRecords(data, ts);
         if (isNewMinute) {
           await insertPltsMinuteTelemetry(parsed, minuteTs);
         }

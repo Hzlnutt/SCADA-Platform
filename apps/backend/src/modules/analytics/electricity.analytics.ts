@@ -282,7 +282,7 @@ export const getElectricityAnalytics = async (
         FROM ${tableName}
         WHERE t_stamp >= $1 AND t_stamp <= $2 AND poi_id = $3
         ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
-      `, [fromQueryIso, toQueryIso, poiFilter]);
+      `, [fromQueryVal, toQueryVal, poiFilter]);
       hourlyRecords = res.rows;
 
       // Append latest from minute table if available
@@ -295,8 +295,9 @@ export const getElectricityAnalytics = async (
         `, [poiFilter]);
         if (minRes.rows.length > 0) {
           const latest = minRes.rows[0];
-          const latestTs = new Date(latest.ts);
-          const lastTs = hourlyRecords.length > 0 ? new Date(hourlyRecords[hourlyRecords.length - 1].ts) : new Date(0);
+          const latestTs = latest.ts ? new Date(latest.ts) : new Date(0);
+          const lastTsRec = hourlyRecords.length > 0 ? hourlyRecords[hourlyRecords.length - 1] : null;
+          const lastTs = (lastTsRec && (lastTsRec.ts || lastTsRec.ts_text)) ? new Date(lastTsRec.ts || lastTsRec.ts_text!) : new Date(0);
           if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
             hourlyRecords.push(latest);
           }
@@ -354,8 +355,9 @@ export const getElectricityAnalytics = async (
         `);
         if (minRes.rows.length > 0) {
           const latest = minRes.rows[0];
-          const latestTs = new Date(latest.ts);
-          const lastTs = hourlyRecords.length > 0 ? new Date(hourlyRecords[hourlyRecords.length - 1].ts) : new Date(0);
+          const latestTs = latest.ts ? new Date(latest.ts) : new Date(0);
+          const lastTsRec = hourlyRecords.length > 0 ? hourlyRecords[hourlyRecords.length - 1] : null;
+          const lastTs = (lastTsRec && (lastTsRec.ts || lastTsRec.ts_text)) ? new Date(lastTsRec.ts || lastTsRec.ts_text!) : new Date(0);
           if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
             hourlyRecords.push(latest);
           }
