@@ -10,6 +10,7 @@ import {
   fetchPowerFactor,
   setLatestPowerFactor
 } from "../modules/analytics/electricity.analytics";
+import { setLatestSolarLiveState } from "../modules/analytics/solar.analytics";
 
 
 import { updateRunningHours } from "../modules/telemetry/running-hours.service";
@@ -539,6 +540,67 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
 };
 
 let lastElectricityMinuteStr = "";
+let lastSolarHourStr = "";
+
+const parsePltsApi = (data: any, ts: Date) => {
+  const p1 = data?.POI_1 || {};
+  const p2 = data?.POI_2 || {};
+  const poi1 = {
+    status: p1.Status_POI_1 !== undefined ? !!p1.Status_POI_1 : true,
+    totalKwh: typeof p1.Total_KWH_POI_1 === "number" ? p1.Total_KWH_POI_1 : 0,
+    totalKvarh: typeof p1.Total_KVARH_POI_1 === "number" ? p1.Total_KVARH_POI_1 : 0,
+    frequency: typeof p1.Frequency_POI_1 === "number" ? p1.Frequency_POI_1 : 50,
+    voltAb: typeof p1.Volt_AB_POI_1 === "number" ? p1.Volt_AB_POI_1 : 0,
+    voltBc: typeof p1.Volt_BC_POI_1 === "number" ? p1.Volt_BC_POI_1 : 0,
+    voltCa: typeof p1.Volt_CA_POI_1 === "number" ? p1.Volt_CA_POI_1 : 0,
+    voltAn: typeof p1.Volt_AN_POI_1 === "number" ? p1.Volt_AN_POI_1 : 0,
+    voltBn: typeof p1.Volt_BN_POI_1 === "number" ? p1.Volt_BN_POI_1 : 0,
+    voltCn: typeof p1.Volt_CN_POI_1 === "number" ? p1.Volt_CN_POI_1 : 0,
+  };
+  const poi2 = {
+    status: p2.Status_POI_2 !== undefined ? !!p2.Status_POI_2 : true,
+    totalKwh: typeof p2.Total_KWH_POI_2 === "number" ? p2.Total_KWH_POI_2 : 0,
+    totalKvarh: typeof p2.Total_KVARH_POI_2 === "number" ? p2.Total_KVARH_POI_2 : 0,
+    frequency: typeof p2.Frequency_POI_2 === "number" ? p2.Frequency_POI_2 : 50,
+    voltAb: typeof p2.Volt_AB_POI_2 === "number" ? p2.Volt_AB_POI_2 : 0,
+    voltBc: typeof p2.Volt_BC_POI_2 === "number" ? p2.Volt_BC_POI_2 : 0,
+    voltCa: typeof p2.Volt_CA_POI_2 === "number" ? p2.Volt_CA_POI_2 : 0,
+    voltAn: typeof p2.Volt_AN_POI_2 === "number" ? p2.Volt_AN_POI_2 : 0,
+    voltBn: typeof p2.Volt_BN_POI_2 === "number" ? p2.Volt_BN_POI_2 : 0,
+    voltCn: typeof p2.Volt_CN_POI_2 === "number" ? p2.Volt_CN_POI_2 : 0,
+  };
+  return {
+    t_stamp: ts,
+    poi1,
+    poi2,
+    totalKwh: poi1.totalKwh + poi2.totalKwh
+  };
+};
+
+const insertSolarHourlyTelemetry = async (
+  pool: any,
+  hourStr: string,
+  poi1Kwh: number,
+  poi2Kwh: number
+) => {
+  const totKwh = poi1Kwh + poi2Kwh;
+  try {
+    await pool.query(
+      `DELETE FROM solar_telemetry WHERE t_stamp = $1`,
+      [hourStr]
+    );
+    await pool.query(
+      `INSERT INTO solar_telemetry (t_stamp, solar_kwh, id_device) VALUES 
+        ($1, $2, 'POI_1'),
+        ($1, $3, 'POI_2'),
+        ($1, $4, 'Solar_Panel_Total')`,
+      [hourStr, poi1Kwh, poi2Kwh, totKwh]
+    );
+    logger.info({ hour: hourStr, poi1Kwh, poi2Kwh, totKwh }, "Saved hourly solar telemetry to Postgres");
+  } catch (err: any) {
+    logger.error(`Failed to insert hourly solar telemetry: ${err.message}`);
+  }
+};
 
 export const startIncomingElectricityPolling = () => {
   if (incomingElectricityPollingInterval) return;
@@ -719,6 +781,40 @@ export const startIncomingElectricityPolling = () => {
       active_energy: wf2Parsed.active_energy
     };
 
+    // Fetch and store Solar Panel (PLTS)
+    let pltsParsed: ReturnType<typeof parsePltsApi> | null = null;
+    try {
+      const data = await fetchApiData("electric_plts");
+      if (data) {
+        pltsParsed = parsePltsApi(data, ts);
+      }
+    } catch (err: any) {
+      logger.warn(`Incoming PLTS polling failed: ${err.message}`);
+    }
+
+    if (pltsParsed) {
+      setLatestSolarLiveState(pltsParsed);
+      const io = getSocketServer();
+      if (io) {
+        io.emit("electricity:solar_live", pltsParsed);
+        io.emit("solar:live_update", pltsParsed);
+      }
+
+      // Check for top-of-hour recording to solar_telemetry (e.g. 10:00:00, 11:00:00)
+      const wibTime = new Date(ts.getTime() + 7 * 60 * 60 * 1000);
+      const padZero = (n: number) => String(n).padStart(2, "0");
+      const currentHourStr = `${wibTime.getUTCFullYear()}-${padZero(wibTime.getUTCMonth() + 1)}-${padZero(wibTime.getUTCDate())} ${padZero(wibTime.getUTCHours())}:00:00`;
+      if (currentHourStr !== lastSolarHourStr) {
+        lastSolarHourStr = currentHourStr;
+        const pool = getPostgresPool();
+        await insertSolarHourlyTelemetry(pool, currentHourStr, pltsParsed.poi1.totalKwh, pltsParsed.poi2.totalKwh);
+        if (io) {
+          io.emit("electricity:update");
+          io.emit("solar:update");
+        }
+      }
+    }
+
     // Fetch and store EW23 (Sub-distribution Power Meters)
     let ew23Parsed: ElectricPmRecord[] = [];
     try {
@@ -801,9 +897,9 @@ export const startIncomingElectricityPolling = () => {
       }
     }
 
-    // Poll every 2500ms for live WebSocket updates
+    // Poll every 1000ms (1 second) for real-time WebSocket updates
     if (incomingElectricityPollingInterval) {
-      incomingElectricityPollingInterval = setTimeout(poll, 2500) as any;
+      incomingElectricityPollingInterval = setTimeout(poll, 1000) as any;
     }
   };
 

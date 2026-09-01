@@ -987,6 +987,17 @@ export const ensurePostgresTables = async () => {
       logger.warn({ err: err.message }, "Hourly gap filler check finished with notice");
     }
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS solar_telemetry (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        solar_kwh NUMERIC,
+        id_device VARCHAR(50) NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_solar_telemetry_time ON solar_telemetry (t_stamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_solar_telemetry_dev ON solar_telemetry (id_device, t_stamp DESC);
+    `).catch(() => {});
+
     logger.info("postgres tables ensured and migrated to NUMERIC successfully");
   } catch (err: any) {
     logger.error({ err }, "failed to ensure postgres tables");

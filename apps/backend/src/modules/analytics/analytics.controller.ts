@@ -3,6 +3,7 @@ import { getAnalyticsSummary } from "./analytics.service";
 import { getElectricityAnalytics } from "./electricity.analytics";
 import { getWaterAnalytics } from "./water.analytics";
 import { getGasAnalytics } from "./gas.analytics";
+import { getSolarAnalytics } from "./solar.analytics";
 import { getMongoDb } from "../../database/mongo";
 import { GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
 import { getPostgresPool } from "../../database/postgres";
@@ -75,6 +76,23 @@ export const getGasAnalyticsHandler = async (
     const year = req.query.year ? Number(req.query.year) : undefined;
 
     const data = await getGasAnalytics(deviceId, from, to, year);
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getSolarAnalyticsHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+    const year = req.query.year ? Number(req.query.year) : undefined;
+
+    const data = await getSolarAnalytics(from, to, year);
     res.json({ data });
   } catch (err) {
     next(err);

@@ -111,6 +111,7 @@ export default function Dashboard() {
   const [ytdChecks, setYtdChecks] = useState({ electricity: true, gas: true, water: true, solar: false, solarFuel: false });
   const [electricityData, setElectricityData] = useState<any>(null);
   const [waterData, setWaterData] = useState<any>(null);
+  const [solarData, setSolarData] = useState<any>(null);
 
   const isPageActive = usePageActive();
 
@@ -140,12 +141,24 @@ export default function Dashboard() {
         .catch((err) => console.error("Dashboard failed to fetch water data", err));
     };
 
+    const fetchSolar = () => {
+      if (!isPageActive) return;
+      const currentYear = new Date().getFullYear();
+      getJson<{ data: any }>(`/analytics/solar?year=${currentYear}&_t=${Date.now()}`)
+        .then((res) => {
+          if (active && res?.data) setSolarData(res.data);
+        })
+        .catch((err) => console.warn("Dashboard failed to fetch solar data", err));
+    };
+
     fetchElectricity();
     fetchWater();
+    fetchSolar();
     const interval = setInterval(() => {
       if (isPageActive) {
         fetchElectricity();
         fetchWater();
+        fetchSolar();
       }
     }, 60000); // auto-fetch every 60 seconds
 
@@ -153,15 +166,29 @@ export default function Dashboard() {
 
     const handleConfigUpdate = () => {
       useConfigStore.getState().fetchRates();
-      if (active && isPageActive) fetchElectricity();
+      if (active && isPageActive) {
+        fetchElectricity();
+        fetchSolar();
+      }
+    };
+
+    const handleUpdate = () => {
+      if (active && isPageActive) {
+        fetchElectricity();
+        fetchSolar();
+      }
     };
 
     socket.on("config:update", handleConfigUpdate);
+    socket.on("electricity:update", handleUpdate);
+    socket.on("solar:update", handleUpdate);
 
     return () => {
       active = false;
       clearInterval(interval);
       socket.off("config:update", handleConfigUpdate);
+      socket.off("electricity:update", handleUpdate);
+      socket.off("solar:update", handleUpdate);
     };
   }, [isPageActive]);
 
@@ -283,20 +310,35 @@ export default function Dashboard() {
   const energyTarget = totalEnergyKwh * 1.12;
   const costTarget = totalCostIdr * 1.08;
 
-  const solarKwh = 0;
-  const solarSavings = 0;
-  const solarCoverage = 0;
+  const solarKwh = useMemo(() => {
+    if (!solarData) return 0;
+    if (period.id === "daily") return solarData.summary?.todayKwh || 0;
+    if (period.id === "monthly") return solarData.summary?.monthlyKwh || 0;
+    return solarData.summary?.yearlyKwh || 0;
+  }, [solarData, period.id]);
+
+  const solarSavings = useMemo(() => {
+    if (!solarData) return 0;
+    if (period.id === "daily") return solarData.summary?.todayCost || 0;
+    return solarData.summary?.estimasiBiaya || (solarKwh * (lwbpRate || 1112));
+  }, [solarData, period.id, solarKwh, lwbpRate]);
+
+  const solarCoverage = useMemo(() => {
+    if (!electricityKwh || electricityKwh <= 0) return 0;
+    return Number(((solarKwh / (electricityKwh + solarKwh)) * 100).toFixed(1));
+  }, [solarKwh, electricityKwh]);
 
   const { currentElectric, currentGasEnergy, currentWaterEnergy, currentSolarPanel, currentSolarFuel, currentEnergyLabel } = useMemo(() => {
     if (consumptionRange === "hour") {
       const elec = electricityData ? electricityData.summary.todayKwh : 0;
       const gas = 0;
       const water = waterData ? waterData.summary.todayKwh : 0;
+      const solar = solarData ? (solarData.summary?.todayKwh || 0) : 0;
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
         currentWaterEnergy: water,
-        currentSolarPanel: 0,
+        currentSolarPanel: solar,
         currentSolarFuel: 0,
         currentEnergyLabel: "Today"
       };
@@ -304,11 +346,12 @@ export default function Dashboard() {
       const elec = electricityData ? electricityData.summary.monthlyMwh * 1000 : 0;
       const gas = 0;
       const water = waterData ? waterData.summary.monthlyKwh : 0;
+      const solar = solarData ? (solarData.summary?.monthlyKwh || 0) : 0;
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
         currentWaterEnergy: water,
-        currentSolarPanel: 0,
+        currentSolarPanel: solar,
         currentSolarFuel: 0,
         currentEnergyLabel: "This Month"
       };
@@ -316,16 +359,17 @@ export default function Dashboard() {
       const elec = electricityData ? electricityData.summary.totalKwh : 0;
       const gas = 0;
       const water = waterData ? waterData.summary.yearlyKwh : 0;
+      const solar = solarData ? (solarData.summary?.yearlyKwh || 0) : 0;
       return {
         currentElectric: elec,
         currentGasEnergy: gas,
         currentWaterEnergy: water,
-        currentSolarPanel: 0,
+        currentSolarPanel: solar,
         currentSolarFuel: 0,
         currentEnergyLabel: "This Year"
       };
     }
-  }, [consumptionRange, electricityData, waterData]);
+  }, [consumptionRange, electricityData, waterData, solarData]);
 
   const totalCurrentEnergy = currentElectric + currentGasEnergy + currentWaterEnergy + currentSolarPanel + currentSolarFuel;
   const co2Emission = totalCurrentEnergy * emissionFactor;
@@ -441,8 +485,18 @@ export default function Dashboard() {
   }, [waterSeries, waterData, waterConfig, consumptionRange]);
 
   const solarPanelSeries = useMemo(() => {
+    if (solarData && solarData.charts) {
+      if (consumptionRange === "hour") {
+        return solarData.charts.hourly || Array.from({ length: 24 }, () => 0);
+      } else if (consumptionRange === "day") {
+        const days = solarData.charts.daily || [];
+        return days.map((d: any) => d.total || 0);
+      } else {
+        return (solarData.charts.monthly || []).map((m: any) => m.total || 0);
+      }
+    }
     return Array.from({ length: electricitySeries.length }, () => 0);
-  }, [electricitySeries.length]);
+  }, [electricitySeries.length, solarData, consumptionRange]);
 
   const solarFuelSeries = useMemo(() => {
     return Array.from({ length: electricitySeries.length }, () => 0);
@@ -510,10 +564,19 @@ export default function Dashboard() {
   );
 
   const ytdSolarSeries = useMemo(() => {
+    if (solarData && solarData.charts?.monthly) {
+      return solarData.charts.monthly.map((m: any, i: number) => {
+        if (i > ytdMonthIndex) return null as unknown as number;
+        return m.total || 0;
+      });
+    }
     return Array.from({ length: 12 }, () => 0);
-  }, []);
+  }, [solarData, ytdMonthIndex]);
 
-  const ytdSolarTotal = 0;
+  const ytdSolarTotal = useMemo(
+    () => ytdSolarSeries.reduce((sum: number, v: number | null) => sum + (v ?? 0), 0),
+    [ytdSolarSeries]
+  );
 
   const ytdSolarFuelSeries = useMemo(() => {
     return Array.from({ length: 12 }, () => 0);
