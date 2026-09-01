@@ -612,18 +612,37 @@ export default function Electricity() {
     fetchData(true);
   }, [fetchData]);
 
-  // Database historical auto-refresh in background (polling every 30s)
+  // Database historical auto-refresh in background (polling + websocket live updates)
   useEffect(() => {
     let active = true;
-    const interval = setInterval(() => { if (active) fetchData(false); }, 30000);
+    const interval = setInterval(() => { if (active) fetchData(false); }, 15000);
     const socket = getSocket();
+    const handleElectricityUpdate = () => {
+      if (active) fetchData(false);
+    };
+    const handleLiveUpdate = (payload: any) => {
+      if (!active || !payload) return;
+      if (payload.deviceId === "Cubicle_PLN_PM8000" && payload.pqData) {
+        if (payload.pqData.pf !== undefined && payload.pqData.pf !== null) {
+          setLivePf(payload.pqData.pf);
+          setPfStatus(payload.pqData.pfStatus || "connected");
+        }
+      }
+    };
     const handleConfigUpdate = () => { useConfigStore.getState().fetchRates().then(() => { if (active) fetchData(false); }); };
     const handlePfStatus = (payload: any) => { if (active) { setLivePf(payload.value); setPfStatus(payload.status); } };
+
+    socket.on("electricity:update", handleElectricityUpdate);
+    socket.on("electricity:live_update", handleLiveUpdate);
+    socket.on("electricity:pm_live_update", handleElectricityUpdate);
     socket.on("config:update", handleConfigUpdate);
     socket.on("power_factor:status", handlePfStatus);
     return () => {
       active = false;
       clearInterval(interval);
+      socket.off("electricity:update", handleElectricityUpdate);
+      socket.off("electricity:live_update", handleLiveUpdate);
+      socket.off("electricity:pm_live_update", handleElectricityUpdate);
       socket.off("config:update", handleConfigUpdate);
       socket.off("power_factor:status", handlePfStatus);
     };

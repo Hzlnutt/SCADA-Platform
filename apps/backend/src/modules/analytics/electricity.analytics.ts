@@ -378,15 +378,17 @@ export const getElectricityAnalytics = async (
     const prevHour = parseInt(prevTimeStr.split(":")[0], 10);
     const currHour = parseInt(currTimeStr.split(":")[0], 10);
 
-    const monthStr = currDateStr.substring(0, 7);
-    const isToday = currDateStr === todayStr;
+    // The consumption interval [prevHour, currHour] belongs to prevDateStr
+    const dateStr = prevDateStr;
+    const monthStr = dateStr.substring(0, 7);
+    const isToday = dateStr === todayStr;
     const isCurrentMonth = monthStr === currentMonthStr;
 
     // Check if current interval falls within the requested date range [fromStr, toStr]
-    const inRange = (!fromStr || currDateStr >= fromStr) && (!toStr || currDateStr <= toStr);
+    const inRange = (!fromStr || dateStr >= fromStr) && (!toStr || dateStr <= toStr);
 
     // Get matching tariff for this date
-    const recordTariff = getTariffForDate(currDateStr, tariffs);
+    const recordTariff = getTariffForDate(dateStr, tariffs);
 
     // If the hourly interval ends at 18:00 to 22:00 WIB, it started at WBP hours (17:00-21:00)
     const isWbp = currHour >= 18 && currHour <= 22;
@@ -405,7 +407,7 @@ export const getElectricityAnalytics = async (
           monthlyWbpCost += cost;
         }
         monthlyWbpCostMap.set(monthStr, (monthlyWbpCostMap.get(monthStr) || 0) + cost);
-        dailyWbpMap.set(currDateStr, (dailyWbpMap.get(currDateStr) || 0) + diff);
+        dailyWbpMap.set(dateStr, (dailyWbpMap.get(dateStr) || 0) + diff);
       } else {
         const cost = diff * recordTariff.lwbpRate;
         lwbpKwh += diff;
@@ -419,10 +421,10 @@ export const getElectricityAnalytics = async (
           monthlyLwbpCost += cost;
         }
         monthlyLwbpCostMap.set(monthStr, (monthlyLwbpCostMap.get(monthStr) || 0) + cost);
-        dailyLwbpMap.set(currDateStr, (dailyLwbpMap.get(currDateStr) || 0) + diff);
+        dailyLwbpMap.set(dateStr, (dailyLwbpMap.get(dateStr) || 0) + diff);
       }
 
-      dailyMap.set(currDateStr, (dailyMap.get(currDateStr) || 0) + diff);
+      dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + diff);
 
       // Group by Month (total + WBP/LWBP split)
       monthlyMap.set(monthStr, (monthlyMap.get(monthStr) || 0) + diff);
@@ -445,14 +447,14 @@ export const getElectricityAnalytics = async (
     }
 
     // Accumulate for daily hourly map (total + WBP/LWBP split)
-    if (!dailyHourlyMap.has(currDateStr)) {
-      dailyHourlyMap.set(currDateStr, Array.from({ length: 24 }, () => 0));
-      dailyHourlyWbpMap.set(currDateStr, Array.from({ length: 24 }, () => 0));
-      dailyHourlyLwbpMap.set(currDateStr, Array.from({ length: 24 }, () => 0));
+    if (!dailyHourlyMap.has(dateStr)) {
+      dailyHourlyMap.set(dateStr, Array.from({ length: 24 }, () => 0));
+      dailyHourlyWbpMap.set(dateStr, Array.from({ length: 24 }, () => 0));
+      dailyHourlyLwbpMap.set(dateStr, Array.from({ length: 24 }, () => 0));
     }
-    const dayHours = dailyHourlyMap.get(currDateStr)!;
-    const dayWbpHours = dailyHourlyWbpMap.get(currDateStr)!;
-    const dayLwbpHours = dailyHourlyLwbpMap.get(currDateStr)!;
+    const dayHours = dailyHourlyMap.get(dateStr)!;
+    const dayWbpHours = dailyHourlyWbpMap.get(dateStr)!;
+    const dayLwbpHours = dailyHourlyLwbpMap.get(dateStr)!;
     if (prevHour >= 0 && prevHour < 24) {
       dayHours[prevHour] += diff;
       if (isWbp) {
@@ -463,7 +465,7 @@ export const getElectricityAnalytics = async (
     }
   }
 
-  let latestWibDate = toStr || fromStr;
+  let latestWibDate = fromStr || toStr;
   if (!latestWibDate) {
     const dates = Array.from(dailyHourlyMap.keys()).sort();
     latestWibDate = dates.length > 0 ? dates[dates.length - 1] : todayStr;

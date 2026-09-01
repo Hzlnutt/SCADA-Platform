@@ -1473,7 +1473,12 @@ export const startPostgresPolling = () => {
   const poll = async () => {
     try {
       const pool = getPostgresPool();
-      const res = await pool.query("SELECT MAX(t_stamp) AS max_ts FROM electricity_telemetry;");
+      const res = await pool.query(`
+        SELECT GREATEST(
+          (SELECT MAX(t_stamp) FROM electricity_telemetry),
+          (SELECT MAX(t_stamp) FROM electric_pln_telemetry)
+        ) AS max_ts;
+      `);
       const maxTs = res.rows[0]?.max_ts;
       
       if (maxTs) {
@@ -1504,8 +1509,8 @@ export const startPostgresPolling = () => {
 
   // Initial poll
   poll();
-  // Poll every 15 seconds to check for new records without overloading CPU
-  pollingInterval = setInterval(poll, 15000);
+  // Poll every 5 seconds to check for new records promptly
+  pollingInterval = setInterval(poll, 5000);
 };
 
 export const startPowerFactorPolling = () => {
