@@ -264,7 +264,9 @@ export const getElectricityAnalytics = async (
       const res = await pool.query(`
         SELECT t_stamp::text AS ts_text, electricity_kwh::float AS value
         FROM electricity_telemetry
-        WHERE t_stamp >= $1 AND t_stamp <= $2 AND (id_device = $3 OR id_device IS NULL)
+        WHERE t_stamp >= $1 AND t_stamp <= $2 
+          AND (id_device = $3 OR id_device IS NULL)
+          AND electricity_kwh IS NOT NULL
         ORDER BY t_stamp ASC
       `, [fromQueryVal, toQueryVal, deviceId]);
       hourlyRecords = res.rows;
@@ -275,6 +277,7 @@ export const getElectricityAnalytics = async (
           const latestRes = await pool.query(`
             SELECT t_stamp::text AS ts_text, active_energy::float AS value
             FROM electric_pln_telemetry
+            WHERE active_energy IS NOT NULL
             ORDER BY t_stamp DESC LIMIT 1
           `);
           if (latestRes.rows.length > 0) {
@@ -293,6 +296,7 @@ export const getElectricityAnalytics = async (
           ${energyCol}::float AS value
         FROM ${tableName}
         WHERE t_stamp >= $1 AND t_stamp <= $2
+          AND ${energyCol} IS NOT NULL
         ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
       `, [fromQueryVal, toQueryVal]);
       hourlyRecords = res.rows;
