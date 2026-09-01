@@ -197,6 +197,82 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
   });
 };
 
+export interface ElectricPltsRecord {
+  t_stamp: Date;
+  poi_id: string;
+  status: boolean | null;
+  volt_ab: number | null;
+  volt_bc: number | null;
+  volt_ca: number | null;
+  volt_an: number | null;
+  volt_bn: number | null;
+  volt_cn: number | null;
+  frequency: number | null;
+  active_power: number;
+  total_kwh: number;
+  total_kvarh: number;
+}
+
+export const parsePltsApi = (data: any, ts: Date): ElectricPltsRecord[] => {
+  const result: ElectricPltsRecord[] = [];
+  if (!data || typeof data !== "object") return result;
+
+  const parsePoi = (poiObj: any, poiId: "POI_1" | "POI_2") => {
+    if (!poiObj) return;
+    const num = poiId === "POI_1" ? "1" : "2";
+    const status = poiObj[`Status_POI_${num}`] !== undefined ? Boolean(poiObj[`Status_POI_${num}`]) : true;
+    const volt_ab = Number(poiObj[`Volt_AB_POI_${num}`]) || null;
+    const volt_bc = Number(poiObj[`Volt_BC_POI_${num}`]) || null;
+    const volt_ca = Number(poiObj[`Volt_CA_POI_${num}`]) || null;
+    const volt_an = Number(poiObj[`Volt_AN_POI_${num}`]) || null;
+    const volt_bn = Number(poiObj[`Volt_BN_POI_${num}`]) || null;
+    const volt_cn = Number(poiObj[`Volt_CN_POI_${num}`]) || null;
+    const frequency = Number(poiObj[`Frequency_POI_${num}`]) || null;
+    let active_power = Number(poiObj[`Scale_Total_KW_POI_${num}`]) || 0;
+    if (active_power < 0.001 && active_power > 0) active_power = 0;
+    const total_kwh = Number(poiObj[`Total_KWH_POI_${num}`]) || 0;
+    const total_kvarh = Number(poiObj[`Total_KVARH_POI_${num}`]) || 0;
+
+    result.push({
+      t_stamp: ts,
+      poi_id: poiId,
+      status,
+      volt_ab,
+      volt_bc,
+      volt_ca,
+      volt_an,
+      volt_bn,
+      volt_cn,
+      frequency,
+      active_power,
+      total_kwh,
+      total_kvarh
+    });
+  };
+
+  if (data.POI_1) parsePoi(data.POI_1, "POI_1");
+  if (data.POI_2) parsePoi(data.POI_2, "POI_2");
+
+  return result;
+};
+
+const insertPltsMinuteTelemetry = async (records: ElectricPltsRecord[], minuteTs: Date) => {
+  const pool = getPostgresPool();
+  for (const r of records) {
+    try {
+      await pool.query(`
+        INSERT INTO electric_plts_telemetry_minute (
+          t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `, [
+        minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power, r.total_kwh, r.total_kvarh
+      ]);
+    } catch (err: any) {
+      logger.warn(`Failed to insert PLTS minute telemetry for ${r.poi_id}: ${err.message}`);
+    }
+  }
+};
+
 export interface ElectricPmRecord {
   t_stamp: Date;
   group_id: string;
@@ -899,6 +975,28 @@ export const startIncomingElectricityPolling = () => {
     }
     broadcastEwLiveTelemetry("ew22", ew22Parsed);
 
+    // Fetch and store PLTS (Solar POI 1 & POI 2)
+    try {
+      const data = await fetchApiData("electric_plts");
+      if (data) {
+        const parsed = parsePltsApi(data, ts);
+        if (isNewMinute) {
+          await insertPltsMinuteTelemetry(parsed, minuteTs);
+        }
+        const poi1 = parsed.find(p => p.poi_id === "POI_1");
+        const poi2 = parsed.find(p => p.poi_id === "POI_2");
+        if (poi1) broadcastLiveTelemetry("Solar_POI1", poi1);
+        if (poi2) broadcastLiveTelemetry("Solar_POI2", poi2);
+
+        const io = getSocketServer();
+        if (io) {
+          io.emit("electricity:plts_live", { data: parsed, t_stamp: ts });
+        }
+      }
+    } catch (err: any) {
+      logger.warn(`Incoming PLTS polling failed: ${err.message}`);
+    }
+
     if (isNewMinute) {
       const io = getSocketServer();
       if (io) {
@@ -1384,7 +1482,70 @@ export const runElectricityRollupAndCleanup = async () => {
       }
     }
 
-    // 5. Monthly Rollup
+    // 5. Rollup completed hours from electric_plts_telemetry_minute -> electric_plts_telemetry
+    const pltsBuckets = await pool.query(`
+      SELECT 
+        to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
+      FROM electric_plts_telemetry_minute
+      WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+      GROUP BY hour_bucket_str
+      ORDER BY hour_bucket_str ASC;
+    `);
+
+    for (const b of pltsBuckets.rows) {
+      const hourStartStr = b.hour_bucket_str;
+      if (!hourStartStr) continue;
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const aggRes = await client.query(`
+          SELECT 
+            poi_id,
+            bool_or(status) as status,
+            AVG(volt_ab) as volt_ab,
+            AVG(volt_bc) as volt_bc,
+            AVG(volt_ca) as volt_ca,
+            AVG(volt_an) as volt_an,
+            AVG(volt_bn) as volt_bn,
+            AVG(volt_cn) as volt_cn,
+            AVG(frequency) as frequency,
+            AVG(active_power) as active_power,
+            MAX(total_kwh) as total_kwh,
+            MAX(total_kvarh) as total_kvarh
+          FROM electric_plts_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+          GROUP BY poi_id
+        `, [hourStartStr]);
+
+        for (const r of aggRes.rows) {
+          await client.query(`DELETE FROM electric_plts_telemetry WHERE t_stamp = $1 AND poi_id = $2`, [hourStartStr, r.poi_id]);
+          await client.query(`
+            INSERT INTO electric_plts_telemetry (
+              t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+            )
+          `, [
+            hourStartStr, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power, r.total_kwh, r.total_kvarh
+          ]);
+        }
+
+        await client.query(`
+          DELETE FROM electric_plts_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
+        await client.query("COMMIT");
+      } catch (err: any) {
+        await client.query("ROLLBACK");
+        logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up PLTS hourly telemetry");
+      } finally {
+        client.release();
+      }
+    }
+
+    // 6. Monthly Rollup
     const now = new Date();
     const yearMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}`;
     await rollupMonthlyForMonth(yearMonth);

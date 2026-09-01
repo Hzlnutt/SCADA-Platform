@@ -691,6 +691,42 @@ export const ensurePostgresTables = async () => {
         active_energy NUMERIC
       );
       CREATE INDEX IF NOT EXISTS idx_electric_pm_minute_time ON electric_pm_telemetry_minute (pm_id, t_stamp DESC);
+
+      CREATE TABLE IF NOT EXISTS electric_plts_telemetry (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        poi_id VARCHAR(20) NOT NULL,
+        status BOOLEAN,
+        volt_ab NUMERIC,
+        volt_bc NUMERIC,
+        volt_ca NUMERIC,
+        volt_an NUMERIC,
+        volt_bn NUMERIC,
+        volt_cn NUMERIC,
+        frequency NUMERIC,
+        active_power NUMERIC,
+        total_kwh NUMERIC,
+        total_kvarh NUMERIC
+      );
+      CREATE INDEX IF NOT EXISTS idx_electric_plts_tstamp ON electric_plts_telemetry (poi_id, t_stamp DESC);
+
+      CREATE TABLE IF NOT EXISTS electric_plts_telemetry_minute (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        poi_id VARCHAR(20) NOT NULL,
+        status BOOLEAN,
+        volt_ab NUMERIC,
+        volt_bc NUMERIC,
+        volt_ca NUMERIC,
+        volt_an NUMERIC,
+        volt_bn NUMERIC,
+        volt_cn NUMERIC,
+        frequency NUMERIC,
+        active_power NUMERIC,
+        total_kwh NUMERIC,
+        total_kvarh NUMERIC
+      );
+      CREATE INDEX IF NOT EXISTS idx_electric_plts_minute_tstamp ON electric_plts_telemetry_minute (poi_id, t_stamp DESC);
     `).catch((err) => {
       logger.warn({ err }, "Failed to create minute buffer tables");
     });

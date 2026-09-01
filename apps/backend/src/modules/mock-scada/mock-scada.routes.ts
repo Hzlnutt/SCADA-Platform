@@ -108,3 +108,34 @@ mockScadaRouter.get("/system/webdev/Utility_Dashboard/electric_ew23", (_req, res
   const result = sorted.map((pmId) => generatePmData(pmId));
   res.json(result);
 });
+
+mockScadaRouter.get("/system/webdev/Utility_Dashboard/electric_plts", (_req, res) => {
+  res.json({
+    POI_1: {
+      Status_POI_1: true,
+      Volt_AN_POI_1: 227.38,
+      Total_KVARH_POI_1: 21410.5,
+      Volt_CA_POI_1: 392.35,
+      Volt_BC_POI_1: 389.98,
+      Volt_CN_POI_1: 226.32,
+      Volt_BN_POI_1: 225.61,
+      Scale_Total_KW_POI_1: 45.2,
+      Frequency_POI_1: 49.98,
+      Total_KWH_POI_1: 24558.67,
+      Volt_AB_POI_1: 391.86
+    },
+    POI_2: {
+      Volt_AN_POI_2: 223.64,
+      Total_KVARH_POI_2: 7562.75,
+      Volt_CA_POI_2: 378.83,
+      Volt_BN_POI_2: 219.47,
+      Volt_BC_POI_2: 385.98,
+      Volt_CN_POI_2: 221.11,
+      Scale_Total_KW_POI_2: 82.5,
+      Frequency_POI_2: 49.98,
+      Volt_AB_POI_2: 383.13,
+      Status_POI_2: true,
+      Total_KWH_POI_2: 95707.05
+    }
+  });
+});

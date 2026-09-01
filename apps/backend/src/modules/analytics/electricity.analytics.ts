@@ -242,13 +242,27 @@ export const getElectricityAnalytics = async (
   // Select appropriate PostgreSQL table based on device
   let tableName = "electric_pln_telemetry";
   let energyCol = "active_energy";
-  if (deviceId === "Feeder_WF1_PM5560" || deviceId === "Cubicle_WF1_PM5560") {
+  let poiFilter: string | null = null;
+
+  const normDev = (deviceId || "").toLowerCase();
+  if (normDev.includes("wf1")) {
     tableName = "electric_wf1_telemetry";
     energyCol = "active_energy";
-  } else if (deviceId === "Feeder_WF2_PM5500" || deviceId === "Cubicle_WF2_PM5500") {
+  } else if (normDev.includes("wf2")) {
     tableName = "electric_wf2_telemetry";
     energyCol = "active_energy";
-  } else if (deviceId !== "Cubicle_PLN_PM8000") {
+  } else if (normDev.includes("poi1") || normDev.includes("poi_1") || normDev.includes("solar_poi1")) {
+    tableName = "electric_plts_telemetry";
+    energyCol = "total_kwh";
+    poiFilter = "POI_1";
+  } else if (normDev.includes("poi2") || normDev.includes("poi_2") || normDev.includes("solar_poi2")) {
+    tableName = "electric_plts_telemetry";
+    energyCol = "total_kwh";
+    poiFilter = "POI_2";
+  } else if (normDev.includes("pln") || normDev.includes("pm8000")) {
+    tableName = "electric_pln_telemetry";
+    energyCol = "active_energy";
+  } else {
     tableName = "electricity_telemetry";
     energyCol = "electricity_kwh";
   }
@@ -260,7 +274,35 @@ export const getElectricityAnalytics = async (
   let hourlyRecords: { ts_text?: string; ts?: Date; value: number }[] = [];
   const pool = getPostgresPool();
   try {
-    if (deviceId === "Cubicle_PLN_PM8000" || tableName === "electricity_telemetry") {
+    if (poiFilter) {
+      const res = await pool.query(`
+        SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
+          t_stamp AS ts, 
+          ${energyCol}::float AS value
+        FROM ${tableName}
+        WHERE t_stamp >= $1 AND t_stamp <= $2 AND poi_id = $3
+        ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
+      `, [fromQueryIso, toQueryIso, poiFilter]);
+      hourlyRecords = res.rows;
+
+      // Append latest from minute table if available
+      try {
+        const minRes = await pool.query(`
+          SELECT t_stamp AS ts, ${energyCol}::float AS value
+          FROM electric_plts_telemetry_minute
+          WHERE poi_id = $1
+          ORDER BY t_stamp DESC LIMIT 1
+        `, [poiFilter]);
+        if (minRes.rows.length > 0) {
+          const latest = minRes.rows[0];
+          const latestTs = new Date(latest.ts);
+          const lastTs = hourlyRecords.length > 0 ? new Date(hourlyRecords[hourlyRecords.length - 1].ts) : new Date(0);
+          if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
+            hourlyRecords.push(latest);
+          }
+        }
+      } catch {}
+    } else if (tableName === "electricity_telemetry") {
       const res = await pool.query(`
         SELECT t_stamp::text AS ts_text, electricity_kwh::float AS value
         FROM electricity_telemetry
@@ -270,7 +312,6 @@ export const getElectricityAnalytics = async (
         ORDER BY t_stamp ASC
       `, [fromQueryVal, toQueryVal, deviceId]);
       hourlyRecords = res.rows;
-
       // Append latest real-time reading from electric_pln_telemetry if available and newer
       if (to >= new Date()) {
         try {
@@ -300,6 +341,26 @@ export const getElectricityAnalytics = async (
         ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
       `, [fromQueryVal, toQueryVal]);
       hourlyRecords = res.rows;
+
+      // Append latest from minute table if available
+      try {
+        const minuteTable = tableName === "electric_pln_telemetry" ? "electric_pln_telemetry_minute"
+          : tableName === "electric_wf1_telemetry" ? "electric_wf1_telemetry_minute"
+          : "electric_wf2_telemetry_minute";
+        const minRes = await pool.query(`
+          SELECT t_stamp AS ts, ${energyCol}::float AS value
+          FROM ${minuteTable}
+          ORDER BY t_stamp DESC LIMIT 1
+        `);
+        if (minRes.rows.length > 0) {
+          const latest = minRes.rows[0];
+          const latestTs = new Date(latest.ts);
+          const lastTs = hourlyRecords.length > 0 ? new Date(hourlyRecords[hourlyRecords.length - 1].ts) : new Date(0);
+          if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
+            hourlyRecords.push(latest);
+          }
+        }
+      } catch {}
     }
   } catch (err) {
     console.warn("PostgreSQL query failed for electricity analytics, falling back:", err);
