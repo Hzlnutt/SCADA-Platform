@@ -81,14 +81,14 @@ export const getSolarAnalytics = async (
   const currentMonthStr = todayStr.substring(0, 7);
 
   // Format local WIB timestamps for PostgreSQL timestamp without time zone
-  const fromBase = fromStr ? `${fromStr} 00:00:00` : `${selectedYear}-01-01 00:00:00`;
-  const toBase = toStr ? `${toStr} 23:59:59` : `${selectedYear}-12-31 23:59:59`;
-
+  const pad = (n: number) => String(n).padStart(2, "0");
   const fromDate = new Date(`${fromStr || `${selectedYear}-01-01`}T00:00:00`);
   const baselineDate = new Date(fromDate.getTime() - 2 * 60 * 60 * 1000);
-  const pad = (n: number) => String(n).padStart(2, "0");
   const fromQueryVal = `${baselineDate.getFullYear()}-${pad(baselineDate.getMonth() + 1)}-${pad(baselineDate.getDate())} ${pad(baselineDate.getHours())}:${pad(baselineDate.getMinutes())}:${pad(baselineDate.getSeconds())}`;
-  const toQueryVal = toBase;
+
+  const toDate = new Date(`${toStr || `${selectedYear}-12-31`}T23:59:59`);
+  const toPlusDate = new Date(toDate.getTime() + 2 * 60 * 60 * 1000);
+  const toQueryVal = `${toPlusDate.getFullYear()}-${pad(toPlusDate.getMonth() + 1)}-${pad(toPlusDate.getDate())} ${pad(toPlusDate.getHours())}:${pad(toPlusDate.getMinutes())}:${pad(toPlusDate.getSeconds())}`;
 
   // Fetch electricity tariff for cost savings estimation
   let solarRate = 1444.7; // default standard PLN tariff per kWh
@@ -158,18 +158,22 @@ export const getSolarAnalytics = async (
     const prev = records[i - 1];
     const curr = records[i];
 
+    const prevDateObj = new Date(prev.ts_text);
+    const currDateObj = new Date(curr.ts_text);
+    const timeDiffMs = currDateObj.getTime() - prevDateObj.getTime();
+
     let diffPoi1 = 0;
-    if (curr.poi_1 !== null && prev.poi_1 !== null) {
+    if (curr.poi_1 !== null && prev.poi_1 !== null && timeDiffMs <= 90 * 60 * 1000) {
       diffPoi1 = Math.max(0, curr.poi_1 - prev.poi_1);
     }
 
     let diffPoi2 = 0;
-    if (curr.poi_2 !== null && prev.poi_2 !== null) {
+    if (curr.poi_2 !== null && prev.poi_2 !== null && timeDiffMs <= 90 * 60 * 1000) {
       diffPoi2 = Math.max(0, curr.poi_2 - prev.poi_2);
     }
 
     let diffTot = 0;
-    if (curr.total !== null && prev.total !== null) {
+    if (curr.total !== null && prev.total !== null && timeDiffMs <= 90 * 60 * 1000) {
       diffTot = Math.max(0, curr.total - prev.total);
     } else {
       diffTot = diffPoi1 + diffPoi2;
@@ -226,10 +230,11 @@ export const getSolarAnalytics = async (
     peakDemand = poi1PeakDemand + poi2PeakDemand;
   }
 
-  // Target date for hourly charts
-  let targetDate = fromStr || toStr;
+  let targetDate = toStr || fromStr;
   if (!targetDate) {
-    const dates = Array.from(hourlyMapTotal.keys()).sort();
+    const dates = Array.from(hourlyMapTotal.keys())
+      .filter(d => (!fromStr || d >= fromStr) && (!toStr || d <= toStr) && d <= todayStr)
+      .sort();
     targetDate = dates.length > 0 ? dates[dates.length - 1] : todayStr;
   }
 

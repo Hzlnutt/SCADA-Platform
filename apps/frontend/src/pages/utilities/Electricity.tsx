@@ -414,6 +414,13 @@ export default function Electricity() {
   // Solar Panel (PLTS) states
   const [solarData, setSolarData] = useState<any>(null);
   const [solarLive, setSolarLive] = useState<any>(null);
+  const [solarRange, setSolarRange] = useState<"hour" | "day" | "month" | "ytd" | "custom">("custom");
+  const [solarStartDate, setSolarStartDate] = useState(getLocalTodayString);
+  const [solarEndDate, setSolarEndDate] = useState(getLocalTodayString);
+  const [solarSelectedYear, setSolarSelectedYear] = useState(() => new Date().getFullYear());
+  const [solarSelectedMonth, setSolarSelectedMonth] = useState(() => new Date().getMonth());
+  const [solarShowPoi1, setSolarShowPoi1] = useState(true);
+  const [solarShowPoi2, setSolarShowPoi2] = useState(true);
 
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
@@ -752,7 +759,7 @@ export default function Electricity() {
 
   const reqIdRef = useRef(0);
 
-  /* ═══ DATA FETCHING ═══ */
+  /* ═══ DATA FETCHING (PLN) ═══ */
   const fetchData = useCallback((showLoading = false) => {
     const currentReqId = ++reqIdRef.current;
     if (showLoading && !summaryData) {
@@ -760,20 +767,15 @@ export default function Electricity() {
       setChartLoading(true);
     }
     let url = `/analytics/electricity?deviceId=Cubicle_PLN_PM8000`;
-    let solarUrl = `/analytics/solar?`;
     if (range === "custom") {
       url += `&from=${chartStartDate}&to=${chartEndDate}`;
-      solarUrl += `from=${chartStartDate}&to=${chartEndDate}`;
     } else if (range === "hour") {
       const todayStr = getLocalTodayString();
       url += `&from=${todayStr}&to=${todayStr}`;
-      solarUrl += `from=${todayStr}&to=${todayStr}`;
     } else {
       url += `&year=${selectedYear}`;
-      solarUrl += `year=${selectedYear}`;
     }
     url += `&_t=${Date.now()}`;
-    solarUrl += `&_t=${Date.now()}`;
 
     getJson<{ data: any }>(url)
       .then((res) => {
@@ -795,10 +797,23 @@ export default function Electricity() {
         setSummaryLoading(false);
         setChartLoading(false);
       });
+  }, [range, selectedYear, chartStartDate, chartEndDate, summaryData]);
+
+  /* ═══ DATA FETCHING (SOLAR) ═══ */
+  const fetchSolarData = useCallback(() => {
+    let solarUrl = `/analytics/solar?`;
+    if (solarRange === "custom") {
+      solarUrl += `from=${solarStartDate}&to=${solarEndDate}`;
+    } else if (solarRange === "hour") {
+      const todayStr = getLocalTodayString();
+      solarUrl += `from=${todayStr}&to=${todayStr}`;
+    } else {
+      solarUrl += `year=${solarSelectedYear}`;
+    }
+    solarUrl += `&_t=${Date.now()}`;
 
     getJson<{ data: any }>(solarUrl)
       .then((res) => {
-        if (currentReqId !== reqIdRef.current) return;
         if (res?.data) {
           setSolarData(res.data);
           if (res.data.live) {
@@ -809,11 +824,15 @@ export default function Electricity() {
       .catch((err) => {
         console.warn("Failed to load solar data", err);
       });
-  }, [range, selectedYear, chartStartDate, chartEndDate, summaryData]);
+  }, [solarRange, solarSelectedYear, solarStartDate, solarEndDate]);
 
   useEffect(() => {
     fetchData(true);
   }, [fetchData]);
+
+  useEffect(() => {
+    fetchSolarData();
+  }, [fetchSolarData]);
 
   // Database historical auto-refresh in background (polling + websocket live updates)
   useEffect(() => {
@@ -1208,44 +1227,95 @@ export default function Electricity() {
   }), [isDark, barWbpValues, barLwbpValues, barUnit, wbpRate, lwbpRate]);
 
   /* ═══ SOLAR STACKED BAR ═══ */
-  const solarBarData = useMemo(() => {
-    let p1Data: number[] = [];
-    let p2Data: number[] = [];
-
-    if (range === "month" || range === "ytd") {
-      p1Data = (solarData?.charts?.monthly || []).map((m: any) => m.poi1 || 0);
-      p2Data = (solarData?.charts?.monthly || []).map((m: any) => m.poi2 || 0);
-    } else if (range === "day" || range === "custom") {
-      p1Data = (solarData?.charts?.daily || []).map((d: any) => d.poi1 || 0);
-      p2Data = (solarData?.charts?.daily || []).map((d: any) => d.poi2 || 0);
+  const solarBarLabels = useMemo(() => {
+    if (solarRange === "hour" || (solarRange === "custom" && solarStartDate === solarEndDate)) {
+      return Array.from({ length: 24 }, (_, i) => `${(i + 1).toString().padStart(2, "0")}:00`);
+    } else if (solarRange === "day") {
+      const targetMonthStr = `${solarSelectedYear}-${String(solarSelectedMonth + 1).padStart(2, "0")}`;
+      const monthDaily = (solarData?.charts?.daily || []).filter((d: any) => d.day && d.day.startsWith(targetMonthStr));
+      if (monthDaily.length > 0) {
+        return monthDaily.map((d: any) => d.day.split("-")[2]);
+      }
+      const daysCount = new Date(solarSelectedYear, solarSelectedMonth + 1, 0).getDate();
+      return Array.from({ length: daysCount }, (_, i) => String(i + 1).padStart(2, "0"));
+    } else if (solarRange === "custom") {
+      const customDaily = solarData?.charts?.daily || [];
+      if (customDaily.length > 0) {
+        return customDaily.map((d: any) => {
+          const p = d.day.split("-");
+          return `${p[2]}/${p[1]}`;
+        });
+      }
+      return [solarStartDate, solarEndDate];
     } else {
-      // 24 hours (Today)
-      p1Data = solarData?.charts?.hourlyPoi1 || Array(24).fill(0);
-      p2Data = solarData?.charts?.hourlyPoi2 || Array(24).fill(0);
+      const monthly = solarData?.charts?.monthly || [];
+      if (monthly.length > 0) {
+        return monthly.map((m: any) => {
+          const [yr, mo] = m.month.split("-").map(Number);
+          return `${MONTH_SHORT_ID[mo - 1]} ${yr}`;
+        });
+      }
+      return MONTH_SHORT_ID.map((name) => `${name} ${solarSelectedYear}`);
     }
+  }, [solarRange, solarStartDate, solarEndDate, solarSelectedYear, solarSelectedMonth, solarData]);
 
+  const solarPoi1Values = useMemo(() => {
+    if (solarRange === "hour" || (solarRange === "custom" && solarStartDate === solarEndDate)) {
+      return solarData?.charts?.hourlyPoi1 || Array(24).fill(0);
+    } else if (solarRange === "day") {
+      const targetMonthStr = `${solarSelectedYear}-${String(solarSelectedMonth + 1).padStart(2, "0")}`;
+      return (solarData?.charts?.daily || [])
+        .filter((d: any) => d.day && d.day.startsWith(targetMonthStr))
+        .map((d: any) => d.poi1 || 0);
+    } else if (solarRange === "custom") {
+      return (solarData?.charts?.daily || []).map((d: any) => d.poi1 || 0);
+    } else {
+      return (solarData?.charts?.monthly || []).map((m: any) => m.poi1 || 0);
+    }
+  }, [solarRange, solarStartDate, solarEndDate, solarSelectedYear, solarSelectedMonth, solarData]);
+
+  const solarPoi2Values = useMemo(() => {
+    if (solarRange === "hour" || (solarRange === "custom" && solarStartDate === solarEndDate)) {
+      return solarData?.charts?.hourlyPoi2 || Array(24).fill(0);
+    } else if (solarRange === "day") {
+      const targetMonthStr = `${solarSelectedYear}-${String(solarSelectedMonth + 1).padStart(2, "0")}`;
+      return (solarData?.charts?.daily || [])
+        .filter((d: any) => d.day && d.day.startsWith(targetMonthStr))
+        .map((d: any) => d.poi2 || 0);
+    } else if (solarRange === "custom") {
+      return (solarData?.charts?.daily || []).map((d: any) => d.poi2 || 0);
+    } else {
+      return (solarData?.charts?.monthly || []).map((m: any) => m.poi2 || 0);
+    }
+  }, [solarRange, solarStartDate, solarEndDate, solarSelectedYear, solarSelectedMonth, solarData]);
+
+  const solarBarData = useMemo(() => {
+    const datasets: any[] = [];
+    if (solarShowPoi1) {
+      datasets.push({
+        label: "POI-1 (kWh)",
+        data: solarPoi1Values,
+        backgroundColor: "rgba(59, 130, 246, 0.85)",
+        borderRadius: solarShowPoi2 ? { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 } : 4,
+        barPercentage: 0.65,
+        stack: "solar"
+      });
+    }
+    if (solarShowPoi2) {
+      datasets.push({
+        label: "POI-2 (kWh)",
+        data: solarPoi2Values,
+        backgroundColor: "rgba(6, 182, 212, 0.85)",
+        borderRadius: solarShowPoi1 ? { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 } : 4,
+        barPercentage: 0.65,
+        stack: "solar"
+      });
+    }
     return {
-      labels: barLabels,
-      datasets: [
-        {
-          label: "POI-1 (kWh)",
-          data: p1Data,
-          backgroundColor: "rgba(59, 130, 246, 0.85)",
-          borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 },
-          barPercentage: 0.65,
-          stack: "solar"
-        },
-        {
-          label: "POI-2 (kWh)",
-          data: p2Data,
-          backgroundColor: "rgba(6, 182, 212, 0.85)",
-          borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
-          barPercentage: 0.65,
-          stack: "solar"
-        }
-      ]
+      labels: solarBarLabels,
+      datasets
     };
-  }, [barLabels, range, solarData]);
+  }, [solarBarLabels, solarPoi1Values, solarPoi2Values, solarShowPoi1, solarShowPoi2]);
 
   const solarBarOptions: any = useMemo(() => ({
     responsive: true,
@@ -1297,8 +1367,8 @@ export default function Electricity() {
           afterBody: (tooltipItems: any[]) => {
             if (!tooltipItems.length) return [];
             const idx = tooltipItems[0].dataIndex;
-            const p1 = Number(solarBarData.datasets[0].data[idx]) || 0;
-            const p2 = Number(solarBarData.datasets[1].data[idx]) || 0;
+            const p1 = solarShowPoi1 ? (solarPoi1Values[idx] || 0) : 0;
+            const p2 = solarShowPoi2 ? (solarPoi2Values[idx] || 0) : 0;
             const tot = p1 + p2;
             const savings = tot * lwbpRate;
             return [
@@ -1321,7 +1391,7 @@ export default function Electricity() {
         ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", callback: (v: number) => `${v}` }
       }
     }
-  }), [isDark, solarBarData, lwbpRate]);
+  }), [isDark, solarPoi1Values, solarPoi2Values, solarShowPoi1, solarShowPoi2, lwbpRate]);
 
   /* ═══ COMBINED FACT TIMELINE CHART & DONUT STATE ═══ */
   const fact1Total = useMemo(() => {
@@ -1564,12 +1634,15 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-emerald-600/10 text-emerald-700'} flex items-center justify-center`}><IconSolar /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-emerald-950'}`}>
-              {renderMetricVal(getApiVal("electricity/solar_generation"), (v) => `${v.toLocaleString("id-ID")}`)}
-              {!isOfflineVal(getApiVal("electricity/solar_generation")) && <span className={`text-sm font-bold ml-1 ${isDark ? 'text-emerald-200' : 'text-emerald-700'}`}>kWh</span>}
+              - <span className={`text-sm font-bold ml-1 ${isDark ? 'text-emerald-200' : 'text-emerald-700'}`}>kW</span>
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>
-              <span>Capacity: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>{renderMetricVal(getApiVal("electricity/solar_capacity"), (v) => `${v.toLocaleString("id-ID")} kW`)}</strong></span>
-              <span>Efficiency: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>{renderMetricVal(getApiVal("electricity/solar_efficiency"), (v) => `${v.toFixed(1)} %`)}</strong></span>
+              <span>POI-1: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
+                {solarLive?.poi1?.status === false ? "TIDAK AKTIF" : `${formatNumber(solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 24558.67)} kWh`}
+              </strong></span>
+              <span>POI-2: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
+                {solarLive?.poi2?.status === false ? "TIDAK AKTIF" : `${formatNumber(solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 95707.05)} kWh`}
+              </strong></span>
             </div>
           </div>
         </div>
@@ -1647,16 +1720,13 @@ export default function Electricity() {
               {(() => {
                 const pGridVal = getApiVal("pln/active_power");
                 const pGridNum = typeof pGridVal === "number" ? pGridVal : (summaryData?.pqData?.activePower || 2197.87);
-                const pSolarVal = getApiVal("electricity/p_solar");
-                const pSolarNum = typeof pSolarVal === "number" ? pSolarVal : 0;
-                const total = pGridNum + pSolarNum;
-                return total.toLocaleString("id-ID", { maximumFractionDigits: 1 });
+                return pGridNum.toLocaleString("id-ID", { maximumFractionDigits: 1 });
               })()}
               <span className={`text-sm font-bold ml-1 ${isDark ? 'text-cyan-200' : 'text-cyan-700'}`}>kW</span>
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-cyan-200' : 'text-cyan-800'}`}>
               <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{renderMetricVal(getApiVal("pln/active_power"), (v) => `${v.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kW`)}</strong></span>
-              <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{renderMetricVal(getApiVal("electricity/p_solar"), (v) => `${v.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kW`)}</strong></span>
+              <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>- kW</strong></span>
             </div>
           </div>
         </div>
@@ -1714,14 +1784,9 @@ export default function Electricity() {
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Peak Demand</span>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {summaryLoading && !summaryData ? "..." : `${cardSummary.peakDemand.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`}
+              - kW
             </div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
-            {cardSummary.peakDemandTs && (
-              <div className="text-[9px] font-bold text-amber-600 dark:text-amber-400 mt-0.5 font-mono">
-                {formatPeakTs(cardSummary.peakDemandTs)}
-              </div>
-            )}
           </div>
         </div>
 
@@ -1957,7 +2022,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-1)</span>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {formatNumber(solarData?.summary?.poi1PeakDemand || 0)} kW
+              - kW
             </div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
           </div>
@@ -1998,7 +2063,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-2)</span>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {formatNumber(solarData?.summary?.poi2PeakDemand || 0)} kW
+              - kW
             </div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
           </div>
@@ -2013,6 +2078,96 @@ export default function Electricity() {
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Trend Produksi Solar Panel (PLTS)</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Produksi energi POI-1 & POI-2 — data historis per jam.</p>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Checklist options: POI-1, POI-2 */}
+              <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/60 p-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+                <label className="flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer select-none font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition">
+                  <input
+                    type="checkbox"
+                    checked={solarShowPoi1}
+                    onChange={(e) => {
+                      if (!e.target.checked && !solarShowPoi2) return;
+                      setSolarShowPoi1(e.target.checked);
+                    }}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer accent-blue-600"
+                  />
+                  <span className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-blue-500" />
+                    POI-1
+                  </span>
+                </label>
+                <label className="flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer select-none font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition">
+                  <input
+                    type="checkbox"
+                    checked={solarShowPoi2}
+                    onChange={(e) => {
+                      if (!e.target.checked && !solarShowPoi1) return;
+                      setSolarShowPoi2(e.target.checked);
+                    }}
+                    className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 h-3.5 w-3.5 cursor-pointer accent-cyan-600"
+                  />
+                  <span className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-cyan-500" />
+                    POI-2
+                  </span>
+                </label>
+              </div>
+
+              {/* Year / Month / Date Pickers */}
+              {(solarRange === "ytd" || solarRange === "day" || solarRange === "month") && (
+                <select
+                  value={solarSelectedYear}
+                  onChange={(e) => setSolarSelectedYear(Number(e.target.value))}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                >
+                  {AVAILABLE_YEARS.map((yr) => <option key={yr} value={yr}>{yr}</option>)}
+                </select>
+              )}
+              {solarRange === "day" && (
+                <select
+                  value={solarSelectedMonth}
+                  onChange={(e) => setSolarSelectedMonth(Number(e.target.value))}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                >
+                  {MONTH_NAMES_ID.map((name, idx) => <option key={idx} value={idx}>{name}</option>)}
+                </select>
+              )}
+              {solarRange === "custom" && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={solarStartDate}
+                    onChange={(e) => setSolarStartDate(e.target.value)}
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                  />
+                  <span className="text-xs font-bold text-slate-400">s/d</span>
+                  <input
+                    type="date"
+                    value={solarEndDate}
+                    onChange={(e) => setSolarEndDate(e.target.value)}
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                  />
+                </div>
+              )}
+
+              {/* Range Buttons */}
+              <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-0.5 text-xs">
+                {ranges.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSolarRange(item.id)}
+                    className={`rounded-md px-3 py-1.5 font-bold transition-all ${
+                      solarRange === item.id
+                        ? "bg-cyan-500 text-white shadow-sm"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[256px]">
             <div style={{ height: 256 }}>
@@ -2020,56 +2175,76 @@ export default function Electricity() {
             </div>
           </div>
         </section>
+
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
           <div>
             <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Distribusi Beban PLTS</h3>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Perbandingan produksi POI-1 vs POI-2.</p>
           </div>
           {(() => {
-            const p1 = solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 24558.67;
-            const p2 = solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 95707.05;
-            const tot = p1 + p2;
-            const p1Pct = tot > 0 ? Number(((p1 / tot) * 100).toFixed(1)) : 20.4;
-            const p2Pct = tot > 0 ? Number(((p2 / tot) * 100).toFixed(1)) : 79.6;
+            const totP1 = solarShowPoi1 ? (solarPoi1Values as number[]).reduce((a: number, b: number) => a + (b || 0), 0) : 0;
+            const totP2 = solarShowPoi2 ? (solarPoi2Values as number[]).reduce((a: number, b: number) => a + (b || 0), 0) : 0;
+            const total = totP1 + totP2;
+            const p1Pct = total > 0 && solarShowPoi1 ? Number(((totP1 / total) * 100).toFixed(1)) : (solarShowPoi1 && !solarShowPoi2 ? 100 : 0);
+            const p2Pct = total > 0 && solarShowPoi2 ? Number(((totP2 / total) * 100).toFixed(1)) : (solarShowPoi2 && !solarShowPoi1 ? 100 : 0);
+
+            const segments = [];
+            if (solarShowPoi1 && (p1Pct > 0 || !solarShowPoi2)) {
+              segments.push({ label: "POI-1", value: p1Pct, color: "#3b82f6" });
+            }
+            if (solarShowPoi2 && (p2Pct > 0 || !solarShowPoi1)) {
+              segments.push({ label: "POI-2", value: p2Pct, color: "#06b6d4" });
+            }
+            if (segments.length === 0) {
+              segments.push({ label: "Tidak Ada Data", value: 100, color: "#94a3b8" });
+            }
+
+            const centerLabel = (solarShowPoi1 && solarShowPoi2)
+              ? (total > 0 ? `${p1Pct}% : ${p2Pct}%` : "0% : 0%")
+              : solarShowPoi1
+              ? `POI-1 ${p1Pct}%`
+              : `POI-2 ${p2Pct}%`;
+
             return (
               <>
                 <div className="my-6 flex justify-center">
                   <DonutChart 
-                    segments={[
-                      { label: "POI-1", value: p1Pct, color: "#3b82f6" }, 
-                      { label: "POI-2", value: p2Pct, color: "#06b6d4" }
-                    ]} 
+                    segments={segments} 
                     size={150} 
                     thickness={18} 
-                    centerLabel="POI-1 vs POI-2" 
+                    centerLabel={centerLabel} 
                     centerLabelSize="text-[11px]" 
                   />
                 </div>
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5">
-                    <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
-                      <span className="h-2 w-2 rounded-full bg-blue-500" />POI-1
-                    </span>
-                    <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
-                      {solarLive?.poi1?.status === false ? (
-                        <span className="text-rose-500">TIDAK AKTIF</span>
-                      ) : (
-                        `${p1Pct}% (${formatNumber(p1)} kWh)`
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
-                      <span className="h-2 w-2 rounded-full bg-cyan-500" />POI-2
-                    </span>
-                    <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
-                      {solarLive?.poi2?.status === false ? (
-                        <span className="text-rose-500">TIDAK AKTIF</span>
-                      ) : (
-                        `${p2Pct}% (${formatNumber(p2)} kWh)`
-                      )}
-                    </span>
-                  </div>
+                  {solarShowPoi1 && (
+                    <div className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5">
+                      <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
+                        <span className="h-2 w-2 rounded-full bg-blue-500" />POI-1
+                      </span>
+                      <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
+                        {solarLive?.poi1?.status === false ? (
+                          <span className="text-rose-500">TIDAK AKTIF</span>
+                        ) : (
+                          `${p1Pct}% (${formatNumber(totP1)} kWh)`
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {solarShowPoi2 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
+                        <span className="h-2 w-2 rounded-full bg-cyan-500" />POI-2
+                      </span>
+                      <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
+                        {solarLive?.poi2?.status === false ? (
+                          <span className="text-rose-500">TIDAK AKTIF</span>
+                        ) : (
+                          `${p2Pct}% (${formatNumber(totP2)} kWh)`
+                        )}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </>
             );
