@@ -286,25 +286,27 @@ export const getElectricityAnalytics = async (
       `, [fromQueryVal, toQueryVal, poiFilter]);
       hourlyRecords = res.rows;
 
-      // Append latest from minute table if available
-      try {
-        const minRes = await pool.query(`
-          SELECT t_stamp::text AS ts_text, ${energyCol}::float AS value
-          FROM electric_plts_telemetry_minute
-          WHERE poi_id = $1 AND ${energyCol} IS NOT NULL
-          ORDER BY t_stamp DESC LIMIT 1
-        `, [poiFilter]);
-        if (minRes.rows.length > 0) {
-          const latest = minRes.rows[0];
-          const latestTs = latest.ts_text ? new Date(latest.ts_text) : new Date(0);
-          const lastTsStr = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "") : "";
-          const lastTs = lastTsStr ? new Date(lastTsStr) : new Date(0);
-          if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
-            hourlyRecords.push(latest);
+      // Append latest from minute table if available and querying today/future
+      if (to >= new Date()) {
+        try {
+          const minRes = await pool.query(`
+            SELECT t_stamp::text AS ts_text, ${energyCol}::float AS value
+            FROM electric_plts_telemetry_minute
+            WHERE poi_id = $1 AND ${energyCol} IS NOT NULL
+            ORDER BY t_stamp DESC LIMIT 1
+          `, [poiFilter]);
+          if (minRes.rows.length > 0) {
+            const latest = minRes.rows[0];
+            const latestTs = latest.ts_text ? new Date(latest.ts_text) : new Date(0);
+            const lastTsStr = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "") : "";
+            const lastTs = lastTsStr ? new Date(lastTsStr) : new Date(0);
+            if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
+              hourlyRecords.push(latest);
+            }
           }
-        }
-      } catch {}
-    } else if (tableName === "electricity_telemetry") {
+        } catch {}
+      }
+    } else if (tableName === "electricity_telemetry" || deviceId === "Cubicle_PLN_PM8000" || !deviceId) {
       const res = await pool.query(`
         SELECT t_stamp::text AS ts_text, electricity_kwh::float AS value
         FROM electricity_telemetry
@@ -344,27 +346,29 @@ export const getElectricityAnalytics = async (
       `, [fromQueryVal, toQueryVal]);
       hourlyRecords = res.rows;
 
-      // Append latest from minute table if available
-      try {
-        const minuteTable = tableName === "electric_pln_telemetry" ? "electric_pln_telemetry_minute"
-          : tableName === "electric_wf1_telemetry" ? "electric_wf1_telemetry_minute"
-          : "electric_wf2_telemetry_minute";
-        const minRes = await pool.query(`
-          SELECT t_stamp::text AS ts_text, ${energyCol}::float AS value
-          FROM ${minuteTable}
-          WHERE ${energyCol} IS NOT NULL
-          ORDER BY t_stamp DESC LIMIT 1
-        `);
-        if (minRes.rows.length > 0) {
-          const latest = minRes.rows[0];
-          const latestTs = latest.ts_text ? new Date(latest.ts_text) : new Date(0);
-          const lastTsStr = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "") : "";
-          const lastTs = lastTsStr ? new Date(lastTsStr) : new Date(0);
-          if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
-            hourlyRecords.push(latest);
+      // Append latest from minute table if available and querying today/future
+      if (to >= new Date()) {
+        try {
+          const minuteTable = tableName === "electric_pln_telemetry" ? "electric_pln_telemetry_minute"
+            : tableName === "electric_wf1_telemetry" ? "electric_wf1_telemetry_minute"
+            : "electric_wf2_telemetry_minute";
+          const minRes = await pool.query(`
+            SELECT t_stamp::text AS ts_text, ${energyCol}::float AS value
+            FROM ${minuteTable}
+            WHERE ${energyCol} IS NOT NULL
+            ORDER BY t_stamp DESC LIMIT 1
+          `);
+          if (minRes.rows.length > 0) {
+            const latest = minRes.rows[0];
+            const latestTs = latest.ts_text ? new Date(latest.ts_text) : new Date(0);
+            const lastTsStr = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "") : "";
+            const lastTs = lastTsStr ? new Date(lastTsStr) : new Date(0);
+            if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
+              hourlyRecords.push(latest);
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
     }
   } catch (err) {
     console.warn("PostgreSQL query failed for electricity analytics, falling back:", err);
