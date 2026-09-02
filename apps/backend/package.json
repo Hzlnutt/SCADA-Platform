@@ -9,7 +9,8 @@
     "start": "node dist/core/server.js",
     "lint": "echo \"lint not configured\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo \"tests not configured\""
+    "test": "echo \"tests not configured\"",
+    "sync:laptop": "tsx src/scripts/sync-backup-to-laptop.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
