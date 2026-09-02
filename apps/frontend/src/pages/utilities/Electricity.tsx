@@ -97,21 +97,8 @@ type ConsumptionFactCategory = {
 };
 
 /* ═══════════ DEFAULT FACT CATEGORIES (MODULE LEVEL) ═══════════ */
-const defaultFact1Categories: ConsumptionFactCategory[] = [
-  { id: 101, config_type: "consumption_fact_1", config_key: "hvac_wf1_u3", label: "HVAC Produksi (WF1-U3)", value: { kWh: 38420 }, sort_order: 1, enabled: true },
-  { id: 102, config_type: "consumption_fact_1", config_key: "ct1", label: "Cooling Tower WF1 (CT-1)", value: { kWh: 26850 }, sort_order: 2, enabled: true },
-  { id: 103, config_type: "consumption_fact_1", config_key: "comp_ale30", label: "Compressed Air WF1 (ALE-30)", value: { kWh: 22400 }, sort_order: 3, enabled: true },
-  { id: 104, config_type: "consumption_fact_1", config_key: "boiler3", label: "Boiler-3 WF1", value: { kWh: 18300 }, sort_order: 4, enabled: true },
-  { id: 105, config_type: "consumption_fact_1", config_key: "lighting_f1", label: "Penerangan & Office Lab", value: { kWh: 8950 }, sort_order: 5, enabled: true }
-];
-
-const defaultFact2Categories: ConsumptionFactCategory[] = [
-  { id: 201, config_type: "consumption_fact_2", config_key: "chiller_trane250", label: "Chiller HVAC WF-2 (Trane-250)", value: { kWh: 64200 }, sort_order: 1, enabled: true },
-  { id: 202, config_type: "consumption_fact_2", config_key: "comp_ale250", label: "Compressed Air WF2 (ALE-250)", value: { kWh: 48150 }, sort_order: 2, enabled: true },
-  { id: 203, config_type: "consumption_fact_2", config_key: "hvac_wf2_u1", label: "HVAC Produksi (WF2-U1 & U2)", value: { kWh: 39800 }, sort_order: 3, enabled: true },
-  { id: 204, config_type: "consumption_fact_2", config_key: "otoklaf_wf2", label: "Panel Otoklaf WF2", value: { kWh: 27650 }, sort_order: 4, enabled: true },
-  { id: 205, config_type: "consumption_fact_2", config_key: "boiler5", label: "Boiler-5", value: { kWh: 19400 }, sort_order: 5, enabled: true }
-];
+const defaultFact1Categories: ConsumptionFactCategory[] = [];
+const defaultFact2Categories: ConsumptionFactCategory[] = [];
 
 /* ═══════════ SMALL ICON COMPONENTS ═══════════ */
 const IconGrid = () => (
@@ -153,22 +140,7 @@ const IconSettings = () => (
 
 /* ═══════════ SPARKLINE MINI CHART ═══════════ */
 const Sparkline = ({ color = "#4ade80" }: { color?: string }) => {
-  const pts = useMemo(() => {
-    const arr: number[] = [];
-    let v = 50 + Math.random() * 20;
-    for (let i = 0; i < 20; i++) {
-      v += (Math.random() - 0.48) * 12;
-      v = Math.max(10, Math.min(90, v));
-      arr.push(v);
-    }
-    return arr;
-  }, []);
-  const pathD = pts.map((y, i) => `${i === 0 ? "M" : "L"}${(i / 19) * 100},${100 - y}`).join(" ");
-  return (
-    <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full opacity-20" preserveAspectRatio="none">
-      <path d={pathD} fill="none" stroke={color} strokeWidth="2.5" />
-    </svg>
-  );
+  return null;
 };
 
 /* ═══════════ MONTHLY COMPARISON BAR CHART ═══════════ */
@@ -286,11 +258,20 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   previousData: number[];
   isDark: boolean;
 }) {
+  const hasData = (currentData && currentData.some(v => v > 0)) || (previousData && previousData.some(v => v > 0));
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
       <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-4">{title}</h4>
       <div style={{ height: 280 }}>
-        <MonthlyComparisonBarChart currentData={currentData} previousData={previousData} isDark={isDark} />
+        {hasData ? (
+          <MonthlyComparisonBarChart currentData={currentData} previousData={previousData} isDark={isDark} />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl p-4 text-center bg-slate-50/50 dark:bg-slate-950/20">
+            <span className="text-2xl mb-1 opacity-40">📊</span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering panel belum terhubung</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -379,12 +360,20 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({ isDark }: { 
           </select>
 
           {/* Status Indicator */}
-          <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">ON</span>
+          <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20">BELUM TERHUBUNG</span>
         </div>
       </div>
 
       <div style={{ height: 280 }}>
-        <MonthlyComparisonBarChart currentData={currentData} previousData={previousData} isDark={isDark} />
+        {currentData.length > 0 ? (
+          <MonthlyComparisonBarChart currentData={currentData} previousData={previousData} isDark={isDark} />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl p-4 text-center bg-slate-50/50 dark:bg-slate-950/20">
+            <span className="text-2xl mb-1 opacity-40">📊</span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering mesin {machine} belum terpasang</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -433,8 +422,8 @@ export default function Electricity() {
     poi1: { status: boolean; volt_ab: number; active_power: number; total_kwh: number; frequency: number };
     poi2: { status: boolean; volt_ab: number; active_power: number; total_kwh: number; frequency: number };
   }>({
-    poi1: { status: true, volt_ab: 391.87, active_power: 45.2, total_kwh: 24558.67, frequency: 49.98 },
-    poi2: { status: true, volt_ab: 383.14, active_power: 82.5, total_kwh: 95707.05, frequency: 49.98 }
+    poi1: { status: false, volt_ab: 0, active_power: 0, total_kwh: 0, frequency: 0 },
+    poi2: { status: false, volt_ab: 0, active_power: 0, total_kwh: 0, frequency: 0 }
   });
 
   // Incoming Cubicle selector (PLN, WF1, WF2, POI1, POI2)
@@ -461,14 +450,14 @@ export default function Electricity() {
   const cubicleSummary = useMemo(() => {
     const s = cubicleAnalytics?.summary || summaryData?.summary || {};
     const isSolar = cubicleSelector === "poi1" || cubicleSelector === "poi2";
-    const peak = Number(s.peakDemand) || (cubicleSelector === "poi1" ? pltsLive.poi1.active_power : cubicleSelector === "poi2" ? pltsLive.poi2.active_power : Number(summaryData?.pqData?.activePower || 594));
+    const peak = Number(s.peakDemand) || (cubicleSelector === "poi1" ? pltsLive.poi1.active_power : cubicleSelector === "poi2" ? pltsLive.poi2.active_power : Number(summaryData?.pqData?.activePower || 0));
     const lwbp = isSolar ? 0 : (Number(s.monthlyLwbpKwh ?? s.todayLwbpKwh) || 0);
     const wbp = isSolar ? 0 : (Number(s.monthlyWbpKwh ?? s.todayWbpKwh) || 0);
     const total = Number(s.monthlyKwh ?? s.totalKwh ?? (lwbp + wbp)) || (cubicleSelector === "poi1" ? pltsLive.poi1.total_kwh : cubicleSelector === "poi2" ? pltsLive.poi2.total_kwh : 0);
     const cost = isSolar ? 0 : (Number(s.totalCost ?? (lwbp * lwbpRate + wbp * wbpRate)) || (total * electricityRate));
 
-    const poi1 = solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 24558.67;
-    const poi2 = solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 95707.05;
+    const poi1 = solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 0;
+    const poi2 = solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 0;
 
     return {
       peakDemand: peak,
@@ -484,12 +473,6 @@ export default function Electricity() {
   // Daily Comparison Data (Bulan Ini vs Bulan Lalu) for selected cubicle
   const cubicleDailyData = useMemo(() => {
     const daysCount = 28;
-    const baseCurrent = cubicleSummary.monthlyKwh > 0 ? (cubicleSummary.monthlyKwh / daysCount) : 
-      cubicleSelector === "pln" ? 850 :
-      cubicleSelector === "wf1" ? 420 :
-      cubicleSelector === "wf2" ? 390 :
-      cubicleSelector === "poi1" ? 120 : 250;
-
     const dailyRecords = cubicleAnalytics?.charts?.daily || summaryData?.charts?.daily || [];
     const now = new Date();
     const currMonthPrefix = `${selectedYear}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -512,14 +495,14 @@ export default function Electricity() {
     const previousData: number[] = [];
 
     for (let i = 1; i <= daysCount; i++) {
-      const curVal = currMap[i] ?? Math.round(baseCurrent * (0.8 + Math.sin(i * 0.7) * 0.2 + (i % 7 === 0 ? -0.3 : 0.05)));
-      const prevVal = prevMap[i] ?? Math.round(baseCurrent * (0.85 + Math.cos(i * 0.6) * 0.18 + (i % 7 === 6 ? -0.25 : 0.08)));
-      currentData.push(Math.max(0, curVal));
-      previousData.push(Math.max(0, prevVal));
+      const curVal = currMap[i] ?? 0;
+      const prevVal = prevMap[i] ?? 0;
+      currentData.push(curVal);
+      previousData.push(prevVal);
     }
 
     return { currentData, previousData };
-  }, [cubicleAnalytics, summaryData, cubicleSummary, cubicleSelector, selectedYear]);
+  }, [cubicleAnalytics, summaryData, cubicleSelector, selectedYear]);
   const [factCategories1, setFactCategories1] = useState<ConsumptionFactCategory[]>([]);
   const [factCategories2, setFactCategories2] = useState<ConsumptionFactCategory[]>([]);
 
@@ -591,17 +574,17 @@ export default function Electricity() {
                 setPltsLive({
                   poi1: {
                     status: Boolean(res.data.POI_1.Status_POI_1 ?? true),
-                    volt_ab: Number(res.data.POI_1.Volt_AB_POI_1) || 391.87,
+                    volt_ab: Number(res.data.POI_1.Volt_AB_POI_1) || 0,
                     active_power: Math.max(0, Number(res.data.POI_1.Scale_Total_KW_POI_1) || 0),
-                    total_kwh: Number(res.data.POI_1.Total_KWH_POI_1) || 24558.67,
-                    frequency: Number(res.data.POI_1.Frequency_POI_1) || 49.98
+                    total_kwh: Number(res.data.POI_1.Total_KWH_POI_1) || 0,
+                    frequency: Number(res.data.POI_1.Frequency_POI_1) || 0
                   },
                   poi2: {
                     status: Boolean(res.data.POI_2.Status_POI_2 ?? true),
-                    volt_ab: Number(res.data.POI_2.Volt_AB_POI_2) || 383.14,
+                    volt_ab: Number(res.data.POI_2.Volt_AB_POI_2) || 0,
                     active_power: Math.max(0, Number(res.data.POI_2.Scale_Total_KW_POI_2) || 0),
-                    total_kwh: Number(res.data.POI_2.Total_KWH_POI_2) || 95707.05,
-                    frequency: Number(res.data.POI_2.Frequency_POI_2) || 49.98
+                    total_kwh: Number(res.data.POI_2.Total_KWH_POI_2) || 0,
+                    frequency: Number(res.data.POI_2.Frequency_POI_2) || 0
                   }
                 });
               }
@@ -704,7 +687,7 @@ export default function Electricity() {
       if (pltsTotal > 0) return pltsTotal;
       if (solarData?.summary?.totalKwh) return solarData.summary.totalKwh;
       if (solarLive?.totalKwh) return solarLive.totalKwh;
-      return 120265.72;
+      return 0;
     }
 
     if (tagKey === "electricity/p_solar" || tagKey === "solar/active_power") {
@@ -725,14 +708,14 @@ export default function Electricity() {
       const p2Status = pltsLive.poi2.status;
       if (p1Status && p2Status) return 98.4;
       if (p1Status || p2Status) return 96.8;
-      return 98.4;
+      return 0;
     }
 
     if (tagKey === "electricity/p_grid") {
       const plnRaw = apiLiveData[DEFAULT_PLN_API_URL]?.[DEFAULT_PLN_JSON_KEYS["pln/active_power"]] ?? summaryData?.pqData?.activePower;
       if (typeof plnRaw === "number" && plnRaw > 10000) return plnRaw / 1000.0;
       if (typeof plnRaw === "number") return plnRaw;
-      return 2197.87;
+      return "API TIDAK TERKIRIM";
     }
 
     if (!url.trim()) return "BELUM ADA API";
@@ -1404,21 +1387,12 @@ export default function Electricity() {
 
   const factTimelineData = useMemo(() => {
     const labels = barLabels;
+    if (fact1Total === 0 && fact2Total === 0) {
+      return { labels, datasets: [] };
+    }
     const len = labels.length;
-
-    // Fact-1 series
-    const f1Data = Array.from({ length: len }, (_, idx) => {
-      const base = fact1Total / (len || 1);
-      const factor = 0.8 + Math.sin(idx / 2.5) * 0.2 + Math.random() * 0.1;
-      return Math.round(base * factor);
-    });
-
-    // Fact-2 series
-    const f2Data = Array.from({ length: len }, (_, idx) => {
-      const base = fact2Total / (len || 1);
-      const factor = 0.85 + Math.cos(idx / 2.5) * 0.2 + Math.random() * 0.1;
-      return Math.round(base * factor);
-    });
+    const f1Data = Array.from({ length: len }, () => 0);
+    const f2Data = Array.from({ length: len }, () => 0);
 
     return {
       labels,
@@ -1534,49 +1508,38 @@ export default function Electricity() {
     }
   }), [isDark]);
 
-  /* ═══ REALISTIC EQUIPMENT SERIES GENERATOR ═══ */
-  const makeEquipmentSeries = (baseDaily: number) => {
-    const current: number[] = [];
-    const previous: number[] = [];
-    for (let i = 1; i <= 28; i++) {
-      const curVal = Math.round(baseDaily * (0.85 + Math.sin(i * 0.5) * 0.18 + (i % 7 === 0 ? -0.35 : 0.05)));
-      const prevVal = Math.round(baseDaily * (0.8 + Math.cos(i * 0.45) * 0.15 + (i % 7 === 6 ? -0.3 : 0.08)));
-      current.push(Math.max(0, curVal));
-      previous.push(Math.max(0, prevVal));
-    }
-    return { current, previous };
-  };
-
-  const ct1Series = useMemo(() => makeEquipmentSeries(450), []);
-  const ct2Series = useMemo(() => makeEquipmentSeries(480), []);
-  const boiler3Series = useMemo(() => makeEquipmentSeries(620), []);
-  const boiler4Series = useMemo(() => makeEquipmentSeries(580), []);
-  const boiler5Series = useMemo(() => makeEquipmentSeries(650), []);
-  const compAle30Series = useMemo(() => makeEquipmentSeries(720), []);
-  const compZt301Series = useMemo(() => makeEquipmentSeries(530), []);
-  const compZt302Series = useMemo(() => makeEquipmentSeries(540), []);
-  const compZt55Series = useMemo(() => makeEquipmentSeries(810), []);
-  const compAle250Series = useMemo(() => makeEquipmentSeries(1420), []);
-  const compZt110Series = useMemo(() => makeEquipmentSeries(1150), []);
-  const chillerDaikin1Series = useMemo(() => makeEquipmentSeries(850), []);
-  const chillerDaikin2Series = useMemo(() => makeEquipmentSeries(830), []);
-  const chillerTraneCgam40Series = useMemo(() => makeEquipmentSeries(690), []);
-  const chillerTrane100Series = useMemo(() => makeEquipmentSeries(1250), []);
-  const chillerTrane275Series = useMemo(() => makeEquipmentSeries(1980), []);
-  const chillerTrane250Series = useMemo(() => makeEquipmentSeries(2100), []);
-  const chillerTrane185Series = useMemo(() => makeEquipmentSeries(1650), []);
-  const hvacWh2Series = useMemo(() => makeEquipmentSeries(310), []);
-  const hvacWh3Series = useMemo(() => makeEquipmentSeries(320), []);
-  const hvacWh4Series = useMemo(() => makeEquipmentSeries(340), []);
-  const hvacWh5Series = useMemo(() => makeEquipmentSeries(330), []);
-  const hvacWh6Series = useMemo(() => makeEquipmentSeries(360), []);
-  const hvacWh7Series = useMemo(() => makeEquipmentSeries(350), []);
-  const hvacQcMicroSeries = useMemo(() => makeEquipmentSeries(220), []);
-  const hvacQcRetainedSeries = useMemo(() => makeEquipmentSeries(210), []);
-  const hvacQcSamplingSeries = useMemo(() => makeEquipmentSeries(240), []);
-  const hvacWf1U3Series = useMemo(() => makeEquipmentSeries(1350), []);
-  const hvacWf2U1Series = useMemo(() => makeEquipmentSeries(1420), []);
-  const hvacWf2U2Series = useMemo(() => makeEquipmentSeries(1390), []);
+  /* ═══ EQUIPMENT SERIES (EMPTY STATE - SENSOR BELUM TERHUBUNG) ═══ */
+  const EMPTY_EQUIPMENT_SERIES = useMemo(() => ({ current: [] as number[], previous: [] as number[] }), []);
+  const ct1Series = EMPTY_EQUIPMENT_SERIES;
+  const ct2Series = EMPTY_EQUIPMENT_SERIES;
+  const boiler3Series = EMPTY_EQUIPMENT_SERIES;
+  const boiler4Series = EMPTY_EQUIPMENT_SERIES;
+  const boiler5Series = EMPTY_EQUIPMENT_SERIES;
+  const compAle30Series = EMPTY_EQUIPMENT_SERIES;
+  const compZt301Series = EMPTY_EQUIPMENT_SERIES;
+  const compZt302Series = EMPTY_EQUIPMENT_SERIES;
+  const compZt55Series = EMPTY_EQUIPMENT_SERIES;
+  const compAle250Series = EMPTY_EQUIPMENT_SERIES;
+  const compZt110Series = EMPTY_EQUIPMENT_SERIES;
+  const chillerDaikin1Series = EMPTY_EQUIPMENT_SERIES;
+  const chillerDaikin2Series = EMPTY_EQUIPMENT_SERIES;
+  const chillerTraneCgam40Series = EMPTY_EQUIPMENT_SERIES;
+  const chillerTrane100Series = EMPTY_EQUIPMENT_SERIES;
+  const chillerTrane275Series = EMPTY_EQUIPMENT_SERIES;
+  const chillerTrane250Series = EMPTY_EQUIPMENT_SERIES;
+  const chillerTrane185Series = EMPTY_EQUIPMENT_SERIES;
+  const hvacWh2Series = EMPTY_EQUIPMENT_SERIES;
+  const hvacWh3Series = EMPTY_EQUIPMENT_SERIES;
+  const hvacWh4Series = EMPTY_EQUIPMENT_SERIES;
+  const hvacWh5Series = EMPTY_EQUIPMENT_SERIES;
+  const hvacWh6Series = EMPTY_EQUIPMENT_SERIES;
+  const hvacWh7Series = EMPTY_EQUIPMENT_SERIES;
+  const hvacQcMicroSeries = EMPTY_EQUIPMENT_SERIES;
+  const hvacQcRetainedSeries = EMPTY_EQUIPMENT_SERIES;
+  const hvacQcSamplingSeries = EMPTY_EQUIPMENT_SERIES;
+  const hvacWf1U3Series = EMPTY_EQUIPMENT_SERIES;
+  const hvacWf2U1Series = EMPTY_EQUIPMENT_SERIES;
+  const hvacWf2U2Series = EMPTY_EQUIPMENT_SERIES;
 
   /* ═══ RENDER ═══ */
   return (
@@ -1638,10 +1601,10 @@ export default function Electricity() {
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>
               <span>POI-1: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
-                {solarLive?.poi1?.status === false ? "TIDAK AKTIF" : `${formatNumber(solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 24558.67)} kWh`}
+                {solarLive?.poi1?.status === false ? "TIDAK AKTIF" : `${formatNumber(solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 0)} kWh`}
               </strong></span>
               <span>POI-2: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
-                {solarLive?.poi2?.status === false ? "TIDAK AKTIF" : `${formatNumber(solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 95707.05)} kWh`}
+                {solarLive?.poi2?.status === false ? "TIDAK AKTIF" : `${formatNumber(solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 0)} kWh`}
               </strong></span>
             </div>
           </div>
@@ -1719,7 +1682,7 @@ export default function Electricity() {
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-cyan-950'}`}>
               {(() => {
                 const pGridVal = getApiVal("pln/active_power");
-                const pGridNum = typeof pGridVal === "number" ? pGridVal : (summaryData?.pqData?.activePower || 2197.87);
+                const pGridNum = typeof pGridVal === "number" ? pGridVal : (summaryData?.pqData?.activePower || 0);
                 return pGridNum.toLocaleString("id-ID", { maximumFractionDigits: 1 });
               })()}
               <span className={`text-sm font-bold ml-1 ${isDark ? 'text-cyan-200' : 'text-cyan-700'}`}>kW</span>
@@ -2009,12 +1972,12 @@ export default function Electricity() {
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
               {solarLive?.poi1?.status === false
                 ? "TIDAK AKTIF"
-                : `${formatNumber(solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 24558.67)} kWh`}
+                : `${formatNumber(solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 0)} kWh`}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
               {solarLive?.poi1?.status === false
                 ? "Status: TIDAK AKTIF"
-                : (solarLive?.poi1?.voltAb ? `${solarLive.poi1.voltAb.toFixed(1)} V | ${solarLive.poi1.frequency.toFixed(2)} Hz` : "391.9 V | 49.96 Hz")}
+                : (solarLive?.poi1?.voltAb ? `${solarLive.poi1.voltAb.toFixed(1)} V | ${solarLive.poi1.frequency.toFixed(2)} Hz` : "-")}
             </div>
           </div>
 
@@ -2050,12 +2013,12 @@ export default function Electricity() {
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
               {solarLive?.poi2?.status === false
                 ? "TIDAK AKTIF"
-                : `${formatNumber(solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 95707.05)} kWh`}
+                : `${formatNumber(solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 0)} kWh`}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
               {solarLive?.poi2?.status === false
                 ? "Status: TIDAK AKTIF"
-                : (solarLive?.poi2?.voltAb ? `${solarLive.poi2.voltAb.toFixed(1)} V | ${solarLive.poi2.frequency.toFixed(2)} Hz` : "384.6 V | 49.96 Hz")}
+                : (solarLive?.poi2?.voltAb ? `${solarLive.poi2.voltAb.toFixed(1)} V | ${solarLive.poi2.frequency.toFixed(2)} Hz` : "-")}
             </div>
           </div>
 
@@ -2374,7 +2337,15 @@ export default function Electricity() {
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
             <div style={{ height: 250 }}>
-              <Bar data={makeHorizontalBarData(factCategories1, 1)} options={horizontalBarOptions} />
+              {factCategories1.filter(c => c.enabled).length > 0 ? (
+                <Bar data={makeHorizontalBarData(factCategories1, 1)} options={horizontalBarOptions} />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <span className="text-2xl mb-1 opacity-40">📊</span>
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering Fact-1 belum terhubung</span>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -2389,7 +2360,15 @@ export default function Electricity() {
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
             <div style={{ height: 250 }}>
-              <Bar data={makeHorizontalBarData(factCategories2, 2)} options={horizontalBarOptions} />
+              {factCategories2.filter(c => c.enabled).length > 0 ? (
+                <Bar data={makeHorizontalBarData(factCategories2, 2)} options={horizontalBarOptions} />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <span className="text-2xl mb-1 opacity-40">📊</span>
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering Fact-2 belum terhubung</span>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -2419,7 +2398,11 @@ export default function Electricity() {
               {utilityData.items.length > 0 ? (
                 <Bar data={makeDeptHorizontalBarData(utilityData.items, "Utility")} options={horizontalBarOptions} />
               ) : (
-                <div className="flex items-center justify-center h-full text-xs text-slate-400">No active utility data matching filter.</div>
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <span className="text-2xl mb-1 opacity-40">📊</span>
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering sistem utility belum terhubung</span>
+                </div>
               )}
             </div>
           </div>
@@ -2433,7 +2416,7 @@ export default function Electricity() {
           </div>
           <div className="my-4 flex justify-center flex-shrink-0">
             <DonutChart 
-              segments={utilityDonutSegments.length > 0 ? utilityDonutSegments : [{ label: "No Data", value: 100, color: "#cbd5e1" }]} 
+              segments={utilityDonutSegments.length > 0 ? utilityDonutSegments : [{ label: "Belum Ada Data", value: 100, color: "#cbd5e1" }]} 
               size={140} 
               thickness={16} 
               centerLabel={utilityData.totalKwh > 0 ? `${utilityData.totalKwh.toLocaleString("id-ID")} kWh` : "0 kWh"} 
@@ -2452,7 +2435,7 @@ export default function Electricity() {
                 </div>
               ))
             ) : (
-              <div className="text-xs text-slate-400 py-4 text-center">No active utility data matching filter.</div>
+              <div className="text-xs text-slate-400 py-4 text-center">Belum ada data sub-metering utility.</div>
             )}
           </div>
         </section>
@@ -2482,7 +2465,11 @@ export default function Electricity() {
               {hvacData.items.length > 0 ? (
                 <Bar data={makeDeptHorizontalBarData(hvacData.items, "HVAC")} options={horizontalBarOptions} />
               ) : (
-                <div className="flex items-center justify-center h-full text-xs text-slate-400">No active HVAC data matching filter.</div>
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <span className="text-2xl mb-1 opacity-40">📊</span>
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering sistem HVAC belum terhubung</span>
+                </div>
               )}
             </div>
           </div>
@@ -2496,7 +2483,7 @@ export default function Electricity() {
           </div>
           <div className="my-4 flex justify-center flex-shrink-0">
             <DonutChart 
-              segments={hvacDonutSegments.length > 0 ? hvacDonutSegments : [{ label: "No Data", value: 100, color: "#cbd5e1" }]} 
+              segments={hvacDonutSegments.length > 0 ? hvacDonutSegments : [{ label: "Belum Ada Data", value: 100, color: "#cbd5e1" }]} 
               size={140} 
               thickness={16} 
               centerLabel={hvacData.totalKwh > 0 ? `${hvacData.totalKwh.toLocaleString("id-ID")} kWh` : "0 kWh"} 
@@ -2515,7 +2502,7 @@ export default function Electricity() {
                 </div>
               ))
             ) : (
-              <div className="text-xs text-slate-400 py-4 text-center">No active HVAC data matching filter.</div>
+              <div className="text-xs text-slate-400 py-4 text-center">Belum ada data sub-metering HVAC.</div>
             )}
           </div>
         </section>
@@ -2524,9 +2511,14 @@ export default function Electricity() {
 
       {/* ═══════════ SECTION H: EQUIPMENT MONTHLY CHARTS ═══════════ */}
       <div className="space-y-8">
-        <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 border-b border-slate-200 dark:border-slate-800 pb-2">
-          Konsumsi Per-Equipment (Bulanan vs Bulan Sebelumnya)
-        </h3>
+        <div className="flex flex-wrap items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 gap-2">
+          <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+            Konsumsi Per-Equipment (Bulanan vs Bulan Sebelumnya)
+          </h3>
+          <span className="text-[11px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full">
+            Sub-metering belum terpasang (Belum ada data)
+          </span>
+        </div>
 
         {/* Cooling Tower Section */}
         <div className="space-y-3">
