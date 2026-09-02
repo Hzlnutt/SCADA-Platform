@@ -563,6 +563,18 @@ export const getElectricityAnalytics = async (
   const hourlyValues = dailyHourlyMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
   const hourlyWbpValues = dailyHourlyWbpMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
   const hourlyLwbpValues = dailyHourlyLwbpMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
+
+  // Ensure hours after current time today are 0 (never show future or incomplete hours)
+  if (latestWibDate === todayStr) {
+    const nowWib = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
+    const currentWibHour = nowWib.getUTCHours();
+    for (let h = currentWibHour; h < 24; h++) {
+      hourlyValues[h] = 0;
+      hourlyWbpValues[h] = 0;
+      hourlyLwbpValues[h] = 0;
+    }
+  }
+
   const yesterdayDate = new Date(new Date().getTime() - 24 * 60 * 60 * 1000);
   const yesterdayDateStr = getWibDateString(yesterdayDate);
   const dbPrevHourly = dailyHourlyMap.get(yesterdayDateStr);

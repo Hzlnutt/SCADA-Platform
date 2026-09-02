@@ -116,17 +116,8 @@ export const getSolarAnalytics = async (
     console.warn("Failed to query solar_telemetry:", err);
   }
 
-  // If live data is available and toDate is today, append latest live counter reading
+  // Live state is retrieved for real-time summary indicators and latest delta
   const live = getLatestSolarLiveState();
-  if (live && (live.poi1?.status || live.poi2?.status)) {
-    const nowWibStr = `${todayStr} ${pad(new Date().getHours())}:${pad(new Date().getMinutes())}:${pad(new Date().getSeconds())}`;
-    records.push({
-      ts_text: nowWibStr,
-      poi_1: live.poi1?.status ? live.poi1.totalKwh : null,
-      poi_2: live.poi2?.status ? live.poi2.totalKwh : null,
-      total: (live.poi1?.status ? live.poi1.totalKwh : 0) + (live.poi2?.status ? live.poi2.totalKwh : 0)
-    });
-  }
 
   // Hourly maps: DateStr -> Array(24)
   const hourlyMapPoi1 = new Map<string, number[]>();
@@ -226,6 +217,35 @@ export const getSolarAnalytics = async (
     }
   }
 
+  // Add current ongoing hour's live generation to summary totals (without affecting completed hourly chart bars)
+  if (live && records.length > 0) {
+    const lastRec = records[records.length - 1];
+    const lastTs = (lastRec.ts_text || "").split(".")[0];
+    const [lastDateStr] = lastTs.split(" ");
+    if (lastDateStr === todayStr) {
+      const livePoi1 = (live.poi1?.status && typeof live.poi1.totalKwh === "number") ? live.poi1.totalKwh : null;
+      const livePoi2 = (live.poi2?.status && typeof live.poi2.totalKwh === "number") ? live.poi2.totalKwh : null;
+
+      let deltaPoi1 = 0;
+      if (livePoi1 !== null && lastRec.poi_1 !== null && livePoi1 >= lastRec.poi_1) {
+        deltaPoi1 = livePoi1 - lastRec.poi_1;
+      }
+      let deltaPoi2 = 0;
+      if (livePoi2 !== null && lastRec.poi_2 !== null && livePoi2 >= lastRec.poi_2) {
+        deltaPoi2 = livePoi2 - lastRec.poi_2;
+      }
+      const deltaTot = deltaPoi1 + deltaPoi2;
+      if (deltaTot > 0 && deltaTot < 5000) {
+        totalKwh += deltaTot;
+        todayKwh += deltaTot;
+        yearlyKwh += deltaTot;
+        monthlyKwh += deltaTot;
+        poi1TodayKwh += deltaPoi1;
+        poi2TodayKwh += deltaPoi2;
+      }
+    }
+  }
+
   if (peakDemand === 0 && (poi1PeakDemand > 0 || poi2PeakDemand > 0)) {
     peakDemand = poi1PeakDemand + poi2PeakDemand;
   }
@@ -241,6 +261,17 @@ export const getSolarAnalytics = async (
   const hourlyPoi1 = hourlyMapPoi1.get(targetDate) || Array.from({ length: 24 }, () => 0);
   const hourlyPoi2 = hourlyMapPoi2.get(targetDate) || Array.from({ length: 24 }, () => 0);
   const hourly = hourlyMapTotal.get(targetDate) || hourlyPoi1.map((v, i) => v + (hourlyPoi2[i] || 0));
+
+  // Ensure hours after current time today are 0 (never show future or incomplete hours)
+  const nowWib = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
+  const currentWibHour = nowWib.getUTCHours();
+  if (targetDate === todayStr) {
+    for (let h = currentWibHour; h < 24; h++) {
+      hourlyPoi1[h] = 0;
+      hourlyPoi2[h] = 0;
+      hourly[h] = 0;
+    }
+  }
 
   // Daily records
   const allDates = Array.from(new Set([...dailyMapPoi1.keys(), ...dailyMapPoi2.keys(), ...dailyMapTotal.keys()])).sort();
@@ -261,8 +292,8 @@ export const getSolarAnalytics = async (
     monthly.push({ month: mStr, poi1: p1, poi2: p2, total: tot });
   }
 
-  const poi1TotalKwh = live?.poi1?.totalKwh ?? 24558.67;
-  const poi2TotalKwh = live?.poi2?.totalKwh ?? 95707.05;
+  const poi1TotalKwh = live?.poi1?.totalKwh ?? 0;
+  const poi2TotalKwh = live?.poi2?.totalKwh ?? 0;
   const estimasiBiaya = totalKwh * solarRate;
   const todayCost = todayKwh * solarRate;
 
