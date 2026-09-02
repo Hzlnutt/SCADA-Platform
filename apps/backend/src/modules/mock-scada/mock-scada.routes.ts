@@ -142,7 +142,9 @@ mockScadaRouter.get("/system/webdev/Utility_Dashboard/electric_plts", (_req, res
 
 mockScadaRouter.get("/system/webdev/Utility_Dashboard/hvac_retain_plc1", (_req, res) => {
   res.json({
+    Connected: true,
     PLC1_AHU1_Utl: {
+      Connected: true,
       ACT_RTx_1A: 40.46875,
       xIND_RUN_EH01: true,
       ACT_RTx_1B: 40.40625,
@@ -163,7 +165,9 @@ mockScadaRouter.get("/system/webdev/Utility_Dashboard/hvac_retain_plc1", (_req, 
 
 mockScadaRouter.get("/system/webdev/Utility_Dashboard/hvac_retain_plc2_2", (_req, res) => {
   res.json({
+    Connected: true,
     PLC2_AHU2: {
+      Connected: true,
       ACT_RTx_2B: 29.84375,
       xIND_RUN_EH02: false,
       ACT_RTx_2A: 28.71875,
@@ -186,7 +190,9 @@ mockScadaRouter.get("/system/webdev/Utility_Dashboard/hvac_retain_plc2_2", (_req
 
 mockScadaRouter.get("/system/webdev/Utility_Dashboard/hvac_retain_plc2_3", (_req, res) => {
   res.json({
+    Connected: true,
     PLC2_AHU3: {
+      Connected: true,
       ACT_RTx_3A: 26.25,
       ACT_RTx_3B: 27.5625
     }

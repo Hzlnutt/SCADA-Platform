@@ -27,6 +27,7 @@ let incomingElectricityRollupInterval: NodeJS.Timeout | null = null;
 
 export interface HvacRetainLiveState {
   PLC1_AHU1_Utl: {
+    Connected?: boolean;
     ACT_RTx_1A?: number;
     ACT_RHx_1A?: number;
     ACT_RTx_1B?: number;
@@ -43,6 +44,7 @@ export interface HvacRetainLiveState {
     xIND_RUN_HP?: boolean;
   };
   PLC2_AHU2: {
+    Connected?: boolean;
     ACT_RTx_2A?: number;
     ACT_RHx_2A?: number;
     ACT_RTx_2B?: number;
@@ -61,6 +63,7 @@ export interface HvacRetainLiveState {
     xIND_RUN_CU02B?: boolean;
   };
   PLC2_AHU3: {
+    Connected?: boolean;
     ACT_RTx_3A?: number;
     ACT_RTx_3B?: number;
   };
@@ -69,6 +72,7 @@ export interface HvacRetainLiveState {
 
 let latestHvacRetainLiveState: HvacRetainLiveState = {
   PLC1_AHU1_Utl: {
+    Connected: true,
     ACT_RTx_1A: 40.46875,
     xIND_RUN_EH01: true,
     ACT_RTx_1B: 40.40625,
@@ -85,6 +89,7 @@ let latestHvacRetainLiveState: HvacRetainLiveState = {
     ACT_RAHx_1: 75.75
   },
   PLC2_AHU2: {
+    Connected: true,
     ACT_RTx_2B: 29.84375,
     xIND_RUN_EH02: false,
     ACT_RTx_2A: 28.71875,
@@ -103,6 +108,7 @@ let latestHvacRetainLiveState: HvacRetainLiveState = {
     xIND_RUN_CU02B: true
   },
   PLC2_AHU3: {
+    Connected: true,
     ACT_RTx_3A: 26.25,
     ACT_RTx_3B: 27.5625
   },
@@ -1090,19 +1096,33 @@ export const startIncomingElectricityPolling = () => {
         fetchApiData("hvac_retain_plc2_3").catch(() => null),
       ]);
 
+      const parseConnected = (raw: any, subKey: string): boolean => {
+        if (!raw) return false;
+        if (typeof raw.Connected === "boolean") return raw.Connected;
+        if (raw[subKey] && typeof raw[subKey].Connected === "boolean") return raw[subKey].Connected;
+        return true;
+      };
+
       if (plc1Data || plc2_2Data || plc2_3Data) {
+        const conn1 = parseConnected(plc1Data, "PLC1_AHU1_Utl");
+        const conn2 = parseConnected(plc2_2Data, "PLC2_AHU2");
+        const conn3 = parseConnected(plc2_3Data, "PLC2_AHU3");
+
         const retainLive: HvacRetainLiveState = {
           PLC1_AHU1_Utl: {
             ...latestHvacRetainLiveState.PLC1_AHU1_Utl,
-            ...(plc1Data?.PLC1_AHU1_Utl || (plc1Data as any) || {})
+            ...(plc1Data?.PLC1_AHU1_Utl || (typeof plc1Data === "object" ? plc1Data : {}) || {}),
+            Connected: conn1
           },
           PLC2_AHU2: {
             ...latestHvacRetainLiveState.PLC2_AHU2,
-            ...(plc2_2Data?.PLC2_AHU2 || (plc2_2Data as any) || {})
+            ...(plc2_2Data?.PLC2_AHU2 || (typeof plc2_2Data === "object" ? plc2_2Data : {}) || {}),
+            Connected: conn2
           },
           PLC2_AHU3: {
             ...latestHvacRetainLiveState.PLC2_AHU3,
-            ...(plc2_3Data?.PLC2_AHU3 || (plc2_3Data as any) || {})
+            ...(plc2_3Data?.PLC2_AHU3 || (typeof plc2_3Data === "object" ? plc2_3Data : {}) || {}),
+            Connected: conn3
           },
           t_stamp: ts
         };

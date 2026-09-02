@@ -34,6 +34,7 @@ const maintenanceIcon = (
 
 interface HvacRetainLiveState {
   PLC1_AHU1_Utl?: {
+    Connected?: boolean;
     ACT_RTx_1A?: number;
     ACT_RHx_1A?: number;
     ACT_RTx_1B?: number;
@@ -50,6 +51,7 @@ interface HvacRetainLiveState {
     xIND_RUN_HP?: boolean;
   };
   PLC2_AHU2?: {
+    Connected?: boolean;
     ACT_RTx_2A?: number;
     ACT_RHx_2A?: number;
     ACT_RTx_2B?: number;
@@ -68,6 +70,7 @@ interface HvacRetainLiveState {
     xIND_RUN_CU02B?: boolean;
   };
   PLC2_AHU3?: {
+    Connected?: boolean;
     ACT_RTx_3A?: number;
     ACT_RTx_3B?: number;
   };
@@ -321,12 +324,18 @@ const MachineCustomTab = () => {
     // ----- AHU-01 -----
     if (tabId === "ahu-01") {
       const plc1 = hvacRetainLive.PLC1_AHU1_Utl || {};
-      const isSfRunning = plc1.xIND_RUN_SF01 !== undefined ? plc1.xIND_RUN_SF01 : (ahu01Status === "Running");
-      const isEhOn = plc1.xIND_RUN_EH01 !== undefined ? plc1.xIND_RUN_EH01 : (ahu01Status === "Running");
-      const isHfRunning = plc1.xIND_RUN_HF01 !== undefined ? plc1.xIND_RUN_HF01 : (ahu01Status === "Running");
+      const isConnected = plc1.Connected !== undefined ? Boolean(plc1.Connected) : true;
+      const isSfRunning = isConnected && (plc1.xIND_RUN_SF01 !== undefined ? Boolean(plc1.xIND_RUN_SF01) : (ahu01Status === "Running"));
+      const isEhOn = isConnected && (plc1.xIND_RUN_EH01 !== undefined ? Boolean(plc1.xIND_RUN_EH01) : (ahu01Status === "Running"));
+      const isHfRunning = isConnected && (plc1.xIND_RUN_HF01 !== undefined ? Boolean(plc1.xIND_RUN_HF01) : (ahu01Status === "Running"));
+
+      const headerMode = isConnected ? ahu01Mode : "Manual";
+      const headerStatus = isConnected
+        ? (isSfRunning ? "Running" : (ahu01Status === "Maintenance" ? "Maintenance" : "Stopped"))
+        : "Stopped";
 
       const systemMode = [
-        { label: "Operating Mode", value: ahu01Mode, statusColor: ahu01Mode === "Auto" ? "cyan" : "yellow" as any },
+        { label: "Operating Mode", value: headerMode, statusColor: headerMode === "Auto" ? "cyan" : "yellow" as any },
         { label: "Fan Status", value: isSfRunning ? "Running" : "Stopped", statusColor: isSfRunning ? "green" : "red" as any },
         { label: "Electric Heater", value: isEhOn ? "On" : "Off", statusColor: isEhOn ? "green" : "default" as any },
         { label: "Humidifier Fan Status", value: isHfRunning ? "Running" : "Stopped", statusColor: isHfRunning ? "green" : "red" as any },
@@ -399,8 +408,8 @@ const MachineCustomTab = () => {
           onVerifyPassword={verifyPassword}
           logs={logs}
           onRefreshData={fetchHvacData}
-          currentMode={ahu01Mode}
-          currentStatus={ahu01Status}
+          currentMode={headerMode}
+          currentStatus={headerStatus}
         />
       );
     }
@@ -408,20 +417,27 @@ const MachineCustomTab = () => {
     // ----- AHU-02 -----
     if (tabId === "ahu-02") {
       const plc2 = hvacRetainLive.PLC2_AHU2 || {};
-      const isSf02aRunning = plc2.xIND_RUN_SF02A !== undefined ? plc2.xIND_RUN_SF02A : (ahu02Status === "Running");
-      const isSf02bRunning = plc2.xIND_RUN_SF02B !== undefined ? plc2.xIND_RUN_SF02B : (ahu02Status === "Running");
-      const isCu02aActive = plc2.xIND_RUN_CU02A !== undefined ? plc2.xIND_RUN_CU02A : (ahu02Status === "Running");
-      const isCu02bActive = plc2.xIND_RUN_CU02B !== undefined ? plc2.xIND_RUN_CU02B : (ahu02Status === "Running");
-      const isEh02On = plc2.xIND_RUN_EH02 !== undefined ? plc2.xIND_RUN_EH02 : false;
+      const isConnected = plc2.Connected !== undefined ? Boolean(plc2.Connected) : true;
+      const isSf02aRunning = isConnected && (plc2.xIND_RUN_SF02A !== undefined ? Boolean(plc2.xIND_RUN_SF02A) : (ahu02Status === "Running"));
+      const isSf02bRunning = isConnected && (plc2.xIND_RUN_SF02B !== undefined ? Boolean(plc2.xIND_RUN_SF02B) : (ahu02Status === "Running"));
+      const isCu02aActive = isConnected && (plc2.xIND_RUN_CU02A !== undefined ? Boolean(plc2.xIND_RUN_CU02A) : (ahu02Status === "Running"));
+      const isCu02bActive = isConnected && (plc2.xIND_RUN_CU02B !== undefined ? Boolean(plc2.xIND_RUN_CU02B) : (ahu02Status === "Running"));
+      const isEh02On = isConnected && (plc2.xIND_RUN_EH02 !== undefined ? Boolean(plc2.xIND_RUN_EH02) : false);
+
+      const isAnyFanRunning = isSf02aRunning || isSf02bRunning;
+      const headerMode = isConnected ? ahu02Mode : "Manual";
+      const headerStatus = isConnected
+        ? (isAnyFanRunning ? "Running" : (ahu02Status === "Maintenance" ? "Maintenance" : "Stopped"))
+        : "Stopped";
 
       const systemMode = [
-        { label: "Operating Mode", value: ahu02Mode, statusColor: ahu02Mode === "Auto" ? "cyan" : "yellow" as any },
+        { label: "Operating Mode", value: headerMode, statusColor: headerMode === "Auto" ? "cyan" : "yellow" as any },
         { label: "Fan-02 A Status", value: isSf02aRunning ? "Running" : "Stopped", statusColor: isSf02aRunning ? "green" : "red" as any },
         { label: "Fan-02 B Status", value: isSf02bRunning ? "Running" : "Stopped", statusColor: isSf02bRunning ? "green" : "red" as any },
         { label: "CU-02 A Status", value: isCu02aActive ? "Active" : "Inactive", statusColor: isCu02aActive ? "cyan" : "default" as any },
         { label: "CU-02 B Status", value: isCu02bActive ? "Active" : "Inactive", statusColor: isCu02bActive ? "cyan" : "default" as any },
         { label: "Electric Heater Status", value: isEh02On ? "On" : "Off", statusColor: isEh02On ? "green" : "default" as any },
-        { label: "Humidity Fan Status", value: "Running", statusColor: "green" as any },
+        { label: "Humidity Fan Status", value: isConnected ? "Running" : "Stopped", statusColor: isConnected ? "green" : "red" as any },
       ];
 
       const setpoints = [
@@ -480,7 +496,7 @@ const MachineCustomTab = () => {
             <MachineAHU02Pid
               tempSP={ahu02Temp}
               humiditySP={ahu02Humid}
-              running={isSf02aRunning || isSf02bRunning}
+              running={isAnyFanRunning}
               data={plc2}
             />
           }
@@ -491,8 +507,8 @@ const MachineCustomTab = () => {
           onVerifyPassword={verifyPassword}
           logs={logs}
           onRefreshData={fetchHvacData}
-          currentMode={ahu02Mode}
-          currentStatus={ahu02Status}
+          currentMode={headerMode}
+          currentStatus={headerStatus}
         />
       );
     }
@@ -500,10 +516,15 @@ const MachineCustomTab = () => {
     // ----- AHU-03 -----
     if (tabId === "ahu-03") {
       const plc3 = hvacRetainLive.PLC2_AHU3 || {};
-      const isRunning = ahu03Status === "Running";
+      const isConnected = plc3.Connected !== undefined ? Boolean(plc3.Connected) : true;
+      const isRunning = isConnected && (ahu03Status === "Running");
+
+      const headerMode = isConnected ? ahu03Mode : "Manual";
+      const headerStatus = isConnected ? ahu03Status : "Stopped";
+
       const systemMode = [
-        { label: "Operating Mode", value: ahu03Mode, statusColor: ahu03Mode === "Auto" ? "cyan" : "yellow" as any },
-        { label: "Fan Status", value: isRunning ? "Running" : "Stopped", statusColor: isRunning ? "green" : (ahu03Status === "Maintenance" ? "cyan" : "red") as any },
+        { label: "Operating Mode", value: headerMode, statusColor: headerMode === "Auto" ? "cyan" : "yellow" as any },
+        { label: "Fan Status", value: isRunning ? "Running" : "Stopped", statusColor: isRunning ? "green" : (headerStatus === "Maintenance" ? "cyan" : "red") as any },
         { label: "Cooling", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
       ];
 
@@ -574,8 +595,8 @@ const MachineCustomTab = () => {
           onVerifyPassword={verifyPassword}
           logs={logs}
           onRefreshData={fetchHvacData}
-          currentMode={ahu03Mode}
-          currentStatus={ahu03Status}
+          currentMode={headerMode}
+          currentStatus={headerStatus}
         />
       );
     }
@@ -583,12 +604,16 @@ const MachineCustomTab = () => {
     // ----- UTILITY -----
     if (tabId === "utility") {
       const plc1 = hvacRetainLive.PLC1_AHU1_Utl || {};
-      const isHpRunning = plc1.xIND_RUN_HP !== undefined ? plc1.xIND_RUN_HP : (utilStatus === "Running");
+      const isConnected = plc1.Connected !== undefined ? Boolean(plc1.Connected) : true;
+      const isHpRunning = isConnected && (plc1.xIND_RUN_HP !== undefined ? Boolean(plc1.xIND_RUN_HP) : (utilStatus === "Running"));
+
+      const headerMode = isConnected ? utilMode : "Manual";
+      const headerStatus = isConnected ? (isHpRunning ? "Running" : (utilStatus === "Maintenance" ? "Maintenance" : "Stopped")) : "Stopped";
 
       const systemMode = [
-        { label: "Operating Mode", value: utilMode, statusColor: utilMode === "Auto" ? "cyan" : "yellow" as any },
+        { label: "Operating Mode", value: headerMode, statusColor: headerMode === "Auto" ? "cyan" : "yellow" as any },
         { label: "Pump Status", value: isHpRunning ? "Running" : "Stopped", statusColor: isHpRunning ? "green" : "red" as any },
-        { label: "UV Lamp Status", value: "Active", statusColor: "green" as any },
+        { label: "UV Lamp Status", value: isConnected ? "Active" : "Off", statusColor: isConnected ? "green" : "default" as any },
       ];
 
       return (
@@ -610,8 +635,8 @@ const MachineCustomTab = () => {
           onVerifyPassword={verifyPassword}
           logs={logs}
           onRefreshData={fetchHvacData}
-          currentMode={utilMode}
-          currentStatus={utilStatus}
+          currentMode={headerMode}
+          currentStatus={headerStatus}
         />
       );
     }
