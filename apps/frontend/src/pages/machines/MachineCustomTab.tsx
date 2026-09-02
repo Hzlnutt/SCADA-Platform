@@ -3,6 +3,8 @@ import { useParams } from "react-router-dom";
 import HvacLayout, { type LogEntry } from "./HvacLayout";
 import { useAuthStore } from "../../store/auth.store";
 import { getJson, postJson } from "../../services/api.client";
+import { getSocket } from "../../services/socket.service";
+import { usePageActive } from "../../hooks/usePageActive";
 
 // Import diagram components
 import MachineAHU01Pid from "./diagrams/MachineAHU01Pid";
@@ -30,11 +32,97 @@ const maintenanceIcon = (
   </svg>
 );
 
+interface HvacRetainLiveState {
+  PLC1_AHU1_Utl?: {
+    ACT_RTx_1A?: number;
+    ACT_RHx_1A?: number;
+    ACT_RTx_1B?: number;
+    ACT_RHx_1B?: number;
+    ACT_RATx_1?: number;
+    ACT_RAHx_1?: number;
+    ACT_SF01_CAP?: number;
+    ACT_SF01_SPD?: number;
+    ACT_SF01_CUR?: number;
+    ACT_EH01_CAP?: number;
+    xIND_RUN_SF01?: boolean;
+    xIND_RUN_EH01?: boolean;
+    xIND_RUN_HF01?: boolean;
+    xIND_RUN_HP?: boolean;
+  };
+  PLC2_AHU2?: {
+    ACT_RTx_2A?: number;
+    ACT_RHx_2A?: number;
+    ACT_RTx_2B?: number;
+    ACT_RHx_2B?: number;
+    ACT_RATx_2?: number;
+    ACT_RAHx_2?: number;
+    ACT_SF02_CAP?: number;
+    ACT_SF02A_SPD?: number;
+    ACT_SF02B_SPD?: number;
+    ACT_SF02B_CUR?: number;
+    ACT_EH02_CAP?: number;
+    xIND_RUN_SF02A?: boolean;
+    xIND_RUN_SF02B?: boolean;
+    xIND_RUN_EH02?: boolean;
+    xIND_RUN_CU02A?: boolean;
+    xIND_RUN_CU02B?: boolean;
+  };
+  PLC2_AHU3?: {
+    ACT_RTx_3A?: number;
+    ACT_RTx_3B?: number;
+  };
+}
+
+const DEFAULT_HVAC_RETAIN_LIVE: HvacRetainLiveState = {
+  PLC1_AHU1_Utl: {
+    ACT_RTx_1A: 40.46875,
+    xIND_RUN_EH01: true,
+    ACT_RTx_1B: 40.40625,
+    ACT_SF01_CAP: 90,
+    ACT_RHx_1B: 74.875,
+    ACT_RHx_1A: 76.8125,
+    ACT_EH01_CAP: 30,
+    xIND_RUN_HP: true,
+    ACT_SF01_CUR: 1.87649989128113,
+    xIND_RUN_SF01: true,
+    ACT_SF01_SPD: 1839.82495117188,
+    ACT_RATx_1: 40.0625,
+    xIND_RUN_HF01: true,
+    ACT_RAHx_1: 75.75
+  },
+  PLC2_AHU2: {
+    ACT_RTx_2B: 29.84375,
+    xIND_RUN_EH02: false,
+    ACT_RTx_2A: 28.71875,
+    ACT_RHx_2A: 76.1875,
+    ACT_RHx_2B: 70.125,
+    ACT_SF02A_SPD: 1828.7099609375,
+    ACT_SF02_CAP: 90,
+    ACT_SF02B_SPD: 1846.26000976563,
+    xIND_RUN_SF02A: true,
+    ACT_RATx_2: 30.1625003814697,
+    xIND_RUN_SF02B: true,
+    ACT_RAHx_2: 68.1374969482422,
+    xIND_RUN_CU02A: true,
+    ACT_SF02B_CUR: 1.5387499332428,
+    ACT_EH02_CAP: 0,
+    xIND_RUN_CU02B: true
+  },
+  PLC2_AHU3: {
+    ACT_RTx_3A: 26.25,
+    ACT_RTx_3B: 27.5625
+  }
+};
+
 const MachineCustomTab = () => {
   const { tabId, unitId } = useParams();
+  const isPageActive = usePageActive();
 
   const user = useAuthStore((state) => state.user);
   const currentUser = user?.name || "Admin";
+
+  // Real-time Live Telemetry from Ignition PLC APIs
+  const [hvacRetainLive, setHvacRetainLive] = useState<HvacRetainLiveState>(DEFAULT_HVAC_RETAIN_LIVE);
 
   // State untuk AHU-01
   const [ahu01Temp, setAhu01Temp] = useState(46.8);
@@ -68,53 +156,94 @@ const MachineCustomTab = () => {
 
   const fetchHvacData = useCallback(async () => {
     try {
-      const statesRes = await getJson<{ data: Record<string, any> }>("/operations/hvac/states");
-      const logsRes = await getJson<{ data: any[] }>("/operations/hvac/logs");
+      const [statesRes, logsRes, liveRes] = await Promise.all([
+        getJson<{ data: Record<string, any> }>("/operations/hvac/states").catch(() => null),
+        getJson<{ data: any[] }>("/operations/hvac/logs").catch(() => null),
+        getJson<{ data: HvacRetainLiveState }>("/operations/hvac/retained-sample/live").catch(() => null)
+      ]);
 
-      const states = statesRes.data;
-      if (states["hvac_state_ahu-01"]) {
-        const s = states["hvac_state_ahu-01"];
-        setAhu01Temp(s.temp);
-        setAhu01Humid(s.humid);
-        setAhu01Mode(s.mode);
-        setAhu01Status(s.status);
-      }
-      if (states["hvac_state_ahu-02"]) {
-        const s = states["hvac_state_ahu-02"];
-        setAhu02Temp(s.temp);
-        setAhu02Humid(s.humid);
-        setAhu02Mode(s.mode);
-        setAhu02Status(s.status);
-      }
-      if (states["hvac_state_ahu-03"]) {
-        const s = states["hvac_state_ahu-03"];
-        setAhu03Temp(s.temp);
-        setAhu03Humid(s.humid);
-        setAhu03Mode(s.mode);
-        setAhu03Status(s.status);
-      }
-      if (states["hvac_state_utility"]) {
-        const s = states["hvac_state_utility"];
-        setUtilTemp(s.temp);
-        setUtilHumid(s.humid);
-        setUtilMode(s.mode);
-        setUtilStatus(s.status);
+      if (statesRes?.data) {
+        const states = statesRes.data;
+        if (states["hvac_state_ahu-01"]) {
+          const s = states["hvac_state_ahu-01"];
+          setAhu01Temp(s.temp);
+          setAhu01Humid(s.humid);
+          setAhu01Mode(s.mode);
+          setAhu01Status(s.status);
+        }
+        if (states["hvac_state_ahu-02"]) {
+          const s = states["hvac_state_ahu-02"];
+          setAhu02Temp(s.temp);
+          setAhu02Humid(s.humid);
+          setAhu02Mode(s.mode);
+          setAhu02Status(s.status);
+        }
+        if (states["hvac_state_ahu-03"]) {
+          const s = states["hvac_state_ahu-03"];
+          setAhu03Temp(s.temp);
+          setAhu03Humid(s.humid);
+          setAhu03Mode(s.mode);
+          setAhu03Status(s.status);
+        }
+        if (states["hvac_state_utility"]) {
+          const s = states["hvac_state_utility"];
+          setUtilTemp(s.temp);
+          setUtilHumid(s.humid);
+          setUtilMode(s.mode);
+          setUtilStatus(s.status);
+        }
       }
 
-      if (logsRes.data) {
+      if (logsRes?.data) {
         setLogs(logsRes.data.map((l: any) => ({
           ...l,
           timestamp: new Date(l.timestamp)
         })));
+      }
+
+      if (liveRes?.data) {
+        setHvacRetainLive(prev => ({
+          PLC1_AHU1_Utl: { ...prev.PLC1_AHU1_Utl, ...liveRes.data.PLC1_AHU1_Utl },
+          PLC2_AHU2: { ...prev.PLC2_AHU2, ...liveRes.data.PLC2_AHU2 },
+          PLC2_AHU3: { ...prev.PLC2_AHU3, ...liveRes.data.PLC2_AHU3 }
+        }));
       }
     } catch (error) {
       console.error("Failed to fetch HVAC data:", error);
     }
   }, []);
 
+  // Polling and WebSocket listener for live data
   useEffect(() => {
     fetchHvacData();
-  }, [fetchHvacData, tabId, unitId]);
+
+    const socket = getSocket();
+    const handleLive = (data: HvacRetainLiveState) => {
+      if (!data) return;
+      setHvacRetainLive(prev => ({
+        PLC1_AHU1_Utl: { ...prev.PLC1_AHU1_Utl, ...(data.PLC1_AHU1_Utl || {}) },
+        PLC2_AHU2: { ...prev.PLC2_AHU2, ...(data.PLC2_AHU2 || {}) },
+        PLC2_AHU3: { ...prev.PLC2_AHU3, ...(data.PLC2_AHU3 || {}) }
+      }));
+    };
+
+    socket.on("hvac:retain_live", handleLive);
+    socket.on("hvac:live_update", handleLive);
+
+    // Fallback polling every 5s when page active
+    let interval: ReturnType<typeof setInterval> | null = null;
+    if (isPageActive) {
+      interval = setInterval(() => {
+        fetchHvacData();
+      }, 5000);
+    }
+
+    return () => {
+      socket.off("hvac:retain_live", handleLive);
+      socket.off("hvac:live_update", handleLive);
+      if (interval) clearInterval(interval);
+    };
+  }, [fetchHvacData, isPageActive, tabId, unitId]);
 
   useEffect(() => {
     return () => {
@@ -191,11 +320,16 @@ const MachineCustomTab = () => {
   if (unitId === "hvac-qc-retained-sample") {
     // ----- AHU-01 -----
     if (tabId === "ahu-01") {
+      const plc1 = hvacRetainLive.PLC1_AHU1_Utl || {};
+      const isSfRunning = plc1.xIND_RUN_SF01 !== undefined ? plc1.xIND_RUN_SF01 : (ahu01Status === "Running");
+      const isEhOn = plc1.xIND_RUN_EH01 !== undefined ? plc1.xIND_RUN_EH01 : (ahu01Status === "Running");
+      const isHfRunning = plc1.xIND_RUN_HF01 !== undefined ? plc1.xIND_RUN_HF01 : (ahu01Status === "Running");
+
       const systemMode = [
         { label: "Operating Mode", value: ahu01Mode, statusColor: ahu01Mode === "Auto" ? "cyan" : "yellow" as any },
-        { label: "Fan Status", value: ahu01Status, statusColor: ahu01Status === "Running" ? "green" : (ahu01Status === "Maintenance" ? "cyan" : "red") as any },
-        { label: "Electric Heater", value: ahu01Status === "Running" ? "On" : "Off", statusColor: ahu01Status === "Running" ? "green" : "default" as any },
-        { label: "Humidifier Fan Status", value: ahu01Status === "Running" ? "Running" : "Stopped", statusColor: ahu01Status === "Running" ? "green" : "red" as any },
+        { label: "Fan Status", value: isSfRunning ? "Running" : "Stopped", statusColor: isSfRunning ? "green" : "red" as any },
+        { label: "Electric Heater", value: isEhOn ? "On" : "Off", statusColor: isEhOn ? "green" : "default" as any },
+        { label: "Humidifier Fan Status", value: isHfRunning ? "Running" : "Stopped", statusColor: isHfRunning ? "green" : "red" as any },
       ];
 
       const setpoints = [
@@ -250,7 +384,14 @@ const MachineCustomTab = () => {
           roomType="ACCELERATED STABILITY ROOM"
           targetTemp="40°C ± 2°C"
           targetHumidity="75%RH ± 5%"
-          diagramComponent={<MachineAHU01Pid tempSP={ahu01Temp} humiditySP={ahu01Humid} running={ahu01Status === "Running"} />}
+          diagramComponent={
+            <MachineAHU01Pid
+              tempSP={ahu01Temp}
+              humiditySP={ahu01Humid}
+              running={isSfRunning}
+              data={plc1}
+            />
+          }
           systemMode={systemMode}
           setpoints={setpoints}
           controlButtons={controlButtons}
@@ -266,15 +407,21 @@ const MachineCustomTab = () => {
 
     // ----- AHU-02 -----
     if (tabId === "ahu-02") {
-      const isRunning = ahu02Status === "Running";
+      const plc2 = hvacRetainLive.PLC2_AHU2 || {};
+      const isSf02aRunning = plc2.xIND_RUN_SF02A !== undefined ? plc2.xIND_RUN_SF02A : (ahu02Status === "Running");
+      const isSf02bRunning = plc2.xIND_RUN_SF02B !== undefined ? plc2.xIND_RUN_SF02B : (ahu02Status === "Running");
+      const isCu02aActive = plc2.xIND_RUN_CU02A !== undefined ? plc2.xIND_RUN_CU02A : (ahu02Status === "Running");
+      const isCu02bActive = plc2.xIND_RUN_CU02B !== undefined ? plc2.xIND_RUN_CU02B : (ahu02Status === "Running");
+      const isEh02On = plc2.xIND_RUN_EH02 !== undefined ? plc2.xIND_RUN_EH02 : false;
+
       const systemMode = [
         { label: "Operating Mode", value: ahu02Mode, statusColor: ahu02Mode === "Auto" ? "cyan" : "yellow" as any },
-        { label: "Fan-02 A Status", value: ahu02Status, statusColor: isRunning ? "green" : (ahu02Status === "Maintenance" ? "cyan" : "red") as any },
-        { label: "Fan-02 B Status", value: ahu02Status, statusColor: isRunning ? "green" : (ahu02Status === "Maintenance" ? "cyan" : "red") as any },
-        { label: "CU-02 A Status", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
-        { label: "CU-02 B Status", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
-        { label: "Electric Heater Status", value: isRunning ? "On" : "Off", statusColor: isRunning ? "green" : "default" as any },
-        { label: "Humidity Fan Status", value: isRunning ? "Running" : "Stopped", statusColor: isRunning ? "green" : "red" as any },
+        { label: "Fan-02 A Status", value: isSf02aRunning ? "Running" : "Stopped", statusColor: isSf02aRunning ? "green" : "red" as any },
+        { label: "Fan-02 B Status", value: isSf02bRunning ? "Running" : "Stopped", statusColor: isSf02bRunning ? "green" : "red" as any },
+        { label: "CU-02 A Status", value: isCu02aActive ? "Active" : "Inactive", statusColor: isCu02aActive ? "cyan" : "default" as any },
+        { label: "CU-02 B Status", value: isCu02bActive ? "Active" : "Inactive", statusColor: isCu02bActive ? "cyan" : "default" as any },
+        { label: "Electric Heater Status", value: isEh02On ? "On" : "Off", statusColor: isEh02On ? "green" : "default" as any },
+        { label: "Humidity Fan Status", value: "Running", statusColor: "green" as any },
       ];
 
       const setpoints = [
@@ -329,7 +476,14 @@ const MachineCustomTab = () => {
           roomType="LONGTERM STABILITY ROOM"
           targetTemp="30°C ± 2°C"
           targetHumidity="75%RH ± 5%"
-          diagramComponent={<MachineAHU02Pid tempSP={ahu02Temp} humiditySP={ahu02Humid} running={isRunning} />}
+          diagramComponent={
+            <MachineAHU02Pid
+              tempSP={ahu02Temp}
+              humiditySP={ahu02Humid}
+              running={isSf02aRunning || isSf02bRunning}
+              data={plc2}
+            />
+          }
           systemMode={systemMode}
           setpoints={setpoints}
           controlButtons={controlButtons}
@@ -345,10 +499,11 @@ const MachineCustomTab = () => {
 
     // ----- AHU-03 -----
     if (tabId === "ahu-03") {
+      const plc3 = hvacRetainLive.PLC2_AHU3 || {};
       const isRunning = ahu03Status === "Running";
       const systemMode = [
         { label: "Operating Mode", value: ahu03Mode, statusColor: ahu03Mode === "Auto" ? "cyan" : "yellow" as any },
-        { label: "Fan Status", value: ahu03Status, statusColor: isRunning ? "green" : (ahu03Status === "Maintenance" ? "cyan" : "red") as any },
+        { label: "Fan Status", value: isRunning ? "Running" : "Stopped", statusColor: isRunning ? "green" : (ahu03Status === "Maintenance" ? "cyan" : "red") as any },
         { label: "Cooling", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
       ];
 
@@ -404,7 +559,14 @@ const MachineCustomTab = () => {
           roomType="REF.RETENTION ROOM"
           targetTemp="Max 30°C"
           targetHumidity="55%RH ± 10%"
-          diagramComponent={<MachineAHU03Pid tempSP={ahu03Temp} humiditySP={ahu03Humid} running={isRunning} />}
+          diagramComponent={
+            <MachineAHU03Pid
+              tempSP={ahu03Temp}
+              humiditySP={ahu03Humid}
+              running={isRunning}
+              data={plc3}
+            />
+          }
           systemMode={systemMode}
           setpoints={setpoints}
           controlButtons={controlButtons}
@@ -420,11 +582,13 @@ const MachineCustomTab = () => {
 
     // ----- UTILITY -----
     if (tabId === "utility") {
-      const isRunning = utilStatus === "Running";
+      const plc1 = hvacRetainLive.PLC1_AHU1_Utl || {};
+      const isHpRunning = plc1.xIND_RUN_HP !== undefined ? plc1.xIND_RUN_HP : (utilStatus === "Running");
+
       const systemMode = [
         { label: "Operating Mode", value: utilMode, statusColor: utilMode === "Auto" ? "cyan" : "yellow" as any },
-        { label: "Pump Status", value: utilStatus, statusColor: isRunning ? "green" : (utilStatus === "Maintenance" ? "cyan" : "red") as any },
-        { label: "UV Lamp Status", value: isRunning ? "Active" : "Off", statusColor: isRunning ? "green" : "default" as any },
+        { label: "Pump Status", value: isHpRunning ? "Running" : "Stopped", statusColor: isHpRunning ? "green" : "red" as any },
+        { label: "UV Lamp Status", value: "Active", statusColor: "green" as any },
       ];
 
       return (
@@ -433,7 +597,14 @@ const MachineCustomTab = () => {
           roomType="CENTRAL UTILITY LOOP"
           targetTemp="22°C ± 2°C"
           targetHumidity="55%RH ± 5%"
-          diagramComponent={<MachineUtilityPid tempSP={utilTemp} humiditySP={utilHumid} running={isRunning} />}
+          diagramComponent={
+            <MachineUtilityPid
+              tempSP={utilTemp}
+              humiditySP={utilHumid}
+              running={isHpRunning}
+              data={plc1}
+            />
+          }
           systemMode={systemMode}
           currentUser={currentUser}
           onVerifyPassword={verifyPassword}

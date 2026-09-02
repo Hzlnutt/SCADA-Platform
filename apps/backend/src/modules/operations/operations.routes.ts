@@ -13,7 +13,8 @@ import {
   updateShiftReportHandler,
   getHvacStatesHandler,
   updateHvacStateHandler,
-  getHvacLogsHandler
+  getHvacLogsHandler,
+  getHvacRetainLiveHandler
 } from "./operations.controller";
 
 export const operationsRouter = Router();
@@ -131,6 +132,12 @@ operationsRouter.get(
   "/operations/hvac/states",
   authenticate,
   getHvacStatesHandler
+);
+
+operationsRouter.get(
+  "/operations/hvac/retained-sample/live",
+  authenticate,
+  getHvacRetainLiveHandler
 );
 
 operationsRouter.post(

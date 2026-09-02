@@ -25,6 +25,92 @@ let pfPollingInterval: NodeJS.Timeout | null = null;
 let incomingElectricityPollingInterval: NodeJS.Timeout | null = null;
 let incomingElectricityRollupInterval: NodeJS.Timeout | null = null;
 
+export interface HvacRetainLiveState {
+  PLC1_AHU1_Utl: {
+    ACT_RTx_1A?: number;
+    ACT_RHx_1A?: number;
+    ACT_RTx_1B?: number;
+    ACT_RHx_1B?: number;
+    ACT_RATx_1?: number;
+    ACT_RAHx_1?: number;
+    ACT_SF01_CAP?: number;
+    ACT_SF01_SPD?: number;
+    ACT_SF01_CUR?: number;
+    ACT_EH01_CAP?: number;
+    xIND_RUN_SF01?: boolean;
+    xIND_RUN_EH01?: boolean;
+    xIND_RUN_HF01?: boolean;
+    xIND_RUN_HP?: boolean;
+  };
+  PLC2_AHU2: {
+    ACT_RTx_2A?: number;
+    ACT_RHx_2A?: number;
+    ACT_RTx_2B?: number;
+    ACT_RHx_2B?: number;
+    ACT_RATx_2?: number;
+    ACT_RAHx_2?: number;
+    ACT_SF02_CAP?: number;
+    ACT_SF02A_SPD?: number;
+    ACT_SF02B_SPD?: number;
+    ACT_SF02B_CUR?: number;
+    ACT_EH02_CAP?: number;
+    xIND_RUN_SF02A?: boolean;
+    xIND_RUN_SF02B?: boolean;
+    xIND_RUN_EH02?: boolean;
+    xIND_RUN_CU02A?: boolean;
+    xIND_RUN_CU02B?: boolean;
+  };
+  PLC2_AHU3: {
+    ACT_RTx_3A?: number;
+    ACT_RTx_3B?: number;
+  };
+  t_stamp?: Date | string;
+}
+
+let latestHvacRetainLiveState: HvacRetainLiveState = {
+  PLC1_AHU1_Utl: {
+    ACT_RTx_1A: 40.46875,
+    xIND_RUN_EH01: true,
+    ACT_RTx_1B: 40.40625,
+    ACT_SF01_CAP: 90,
+    ACT_RHx_1B: 74.875,
+    ACT_RHx_1A: 76.8125,
+    ACT_EH01_CAP: 30,
+    xIND_RUN_HP: true,
+    ACT_SF01_CUR: 1.87649989128113,
+    xIND_RUN_SF01: true,
+    ACT_SF01_SPD: 1839.82495117188,
+    ACT_RATx_1: 40.0625,
+    xIND_RUN_HF01: true,
+    ACT_RAHx_1: 75.75
+  },
+  PLC2_AHU2: {
+    ACT_RTx_2B: 29.84375,
+    xIND_RUN_EH02: false,
+    ACT_RTx_2A: 28.71875,
+    ACT_RHx_2A: 76.1875,
+    ACT_RHx_2B: 70.125,
+    ACT_SF02A_SPD: 1828.7099609375,
+    ACT_SF02_CAP: 90,
+    ACT_SF02B_SPD: 1846.26000976563,
+    xIND_RUN_SF02A: true,
+    ACT_RATx_2: 30.1625003814697,
+    xIND_RUN_SF02B: true,
+    ACT_RAHx_2: 68.1374969482422,
+    xIND_RUN_CU02A: true,
+    ACT_SF02B_CUR: 1.5387499332428,
+    ACT_EH02_CAP: 0,
+    xIND_RUN_CU02B: true
+  },
+  PLC2_AHU3: {
+    ACT_RTx_3A: 26.25,
+    ACT_RTx_3B: 27.5625
+  },
+  t_stamp: new Date()
+};
+
+export const getHvacRetainLiveState = (): HvacRetainLiveState => latestHvacRetainLiveState;
+
 const parsePlnApi = (data: any, ts: Date) => {
   return {
     t_stamp: ts,
@@ -994,6 +1080,42 @@ export const startIncomingElectricityPolling = () => {
       }
     } catch (err: any) {
       logger.warn(`Incoming PLTS polling failed: ${err.message}`);
+    }
+
+    // Fetch and store HVAC Retained Sample PLCs (PLC1_AHU1_Utl, PLC2_AHU2, PLC2_AHU3)
+    try {
+      const [plc1Data, plc2_2Data, plc2_3Data] = await Promise.all([
+        fetchApiData("hvac_retain_plc1").catch(() => null),
+        fetchApiData("hvac_retain_plc2_2").catch(() => null),
+        fetchApiData("hvac_retain_plc2_3").catch(() => null),
+      ]);
+
+      if (plc1Data || plc2_2Data || plc2_3Data) {
+        const retainLive: HvacRetainLiveState = {
+          PLC1_AHU1_Utl: {
+            ...latestHvacRetainLiveState.PLC1_AHU1_Utl,
+            ...(plc1Data?.PLC1_AHU1_Utl || (plc1Data as any) || {})
+          },
+          PLC2_AHU2: {
+            ...latestHvacRetainLiveState.PLC2_AHU2,
+            ...(plc2_2Data?.PLC2_AHU2 || (plc2_2Data as any) || {})
+          },
+          PLC2_AHU3: {
+            ...latestHvacRetainLiveState.PLC2_AHU3,
+            ...(plc2_3Data?.PLC2_AHU3 || (plc2_3Data as any) || {})
+          },
+          t_stamp: ts
+        };
+        latestHvacRetainLiveState = retainLive;
+
+        const io = getSocketServer();
+        if (io) {
+          io.emit("hvac:retain_live", retainLive);
+          io.emit("hvac:live_update", retainLive);
+        }
+      }
+    } catch (err: any) {
+      logger.warn(`HVAC Retained Sample polling failed: ${err.message}`);
     }
 
     if (isNewMinute) {

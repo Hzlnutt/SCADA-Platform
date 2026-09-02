@@ -369,3 +369,17 @@ export const getHvacLogsHandler = async (
     next(err);
   }
 };
+
+export const getHvacRetainLiveHandler = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { getHvacRetainLiveState } = await import("../../core/scheduler");
+    const data = getHvacRetainLiveState();
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+};

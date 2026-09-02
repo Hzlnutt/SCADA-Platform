@@ -596,6 +596,30 @@ export const getDefaultSensorConfigs = (unitId: string): ConfigTagRow[] => {
     ];
   }
 
+  if (unitId === "hvac-qc-retained-sample") {
+    return [
+      // AHU-01
+      { tagKey: "hvac/ahu01_temp_a", tagName: "AHU-01 Room Temp A (ACT_RTx_1A)", lowLimit: 38.0, baseline: 40.0, highLimit: 42.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "hvac/ahu01_humid_a", tagName: "AHU-01 Room Humidity A (ACT_RHx_1A)", lowLimit: 70.0, baseline: 75.0, highLimit: 80.0, unit: "%RH", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "hvac/ahu01_temp_b", tagName: "AHU-01 Room Temp B (ACT_RTx_1B)", lowLimit: 38.0, baseline: 40.0, highLimit: 42.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "hvac/ahu01_humid_b", tagName: "AHU-01 Room Humidity B (ACT_RHx_1B)", lowLimit: 70.0, baseline: 75.0, highLimit: 80.0, unit: "%RH", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "hvac/ahu01_rat", tagName: "AHU-01 Return Air Temp (ACT_RATx_1)", lowLimit: 38.0, baseline: 40.0, highLimit: 42.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "hvac/ahu01_rah", tagName: "AHU-01 Return Air Humidity (ACT_RAHx_1)", lowLimit: 70.0, baseline: 75.0, highLimit: 80.0, unit: "%RH", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "hvac/ahu01_sf_speed", tagName: "AHU-01 SF Speed (ACT_SF01_SPD)", lowLimit: 1000.0, baseline: 1800.0, highLimit: 2200.0, unit: "rpm", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "hvac/ahu01_sf_current", tagName: "AHU-01 SF Current (ACT_SF01_CUR)", lowLimit: 0, baseline: 1.8, highLimit: 5.0, unit: "A", enableAlert: true, suppressAlert: false, direction: "above" },
+      // AHU-02
+      { tagKey: "hvac/ahu02_temp_a", tagName: "AHU-02 Room Temp A (ACT_RTx_2A)", lowLimit: 26.0, baseline: 28.0, highLimit: 32.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "hvac/ahu02_humid_a", tagName: "AHU-02 Room Humidity A (ACT_RHx_2A)", lowLimit: 70.0, baseline: 75.0, highLimit: 80.0, unit: "%RH", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "hvac/ahu02_temp_b", tagName: "AHU-02 Room Temp B (ACT_RTx_2B)", lowLimit: 26.0, baseline: 28.0, highLimit: 32.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "hvac/ahu02_humid_b", tagName: "AHU-02 Room Humidity B (ACT_RHx_2B)", lowLimit: 65.0, baseline: 70.0, highLimit: 75.0, unit: "%RH", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "hvac/ahu02_rat", tagName: "AHU-02 Return Air Temp (ACT_RATx_2)", lowLimit: 26.0, baseline: 30.0, highLimit: 34.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "hvac/ahu02_rah", tagName: "AHU-02 Return Air Humidity (ACT_RAHx_2)", lowLimit: 60.0, baseline: 68.0, highLimit: 75.0, unit: "%RH", enableAlert: true, suppressAlert: false, direction: "above" },
+      // AHU-03
+      { tagKey: "hvac/ahu03_temp_a", tagName: "AHU-03 Room Temp A (ACT_RTx_3A)", lowLimit: 20.0, baseline: 26.0, highLimit: 30.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" },
+      { tagKey: "hvac/ahu03_temp_b", tagName: "AHU-03 Room Temp B (ACT_RTx_3B)", lowLimit: 20.0, baseline: 27.0, highLimit: 30.0, unit: "°C", enableAlert: true, suppressAlert: false, direction: "above" }
+    ];
+  }
+
   const isCooling = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
   if (!isCooling) {
     return [

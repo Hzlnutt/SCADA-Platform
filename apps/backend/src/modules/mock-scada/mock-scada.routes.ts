@@ -139,3 +139,56 @@ mockScadaRouter.get("/system/webdev/Utility_Dashboard/electric_plts", (_req, res
     }
   });
 });
+
+mockScadaRouter.get("/system/webdev/Utility_Dashboard/hvac_retain_plc1", (_req, res) => {
+  res.json({
+    PLC1_AHU1_Utl: {
+      ACT_RTx_1A: 40.46875,
+      xIND_RUN_EH01: true,
+      ACT_RTx_1B: 40.40625,
+      ACT_SF01_CAP: 90,
+      ACT_RHx_1B: 74.875,
+      ACT_RHx_1A: 76.8125,
+      ACT_EH01_CAP: 30,
+      xIND_RUN_HP: true,
+      ACT_SF01_CUR: 1.87649989128113,
+      xIND_RUN_SF01: true,
+      ACT_SF01_SPD: 1839.82495117188,
+      ACT_RATx_1: 40.0625,
+      xIND_RUN_HF01: true,
+      ACT_RAHx_1: 75.75
+    }
+  });
+});
+
+mockScadaRouter.get("/system/webdev/Utility_Dashboard/hvac_retain_plc2_2", (_req, res) => {
+  res.json({
+    PLC2_AHU2: {
+      ACT_RTx_2B: 29.84375,
+      xIND_RUN_EH02: false,
+      ACT_RTx_2A: 28.71875,
+      ACT_RHx_2A: 76.1875,
+      ACT_RHx_2B: 70.125,
+      ACT_SF02A_SPD: 1828.7099609375,
+      ACT_SF02_CAP: 90,
+      ACT_SF02B_SPD: 1846.26000976563,
+      xIND_RUN_SF02A: true,
+      ACT_RATx_2: 30.1625003814697,
+      xIND_RUN_SF02B: true,
+      ACT_RAHx_2: 68.1374969482422,
+      xIND_RUN_CU02A: true,
+      ACT_SF02B_CUR: 1.5387499332428,
+      ACT_EH02_CAP: 0,
+      xIND_RUN_CU02B: true
+    }
+  });
+});
+
+mockScadaRouter.get("/system/webdev/Utility_Dashboard/hvac_retain_plc2_3", (_req, res) => {
+  res.json({
+    PLC2_AHU3: {
+      ACT_RTx_3A: 26.25,
+      ACT_RTx_3B: 27.5625
+    }
+  });
+});

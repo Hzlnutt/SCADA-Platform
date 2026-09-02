@@ -4,7 +4,7 @@ import DuctSection from "../../../components/pid/DuctSection";
 import Partition from "../../../components/pid/Partition";
 import SupplyFan from "../../../components/pid/SupplyFan";
 import ThermalUnit from "../../../components/pid/ThermalUnit";
-import HumidityFan from "../../../components/pid/HumidityFan"
+import HumidityFan from "../../../components/pid/HumidityFan";
 import DifferentialPressureSwitch from "../../../components/pid/DPS";
 import Line from "../../../components/pid/Line";
 import TitleCard from "../../../components/pid/TitleCard";
@@ -19,13 +19,34 @@ interface PidProps {
   tempSP?: number;
   humiditySP?: number;
   running?: boolean;
+  data?: Record<string, any>;
 }
 
 export default function MachineAHU01Pid({
   tempSP = 46.8,
   humiditySP = 75.0,
   running = true,
+  data = {},
 }: PidProps) {
+  // Extract live parameters from PLC1_AHU1_Utl
+  const rt1A = data.ACT_RTx_1A !== undefined ? Number(data.ACT_RTx_1A) : 40.47;
+  const rh1A = data.ACT_RHx_1A !== undefined ? Number(data.ACT_RHx_1A) : 76.81;
+  const rt1B = data.ACT_RTx_1B !== undefined ? Number(data.ACT_RTx_1B) : 40.41;
+  const rh1B = data.ACT_RHx_1B !== undefined ? Number(data.ACT_RHx_1B) : 74.88;
+  const rat1 = data.ACT_RATx_1 !== undefined ? Number(data.ACT_RATx_1) : 40.06;
+  const rah1 = data.ACT_RAHx_1 !== undefined ? Number(data.ACT_RAHx_1) : 75.75;
+
+  const sf01Running = data.xIND_RUN_SF01 !== undefined ? Boolean(data.xIND_RUN_SF01) : running;
+  const sf01Cap = data.ACT_SF01_CAP !== undefined ? Number(data.ACT_SF01_CAP) : 90.0;
+  const sf01Spd = data.ACT_SF01_SPD !== undefined ? Number(data.ACT_SF01_SPD) : 1839.8;
+  const sf01Cur = data.ACT_SF01_CUR !== undefined ? Number(data.ACT_SF01_CUR) : 1.88;
+
+  const eh01Running = data.xIND_RUN_EH01 !== undefined ? Boolean(data.xIND_RUN_EH01) : running;
+  const eh01Cap = data.ACT_EH01_CAP !== undefined ? Number(data.ACT_EH01_CAP) : 30.0;
+
+  const hf01Running = data.xIND_RUN_HF01 !== undefined ? Boolean(data.xIND_RUN_HF01) : running;
+  const pf01Dp = data.PF_01_DP !== undefined ? Number(data.PF_01_DP) : 0.0;
+
   return (
     <svg
       viewBox="0 0 1000 600"
@@ -88,20 +109,19 @@ export default function MachineAHU01Pid({
       />
 
       <Partition x={235} y={60} width={14} height={190} color="#606060" />
-      <SupplyFan x={228} y={-10} w={350} h={350} running={running} />
+      <SupplyFan x={228} y={-10} w={350} h={350} running={sf01Running} />
 
       <ThermalUnit
         x={370}
         y={60}
         width={60}
         height={190}
-        running={running}
-
+        running={eh01Running}
       />
 
       <Partition x={440} y={60} width={14} height={190} color="#606060" />
 
-      <HumidityFan x={440} y={80} width={250} height={150} running={running} />
+      <HumidityFan x={440} y={80} width={250} height={150} running={hf01Running} />
 
       <DifferentialPressureSwitch
         x={800}
@@ -129,56 +149,59 @@ export default function MachineAHU01Pid({
         paddingTop={20}
       />
 
+      {/* R. THD-01 A */}
       <LabelComponent text="R. THD-01 A" x={820} y={300} w={120} h={35} hasBorder={true} fontSize={13} />
       <SensorIndicator
         x={820} y={340}
         w={120} h={35}
-        value={0.0} unit=" °C"
-        warningThreshold={0} alarmThreshold={0}
+        value={rt1A} unit=" °C"
+        warningThreshold={42} alarmThreshold={44}
         thresholdDirection="above"
         decimalPlaces={1}
       />
       <SensorIndicator
         x={820} y={380}
         w={120} h={35}
-        value={0.0} unit=" %RH"
-        warningThreshold={0} alarmThreshold={0}
+        value={rh1A} unit=" %RH"
+        warningThreshold={80} alarmThreshold={85}
         thresholdDirection="above"
         decimalPlaces={1}
       />
 
+      {/* R. THD-01 B */}
       <LabelComponent text="R. THD-01 B" x={820} y={430} w={120} h={35} hasBorder={true} fontSize={13} />
       <SensorIndicator
         x={820} y={470}
         w={120} h={35}
-        value={0.0} unit=" °C"
-        warningThreshold={0} alarmThreshold={0}
+        value={rt1B} unit=" °C"
+        warningThreshold={42} alarmThreshold={44}
         thresholdDirection="above"
         decimalPlaces={1}
       />
       <SensorIndicator
         x={820} y={510}
         w={120} h={35}
-        value={0.0} unit=" %RH"
-        warningThreshold={0} alarmThreshold={0}
+        value={rh1B} unit=" %RH"
+        warningThreshold={80} alarmThreshold={85}
         thresholdDirection="above"
         decimalPlaces={1}
       />
 
+      {/* R.A. THD-01 */}
       <LabelComponent text="R.A. THD-01" x={580} y={430} w={120} h={35} hasBorder={true} fontSize={13} />
       <SensorIndicator
         x={580} y={470}
         w={120} h={35}
-        value={0.0} unit=" °C"
-        warningThreshold={0} alarmThreshold={0}
+        value={rat1} unit=" °C"
+        warningThreshold={42} alarmThreshold={44}
         thresholdDirection="above"
         decimalPlaces={1}
       />
       <SensorIndicator
         x={580} y={510}
         w={120} h={35}
-        value={0.0} unit=" %RH"
-        warningThreshold={0} alarmThreshold={0}
+        value={rah1} unit=" %RH"
+        warningThreshold={80} alarmThreshold={85}
         thresholdDirection="above"
         decimalPlaces={1}
       />
@@ -206,69 +229,71 @@ export default function MachineAHU01Pid({
         on={running} dir="right" type="cold" />
       <PipeBend x={527} y={300} size={25} angle={0} />
 
+      {/* HF-01 */}
       <LabelComponent text="HF-01" x={558} y={60} w={65} h={25} hasBorder={true} fontSize={13} />
       <SensorIndicator
         x={512}
         y={60}
         w={40}
         h={25}
-        value={running} // true = ON (hijau), false = OFF (merah)
+        value={hf01Running} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
       />
 
+      {/* EH-01 */}
       <LabelComponent text="EH-01" x={416} y={300} w={65} h={25} hasBorder={true} fontSize={13} />
       <SensorIndicator
         x={370}
         y={300}
         w={40}
         h={25}
-        value={running} // true = ON (hijau), false = OFF (merah)
+        value={eh01Running} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
       />
-
       <SensorIndicator
         x={370} y={330}
         w={110} h={30}
-        value={0.0} unit=" %"
-        warningThreshold={0} alarmThreshold={0}
+        value={eh01Cap} unit=" %"
+        warningThreshold={100} alarmThreshold={100}
         thresholdDirection="above"
         decimalPlaces={1}
       />
 
       <LabelComponent text="PF-01" x={147} y={240} w={65} h={25} hasBorder={true} fontSize={13} />
 
+      {/* SF-01 */}
       <LabelComponent text="SF-01" x={185} y={300} w={65} h={25} hasBorder={true} fontSize={13} />
       <SensorIndicator
         x={140}
         y={300}
         w={40}
         h={25}
-        value={running} // true = ON (hijau), false = OFF (merah)
+        value={sf01Running} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
       />
-
       <SensorIndicator
         x={140} y={330}
         w={110} h={30}
-        value={0.0} unit=" %"
-        warningThreshold={0} alarmThreshold={0}
+        value={sf01Cap} unit=" %"
+        warningThreshold={100} alarmThreshold={100}
         thresholdDirection="above"
         decimalPlaces={1}
       />
       <SensorIndicator
         x={140} y={365}
         w={110} h={30}
-        value={0.0} unit=" rpm"
-        warningThreshold={0} alarmThreshold={0}
+        value={sf01Spd} unit=" rpm"
+        warningThreshold={2000} alarmThreshold={2200}
         thresholdDirection="above"
+        decimalPlaces={0}
       />
       <SensorIndicator
         x={140} y={400}
         w={110} h={30}
-        value={0.0} unit=" A"
-        warningThreshold={0} alarmThreshold={0}
+        value={sf01Cur} unit=" A"
+        warningThreshold={5} alarmThreshold={8}
         thresholdDirection="above"
-        decimalPlaces={1}
+        decimalPlaces={2}
       />
 
       <DashedLine x={252} y={312} w={50} h={0} />
@@ -291,8 +316,8 @@ export default function MachineAHU01Pid({
       <SensorIndicator
         x={140} y={480}
         w={110} h={30}
-        value={0.0} unit=" Pa"
-        warningThreshold={0} alarmThreshold={0}
+        value={pf01Dp} unit=" Pa"
+        warningThreshold={250} alarmThreshold={300}
         thresholdDirection="above"
         decimalPlaces={1}
       />
