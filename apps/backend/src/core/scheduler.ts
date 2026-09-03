@@ -710,7 +710,6 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
 };
 
 let lastElectricityMinuteStr = "";
-let lastSolarHourStr = "";
 
 const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   const p1 = data?.POI_1 || {};
@@ -747,32 +746,6 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
     poi2,
     totalKwh: poi1.totalKwh + poi2.totalKwh
   };
-};
-
-const insertSolarHourlyTelemetry = async (
-  pool: any,
-  hourStr: string,
-  poi1Kwh: number | null,
-  poi2Kwh: number | null
-) => {
-  let totKwh: number | null = null;
-  if (poi1Kwh !== null || poi2Kwh !== null) {
-    totKwh = (poi1Kwh ?? 0) + (poi2Kwh ?? 0);
-  }
-  try {
-    await pool.query(
-      `INSERT INTO solar_telemetry (t_stamp, poi_1, poi_2, total)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (t_stamp) DO UPDATE SET
-         poi_1 = EXCLUDED.poi_1,
-         poi_2 = EXCLUDED.poi_2,
-         total = EXCLUDED.total;`,
-      [hourStr, poi1Kwh, poi2Kwh, totKwh]
-    );
-    logger.info({ hour: hourStr, poi1Kwh, poi2Kwh, totKwh }, "Saved hourly solar telemetry to Postgres");
-  } catch (err: any) {
-    logger.error(`Failed to insert hourly solar telemetry: ${err.message}`);
-  }
 };
 
 export const startIncomingElectricityPolling = () => {
@@ -981,35 +954,6 @@ export const startIncomingElectricityPolling = () => {
     }
 
     if (isNewMinute) {
-      const pool = getPostgresPool();
-      const p1Kwh = pltsParsed.poi1.status ? pltsParsed.poi1.totalKwh : null;
-      const p2Kwh = pltsParsed.poi2.status ? pltsParsed.poi2.totalKwh : null;
-      let totKwh: number | null = null;
-      if (p1Kwh !== null || p2Kwh !== null) {
-        totKwh = (p1Kwh ?? 0) + (p2Kwh ?? 0);
-      }
-      await pool.query(`
-        INSERT INTO solar_telemetry_minute (t_stamp, poi_1, poi_2, total)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (t_stamp) DO UPDATE SET
-          poi_1 = EXCLUDED.poi_1,
-          poi_2 = EXCLUDED.poi_2,
-          total = EXCLUDED.total;
-      `, [minuteTs, p1Kwh, p2Kwh, totKwh]).catch((err: any) => {
-        logger.warn(`Failed to insert solar_telemetry_minute: ${err.message}`);
-      });
-    }
-
-    // Check for top-of-hour recording to solar_telemetry (e.g. 10:00:00, 11:00:00)
-    const wibTime = new Date(ts.getTime() + 7 * 60 * 60 * 1000);
-    const padZero = (n: number) => String(n).padStart(2, "0");
-    const currentHourStr = `${wibTime.getUTCFullYear()}-${padZero(wibTime.getUTCMonth() + 1)}-${padZero(wibTime.getUTCDate())} ${padZero(wibTime.getUTCHours())}:00:00`;
-    if (currentHourStr !== lastSolarHourStr) {
-      lastSolarHourStr = currentHourStr;
-      const pool = getPostgresPool();
-      const p1Kwh = pltsParsed.poi1.status ? pltsParsed.poi1.totalKwh : null;
-      const p2Kwh = pltsParsed.poi2.status ? pltsParsed.poi2.totalKwh : null;
-      await insertSolarHourlyTelemetry(pool, currentHourStr, p1Kwh, p2Kwh);
       if (io) {
         io.emit("electricity:update");
         io.emit("solar:update");
@@ -1378,13 +1322,6 @@ export const runElectricityRollupAndCleanup = async () => {
             r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
             r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy
           ]);
-
-          // Sync to electricity_telemetry for dashboard overview (consistently insert even if active_energy is null)
-          await client.query(`DELETE FROM electricity_telemetry WHERE t_stamp = $1 AND id_device = $2`, [hourStartStr, "Cubicle_PLN_PM8000"]);
-          await client.query(`
-            INSERT INTO electricity_telemetry (t_stamp, electricity_kwh, id_device)
-            VALUES ($1, $2, $3)
-          `, [hourStartStr, r.active_energy ?? null, "Cubicle_PLN_PM8000"]);
         }
 
         // Delete minute records from buffer
@@ -1710,58 +1647,6 @@ export const runElectricityRollupAndCleanup = async () => {
       }
     }
 
-    // 5b. Rollup completed hours from solar_telemetry_minute -> solar_telemetry
-    const solarBuckets = await pool.query(`
-      SELECT 
-        to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
-      FROM solar_telemetry_minute
-      WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-      GROUP BY hour_bucket_str
-      ORDER BY hour_bucket_str ASC;
-    `);
-
-    for (const b of solarBuckets.rows) {
-      const hourStartStr = b.hour_bucket_str;
-      if (!hourStartStr) continue;
-
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        const aggRes = await client.query(`
-          SELECT 
-            MAX(poi_1) as poi_1,
-            MAX(poi_2) as poi_2,
-            MAX(total) as total
-          FROM solar_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
-
-        const r = aggRes.rows[0];
-        if (r && (r.poi_1 !== null || r.poi_2 !== null)) {
-          await client.query(`
-            INSERT INTO solar_telemetry (t_stamp, poi_1, poi_2, total)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (t_stamp) DO UPDATE SET
-              poi_1 = EXCLUDED.poi_1,
-              poi_2 = EXCLUDED.poi_2,
-              total = EXCLUDED.total;
-          `, [hourStartStr, r.poi_1, r.poi_2, r.total]);
-        }
-
-        await client.query(`
-          DELETE FROM solar_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
-
-        await client.query("COMMIT");
-      } catch (err: any) {
-        await client.query("ROLLBACK");
-        logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up solar_telemetry_minute hourly telemetry");
-      } finally {
-        client.release();
-      }
-    }
-
     // 6. Monthly Rollup
     const now = new Date();
     const yearMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}`;
@@ -1959,9 +1844,8 @@ export const startPostgresPolling = () => {
       const pool = getPostgresPool();
       const res = await pool.query(`
         SELECT GREATEST(
-          (SELECT MAX(t_stamp) FROM electricity_telemetry),
           (SELECT MAX(t_stamp) FROM electric_pln_telemetry),
-          (SELECT MAX(t_stamp) FROM solar_telemetry)
+          (SELECT MAX(t_stamp) FROM electric_plts_telemetry)
         ) AS max_ts;
       `);
       const maxTs = res.rows[0]?.max_ts;

@@ -52,21 +52,6 @@ export const ingestTelemetry = async (points: TelemetryPointInput[]) => {
   if (plnPoints.length > 0) {
     try {
       const pool = getPostgresPool();
-      
-      // Look for electricity_kwh in the incoming points
-      const kwhPoint = plnPoints.find(p => p.tagId.endsWith("/active_energy") || p.tagId.endsWith("/electricity_kwh"));
-      if (kwhPoint) {
-        const electricity_kwh = Number(kwhPoint.value);
-        if (!isNaN(electricity_kwh)) {
-          const ts = kwhPoint.ts ? new Date(kwhPoint.ts) : new Date();
-          
-          await pool.query(`
-            INSERT INTO electricity_telemetry (t_stamp, electricity_kwh, id_device)
-            VALUES ($1, $2, $3)
-          `, [ts, electricity_kwh, "Cubicle_PLN_PM8000"]);
-          console.log("Successfully synced electricity_kwh to PostgreSQL");
-        }
-      }
     } catch (err: any) {
       console.error("Failed to sync telemetry to PostgreSQL:", err.message);
     }

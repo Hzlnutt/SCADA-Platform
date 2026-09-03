@@ -103,17 +103,19 @@ export const getSolarAnalytics = async (
   try {
     const res = await pool.query(`
       SELECT 
-        t_stamp::text AS ts_text,
-        poi_1::float AS poi_1,
-        poi_2::float AS poi_2,
-        total::float AS total
-      FROM solar_telemetry
+        to_char(t_stamp, 'YYYY-MM-DD HH24:00:00') as ts_text,
+        MAX(CASE WHEN poi_id = 'POI_1' THEN total_kwh END)::float as poi_1,
+        MAX(CASE WHEN poi_id = 'POI_2' THEN total_kwh END)::float as poi_2,
+        (COALESCE(MAX(CASE WHEN poi_id = 'POI_1' THEN total_kwh END), 0) + 
+         COALESCE(MAX(CASE WHEN poi_id = 'POI_2' THEN total_kwh END), 0))::float as total
+      FROM electric_plts_telemetry
       WHERE t_stamp >= $1 AND t_stamp <= $2
-      ORDER BY t_stamp ASC
+      GROUP BY ts_text
+      ORDER BY ts_text ASC
     `, [fromQueryVal, toQueryVal]);
     records = res.rows;
   } catch (err) {
-    console.warn("Failed to query solar_telemetry:", err);
+    console.warn("Failed to query electric_plts_telemetry:", err);
   }
 
   // Live state is retrieved for real-time summary indicators and latest delta
@@ -273,16 +275,17 @@ export const getSolarAnalytics = async (
     try {
       const progRes = await pool.query(`
         SELECT 
-          (MAX(poi_1) - MIN(poi_1))::float as poi1_prog,
-          (MAX(poi_2) - MIN(poi_2))::float as poi2_prog,
-          (MAX(total) - MIN(total))::float as total_prog
-        FROM solar_telemetry_minute
+          poi_id,
+          (MAX(total_kwh) - MIN(total_kwh))::float as progressive_kwh
+        FROM electric_plts_telemetry_minute
         WHERE t_stamp >= $1 AND t_stamp < $2
+          AND total_kwh IS NOT NULL
+        GROUP BY poi_id
       `, [currentHourStart, nextHourStart]);
 
-      const poi1Prog = Math.max(0, progRes.rows[0]?.poi1_prog || 0);
-      const poi2Prog = Math.max(0, progRes.rows[0]?.poi2_prog || 0);
-      const totalProg = Math.max(0, progRes.rows[0]?.total_prog || (poi1Prog + poi2Prog));
+      const poi1Prog = Math.max(0, progRes.rows.find((r: any) => r.poi_id === "POI_1")?.progressive_kwh || 0);
+      const poi2Prog = Math.max(0, progRes.rows.find((r: any) => r.poi_id === "POI_2")?.progressive_kwh || 0);
+      const totalProg = poi1Prog + poi2Prog;
 
       hourlyPoi1[currentWibHour] = poi1Prog;
       hourlyPoi2[currentWibHour] = poi2Prog;

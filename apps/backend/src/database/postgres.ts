@@ -1018,45 +1018,11 @@ export const ensurePostgresTables = async () => {
         ) h
         LEFT JOIN cooling_tower_telemetry p ON p.t_stamp = h.t_stamp AND p.id_device = 'cooling-water-1'
         WHERE p.t_stamp IS NULL AND h.t_stamp IS NOT NULL;
-
-        INSERT INTO electricity_telemetry (t_stamp, electricity_kwh, id_device)
-        SELECT h.t_stamp, NULL, 'Cubicle_PLN_PM8000'
-        FROM (
-          SELECT generate_series(
-            (SELECT MIN(date_trunc('hour', t_stamp)) FROM electricity_telemetry),
-            (SELECT MAX(date_trunc('hour', t_stamp)) FROM electricity_telemetry),
-            INTERVAL '1 hour'
-          ) AS t_stamp
-        ) h
-        LEFT JOIN electricity_telemetry p ON p.t_stamp = h.t_stamp AND p.id_device = 'Cubicle_PLN_PM8000'
-        WHERE p.t_stamp IS NULL AND h.t_stamp IS NOT NULL;
       `);
       logger.info("Historical hourly telemetry gaps populated with NULL values successfully");
     } catch (err: any) {
       logger.warn({ err: err.message }, "Hourly gap filler check finished with notice");
     }
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS solar_telemetry (
-        id SERIAL PRIMARY KEY,
-        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
-        poi_1 NUMERIC,
-        poi_2 NUMERIC,
-        total NUMERIC
-      );
-      CREATE UNIQUE INDEX IF NOT EXISTS uq_solar_telemetry_tstamp ON solar_telemetry (t_stamp);
-      CREATE INDEX IF NOT EXISTS idx_solar_telemetry_time ON solar_telemetry (t_stamp DESC);
-
-      CREATE TABLE IF NOT EXISTS solar_telemetry_minute (
-        id SERIAL PRIMARY KEY,
-        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
-        poi_1 NUMERIC,
-        poi_2 NUMERIC,
-        total NUMERIC
-      );
-      CREATE UNIQUE INDEX IF NOT EXISTS uq_solar_minute_tstamp ON solar_telemetry_minute (t_stamp);
-      CREATE INDEX IF NOT EXISTS idx_solar_minute_ts ON solar_telemetry_minute (t_stamp DESC);
-    `).catch(() => {});
 
     logger.info("postgres tables ensured and migrated to NUMERIC successfully");
   } catch (err: any) {

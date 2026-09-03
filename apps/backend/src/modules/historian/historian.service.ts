@@ -68,10 +68,10 @@ export const getHistorianRangeFromPostgres = async (query: RangeQuery) => {
     "cooling/humidity": { table: "cooling_tower_telemetry", column: "humidity", minuteTable: "cooling_tower_telemetry_minute" },
 
     // Dashboard Utama
-    "utility/electricity": { table: "electricity_telemetry", column: "electricity_kwh", minuteTable: "electric_pln_telemetry_minute" },
+    "utility/electricity": { table: "electric_pln_telemetry", column: "active_energy", minuteTable: "electric_pln_telemetry_minute" },
     "utility/gas": { table: "gas_telemetry", column: "gas_sm3" },
     "utility/water": { table: "water_telemetry", column: "water_m3" },
-    "utility/solar": { table: "solar_telemetry", column: "solar_kwh" }
+    "utility/solar": { table: "electric_plts_telemetry", column: "total_kwh", minuteTable: "electric_plts_telemetry_minute" }
   };
 
   const mapping = tagMappings[query.tagId];
