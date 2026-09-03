@@ -515,17 +515,24 @@ const MachineCustomTab = () => {
 
     // ----- AHU-03 -----
     if (tabId === "ahu-03") {
+      const plc2 = hvacRetainLive.PLC2_AHU2 || {};
       const plc3 = hvacRetainLive.PLC2_AHU3 || {};
-      const isConnected = plc3.Connected !== undefined ? Boolean(plc3.Connected) : true;
-      const isRunning = isConnected && (ahu03Status === "Running");
 
-      const headerMode = isConnected ? ahu03Mode : "Manual";
-      const headerStatus = isConnected ? ahu03Status : "Stopped";
+      // AHU-03 running status is strictly linked 1-to-1 with AHU-02 (same PLC2 controller)
+      const isConnected = plc2.Connected !== undefined ? Boolean(plc2.Connected) : (plc3.Connected !== undefined ? Boolean(plc3.Connected) : true);
+      const isSf02aRunning = isConnected && (plc2.xIND_RUN_SF02A !== undefined ? Boolean(plc2.xIND_RUN_SF02A) : (ahu02Status === "Running"));
+      const isSf02bRunning = isConnected && (plc2.xIND_RUN_SF02B !== undefined ? Boolean(plc2.xIND_RUN_SF02B) : (ahu02Status === "Running"));
+      const isAhu2Running = isSf02aRunning || isSf02bRunning || (ahu02Status === "Running");
+
+      const headerMode = isConnected ? ahu02Mode : "Manual";
+      const headerStatus = isConnected
+        ? (isAhu2Running ? "Running" : (ahu02Status === "Maintenance" ? "Maintenance" : "Stopped"))
+        : "Stopped";
 
       const systemMode = [
         { label: "Operating Mode", value: headerMode, statusColor: headerMode === "Auto" ? "cyan" : "yellow" as any },
-        { label: "Fan Status", value: isRunning ? "Running" : "Stopped", statusColor: isRunning ? "green" : (headerStatus === "Maintenance" ? "cyan" : "red") as any },
-        { label: "Cooling", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
+        { label: "Fan Status", value: isAhu2Running ? "Running" : "Stopped", statusColor: isAhu2Running ? "green" : (headerStatus === "Maintenance" ? "cyan" : "red") as any },
+        { label: "Cooling", value: isAhu2Running ? "Active" : "Inactive", statusColor: isAhu2Running ? "cyan" : "default" as any },
       ];
 
       const setpoints = [
@@ -556,19 +563,28 @@ const MachineCustomTab = () => {
       const controlButtons = [
         {
           label: "START AHU",
-          onClick: () => updateHvacBackend("ahu-03", { status: "Running", mode: "Auto" }, "START AHU"),
+          onClick: async () => {
+            await updateHvacBackend("ahu-02", { status: "Running", mode: "Auto" }, "START AHU");
+            await updateHvacBackend("ahu-03", { status: "Running", mode: "Auto" }, "START AHU");
+          },
           variant: "green" as any,
           icon: startIcon
         },
         {
           label: "STOP AHU",
-          onClick: () => updateHvacBackend("ahu-03", { status: "Stopped", mode: "Manual" }, "STOP AHU"),
+          onClick: async () => {
+            await updateHvacBackend("ahu-02", { status: "Stopped", mode: "Manual" }, "STOP AHU");
+            await updateHvacBackend("ahu-03", { status: "Stopped", mode: "Manual" }, "STOP AHU");
+          },
           variant: "red" as any,
           icon: stopIcon
         },
         {
           label: "MAINTENANCE",
-          onClick: () => updateHvacBackend("ahu-03", { status: "Maintenance", mode: "Manual" }, "MAINTENANCE"),
+          onClick: async () => {
+            await updateHvacBackend("ahu-02", { status: "Maintenance", mode: "Manual" }, "MAINTENANCE");
+            await updateHvacBackend("ahu-03", { status: "Maintenance", mode: "Manual" }, "MAINTENANCE");
+          },
           variant: "blue" as any,
           icon: maintenanceIcon
         },
@@ -584,8 +600,12 @@ const MachineCustomTab = () => {
             <MachineAHU03Pid
               tempSP={ahu03Temp}
               humiditySP={ahu03Humid}
-              running={isRunning}
-              data={plc3}
+              running={isAhu2Running}
+              data={{
+                ...plc3,
+                isRunning: isAhu2Running,
+                Connected: isConnected
+              }}
             />
           }
           systemMode={systemMode}
