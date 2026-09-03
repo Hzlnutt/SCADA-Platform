@@ -1206,21 +1206,36 @@ export default function PowerDistribution() {
             </defs>
 
             {/* --- AUXILIARY POWER ROUTING (Rendered behind busbars so yellow busbar covers crossing lines) --- */}
-            {/* 1. Genset Natural Gas (95, 242) -> Feeds MDP-1.1 (120), MDP-1.2 (230), and MDP-2 (340) */}
+            {/* 1. Genset Natural Gas (95, 242) -> Feeds MDP-1.2 (183, 415) and branches to MDP-2 (293, 415) */}
             <path
-              d="M 95 242 L 95 345 L 340 345 M 120 345 L 120 360 M 230 345 L 230 360 M 340 345 L 340 360"
+              d="M 95 242 L 95 345 L 282 345 M 172 345 L 172 415 L 183 415 M 282 345 L 282 415 L 293 415"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
               strokeDasharray="4 3"
             />
-            <circle cx="120" cy="345" r="2.5" fill="#10b981" />
-            <circle cx="230" cy="345" r="2.5" fill="#10b981" />
-            <circle cx="340" cy="345" r="2.5" fill="#10b981" />
-
-            {/* 2. Solar PV POI-1 (475, 242) -> Feeds right side of MDP-3 (500, 415) */}
+            {/* Arrowhead into left side of MDP-1.2 */}
             <path
-              d="M 475 242 L 475 252 L 525 252 L 525 415 L 500 415"
+              d="M 172 415 L 183 415"
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="2"
+              markerEnd="url(#arrow-green)"
+            />
+            {/* Arrowhead on second branch into left side of MDP-2 */}
+            <path
+              d="M 282 415 L 293 415"
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="2"
+              markerEnd="url(#arrow-green)"
+            />
+            {/* Branch junction circle */}
+            <circle cx="172" cy="345" r="2.5" fill="#10b981" />
+
+            {/* 2. Solar PV POI-1 (475, 242) -> Feeds right side of MDP-3 (497, 415) */}
+            <path
+              d="M 475 242 L 475 252 L 525 252 L 525 415 L 497 415"
               fill="none"
               stroke="#ef4444"
               strokeWidth="2"
@@ -1415,11 +1430,11 @@ export default function PowerDistribution() {
 
           {/* ═══════════ FACTORY 1 TRANSFORMER CARDS (4 Units) ═══════════ */}
           {factory1.map((tx, idx) => {
-            const cardLeft = 70 + idx * 110;
+            const cardLeft = 73 + idx * 110;
             const hasData = tx.activePowerKw !== null;
             const loadPct = hasData && tx.capacityKva && tx.activePowerKw !== null ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null;
             return (
-              <div key={tx.id} className="absolute z-10" style={{ left: cardLeft, top: 360, width: 100 }}>
+              <div key={tx.id} className="absolute z-10" style={{ left: cardLeft, top: 360, width: 94 }}>
                 <div
                   onClick={() => setSelectedTx(tx)}
                   className={`rounded-2xl border p-2.5 text-center cursor-pointer transition-all duration-300 hover:shadow-lg ${
