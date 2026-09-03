@@ -20,10 +20,8 @@ export default function MachineUtilityPid({
   running = true,
   data = {},
 }: DiagramProps) {
-  const isConnected = data.Connected !== undefined ? Boolean(data.Connected) : true;
-  const isMachineRunning = isConnected && running;
-  const hpRunning = isMachineRunning && (data.xIND_RUN_HP !== undefined ? Boolean(data.xIND_RUN_HP) : running);
-  const uvRunning = isMachineRunning && (data.UV_LAMP !== undefined ? Boolean(data.UV_LAMP) : running);
+  const hpRunning = data.xIND_RUN_HP !== undefined ? Boolean(data.xIND_RUN_HP) : running;
+  const uvRunning = data.UV_LAMP !== undefined ? Boolean(data.UV_LAMP) : running;
 
   return (
     <svg
@@ -71,7 +69,6 @@ export default function MachineUtilityPid({
         h={25}
         value={hpRunning} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
-        isStopped={!isMachineRunning || !hpRunning}
       />
 
       {/* UV LAMP */}
@@ -83,7 +80,6 @@ export default function MachineUtilityPid({
         h={25}
         value={uvRunning} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
-        isStopped={!isMachineRunning || !uvRunning}
       />
     </svg>
   );

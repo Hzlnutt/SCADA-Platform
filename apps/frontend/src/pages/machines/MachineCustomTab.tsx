@@ -77,9 +77,44 @@ interface HvacRetainLiveState {
 }
 
 const DEFAULT_HVAC_RETAIN_LIVE: HvacRetainLiveState = {
-  PLC1_AHU1_Utl: {},
-  PLC2_AHU2: {},
-  PLC2_AHU3: {}
+  PLC1_AHU1_Utl: {
+    ACT_RTx_1A: 40.46875,
+    xIND_RUN_EH01: true,
+    ACT_RTx_1B: 40.40625,
+    ACT_SF01_CAP: 90,
+    ACT_RHx_1B: 74.875,
+    ACT_RHx_1A: 76.8125,
+    ACT_EH01_CAP: 30,
+    xIND_RUN_HP: true,
+    ACT_SF01_CUR: 1.87649989128113,
+    xIND_RUN_SF01: true,
+    ACT_SF01_SPD: 1839.82495117188,
+    ACT_RATx_1: 40.0625,
+    xIND_RUN_HF01: true,
+    ACT_RAHx_1: 75.75
+  },
+  PLC2_AHU2: {
+    ACT_RTx_2B: 29.84375,
+    xIND_RUN_EH02: false,
+    ACT_RTx_2A: 28.71875,
+    ACT_RHx_2A: 76.1875,
+    ACT_RHx_2B: 70.125,
+    ACT_SF02A_SPD: 1828.7099609375,
+    ACT_SF02_CAP: 90,
+    ACT_SF02B_SPD: 1846.26000976563,
+    xIND_RUN_SF02A: true,
+    ACT_RATx_2: 30.1625003814697,
+    xIND_RUN_SF02B: true,
+    ACT_RAHx_2: 68.1374969482422,
+    xIND_RUN_CU02A: true,
+    ACT_SF02B_CUR: 1.5387499332428,
+    ACT_EH02_CAP: 0,
+    xIND_RUN_CU02B: true
+  },
+  PLC2_AHU3: {
+    ACT_RTx_3A: 26.25,
+    ACT_RTx_3B: 27.5625
+  }
 };
 
 const MachineCustomTab = () => {
@@ -480,24 +515,17 @@ const MachineCustomTab = () => {
 
     // ----- AHU-03 -----
     if (tabId === "ahu-03") {
-      const plc2 = hvacRetainLive.PLC2_AHU2 || {};
       const plc3 = hvacRetainLive.PLC2_AHU3 || {};
+      const isConnected = plc3.Connected !== undefined ? Boolean(plc3.Connected) : true;
+      const isRunning = isConnected && (ahu03Status === "Running");
 
-      // AHU-03 running status is strictly linked 1-to-1 with AHU-02 (same PLC2 controller)
-      const isConnected = plc2.Connected !== undefined ? Boolean(plc2.Connected) : (plc3.Connected !== undefined ? Boolean(plc3.Connected) : true);
-      const isSf02aRunning = isConnected && (plc2.xIND_RUN_SF02A !== undefined ? Boolean(plc2.xIND_RUN_SF02A) : (ahu02Status === "Running"));
-      const isSf02bRunning = isConnected && (plc2.xIND_RUN_SF02B !== undefined ? Boolean(plc2.xIND_RUN_SF02B) : (ahu02Status === "Running"));
-      const isAhu2Running = isSf02aRunning || isSf02bRunning || (ahu02Status === "Running");
-
-      const headerMode = isConnected ? ahu02Mode : "Manual";
-      const headerStatus = isConnected
-        ? (isAhu2Running ? "Running" : (ahu02Status === "Maintenance" ? "Maintenance" : "Stopped"))
-        : "Stopped";
+      const headerMode = isConnected ? ahu03Mode : "Manual";
+      const headerStatus = isConnected ? ahu03Status : "Stopped";
 
       const systemMode = [
         { label: "Operating Mode", value: headerMode, statusColor: headerMode === "Auto" ? "cyan" : "yellow" as any },
-        { label: "Fan Status", value: isAhu2Running ? "Running" : "Stopped", statusColor: isAhu2Running ? "green" : (headerStatus === "Maintenance" ? "cyan" : "red") as any },
-        { label: "Cooling", value: isAhu2Running ? "Active" : "Inactive", statusColor: isAhu2Running ? "cyan" : "default" as any },
+        { label: "Fan Status", value: isRunning ? "Running" : "Stopped", statusColor: isRunning ? "green" : (headerStatus === "Maintenance" ? "cyan" : "red") as any },
+        { label: "Cooling", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
       ];
 
       const setpoints = [
@@ -528,28 +556,19 @@ const MachineCustomTab = () => {
       const controlButtons = [
         {
           label: "START AHU",
-          onClick: async () => {
-            await updateHvacBackend("ahu-02", { status: "Running", mode: "Auto" }, "START AHU");
-            await updateHvacBackend("ahu-03", { status: "Running", mode: "Auto" }, "START AHU");
-          },
+          onClick: () => updateHvacBackend("ahu-03", { status: "Running", mode: "Auto" }, "START AHU"),
           variant: "green" as any,
           icon: startIcon
         },
         {
           label: "STOP AHU",
-          onClick: async () => {
-            await updateHvacBackend("ahu-02", { status: "Stopped", mode: "Manual" }, "STOP AHU");
-            await updateHvacBackend("ahu-03", { status: "Stopped", mode: "Manual" }, "STOP AHU");
-          },
+          onClick: () => updateHvacBackend("ahu-03", { status: "Stopped", mode: "Manual" }, "STOP AHU"),
           variant: "red" as any,
           icon: stopIcon
         },
         {
           label: "MAINTENANCE",
-          onClick: async () => {
-            await updateHvacBackend("ahu-02", { status: "Maintenance", mode: "Manual" }, "MAINTENANCE");
-            await updateHvacBackend("ahu-03", { status: "Maintenance", mode: "Manual" }, "MAINTENANCE");
-          },
+          onClick: () => updateHvacBackend("ahu-03", { status: "Maintenance", mode: "Manual" }, "MAINTENANCE"),
           variant: "blue" as any,
           icon: maintenanceIcon
         },
@@ -565,12 +584,8 @@ const MachineCustomTab = () => {
             <MachineAHU03Pid
               tempSP={ahu03Temp}
               humiditySP={ahu03Humid}
-              running={isAhu2Running}
-              data={{
-                ...plc3,
-                isRunning: isAhu2Running,
-                Connected: isConnected
-              }}
+              running={isRunning}
+              data={plc3}
             />
           }
           systemMode={systemMode}

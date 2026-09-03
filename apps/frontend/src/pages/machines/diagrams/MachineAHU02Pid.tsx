@@ -30,37 +30,32 @@ export default function MachineAHU02Pid({
   running = true,
   data = {},
 }: PidProps) {
-  const isConnected = data.Connected !== undefined ? Boolean(data.Connected) : true;
-  const isSf02a = data.xIND_RUN_SF02A !== undefined ? Boolean(data.xIND_RUN_SF02A) : running;
-  const isSf02b = data.xIND_RUN_SF02B !== undefined ? Boolean(data.xIND_RUN_SF02B) : running;
-  const isMachineRunning = isConnected && (isSf02a || isSf02b || running);
+  // Extract live parameters from PLC2_AHU2
+  const rt2A = data.ACT_RTx_2A !== undefined ? Number(data.ACT_RTx_2A) : 28.72;
+  const rh2A = data.ACT_RHx_2A !== undefined ? Number(data.ACT_RHx_2A) : 76.19;
+  const rt2B = data.ACT_RTx_2B !== undefined ? Number(data.ACT_RTx_2B) : 29.84;
+  const rh2B = data.ACT_RHx_2B !== undefined ? Number(data.ACT_RHx_2B) : 70.13;
+  const rat2 = data.ACT_RATx_2 !== undefined ? Number(data.ACT_RATx_2) : 30.16;
+  const rah2 = data.ACT_RAHx_2 !== undefined ? Number(data.ACT_RAHx_2) : 68.14;
 
-  // Extract live parameters without dummy fallback numbers
-  const rt2A = isMachineRunning && typeof data.ACT_RTx_2A === "number" ? data.ACT_RTx_2A : null;
-  const rh2A = isMachineRunning && typeof data.ACT_RHx_2A === "number" ? data.ACT_RHx_2A : null;
-  const rt2B = isMachineRunning && typeof data.ACT_RTx_2B === "number" ? data.ACT_RTx_2B : null;
-  const rh2B = isMachineRunning && typeof data.ACT_RHx_2B === "number" ? data.ACT_RHx_2B : null;
-  const rat2 = isMachineRunning && typeof data.ACT_RATx_2 === "number" ? data.ACT_RATx_2 : null;
-  const rah2 = isMachineRunning && typeof data.ACT_RAHx_2 === "number" ? data.ACT_RAHx_2 : null;
+  const sf02aRunning = data.xIND_RUN_SF02A !== undefined ? Boolean(data.xIND_RUN_SF02A) : running;
+  const sf02aCap = data.ACT_SF02_CAP !== undefined ? Number(data.ACT_SF02_CAP) : 90.0;
+  const sf02aSpd = data.ACT_SF02A_SPD !== undefined ? Number(data.ACT_SF02A_SPD) : 1828.7;
+  const sf02aCur = data.ACT_SF02A_CUR !== undefined ? Number(data.ACT_SF02A_CUR) : (data.ACT_SF02B_CUR !== undefined ? Number(data.ACT_SF02B_CUR) : 1.54);
 
-  const sf02aRunning = isMachineRunning && (data.xIND_RUN_SF02A !== undefined ? Boolean(data.xIND_RUN_SF02A) : isMachineRunning);
-  const sf02aCap = isMachineRunning && typeof data.ACT_SF02_CAP === "number" ? data.ACT_SF02_CAP : null;
-  const sf02aSpd = isMachineRunning && typeof data.ACT_SF02A_SPD === "number" ? data.ACT_SF02A_SPD : null;
-  const sf02aCur = isMachineRunning && (typeof data.ACT_SF02A_CUR === "number" ? data.ACT_SF02A_CUR : (typeof data.ACT_SF02B_CUR === "number" ? data.ACT_SF02B_CUR : null));
+  const sf02bRunning = data.xIND_RUN_SF02B !== undefined ? Boolean(data.xIND_RUN_SF02B) : running;
+  const sf02bCap = data.ACT_SF02_CAP !== undefined ? Number(data.ACT_SF02_CAP) : 90.0;
+  const sf02bSpd = data.ACT_SF02B_SPD !== undefined ? Number(data.ACT_SF02B_SPD) : 1846.3;
+  const sf02bCur = data.ACT_SF02B_CUR !== undefined ? Number(data.ACT_SF02B_CUR) : 1.54;
 
-  const sf02bRunning = isMachineRunning && (data.xIND_RUN_SF02B !== undefined ? Boolean(data.xIND_RUN_SF02B) : isMachineRunning);
-  const sf02bCap = isMachineRunning && typeof data.ACT_SF02_CAP === "number" ? data.ACT_SF02_CAP : null;
-  const sf02bSpd = isMachineRunning && typeof data.ACT_SF02B_SPD === "number" ? data.ACT_SF02B_SPD : null;
-  const sf02bCur = isMachineRunning && typeof data.ACT_SF02B_CUR === "number" ? data.ACT_SF02B_CUR : null;
+  const eh02Running = data.xIND_RUN_EH02 !== undefined ? Boolean(data.xIND_RUN_EH02) : false;
+  const eh02Cap = data.ACT_EH02_CAP !== undefined ? Number(data.ACT_EH02_CAP) : 0.0;
 
-  const eh02Running = isMachineRunning && Boolean(data.xIND_RUN_EH02);
-  const eh02Cap = isMachineRunning && typeof data.ACT_EH02_CAP === "number" ? data.ACT_EH02_CAP : null;
+  const cu02aRunning = data.xIND_RUN_CU02A !== undefined ? Boolean(data.xIND_RUN_CU02A) : running;
+  const cu02bRunning = data.xIND_RUN_CU02B !== undefined ? Boolean(data.xIND_RUN_CU02B) : running;
 
-  const cu02aRunning = isMachineRunning && Boolean(data.xIND_RUN_CU02A);
-  const cu02bRunning = isMachineRunning && Boolean(data.xIND_RUN_CU02B);
-
-  const hf02Running = isMachineRunning && (data.xIND_RUN_HF02 !== undefined ? Boolean(data.xIND_RUN_HF02) : isMachineRunning);
-  const pf02Dp = isMachineRunning && typeof data.PF_02_DP === "number" ? data.PF_02_DP : (data.PF_02_DP ? Number(data.PF_02_DP) : null);
+  const hf02Running = data.xIND_RUN_HF02 !== undefined ? Boolean(data.xIND_RUN_HF02) : running;
+  const pf02Dp = data.PF_02_DP !== undefined ? Number(data.PF_02_DP) : 0.0;
 
   return (
     <svg
@@ -123,58 +118,52 @@ export default function MachineAHU02Pid({
         color="blue"
       />
 
-      <Partition x={190} y={60} width={14} height={190} color="#606060" />
-      <Partition x={535} y={60} width={14} height={190} color="#606060" />
-
-      <SupplyFan x={170} y={-40} w={280} h={280} running={sf02aRunning} />
-      <SupplyFan x={170} y={60} w={280} h={280} running={sf02bRunning} />
+      <Partition x={160} y={60} width={14} height={190} color="#606060" />
+      <SupplyFan x={157} y={-20} w={300} h={300} running={sf02aRunning} />
+      <SupplyFan x={157} y={70} w={300} h={300} running={sf02bRunning} />
+      <Partition x={250} y={60} width={14} height={190} color="#606060" />
 
       <ThermalUnit 
-        x={275} 
+        x={274} 
         y={60} 
         width={60} 
         height={190} 
-        running={isMachineRunning} 
+        running={cu02aRunning || cu02bRunning} 
         type="cooler"
       />
-
       <ThermalUnit 
-        x={425} 
+        x={370} 
         y={60} 
         width={60} 
         height={190} 
-        running={isMachineRunning} 
+        running={eh02Running} 
         type="heater"
       />
 
-      <HumidityFan x={400} y={80} width={250} height={150} running={hf02Running} />
+      <Partition x={440} y={60} width={14} height={190} color="#606060" />
 
-      <DifferentialPressureSwitch x={800} y={100} width={60} height={80} />
+      <HumidityFan x={420} y={55} width={250} height={100} running={hf02Running} />
+      <HumidityFan x={420} y={150} width={250} height={100} running={hf02Running} />
+
+      <DifferentialPressureSwitch
+        x={800}
+        y={100}
+        width={60}
+        height={80}
+      />
 
       <Line x={0} y={110} size={60} direction={0} strokeWidth={4} color="red" arrow="end" />
       <Line x={0} y={210} size={60} direction={0} strokeWidth={4} color="red" arrow="end" />
       <Line x={2} y={210} size={360} direction={90} strokeWidth={4} color="red" />
-      <Line x={0} y={570} size={820} direction={0} strokeWidth={4} color="red" />
-      <Line x={630} y={155} size={300} direction={0} strokeWidth={4} color="blue" />
-      <Line x={740} y={155} size={50} direction={90} strokeWidth={4} color="blue" arrow="end" />
+      <Line x={0} y={570} size={780} direction={0} strokeWidth={4} color="red" />
+      <Line x={620} y={155} size={262} direction={0} strokeWidth={4} color="blue" />
       <Line x={880} y={155} size={50} direction={90} strokeWidth={4} color="blue" arrow="end" />
-      <Line x={740} y={525} size={45} direction={90} strokeWidth={4} color="red" />
-      <Line x={880} y={525} size={45} direction={90} strokeWidth={4} color="red" />
+      <Line x={640} y={540} size={28} direction={90} strokeWidth={4} color="red" />
 
       <TitleCard 
-        x={680} y={225} 
-        width={120} height={300} 
-        title="LONGTERM RETENTION ROOM" 
-        fontSize={16}
-        color="#2C3E50"
-        textColor="#ECF0F1"
-        borderRadius={8}
-        paddingTop={20}
-      />
-      <TitleCard 
-        x={820} y={225} 
-        width={120} height={300} 
-        title="LONGTERM STABILITY ROOM" 
+        x={780} y={225} 
+        width={200} height={350} 
+        title="LONG TERM STABILITY ROOM" 
         fontSize={16}
         color="#2C3E50"
         textColor="#ECF0F1"
@@ -183,24 +172,22 @@ export default function MachineAHU02Pid({
       />
 
       {/* R. THD-02 A */}
-      <LabelComponent text="R. THD-02 A" x={680} y={430} w={120} h={35} hasBorder={true} fontSize={13}/>
+      <LabelComponent text="R. THD-02 A" x={820} y={300} w={120} h={35} hasBorder={true} fontSize={13}/>
       <SensorIndicator 
-        x={680} y={470} 
+        x={820} y={340} 
         w={120} h={35}
         value={rt2A} unit=" °C" 
         warningThreshold={32} alarmThreshold={34} 
         thresholdDirection="above" 
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator 
-        x={680} y={510} 
+        x={820} y={380} 
         w={120} h={35}
         value={rh2A} unit=" %RH" 
         warningThreshold={80} alarmThreshold={85} 
         thresholdDirection="above" 
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
 
       {/* R. THD-02 B */}
@@ -212,7 +199,6 @@ export default function MachineAHU02Pid({
         warningThreshold={32} alarmThreshold={34} 
         thresholdDirection="above" 
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator 
         x={820} y={510} 
@@ -221,7 +207,6 @@ export default function MachineAHU02Pid({
         warningThreshold={80} alarmThreshold={85} 
         thresholdDirection="above" 
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
 
       {/* R.A. THD-02 */}
@@ -233,7 +218,6 @@ export default function MachineAHU02Pid({
         warningThreshold={32} alarmThreshold={34} 
         thresholdDirection="above" 
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator 
         x={580} y={510} 
@@ -242,7 +226,6 @@ export default function MachineAHU02Pid({
         warningThreshold={80} alarmThreshold={85} 
         thresholdDirection="above" 
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
 
       <LabelComponent text="DPS-02" x={795} y={165} w={65} h={25} hasBorder={true} fontSize={13}/>
@@ -258,14 +241,14 @@ export default function MachineAHU02Pid({
       />
 
       <PipeH x={525} y={340} w={54} h={6} 
-        on={isMachineRunning} dir="left" type="cold" />
+        on={running} dir="left" type="cold" />
       <PipeBend x={501} y={325} size={25} angle={0} />
       <PipeV x={503} y={244} w={6} h={82} 
-        on={isMachineRunning} dir="up" type="cold" />
+        on={running} dir="up" type="cold" />
       <PipeV x={520} y={244} w={6} h={59} 
-        on={isMachineRunning} dir="down" type="cold" />
+        on={running} dir="down" type="cold" />
       <PipeH x={543} y={315} w={36} h={6} 
-        on={isMachineRunning} dir="right" type="cold" />
+        on={running} dir="right" type="cold" />
       <PipeBend x={518} y={300} size={25} angle={0} />
       
       {/* HF-02 */}
@@ -275,9 +258,8 @@ export default function MachineAHU02Pid({
         y={140}
         w={40}
         h={25}
-        value={isMachineRunning ? hf02Running : false}
+        value={hf02Running} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
-        isStopped={!isMachineRunning}
       />
 
       {/* EH-02 */}
@@ -287,9 +269,8 @@ export default function MachineAHU02Pid({
         y={300}
         w={40}
         h={25}
-        value={isMachineRunning ? eh02Running : false}
+        value={eh02Running} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator 
         x={370} y={330} 
@@ -298,7 +279,6 @@ export default function MachineAHU02Pid({
         warningThreshold={100} alarmThreshold={100} 
         thresholdDirection="above" 
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
 
       <LabelComponent text="PF-02" x={88} y={240} w={65} h={25} hasBorder={true} fontSize={13}/>
@@ -310,9 +290,8 @@ export default function MachineAHU02Pid({
         y={290}
         w={40}
         h={25}
-        value={isMachineRunning ? sf02aRunning : false}
+        value={sf02aRunning} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator 
         x={55} y={320} 
@@ -321,7 +300,6 @@ export default function MachineAHU02Pid({
         warningThreshold={100} alarmThreshold={100} 
         thresholdDirection="above" 
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator 
         x={55} y={355} 
@@ -330,7 +308,6 @@ export default function MachineAHU02Pid({
         warningThreshold={2000} alarmThreshold={2200} 
         thresholdDirection="above" 
         decimalPlaces={0}
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator 
         x={55} y={390} 
@@ -339,7 +316,6 @@ export default function MachineAHU02Pid({
         warningThreshold={5} alarmThreshold={8} 
         thresholdDirection="above" 
         decimalPlaces={2}
-        isStopped={!isMachineRunning}
       />
 
       {/* SF-02 B */}
@@ -349,9 +325,8 @@ export default function MachineAHU02Pid({
         y={430}
         w={40}
         h={25}
-        value={isMachineRunning ? sf02bRunning : false}
+        value={sf02bRunning} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator 
         x={55} y={460} 
@@ -360,7 +335,6 @@ export default function MachineAHU02Pid({
         warningThreshold={100} alarmThreshold={100} 
         thresholdDirection="above" 
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator 
         x={55} y={495} 
@@ -369,7 +343,6 @@ export default function MachineAHU02Pid({
         warningThreshold={2000} alarmThreshold={2200} 
         thresholdDirection="above" 
         decimalPlaces={0}
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator 
         x={55} y={530} 
@@ -378,7 +351,6 @@ export default function MachineAHU02Pid({
         warningThreshold={5} alarmThreshold={8} 
         thresholdDirection="above" 
         decimalPlaces={2}
-        isStopped={!isMachineRunning}
       />
 
       <DashedLine x={170} y={302} w={50} h={0} />
@@ -408,19 +380,19 @@ export default function MachineAHU02Pid({
       <PipeBend x={260} y={440} size={25} angle={0} />
       <PipeBend x={432} y={440} size={25} angle={0} />
 
-      <ACUnit x={1550} y={2800} w={200} h={75} running={isMachineRunning} />
-      <ACUnit x={2700} y={2800} w={200} h={75} running={isMachineRunning} />
+      <ACUnit x={1550} y={2800} w={200} h={75} running={running} />
+      <ACUnit x={2700} y={2800} w={200} h={75} running={running} />
 
       <PipeV x={253} y={255} w={6} h={210} 
-        on={isMachineRunning} dir="up" type="cold" />
+        on={running} dir="up" type="cold" />
       <PipeV x={350} y={104} w={6} h={295} 
-        on={isMachineRunning} dir="down" type="cold" />
+        on={running} dir="down" type="cold" />
       <PipeV x={263} y={430} w={6} h={11} 
-        on={isMachineRunning} dir="down" type="cold" />
+        on={running} dir="down" type="cold" />
       <PipeV x={434} y={428} w={6} h={13} 
-        on={isMachineRunning} dir="down" type="cold" />
+        on={running} dir="down" type="cold" />
       <PipeV x={424} y={398} w={6} h={68} 
-        on={isMachineRunning} dir="up" type="cold" />
+        on={running} dir="up" type="cold" />
       <PipeT x={256} y={380} armLength={13} thickness={8} direction="right" />
       <PipeT x={353} y={410} armLength={13} thickness={8} direction="up" />
 
@@ -429,11 +401,11 @@ export default function MachineAHU02Pid({
       <PipeBend x={407} y={374} size={25} angle={180} />
       
       <PipeH x={285} y={407} w={55} h={6} 
-        on={isMachineRunning} dir="left" type="cold" />
+        on={running} dir="left" type="cold" />
       <PipeH x={269} y={377} w={138} h={6} 
-        on={isMachineRunning} dir="left" type="cold" />
+        on={running} dir="left" type="cold" />
       <PipeH x={366} y={407} w={52} h={6} 
-        on={isMachineRunning} dir="right" type="cold" />
+        on={running} dir="right" type="cold" />
 
       <LabelComponent text="M" x={347} y={450} w={40} h={20} hasBorder={true} fontSize={13}/>
       <LabelComponent text="S" x={520} y={450} w={40} h={20} hasBorder={true} fontSize={13}/>
@@ -445,9 +417,8 @@ export default function MachineAHU02Pid({
         y={505}
         w={40}
         h={25}
-        value={isMachineRunning ? cu02aRunning : false}
+        value={cu02aRunning} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
-        isStopped={!isMachineRunning}
       />
 
       {/* CU-02 B */}
@@ -457,9 +428,8 @@ export default function MachineAHU02Pid({
         y={505}
         w={40}
         h={25}
-        value={isMachineRunning ? cu02bRunning : false}
+        value={cu02bRunning} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
-        isStopped={!isMachineRunning}
       />
 
       <LabelComponent text="PF-02" x={750} y={13} w={110} h={25} hasBorder={true} fontSize={13}/>
@@ -470,7 +440,6 @@ export default function MachineAHU02Pid({
         warningThreshold={250} alarmThreshold={300} 
         thresholdDirection="above" 
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
 
       <DashedLine x={130} y={25} w={615} h={0} />

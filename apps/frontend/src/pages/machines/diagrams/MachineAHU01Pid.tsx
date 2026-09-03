@@ -28,28 +28,24 @@ export default function MachineAHU01Pid({
   running = true,
   data = {},
 }: PidProps) {
-  const isConnected = data.Connected !== undefined ? Boolean(data.Connected) : true;
-  const isSfRunning = isConnected && (data.xIND_RUN_SF01 !== undefined ? Boolean(data.xIND_RUN_SF01) : running);
-  const isMachineRunning = isConnected && isSfRunning;
+  // Extract live parameters from PLC1_AHU1_Utl
+  const rt1A = data.ACT_RTx_1A !== undefined ? Number(data.ACT_RTx_1A) : 40.47;
+  const rh1A = data.ACT_RHx_1A !== undefined ? Number(data.ACT_RHx_1A) : 76.81;
+  const rt1B = data.ACT_RTx_1B !== undefined ? Number(data.ACT_RTx_1B) : 40.41;
+  const rh1B = data.ACT_RHx_1B !== undefined ? Number(data.ACT_RHx_1B) : 74.88;
+  const rat1 = data.ACT_RATx_1 !== undefined ? Number(data.ACT_RATx_1) : 40.06;
+  const rah1 = data.ACT_RAHx_1 !== undefined ? Number(data.ACT_RAHx_1) : 75.75;
 
-  // Extract live parameters without dummy fallback numbers
-  const rt1A = isMachineRunning && typeof data.ACT_RTx_1A === "number" ? data.ACT_RTx_1A : null;
-  const rh1A = isMachineRunning && typeof data.ACT_RHx_1A === "number" ? data.ACT_RHx_1A : null;
-  const rt1B = isMachineRunning && typeof data.ACT_RTx_1B === "number" ? data.ACT_RTx_1B : null;
-  const rh1B = isMachineRunning && typeof data.ACT_RHx_1B === "number" ? data.ACT_RHx_1B : null;
-  const rat1 = isMachineRunning && typeof data.ACT_RATx_1 === "number" ? data.ACT_RATx_1 : null;
-  const rah1 = isMachineRunning && typeof data.ACT_RAHx_1 === "number" ? data.ACT_RAHx_1 : null;
+  const sf01Running = data.xIND_RUN_SF01 !== undefined ? Boolean(data.xIND_RUN_SF01) : running;
+  const sf01Cap = data.ACT_SF01_CAP !== undefined ? Number(data.ACT_SF01_CAP) : 90.0;
+  const sf01Spd = data.ACT_SF01_SPD !== undefined ? Number(data.ACT_SF01_SPD) : 1839.8;
+  const sf01Cur = data.ACT_SF01_CUR !== undefined ? Number(data.ACT_SF01_CUR) : 1.88;
 
-  const sf01Running = isMachineRunning && (data.xIND_RUN_SF01 !== undefined ? Boolean(data.xIND_RUN_SF01) : isMachineRunning);
-  const sf01Cap = isMachineRunning && typeof data.ACT_SF01_CAP === "number" ? data.ACT_SF01_CAP : null;
-  const sf01Spd = isMachineRunning && typeof data.ACT_SF01_SPD === "number" ? data.ACT_SF01_SPD : null;
-  const sf01Cur = isMachineRunning && typeof data.ACT_SF01_CUR === "number" ? data.ACT_SF01_CUR : null;
+  const eh01Running = data.xIND_RUN_EH01 !== undefined ? Boolean(data.xIND_RUN_EH01) : running;
+  const eh01Cap = data.ACT_EH01_CAP !== undefined ? Number(data.ACT_EH01_CAP) : 30.0;
 
-  const eh01Running = isMachineRunning && (data.xIND_RUN_EH01 !== undefined ? Boolean(data.xIND_RUN_EH01) : isMachineRunning);
-  const eh01Cap = isMachineRunning && typeof data.ACT_EH01_CAP === "number" ? data.ACT_EH01_CAP : null;
-
-  const hf01Running = isMachineRunning && (data.xIND_RUN_HF01 !== undefined ? Boolean(data.xIND_RUN_HF01) : isMachineRunning);
-  const pf01Dp = isMachineRunning && typeof data.PF_01_DP === "number" ? data.PF_01_DP : (data.PF_01_DP ? Number(data.PF_01_DP) : null);
+  const hf01Running = data.xIND_RUN_HF01 !== undefined ? Boolean(data.xIND_RUN_HF01) : running;
+  const pf01Dp = data.PF_01_DP !== undefined ? Number(data.PF_01_DP) : 0.0;
 
   return (
     <svg
@@ -162,7 +158,6 @@ export default function MachineAHU01Pid({
         warningThreshold={42} alarmThreshold={44}
         thresholdDirection="above"
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator
         x={820} y={380}
@@ -171,7 +166,6 @@ export default function MachineAHU01Pid({
         warningThreshold={80} alarmThreshold={85}
         thresholdDirection="above"
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
 
       {/* R. THD-01 B */}
@@ -183,7 +177,6 @@ export default function MachineAHU01Pid({
         warningThreshold={42} alarmThreshold={44}
         thresholdDirection="above"
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator
         x={820} y={510}
@@ -192,7 +185,6 @@ export default function MachineAHU01Pid({
         warningThreshold={80} alarmThreshold={85}
         thresholdDirection="above"
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
 
       {/* R.A. THD-01 */}
@@ -204,7 +196,6 @@ export default function MachineAHU01Pid({
         warningThreshold={42} alarmThreshold={44}
         thresholdDirection="above"
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator
         x={580} y={510}
@@ -213,7 +204,6 @@ export default function MachineAHU01Pid({
         warningThreshold={80} alarmThreshold={85}
         thresholdDirection="above"
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
 
       <LabelComponent text="DPS-01" x={795} y={165} w={65} h={25} hasBorder={true} fontSize={13} />
@@ -229,14 +219,14 @@ export default function MachineAHU01Pid({
       />
 
       <PipeH x={510} y={340} w={69} h={6}
-        on={isMachineRunning} dir="left" type="cold"/>
+        on={running} dir="left" type="cold"/>
       <PipeBend x={501} y={325} size={25} angle={0} />
       <PipeV x={503.5} y={221} w={6} h={105}
-        on={isMachineRunning} dir="up" type="cold" />
+        on={running} dir="up" type="cold" />
       <PipeV x={529} y={221} w={6} h={90}
-        on={isMachineRunning} dir="down" type="cold" />
+        on={running} dir="down" type="cold" />
       <PipeH x={550} y={315} w={29} h={6}
-        on={isMachineRunning} dir="right" type="cold" />
+        on={running} dir="right" type="cold" />
       <PipeBend x={527} y={300} size={25} angle={0} />
 
       {/* HF-01 */}
@@ -246,9 +236,8 @@ export default function MachineAHU01Pid({
         y={60}
         w={40}
         h={25}
-        value={isMachineRunning ? hf01Running : false}
+        value={hf01Running} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
-        isStopped={!isMachineRunning}
       />
 
       {/* EH-01 */}
@@ -258,9 +247,8 @@ export default function MachineAHU01Pid({
         y={300}
         w={40}
         h={25}
-        value={isMachineRunning ? eh01Running : false}
+        value={eh01Running} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator
         x={370} y={330}
@@ -269,7 +257,6 @@ export default function MachineAHU01Pid({
         warningThreshold={100} alarmThreshold={100}
         thresholdDirection="above"
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
 
       <LabelComponent text="PF-01" x={147} y={240} w={65} h={25} hasBorder={true} fontSize={13} />
@@ -281,9 +268,8 @@ export default function MachineAHU01Pid({
         y={300}
         w={40}
         h={25}
-        value={isMachineRunning ? sf01Running : false}
+        value={sf01Running} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator
         x={140} y={330}
@@ -292,7 +278,6 @@ export default function MachineAHU01Pid({
         warningThreshold={100} alarmThreshold={100}
         thresholdDirection="above"
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator
         x={140} y={365}
@@ -301,7 +286,6 @@ export default function MachineAHU01Pid({
         warningThreshold={2000} alarmThreshold={2200}
         thresholdDirection="above"
         decimalPlaces={0}
-        isStopped={!isMachineRunning}
       />
       <SensorIndicator
         x={140} y={400}
@@ -310,7 +294,6 @@ export default function MachineAHU01Pid({
         warningThreshold={5} alarmThreshold={8}
         thresholdDirection="above"
         decimalPlaces={2}
-        isStopped={!isMachineRunning}
       />
 
       <DashedLine x={252} y={312} w={50} h={0} />
@@ -337,7 +320,6 @@ export default function MachineAHU01Pid({
         warningThreshold={250} alarmThreshold={300}
         thresholdDirection="above"
         decimalPlaces={1}
-        isStopped={!isMachineRunning}
       />
     </svg>
   );
