@@ -2304,7 +2304,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Peak Demand</div>
             <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {cubicleSummary.peakDemand.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW
+              - kW
             </div>
           </div>
           {cubiclePoiView ? (
