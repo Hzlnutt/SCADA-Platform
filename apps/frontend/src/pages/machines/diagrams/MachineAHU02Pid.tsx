@@ -445,27 +445,28 @@ export default function MachineAHU02Pid({
         mode="onoff"
       />
 
-      <LabelComponent text="PF-02" x={750} y={13} w={110} h={25} hasBorder={true} fontSize={13}/>
+      {/* PF-02 (Above AHU box, separated from Ambient) */}
+      <LabelComponent text="PF-02" x={635} y={13} w={105} h={25} hasBorder={true} fontSize={13}/>
       <SensorIndicator 
-        x={750} y={43} 
-        w={110} h={30}
+        x={635} y={42} 
+        w={105} h={28}
         value={pf02Dp} unit=" Pa" 
         warningThreshold={250} alarmThreshold={300} 
         thresholdDirection="above" 
         decimalPlaces={1}
       />
 
-      <DashedLine x={130} y={25} w={615} h={0} />
-      <DashedLine x={730} y={57} w={20} h={0} />
-      <DashedLine x={730} y={30} w={0} h={30} />
+      <DashedLine x={130} y={25} w={500} h={0} />
+      <DashedLine x={630} y={56} w={5} h={0} />
+      <DashedLine x={630} y={25} w={0} h={31} />
       <DashedLine x={130} y={25} w={0} h={60} />
 
-      {/* Ambient Card (Ambient Temp & RH) */}
+      {/* Ambient Card (Ambient Temp & RH) - Top Right */}
       <AmbientCard
-        x={855}
-        y={15}
-        width={130}
-        height={160}
+        x={870}
+        y={12}
+        width={115}
+        height={128}
         temp={ambientT}
         humidity={ambientH}
       />

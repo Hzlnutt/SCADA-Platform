@@ -335,10 +335,10 @@ export default function MachineAHU01Pid({
 
       {/* Ambient Card (Ambient Temp & RH) */}
       <AmbientCard
-        x={855}
-        y={15}
-        width={130}
-        height={160}
+        x={870}
+        y={12}
+        width={115}
+        height={128}
         temp={ambientT}
         humidity={ambientH}
       />

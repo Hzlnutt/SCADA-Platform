@@ -1,5 +1,4 @@
 import React from "react";
-import TitleCard from "./TitleCard";
 import LabelComponent from "./TextLabel";
 import { SensorIndicator } from "./SensorIndicator";
 
@@ -13,47 +12,72 @@ export interface AmbientCardProps {
 }
 
 export const AmbientCard: React.FC<AmbientCardProps> = ({
-  x = 855,
-  y = 15,
-  width = 130,
-  height = 160,
+  x = 870,
+  y = 12,
+  width = 115,
+  height = 128,
   temp = null,
   humidity = null,
 }) => {
-  const itemW = width - 20; // 110
-  const itemX = x + 10;
+  const itemW = width - 16; // 99
+  const itemX = x + 8;
 
   return (
     <g id="ambient-card" className="select-none transition-all duration-300">
-      {/* Outer Card Background and Title */}
-      <TitleCard
+      {/* Outer Card Background Frame */}
+      <rect
         x={x}
         y={y}
         width={width}
         height={height}
-        title="AMBIENT"
-        fontSize={13}
-        color="#2C3E50"
-        textColor="#ECF0F1"
-        borderRadius={8}
-        paddingTop={12}
+        rx={6}
+        fill="#1e293b"
+        stroke="#38bdf8"
+        strokeWidth={1.5}
       />
+
+      {/* Card Header Banner */}
+      <path
+        d={`M ${x} ${y + 6} A 6 6 0 0 1 ${x + 6} ${y} L ${x + width - 6} ${y} A 6 6 0 0 1 ${x + width} ${y + 6} L ${x + width} ${y + 24} L ${x} ${y + 24} Z`}
+        fill="#0f172a"
+      />
+      <line
+        x1={x}
+        y1={y + 24}
+        x2={x + width}
+        y2={y + 24}
+        stroke="#38bdf8"
+        strokeWidth={1}
+        strokeOpacity={0.5}
+      />
+      <text
+        x={x + width / 2}
+        y={y + 16}
+        textAnchor="middle"
+        fontSize={11}
+        fontWeight="800"
+        fontFamily="sans-serif"
+        fill="#38bdf8"
+        letterSpacing="0.08em"
+      >
+        AMBIENT
+      </text>
 
       {/* Ambient Temperature */}
       <LabelComponent
         text="Ambient Temp"
         x={itemX}
-        y={y + 38}
+        y={y + 30}
         w={itemW}
-        h={22}
+        h={18}
         hasBorder={true}
-        fontSize={11}
+        fontSize={10}
       />
       <SensorIndicator
         x={itemX}
-        y={y + 63}
+        y={y + 51}
         w={itemW}
-        h={27}
+        h={24}
         value={temp}
         unit=" °C"
         warningThreshold={35}
@@ -66,17 +90,17 @@ export const AmbientCard: React.FC<AmbientCardProps> = ({
       <LabelComponent
         text="Ambient RH"
         x={itemX}
-        y={y + 97}
+        y={y + 79}
         w={itemW}
-        h={22}
+        h={18}
         hasBorder={true}
-        fontSize={11}
+        fontSize={10}
       />
       <SensorIndicator
         x={itemX}
-        y={y + 122}
+        y={y + 100}
         w={itemW}
-        h={27}
+        h={24}
         value={humidity}
         unit=" %RH"
         warningThreshold={80}
