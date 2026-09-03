@@ -255,6 +255,10 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
     )
+    ON CONFLICT (t_stamp) DO UPDATE SET
+      status_pm8000 = EXCLUDED.status_pm8000,
+      active_power = EXCLUDED.active_power,
+      active_energy = EXCLUDED.active_energy;
   `, [
     minuteTs, payload.status_pm8000, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
     payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power,
@@ -989,6 +993,10 @@ export const startIncomingElectricityPolling = () => {
       await pool.query(`
         INSERT INTO solar_telemetry_minute (t_stamp, poi_1, poi_2, total)
         VALUES ($1, $2, $3, $4)
+        ON CONFLICT (t_stamp) DO UPDATE SET
+          poi_1 = EXCLUDED.poi_1,
+          poi_2 = EXCLUDED.poi_2,
+          total = EXCLUDED.total;
       `, [minuteTs, p1Kwh, p2Kwh, totKwh]).catch((err: any) => {
         logger.warn(`Failed to insert solar_telemetry_minute: ${err.message}`);
       });

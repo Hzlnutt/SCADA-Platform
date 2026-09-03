@@ -604,6 +604,7 @@ export const ensurePostgresTables = async () => {
         thd_current_c NUMERIC,
         active_energy NUMERIC
       );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_pln_minute_tstamp ON electric_pln_telemetry_minute (t_stamp);
       CREATE INDEX IF NOT EXISTS idx_electric_pln_minute_tstamp ON electric_pln_telemetry_minute (t_stamp DESC);
 
       CREATE TABLE IF NOT EXISTS electric_wf1_telemetry_minute (
@@ -1053,6 +1054,7 @@ export const ensurePostgresTables = async () => {
         poi_2 NUMERIC,
         total NUMERIC
       );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_solar_minute_tstamp ON solar_telemetry_minute (t_stamp);
       CREATE INDEX IF NOT EXISTS idx_solar_minute_ts ON solar_telemetry_minute (t_stamp DESC);
     `).catch(() => {});
 
