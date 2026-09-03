@@ -475,8 +475,10 @@ export const getElectricityAnalytics = async (
     const prevHour = parseInt(prevTimeStr.split(":")[0], 10);
     const currHour = parseInt(currTimeStr.split(":")[0], 10);
 
-    // The consumption interval [prevHour, currHour] belongs to prevDateStr
-    const dateStr = prevDateStr;
+    // For electric_pln_telemetry, row at HH:00 contains the rollup for hour HH.
+    // The consumption difference curr - prev represents hour currHour on currDateStr.
+    const dateStr = currDateStr;
+    const targetHour = currHour;
     const monthStr = dateStr.substring(0, 7);
     const isToday = dateStr === todayStr;
     const isCurrentMonth = monthStr === currentMonthStr;
@@ -487,8 +489,8 @@ export const getElectricityAnalytics = async (
     // Get matching tariff for this date
     const recordTariff = getTariffForDate(dateStr, tariffs);
 
-    // If the hourly interval ends at 18:00 to 22:00 WIB, it started at WBP hours (17:00-21:00)
-    const isWbp = currHour >= 18 && currHour <= 22;
+    // WBP is 17:00 to 22:00 WIB (hours 17, 18, 19, 20, 21)
+    const isWbp = targetHour >= 17 && targetHour <= 21;
 
     if (inRange) {
       if (isWbp) {
@@ -552,12 +554,12 @@ export const getElectricityAnalytics = async (
     const dayHours = dailyHourlyMap.get(dateStr)!;
     const dayWbpHours = dailyHourlyWbpMap.get(dateStr)!;
     const dayLwbpHours = dailyHourlyLwbpMap.get(dateStr)!;
-    if (prevHour >= 0 && prevHour < 24) {
-      dayHours[prevHour] += diff;
+    if (targetHour >= 0 && targetHour < 24) {
+      dayHours[targetHour] += diff;
       if (isWbp) {
-        dayWbpHours[prevHour] += diff;
+        dayWbpHours[targetHour] += diff;
       } else {
-        dayLwbpHours[prevHour] += diff;
+        dayLwbpHours[targetHour] += diff;
       }
     }
   }
@@ -574,11 +576,46 @@ export const getElectricityAnalytics = async (
   const hourlyWbpValues = dailyHourlyWbpMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
   const hourlyLwbpValues = dailyHourlyLwbpMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
 
-  // Ensure hours after current time today are 0 (never show future or incomplete hours)
+  // Progressive real-time calculation for today's active current hour
   if (latestWibDate === todayStr) {
     const nowWib = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
     const currentWibHour = nowWib.getUTCHours();
-    for (let h = currentWibHour; h < 24; h++) {
+    const padHour = (n: number) => String(n).padStart(2, "0");
+    const currentHourStart = `${todayStr} ${padHour(currentWibHour)}:00:00`;
+    const nextHourStart = `${todayStr} ${padHour(currentWibHour + 1)}:00:00`;
+
+    try {
+      const minuteTable = tableName === "electric_wf1_telemetry" ? "electric_wf1_telemetry_minute"
+        : tableName === "electric_wf2_telemetry" ? "electric_wf2_telemetry_minute"
+        : "electric_pln_telemetry_minute";
+
+      const progRes = await pool.query(`
+        SELECT 
+          (MAX(active_energy) - MIN(active_energy))::float as progressive_kwh
+        FROM ${minuteTable}
+        WHERE t_stamp >= $1 AND t_stamp < $2
+          AND active_energy IS NOT NULL
+      `, [currentHourStart, nextHourStart]);
+
+      const progressiveKwh = Math.max(0, progRes.rows[0]?.progressive_kwh || 0);
+      const isCurrentWbp = currentWibHour >= 17 && currentWibHour <= 21; // 17:00 to 22:00 WIB
+
+      hourlyValues[currentWibHour] = progressiveKwh;
+      if (isCurrentWbp) {
+        hourlyWbpValues[currentWibHour] = progressiveKwh;
+        hourlyLwbpValues[currentWibHour] = 0;
+        todayWbpKwh += progressiveKwh;
+        todayWbpCost += progressiveKwh * getTariffForDate(todayStr, tariffs).wbpRate;
+      } else {
+        hourlyLwbpValues[currentWibHour] = progressiveKwh;
+        hourlyWbpValues[currentWibHour] = 0;
+        todayLwbpKwh += progressiveKwh;
+        todayLwbpCost += progressiveKwh * getTariffForDate(todayStr, tariffs).lwbpRate;
+      }
+    } catch {}
+
+    // Ensure all future hours (> currentWibHour) are 0
+    for (let h = currentWibHour + 1; h < 24; h++) {
       hourlyValues[h] = 0;
       hourlyWbpValues[h] = 0;
       hourlyLwbpValues[h] = 0;

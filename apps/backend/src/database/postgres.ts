@@ -1045,6 +1045,15 @@ export const ensurePostgresTables = async () => {
       );
       CREATE UNIQUE INDEX IF NOT EXISTS uq_solar_telemetry_tstamp ON solar_telemetry (t_stamp);
       CREATE INDEX IF NOT EXISTS idx_solar_telemetry_time ON solar_telemetry (t_stamp DESC);
+
+      CREATE TABLE IF NOT EXISTS solar_telemetry_minute (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        poi_1 NUMERIC,
+        poi_2 NUMERIC,
+        total NUMERIC
+      );
+      CREATE INDEX IF NOT EXISTS idx_solar_minute_ts ON solar_telemetry_minute (t_stamp DESC);
     `).catch(() => {});
 
     logger.info("postgres tables ensured and migrated to NUMERIC successfully");

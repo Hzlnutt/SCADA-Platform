@@ -1108,7 +1108,7 @@ export default function Electricity() {
   const barLabels = useMemo(() => {
     if (hasChartData) {
       if (range === "hour" || (range === "custom" && chartStartDate === chartEndDate)) {
-        return Array.from({ length: 24 }, (_, i) => `${(i + 1).toString().padStart(2, "0")}:00`);
+        return Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
       } else if (range === "day") {
         return monthlyDailyRecords.map((d: any) => d.day.split("-")[2]);
       } else if (range === "custom") {
@@ -1237,7 +1237,7 @@ export default function Electricity() {
   /* ═══ SOLAR STACKED BAR ═══ */
   const solarBarLabels = useMemo(() => {
     if (solarRange === "hour" || (solarRange === "custom" && solarStartDate === solarEndDate)) {
-      return Array.from({ length: 24 }, (_, i) => `${(i + 1).toString().padStart(2, "0")}:00`);
+      return Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
     } else if (solarRange === "day") {
       const targetMonthStr = `${solarSelectedYear}-${String(solarSelectedMonth + 1).padStart(2, "0")}`;
       const monthDaily = (solarData?.charts?.daily || []).filter((d: any) => d.day && d.day.startsWith(targetMonthStr));

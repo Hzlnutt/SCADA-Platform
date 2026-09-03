@@ -978,6 +978,22 @@ export const startIncomingElectricityPolling = () => {
       io.emit("solar:live_update", pltsParsed);
     }
 
+    if (isNewMinute) {
+      const pool = getPostgresPool();
+      const p1Kwh = pltsParsed.poi1.status ? pltsParsed.poi1.totalKwh : null;
+      const p2Kwh = pltsParsed.poi2.status ? pltsParsed.poi2.totalKwh : null;
+      let totKwh: number | null = null;
+      if (p1Kwh !== null || p2Kwh !== null) {
+        totKwh = (p1Kwh ?? 0) + (p2Kwh ?? 0);
+      }
+      await pool.query(`
+        INSERT INTO solar_telemetry_minute (t_stamp, poi_1, poi_2, total)
+        VALUES ($1, $2, $3, $4)
+      `, [minuteTs, p1Kwh, p2Kwh, totKwh]).catch((err: any) => {
+        logger.warn(`Failed to insert solar_telemetry_minute: ${err.message}`);
+      });
+    }
+
     // Check for top-of-hour recording to solar_telemetry (e.g. 10:00:00, 11:00:00)
     const wibTime = new Date(ts.getTime() + 7 * 60 * 60 * 1000);
     const padZero = (n: number) => String(n).padStart(2, "0");
@@ -1145,6 +1161,8 @@ export const startIncomingElectricityPolling = () => {
           unitId: "electricity",
           t_stamp: currentMinuteStr
         });
+        io.emit("electricity:update");
+        io.emit("solar:update");
       }
     }
 
@@ -1681,6 +1699,58 @@ export const runElectricityRollupAndCleanup = async () => {
       } catch (err: any) {
         await client.query("ROLLBACK");
         logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up PLTS hourly telemetry");
+      } finally {
+        client.release();
+      }
+    }
+
+    // 5b. Rollup completed hours from solar_telemetry_minute -> solar_telemetry
+    const solarBuckets = await pool.query(`
+      SELECT 
+        to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
+      FROM solar_telemetry_minute
+      WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+      GROUP BY hour_bucket_str
+      ORDER BY hour_bucket_str ASC;
+    `);
+
+    for (const b of solarBuckets.rows) {
+      const hourStartStr = b.hour_bucket_str;
+      if (!hourStartStr) continue;
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const aggRes = await client.query(`
+          SELECT 
+            MAX(poi_1) as poi_1,
+            MAX(poi_2) as poi_2,
+            MAX(total) as total
+          FROM solar_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
+        const r = aggRes.rows[0];
+        if (r && (r.poi_1 !== null || r.poi_2 !== null)) {
+          await client.query(`
+            INSERT INTO solar_telemetry (t_stamp, poi_1, poi_2, total)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (t_stamp) DO UPDATE SET
+              poi_1 = EXCLUDED.poi_1,
+              poi_2 = EXCLUDED.poi_2,
+              total = EXCLUDED.total;
+          `, [hourStartStr, r.poi_1, r.poi_2, r.total]);
+        }
+
+        await client.query(`
+          DELETE FROM solar_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
+        await client.query("COMMIT");
+      } catch (err: any) {
+        await client.query("ROLLBACK");
+        logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up solar_telemetry_minute hourly telemetry");
       } finally {
         client.release();
       }

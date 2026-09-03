@@ -262,11 +262,35 @@ export const getSolarAnalytics = async (
   const hourlyPoi2 = hourlyMapPoi2.get(targetDate) || Array.from({ length: 24 }, () => 0);
   const hourly = hourlyMapTotal.get(targetDate) || hourlyPoi1.map((v, i) => v + (hourlyPoi2[i] || 0));
 
-  // Ensure hours after current time today are 0 (never show future or incomplete hours)
+  // Progressive real-time calculation for today's active current hour
   const nowWib = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
   const currentWibHour = nowWib.getUTCHours();
   if (targetDate === todayStr) {
-    for (let h = currentWibHour; h < 24; h++) {
+    const padHour = (n: number) => String(n).padStart(2, "0");
+    const currentHourStart = `${todayStr} ${padHour(currentWibHour)}:00:00`;
+    const nextHourStart = `${todayStr} ${padHour(currentWibHour + 1)}:00:00`;
+
+    try {
+      const progRes = await pool.query(`
+        SELECT 
+          (MAX(poi_1) - MIN(poi_1))::float as poi1_prog,
+          (MAX(poi_2) - MIN(poi_2))::float as poi2_prog,
+          (MAX(total) - MIN(total))::float as total_prog
+        FROM solar_telemetry_minute
+        WHERE t_stamp >= $1 AND t_stamp < $2
+      `, [currentHourStart, nextHourStart]);
+
+      const poi1Prog = Math.max(0, progRes.rows[0]?.poi1_prog || 0);
+      const poi2Prog = Math.max(0, progRes.rows[0]?.poi2_prog || 0);
+      const totalProg = Math.max(0, progRes.rows[0]?.total_prog || (poi1Prog + poi2Prog));
+
+      hourlyPoi1[currentWibHour] = poi1Prog;
+      hourlyPoi2[currentWibHour] = poi2Prog;
+      hourly[currentWibHour] = totalProg;
+    } catch {}
+
+    // Ensure all future hours (> currentWibHour) are 0
+    for (let h = currentWibHour + 1; h < 24; h++) {
       hourlyPoi1[h] = 0;
       hourlyPoi2[h] = 0;
       hourly[h] = 0;
