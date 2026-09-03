@@ -8,13 +8,15 @@ import {
   getBillingAnalyticsHandler,
   getPowerMetersLatestHandler,
   getPowerMeterHistoryHandler,
-  getSolarAnalyticsHandler
+  getSolarAnalyticsHandler,
+  getElectricityReportHandler
 } from "./analytics.controller";
 
 export const analyticsRouter = Router();
 
 analyticsRouter.get("/analytics/summary", getAnalyticsSummaryHandler);
 analyticsRouter.get("/analytics/electricity", getElectricityAnalyticsHandler);
+analyticsRouter.get("/analytics/electricity/report", getElectricityReportHandler);
 analyticsRouter.get("/analytics/electricity/power-meters", getPowerMetersLatestHandler);
 analyticsRouter.get("/analytics/electricity/power-meters/:pmId/history", getPowerMeterHistoryHandler);
 analyticsRouter.get("/analytics/solar", getSolarAnalyticsHandler);

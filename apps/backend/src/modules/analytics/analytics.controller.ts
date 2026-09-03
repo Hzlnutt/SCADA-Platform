@@ -465,3 +465,223 @@ export const getPowerMeterHistoryHandler = async (
     next(err);
   }
 };
+
+export const getElectricityReportHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const category = ((req.query.category as string) || "energy").toLowerCase();
+    const factory = ((req.query.factory as string) || "all").toLowerCase();
+    const tag = (req.query.tag as string) || "f1-mdp-3";
+    const machine = (req.query.machine as string) || "all";
+    const granularity = ((req.query.granularity as string) || "hour").toLowerCase();
+    const startDate = (req.query.startDate as string) || new Date().toISOString().slice(0, 10);
+    const endDate = (req.query.endDate as string) || startDate;
+
+    const pool = getPostgresPool();
+
+    // Map tag to candidate PM IDs or tables
+    const tagMap: Record<string, { pmId?: string; group?: string; table?: string }> = {
+      "f1-mdp-1.1": { group: "ew21", pmId: "PM318", table: "electric_wf1_telemetry" },
+      "f1-mdp-1.2": { group: "ew21", pmId: "PM319", table: "electric_wf1_telemetry" },
+      "f1-mdp-2": { group: "ew21", pmId: "PM320", table: "electric_wf1_telemetry" },
+      "f1-mdp-3": { group: "ew21", pmId: "PM321", table: "electric_wf1_telemetry" },
+      "f2-putr-1": { group: "ew22", pmId: "PM201", table: "electric_wf2_telemetry" },
+      "f2-putr-2": { group: "ew22", pmId: "PM202", table: "electric_wf2_telemetry" },
+      "f2-putr-new": { group: "ew23", pmId: "PM325", table: "electric_wf2_telemetry" },
+    };
+
+    const mapping = tagMap[tag.toLowerCase()] || {};
+    const targetPmId = mapping.pmId || (tag.toUpperCase().startsWith("PM") ? tag.toUpperCase() : null);
+    const targetGroup = mapping.group || null;
+    const targetTable = mapping.table || (factory === "f2" ? "electric_wf2_telemetry" : "electric_wf1_telemetry");
+
+    // Select date trunc granularity: 'hour', 'day', 'month'
+    const truncUnit = granularity === "month" ? "month" : granularity === "day" ? "day" : "hour";
+
+    // 1. Try querying electric_pm_telemetry / minute first
+    let queryRows: any[] = [];
+    try {
+      const pmSql = `
+        WITH raw_pm AS (
+          SELECT t_stamp, volt_ab, volt_bc, volt_ca, volt_ll,
+                 current_a, current_b, current_c, current_unbalance,
+                 active_power_total, reactive_power_total, apparent_power_total,
+                 power_factor, frequency,
+                 thd_volt_a, thd_volt_b, thd_volt_c,
+                 thd_current_a, thd_current_b, thd_current_c,
+                 active_energy
+          FROM electric_pm_telemetry
+          WHERE (pm_id ILIKE $1 OR group_id ILIKE $2)
+            AND t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
+          UNION ALL
+          SELECT t_stamp, volt_ab, volt_bc, volt_ca, volt_ll,
+                 current_a, current_b, current_c, current_unbalance,
+                 active_power_total, reactive_power_total, apparent_power_total,
+                 power_factor, frequency,
+                 thd_volt_a, thd_volt_b, thd_volt_c,
+                 thd_current_a, thd_current_b, thd_current_c,
+                 active_energy
+          FROM electric_pm_telemetry_minute
+          WHERE (pm_id ILIKE $1 OR group_id ILIKE $2)
+            AND t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
+        )
+        SELECT 
+          date_trunc('${truncUnit}', t_stamp) AS bucket,
+          AVG(volt_ab) AS vr, AVG(volt_bc) AS vs, AVG(volt_ca) AS vt,
+          AVG(volt_ab) AS vrs, AVG(volt_bc) AS vst, AVG(volt_ca) AS vtr,
+          AVG(current_a) AS ir, AVG(current_b) AS is_val, AVG(current_c) AS it, AVG(current_unbalance) AS in_val,
+          AVG(thd_volt_a) AS thdv_r, AVG(thd_volt_b) AS thdv_s, AVG(thd_volt_c) AS thdv_t,
+          AVG(thd_current_a) AS thdi_r, AVG(thd_current_b) AS thdi_s, AVG(thd_current_c) AS thdi_t,
+          AVG(active_power_total) AS kw,
+          AVG(reactive_power_total) AS kvar,
+          AVG(apparent_power_total) AS kva,
+          AVG(power_factor) AS pf,
+          AVG(frequency) AS freq,
+          MAX(active_energy) AS max_energy,
+          MIN(active_energy) AS min_energy,
+          COUNT(*) as sample_count
+        FROM raw_pm
+        GROUP BY date_trunc('${truncUnit}', t_stamp)
+        ORDER BY bucket DESC
+      `;
+      const pmRes = await pool.query(pmSql, [targetPmId || "%", targetGroup || "%", `${startDate} 00:00:00`, endDate]);
+      if (pmRes.rows.length > 0) {
+        queryRows = pmRes.rows;
+      }
+    } catch (e) {
+      // Fallback
+    }
+
+    // 2. If no PM rows found, query main feeder table
+    if (queryRows.length === 0) {
+      try {
+        const feederSql = `
+          WITH raw_feeder AS (
+            SELECT t_stamp, volt_ab, volt_bc, volt_ca, volt_ll,
+                   current_a, current_b, current_c, current_unbalance,
+                   COALESCE(active_power_total, active_power) AS active_power_total,
+                   reactive_power_total, apparent_power_total,
+                   power_factor, frequency,
+                   thd_volt_a, thd_volt_b, thd_volt_c,
+                   thd_current_a, thd_current_b, thd_current_c,
+                   active_energy
+            FROM ${targetTable}
+            WHERE t_stamp >= $1::timestamp AND t_stamp <= ($2 || ' 23:59:59')::timestamp
+            UNION ALL
+            SELECT t_stamp, volt_ab, volt_bc, volt_ca, volt_ll,
+                   current_a, current_b, current_c, current_unbalance,
+                   COALESCE(active_power_total, active_power) AS active_power_total,
+                   reactive_power_total, apparent_power_total,
+                   power_factor, frequency,
+                   thd_volt_a, thd_volt_b, thd_volt_c,
+                   thd_current_a, thd_current_b, thd_current_c,
+                   active_energy
+            FROM ${targetTable}_minute
+            WHERE t_stamp >= $1::timestamp AND t_stamp <= ($2 || ' 23:59:59')::timestamp
+          )
+          SELECT 
+            date_trunc('${truncUnit}', t_stamp) AS bucket,
+            AVG(volt_ab) AS vr, AVG(volt_bc) AS vs, AVG(volt_ca) AS vt,
+            AVG(volt_ab) AS vrs, AVG(volt_bc) AS vst, AVG(volt_ca) AS vtr,
+            AVG(current_a) AS ir, AVG(current_b) AS is_val, AVG(current_c) AS it, AVG(current_unbalance) AS in_val,
+            AVG(thd_volt_a) AS thdv_r, AVG(thd_volt_b) AS thdv_s, AVG(thd_volt_c) AS thdv_t,
+            AVG(thd_current_a) AS thdi_r, AVG(thd_current_b) AS thdi_s, AVG(thd_current_c) AS thdi_t,
+            AVG(active_power_total) AS kw,
+            AVG(reactive_power_total) AS kvar,
+            AVG(apparent_power_total) AS kva,
+            AVG(power_factor) AS pf,
+            AVG(frequency) AS freq,
+            MAX(active_energy) AS max_energy,
+            MIN(active_energy) AS min_energy,
+            COUNT(*) as sample_count
+          FROM raw_feeder
+          GROUP BY date_trunc('${truncUnit}', t_stamp)
+          ORDER BY bucket DESC
+        `;
+        const feederRes = await pool.query(feederSql, [`${startDate} 00:00:00`, endDate]);
+        queryRows = feederRes.rows;
+      } catch (e) {
+        // Fallback
+      }
+    }
+
+    // Transform query rows into the report row format
+    const tagLabel = machine && machine !== "all" ? `${tag.toUpperCase()} - ${machine}` : tag.toUpperCase();
+
+    const result = queryRows.map((r: any) => {
+      const bDate = new Date(r.bucket);
+      let dateStr = "";
+      if (granularity === "hour") {
+        const pad = (n: number) => String(n).padStart(2, "0");
+        dateStr = `${bDate.getFullYear()}-${pad(bDate.getMonth() + 1)}-${pad(bDate.getDate())} ${pad(bDate.getHours())}:00:00`;
+      } else if (granularity === "day") {
+        const pad = (n: number) => String(n).padStart(2, "0");
+        dateStr = `${bDate.getFullYear()}-${pad(bDate.getMonth() + 1)}-${pad(bDate.getDate())}`;
+      } else {
+        const pad = (n: number) => String(n).padStart(2, "0");
+        dateStr = `${bDate.getFullYear()}-${pad(bDate.getMonth() + 1)}`;
+      }
+
+      const kwVal = r.kw !== null ? Number(r.kw) : null;
+      const kvarVal = r.kvar !== null ? Number(r.kvar) : null;
+      const kvaVal = r.kva !== null ? Number(r.kva) : null;
+      const energyDiff = (r.max_energy !== null && r.min_energy !== null && Number(r.max_energy) > Number(r.min_energy))
+        ? Number(r.max_energy) - Number(r.min_energy)
+        : null;
+
+      // Real active energy (kWh)
+      const kwhVal = energyDiff !== null && energyDiff > 0
+        ? energyDiff
+        : (kwVal !== null ? kwVal : (r.max_energy !== null ? Number(r.max_energy) : null));
+
+      // Real reactive energy (kVARh) - calculated directly from real reactive_power_total
+      const kvarhVal = kvarVal !== null ? Math.abs(kvarVal) : null;
+
+      // Real apparent energy (kVAh) - calculated directly from real apparent_power_total
+      const kvahVal = kvaVal !== null 
+        ? Math.abs(kvaVal) 
+        : (kwhVal !== null && kvarhVal !== null ? Math.sqrt(kwhVal * kwhVal + kvarhVal * kvarhVal) : null);
+
+      return {
+        date: dateStr,
+        tag: tagLabel,
+        // Energy tab
+        kwh: kwhVal !== null ? +kwhVal.toFixed(2) : null,
+        kvarh: kvarhVal !== null ? +kvarhVal.toFixed(2) : null,
+        kvah: kvahVal !== null ? +kvahVal.toFixed(2) : null,
+        // Tegangan tab
+        vr: r.vr !== null ? +Number(r.vr).toFixed(1) : null,
+        vs: r.vs !== null ? +Number(r.vs).toFixed(1) : null,
+        vt: r.vt !== null ? +Number(r.vt).toFixed(1) : null,
+        vrs: r.vrs !== null ? +Number(r.vrs).toFixed(1) : null,
+        vst: r.vst !== null ? +Number(r.vst).toFixed(1) : null,
+        vtr: r.vtr !== null ? +Number(r.vtr).toFixed(1) : null,
+        // Ampere tab
+        ir: r.ir !== null ? +Number(r.ir).toFixed(1) : null,
+        is: r.is_val !== null ? +Number(r.is_val).toFixed(1) : null,
+        it: r.it !== null ? +Number(r.it).toFixed(1) : null,
+        in: r.in_val !== null ? +Number(r.in_val).toFixed(1) : null,
+        // THD tab
+        thdv_r: r.thdv_r !== null ? +Number(r.thdv_r).toFixed(2) : null,
+        thdv_s: r.thdv_s !== null ? +Number(r.thdv_s).toFixed(2) : null,
+        thdv_t: r.thdv_t !== null ? +Number(r.thdv_t).toFixed(2) : null,
+        thdi_r: r.thdi_r !== null ? +Number(r.thdi_r).toFixed(2) : null,
+        thdi_s: r.thdi_s !== null ? +Number(r.thdi_s).toFixed(2) : null,
+        thdi_t: r.thdi_t !== null ? +Number(r.thdi_t).toFixed(2) : null,
+        // Daya tab
+        kw: kwVal !== null ? +kwVal.toFixed(1) : null,
+        kvar: kvarVal !== null ? +kvarVal.toFixed(1) : null,
+        kva: kvaVal !== null ? +kvaVal.toFixed(1) : null,
+        pf: r.pf !== null ? +Number(r.pf).toFixed(3) : null,
+        freq: r.freq !== null ? +Number(r.freq).toFixed(2) : null,
+      };
+    });
+
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+};

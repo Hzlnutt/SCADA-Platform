@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { useSystemStore } from "../../store/system.store";
+import { getJson } from "../../services/api.client";
 
 /* ═══════════ TYPES ═══════════ */
 type ReportCategory = "energy" | "tegangan" | "ampere" | "thd" | "daya";
@@ -189,99 +190,6 @@ const COVERED_MACHINES: Record<string, string[]> = {
   ]
 };
 
-function generateMockData(
-  category: ReportCategory,
-  tag: TagOption,
-  machineName: string,
-  granularity: string,
-  startDate: string,
-  endDate: string
-): Record<string, any>[] {
-  const rows: Record<string, any>[] = [];
-  const start = new Date(startDate + "T00:00:00");
-  const end = new Date(endDate + "T23:59:59");
-
-  if (granularity === "hour") {
-    // Generate hourly rows for the date range (newest first)
-    const dates: Date[] = [];
-    const cur = new Date(end);
-    while (cur >= start) {
-      dates.push(new Date(cur));
-      cur.setHours(cur.getHours() - 1);
-    }
-    for (const dt of dates) {
-      rows.push(generateRow(category, tag, machineName, dt));
-    }
-  } else if (granularity === "day") {
-    const cur = new Date(end);
-    while (cur >= start) {
-      rows.push(generateRow(category, tag, machineName, cur));
-      cur.setDate(cur.getDate() - 1);
-    }
-  } else {
-    // month
-    const cur = new Date(end.getFullYear(), end.getMonth(), 1);
-    const startMonth = new Date(start.getFullYear(), start.getMonth(), 1);
-    while (cur >= startMonth) {
-      rows.push(generateRow(category, tag, machineName, cur));
-      cur.setMonth(cur.getMonth() - 1);
-    }
-  }
-
-  return rows;
-}
-
-function generateRow(category: ReportCategory, tag: TagOption, machineName: string, dt: Date): Record<string, any> {
-  const dateStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")} ${String(dt.getHours()).padStart(2, "0")}:00:00`;
-  const tagLabel = machineName !== "all" ? `${tag.label} - ${machineName}` : tag.label;
-  const base: Record<string, any> = { date: dateStr, tag: tagLabel };
-  const rnd = (min: number, max: number, dec = 2) => +(min + Math.random() * (max - min)).toFixed(dec);
-
-  // If a specific machine is selected, scale down the consumption values compared to the whole panel load
-  const isScale = machineName !== "all";
-  const scaleKwh = isScale ? rnd(0.05, 0.15, 3) : 1;
-  const scaleKw = isScale ? rnd(0.05, 0.15, 3) : 1;
-  const scaleAmp = isScale ? rnd(0.05, 0.15, 3) : 1;
-
-  switch (category) {
-    case "energy":
-      base.kwh = rnd(300 * scaleKwh, 500 * scaleKwh, 2);
-      base.kvarh = rnd(0 * scaleKwh, 30 * scaleKwh, 2);
-      base.kvah = +(base.kwh + rnd(3 * scaleKwh, 10 * scaleKwh, 2)).toFixed(2);
-      break;
-    case "tegangan":
-      base.vr = rnd(225, 235, 1);
-      base.vs = rnd(225, 235, 1);
-      base.vt = rnd(225, 235, 1);
-      base.vrs = rnd(390, 410, 1);
-      base.vst = rnd(390, 410, 1);
-      base.vtr = rnd(390, 410, 1);
-      break;
-    case "ampere":
-      base.ir = rnd(600 * scaleAmp, 900 * scaleAmp, 1);
-      base.is = rnd(600 * scaleAmp, 900 * scaleAmp, 1);
-      base.it = rnd(600 * scaleAmp, 900 * scaleAmp, 1);
-      base.in = rnd(0, 15 * scaleAmp, 1);
-      break;
-    case "thd":
-      base.thdv_r = rnd(1, 4, 2);
-      base.thdv_s = rnd(1, 4, 2);
-      base.thdv_t = rnd(1, 4, 2);
-      base.thdi_r = rnd(3, 8, 2);
-      base.thdi_s = rnd(3, 8, 2);
-      base.thdi_t = rnd(3, 8, 2);
-      break;
-    case "daya":
-      base.kw = rnd(350 * scaleKw, 550 * scaleKw, 1);
-      base.kvar = rnd(80 * scaleKw, 200 * scaleKw, 1);
-      base.kva = rnd(400 * scaleKw, 600 * scaleKw, 1);
-      base.pf = rnd(0.88, 0.98, 3);
-      base.freq = rnd(49.95, 50.05, 2);
-      break;
-  }
-  return base;
-}
-
 /* ═══════════ EXPORT TO EXCEL HELPER ═══════════ */
 async function exportToExcel(data: Record<string, any>[], columns: { key: string; label: string }[], filename: string) {
   try {
@@ -349,16 +257,38 @@ export default function ElectricityReport() {
     setSelectedMachine("all");
   }, [effectiveTag]);
 
-  // Generate data
+  // Live backend data
   const [data, setData] = useState<Record<string, any>[]>([]);
   const [hasFiltered, setHasFiltered] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleFilter = useCallback(() => {
+  const handleFilter = useCallback(async () => {
     if (!effectiveTag) return;
-    const rows = generateMockData(activeCategory, effectiveTag, selectedMachine, selectedGranularity, dateStart, dateEnd);
-    setData(rows);
-    setHasFiltered(true);
-  }, [activeCategory, effectiveTag, selectedMachine, selectedGranularity, dateStart, dateEnd]);
+    setIsLoading(true);
+    try {
+      const q = new URLSearchParams({
+        category: activeCategory,
+        factory: selectedFactory,
+        tag: effectiveTag.id,
+        machine: selectedMachine,
+        granularity: selectedGranularity,
+        startDate: dateStart,
+        endDate: dateEnd,
+      }).toString();
+      const res = await getJson<{ data: Record<string, any>[] }>(`/analytics/electricity/report?${q}`);
+      if (res && Array.isArray(res.data)) {
+        setData(res.data);
+      } else {
+        setData([]);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch real electricity report:", err);
+      setData([]);
+    } finally {
+      setIsLoading(false);
+      setHasFiltered(true);
+    }
+  }, [activeCategory, selectedFactory, effectiveTag, selectedMachine, selectedGranularity, dateStart, dateEnd]);
 
   const columns = COLUMNS[activeCategory];
 
@@ -493,15 +423,22 @@ export default function ElectricityReport() {
             {/* Filter Button */}
             <button
               onClick={handleFilter}
-              className="px-4 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-xs font-extrabold uppercase tracking-wider transition-colors shadow-sm shadow-sky-500/20"
+              disabled={isLoading}
+              className="px-4 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white text-xs font-extrabold uppercase tracking-wider transition-colors shadow-sm shadow-sky-500/20 flex items-center gap-1.5"
             >
-              Filter
+              {isLoading && (
+                <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+              )}
+              {isLoading ? "Memuat..." : "Filter"}
             </button>
 
             {/* Export Button */}
             <button
               onClick={handleExport}
-              disabled={data.length === 0}
+              disabled={data.length === 0 || isLoading}
               className="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-extrabold uppercase tracking-wider transition-colors shadow-sm shadow-emerald-500/20"
             >
               Export to Excel
@@ -510,7 +447,15 @@ export default function ElectricityReport() {
 
           {/* Table Area */}
           <div className="flex-1 overflow-auto">
-            {!hasFiltered ? (
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center h-full py-20 text-center">
+                <svg className="animate-spin h-8 w-8 text-sky-500 mb-3" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Mengambil data real dari database...</p>
+              </div>
+            ) : !hasFiltered ? (
               /* Empty State */
               <div className="flex flex-col items-center justify-center h-full py-20 text-center">
                 <svg style={{ width: 48, height: 48 }} className="text-slate-300 dark:text-slate-700 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
@@ -520,12 +465,12 @@ export default function ElectricityReport() {
                   Pilih parameter dan klik <span className="text-sky-500">Filter</span> untuk menampilkan data
                 </p>
                 <p className="text-xs text-slate-300 dark:text-slate-600 mt-1">
-                  Data akan ditampilkan dalam format tabel berdasarkan filter yang dipilih
+                  Data akan ditarik langsung dari database historis telemetri
                 </p>
               </div>
             ) : data.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full py-20 text-center">
-                <p className="text-sm font-bold text-slate-400">Tidak ada data untuk filter yang dipilih</p>
+                <p className="text-sm font-bold text-slate-400">Tidak ada data untuk filter yang dipilih di database</p>
               </div>
             ) : (
               /* Data Table */
