@@ -16,7 +16,7 @@ fi
 
 echo "[1/3] Copying updated backend source and compiling TypeScript inside container..."
 sudo docker cp apps/backend/src/. "${BACKEND_CID}:/repo/apps/backend/src/"
-sudo docker compose exec -T backend pnpm -C apps/backend build
+sudo docker compose exec -T backend pnpm build
 
 echo "[2/3] Copying updated frontend build into Nginx..."
 sudo docker cp apps/frontend/dist/. "${FRONTEND_CID}:/usr/share/nginx/html/"
