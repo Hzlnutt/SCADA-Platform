@@ -221,8 +221,6 @@ const getNullEwRecords = (ts: Date, groupId: string): ElectricPmRecord[] => {
 };
 
 export const formatMinuteString = (d: Date = new Date()): string => {
-  // Correct 1-minute server clock skew by subtracting 60 seconds to match local time
-  const adjustedDate = new Date(d.getTime() - 60000);
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Jakarta",
     year: "numeric",
@@ -233,7 +231,7 @@ export const formatMinuteString = (d: Date = new Date()): string => {
     second: "2-digit",
     hour12: false
   });
-  const parts = formatter.formatToParts(adjustedDate);
+  const parts = formatter.formatToParts(d);
   const getPart = (type: string) => parts.find(p => p.type === type)?.value || "00";
   const yr = getPart("year");
   const mo = getPart("month");
