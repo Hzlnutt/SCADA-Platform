@@ -12,6 +12,8 @@ node_modules/
 coverage/
 dist/
 build/
+!apps/frontend/dist/
+!apps/frontend/dist/**
 .vscode/
 .idea/
 mongodb-database-tools-windows-x86_64-100.17.0.msi
