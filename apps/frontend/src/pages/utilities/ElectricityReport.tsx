@@ -48,8 +48,6 @@ const COLUMNS: Record<ReportCategory, { key: string; label: string; unit?: strin
     { key: "date", label: "DATE" },
     { key: "tag", label: "TAG DESCRIPTION" },
     { key: "kwh", label: "KWH", unit: "kWh" },
-    { key: "kvarh", label: "KVARH", unit: "kVARh" },
-    { key: "kvah", label: "KVAH", unit: "kVAh" },
   ],
   tegangan: [
     { key: "date", label: "DATE" },
