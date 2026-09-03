@@ -1,9 +1,13 @@
 import { Client } from "pg";
 import dotenv from "dotenv";
 import path from "path";
+import fs from "fs";
 
 dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+
+// File penanda apakah backup sukses sudah tercapai hari ini
+const LAST_SYNC_FILE = path.resolve(__dirname, "../../../../.last_sync_success.txt");
 
 // ==============================================================================
 // KONFIGURASI DATABASE
@@ -31,6 +35,22 @@ const LOCAL_CONFIG = {
 const BATCH_SIZE = 500;
 
 async function runSync() {
+  const isForce = process.argv.includes("--force");
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const currentHour = now.getHours();
+
+  // Jika hari ini sudah sukses backup dan sekarang bukan jam 2 pagi, tidak perlu backup ulang
+  if (!isForce && fs.existsSync(LAST_SYNC_FILE)) {
+    try {
+      const lastDate = fs.readFileSync(LAST_SYNC_FILE, "utf-8").trim();
+      if (lastDate === todayStr && currentHour !== 2) {
+        console.log(`ℹ️ [INFO] Backup hari ini (${todayStr}) sudah berhasil dilakukan. Menunggu jadwal jam 02:00 berikutnya.`);
+        return;
+      }
+    } catch {}
+  }
+
   console.log("==================================================================");
   console.log("🔄 SCADA DATABASE BACKUP & INCREMENTAL SYNC KE LAPTOP PRIBADI");
   console.log("==================================================================");
@@ -303,6 +323,11 @@ async function runSync() {
     console.log("------------------------------------------------------------------");
     console.log(`✨ SINKRONISASI SELESAI SUKSES! Total data disinkronkan: ${totalSyncedRows} baris.`);
     console.log("==================================================================");
+
+    try {
+      fs.writeFileSync(LAST_SYNC_FILE, todayStr, "utf-8");
+      console.log(`💾 Tanggal backup sukses hari ini (${todayStr}) telah dicatat.`);
+    } catch {}
 
   } catch (error: any) {
     console.error("\n❌ Terjadi kesalahan saat sinkronisasi:", error.message);
