@@ -172,11 +172,12 @@ export const getSolarAnalytics = async (
       diffTot = diffPoi1 + diffPoi2;
     }
 
-    const prevTs = prev.ts_text.split(".")[0];
-    const [prevDateStr, prevTimeStr = "00:00:00"] = prevTs.split(" ");
-    const prevHour = parseInt(prevTimeStr.split(":")[0], 10);
+    // The difference curr - prev represents energy produced during the hour interval of curr
+    const currTs = curr.ts_text.split(".")[0];
+    const [currDateStr, currTimeStr = "00:00:00"] = currTs.split(" ");
+    const targetHour = parseInt(currTimeStr.split(":")[0], 10);
 
-    const dateStr = prevDateStr;
+    const dateStr = currDateStr;
     const monthStr = dateStr.substring(0, 7);
     const isToday = dateStr === todayStr;
     const isCurrentMonth = monthStr === currentMonthStr;
@@ -212,10 +213,10 @@ export const getSolarAnalytics = async (
     if (!hourlyMapPoi2.has(dateStr)) hourlyMapPoi2.set(dateStr, Array.from({ length: 24 }, () => 0));
     if (!hourlyMapTotal.has(dateStr)) hourlyMapTotal.set(dateStr, Array.from({ length: 24 }, () => 0));
 
-    if (prevHour >= 0 && prevHour < 24) {
-      hourlyMapPoi1.get(dateStr)![prevHour] += diffPoi1;
-      hourlyMapPoi2.get(dateStr)![prevHour] += diffPoi2;
-      hourlyMapTotal.get(dateStr)![prevHour] += diffTot;
+    if (targetHour >= 0 && targetHour < 24) {
+      hourlyMapPoi1.get(dateStr)![targetHour] += diffPoi1;
+      hourlyMapPoi2.get(dateStr)![targetHour] += diffPoi2;
+      hourlyMapTotal.get(dateStr)![targetHour] += diffTot;
     }
   }
 
