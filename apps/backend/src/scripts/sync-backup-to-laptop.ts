@@ -10,11 +10,11 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 // ==============================================================================
 // 1. Database Server Sumber (SCADA Production)
 const SERVER_CONFIG = {
-  host: process.env.REMOTE_PG_HOST || process.env.SERVER_PG_HOST || "utility.widatra.com",
-  port: parseInt(process.env.REMOTE_PG_PORT || process.env.SERVER_PG_PORT || "5432", 10),
-  database: process.env.REMOTE_PG_DB || process.env.SERVER_PG_DB || "scada_test",
-  user: process.env.REMOTE_PG_USER || process.env.SERVER_PG_USER || "test_user",
-  password: process.env.REMOTE_PG_PASS || process.env.SERVER_PG_PASS || "Pandaan1",
+  host: process.env.REMOTE_PG_HOST || process.env.SERVER_PG_HOST || process.env.POSTGRES_HOST || "utility.widatra.com",
+  port: parseInt(process.env.REMOTE_PG_PORT || process.env.SERVER_PG_PORT || process.env.POSTGRES_PORT || "5432", 10),
+  database: process.env.REMOTE_PG_DB || process.env.SERVER_PG_DB || process.env.POSTGRES_DB || "scada_test",
+  user: process.env.REMOTE_PG_USER || process.env.SERVER_PG_USER || process.env.POSTGRES_USER || "test_user",
+  password: process.env.REMOTE_PG_PASS || process.env.SERVER_PG_PASS || process.env.POSTGRES_PASSWORD || "Pandaan1",
   connectionTimeoutMillis: 10000,
 };
 
@@ -66,7 +66,23 @@ async function runSync() {
       }
     }
 
-    // 3. Dapatkan daftar semua tabel dari server (public schema)
+    // 3. Replikasi seluruh sequences dari server terlebih dahulu (mencegah error relation seq does not exist)
+    console.log("🔢 Menyiapkan sequences di database laptop...");
+    try {
+      const seqRes = await serverClient.query(`
+        SELECT sequence_name 
+        FROM information_schema.sequences 
+        WHERE sequence_schema = 'public'
+      `);
+      for (const row of seqRes.rows) {
+        await localClient.query(`CREATE SEQUENCE IF NOT EXISTS "${row.sequence_name}"`).catch(() => {});
+      }
+      console.log(`✅ ${seqRes.rows.length} sequences berhasil disiapkan.`);
+    } catch (e: any) {
+      console.warn("Peringatan saat menyiapkan sequence:", e.message);
+    }
+
+    // 4. Dapatkan daftar semua tabel dari server (public schema)
     const tablesRes = await serverClient.query(`
       SELECT table_name 
       FROM information_schema.tables 
@@ -94,16 +110,39 @@ async function runSync() {
       // Jika belum ada di laptop, replikasi skema tabel dari server
       if (!tableExists) {
         const ddlRes = await serverClient.query(`
-          SELECT column_name, data_type, character_maximum_length, is_nullable, column_default
+          SELECT column_name, data_type, character_maximum_length, numeric_precision, numeric_scale, is_nullable, column_default
           FROM information_schema.columns
           WHERE table_schema = 'public' AND table_name = $1
           ORDER BY ordinal_position
         `, [table]);
 
+        // Buat sequence terkait jika ada di default value
+        for (const col of ddlRes.rows) {
+          if (col.column_default && col.column_default.includes("nextval")) {
+            const match = col.column_default.match(/nextval\('([^']+)'/);
+            if (match) {
+              const seqName = match[1].split(".").pop()?.replace(/"/g, "") || "";
+              if (seqName) {
+                await localClient.query(`CREATE SEQUENCE IF NOT EXISTS "${seqName}"`).catch(() => {});
+              }
+            }
+          }
+        }
+
         const colsDef = ddlRes.rows.map((col: any) => {
           let type = col.data_type;
           if (type === "character varying") {
             type = col.character_maximum_length ? `VARCHAR(${col.character_maximum_length})` : "VARCHAR";
+          } else if (type === "numeric") {
+            if (col.numeric_precision && col.numeric_scale) {
+              type = `NUMERIC(${col.numeric_precision},${col.numeric_scale})`;
+            } else {
+              type = "NUMERIC";
+            }
+          } else if (type === "timestamp without time zone") {
+            type = "TIMESTAMP WITHOUT TIME ZONE";
+          } else if (type === "timestamp with time zone") {
+            type = "TIMESTAMP WITH TIME ZONE";
           } else if (type === "USER-DEFINED") {
             type = "TEXT";
           }
@@ -113,8 +152,22 @@ async function runSync() {
         }).join(", ");
 
         await localClient.query(`CREATE TABLE IF NOT EXISTS "${table}" (${colsDef});`);
+
+        // Replikasi primary key / unique constraints jika ada
+        try {
+          const pkRes = await serverClient.query(`
+            SELECT c.conname, pg_get_constraintdef(c.oid) as condef
+            FROM pg_constraint c
+            JOIN pg_namespace n ON n.oid = c.connamespace
+            JOIN pg_class cl ON cl.oid = c.conrelid
+            WHERE n.nspname = 'public' AND cl.relname = $1 AND c.contype IN ('p', 'u')
+          `, [table]);
+          for (const pk of pkRes.rows) {
+            await localClient.query(`ALTER TABLE "${table}" ADD CONSTRAINT "${pk.conname}" ${pk.condef}`).catch(() => {});
+          }
+        } catch {}
         
-        // Salin index / constraint jika ada
+        // Salin index jika ada
         try {
           const indexRes = await serverClient.query(`
             SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename = $1
@@ -176,15 +229,26 @@ async function runSync() {
       // Masukkan baris baru ke database laptop (secara batch)
       const quotedCols = colNames.map(c => `"${c}"`).join(", ");
       
-      // Deteksi conflict target jika ada PK atau unique constraint
+      // Deteksi conflict target berdasarkan primary key atau unique constraint yang valid
       let onConflictClause = "";
-      if (hasId) {
-        onConflictClause = `ON CONFLICT ("id") DO NOTHING`;
-      } else if (hasTstamp && colNames.includes("id_device")) {
-        onConflictClause = `ON CONFLICT ("t_stamp", "id_device") DO NOTHING`;
-      } else if (hasTstamp) {
-        onConflictClause = `ON CONFLICT ("t_stamp") DO NOTHING`;
-      }
+      try {
+        const constraintRes = await localClient.query(`
+          SELECT pg_get_constraintdef(c.oid) as condef
+          FROM pg_constraint c
+          JOIN pg_namespace n ON n.oid = c.connamespace
+          JOIN pg_class cl ON cl.oid = c.conrelid
+          WHERE n.nspname = 'public' AND cl.relname = $1 AND c.contype IN ('p', 'u')
+          ORDER BY c.contype ASC
+          LIMIT 1
+        `, [table]);
+        if (constraintRes.rows.length > 0) {
+          const condef = constraintRes.rows[0].condef;
+          const match = condef.match(/\(([^)]+)\)/);
+          if (match) {
+            onConflictClause = `ON CONFLICT (${match[1]}) DO NOTHING`;
+          }
+        }
+      } catch {}
 
       let insertedCount = 0;
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
@@ -223,6 +287,12 @@ async function runSync() {
             insertedCount++;
           }
         }
+      }
+
+      if (hasId) {
+        await localClient.query(`
+          SELECT setval(pg_get_serial_sequence('"${table}"', 'id'), COALESCE((SELECT MAX("id") FROM "${table}"), 1), true)
+        `).catch(() => {});
       }
 
       const statusTag = isFirstTime ? "🎉 INITIAL FULL SYNC" : "⚡ INCREMENTAL SYNC";
