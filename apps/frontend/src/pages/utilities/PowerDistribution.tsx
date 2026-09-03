@@ -1194,6 +1194,9 @@ export default function PowerDistribution() {
               <marker id="arrow-green" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10b981" />
               </marker>
+              <marker id="arrow-red" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#ef4444" />
+              </marker>
               <marker id="arrow-orange" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#f97316" />
               </marker>
@@ -1202,18 +1205,18 @@ export default function PowerDistribution() {
               </marker>
             </defs>
 
-            {/* Main PLN line down and split symmetrically to Factory 1 (285) & Factory 2 (915) */}
-            <path d="M 600 114 L 600 134 M 285 134 L 915 134" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            {/* Main PLN line down and split symmetrically to Factory 1 (285) & Factory 2 (795) */}
+            <path d="M 600 114 L 600 134 M 285 134 L 795 134" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
             
             {/* Feeder line into Incoming Fact-1 */}
             <path d="M 285 134 L 285 150" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
             
             {/* Feeder line into Incoming Fact-2 */}
-            <path d="M 915 134 L 915 150" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <path d="M 795 134 L 795 150" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
 
             {/* Blue lines from Incoming Feeders down to Yellow Busbars */}
             <path d="M 285 226 L 285 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
-            <path d="M 915 226 L 915 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <path d="M 795 226 L 795 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
 
             {/* Busbars: Thick Yellow Lines with Ambient Glow */}
             {/* Factory 1 Busbar (Centered at X = 285, Width = 430) */}
@@ -1250,54 +1253,52 @@ export default function PowerDistribution() {
               </g>
             ))}
 
-            {/* --- ZERO-COLLISION AUXILIARY POWER ROUTING --- */}
-            {/* 1. Genset Natural Gas (95, 220) -> Feeds MDP-2 (left side X=290, Y=410) and MDP-3 (left side X=400, Y=410) */}
+            {/* --- EXACT AUXILIARY POWER ROUTING AS IN REFERENCE DIAGRAM --- */}
+            {/* 1. Genset Natural Gas (95, 220) -> Feeds MDP-1.1 (120), MDP-1.2 (230), and MDP-2 (340) */}
             <path
-              d="M 95 220 L 95 245 L 35 245 L 35 455 L 285 455 L 285 410 L 290 410"
+              d="M 95 220 L 95 345 L 340 345 M 120 345 L 120 360 M 230 345 L 230 360 M 340 345 L 340 360"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
-              strokeDasharray="5 3"
-              markerEnd="url(#arrow-green)"
+              strokeDasharray="4 3"
             />
+            <circle cx="95" cy="220" r="2.5" fill="#10b981" />
+            <circle cx="120" cy="345" r="2.5" fill="#10b981" />
+            <circle cx="230" cy="345" r="2.5" fill="#10b981" />
+            <circle cx="340" cy="345" r="2.5" fill="#10b981" />
+
+            {/* 2. Solar PV POI-1 (475, 220) -> Feeds right side of MDP-3 (500, 415) */}
             <path
-              d="M 285 455 L 395 455 L 395 410 L 400 410"
+              d="M 475 220 L 475 240 L 525 240 L 525 415 L 500 415"
+              fill="none"
+              stroke="#ef4444"
+              strokeWidth="2"
+              strokeDasharray="3 3"
+              markerEnd="url(#arrow-red)"
+            />
+            <circle cx="475" cy="220" r="2.5" fill="#ef4444" />
+
+            {/* 3. Solar PV POI-2 (950 -> 975, 220) -> Straight down between PUTR-2 & PUTR-NEW, into right side of PUTR-2 (969, 415) */}
+            <path
+              d="M 950 220 L 950 235 L 975 235 L 975 415 L 969 415"
+              fill="none"
+              stroke="#ef4444"
+              strokeWidth="2"
+              strokeDasharray="3 3"
+              markerEnd="url(#arrow-red)"
+            />
+            <circle cx="950" cy="220" r="2.5" fill="#ef4444" />
+
+            {/* 4. Genset Diesel Fuel (1105, 220) -> Down & left into feeder above PUTR-NEW (1035, 345) */}
+            <path
+              d="M 1105 220 L 1105 345 L 1035 345 M 1035 345 L 1035 360"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
-              strokeDasharray="5 3"
-              markerEnd="url(#arrow-green)"
+              strokeDasharray="4 3"
             />
-
-            {/* 2. Solar PV POI-1 (475, 220) -> Feeds right side of MDP-3 (X=500, Y=410) */}
-            <path
-              d="M 475 220 L 475 245 L 535 245 L 535 410 L 500 410"
-              fill="none"
-              stroke="#f97316"
-              strokeWidth="2"
-              strokeDasharray="5 3"
-              markerEnd="url(#arrow-orange)"
-            />
-
-            {/* 3. Solar PV POI-2 (725, 220) -> Feeds left side of PUTR-2 (X=861, Y=410) */}
-            <path
-              d="M 725 220 L 725 245 L 675 245 L 675 455 L 855 455 L 855 410 L 861 410"
-              fill="none"
-              stroke="#f97316"
-              strokeWidth="2"
-              strokeDasharray="5 3"
-              markerEnd="url(#arrow-orange)"
-            />
-
-            {/* 4. Genset Diesel Fuel (1105, 220) -> Feeds right side of PUTR-NEW (X=1089, Y=410) */}
-            <path
-              d="M 1105 220 L 1105 245 L 1125 245 L 1125 410 L 1089 410"
-              fill="none"
-              stroke="#10b981"
-              strokeWidth="2"
-              strokeDasharray="5 3"
-              markerEnd="url(#arrow-green)"
-            />
+            <circle cx="1105" cy="220" r="2.5" fill="#10b981" />
+            <circle cx="1035" cy="345" r="2.5" fill="#10b981" />
           </svg>
 
           {/* 2. ABSOLUTE CARDS LAYOUT */}
@@ -1368,25 +1369,9 @@ export default function PowerDistribution() {
             </div>
           </div>
 
-          {/* ═══════════ FACTORY 2 SOURCES (Right Wing, Center = 915) ═══════════ */}
-          {/* 1. Solar PV POI-2 (Inner Right) */}
-          <div className="absolute z-10" style={{ left: 660, top: 160 }}>
-            <div className={`p-2.5 w-[130px] text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
-            }`}>
-              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
-              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">POI-2</div>
-              <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                Active Power: <span className="font-bold font-mono text-slate-400">—</span>
-              </div>
-              <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono text-slate-400">—</span>
-              </div>
-            </div>
-          </div>
-
-          {/* 2. Incoming Fact-2 (Center F2) */}
-          <div className="absolute z-10" style={{ left: 845, top: 150 }}>
+          {/* ═══════════ FACTORY 2 SOURCES (Right Wing) ═══════════ */}
+          {/* 1. Incoming Fact-2 (Left F2, Center = 795) */}
+          <div className="absolute z-10" style={{ left: 725, top: 150 }}>
             <div className={`p-2.5 w-[140px] text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
             }`}>
@@ -1404,7 +1389,23 @@ export default function PowerDistribution() {
             </div>
           </div>
 
-          {/* 3. Genset Diesel Fuel (Outer Right) */}
+          {/* 2. Solar PV POI-2 (Center F2, Center = 950) */}
+          <div className="absolute z-10" style={{ left: 885, top: 160 }}>
+            <div className={`p-2.5 w-[130px] text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
+            }`}>
+              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
+              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">POI-2</div>
+              <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                Active Power: <span className="font-bold font-mono text-slate-400">—</span>
+              </div>
+              <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
+                PF : <span className="font-bold font-mono text-slate-400">—</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Genset Diesel Fuel (Outer Right, Center = 1105) */}
           <div className="absolute z-10" style={{ left: 1040, top: 160 }}>
             <div className={`p-2.5 w-[130px] text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
