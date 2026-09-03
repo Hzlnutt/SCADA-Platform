@@ -1,14 +1,9 @@
 @echo off
-TITLE SCADA Database Backup Sync to Laptop
-echo ==================================================================
-echo [SCADA] Menjalankan Backup dan Sinkronisasi ke Database Laptop...
-echo ==================================================================
-
 cd /d "%~dp0"
-pnpm run sync:backup
 
-echo.
-echo ==================================================================
-echo Proses selesai.
-echo ==================================================================
-timeout /t 5
+echo ================================================================== >> backup-sync.log
+echo [%date% %time%] Memulai sinkronisasi backup SCADA ke laptop... >> backup-sync.log
+
+call pnpm run sync:backup >> backup-sync.log 2>&1
+
+echo [%date% %time%] Sinkronisasi selesai. >> backup-sync.log
