@@ -10,7 +10,8 @@ node_modules/
 !.env.example
 *.log
 coverage/
-dist/
+/dist/
+apps/backend/dist/
 build/
 !apps/frontend/dist/
 !apps/frontend/dist/**
