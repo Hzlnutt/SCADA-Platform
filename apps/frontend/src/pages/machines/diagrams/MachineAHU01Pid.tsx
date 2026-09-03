@@ -14,12 +14,15 @@ import PipeBend from "../../../components/pid/PipeBend";
 import { PipeDefs } from "../../../components/pid/PipeDefs";
 import { PipeH, PipeV } from "../../../components/pid/Pipe";
 import DashedLine from "../../../components/pid/DashedLine";
+import AmbientIndicator from "../../../components/pid/AmbientIndicator";
 
 interface PidProps {
   tempSP?: number;
   humiditySP?: number;
   running?: boolean;
   data?: Record<string, any>;
+  ambientTemp?: number | null;
+  ambientHumid?: number | null;
 }
 
 export default function MachineAHU01Pid({
@@ -27,14 +30,22 @@ export default function MachineAHU01Pid({
   humiditySP = 75.0,
   running = true,
   data = {},
+  ambientTemp = null,
+  ambientHumid = null,
 }: PidProps) {
+  const isConnected = data.Connected !== undefined ? Boolean(data.Connected) : true;
+  const isMachineRunning = isConnected && (data.xIND_RUN_SF01 !== undefined ? Boolean(data.xIND_RUN_SF01) : running);
+
+  const ambientT = ambientTemp !== null ? ambientTemp : (typeof data.Ambient_Temp === "number" ? data.Ambient_Temp : (typeof data.ambient_temp === "number" ? data.ambient_temp : null));
+  const ambientH = ambientHumid !== null ? ambientHumid : (typeof data.Ambient_RH === "number" ? data.Ambient_RH : (typeof data.ambient_humid === "number" ? data.ambient_humid : null));
+
   // Extract live parameters from PLC1_AHU1_Utl
-  const rt1A = data.ACT_RTx_1A !== undefined ? Number(data.ACT_RTx_1A) : 40.47;
-  const rh1A = data.ACT_RHx_1A !== undefined ? Number(data.ACT_RHx_1A) : 76.81;
-  const rt1B = data.ACT_RTx_1B !== undefined ? Number(data.ACT_RTx_1B) : 40.41;
-  const rh1B = data.ACT_RHx_1B !== undefined ? Number(data.ACT_RHx_1B) : 74.88;
-  const rat1 = data.ACT_RATx_1 !== undefined ? Number(data.ACT_RATx_1) : 40.06;
-  const rah1 = data.ACT_RAHx_1 !== undefined ? Number(data.ACT_RAHx_1) : 75.75;
+  const rt1A = isMachineRunning && typeof data.ACT_RTx_1A === "number" ? data.ACT_RTx_1A : null;
+  const rh1A = isMachineRunning && typeof data.ACT_RHx_1A === "number" ? data.ACT_RHx_1A : null;
+  const rt1B = isMachineRunning && typeof data.ACT_RTx_1B === "number" ? data.ACT_RTx_1B : null;
+  const rh1B = isMachineRunning && typeof data.ACT_RHx_1B === "number" ? data.ACT_RHx_1B : null;
+  const rat1 = isMachineRunning && typeof data.ACT_RATx_1 === "number" ? data.ACT_RATx_1 : null;
+  const rah1 = isMachineRunning && typeof data.ACT_RAHx_1 === "number" ? data.ACT_RAHx_1 : null;
 
   const sf01Running = data.xIND_RUN_SF01 !== undefined ? Boolean(data.xIND_RUN_SF01) : running;
   const sf01Cap = data.ACT_SF01_CAP !== undefined ? Number(data.ACT_SF01_CAP) : 90.0;
@@ -320,6 +331,16 @@ export default function MachineAHU01Pid({
         warningThreshold={250} alarmThreshold={300}
         thresholdDirection="above"
         decimalPlaces={1}
+      />
+
+      {/* Ambient Temp & RH Indicator */}
+      <AmbientIndicator
+        x={865}
+        y={13}
+        w={120}
+        temp={ambientT}
+        humidity={ambientH}
+        isStopped={false}
       />
     </svg>
   );

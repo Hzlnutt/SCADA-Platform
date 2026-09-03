@@ -6,12 +6,15 @@ import PumpMotor from "../../../components/pid/PumpMotor";
 import PipeBend from "../../../components/pid/PipeBend";
 import LabelComponent from "../../../components/pid/TextLabel";
 import { SensorIndicator } from "../../../components/pid/SensorIndicator";
+import AmbientIndicator from "../../../components/pid/AmbientIndicator";
 
 interface DiagramProps {
   tempSP?: number;
   humiditySP?: number;
   running?: boolean;
   data?: Record<string, any>;
+  ambientTemp?: number | null;
+  ambientHumid?: number | null;
 }
 
 export default function MachineUtilityPid({
@@ -19,9 +22,14 @@ export default function MachineUtilityPid({
   humiditySP = 60.0,
   running = true,
   data = {},
+  ambientTemp = null,
+  ambientHumid = null,
 }: DiagramProps) {
   const hpRunning = data.xIND_RUN_HP !== undefined ? Boolean(data.xIND_RUN_HP) : running;
   const uvRunning = data.UV_LAMP !== undefined ? Boolean(data.UV_LAMP) : running;
+
+  const ambientT = ambientTemp !== null ? ambientTemp : (typeof data.Ambient_Temp === "number" ? data.Ambient_Temp : (typeof data.ambient_temp === "number" ? data.ambient_temp : null));
+  const ambientH = ambientHumid !== null ? ambientHumid : (typeof data.Ambient_RH === "number" ? data.Ambient_RH : (typeof data.ambient_humid === "number" ? data.ambient_humid : null));
 
   return (
     <svg
@@ -80,6 +88,16 @@ export default function MachineUtilityPid({
         h={25}
         value={uvRunning} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
+      />
+
+      {/* Ambient Temp & RH Indicator */}
+      <AmbientIndicator
+        x={865}
+        y={13}
+        w={120}
+        temp={ambientT}
+        humidity={ambientH}
+        isStopped={false}
       />
     </svg>
   );

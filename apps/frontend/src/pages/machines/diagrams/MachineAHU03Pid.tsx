@@ -13,12 +13,15 @@ import { PipeH, PipeV } from "../../../components/pid/Pipe";
 import DashedLine from "../../../components/pid/DashedLine";
 import ACUnit from "../../../components/pid/ACUnit";
 import AHUFan from "../../../components/pid/AHUFan";
+import AmbientIndicator from "../../../components/pid/AmbientIndicator";
 
 interface PidProps {
   tempSP?: number;
   humiditySP?: number;
   running?: boolean;
   data?: Record<string, any>;
+  ambientTemp?: number | null;
+  ambientHumid?: number | null;
 }
 
 export default function MachineAHU03Pid({
@@ -26,12 +29,19 @@ export default function MachineAHU03Pid({
   humiditySP = 55.0,
   running = true,
   data = {},
+  ambientTemp = null,
+  ambientHumid = null,
 }: PidProps) {
-  // Extract live parameters from PLC2_AHU3
-  const rt3A = data.ACT_RTx_3A !== undefined ? Number(data.ACT_RTx_3A) : 26.25;
-  const rt3B = data.ACT_RTx_3B !== undefined ? Number(data.ACT_RTx_3B) : 27.56;
-  const pf03Dp = data.PF_03_DP !== undefined ? Number(data.PF_03_DP) : 0.0;
-  const isRunning = data.isRunning !== undefined ? Boolean(data.isRunning) : running;
+  const isConnected = data.Connected !== undefined ? Boolean(data.Connected) : true;
+  const isRunning = isConnected && (data.isRunning !== undefined ? Boolean(data.isRunning) : running);
+
+  const ambientT = ambientTemp !== null ? ambientTemp : (typeof data.Ambient_Temp === "number" ? data.Ambient_Temp : (typeof data.ambient_temp === "number" ? data.ambient_temp : null));
+  const ambientH = ambientHumid !== null ? ambientHumid : (typeof data.Ambient_RH === "number" ? data.Ambient_RH : (typeof data.ambient_humid === "number" ? data.ambient_humid : null));
+
+  // Extract live parameters without dummy numbers
+  const rt3A = isRunning && typeof data.ACT_RTx_3A === "number" ? data.ACT_RTx_3A : null;
+  const rt3B = isRunning && typeof data.ACT_RTx_3B === "number" ? data.ACT_RTx_3B : null;
+  const pf03Dp = isRunning && typeof data.PF_03_DP === "number" ? data.PF_03_DP : null;
 
   return (
     <svg
@@ -231,6 +241,16 @@ export default function MachineAHU03Pid({
         warningThreshold={250} alarmThreshold={300} 
         thresholdDirection="above" 
         decimalPlaces={1}
+      />
+
+      {/* Ambient Temp & RH Indicator */}
+      <AmbientIndicator
+        x={865}
+        y={13}
+        w={120}
+        temp={ambientT}
+        humidity={ambientH}
+        isStopped={false}
       />
     </svg>
   );

@@ -16,12 +16,15 @@ import { PipeH, PipeV } from "../../../components/pid/Pipe";
 import DashedLine from "../../../components/pid/DashedLine";
 import ACUnit from "../../../components/pid/ACUnit";
 import { PipeT } from "../../../components/pid/PipeT";
+import AmbientIndicator from "../../../components/pid/AmbientIndicator";
 
 interface PidProps {
   tempSP?: number;
   humiditySP?: number;
   running?: boolean;
   data?: Record<string, any>;
+  ambientTemp?: number | null;
+  ambientHumid?: number | null;
 }
 
 export default function MachineAHU02Pid({
@@ -29,14 +32,24 @@ export default function MachineAHU02Pid({
   humiditySP = 55.0,
   running = true,
   data = {},
+  ambientTemp = null,
+  ambientHumid = null,
 }: PidProps) {
-  // Extract live parameters from PLC2_AHU2
-  const rt2A = data.ACT_RTx_2A !== undefined ? Number(data.ACT_RTx_2A) : 28.72;
-  const rh2A = data.ACT_RHx_2A !== undefined ? Number(data.ACT_RHx_2A) : 76.19;
-  const rt2B = data.ACT_RTx_2B !== undefined ? Number(data.ACT_RTx_2B) : 29.84;
-  const rh2B = data.ACT_RHx_2B !== undefined ? Number(data.ACT_RHx_2B) : 70.13;
-  const rat2 = data.ACT_RATx_2 !== undefined ? Number(data.ACT_RATx_2) : 30.16;
-  const rah2 = data.ACT_RAHx_2 !== undefined ? Number(data.ACT_RAHx_2) : 68.14;
+  const isConnected = data.Connected !== undefined ? Boolean(data.Connected) : true;
+  const isSf02a = data.xIND_RUN_SF02A !== undefined ? Boolean(data.xIND_RUN_SF02A) : running;
+  const isSf02b = data.xIND_RUN_SF02B !== undefined ? Boolean(data.xIND_RUN_SF02B) : running;
+  const isMachineRunning = isConnected && (isSf02a || isSf02b || running);
+
+  const ambientT = ambientTemp !== null ? ambientTemp : (typeof data.Ambient_Temp === "number" ? data.Ambient_Temp : (typeof data.ambient_temp === "number" ? data.ambient_temp : null));
+  const ambientH = ambientHumid !== null ? ambientHumid : (typeof data.Ambient_RH === "number" ? data.Ambient_RH : (typeof data.ambient_humid === "number" ? data.ambient_humid : null));
+
+  // Extract live parameters from PLC2_AHU2 without dummy fallback numbers
+  const rt2A = isMachineRunning && typeof data.ACT_RTx_2A === "number" ? data.ACT_RTx_2A : null;
+  const rh2A = isMachineRunning && typeof data.ACT_RHx_2A === "number" ? data.ACT_RHx_2A : null;
+  const rt2B = isMachineRunning && typeof data.ACT_RTx_2B === "number" ? data.ACT_RTx_2B : null;
+  const rh2B = isMachineRunning && typeof data.ACT_RHx_2B === "number" ? data.ACT_RHx_2B : null;
+  const rat2 = isMachineRunning && typeof data.ACT_RATx_2 === "number" ? data.ACT_RATx_2 : null;
+  const rah2 = isMachineRunning && typeof data.ACT_RAHx_2 === "number" ? data.ACT_RAHx_2 : null;
 
   const sf02aRunning = data.xIND_RUN_SF02A !== undefined ? Boolean(data.xIND_RUN_SF02A) : running;
   const sf02aCap = data.ACT_SF02_CAP !== undefined ? Number(data.ACT_SF02_CAP) : 90.0;
@@ -446,6 +459,16 @@ export default function MachineAHU02Pid({
       <DashedLine x={730} y={57} w={20} h={0} />
       <DashedLine x={730} y={30} w={0} h={30} />
       <DashedLine x={130} y={25} w={0} h={60} />
+
+      {/* Ambient Temp & RH Indicator */}
+      <AmbientIndicator
+        x={870}
+        y={13}
+        w={115}
+        temp={ambientT}
+        humidity={ambientH}
+        isStopped={false}
+      />
     </svg>
   );
 }

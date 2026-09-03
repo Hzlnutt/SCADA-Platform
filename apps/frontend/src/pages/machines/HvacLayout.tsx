@@ -50,6 +50,22 @@ export interface LogEntry {
   type: "start" | "stop" | "maintenance" | "other";
 }
 
+export const canAccessHvacControls = (role?: string | null): boolean => {
+  if (!role) return false;
+  const normalized = role.toLowerCase().trim();
+  return (
+    normalized === "kashift hvac" ||
+    normalized === "kashift_hvac" ||
+    normalized === "kashift" ||
+    normalized === "leader" ||
+    normalized === "team_head" ||
+    normalized === "developer" ||
+    normalized === "admin" ||
+    normalized === "superadmin" ||
+    normalized === "dev"
+  );
+};
+
 export default function HvacLayout({
   roomName,
   roomType,
@@ -73,8 +89,10 @@ export default function HvacLayout({
   const [passwordError, setPasswordError] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
 
-  // Access auth store user
+  // Access auth store user & role permission check
   const user = useAuthStore((state) => state.user);
+  const userRole = user?.role ?? "";
+  const hasControlAccess = useMemo(() => canAccessHvacControls(userRole), [userRole]);
 
   // Biometric state variables
   const [verificationMode, setVerificationMode] = useState<"password" | "biometric">("password");
@@ -414,7 +432,7 @@ export default function HvacLayout({
           {/* SYSTEM MODE */}
           <div
             className={`${
-              setpoints?.length || controlButtons?.length ? "flex-[1.5]" : "flex-1"
+              hasControlAccess && (setpoints?.length || controlButtons?.length) ? "flex-[1.5]" : "flex-1"
             } border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-0 shadow-sm dark:shadow-2xl transition-all duration-300`}
           >
             <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm border-b border-slate-100 dark:border-slate-800 pb-2 mb-3 tracking-wide">
@@ -434,8 +452,8 @@ export default function HvacLayout({
             </div>
           </div>
 
-          {/* SETPOINTS */}
-          {setpoints && setpoints.length > 0 && (
+          {/* SETPOINTS - Only for kashift HVAC, Leader, Developer */}
+          {hasControlAccess && setpoints && setpoints.length > 0 && (
             <div className="flex-[1.2] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-[160px] shadow-sm dark:shadow-2xl transition-all duration-300">
               <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm border-b border-slate-100 dark:border-slate-800 pb-2 mb-3 tracking-wide">
                 SETPOINTS
@@ -467,8 +485,8 @@ export default function HvacLayout({
             </div>
           )}
 
-          {/* CONTROL PANEL */}
-          {controlButtons && controlButtons.length > 0 && (
+          {/* CONTROL PANEL - Only for kashift HVAC, Leader, Developer */}
+          {hasControlAccess && controlButtons && controlButtons.length > 0 && (
             <div className="flex-[1] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-0 shadow-sm dark:shadow-2xl transition-all duration-300">
               <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm border-b border-slate-100 dark:border-slate-800 pb-2 mb-3 tracking-wide">
                 CONTROL PANEL

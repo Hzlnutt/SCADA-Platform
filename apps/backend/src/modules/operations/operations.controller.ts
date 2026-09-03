@@ -312,6 +312,27 @@ export const updateHvacStateHandler = async (
   next: NextFunction
 ) => {
   try {
+    const actorRole = getActorRole(req);
+    if (actorRole) {
+      const normalizedRole = actorRole.toLowerCase().trim();
+      const isAuthorized =
+        normalizedRole === "kashift hvac" ||
+        normalizedRole === "kashift_hvac" ||
+        normalizedRole === "kashift" ||
+        normalizedRole === "leader" ||
+        normalizedRole === "team_head" ||
+        normalizedRole === "developer" ||
+        normalizedRole === "admin" ||
+        normalizedRole === "superadmin" ||
+        normalizedRole === "dev";
+
+      if (!isAuthorized) {
+        return res.status(403).json({
+          message: "Akses ditolak: Hanya role kashift HVAC, Leader, dan Developer yang diizinkan mengubah setpoints atau kontrol HVAC."
+        });
+      }
+    }
+
     const parsed = hvacControlSchema.parse(req.body);
     const actorId = getActorId(req);
 
