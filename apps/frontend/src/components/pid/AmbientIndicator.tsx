@@ -1,39 +1,59 @@
+import React from "react";
+import TitleCard from "./TitleCard";
 import LabelComponent from "./TextLabel";
 import { SensorIndicator } from "./SensorIndicator";
 
-interface AmbientIndicatorProps {
+export interface AmbientCardProps {
   x?: number;
   y?: number;
-  w?: number;
+  width?: number;
+  height?: number;
   temp?: number | null;
   humidity?: number | null;
-  isStopped?: boolean;
 }
 
-export function AmbientIndicator({
-  x = 865,
-  y = 13,
-  w = 120,
+export const AmbientCard: React.FC<AmbientCardProps> = ({
+  x = 855,
+  y = 15,
+  width = 130,
+  height = 160,
   temp = null,
   humidity = null,
-}: AmbientIndicatorProps) {
+}) => {
+  const itemW = width - 20; // 110
+  const itemX = x + 10;
+
   return (
-    <g className="ambient-indicator-group select-none">
+    <g id="ambient-card" className="select-none transition-all duration-300">
+      {/* Outer Card Background and Title */}
+      <TitleCard
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        title="AMBIENT"
+        fontSize={13}
+        color="#2C3E50"
+        textColor="#ECF0F1"
+        borderRadius={8}
+        paddingTop={12}
+      />
+
       {/* Ambient Temperature */}
       <LabelComponent
         text="Ambient Temp"
-        x={x}
-        y={y}
-        w={w}
-        h={25}
+        x={itemX}
+        y={y + 38}
+        w={itemW}
+        h={22}
         hasBorder={true}
-        fontSize={12}
+        fontSize={11}
       />
       <SensorIndicator
-        x={x}
-        y={y + 27}
-        w={w}
-        h={30}
+        x={itemX}
+        y={y + 63}
+        w={itemW}
+        h={27}
         value={temp}
         unit=" °C"
         warningThreshold={35}
@@ -45,18 +65,18 @@ export function AmbientIndicator({
       {/* Ambient RH */}
       <LabelComponent
         text="Ambient RH"
-        x={x}
-        y={y + 60}
-        w={w}
-        h={25}
+        x={itemX}
+        y={y + 97}
+        w={itemW}
+        h={22}
         hasBorder={true}
-        fontSize={12}
+        fontSize={11}
       />
       <SensorIndicator
-        x={x}
-        y={y + 87}
-        w={w}
-        h={30}
+        x={itemX}
+        y={y + 122}
+        w={itemW}
+        h={27}
         value={humidity}
         unit=" %RH"
         warningThreshold={80}
@@ -66,6 +86,6 @@ export function AmbientIndicator({
       />
     </g>
   );
-}
+};
 
-export default AmbientIndicator;
+export default AmbientCard;

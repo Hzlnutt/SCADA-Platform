@@ -42,8 +42,9 @@ export function SensorIndicator({
 
   const getColorAndText = (): { color: string; display: string } => {
     // ── Jika value null ────────────────────────────────────────────────
-    if (value === null) {
-      return { color: "#444444", display: "--" };
+    if (value === null || value === undefined) {
+      const display = unit ? `-- ${unit.trim()}` : "--";
+      return { color: "#94a3b8", display };
     }
 
     // ── Jika customColor diberikan (berguna untuk info non-threshold seperti running hours) ──

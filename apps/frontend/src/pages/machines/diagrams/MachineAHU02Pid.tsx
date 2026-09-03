@@ -16,7 +16,7 @@ import { PipeH, PipeV } from "../../../components/pid/Pipe";
 import DashedLine from "../../../components/pid/DashedLine";
 import ACUnit from "../../../components/pid/ACUnit";
 import { PipeT } from "../../../components/pid/PipeT";
-import AmbientIndicator from "../../../components/pid/AmbientIndicator";
+import AmbientCard from "../../../components/pid/AmbientIndicator";
 
 interface PidProps {
   tempSP?: number;
@@ -460,14 +460,14 @@ export default function MachineAHU02Pid({
       <DashedLine x={730} y={30} w={0} h={30} />
       <DashedLine x={130} y={25} w={0} h={60} />
 
-      {/* Ambient Temp & RH Indicator */}
-      <AmbientIndicator
-        x={870}
-        y={13}
-        w={115}
+      {/* Ambient Card (Ambient Temp & RH) */}
+      <AmbientCard
+        x={855}
+        y={15}
+        width={130}
+        height={160}
         temp={ambientT}
         humidity={ambientH}
-        isStopped={false}
       />
     </svg>
   );
