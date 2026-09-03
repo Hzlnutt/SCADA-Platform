@@ -403,7 +403,7 @@ export default function Electricity() {
   // Solar Panel (PLTS) states
   const [solarData, setSolarData] = useState<any>(null);
   const [solarLive, setSolarLive] = useState<any>(null);
-  const [solarRange, setSolarRange] = useState<"hour" | "day" | "month" | "ytd" | "custom">("custom");
+  const [solarRange, setSolarRange] = useState<"hour" | "day" | "month" | "ytd" | "custom">("ytd");
   const [solarStartDate, setSolarStartDate] = useState(getLocalTodayString);
   const [solarEndDate, setSolarEndDate] = useState(getLocalTodayString);
   const [solarSelectedYear, setSolarSelectedYear] = useState(() => new Date().getFullYear());
@@ -1164,8 +1164,8 @@ export default function Electricity() {
   const stackedBarData = useMemo(() => ({
     labels: barLabels,
     datasets: [
-      { label: `LWBP ${barUnit}`, data: barLwbpValues, backgroundColor: "rgba(59,130,246,.8)", borderWidth: 0, borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 }, barPercentage: 0.65, stack: "beban" },
-      { label: `WBP ${barUnit}`, data: barWbpValues, backgroundColor: "rgba(239,68,68,.8)", borderWidth: 0, borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }, barPercentage: 0.65, stack: "beban" }
+      { label: `LWBP ${barUnit}`, data: barLwbpValues, backgroundColor: "rgba(59,130,246,.85)", borderColor: "rgba(37,99,235,1)", borderWidth: 1, borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 }, barPercentage: 0.65, minBarLength: 5, stack: "beban" },
+      { label: `WBP ${barUnit}`, data: barWbpValues, backgroundColor: "rgba(239,68,68,.85)", borderColor: "rgba(220,38,38,1)", borderWidth: 1, borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }, barPercentage: 0.65, minBarLength: 5, stack: "beban" }
     ]
   }), [barLabels, barUnit, barLwbpValues, barWbpValues]);
 
@@ -1304,8 +1304,11 @@ export default function Electricity() {
         label: "POI-1 (kWh)",
         data: solarPoi1Values,
         backgroundColor: "rgba(59, 130, 246, 0.85)",
+        borderColor: "rgba(37, 99, 235, 1)",
+        borderWidth: 1,
         borderRadius: solarShowPoi2 ? { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 } : 4,
         barPercentage: 0.65,
+        minBarLength: 6,
         stack: "solar"
       });
     }
@@ -1314,8 +1317,11 @@ export default function Electricity() {
         label: "POI-2 (kWh)",
         data: solarPoi2Values,
         backgroundColor: "rgba(6, 182, 212, 0.85)",
+        borderColor: "rgba(8, 145, 178, 1)",
+        borderWidth: 1,
         borderRadius: solarShowPoi1 ? { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 } : 4,
         barPercentage: 0.65,
+        minBarLength: 6,
         stack: "solar"
       });
     }

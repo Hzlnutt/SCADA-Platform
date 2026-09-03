@@ -309,34 +309,44 @@ export const getElectricityAnalytics = async (
           }
         } catch {}
       }
-    } else if (tableName === "electricity_telemetry" || deviceId === "Cubicle_PLN_PM8000" || !deviceId) {
+    } else if (tableName === "electric_pln_telemetry" || normDev.includes("pln") || normDev.includes("pm8000")) {
       const res = await pool.query(`
-        SELECT t_stamp::text AS ts_text, electricity_kwh::float AS value
+        SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
+          t_stamp::text AS ts_text, 
+          COALESCE(active_energy, 0)::float AS value
+        FROM electric_pln_telemetry
+        WHERE t_stamp >= $1 AND t_stamp <= $2
+          AND active_energy IS NOT NULL
+        ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
+      `, [fromQueryVal, toQueryVal]);
+      hourlyRecords = res.rows;
+
+      // If electric_pln_telemetry is empty, fall back to electricity_telemetry
+      if (hourlyRecords.length === 0) {
+        const fbRes = await pool.query(`
+          SELECT DISTINCT ON (date_trunc('hour', t_stamp))
+            t_stamp::text AS ts_text, 
+            electricity_kwh::float AS value
+          FROM electricity_telemetry
+          WHERE t_stamp >= $1 AND t_stamp <= $2 
+            AND (id_device = $3 OR id_device IS NULL)
+            AND electricity_kwh IS NOT NULL
+          ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
+        `, [fromQueryVal, toQueryVal, deviceId]);
+        hourlyRecords = fbRes.rows;
+      }
+    } else if (tableName === "electricity_telemetry" || !deviceId) {
+      const res = await pool.query(`
+        SELECT DISTINCT ON (date_trunc('hour', t_stamp))
+          t_stamp::text AS ts_text, 
+          electricity_kwh::float AS value
         FROM electricity_telemetry
         WHERE t_stamp >= $1 AND t_stamp <= $2 
           AND (id_device = $3 OR id_device IS NULL)
           AND electricity_kwh IS NOT NULL
-        ORDER BY t_stamp ASC
+        ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
       `, [fromQueryVal, toQueryVal, deviceId]);
       hourlyRecords = res.rows;
-      // Append latest real-time reading from electric_pln_telemetry if available and newer
-      if (to >= new Date()) {
-        try {
-          const latestRes = await pool.query(`
-            SELECT t_stamp::text AS ts_text, active_energy::float AS value
-            FROM electric_pln_telemetry
-            WHERE active_energy IS NOT NULL
-            ORDER BY t_stamp DESC LIMIT 1
-          `);
-          if (latestRes.rows.length > 0) {
-            const latest = latestRes.rows[0];
-            const lastTs = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "") : "";
-            if (latest.ts_text !== lastTs && latest.value > 0) {
-              hourlyRecords.push(latest);
-            }
-          }
-        } catch {}
-      }
     } else {
       const res = await pool.query(`
         SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
