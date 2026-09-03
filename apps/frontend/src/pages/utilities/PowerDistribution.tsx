@@ -1191,7 +1191,7 @@ export default function PowerDistribution() {
           {/* 1. SVG PIPELINE AND POWER LINES OVERLAY (z-20 on top so never occluded) */}
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-20">
             <defs>
-              <marker id="arrow-green" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <marker id="arrow-green" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10b981" />
               </marker>
               <marker id="arrow-red" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
@@ -1238,15 +1238,15 @@ export default function PowerDistribution() {
               markerEnd="url(#arrow-red)"
             />
 
-            {/* 4. Genset Diesel Fuel (1105, 242) -> Down & left into feeder above PUTR-NEW (1035, 345) */}
+            {/* 4. Genset Diesel Fuel (1105, 242) -> Straight down along right side, turns left at 415 into right side of PUTR-NEW (1085, 415) */}
             <path
-              d="M 1105 242 L 1105 345 L 1035 345 M 1035 345 L 1035 360"
+              d="M 1105 242 L 1105 415 L 1085 415"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
               strokeDasharray="4 3"
+              markerEnd="url(#arrow-green)"
             />
-            <circle cx="1035" cy="345" r="2.5" fill="#10b981" />
 
             {/* Main PLN line down and split symmetrically to Factory 1 (285) & Factory 2 (795) */}
             <path d="M 600 114 L 600 134 M 285 134 L 795 134" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
