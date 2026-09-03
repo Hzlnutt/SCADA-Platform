@@ -445,22 +445,303 @@ export const getPowerMeterHistoryHandler = async (
   next: NextFunction
 ) => {
   try {
-    const pmId = (req.params.pmId || "").toUpperCase();
-    const hours = Number(req.query.hours) || 24;
+    const pmId = (req.params.pmId || "").toUpperCase().trim();
+    const nowWib = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
+    const todayWibStr = nowWib.toISOString().slice(0, 10);
+    const targetDate = (req.query.date as string) || todayWibStr;
+    const isToday = targetDate === todayWibStr;
+    const currentHour = isToday ? nowWib.getHours() : 23;
+
     const pool = getPostgresPool();
+    let dbRes;
 
-    const dbRes = await pool.query(`
-      SELECT t_stamp, volt_ab, volt_bc, volt_ca, current_a, current_b, current_c, 
-             active_power_total, reactive_power_total, apparent_power_total, power_factor, 
-             frequency, active_energy, status
-      FROM electric_pm_telemetry
-      WHERE pm_id = $1
-        AND t_stamp >= NOW() - ($2 || ' hours')::INTERVAL
-      ORDER BY t_stamp ASC
-      LIMIT 500
-    `, [pmId, hours]);
+    // Handle Incoming Cubicles (PLN, WF1, WF2)
+    if (pmId === "PM410" || pmId === "PM8000" || pmId === "CUBICLE_PLN_PM8000") {
+      dbRes = await pool.query(`
+        WITH pln_hourly AS (
+          SELECT 
+            EXTRACT(HOUR FROM t_stamp)::int as hour,
+            AVG(active_power)::numeric(12,2) as active_power_total,
+            AVG(current_a)::numeric(12,2) as current_a,
+            AVG(current_b)::numeric(12,2) as current_b,
+            AVG(current_c)::numeric(12,2) as current_c,
+            AVG(volt_ab)::numeric(12,2) as volt_ab,
+            AVG(power_factor)::numeric(12,3) as power_factor,
+            MAX(active_energy)::numeric(14,2) as active_energy,
+            MAX(t_stamp) as t_stamp
+          FROM electric_pln_telemetry
+          WHERE DATE(t_stamp) = $1::date
+          GROUP BY EXTRACT(HOUR FROM t_stamp)
+        ),
+        pln_minute AS (
+          SELECT 
+            EXTRACT(HOUR FROM t_stamp)::int as hour,
+            AVG(active_power)::numeric(12,2) as active_power_total,
+            AVG(current_a)::numeric(12,2) as current_a,
+            AVG(current_b)::numeric(12,2) as current_b,
+            AVG(current_c)::numeric(12,2) as current_c,
+            AVG(volt_ab)::numeric(12,2) as volt_ab,
+            AVG(power_factor)::numeric(12,3) as power_factor,
+            MAX(active_energy)::numeric(14,2) as active_energy,
+            MAX(t_stamp) as t_stamp
+          FROM electric_pln_telemetry_minute
+          WHERE DATE(t_stamp) = $1::date
+          GROUP BY EXTRACT(HOUR FROM t_stamp)
+        )
+        SELECT 
+          s.hour,
+          to_char(s.hour, 'FM00') || ':00' as label,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.active_power_total ELSE COALESCE(h.active_power_total, m.active_power_total) END,
+            0
+          ) as active_power_total,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.current_a ELSE COALESCE(h.current_a, m.current_a) END,
+            0
+          ) as current_a,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.current_b ELSE COALESCE(h.current_b, m.current_b) END,
+            0
+          ) as current_b,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.current_c ELSE COALESCE(h.current_c, m.current_c) END,
+            0
+          ) as current_c,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.volt_ab ELSE COALESCE(h.volt_ab, m.volt_ab) END,
+            0
+          ) as volt_ab,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.power_factor ELSE COALESCE(h.power_factor, m.power_factor) END,
+            0
+          ) as power_factor,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.active_energy ELSE COALESCE(h.active_energy, m.active_energy) END,
+            0
+          ) as active_energy,
+          COALESCE(m.t_stamp, h.t_stamp) as t_stamp
+        FROM generate_series(0, $2) as s(hour)
+        LEFT JOIN pln_hourly h ON h.hour = s.hour
+        LEFT JOIN pln_minute m ON m.hour = s.hour
+        ORDER BY s.hour ASC;
+      `, [targetDate, currentHour]);
+    } else if (pmId === "PM411" || pmId === "PM5560" || pmId === "PM5560_WF1" || pmId === "FEEDER_WF1_PM5560") {
+      dbRes = await pool.query(`
+        WITH wf1_hourly AS (
+          SELECT 
+            EXTRACT(HOUR FROM t_stamp)::int as hour,
+            AVG(active_power_total)::numeric(12,2) as active_power_total,
+            AVG(current_a)::numeric(12,2) as current_a,
+            AVG(current_b)::numeric(12,2) as current_b,
+            AVG(current_c)::numeric(12,2) as current_c,
+            AVG(volt_ab)::numeric(12,2) as volt_ab,
+            AVG(power_factor)::numeric(12,3) as power_factor,
+            MAX(active_energy)::numeric(14,2) as active_energy,
+            MAX(t_stamp) as t_stamp
+          FROM electric_wf1_telemetry
+          WHERE DATE(t_stamp) = $1::date
+          GROUP BY EXTRACT(HOUR FROM t_stamp)
+        ),
+        wf1_minute AS (
+          SELECT 
+            EXTRACT(HOUR FROM t_stamp)::int as hour,
+            AVG(active_power_total)::numeric(12,2) as active_power_total,
+            AVG(current_a)::numeric(12,2) as current_a,
+            AVG(current_b)::numeric(12,2) as current_b,
+            AVG(current_c)::numeric(12,2) as current_c,
+            AVG(volt_ab)::numeric(12,2) as volt_ab,
+            AVG(power_factor)::numeric(12,3) as power_factor,
+            MAX(active_energy)::numeric(14,2) as active_energy,
+            MAX(t_stamp) as t_stamp
+          FROM electric_wf1_telemetry_minute
+          WHERE DATE(t_stamp) = $1::date
+          GROUP BY EXTRACT(HOUR FROM t_stamp)
+        )
+        SELECT 
+          s.hour,
+          to_char(s.hour, 'FM00') || ':00' as label,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.active_power_total ELSE COALESCE(h.active_power_total, m.active_power_total) END,
+            0
+          ) as active_power_total,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.current_a ELSE COALESCE(h.current_a, m.current_a) END,
+            0
+          ) as current_a,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.current_b ELSE COALESCE(h.current_b, m.current_b) END,
+            0
+          ) as current_b,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.current_c ELSE COALESCE(h.current_c, m.current_c) END,
+            0
+          ) as current_c,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.volt_ab ELSE COALESCE(h.volt_ab, m.volt_ab) END,
+            0
+          ) as volt_ab,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.power_factor ELSE COALESCE(h.power_factor, m.power_factor) END,
+            0
+          ) as power_factor,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.active_energy ELSE COALESCE(h.active_energy, m.active_energy) END,
+            0
+          ) as active_energy,
+          COALESCE(m.t_stamp, h.t_stamp) as t_stamp
+        FROM generate_series(0, $2) as s(hour)
+        LEFT JOIN wf1_hourly h ON h.hour = s.hour
+        LEFT JOIN wf1_minute m ON m.hour = s.hour
+        ORDER BY s.hour ASC;
+      `, [targetDate, currentHour]);
+    } else if (pmId === "PM412" || pmId === "PM5560_WF2" || pmId === "PM5500" || pmId === "FEEDER_WF2_PM5500") {
+      dbRes = await pool.query(`
+        WITH wf2_hourly AS (
+          SELECT 
+            EXTRACT(HOUR FROM t_stamp)::int as hour,
+            AVG(active_power_total)::numeric(12,2) as active_power_total,
+            AVG(current_a)::numeric(12,2) as current_a,
+            AVG(current_b)::numeric(12,2) as current_b,
+            AVG(current_c)::numeric(12,2) as current_c,
+            AVG(volt_ab)::numeric(12,2) as volt_ab,
+            AVG(power_factor)::numeric(12,3) as power_factor,
+            MAX(active_energy)::numeric(14,2) as active_energy,
+            MAX(t_stamp) as t_stamp
+          FROM electric_wf2_telemetry
+          WHERE DATE(t_stamp) = $1::date
+          GROUP BY EXTRACT(HOUR FROM t_stamp)
+        ),
+        wf2_minute AS (
+          SELECT 
+            EXTRACT(HOUR FROM t_stamp)::int as hour,
+            AVG(active_power_total)::numeric(12,2) as active_power_total,
+            AVG(current_a)::numeric(12,2) as current_a,
+            AVG(current_b)::numeric(12,2) as current_b,
+            AVG(current_c)::numeric(12,2) as current_c,
+            AVG(volt_ab)::numeric(12,2) as volt_ab,
+            AVG(power_factor)::numeric(12,3) as power_factor,
+            MAX(active_energy)::numeric(14,2) as active_energy,
+            MAX(t_stamp) as t_stamp
+          FROM electric_wf2_telemetry_minute
+          WHERE DATE(t_stamp) = $1::date
+          GROUP BY EXTRACT(HOUR FROM t_stamp)
+        )
+        SELECT 
+          s.hour,
+          to_char(s.hour, 'FM00') || ':00' as label,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.active_power_total ELSE COALESCE(h.active_power_total, m.active_power_total) END,
+            0
+          ) as active_power_total,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.current_a ELSE COALESCE(h.current_a, m.current_a) END,
+            0
+          ) as current_a,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.current_b ELSE COALESCE(h.current_b, m.current_b) END,
+            0
+          ) as current_b,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.current_c ELSE COALESCE(h.current_c, m.current_c) END,
+            0
+          ) as current_c,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.volt_ab ELSE COALESCE(h.volt_ab, m.volt_ab) END,
+            0
+          ) as volt_ab,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.power_factor ELSE COALESCE(h.power_factor, m.power_factor) END,
+            0
+          ) as power_factor,
+          COALESCE(
+            CASE WHEN s.hour = $2 THEN m.active_energy ELSE COALESCE(h.active_energy, m.active_energy) END,
+            0
+          ) as active_energy,
+          COALESCE(m.t_stamp, h.t_stamp) as t_stamp
+        FROM generate_series(0, $2) as s(hour)
+        LEFT JOIN wf2_hourly h ON h.hour = s.hour
+        LEFT JOIN wf2_minute m ON m.hour = s.hour
+        ORDER BY s.hour ASC;
+      `, [targetDate, currentHour]);
+    } else {
+      // Standard Sub-Distribution PM meter (EW23, EW22, EW21)
+      dbRes = await pool.query(`
+        WITH pm_hourly AS (
+          SELECT 
+            EXTRACT(HOUR FROM t_stamp)::int as hour,
+            AVG(active_power_total)::numeric(12,2) as active_power_total,
+            AVG(current_a)::numeric(12,2) as current_a,
+            AVG(current_b)::numeric(12,2) as current_b,
+            AVG(current_c)::numeric(12,2) as current_c,
+            AVG(volt_ab)::numeric(12,2) as volt_ab,
+            AVG(power_factor)::numeric(12,3) as power_factor,
+            MAX(active_energy)::numeric(14,2) as active_energy,
+            MAX(t_stamp) as t_stamp
+          FROM electric_pm_telemetry
+          WHERE UPPER(pm_id) = $1
+            AND DATE(t_stamp) = $2::date
+          GROUP BY EXTRACT(HOUR FROM t_stamp)
+        ),
+        pm_minute AS (
+          SELECT 
+            EXTRACT(HOUR FROM t_stamp)::int as hour,
+            AVG(active_power_total)::numeric(12,2) as active_power_total,
+            AVG(current_a)::numeric(12,2) as current_a,
+            AVG(current_b)::numeric(12,2) as current_b,
+            AVG(current_c)::numeric(12,2) as current_c,
+            AVG(volt_ab)::numeric(12,2) as volt_ab,
+            AVG(power_factor)::numeric(12,3) as power_factor,
+            MAX(active_energy)::numeric(14,2) as active_energy,
+            MAX(t_stamp) as t_stamp
+          FROM electric_pm_telemetry_minute
+          WHERE UPPER(pm_id) = $1
+            AND DATE(t_stamp) = $2::date
+          GROUP BY EXTRACT(HOUR FROM t_stamp)
+        )
+        SELECT 
+          s.hour,
+          to_char(s.hour, 'FM00') || ':00' as label,
+          COALESCE(
+            CASE WHEN s.hour = $3 THEN m.active_power_total ELSE COALESCE(h.active_power_total, m.active_power_total) END,
+            0
+          ) as active_power_total,
+          COALESCE(
+            CASE WHEN s.hour = $3 THEN m.current_a ELSE COALESCE(h.current_a, m.current_a) END,
+            0
+          ) as current_a,
+          COALESCE(
+            CASE WHEN s.hour = $3 THEN m.current_b ELSE COALESCE(h.current_b, m.current_b) END,
+            0
+          ) as current_b,
+          COALESCE(
+            CASE WHEN s.hour = $3 THEN m.current_c ELSE COALESCE(h.current_c, m.current_c) END,
+            0
+          ) as current_c,
+          COALESCE(
+            CASE WHEN s.hour = $3 THEN m.volt_ab ELSE COALESCE(h.volt_ab, m.volt_ab) END,
+            0
+          ) as volt_ab,
+          COALESCE(
+            CASE WHEN s.hour = $3 THEN m.power_factor ELSE COALESCE(h.power_factor, m.power_factor) END,
+            0
+          ) as power_factor,
+          COALESCE(
+            CASE WHEN s.hour = $3 THEN m.active_energy ELSE COALESCE(h.active_energy, m.active_energy) END,
+            0
+          ) as active_energy,
+          COALESCE(m.t_stamp, h.t_stamp) as t_stamp
+        FROM generate_series(0, $3) as s(hour)
+        LEFT JOIN pm_hourly h ON h.hour = s.hour
+        LEFT JOIN pm_minute m ON m.hour = s.hour
+        ORDER BY s.hour ASC;
+      `, [pmId, targetDate, currentHour]);
+    }
 
-    res.json({ data: dbRes.rows });
+    res.json({
+      targetDate,
+      currentHour,
+      data: dbRes.rows
+    });
   } catch (err) {
     next(err);
   }

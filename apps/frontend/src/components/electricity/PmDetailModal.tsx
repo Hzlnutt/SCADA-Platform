@@ -43,41 +43,48 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
   const [historyData, setHistoryData] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  useEffect(() => {
+  const fetchHistory = (showLoading = false) => {
     if (!pm) return;
-    setLoadingHistory(true);
-    getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pm.pm_id}/history?hours=24`)
+    if (showLoading) setLoadingHistory(true);
+    getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pm.pm_id}/history?_t=${Date.now()}`)
       .then((res) => {
         if (res?.data) {
           setHistoryData(res.data);
         }
       })
       .catch((err) => console.error("Failed to load PM history:", err))
-      .finally(() => setLoadingHistory(false));
-  }, [pm]);
+      .finally(() => {
+        if (showLoading) setLoadingHistory(false);
+      });
+  };
+
+  useEffect(() => {
+    if (!pm) return;
+    fetchHistory(true);
+    const interval = setInterval(() => fetchHistory(false), 10000);
+    return () => clearInterval(interval);
+  }, [pm?.pm_id]);
 
   if (!pm) return null;
 
   const isOnline = pm.status !== false;
 
-  // Chart configuration for history
-  const historyLabels = historyData.map((d) => {
-    const dt = new Date(d.t_stamp);
-    return `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
-  });
+  // Chart configuration for today's 24-hour progressive history
+  const historyLabels = historyData.map((d) => d.label || `${String(d.hour).padStart(2, "0")}:00`);
 
   const powerChartData = {
     labels: historyLabels,
     datasets: [
       {
         label: "Active Power (kW)",
-        data: historyData.map((d) => d.active_power_total || 0),
+        data: historyData.map((d) => (d.active_power_total !== null && d.active_power_total !== undefined ? Number(d.active_power_total) : 0)),
         borderColor: "#38bdf8",
         backgroundColor: "rgba(56,189,248,0.1)",
         borderWidth: 2,
         tension: 0.3,
         fill: true,
-        pointRadius: 2
+        pointRadius: 2.5,
+        pointHoverRadius: 5
       }
     ]
   };
@@ -87,30 +94,33 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
     datasets: [
       {
         label: "Phase A (A)",
-        data: historyData.map((d) => d.current_a || 0),
+        data: historyData.map((d) => (d.current_a !== null && d.current_a !== undefined ? Number(d.current_a) : 0)),
         borderColor: "#ef4444",
         backgroundColor: "transparent",
         borderWidth: 1.5,
         tension: 0.3,
-        pointRadius: 0
+        pointRadius: 2,
+        pointHoverRadius: 4
       },
       {
         label: "Phase B (A)",
-        data: historyData.map((d) => d.current_b || 0),
+        data: historyData.map((d) => (d.current_b !== null && d.current_b !== undefined ? Number(d.current_b) : 0)),
         borderColor: "#f59e0b",
         backgroundColor: "transparent",
         borderWidth: 1.5,
         tension: 0.3,
-        pointRadius: 0
+        pointRadius: 2,
+        pointHoverRadius: 4
       },
       {
         label: "Phase C (A)",
-        data: historyData.map((d) => d.current_c || 0),
+        data: historyData.map((d) => (d.current_c !== null && d.current_c !== undefined ? Number(d.current_c) : 0)),
         borderColor: "#10b981",
         backgroundColor: "transparent",
         borderWidth: 1.5,
         tension: 0.3,
-        pointRadius: 0
+        pointRadius: 2,
+        pointHoverRadius: 4
       }
     ]
   };
@@ -250,7 +260,9 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
           <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 shadow-sm">
             <span className="text-[10px] font-extrabold uppercase text-slate-400 block mb-0.5">Active Energy</span>
             <div className="text-lg font-extrabold font-mono text-purple-500">
-              {fmt(pm.active_energy, "kWh", 0)}
+              {pm.active_energy !== null && pm.active_energy !== undefined
+                ? `${Math.round(Number(pm.active_energy)).toLocaleString("id-ID")} kWh`
+                : "—"}
             </div>
           </div>
         </div>
@@ -350,7 +362,11 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
                   </div>
                   <div className="col-span-2 flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
                     <span className="text-slate-400">Active Energy:</span>
-                    <span className="font-bold text-purple-400">{fmt(pm.active_energy, "kWh", 0)}</span>
+                    <span className="font-bold text-purple-400">
+                      {pm.active_energy !== null && pm.active_energy !== undefined
+                        ? `${Math.round(Number(pm.active_energy)).toLocaleString("id-ID")} kWh`
+                        : "—"}
+                    </span>
                   </div>
                 </div>
               </div>

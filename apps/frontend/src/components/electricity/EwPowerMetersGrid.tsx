@@ -166,7 +166,7 @@ export function EwPowerMetersGrid({
                       </div>
                       <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
                         <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Energi</span>
-                        <span className="font-extrabold text-purple-400">{pm.active_energy ? Number(pm.active_energy).toFixed(0) : "—"}</span>
+                        <span className="font-extrabold text-purple-400">{pm.active_energy !== null && pm.active_energy !== undefined ? Math.round(Number(pm.active_energy)).toLocaleString("id-ID") : "—"}</span>
                       </div>
                     </div>
                   </div>
