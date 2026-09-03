@@ -1884,7 +1884,8 @@ export const startPostgresPolling = () => {
       const res = await pool.query(`
         SELECT GREATEST(
           (SELECT MAX(t_stamp) FROM electricity_telemetry),
-          (SELECT MAX(t_stamp) FROM electric_pln_telemetry)
+          (SELECT MAX(t_stamp) FROM electric_pln_telemetry),
+          (SELECT MAX(t_stamp) FROM solar_telemetry)
         ) AS max_ts;
       `);
       const maxTs = res.rows[0]?.max_ts;
@@ -1898,7 +1899,8 @@ export const startPostgresPolling = () => {
           const io = getSocketServer();
           if (io) {
             io.emit("electricity:update");
-            logger.info("Detected new electricity telemetry in Postgres, broadcasting electricity:update");
+            io.emit("solar:update");
+            logger.info("Detected new telemetry in Postgres, broadcasting electricity:update & solar:update");
           }
         }
       } else if (lastElectricityTs !== null) {
@@ -1907,7 +1909,8 @@ export const startPostgresPolling = () => {
         const io = getSocketServer();
         if (io) {
           io.emit("electricity:update");
-          logger.info("Detected electricity telemetry cleared in Postgres, broadcasting electricity:update");
+          io.emit("solar:update");
+          logger.info("Detected telemetry cleared in Postgres, broadcasting electricity:update & solar:update");
         }
       }
     } catch (err) {

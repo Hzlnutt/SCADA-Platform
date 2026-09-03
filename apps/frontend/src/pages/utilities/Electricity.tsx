@@ -820,10 +820,23 @@ export default function Electricity() {
   // Database historical auto-refresh in background (polling + websocket live updates)
   useEffect(() => {
     let active = true;
-    const interval = setInterval(() => { if (active) fetchData(false); }, 15000);
+    const interval = setInterval(() => {
+      if (active) {
+        fetchData(false);
+        fetchSolarData();
+      }
+    }, 10000);
     const socket = getSocket();
     const handleElectricityUpdate = () => {
-      if (active) fetchData(false);
+      if (active) {
+        fetchData(false);
+        fetchSolarData();
+      }
+    };
+    const handleSolarUpdate = () => {
+      if (active) {
+        fetchSolarData();
+      }
     };
     const handleLiveUpdate = (payload: any) => {
       if (!active || !payload) return;
@@ -838,15 +851,27 @@ export default function Electricity() {
       if (!active || !payload) return;
       setSolarLive(payload);
     };
-    const handleConfigUpdate = () => { useConfigStore.getState().fetchRates().then(() => { if (active) fetchData(false); }); };
-    const handlePfStatus = (payload: any) => { if (active) { setLivePf(payload.value); setPfStatus(payload.status); } };
+    const handleConfigUpdate = () => {
+      useConfigStore.getState().fetchRates().then(() => {
+        if (active) {
+          fetchData(false);
+          fetchSolarData();
+        }
+      });
+    };
+    const handlePfStatus = (payload: any) => {
+      if (active) {
+        setLivePf(payload.value);
+        setPfStatus(payload.status);
+      }
+    };
 
     socket.on("electricity:update", handleElectricityUpdate);
     socket.on("electricity:live_update", handleLiveUpdate);
     socket.on("electricity:pm_live_update", handleElectricityUpdate);
     socket.on("electricity:solar_live", handleSolarLive);
     socket.on("solar:live_update", handleSolarLive);
-    socket.on("solar:update", handleElectricityUpdate);
+    socket.on("solar:update", handleSolarUpdate);
     socket.on("config:update", handleConfigUpdate);
     socket.on("power_factor:status", handlePfStatus);
     return () => {
@@ -857,11 +882,11 @@ export default function Electricity() {
       socket.off("electricity:pm_live_update", handleElectricityUpdate);
       socket.off("electricity:solar_live", handleSolarLive);
       socket.off("solar:live_update", handleSolarLive);
-      socket.off("solar:update", handleElectricityUpdate);
+      socket.off("solar:update", handleSolarUpdate);
       socket.off("config:update", handleConfigUpdate);
       socket.off("power_factor:status", handlePfStatus);
     };
-  }, [fetchData]);
+  }, [fetchData, fetchSolarData]);
 
   // Load consumption fact categories
   useEffect(() => {
