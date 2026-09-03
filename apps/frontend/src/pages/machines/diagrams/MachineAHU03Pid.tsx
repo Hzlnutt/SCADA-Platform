@@ -27,11 +27,13 @@ export default function MachineAHU03Pid({
   running = true,
   data = {},
 }: PidProps) {
-  // Extract live parameters from PLC2_AHU3
-  const rt3A = data.ACT_RTx_3A !== undefined ? Number(data.ACT_RTx_3A) : 26.25;
-  const rt3B = data.ACT_RTx_3B !== undefined ? Number(data.ACT_RTx_3B) : 27.56;
-  const pf03Dp = data.PF_03_DP !== undefined ? Number(data.PF_03_DP) : 0.0;
-  const isRunning = data.isRunning !== undefined ? Boolean(data.isRunning) : running;
+  const isConnected = data.Connected !== undefined ? Boolean(data.Connected) : true;
+  const isMachineRunning = isConnected && (data.isRunning !== undefined ? Boolean(data.isRunning) : running);
+
+  // Extract live parameters without dummy numbers
+  const rt3A = isMachineRunning && typeof data.ACT_RTx_3A === "number" ? data.ACT_RTx_3A : null;
+  const rt3B = isMachineRunning && typeof data.ACT_RTx_3B === "number" ? data.ACT_RTx_3B : null;
+  const pf03Dp = isMachineRunning && typeof data.PF_03_DP === "number" ? data.PF_03_DP : (data.PF_03_DP ? Number(data.PF_03_DP) : null);
 
   return (
     <svg
@@ -101,7 +103,7 @@ export default function MachineAHU03Pid({
         y={60} 
         width={60} 
         height={190} 
-        running={isRunning} 
+        running={isMachineRunning} 
         type="cooler"
       />
 
@@ -109,7 +111,7 @@ export default function MachineAHU03Pid({
         x={320} 
         y={110} 
         size={1.5} 
-        isRunning={isRunning} 
+        isRunning={isMachineRunning} 
       />
 
       <LabelComponent text="C/C" x={188} y={240} w={65} h={25} hasBorder={true} fontSize={13}/>
@@ -121,8 +123,9 @@ export default function MachineAHU03Pid({
         y={290}
         w={40}
         h={25}
-        value={isRunning} // true = ON (hijau), false = OFF (merah)
+        value={isMachineRunning} // true = ON (hijau), false = OFF (merah)
         mode="onoff"
+        isStopped={!isMachineRunning}
       />
 
       <DashedLine x={320} y={303} w={20} h={0} />
@@ -130,16 +133,16 @@ export default function MachineAHU03Pid({
       <DashedLine x={320} y={185} w={0} h={120} />
 
       <PipeV x={168} y={250} w={6} h={170} 
-        on={isRunning} dir="up" type="cold" />
+        on={isMachineRunning} dir="up" type="cold" />
       <PipeV x={265.5} y={93} w={6} h={320} 
-        on={isRunning} dir="down" type="cold" />
+        on={isMachineRunning} dir="down" type="cold" />
       <PipeH x={190} y={434} w={90} h={6} 
-        on={isRunning} dir="left" type="cold" />
+        on={isMachineRunning} dir="left" type="cold" />
       <PipeBend x={165} y={225} size={25} angle={90} />
       <PipeBend x={250} y={70} size={25} angle={180} />
       <PipeBend x={165.5} y={418} size={25} angle={0} />
       <PipeBend x={263} y={405} size={25} angle={0} />
-      <ACUnit x={1600} y={2500} w={200} h={75} running={isRunning} />
+      <ACUnit x={1600} y={2500} w={200} h={75} running={isMachineRunning} />
 
       <Line x={0} y={110} size={60} direction={0} strokeWidth={4} color="red" arrow="end" />
       <Line x={0} y={210} size={60} direction={0} strokeWidth={4} color="red" arrow="end" />
@@ -205,6 +208,7 @@ export default function MachineAHU03Pid({
         warningThreshold={28} alarmThreshold={30} 
         thresholdDirection="above" 
         decimalPlaces={1}
+        isStopped={!isMachineRunning}
       />
 
       {/* R. T-03 B */}
@@ -216,6 +220,7 @@ export default function MachineAHU03Pid({
         warningThreshold={28} alarmThreshold={30} 
         thresholdDirection="above" 
         decimalPlaces={1}
+        isStopped={!isMachineRunning}
       />
 
       <DashedLine x={135} y={462} w={20} h={0} />
@@ -231,6 +236,7 @@ export default function MachineAHU03Pid({
         warningThreshold={250} alarmThreshold={300} 
         thresholdDirection="above" 
         decimalPlaces={1}
+        isStopped={!isMachineRunning}
       />
     </svg>
   );

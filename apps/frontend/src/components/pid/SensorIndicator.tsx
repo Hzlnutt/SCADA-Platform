@@ -18,6 +18,7 @@ interface SensorIndicatorProps {
   color?: string;
   enableAlert?: boolean;
   suppressAlert?: boolean;
+  isStopped?: boolean;
 }
 
 export function SensorIndicator({
@@ -36,17 +37,23 @@ export function SensorIndicator({
   color: customColor,
   enableAlert = true,
   suppressAlert = false,
+  isStopped = false,
 }: SensorIndicatorProps) {
   const cx = x + w / 2;
   const cy = y + h / 2;
 
   const getColorAndText = (): { color: string; display: string } => {
-    // ── Jika value null ────────────────────────────────────────────────
-    if (value === null) {
-      return { color: "#444444", display: "--" };
+    // ── Jika mesin mati / stopped secara eksplisit ────────────────────
+    if (isStopped || value === "OFF" || value === "off") {
+      return { color: "#ef4444", display: "OFF" };
     }
 
-    // ── Jika customColor diberikan (berguna untuk info non-threshold seperti running hours) ──
+    // ── Jika value null atau undefined ────────────────────────────────
+    if (value === null || value === undefined) {
+      return { color: isStopped ? "#ef4444" : "#64748b", display: "--" };
+    }
+
+    // ── Jika customColor diberikan ────────────────────────────────────
     if (customColor) {
       const display = unit ? `${value}${unit}` : String(value);
       return { color: customColor, display };
@@ -56,36 +63,35 @@ export function SensorIndicator({
     if (typeof value === 'string') {
       const upper = value.toUpperCase();
       if (upper.includes("BELUM") || upper.includes("NO API") || upper === "XX" || upper.includes("TIDAK")) {
-        return { color: "#ff2222", display: "xx" };
+        return { color: "#ef4444", display: "xx" };
       }
     }
-
 
     // ── Mode ON/OFF dengan status khusus ──────────────────────────────
     if (mode === 'onoff') {
       if (typeof value === 'string') {
-        switch (value) {
-          case 'on':  return { color: "#00cc00", display: "ON" };
-          case 'off': return { color: "#ff2222", display: "OFF" };
-          case 'standby': return { color: "#ffaa00", display: "STANDBY" };
+        switch (value.toLowerCase()) {
+          case 'on':  return { color: "#10b981", display: "ON" };
+          case 'off': return { color: "#ef4444", display: "OFF" };
+          case 'standby': return { color: "#f59e0b", display: "STANDBY" };
           case 'maintenance': return { color: "#888888", display: "MAINTENANCE" };
-          default: return { color: "#444444", display: "??" };
+          default: return { color: "#64748b", display: "??" };
         }
       }
       if (typeof value === 'boolean') {
         return value 
-          ? { color: "#00cc00", display: "ON" }
-          : { color: "#ff2222", display: "OFF" };
+          ? { color: "#10b981", display: "ON" }
+          : { color: "#ef4444", display: "OFF" };
       }
       if (typeof value === 'number') {
         return value === 1
-          ? { color: "#00cc00", display: "ON" }
-          : { color: "#ff2222", display: "OFF" };
+          ? { color: "#10b981", display: "ON" }
+          : { color: "#ef4444", display: "OFF" };
       }
     }
 
     // ── Mode NUMERIC ──────────────────────────────────────────────────
-    let numValue = 0;
+    let numValue: number | null = null;
     if (typeof value === 'number') {
       numValue = value;
     } else if (typeof value === 'string') {
@@ -94,24 +100,28 @@ export function SensorIndicator({
         numValue = parsed;
       }
     }
+
+    if (numValue === null) {
+      return { color: "#64748b", display: "--" };
+    }
     
     const isAlertActive = enableAlert !== false && suppressAlert !== true;
 
-    // Jika alert tidak diaktifkan, warna tetap hijau
+    // Jika alert tidak diaktifkan, warna default emerald/green
     if (!isAlertActive) {
       const baseValue = numValue.toFixed(decimalPlaces);
       const display = unit ? `${baseValue}${unit}` : baseValue;
-      return { color: "#00cc00", display };
+      return { color: "#10b981", display };
     }
 
     // Jika threshold diberikan, jalankan logika
-    let color = "#00cc00"; // default green
+    let color = "#10b981"; // default green
     if (thresholdDirection === 'above') {
-      if (alarmThreshold !== null && alarmThreshold !== undefined && numValue >= alarmThreshold) color = "#ff2222";
-      else if (warningThreshold !== null && warningThreshold !== undefined && numValue >= warningThreshold) color = "#ffaa00";
+      if (alarmThreshold !== null && alarmThreshold !== undefined && numValue >= alarmThreshold) color = "#ef4444";
+      else if (warningThreshold !== null && warningThreshold !== undefined && numValue >= warningThreshold) color = "#f59e0b";
     } else {
-      if (alarmThreshold !== null && alarmThreshold !== undefined && numValue <= alarmThreshold) color = "#ff2222";
-      else if (warningThreshold !== null && warningThreshold !== undefined && numValue <= warningThreshold) color = "#ffaa00";
+      if (alarmThreshold !== null && alarmThreshold !== undefined && numValue <= alarmThreshold) color = "#ef4444";
+      else if (warningThreshold !== null && warningThreshold !== undefined && numValue <= warningThreshold) color = "#f59e0b";
     }
 
     const baseValue = numValue.toFixed(decimalPlaces);
@@ -125,7 +135,7 @@ export function SensorIndicator({
   const availableH = h - padding * 2;
   const fontSize = Math.max(10, Math.min(
     availableH * 0.75,
-    availableW / (display.length * 0.6)
+    availableW / (Math.max(1, display.length) * 0.6)
   ));
 
   return (
