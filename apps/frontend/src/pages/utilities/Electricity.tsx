@@ -1164,8 +1164,8 @@ export default function Electricity() {
   const stackedBarData = useMemo(() => ({
     labels: barLabels,
     datasets: [
-      { label: `LWBP ${barUnit}`, data: barLwbpValues, backgroundColor: "rgba(59,130,246,.85)", borderColor: "rgba(37,99,235,1)", borderWidth: 1, borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 }, barPercentage: 0.65, minBarLength: 5, stack: "beban" },
-      { label: `WBP ${barUnit}`, data: barWbpValues, backgroundColor: "rgba(239,68,68,.85)", borderColor: "rgba(220,38,38,1)", borderWidth: 1, borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }, barPercentage: 0.65, minBarLength: 5, stack: "beban" }
+      { label: `LWBP ${barUnit}`, data: barLwbpValues.map((v: number) => (v > 0 ? v : null)), backgroundColor: "rgba(59,130,246,.85)", borderColor: "rgba(37,99,235,1)", borderWidth: 1, borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 }, barPercentage: 0.65, minBarLength: 5, stack: "beban" },
+      { label: `WBP ${barUnit}`, data: barWbpValues.map((v: number) => (v > 0 ? v : null)), backgroundColor: "rgba(239,68,68,.85)", borderColor: "rgba(220,38,38,1)", borderWidth: 1, borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }, barPercentage: 0.65, minBarLength: 5, stack: "beban" }
     ]
   }), [barLabels, barUnit, barLwbpValues, barWbpValues]);
 
@@ -1207,9 +1207,11 @@ export default function Electricity() {
         bodyFont: { family: "IBM Plex Mono, monospace", size: 11, weight: "bold" as const },
         footerColor: isDark ? "#fbbf24" : "#b45309",
         footerFont: { family: "IBM Plex Mono, monospace", size: 11, weight: "bold" as const },
+        filter: (tooltipItem: any) => tooltipItem.raw !== null && tooltipItem.raw > 0,
         callbacks: {
           label: (ctx: any) => {
-            const val = ctx.parsed.y;
+            const val = ctx.raw;
+            if (val === null || val === undefined || val === 0) return null;
             return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { maximumFractionDigits: 2 })}`;
           },
           footer: (tooltipItems: any[]) => {
@@ -1218,6 +1220,7 @@ export default function Electricity() {
             const wbp = barWbpValues[dataIndex] || 0;
             const lwbp = barLwbpValues[dataIndex] || 0;
             const total = wbp + lwbp;
+            if (total === 0) return "";
             const multiplier = barUnit === "MWh" ? 1000 : 1;
             const cost = (wbp * multiplier * wbpRate) + (lwbp * multiplier * lwbpRate);
             return [
@@ -1302,7 +1305,7 @@ export default function Electricity() {
     if (solarShowPoi1) {
       datasets.push({
         label: "POI-1 (kWh)",
-        data: solarPoi1Values,
+        data: solarPoi1Values.map((v: number) => (v > 0 ? v : null)),
         backgroundColor: "rgba(59, 130, 246, 0.85)",
         borderColor: "rgba(37, 99, 235, 1)",
         borderWidth: 1,
@@ -1315,7 +1318,7 @@ export default function Electricity() {
     if (solarShowPoi2) {
       datasets.push({
         label: "POI-2 (kWh)",
-        data: solarPoi2Values,
+        data: solarPoi2Values.map((v: number) => (v > 0 ? v : null)),
         backgroundColor: "rgba(6, 182, 212, 0.85)",
         borderColor: "rgba(8, 145, 178, 1)",
         borderWidth: 1,
@@ -1377,13 +1380,20 @@ export default function Electricity() {
         borderWidth: 1,
         padding: 12,
         boxPadding: 4,
+        filter: (tooltipItem: any) => tooltipItem.raw !== null && tooltipItem.raw > 0,
         callbacks: {
+          label: (ctx: any) => {
+            const val = ctx.raw;
+            if (val === null || val === undefined || val === 0) return null;
+            return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`;
+          },
           afterBody: (tooltipItems: any[]) => {
             if (!tooltipItems.length) return [];
             const idx = tooltipItems[0].dataIndex;
             const p1 = solarShowPoi1 ? (solarPoi1Values[idx] || 0) : 0;
             const p2 = solarShowPoi2 ? (solarPoi2Values[idx] || 0) : 0;
             const tot = p1 + p2;
+            if (tot === 0) return [];
             const savings = tot * lwbpRate;
             return [
               `Total: ${tot.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`,
