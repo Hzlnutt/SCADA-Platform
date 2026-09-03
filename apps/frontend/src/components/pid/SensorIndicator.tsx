@@ -43,16 +43,6 @@ export function SensorIndicator({
   const cy = y + h / 2;
 
   const getColorAndText = (): { color: string; display: string } => {
-    // ── Jika mesin mati / stopped secara eksplisit ────────────────────
-    if (isStopped || value === "OFF" || value === "off") {
-      return { color: "#ef4444", display: "OFF" };
-    }
-
-    // ── Jika value null atau undefined ────────────────────────────────
-    if (value === null || value === undefined) {
-      return { color: isStopped ? "#ef4444" : "#64748b", display: "--" };
-    }
-
     // ── Jika customColor diberikan ────────────────────────────────────
     if (customColor) {
       const display = unit ? `${value}${unit}` : String(value);
@@ -67,44 +57,41 @@ export function SensorIndicator({
       }
     }
 
-    // ── Mode ON/OFF dengan status khusus ──────────────────────────────
+    // ── Mode ON/OFF ──────────────────────────────────────────────────
     if (mode === 'onoff') {
+      if (isStopped || value === "OFF" || value === "off" || value === false || value === 0) {
+        return { color: "#ef4444", display: "OFF" };
+      }
+      if (value === true || value === 'on' || value === 1) {
+        return { color: "#10b981", display: "ON" };
+      }
       if (typeof value === 'string') {
         switch (value.toLowerCase()) {
-          case 'on':  return { color: "#10b981", display: "ON" };
-          case 'off': return { color: "#ef4444", display: "OFF" };
           case 'standby': return { color: "#f59e0b", display: "STANDBY" };
           case 'maintenance': return { color: "#888888", display: "MAINTENANCE" };
-          default: return { color: "#64748b", display: "??" };
+          default: return { color: "#ef4444", display: "OFF" };
         }
       }
-      if (typeof value === 'boolean') {
-        return value 
-          ? { color: "#10b981", display: "ON" }
-          : { color: "#ef4444", display: "OFF" };
-      }
-      if (typeof value === 'number') {
-        return value === 1
-          ? { color: "#10b981", display: "ON" }
-          : { color: "#ef4444", display: "OFF" };
-      }
+      return { color: "#ef4444", display: "OFF" };
     }
 
     // ── Mode NUMERIC ──────────────────────────────────────────────────
     let numValue: number | null = null;
     if (typeof value === 'number') {
       numValue = value;
-    } else if (typeof value === 'string') {
+    } else if (typeof value === 'string' && value !== "OFF" && value !== "off" && value !== "--") {
       const parsed = parseFloat(value);
       if (!isNaN(parsed)) {
         numValue = parsed;
       }
     }
 
-    if (numValue === null) {
-      return { color: "#64748b", display: "--" };
+    // Jika mesin mati atau data belum tersedia
+    if (numValue === null || isStopped) {
+      const emptyDisplay = unit ? `-- ${unit.trim()}` : "--";
+      return { color: isStopped ? "#ef4444" : "#64748b", display: emptyDisplay };
     }
-    
+
     const isAlertActive = enableAlert !== false && suppressAlert !== true;
 
     // Jika alert tidak diaktifkan, warna default emerald/green

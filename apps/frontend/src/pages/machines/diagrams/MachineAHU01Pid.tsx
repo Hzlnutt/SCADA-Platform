@@ -32,7 +32,7 @@ export default function MachineAHU01Pid({
   const isSfRunning = isConnected && (data.xIND_RUN_SF01 !== undefined ? Boolean(data.xIND_RUN_SF01) : running);
   const isMachineRunning = isConnected && isSfRunning;
 
-  // Extract live parameters without dummy numbers
+  // Extract live parameters without dummy fallback numbers
   const rt1A = isMachineRunning && typeof data.ACT_RTx_1A === "number" ? data.ACT_RTx_1A : null;
   const rh1A = isMachineRunning && typeof data.ACT_RHx_1A === "number" ? data.ACT_RHx_1A : null;
   const rt1B = isMachineRunning && typeof data.ACT_RTx_1B === "number" ? data.ACT_RTx_1B : null;
@@ -75,9 +75,9 @@ export default function MachineAHU01Pid({
       />
 
       <DuctSection
-        x={50}
+        x={18}
         y={70}
-        width={50}
+        width={80}
         height={80}
         direction="right"
         flowDirection="in"
@@ -85,9 +85,9 @@ export default function MachineAHU01Pid({
       />
 
       <DuctSection
-        x={50}
+        x={18}
         y={170}
-        width={50}
+        width={80}
         height={80}
         direction="right"
         flowDirection="in"
@@ -97,7 +97,7 @@ export default function MachineAHU01Pid({
       <DuctSection
         x={700}
         y={115}
-        width={50}
+        width={80}
         height={80}
         direction="left"
         flowDirection="out"
@@ -112,70 +112,40 @@ export default function MachineAHU01Pid({
         color="blue"
       />
 
-      <Partition x={250} y={60} width={14} height={190} color="#606060" />
-      <Partition x={585} y={60} width={14} height={190} color="#606060" />
+      <Partition x={235} y={60} width={14} height={190} color="#606060" />
+      <SupplyFan x={228} y={-10} w={350} h={350} running={sf01Running} />
 
       <ThermalUnit
-        x={360}
+        x={370}
         y={60}
         width={60}
         height={190}
-        running={isMachineRunning}
-        type="heater"
+        running={eh01Running}
       />
 
-      <SupplyFan
-        x={275}
-        y={110}
-        w={100}
-        h={100}
-        running={isMachineRunning}
-      />
+      <Partition x={440} y={60} width={14} height={190} color="#606060" />
 
-      <ThermalUnit
-        x={475}
-        y={60}
+      <HumidityFan x={440} y={80} width={250} height={150} running={hf01Running} />
+
+      <DifferentialPressureSwitch
+        x={800}
+        y={100}
         width={60}
-        height={190}
-        running={isMachineRunning}
-        type="cooler"
+        height={80}
       />
 
-      <HumidityFan
-        x={610}
-        y={110}
-        width={100}
-        height={100}
-        running={isMachineRunning}
-      />
-
-      <DifferentialPressureSwitch x={720} y={150} width={80} height={60} />
-
-      <Line x={0} y={110} size={100} direction={0} strokeWidth={4} color="red" arrow="end" />
-      <Line x={0} y={210} size={100} direction={0} strokeWidth={4} color="red" arrow="end" />
-      <Line x={0} y={210} size={360} direction={90} strokeWidth={4} color="red" />
-      <Line x={0} y={570} size={700} direction={0} strokeWidth={4} color="red" />
-      <Line x={680} y={155} size={300} direction={0} strokeWidth={4} color="blue" />
-      <Line x={790} y={155} size={50} direction={90} strokeWidth={4} color="blue" arrow="end" />
-      <Line x={930} y={155} size={50} direction={90} strokeWidth={4} color="blue" arrow="end" />
-      <Line x={790} y={525} size={45} direction={90} strokeWidth={4} color="red" />
-      <Line x={930} y={525} size={45} direction={90} strokeWidth={4} color="red" />
+      <Line x={0} y={110} size={120} direction={0} strokeWidth={4} color="red" arrow="end" />
+      <Line x={0} y={210} size={120} direction={0} strokeWidth={4} color="red" arrow="end" />
+      <Line x={2} y={210} size={360} direction={90} strokeWidth={4} color="red" />
+      <Line x={0} y={570} size={780} direction={0} strokeWidth={4} color="red" />
+      <Line x={660} y={155} size={220} direction={0} strokeWidth={4} color="blue" />
+      <Line x={880} y={155} size={50} direction={90} strokeWidth={4} color="blue" arrow="end" />
+      <Line x={640} y={540} size={28} direction={90} strokeWidth={4} color="red" />
 
       <TitleCard
-        x={730} y={225}
-        width={120} height={300}
-        title="ACC. RETENTION ROOM"
-        fontSize={16}
-        color="#2C3E50"
-        textColor="#ECF0F1"
-        borderRadius={8}
-        paddingTop={20}
-      />
-
-      <TitleCard
-        x={870} y={225}
-        width={120} height={300}
-        title="ACC. STABILITY ROOM"
+        x={780} y={225}
+        width={200} height={350}
+        title="ACCELERATED STABILITY ROOM"
         fontSize={16}
         color="#2C3E50"
         textColor="#ECF0F1"
@@ -184,9 +154,9 @@ export default function MachineAHU01Pid({
       />
 
       {/* R. THD-01 A */}
-      <LabelComponent text="R. THD-01 A" x={700} y={430} w={120} h={35} hasBorder={true} fontSize={13} />
+      <LabelComponent text="R. THD-01 A" x={820} y={300} w={120} h={35} hasBorder={true} fontSize={13} />
       <SensorIndicator
-        x={700} y={470}
+        x={820} y={340}
         w={120} h={35}
         value={rt1A} unit=" °C"
         warningThreshold={42} alarmThreshold={44}
@@ -195,7 +165,7 @@ export default function MachineAHU01Pid({
         isStopped={!isMachineRunning}
       />
       <SensorIndicator
-        x={700} y={510}
+        x={820} y={380}
         w={120} h={35}
         value={rh1A} unit=" %RH"
         warningThreshold={80} alarmThreshold={85}
@@ -205,9 +175,9 @@ export default function MachineAHU01Pid({
       />
 
       {/* R. THD-01 B */}
-      <LabelComponent text="R. THD-01 B" x={840} y={430} w={120} h={35} hasBorder={true} fontSize={13} />
+      <LabelComponent text="R. THD-01 B" x={820} y={430} w={120} h={35} hasBorder={true} fontSize={13} />
       <SensorIndicator
-        x={840} y={470}
+        x={820} y={470}
         w={120} h={35}
         value={rt1B} unit=" °C"
         warningThreshold={42} alarmThreshold={44}
@@ -216,7 +186,7 @@ export default function MachineAHU01Pid({
         isStopped={!isMachineRunning}
       />
       <SensorIndicator
-        x={840} y={510}
+        x={820} y={510}
         w={120} h={35}
         value={rh1B} unit=" %RH"
         warningThreshold={80} alarmThreshold={85}
@@ -226,9 +196,9 @@ export default function MachineAHU01Pid({
       />
 
       {/* R.A. THD-01 */}
-      <LabelComponent text="R.A. THD-01" x={570} y={430} w={120} h={35} hasBorder={true} fontSize={13} />
+      <LabelComponent text="R.A. THD-01" x={580} y={430} w={120} h={35} hasBorder={true} fontSize={13} />
       <SensorIndicator
-        x={570} y={470}
+        x={580} y={470}
         w={120} h={35}
         value={rat1} unit=" °C"
         warningThreshold={42} alarmThreshold={44}
@@ -237,7 +207,7 @@ export default function MachineAHU01Pid({
         isStopped={!isMachineRunning}
       />
       <SensorIndicator
-        x={570} y={510}
+        x={580} y={510}
         w={120} h={35}
         value={rah1} unit=" %RH"
         warningThreshold={80} alarmThreshold={85}

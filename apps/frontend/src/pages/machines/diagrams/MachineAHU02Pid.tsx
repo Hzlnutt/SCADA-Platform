@@ -35,7 +35,7 @@ export default function MachineAHU02Pid({
   const isSf02b = data.xIND_RUN_SF02B !== undefined ? Boolean(data.xIND_RUN_SF02B) : running;
   const isMachineRunning = isConnected && (isSf02a || isSf02b || running);
 
-  // Extract live parameters without dummy numbers
+  // Extract live parameters without dummy fallback numbers
   const rt2A = isMachineRunning && typeof data.ACT_RTx_2A === "number" ? data.ACT_RTx_2A : null;
   const rh2A = isMachineRunning && typeof data.ACT_RHx_2A === "number" ? data.ACT_RHx_2A : null;
   const rt2B = isMachineRunning && typeof data.ACT_RTx_2B === "number" ? data.ACT_RTx_2B : null;
@@ -126,6 +126,9 @@ export default function MachineAHU02Pid({
       <Partition x={190} y={60} width={14} height={190} color="#606060" />
       <Partition x={535} y={60} width={14} height={190} color="#606060" />
 
+      <SupplyFan x={170} y={-40} w={280} h={280} running={sf02aRunning} />
+      <SupplyFan x={170} y={60} w={280} h={280} running={sf02bRunning} />
+
       <ThermalUnit 
         x={275} 
         y={60} 
@@ -133,22 +136,6 @@ export default function MachineAHU02Pid({
         height={190} 
         running={isMachineRunning} 
         type="cooler"
-      />
-
-      <SupplyFan 
-        x={210} 
-        y={160} 
-        w={90} 
-        h={90} 
-        running={sf02aRunning} 
-      />
-
-      <SupplyFan 
-        x={210} 
-        y={60} 
-        w={90} 
-        h={90} 
-        running={sf02bRunning} 
       />
 
       <ThermalUnit 
@@ -160,15 +147,9 @@ export default function MachineAHU02Pid({
         type="heater"
       />
 
-      <HumidityFan 
-        x={560} 
-        y={110} 
-        width={100} 
-        height={100} 
-        running={hf02Running} 
-      />
+      <HumidityFan x={400} y={80} width={250} height={150} running={hf02Running} />
 
-      <DifferentialPressureSwitch x={670} y={150} width={80} height={60} />
+      <DifferentialPressureSwitch x={800} y={100} width={60} height={80} />
 
       <Line x={0} y={110} size={60} direction={0} strokeWidth={4} color="red" arrow="end" />
       <Line x={0} y={210} size={60} direction={0} strokeWidth={4} color="red" arrow="end" />
@@ -244,9 +225,9 @@ export default function MachineAHU02Pid({
       />
 
       {/* R.A. THD-02 */}
-      <LabelComponent text="R.A. THD-02" x={520} y={430} w={120} h={35} hasBorder={true} fontSize={13}/>
+      <LabelComponent text="R.A. THD-02" x={580} y={430} w={120} h={35} hasBorder={true} fontSize={13}/>
       <SensorIndicator 
-        x={520} y={470} 
+        x={580} y={470} 
         w={120} h={35}
         value={rat2} unit=" °C" 
         warningThreshold={32} alarmThreshold={34} 
@@ -255,7 +236,7 @@ export default function MachineAHU02Pid({
         isStopped={!isMachineRunning}
       />
       <SensorIndicator 
-        x={520} y={510} 
+        x={580} y={510} 
         w={120} h={35}
         value={rah2} unit=" %RH" 
         warningThreshold={80} alarmThreshold={85} 
@@ -264,13 +245,34 @@ export default function MachineAHU02Pid({
         isStopped={!isMachineRunning}
       />
 
-      <LabelComponent text="DPS-02" x={745} y={165} w={65} h={25} hasBorder={true} fontSize={13}/>
+      <LabelComponent text="DPS-02" x={795} y={165} w={65} h={25} hasBorder={true} fontSize={13}/>
 
+      <TitleCard 
+        x={580} y={300} 
+        width={120} height={60} 
+        title="FROM/TO UTILITY" 
+        fontSize={16}
+        color="#2C3E50"
+        textColor="#ECF0F1"
+        borderRadius={8}
+      />
+
+      <PipeH x={525} y={340} w={54} h={6} 
+        on={isMachineRunning} dir="left" type="cold" />
+      <PipeBend x={501} y={325} size={25} angle={0} />
+      <PipeV x={503} y={244} w={6} h={82} 
+        on={isMachineRunning} dir="up" type="cold" />
+      <PipeV x={520} y={244} w={6} h={59} 
+        on={isMachineRunning} dir="down" type="cold" />
+      <PipeH x={543} y={315} w={36} h={6} 
+        on={isMachineRunning} dir="right" type="cold" />
+      <PipeBend x={518} y={300} size={25} angle={0} />
+      
       {/* HF-02 */}
-      <LabelComponent text="HF-02" x={508} y={60} w={65} h={25} hasBorder={true} fontSize={13}/>
+      <LabelComponent text="HF-02" x={535} y={140} w={65} h={25} hasBorder={true} fontSize={13}/>
       <SensorIndicator
-        x={462}
-        y={60}
+        x={490}
+        y={140}
         w={40}
         h={25}
         value={isMachineRunning ? hf02Running : false}
