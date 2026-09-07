@@ -14,6 +14,7 @@ function getWibDateString(date: Date): string {
 export interface SolarLiveItem {
   status: boolean;
   activePower?: number;
+  peakDemand?: number;
   totalKwh: number;
   totalKvarh: number;
   frequency: number;
@@ -248,6 +249,13 @@ export const getSolarAnalytics = async (
         poi2TodayKwh += deltaPoi2;
       }
     }
+  }
+
+  if (live?.poi1?.peakDemand) {
+    poi1PeakDemand = live.poi1.peakDemand;
+  }
+  if (live?.poi2?.peakDemand) {
+    poi2PeakDemand = live.poi2.peakDemand;
   }
 
   if (peakDemand === 0 && (poi1PeakDemand > 0 || poi2PeakDemand > 0)) {

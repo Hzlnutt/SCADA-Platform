@@ -303,6 +303,7 @@ export interface ElectricPltsRecord {
   volt_cn: number | null;
   frequency: number | null;
   active_power: number;
+  peak_demand?: number;
   total_kwh: number;
   total_kvarh: number;
 }
@@ -324,6 +325,8 @@ export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] =
     const frequency = Number(poiObj[`Frequency_POI_${num}`]) || null;
     let active_power = Number(poiObj[`Scale_Total_KW_POI_${num}`]) || 0;
     if (active_power < 0.001 && active_power > 0) active_power = 0;
+    const rawPeak = poiObj[`Peak_Demand_ScaleKw_POI_${num}`] ?? poiObj[`Peak_Demand_ScaleKW_POI_${num}`];
+    const peak_demand = rawPeak !== undefined && rawPeak !== null ? Number(rawPeak) || 0 : 0;
     const total_kwh = Number(poiObj[`Total_KWH_POI_${num}`]) || 0;
     const total_kvarh = Number(poiObj[`Total_KVARH_POI_${num}`]) || 0;
 
@@ -339,6 +342,7 @@ export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] =
       volt_cn,
       frequency,
       active_power,
+      peak_demand,
       total_kwh,
       total_kvarh
     });
@@ -716,9 +720,12 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   const p2 = data?.POI_2 || {};
   const poi1Status = Boolean(p1.Status_POI_1);
   const poi2Status = Boolean(p2.Status_POI_2);
+  const rawPeak1 = p1.Peak_Demand_ScaleKw_POI_1 ?? p1.Peak_Demand_ScaleKW_POI_1;
+  const rawPeak2 = p2.Peak_Demand_ScaleKw_POI_2 ?? p2.Peak_Demand_ScaleKW_POI_2;
   const poi1 = {
     status: poi1Status,
-    activePower: typeof p1.Scale_Total_KW_POI_1 === "number" ? p1.Scale_Total_KW_POI_1 : 0,
+    activePower: typeof p1.Scale_Total_KW_POI_1 === "number" ? p1.Scale_Total_KW_POI_1 : (Number(p1.Scale_Total_KW_POI_1) || 0),
+    peakDemand: rawPeak1 !== undefined && rawPeak1 !== null ? (Number(rawPeak1) || 0) : 0,
     totalKwh: typeof p1.Total_KWH_POI_1 === "number" ? p1.Total_KWH_POI_1 : 0,
     totalKvarh: typeof p1.Total_KVARH_POI_1 === "number" ? p1.Total_KVARH_POI_1 : 0,
     frequency: typeof p1.Frequency_POI_1 === "number" ? p1.Frequency_POI_1 : 50,
@@ -731,7 +738,8 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   };
   const poi2 = {
     status: poi2Status,
-    activePower: typeof p2.Scale_Total_KW_POI_2 === "number" ? p2.Scale_Total_KW_POI_2 : 0,
+    activePower: typeof p2.Scale_Total_KW_POI_2 === "number" ? p2.Scale_Total_KW_POI_2 : (Number(p2.Scale_Total_KW_POI_2) || 0),
+    peakDemand: rawPeak2 !== undefined && rawPeak2 !== null ? (Number(rawPeak2) || 0) : 0,
     totalKwh: typeof p2.Total_KWH_POI_2 === "number" ? p2.Total_KWH_POI_2 : 0,
     totalKvarh: typeof p2.Total_KVARH_POI_2 === "number" ? p2.Total_KVARH_POI_2 : 0,
     frequency: typeof p2.Frequency_POI_2 === "number" ? p2.Frequency_POI_2 : 50,
@@ -971,16 +979,16 @@ export const startIncomingElectricityPolling = () => {
       } catch {
         pltsParsed = {
           t_stamp: ts,
-          poi1: { status: false, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
-          poi2: { status: false, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
+          poi1: { status: false, activePower: 0, peakDemand: 0, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
+          poi2: { status: false, activePower: 0, peakDemand: 0, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
           totalKwh: 0
         };
       }
     } else {
       pltsParsed = {
         t_stamp: ts,
-        poi1: { status: false, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
-        poi2: { status: false, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
+        poi1: { status: false, activePower: 0, peakDemand: 0, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
+        poi2: { status: false, activePower: 0, peakDemand: 0, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
         totalKwh: 0
       };
     }

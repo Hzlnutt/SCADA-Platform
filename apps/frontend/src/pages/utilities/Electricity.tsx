@@ -425,11 +425,11 @@ export default function Electricity() {
 
   // Live PLTS Data (Solar POI 1 & POI 2)
   const [pltsLive, setPltsLive] = useState<{
-    poi1: { status: boolean; volt_ab: number; active_power: number; total_kwh: number; frequency: number };
-    poi2: { status: boolean; volt_ab: number; active_power: number; total_kwh: number; frequency: number };
+    poi1: { status: boolean; volt_ab: number; active_power: number; peak_demand: number; total_kwh: number; frequency: number };
+    poi2: { status: boolean; volt_ab: number; active_power: number; peak_demand: number; total_kwh: number; frequency: number };
   }>({
-    poi1: { status: false, volt_ab: 0, active_power: 0, total_kwh: 0, frequency: 0 },
-    poi2: { status: false, volt_ab: 0, active_power: 0, total_kwh: 0, frequency: 0 }
+    poi1: { status: false, volt_ab: 0, active_power: 0, peak_demand: 0, total_kwh: 0, frequency: 0 },
+    poi2: { status: false, volt_ab: 0, active_power: 0, peak_demand: 0, total_kwh: 0, frequency: 0 }
   });
 
   // Live socket & API telemetry states for real-time streaming
@@ -463,7 +463,7 @@ export default function Electricity() {
   const cubicleSummary = useMemo(() => {
     const s = cubicleAnalytics?.summary || summaryData?.summary || {};
     const isSolar = cubicleSelector === "poi1" || cubicleSelector === "poi2";
-    const peak = Number(s.peakDemand) || (cubicleSelector === "poi1" ? pltsLive.poi1.active_power : cubicleSelector === "poi2" ? pltsLive.poi2.active_power : Number(summaryData?.pqData?.activePower || 0));
+    const peak = Number(s.peakDemand) || (cubicleSelector === "poi1" ? (solarLive?.poi1?.peakDemand || pltsLive.poi1.peak_demand || pltsLive.poi1.active_power) : cubicleSelector === "poi2" ? (solarLive?.poi2?.peakDemand || pltsLive.poi2.peak_demand || pltsLive.poi2.active_power) : Number(summaryData?.pqData?.activePower || 0));
     const lwbp = isSolar ? 0 : (Number(s.monthlyLwbpKwh ?? s.todayLwbpKwh) || 0);
     const wbp = isSolar ? 0 : (Number(s.monthlyWbpKwh ?? s.todayWbpKwh) || 0);
     const total = Number(s.monthlyKwh ?? s.totalKwh ?? (lwbp + wbp)) || (cubicleSelector === "poi1" ? pltsLive.poi1.total_kwh : cubicleSelector === "poi2" ? pltsLive.poi2.total_kwh : 0);
@@ -611,6 +611,7 @@ export default function Electricity() {
                     status: Boolean(res.data.POI_1.Status_POI_1 ?? true),
                     volt_ab: Number(res.data.POI_1.Volt_AB_POI_1) || 0,
                     active_power: Math.max(0, Number(res.data.POI_1.Scale_Total_KW_POI_1) || 0),
+                    peak_demand: Number(res.data.POI_1.Peak_Demand_ScaleKw_POI_1 ?? res.data.POI_1.Peak_Demand_ScaleKW_POI_1) || 0,
                     total_kwh: Number(res.data.POI_1.Total_KWH_POI_1) || 0,
                     frequency: Number(res.data.POI_1.Frequency_POI_1) || 0
                   },
@@ -618,6 +619,7 @@ export default function Electricity() {
                     status: Boolean(res.data.POI_2.Status_POI_2 ?? true),
                     volt_ab: Number(res.data.POI_2.Volt_AB_POI_2) || 0,
                     active_power: Math.max(0, Number(res.data.POI_2.Scale_Total_KW_POI_2) || 0),
+                    peak_demand: Number(res.data.POI_2.Peak_Demand_ScaleKw_POI_2 ?? res.data.POI_2.Peak_Demand_ScaleKW_POI_2) || 0,
                     total_kwh: Number(res.data.POI_2.Total_KWH_POI_2) || 0,
                     frequency: Number(res.data.POI_2.Frequency_POI_2) || 0
                   }
@@ -645,8 +647,22 @@ export default function Electricity() {
         const p2 = payload.data.find((p: any) => p.poi_id === "POI_2");
         if (p1 || p2) {
           setPltsLive(prev => ({
-            poi1: p1 ? { status: p1.status, volt_ab: p1.volt_ab, active_power: p1.active_power, total_kwh: p1.total_kwh, frequency: p1.frequency } : prev.poi1,
-            poi2: p2 ? { status: p2.status, volt_ab: p2.volt_ab, active_power: p2.active_power, total_kwh: p2.total_kwh, frequency: p2.frequency } : prev.poi2
+            poi1: p1 ? {
+              status: p1.status,
+              volt_ab: p1.volt_ab,
+              active_power: p1.active_power,
+              peak_demand: Number(p1.peak_demand) || 0,
+              total_kwh: p1.total_kwh,
+              frequency: p1.frequency
+            } : prev.poi1,
+            poi2: p2 ? {
+              status: p2.status,
+              volt_ab: p2.volt_ab,
+              active_power: p2.active_power,
+              peak_demand: Number(p2.peak_demand) || 0,
+              total_kwh: p2.total_kwh,
+              frequency: p2.frequency
+            } : prev.poi2
           }));
         }
       }
@@ -2029,7 +2045,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-1)</span>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              - kW
+              {formatNumber(solarLive?.poi1?.peakDemand ?? (pltsLive.poi1.peak_demand > 0 ? pltsLive.poi1.peak_demand : (solarData?.summary?.poi1PeakDemand ?? 0)))} kW
             </div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
           </div>
@@ -2070,7 +2086,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-2)</span>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              - kW
+              {formatNumber(solarLive?.poi2?.peakDemand ?? (pltsLive.poi2.peak_demand > 0 ? pltsLive.poi2.peak_demand : (solarData?.summary?.poi2PeakDemand ?? 0)))} kW
             </div>
             <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
           </div>
