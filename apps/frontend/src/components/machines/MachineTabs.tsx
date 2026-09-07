@@ -1,6 +1,7 @@
 import { NavItem } from "../navigation/NavItem";
 import { useAuthStore } from "../../store/auth.store";
 import { canAccessConfigAndAudit } from "../../utils/roles";
+import { canAccessHvacControls } from "../../pages/machines/HvacLayout";
 
 // ── KONFIGURASI TAB PER MESIN ────────────────────────────────────
 // Tambahkan mapping untuk setiap mesin HVAC di sini
@@ -35,13 +36,21 @@ export const MachineTabs = ({
   groupId,
   currentUnitId,
 }: MachineTabsProps) => {
-  const role = useAuthStore((state) => state.user?.role ?? "user");
+  const user = useAuthStore((state) => state.user);
+  const role = user?.role ?? "user";
   const canAccessConfig = canAccessConfigAndAudit(role);
+  const hasControlAccess = canAccessHvacControls(user?.role);
 
   // ── Mode HVAC : tab dinamis per mesin ──────────────────────────
   if (isHvacGroup && groupId && currentUnitId) {
     // Ambil tab khusus untuk unit ini (jika ada di mapping)
-    const customTabs = customTabsMap[currentUnitId] || [];
+    const baseTabs = customTabsMap[currentUnitId] || [];
+    const customTabs = [...baseTabs];
+
+    // Sub-page Control khusus role Leader dan Kashift HVAC (serta Dev/Admin)
+    if (currentUnitId === "hvac-qc-retained-sample" && hasControlAccess) {
+      customTabs.push({ label: "Control", tabId: "control" });
+    }
 
     return (
       <div className="mb-4 border-b border-[#acd3ff]">

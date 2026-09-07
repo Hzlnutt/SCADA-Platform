@@ -25,6 +25,30 @@ export interface ControlButtonItem {
   icon?: ReactNode;
 }
 
+// Inline SVG Icons for AHU Status
+const snowflakeIcon = (
+  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="2" x2="12" y2="22" />
+    <line x1="2" y1="12" x2="22" y2="22" />
+    <path d="m20 16-4-4 4-4" />
+    <path d="m4 8 4 4-4 4" />
+    <path d="m16 4-4 4-4-4" />
+    <path d="m8 20 4-4 4 4" />
+  </svg>
+);
+
+const flameIcon = (
+  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+  </svg>
+);
+
+const dropletIcon = (
+  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" />
+  </svg>
+);
+
 interface HvacLayoutProps {
   roomName: string;
   roomType: string;
@@ -40,6 +64,9 @@ interface HvacLayoutProps {
   onRefreshData?: () => Promise<void> | void;
   currentMode?: string;
   currentStatus?: string;
+  ahuStatus?: "ON" | "OFF" | "IDLE";
+  machineJob?: "COOLING" | "HEATING" | "STANDBY" | null;
+  humidityStatus?: "ON" | "OFF" | null;
 }
 
 export interface LogEntry {
@@ -68,6 +95,9 @@ export default function HvacLayout({
   onRefreshData,
   currentMode = "Auto",
   currentStatus = "Running",
+  ahuStatus,
+  machineJob,
+  humidityStatus,
 }: HvacLayoutProps) {
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -423,50 +453,114 @@ export default function HvacLayout({
           </div>
         </div>
 
-        <div className="flex items-center gap-6 bg-slate-50 dark:bg-slate-950 px-4 py-3 rounded-lg border border-slate-150 dark:border-slate-900">
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] text-slate-450 dark:text-slate-500 font-mono uppercase tracking-wider">
-              MODE
-            </span>
-            <span className={`text-sm font-bold font-mono ${
-              currentMode === "Auto" 
-                ? "text-cyan-600 dark:text-cyan-400" 
-                : "text-amber-600 dark:text-amber-400"
-            }`}>
-              {currentMode}
-            </span>
-          </div>
-          <div className="h-6 w-px bg-slate-200 dark:bg-slate-800"></div>
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] text-slate-450 dark:text-slate-500 font-mono uppercase tracking-wider">
-              STATUS
-            </span>
-            <span className={`text-sm font-bold font-mono flex items-center gap-1.5 ${
-              currentStatus === "Running" 
-                ? "text-emerald-600 dark:text-emerald-400" 
-                : currentStatus === "Maintenance"
-                ? "text-amber-600 dark:text-amber-400"
-                : "text-rose-600 dark:text-rose-455"
-            }`}>
-              {currentStatus === "Running" && (
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        {/* STATUS & OPERATION CLUSTER */}
+        {(() => {
+          const effectiveAhuStatus: "ON" | "OFF" | "IDLE" =
+            ahuStatus ||
+            (currentStatus === "Running" ? "ON" : currentStatus === "Maintenance" ? "IDLE" : "OFF");
+
+          return (
+            <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-950 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              {/* MODE */}
+              <div className="flex flex-col items-center px-1">
+                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono uppercase tracking-wider font-semibold">
+                  MODE
                 </span>
-              )}
-              {currentStatus === "Maintenance" && (
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                <span
+                  className={`text-xs font-bold font-mono ${
+                    currentMode === "Auto"
+                      ? "text-cyan-600 dark:text-cyan-400"
+                      : "text-amber-600 dark:text-amber-400"
+                  }`}
+                >
+                  {currentMode}
                 </span>
+              </div>
+
+              <div className="h-6 w-px bg-slate-200 dark:bg-slate-800"></div>
+
+              {/* AHU STATUS INDICATOR (ON / OFF / IDLE) */}
+              <div className="flex flex-col items-center px-1">
+                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono uppercase tracking-wider font-semibold">
+                  AHU STATUS
+                </span>
+                <span
+                  className={`text-xs font-bold font-mono flex items-center gap-1.5 mt-0.5 ${
+                    effectiveAhuStatus === "ON"
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : effectiveAhuStatus === "IDLE"
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-rose-600 dark:text-rose-400"
+                  }`}
+                >
+                  {effectiveAhuStatus === "ON" && (
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                  )}
+                  {effectiveAhuStatus === "IDLE" && (
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                    </span>
+                  )}
+                  {effectiveAhuStatus === "OFF" && (
+                    <span className="h-2 w-2 rounded-full bg-rose-500"></span>
+                  )}
+                  {effectiveAhuStatus}
+                </span>
+              </div>
+
+              {/* CARD 1: MACHINE JOB (COOLING / HEATING) - Omitted when machineJob is null, e.g. AHU-03 */}
+              {machineJob !== null && machineJob !== undefined && (
+                <>
+                  <div className="h-6 w-px bg-slate-200 dark:bg-slate-800"></div>
+                  <div className="flex flex-col items-center px-1">
+                    <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono uppercase tracking-wider font-semibold">
+                      MACHINE
+                    </span>
+                    <span
+                      className={`text-xs font-bold font-mono flex items-center gap-1 mt-0.5 ${
+                        machineJob === "COOLING"
+                          ? "text-cyan-600 dark:text-cyan-400"
+                          : machineJob === "HEATING"
+                          ? "text-orange-600 dark:text-orange-400"
+                          : "text-slate-400 dark:text-slate-500"
+                      }`}
+                    >
+                      {machineJob === "COOLING" && snowflakeIcon}
+                      {machineJob === "HEATING" && flameIcon}
+                      {machineJob}
+                    </span>
+                  </div>
+                </>
               )}
-              {currentStatus !== "Running" && currentStatus !== "Maintenance" && (
-                <span className="h-2 w-2 rounded-full bg-rose-500"></span>
+
+              {/* CARD 2: HUMIDITY STATUS (ON / OFF) */}
+              {humidityStatus !== null && humidityStatus !== undefined && (
+                <>
+                  <div className="h-6 w-px bg-slate-200 dark:bg-slate-800"></div>
+                  <div className="flex flex-col items-center px-1">
+                    <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono uppercase tracking-wider font-semibold">
+                      HUMI
+                    </span>
+                    <span
+                      className={`text-xs font-bold font-mono flex items-center gap-1 mt-0.5 ${
+                        humidityStatus === "ON"
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-slate-400 dark:text-slate-500"
+                      }`}
+                    >
+                      {dropletIcon}
+                      {humidityStatus}
+                    </span>
+                  </div>
+                </>
               )}
-              {currentStatus}
-            </span>
-          </div>
-        </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* MAIN AREA */}
@@ -699,47 +793,47 @@ export default function HvacLayout({
           )}
 
           {/* ACTIVITY LOG CARD */}
-          {controlButtons && controlButtons.length > 0 && (
-            <div className="flex-[1.2] min-h-[180px] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col shadow-sm dark:shadow-2xl transition-all duration-300">
-              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2 mb-2">
-                <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm tracking-wide">
-                  ACTIVITY LOG
-                </h3>
-                <button
-                  onClick={() => setIsLogModalOpen(true)}
-                  className="text-xs text-cyan-600 dark:text-cyan-400 hover:underline font-medium"
-                >
-                  Lihat Semua
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
-                {recentLogs.length === 0 ? (
-                  <p className="text-slate-400 dark:text-slate-500 italic text-center py-2">
-                    Belum ada aktivitas
-                  </p>
-                ) : (
-                  recentLogs.map((log) => (
-                    <div
-                      key={log.id}
-                      className="flex flex-col border-b border-slate-100 dark:border-slate-800 last:border-0 py-1.5"
-                    >
-                      <div className="flex justify-between items-start">
-                        <span className="text-slate-800 dark:text-white font-medium text-xs leading-tight">
-                          {log.action}
-                        </span>
-                        <span className="text-slate-400 dark:text-slate-500 text-[10px] font-mono whitespace-nowrap ml-2">
-                          {formatDate(log.timestamp)}
-                        </span>
-                      </div>
-                      <span className="text-slate-500 dark:text-slate-400 text-[10px] mt-0.5">
-                        oleh {log.user}
+          <div className={`${
+            hasControlAccess && (setpoints?.length || controlButtons?.length) ? "flex-[1.2] min-h-[180px]" : "flex-1 min-h-[220px]"
+          } border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col shadow-sm dark:shadow-2xl transition-all duration-300`}>
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2 mb-2">
+              <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm tracking-wide">
+                ACTIVITY LOG
+              </h3>
+              <button
+                onClick={() => setIsLogModalOpen(true)}
+                className="text-xs text-cyan-600 dark:text-cyan-400 hover:underline font-medium"
+              >
+                Lihat Semua
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+              {recentLogs.length === 0 ? (
+                <p className="text-slate-400 dark:text-slate-500 italic text-center py-2">
+                  Belum ada aktivitas
+                </p>
+              ) : (
+                recentLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="flex flex-col border-b border-slate-100 dark:border-slate-800 last:border-0 py-1.5"
+                  >
+                    <div className="flex justify-between items-start">
+                      <span className="text-slate-800 dark:text-white font-medium text-xs leading-tight">
+                        {log.action}
+                      </span>
+                      <span className="text-slate-400 dark:text-slate-500 text-[10px] font-mono whitespace-nowrap ml-2">
+                        {formatDate(log.timestamp)}
                       </span>
                     </div>
-                  ))
-                )}
-              </div>
+                    <span className="text-slate-500 dark:text-slate-400 text-[10px] mt-0.5">
+                      oleh {log.user}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
