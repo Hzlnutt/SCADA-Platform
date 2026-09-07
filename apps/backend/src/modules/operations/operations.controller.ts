@@ -233,7 +233,7 @@ export const reviewMaintenanceHandler = async (
     let role: "team_head" | "leader" | "admin" = "team_head";
     if (actorRole === "admin" || actorRole === "senior_unit_head") {
       role = "admin";
-    } else if (actorRole === "unit_head") {
+    } else if (actorRole === "unit_head" || actorRole === "unit_head_utility" || actorRole === "unit_head_hvac") {
       role = "leader";
     } else if (actorRole.startsWith("kashift_") || actorRole === "leader" || actorRole === "team_head") {
       role = "team_head";
@@ -270,7 +270,7 @@ export const reviewShiftReportHandler = async (
     let role: "team_head" | "leader" | "admin" = "team_head";
     if (actorRole === "admin" || actorRole === "senior_unit_head") {
       role = "admin";
-    } else if (actorRole === "unit_head") {
+    } else if (actorRole === "unit_head" || actorRole === "unit_head_utility" || actorRole === "unit_head_hvac") {
       role = "leader";
     } else if (actorRole.startsWith("kashift_") || actorRole === "leader" || actorRole === "team_head") {
       role = "team_head";
@@ -314,21 +314,23 @@ export const updateHvacStateHandler = async (
   try {
     const actorRole = getActorRole(req);
     if (actorRole) {
-      const normalizedRole = actorRole.toLowerCase().trim();
+      const normalizedRole = actorRole.toLowerCase().trim().replace(/[\s-]+/g, "_");
       const isAuthorized =
-        normalizedRole === "kashift hvac" ||
-        normalizedRole === "kashift_hvac" ||
-        normalizedRole === "kashift" ||
-        normalizedRole === "leader" ||
-        normalizedRole === "team_head" ||
-        normalizedRole === "developer" ||
         normalizedRole === "admin" ||
         normalizedRole === "superadmin" ||
-        normalizedRole === "dev";
+        normalizedRole === "developer" ||
+        normalizedRole === "dev" ||
+        normalizedRole === "senior_unit_head" ||
+        normalizedRole === "unit_head_utility" ||
+        normalizedRole === "unit_head_hvac" ||
+        normalizedRole === "unit_head" ||
+        normalizedRole === "unithead" ||
+        normalizedRole.startsWith("senior_unit_head") ||
+        normalizedRole.startsWith("unit_head");
 
       if (!isAuthorized) {
         return res.status(403).json({
-          message: "Akses ditolak: Hanya role kashift HVAC, Leader, dan Developer yang diizinkan mengubah setpoints atau kontrol HVAC."
+          message: "Akses ditolak: Hanya role Senior Unit Head, Unit Head Utility, Unit Head HVAC, dan Admin yang diizinkan mengubah setpoints atau kontrol HVAC."
         });
       }
     }

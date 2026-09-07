@@ -30,7 +30,14 @@ const formatDate = (value?: string) =>
 
 export default function Approvals() {
   const role = useAuthStore((state) => state.user?.role ?? "user");
-  const canApprove = role === "team_head" || role === "leader" || role === "admin";
+  const canApprove =
+    role === "team_head" ||
+    role === "leader" ||
+    role === "admin" ||
+    role === "senior_unit_head" ||
+    role === "unit_head" ||
+    role === "unit_head_utility" ||
+    role === "unit_head_hvac";
   const [maintenance, setMaintenance] = useState<ApprovalItem[]>([]);
   const [shiftReports, setShiftReports] = useState<ApprovalItem[]>([]);
   const [passwordRequests, setPasswordRequests] = useState<PasswordChangeRequest[]>([]);

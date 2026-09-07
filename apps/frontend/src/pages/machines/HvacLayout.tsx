@@ -50,19 +50,8 @@ export interface LogEntry {
   type: "start" | "stop" | "maintenance" | "other";
 }
 
-export const canAccessHvacControls = (role?: string | null): boolean => {
-  if (!role) return false;
-  const normalized = role.toLowerCase().trim().replace(/[\s-]+/g, "_");
-  return (
-    normalized === "leader" ||
-    normalized === "kashift_hvac" ||
-    normalized === "kashift_utility_hvac" ||
-    normalized === "admin" ||
-    normalized === "superadmin" ||
-    normalized === "developer" ||
-    normalized === "dev"
-  );
-};
+import { canAccessHvacControls } from "../../utils/roles";
+export { canAccessHvacControls };
 
 export default function HvacLayout({
   roomName,
@@ -499,7 +488,7 @@ export default function HvacLayout({
             </div>
           </div>
 
-          {/* SETPOINTS - Visible to all, editable only by leader, kashift_hvac, admin */}
+          {/* SETPOINTS - Visible to all, editable only by Unit Head, Senior Unit Head, Admin */}
           {setpoints && setpoints.length > 0 && (
             <div className="flex-[1.3] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-[175px] shadow-sm dark:shadow-2xl transition-all duration-300">
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2 mb-3">
@@ -534,7 +523,7 @@ export default function HvacLayout({
                     );
                   }
 
-                  // Stepper & manual input for leader, kashift_hvac, admin
+                  // Stepper & manual input for Unit Head, Senior Unit Head, Admin
                   return (
                     <div
                       key={idx}
@@ -615,7 +604,7 @@ export default function HvacLayout({
             </div>
           )}
 
-          {/* CONTROL PANEL - Only for leader, kashift_hvac, admin */}
+          {/* CONTROL PANEL - Only for Unit Head, Senior Unit Head, Admin */}
           {hasControlAccess && controlButtons && controlButtons.length > 0 && (
             <div className="flex-[1] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-0 shadow-sm dark:shadow-2xl transition-all duration-300">
               <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm border-b border-slate-100 dark:border-slate-800 pb-2 mb-3 tracking-wide">

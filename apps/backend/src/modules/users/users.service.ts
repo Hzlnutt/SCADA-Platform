@@ -302,6 +302,8 @@ export const listOperators = async () => {
             "leader",
             "admin",
             "senior_unit_head",
+            "unit_head_utility",
+            "unit_head_hvac",
             "unit_head"
           ]
         },

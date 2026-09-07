@@ -366,6 +366,8 @@ export default function MachineAlarm() {
   const isKaShiftOrAbove = [
     "admin",
     "senior_unit_head",
+    "unit_head_utility",
+    "unit_head_hvac",
     "unit_head",
     "kashift_utility_hvac",
     "kashift_utility",

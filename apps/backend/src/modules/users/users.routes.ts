@@ -35,13 +35,13 @@ usersRouter.delete("/users/me/password-request/:id", authenticate, cancelMyPassw
 usersRouter.get(
   "/approvals/password-requests",
   authenticate,
-  authorize(["admin", "senior_unit_head", "unit_head", "leader", "team_head"]),
+  authorize(["admin", "senior_unit_head", "unit_head_utility", "unit_head_hvac", "unit_head", "leader", "team_head"]),
   listPasswordChangeApprovalsHandler
 );
 usersRouter.patch(
   "/approvals/password-requests/:id",
   authenticate,
-  authorize(["admin", "senior_unit_head", "unit_head", "leader", "team_head"]),
+  authorize(["admin", "senior_unit_head", "unit_head_utility", "unit_head_hvac", "unit_head", "leader", "team_head"]),
   reviewPasswordChangeApprovalHandler
 );
 

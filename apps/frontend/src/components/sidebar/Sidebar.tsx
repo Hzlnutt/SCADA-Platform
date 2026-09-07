@@ -88,7 +88,14 @@ const IconChevron = ({ open }: { open: boolean }) => (
 export const Sidebar = () => {
   const role = useAuthStore((state) => state.user?.role ?? "user");
   const isAdmin = role === "admin";
-  const canApprove = role === "team_head" || role === "leader" || role === "admin";
+  const canApprove =
+    role === "team_head" ||
+    role === "leader" ||
+    role === "admin" ||
+    role === "senior_unit_head" ||
+    role === "unit_head" ||
+    role === "unit_head_utility" ||
+    role === "unit_head_hvac";
   const canAccessConfig = canAccessConfigAndAudit(role);
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {

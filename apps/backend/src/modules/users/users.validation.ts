@@ -3,6 +3,8 @@ import { z } from "zod";
 export const userRoleSchema = z.enum([
   "admin",
   "senior_unit_head",
+  "unit_head_utility",
+  "unit_head_hvac",
   "unit_head",
   "kashift_utility_hvac",
   "kashift_utility",

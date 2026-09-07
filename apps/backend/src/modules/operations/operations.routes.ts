@@ -22,6 +22,8 @@ export const operationsRouter = Router();
 const writeRoles = [
   "admin",
   "senior_unit_head",
+  "unit_head_utility",
+  "unit_head_hvac",
   "unit_head",
   "kashift_utility_hvac",
   "kashift_utility",
@@ -33,12 +35,22 @@ const writeRoles = [
 const approvalRoles = [
   "admin",
   "senior_unit_head",
+  "unit_head_utility",
+  "unit_head_hvac",
   "unit_head",
   "kashift_utility_hvac",
   "kashift_utility",
   "kashift_hvac",
   "leader",
   "team_head"
+];
+
+const hvacControlRoles = [
+  "admin",
+  "senior_unit_head",
+  "unit_head_utility",
+  "unit_head_hvac",
+  "unit_head"
 ];
 
 operationsRouter.get(
@@ -143,7 +155,7 @@ operationsRouter.get(
 operationsRouter.post(
   "/operations/hvac/control",
   authenticate,
-  authorize(writeRoles),
+  authorize(hvacControlRoles),
   updateHvacStateHandler
 );
 

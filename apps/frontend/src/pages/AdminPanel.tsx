@@ -13,6 +13,8 @@ type UserItem = {
   role:
     | "admin"
     | "senior_unit_head"
+    | "unit_head_utility"
+    | "unit_head_hvac"
     | "unit_head"
     | "kashift_utility_hvac"
     | "kashift_utility"
@@ -53,7 +55,8 @@ type ShiftReportItem = {
 const roleOptions: Array<UserItem["role"]> = [
   "admin",
   "senior_unit_head",
-  "unit_head",
+  "unit_head_utility",
+  "unit_head_hvac",
   "kashift_utility_hvac",
   "kashift_utility",
   "kashift_hvac",
@@ -433,9 +436,9 @@ export default function AdminPanel() {
                           }
                           className="rounded-md border border-slate-800 bg-white px-2 py-1 text-xs text-[#002b5c] font-bold"
                         >
-                          {roleOptions.map((option) => (
+                          {(roleOptions.includes(user.role) ? roleOptions : [user.role, ...roleOptions]).map((option) => (
                             <option key={option} value={option}>
-                              {option}
+                              {option.replace(/_/g, " ").toUpperCase()}
                             </option>
                           ))}
                         </select>

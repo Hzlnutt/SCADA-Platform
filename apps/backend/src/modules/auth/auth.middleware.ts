@@ -94,7 +94,13 @@ export const checkMachineScope = (
   }
 
   // Role yang dianggap super admin / dapat mengakses semua mesin
-  const superRoles = ["admin", "senior_unit_head", "unit_head"];
+  const superRoles = [
+    "admin",
+    "senior_unit_head",
+    "unit_head_utility",
+    "unit_head_hvac",
+    "unit_head"
+  ];
   if (superRoles.includes(user.role)) {
     return next();
   }
