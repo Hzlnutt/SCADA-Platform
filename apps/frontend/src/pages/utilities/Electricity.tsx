@@ -68,6 +68,8 @@ const formatPeakTs = (tsStr: string) => {
 };
 
 const DEFAULT_PLN_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln";
+const DEFAULT_WF1_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1";
+const DEFAULT_WF2_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2";
 
 const DEFAULT_PLN_JSON_KEYS: Record<string, string> = {
   "pln/active_power": "Active_Power",
@@ -84,7 +86,9 @@ const DEFAULT_PLN_JSON_KEYS: Record<string, string> = {
   "pln/voltage_tn": "VoltCA",
   "pln/unbalance_v": "Volatage_Unbalance",
   "pln/unbalance_i": "Current_Umbalance",
-  "electricity/p_grid": "Active_Power"
+  "electricity/p_grid": "Active_Power",
+  "wf1/active_power": "Active_Power_Total",
+  "wf2/active_power": "Active_Power_Total"
 };
 
 /* ═══════════ TYPES ═══════════ */
@@ -428,6 +432,13 @@ export default function Electricity() {
     poi2: { status: false, volt_ab: 0, active_power: 0, total_kwh: 0, frequency: 0 }
   });
 
+  // Live socket & API telemetry states for real-time streaming
+  const [livePGridKw, setLivePGridKw] = useState<number | null>(null);
+  const [liveWf1Kw, setLiveWf1Kw] = useState<number | null>(null);
+  const [liveWf2Kw, setLiveWf2Kw] = useState<number | null>(null);
+  const [liveWf1Status, setLiveWf1Status] = useState<boolean>(true);
+  const [liveWf2Status, setLiveWf2Status] = useState<boolean>(true);
+
   // Incoming Cubicle selector (PLN, WF1, WF2, POI1, POI2)
   const [cubicleSelector, setCubicleSelector] = useState<"pln" | "wf1" | "wf2" | "poi1" | "poi2">("pln");
   const [cubiclePoiView, setCubiclePoiView] = useState(false);
@@ -552,12 +563,18 @@ export default function Electricity() {
 
   const DEFAULT_PLTS_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_plts";
 
-  // Poll active URLs (PLN, PLTS, etc.)
+  // Poll active URLs (PLN, PLTS, WF1, WF2, etc.)
   useEffect(() => {
     let isMounted = true;
     const fetchActiveApiData = async () => {
       if (!isPageActive) return;
-      const uniqueUrls = Array.from(new Set([...Object.values(apiSourceUrls), DEFAULT_PLN_API_URL, DEFAULT_PLTS_API_URL].filter((u) => u && u.trim())));
+      const uniqueUrls = Array.from(new Set([
+        ...Object.values(apiSourceUrls),
+        DEFAULT_PLN_API_URL,
+        DEFAULT_WF1_API_URL,
+        DEFAULT_WF2_API_URL,
+        DEFAULT_PLTS_API_URL
+      ].filter((u) => u && u.trim())));
       if (uniqueUrls.length === 0) {
         if (isMounted) setApiLiveData({});
         return;
@@ -573,6 +590,20 @@ export default function Electricity() {
             });
             if (res && res.success && res.data) {
               aggregatedData[url] = res.data;
+              // Extract WF1
+              if (url.includes("electric_wf1") && res.data.Active_Power_Total !== undefined) {
+                setLiveWf1Kw(Math.max(0, Number(res.data.Active_Power_Total) || 0));
+                if (res.data.Status_PM5500_WF1 !== undefined) {
+                  setLiveWf1Status(Boolean(res.data.Status_PM5500_WF1));
+                }
+              }
+              // Extract WF2
+              if (url.includes("electric_wf2") && res.data.Active_Power_Total !== undefined) {
+                setLiveWf2Kw(Math.max(0, Number(res.data.Active_Power_Total) || 0));
+                if (res.data.Status_PM5500_WF1 !== undefined) {
+                  setLiveWf2Status(Boolean(res.data.Status_PM5500_WF1));
+                }
+              }
               // Extract PLTS if this is plts url
               if (url.includes("electric_plts") && res.data.POI_1 && res.data.POI_2) {
                 setPltsLive({
@@ -631,8 +662,10 @@ export default function Electricity() {
 
   const getApiVal = useCallback((tagKey: string): any => {
     const isPlnTag = tagKey.startsWith("pln/") || tagKey === "electricity/p_grid";
-    const url = apiSourceUrls[tagKey] || (isPlnTag ? DEFAULT_PLN_API_URL : "");
-    const rawJsonKey = jsonKeyMap[tagKey] || (isPlnTag ? DEFAULT_PLN_JSON_KEYS[tagKey] : undefined) || tagKey.split("/")[1];
+    const isWf1Tag = tagKey.startsWith("wf1/");
+    const isWf2Tag = tagKey.startsWith("wf2/");
+    const url = apiSourceUrls[tagKey] || (isPlnTag ? DEFAULT_PLN_API_URL : isWf1Tag ? DEFAULT_WF1_API_URL : isWf2Tag ? DEFAULT_WF2_API_URL : "");
+    const rawJsonKey = jsonKeyMap[tagKey] || ((isPlnTag || isWf1Tag || isWf2Tag) ? DEFAULT_PLN_JSON_KEYS[tagKey] : undefined) || tagKey.split("/")[1];
 
     if (url && apiLiveData[url] && rawJsonKey) {
       let val = apiLiveData[url][rawJsonKey] ?? 
@@ -848,6 +881,19 @@ export default function Electricity() {
         if (payload.pqData.pf !== undefined && payload.pqData.pf !== null) {
           setLivePf(payload.pqData.pf);
           setPfStatus(payload.pqData.pfStatus || "connected");
+        }
+        if (typeof payload.pqData.activePower === "number") {
+          setLivePGridKw(payload.pqData.activePower);
+        }
+      } else if (payload.deviceId === "Feeder_WF1_PM5560" && payload.pqData) {
+        if (typeof payload.pqData.activePower === "number") {
+          setLiveWf1Kw(payload.pqData.activePower);
+          setLiveWf1Status(payload.pqData.pfStatus === "connected");
+        }
+      } else if (payload.deviceId === "Feeder_WF2_PM5500" && payload.pqData) {
+        if (typeof payload.pqData.activePower === "number") {
+          setLiveWf2Kw(payload.pqData.activePower);
+          setLiveWf2Status(payload.pqData.pfStatus === "connected");
         }
       }
     };
@@ -1587,8 +1633,18 @@ export default function Electricity() {
   const hvacWf2U2Series = EMPTY_EQUIPMENT_SERIES;
 
   // Power metrics & percentages for Top Overview Cards
-  const pGridVal = getApiVal("pln/active_power");
-  const pGridNum = Math.max(0, typeof pGridVal === "number" ? pGridVal : (summaryData?.pqData?.activePower || 0));
+  const fact1Kw = Math.max(0, liveWf1Kw ?? getApiVal("wf1/active_power") ?? 0);
+  const fact2Kw = Math.max(0, liveWf2Kw ?? getApiVal("wf2/active_power") ?? 0);
+
+  const rawPGridVal = livePGridKw ?? getApiVal("pln/active_power");
+  const pGridNum = Math.max(
+    0,
+    typeof rawPGridVal === "number" && rawPGridVal > 0
+      ? rawPGridVal
+      : fact1Kw + fact2Kw > 0
+      ? fact1Kw + fact2Kw
+      : (summaryData?.pqData?.activePower || 0)
+  );
 
   const poi1Kw = Math.max(0, pltsLive.poi1.active_power || solarLive?.poi1?.activePower || 0);
   const poi2Kw = Math.max(0, pltsLive.poi2.active_power || solarLive?.poi2?.activePower || 0);
@@ -1603,9 +1659,13 @@ export default function Electricity() {
   const solarPct = totalPlantLoadKw > 0 ? (totalSolarKw / totalPlantLoadKw) * 100 : 0;
   const poi1Pct = totalPlantLoadKw > 0 ? (poi1Kw / totalPlantLoadKw) * 100 : 0;
   const poi2Pct = totalPlantLoadKw > 0 ? (poi2Kw / totalPlantLoadKw) * 100 : 0;
+  const fact1Pct = totalPlantLoadKw > 0 ? (fact1Kw / totalPlantLoadKw) * 100 : 0;
+  const fact2Pct = totalPlantLoadKw > 0 ? (fact2Kw / totalPlantLoadKw) * 100 : 0;
 
   const isPoi1Inactive = solarLive?.poi1?.status === false && pltsLive.poi1.status === false && poi1Kw === 0;
   const isPoi2Inactive = solarLive?.poi2?.status === false && pltsLive.poi2.status === false && poi2Kw === 0;
+  const isFact1Inactive = fact1Kw === 0 && liveWf1Status === false;
+  const isFact2Inactive = fact2Kw === 0 && liveWf2Status === false;
 
   /* ═══ RENDER ═══ */
   return (
@@ -1647,12 +1707,16 @@ export default function Electricity() {
               </div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-blue-950'}`}>
-              {pGridNum.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
+              {pGridNum.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
               <span className={`text-sm font-bold ml-1 ${isDark ? 'text-blue-200' : 'text-blue-700'}`}>kW</span>
             </div>
-            <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-blue-200' : 'text-blue-800'}`}>
-              <span>Voltage: <strong className={isDark ? 'text-white' : 'text-blue-950'}>{renderMetricVal(getApiVal("pln/voltage"), (v) => `${v.toFixed(2)} kV`)}</strong></span>
-              <span>Freq: <strong className={isDark ? 'text-white' : 'text-blue-950'}>{renderMetricVal(getApiVal("pln/frequency"), (v) => `${v.toFixed(2)} Hz`)}</strong></span>
+            <div className={`mt-2 flex items-center justify-between text-[10px] ${isDark ? 'text-blue-200' : 'text-blue-800'}`}>
+              <span>Fact 1: <strong className={isDark ? 'text-white' : 'text-blue-950'}>
+                {isFact1Inactive ? "TIDAK AKTIF" : `${formatNumber(fact1Kw)} kW (${fact1Pct.toFixed(1)}%)`}
+              </strong></span>
+              <span>Fact 2: <strong className={isDark ? 'text-white' : 'text-blue-950'}>
+                {isFact2Inactive ? "TIDAK AKTIF" : `${formatNumber(fact2Kw)} kW (${fact2Pct.toFixed(1)}%)`}
+              </strong></span>
             </div>
           </div>
         </div>
@@ -1679,7 +1743,7 @@ export default function Electricity() {
               </div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-emerald-950'}`}>
-              {totalSolarKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
+              {totalSolarKw.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
               <span className={`text-sm font-bold ml-1 ${isDark ? 'text-emerald-200' : 'text-emerald-700'}`}>kW</span>
             </div>
             <div className={`mt-2 flex items-center justify-between text-[10px] ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>
@@ -1763,12 +1827,12 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-cyan-600/10 text-cyan-700'} flex items-center justify-center`}><IconPlant /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-cyan-950'}`}>
-              {totalPlantLoadKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
+              {totalPlantLoadKw.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
               <span className={`text-sm font-bold ml-1 ${isDark ? 'text-cyan-200' : 'text-cyan-700'}`}>kW</span>
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-cyan-200' : 'text-cyan-800'}`}>
-              <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{pGridNum.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW ({gridPct.toFixed(1)}%)</strong></span>
-              <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{totalSolarKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW ({solarPct.toFixed(1)}%)</strong></span>
+              <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{pGridNum.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW ({gridPct.toFixed(1)}%)</strong></span>
+              <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{totalSolarKw.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW ({solarPct.toFixed(1)}%)</strong></span>
             </div>
           </div>
         </div>

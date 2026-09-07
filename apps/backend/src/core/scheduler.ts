@@ -611,15 +611,15 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
 
   const isPln = deviceId === "Cubicle_PLN_PM8000";
   const rawActive = pgPq.active_power !== undefined ? pgPq.active_power : pgPq.active_power_total;
-  const activePowerVal = rawActive !== null ? Number(rawActive) / 1000.0 : 0;
-  const reactivePowerVal = pgPq.reactive_power_total !== null ? Number(pgPq.reactive_power_total) / 1000.0 : 0;
-  const apparentPowerVal = pgPq.apparent_power_total !== null ? Number(pgPq.apparent_power_total) / 1000.0 : 0;
+  const activePowerVal = rawActive !== null ? (Number(rawActive) > 10000 ? Number(rawActive) / 1000.0 : Number(rawActive)) : 0;
+  const reactivePowerVal = pgPq.reactive_power_total !== null ? (Number(pgPq.reactive_power_total) > 10000 ? Number(pgPq.reactive_power_total) / 1000.0 : Number(pgPq.reactive_power_total)) : 0;
+  const apparentPowerVal = pgPq.apparent_power_total !== null ? (Number(pgPq.apparent_power_total) > 10000 ? Number(pgPq.apparent_power_total) / 1000.0 : Number(pgPq.apparent_power_total)) : 0;
   const pfVal = pgPq.power_factor !== null ? Math.abs(Number(pgPq.power_factor)) : 1.0;
   const freqVal = pgPq.frequency !== null ? Number(pgPq.frequency) : 50.0;
-  const voltLAvg = pgPq.volt_ll !== null ? Number(pgPq.volt_ll) / 1000.0 : 20.0;
-  const voltABVal = pgPq.volt_ab !== null ? Number(pgPq.volt_ab) / 1000.0 : 20.0;
-  const voltBCVal = pgPq.volt_bc !== null ? Number(pgPq.volt_bc) / 1000.0 : 20.0;
-  const voltCAVal = pgPq.volt_ca !== null ? Number(pgPq.volt_ca) / 1000.0 : 20.0;
+  const voltLAvg = pgPq.volt_ll !== null ? (Number(pgPq.volt_ll) > 1000 ? Number(pgPq.volt_ll) / 1000.0 : Number(pgPq.volt_ll)) : 20.0;
+  const voltABVal = pgPq.volt_ab !== null ? (Number(pgPq.volt_ab) > 1000 ? Number(pgPq.volt_ab) / 1000.0 : Number(pgPq.volt_ab)) : 20.0;
+  const voltBCVal = pgPq.volt_bc !== null ? (Number(pgPq.volt_bc) > 1000 ? Number(pgPq.volt_bc) / 1000.0 : Number(pgPq.volt_bc)) : 20.0;
+  const voltCAVal = pgPq.volt_ca !== null ? (Number(pgPq.volt_ca) > 1000 ? Number(pgPq.volt_ca) / 1000.0 : Number(pgPq.volt_ca)) : 20.0;
   const currentAVal = pgPq.current_a !== null ? Number(pgPq.current_a) : 0;
   const currentBVal = pgPq.current_b !== null ? Number(pgPq.current_b) : 0;
   const currentCVal = pgPq.current_c !== null ? Number(pgPq.current_c) : 0;
@@ -718,6 +718,7 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   const poi2Status = Boolean(p2.Status_POI_2);
   const poi1 = {
     status: poi1Status,
+    activePower: typeof p1.Scale_Total_KW_POI_1 === "number" ? p1.Scale_Total_KW_POI_1 : 0,
     totalKwh: typeof p1.Total_KWH_POI_1 === "number" ? p1.Total_KWH_POI_1 : 0,
     totalKvarh: typeof p1.Total_KVARH_POI_1 === "number" ? p1.Total_KVARH_POI_1 : 0,
     frequency: typeof p1.Frequency_POI_1 === "number" ? p1.Frequency_POI_1 : 50,
@@ -730,6 +731,7 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   };
   const poi2 = {
     status: poi2Status,
+    activePower: typeof p2.Scale_Total_KW_POI_2 === "number" ? p2.Scale_Total_KW_POI_2 : 0,
     totalKwh: typeof p2.Total_KWH_POI_2 === "number" ? p2.Total_KWH_POI_2 : 0,
     totalKvarh: typeof p2.Total_KVARH_POI_2 === "number" ? p2.Total_KVARH_POI_2 : 0,
     frequency: typeof p2.Frequency_POI_2 === "number" ? p2.Frequency_POI_2 : 50,
@@ -748,10 +750,35 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   };
 };
 
+let cachedWorkingBaseUrl = "http://10.3.164.3:8088";
+const CANDIDATE_BASES = [
+  "http://10.3.164.3:8088",
+  "http://10.3.161.3:8088",
+  "https://utility.widatra.com",
+  "http://127.0.0.1:3001"
+];
+
+const fetchApiData = async (endpoint: string) => {
+  const orderedBases = [cachedWorkingBaseUrl, ...CANDIDATE_BASES.filter((b) => b !== cachedWorkingBaseUrl)];
+  for (const base of orderedBases) {
+    try {
+      const res = await fetchJsonWithTimeout(`${base}/system/webdev/Utility_Dashboard/${endpoint}`, 600);
+      if (res) {
+        cachedWorkingBaseUrl = base;
+        return res;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
+};
+
 export const startIncomingElectricityPolling = () => {
   if (incomingElectricityPollingInterval) return;
 
   const poll = async () => {
+    const startTime = Date.now();
     const ts = new Date();
     const currentMinuteStr = formatMinuteString(ts);
     const isNewMinute = currentMinuteStr !== lastElectricityMinuteStr;
@@ -763,29 +790,40 @@ export const startIncomingElectricityPolling = () => {
     let lastPlnRec: ElectricPmRecord | null = null;
     let lastWf1Rec: ElectricPmRecord | null = null;
     let lastWf2Rec: ElectricPmRecord | null = null;
-    
-    // Helper for resilient fetching
-    const fetchApiData = async (endpoint: string) => {
-      try {
-        return await fetchJsonWithTimeout(`https://utility.widatra.com/system/webdev/Utility_Dashboard/${endpoint}`);
-      } catch {
-        try {
-          return await fetchJsonWithTimeout(`http://10.3.164.3:8088/system/webdev/Utility_Dashboard/${endpoint}`);
-        } catch {
-          return await fetchJsonWithTimeout(`http://127.0.0.1:3001/system/webdev/Utility_Dashboard/${endpoint}`).catch(() => null);
-        }
-      }
-    };
-    
-    // Fetch and store PLN
+
+    // Fetch all endpoints concurrently for real-time 1-second cadence
+    const [
+      plnRaw,
+      wf1Raw,
+      wf2Raw,
+      pltsRaw,
+      ew23Raw,
+      ew21Raw,
+      ew22Raw,
+      plc1Data,
+      plc2_2Data,
+      plc2_3Data
+    ] = await Promise.all([
+      fetchApiData("electric_pln").catch(() => null),
+      fetchApiData("electric_wf1").catch(() => null),
+      fetchApiData("electric_wf2").catch(() => null),
+      fetchApiData("electric_plts").catch(() => null),
+      fetchApiData("electric_ew23").catch(() => null),
+      fetchApiData("electric_ew21").catch(() => null),
+      fetchApiData("electric_ew22").catch(() => null),
+      fetchApiData("hvac_retain_plc1").catch(() => null),
+      fetchApiData("hvac_retain_plc2_2").catch(() => null),
+      fetchApiData("hvac_retain_plc2_3").catch(() => null),
+    ]);
+
+    // 1. Process PLN
     let plnParsed: ReturnType<typeof parsePlnApi> | null = null;
-    try {
-      const data = await fetchApiData("electric_pln");
-      if (data) {
-        plnParsed = parsePlnApi(data, ts);
+    if (plnRaw) {
+      try {
+        plnParsed = parsePlnApi(plnRaw, ts);
+      } catch (err: any) {
+        logger.warn(`Incoming PLN parsing failed: ${err.message}`);
       }
-    } catch (err: any) {
-      logger.warn(`Incoming PLN polling failed: ${err.message}`);
     }
 
     if (!plnParsed) {
@@ -827,15 +865,14 @@ export const startIncomingElectricityPolling = () => {
       active_energy: plnParsed.active_energy
     };
 
-    // Fetch and store WF1
+    // 2. Process WF1
     let wf1Parsed: ReturnType<typeof parseWfApi> | null = null;
-    try {
-      const data = await fetchApiData("electric_wf1");
-      if (data) {
-        wf1Parsed = parseWfApi(data, ts);
+    if (wf1Raw) {
+      try {
+        wf1Parsed = parseWfApi(wf1Raw, ts);
+      } catch (err: any) {
+        logger.warn(`Incoming WF1 parsing failed: ${err.message}`);
       }
-    } catch (err: any) {
-      logger.warn(`Incoming WF1 polling failed: ${err.message}`);
     }
 
     if (!wf1Parsed) {
@@ -877,15 +914,14 @@ export const startIncomingElectricityPolling = () => {
       active_energy: wf1Parsed.active_energy
     };
 
-    // Fetch and store WF2
+    // 3. Process WF2
     let wf2Parsed: ReturnType<typeof parseWfApi> | null = null;
-    try {
-      const data = await fetchApiData("electric_wf2");
-      if (data) {
-        wf2Parsed = parseWfApi(data, ts);
+    if (wf2Raw) {
+      try {
+        wf2Parsed = parseWfApi(wf2Raw, ts);
+      } catch (err: any) {
+        logger.warn(`Incoming WF2 parsing failed: ${err.message}`);
       }
-    } catch (err: any) {
-      logger.warn(`Incoming WF2 polling failed: ${err.message}`);
     }
 
     if (!wf2Parsed) {
@@ -927,17 +963,20 @@ export const startIncomingElectricityPolling = () => {
       active_energy: wf2Parsed.active_energy
     };
 
-    // Fetch and store Solar Panel (PLTS)
+    // 4. Process PLTS (Solar POI 1 & POI 2)
     let pltsParsed: SolarLiveState;
-    try {
-      const data = await fetchApiData("electric_plts");
-      if (data) {
-        pltsParsed = parseSolarApi(data, ts);
-      } else {
-        throw new Error("No data");
+    if (pltsRaw) {
+      try {
+        pltsParsed = parseSolarApi(pltsRaw, ts);
+      } catch {
+        pltsParsed = {
+          t_stamp: ts,
+          poi1: { status: false, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
+          poi2: { status: false, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
+          totalKwh: 0
+        };
       }
-    } catch (err: any) {
-      logger.warn(`Incoming PLTS polling failed: ${err.message}`);
+    } else {
       pltsParsed = {
         t_stamp: ts,
         poi1: { status: false, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
@@ -953,22 +992,33 @@ export const startIncomingElectricityPolling = () => {
       io.emit("solar:live_update", pltsParsed);
     }
 
-    if (isNewMinute) {
-      if (io) {
-        io.emit("electricity:update");
-        io.emit("solar:update");
+    if (pltsRaw) {
+      try {
+        const parsed = parsePltsApiRecords(pltsRaw, ts);
+        if (isNewMinute && parsed.length > 0) {
+          await insertPltsMinuteTelemetry(parsed, minuteTs);
+        }
+        const poi1 = parsed.find((p) => p.poi_id === "POI_1");
+        const poi2 = parsed.find((p) => p.poi_id === "POI_2");
+        if (poi1) broadcastLiveTelemetry("Solar_POI1", poi1);
+        if (poi2) broadcastLiveTelemetry("Solar_POI2", poi2);
+
+        if (io && parsed.length > 0) {
+          io.emit("electricity:plts_live", { data: parsed, t_stamp: ts });
+        }
+      } catch (err: any) {
+        logger.warn(`PLTS telemetry record parse failed: ${err.message}`);
       }
     }
 
-    // Fetch and store EW23 (Sub-distribution Power Meters)
+    // 5. Process EW23 (Sub-distribution Power Meters)
     let ew23Parsed: ElectricPmRecord[] = [];
-    try {
-      const data = await fetchApiData("electric_ew23");
-      if (data) {
-        ew23Parsed = parseEwApi(data, ts, "ew23");
+    if (ew23Raw) {
+      try {
+        ew23Parsed = parseEwApi(ew23Raw, ts, "ew23");
+      } catch (err: any) {
+        logger.warn(`Incoming EW23 polling failed: ${err.message}`);
       }
-    } catch (err: any) {
-      logger.warn(`Incoming EW23 polling failed: ${err.message}`);
     }
 
     if (ew23Parsed.length === 0) {
@@ -976,7 +1026,7 @@ export const startIncomingElectricityPolling = () => {
     }
 
     // Ensure the 3 incoming cubicles are merged into the list if not already present in the EW23 JSON payload
-    const existing = new Set(ew23Parsed.map(p => p.pm_id.toUpperCase()));
+    const existing = new Set(ew23Parsed.map((p) => p.pm_id.toUpperCase()));
     if (!existing.has("PM410") && !existing.has("PM8000") && lastPlnRec) {
       ew23Parsed.push(lastPlnRec);
     }
@@ -992,15 +1042,14 @@ export const startIncomingElectricityPolling = () => {
     }
     broadcastEwLiveTelemetry("ew23", ew23Parsed);
 
-    // Fetch and store EW21
+    // 6. Process EW21
     let ew21Parsed: ElectricPmRecord[] = [];
-    try {
-      const data = await fetchApiData("electric_ew21");
-      if (data) {
-        ew21Parsed = parseEwApi(data, ts, "ew21");
+    if (ew21Raw) {
+      try {
+        ew21Parsed = parseEwApi(ew21Raw, ts, "ew21");
+      } catch (err: any) {
+        logger.warn(`Incoming EW21 polling failed: ${err.message}`);
       }
-    } catch (err: any) {
-      logger.warn(`Incoming EW21 polling failed: ${err.message}`);
     }
 
     if (ew21Parsed.length === 0) {
@@ -1012,15 +1061,14 @@ export const startIncomingElectricityPolling = () => {
     }
     broadcastEwLiveTelemetry("ew21", ew21Parsed);
 
-    // Fetch and store EW22
+    // 7. Process EW22
     let ew22Parsed: ElectricPmRecord[] = [];
-    try {
-      const data = await fetchApiData("electric_ew22");
-      if (data) {
-        ew22Parsed = parseEwApi(data, ts, "ew22");
+    if (ew22Raw) {
+      try {
+        ew22Parsed = parseEwApi(ew22Raw, ts, "ew22");
+      } catch (err: any) {
+        logger.warn(`Incoming EW22 polling failed: ${err.message}`);
       }
-    } catch (err: any) {
-      logger.warn(`Incoming EW22 polling failed: ${err.message}`);
     }
 
     if (ew22Parsed.length === 0) {
@@ -1032,36 +1080,8 @@ export const startIncomingElectricityPolling = () => {
     }
     broadcastEwLiveTelemetry("ew22", ew22Parsed);
 
-    // Fetch and store PLTS (Solar POI 1 & POI 2)
+    // 8. Process HVAC Retained Sample PLCs (PLC1_AHU1_Utl, PLC2_AHU2, PLC2_AHU3)
     try {
-      const data = await fetchApiData("electric_plts");
-      if (data) {
-        const parsed = parsePltsApiRecords(data, ts);
-        if (isNewMinute) {
-          await insertPltsMinuteTelemetry(parsed, minuteTs);
-        }
-        const poi1 = parsed.find(p => p.poi_id === "POI_1");
-        const poi2 = parsed.find(p => p.poi_id === "POI_2");
-        if (poi1) broadcastLiveTelemetry("Solar_POI1", poi1);
-        if (poi2) broadcastLiveTelemetry("Solar_POI2", poi2);
-
-        const io = getSocketServer();
-        if (io) {
-          io.emit("electricity:plts_live", { data: parsed, t_stamp: ts });
-        }
-      }
-    } catch (err: any) {
-      logger.warn(`Incoming PLTS polling failed: ${err.message}`);
-    }
-
-    // Fetch and store HVAC Retained Sample PLCs (PLC1_AHU1_Utl, PLC2_AHU2, PLC2_AHU3)
-    try {
-      const [plc1Data, plc2_2Data, plc2_3Data] = await Promise.all([
-        fetchApiData("hvac_retain_plc1").catch(() => null),
-        fetchApiData("hvac_retain_plc2_2").catch(() => null),
-        fetchApiData("hvac_retain_plc2_3").catch(() => null),
-      ]);
-
       const parseConnected = (raw: any, subKey: string): boolean => {
         if (!raw) return false;
         if (typeof raw.Connected === "boolean") return raw.Connected;
@@ -1094,7 +1114,6 @@ export const startIncomingElectricityPolling = () => {
         };
         latestHvacRetainLiveState = retainLive;
 
-        const io = getSocketServer();
         if (io) {
           io.emit("hvac:retain_live", retainLive);
           io.emit("hvac:live_update", retainLive);
@@ -1105,7 +1124,6 @@ export const startIncomingElectricityPolling = () => {
     }
 
     if (isNewMinute) {
-      const io = getSocketServer();
       if (io) {
         io.emit("historian:minute_update", {
           unitId: "electricity",
@@ -1117,8 +1135,10 @@ export const startIncomingElectricityPolling = () => {
     }
 
     // Poll every 1000ms (1 second) for real-time WebSocket updates
+    const elapsed = Date.now() - startTime;
+    const nextDelay = Math.max(100, 1000 - elapsed);
     if (incomingElectricityPollingInterval) {
-      incomingElectricityPollingInterval = setTimeout(poll, 1000) as any;
+      incomingElectricityPollingInterval = setTimeout(poll, nextDelay) as any;
     }
   };
 

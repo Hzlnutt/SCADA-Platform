@@ -13,6 +13,7 @@ function getWibDateString(date: Date): string {
 
 export interface SolarLiveItem {
   status: boolean;
+  activePower?: number;
   totalKwh: number;
   totalKvarh: number;
   frequency: number;
