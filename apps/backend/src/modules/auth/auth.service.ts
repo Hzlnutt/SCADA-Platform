@@ -3,11 +3,13 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { ObjectId } from "mongodb";
 import { env } from "../../config/env.config";
+import { logger } from "../../config/logger.config";
 import {
   AUTH_TOKENS_COLLECTION,
   USERS_COLLECTION
 } from "../../database/collections";
 import { getMongoDb } from "../../database/mongo";
+import { getPostgresPool } from "../../database/postgres";
 import type {
   BootstrapInput,
   GoogleLoginInput,
@@ -72,35 +74,41 @@ const signRefreshToken = (userId: string) => {
   } as jwt.SignOptions);
 };
 
-const buildAuthResponse = async (user: UserDoc) => {
+const buildAuthResponse = async (user: any) => {
+  const userIdStr = String(user.id || user._id || "");
+  const userOid = ObjectId.isValid(userIdStr) ? new ObjectId(userIdStr) : new ObjectId();
+
   const accessToken = signAccessToken({
-    sub: user._id.toString(),
+    sub: userIdStr,
     role: user.role,
     name: user.name
   });
 
-  const refreshToken = signRefreshToken(user._id.toString());
+  const refreshToken = signRefreshToken(userIdStr);
   const tokenHash = hashToken(refreshToken);
   const db = getMongoDb();
-  const authTokens = db.collection<AuthTokenDoc>(AUTH_TOKENS_COLLECTION);
-
-  await authTokens.insertOne({
-    userId: user._id,
-    tokenHash,
-    createdAt: new Date(),
-    expiresAt: getTokenExpiry(refreshToken, 7)
-  });
+  if (db) {
+    try {
+      const authTokens = db.collection<AuthTokenDoc>(AUTH_TOKENS_COLLECTION);
+      await authTokens.insertOne({
+        userId: userOid,
+        tokenHash,
+        createdAt: new Date(),
+        expiresAt: getTokenExpiry(refreshToken, 7)
+      });
+    } catch {}
+  }
 
   return {
     accessToken,
     refreshToken,
     user: {
-      id: user._id.toString(),
-      username: user.username || user.email.split("@")[0],
-      email: user.email,
+      id: userIdStr,
+      username: user.username || (user.email ? user.email.split("@")[0] : user.name),
+      email: user.email || "",
       name: user.name,
       role: user.role,
-      avatarUrl: user.avatarUrl ?? null,
+      avatarUrl: user.avatarUrl || user.avatar_url || null,
       hasBiometrics: !!(user.biometricDescriptors && user.biometricDescriptors.length > 0) || !!user.biometricDescriptor || !!(user.biometricImages && user.biometricImages.length > 0)
     }
   };
@@ -116,33 +124,99 @@ const getTokenExpiry = (token: string, fallbackDays: number) => {
 };
 
 export const login = async (input: LoginInput) => {
-  const db = getMongoDb();
-  const users = db.collection<UserDoc>(USERS_COLLECTION);
-
   const identifier = (input.username || input.email || "").trim().toLowerCase();
   if (!identifier) {
     throw createError("Username is required", 400);
   }
 
-  const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const user = await users.findOne({
-    $or: [
-      { username: identifier },
-      { email: identifier },
-      { email: `${identifier}@widatra.co` },
-      { email: new RegExp(`^${escaped}(@.*)?$`, "i") }
-    ]
-  });
+  const pool = getPostgresPool();
+  let user: any = null;
+
+  // 1. Try finding user in PostgreSQL users table
+  try {
+    const pgRes = await pool.query(`
+      SELECT id, username, name, email, role, password_hash, avatar_url, status
+      FROM users
+      WHERE LOWER(username) = $1
+         OR LOWER(email) = $1
+         OR LOWER(email) = $2
+         OR LOWER(username) = SPLIT_PART($1, '@', 1)
+      LIMIT 1
+    `, [identifier, `${identifier}@widatra.co`]);
+
+    if (pgRes.rows.length > 0) {
+      user = pgRes.rows[0];
+    }
+  } catch (err: any) {
+    logger.warn(`PostgreSQL users query error: ${err.message}`);
+  }
+
+  // 2. Fallback to MongoDB if not found in PostgreSQL
+  if (!user) {
+    const db = getMongoDb();
+    if (db) {
+      const users = db.collection<UserDoc>(USERS_COLLECTION);
+      const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const mongoUser = await users.findOne({
+        $or: [
+          { username: identifier },
+          { email: identifier },
+          { email: `${identifier}@widatra.co` },
+          { email: new RegExp(`^${escaped}(@.*)?$`, "i") }
+        ]
+      });
+
+      if (mongoUser) {
+        user = {
+          id: mongoUser._id.toString(),
+          username: mongoUser.username || mongoUser.email.split("@")[0],
+          name: mongoUser.name,
+          email: mongoUser.email,
+          role: mongoUser.role,
+          password_hash: mongoUser.passwordHash,
+          avatar_url: mongoUser.avatarUrl,
+          status: mongoUser.status,
+          biometricDescriptor: mongoUser.biometricDescriptor,
+          biometricDescriptors: mongoUser.biometricDescriptors,
+          biometricImages: mongoUser.biometricImages
+        };
+
+        // Auto-sync existing MongoDB user into PostgreSQL with encrypted password
+        try {
+          if (mongoUser.passwordHash) {
+            await pool.query(`
+              INSERT INTO users (username, name, email, role, password_hash, avatar_url, status)
+              VALUES ($1, $2, $3, $4, $5, $6, $7)
+              ON CONFLICT (username) DO UPDATE SET
+                password_hash = EXCLUDED.password_hash,
+                name = EXCLUDED.name,
+                email = EXCLUDED.email,
+                role = EXCLUDED.role,
+                updated_at = NOW()
+            `, [
+              user.username,
+              user.name,
+              user.email,
+              user.role,
+              mongoUser.passwordHash,
+              user.avatar_url || null,
+              user.status || "active"
+            ]);
+          }
+        } catch {}
+      }
+    }
+  }
 
   if (!user) {
     throw createError("Username atau password salah", 401);
   }
 
   if (user.status === "disabled") {
-    throw createError("User disabled", 403);
+    throw createError("Akun dinonaktifkan", 403);
   }
 
-  if (!user.passwordHash) {
+  if (!user.password_hash) {
     if (input.password === "Pandaan1" || input.password === "admin") {
       return buildAuthResponse(user);
     }
@@ -150,7 +224,7 @@ export const login = async (input: LoginInput) => {
   }
 
   const match =
-    (await bcrypt.compare(input.password, user.passwordHash)) ||
+    (await bcrypt.compare(input.password, user.password_hash)) ||
     input.password === "Pandaan1" ||
     input.password === "admin";
   if (!match) {

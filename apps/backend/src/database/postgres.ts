@@ -1,4 +1,5 @@
 import { Pool, types } from "pg";
+import bcrypt from "bcryptjs";
 import { env } from "../config/env.config";
 import { logger } from "../config/logger.config";
 
@@ -40,6 +41,39 @@ export const closePostgres = async () => {
 export const ensurePostgresTables = async () => {
   const pool = getPostgresPool();
   try {
+    // --- USERS AUTHENTICATION & ACCESS CONTROL TABLE ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        email VARCHAR(100),
+        role VARCHAR(50) NOT NULL DEFAULT 'operator',
+        password_hash VARCHAR(255) NOT NULL,
+        avatar_url TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);
+      CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+    `);
+
+    // Seed default operator and admin if table is empty
+    const userCountRes = await pool.query(`SELECT COUNT(*) as count FROM users`);
+    if (parseInt(userCountRes.rows[0].count, 10) === 0) {
+      const operatorHash = await bcrypt.hash("operator123", 10);
+      const adminHash = await bcrypt.hash("admin", 10);
+      await pool.query(`
+        INSERT INTO users (username, name, email, role, password_hash, status)
+        VALUES 
+          ('operator', 'Operator Widatra', 'operator@widatra.co', 'operator', $1, 'active'),
+          ('admin', 'Administrator Widatra', 'admin@widatra.co', 'admin', $2, 'active')
+        ON CONFLICT (username) DO NOTHING
+      `, [operatorHash, adminHash]);
+      logger.info("Default users seeded into PostgreSQL users table with encrypted passwords (bcrypt)");
+    }
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cooling_tower_telemetry (
         id SERIAL PRIMARY KEY,
