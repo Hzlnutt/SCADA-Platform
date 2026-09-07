@@ -1586,6 +1586,27 @@ export default function Electricity() {
   const hvacWf2U1Series = EMPTY_EQUIPMENT_SERIES;
   const hvacWf2U2Series = EMPTY_EQUIPMENT_SERIES;
 
+  // Power metrics & percentages for Top Overview Cards
+  const pGridVal = getApiVal("pln/active_power");
+  const pGridNum = Math.max(0, typeof pGridVal === "number" ? pGridVal : (summaryData?.pqData?.activePower || 0));
+
+  const poi1Kw = Math.max(0, pltsLive.poi1.active_power || solarLive?.poi1?.activePower || 0);
+  const poi2Kw = Math.max(0, pltsLive.poi2.active_power || solarLive?.poi2?.activePower || 0);
+  const totalSolarKw = poi1Kw + poi2Kw;
+
+  const gensetRunning = Number(getApiVal("electricity/genset_running")) || 0;
+  const pGensetNum = gensetRunning === 1 ? 850 : gensetRunning > 1 ? 1850 : 0;
+
+  const totalPlantLoadKw = pGridNum + totalSolarKw + pGensetNum;
+
+  const gridPct = totalPlantLoadKw > 0 ? (pGridNum / totalPlantLoadKw) * 100 : 0;
+  const solarPct = totalPlantLoadKw > 0 ? (totalSolarKw / totalPlantLoadKw) * 100 : 0;
+  const poi1Pct = totalPlantLoadKw > 0 ? (poi1Kw / totalPlantLoadKw) * 100 : 0;
+  const poi2Pct = totalPlantLoadKw > 0 ? (poi2Kw / totalPlantLoadKw) * 100 : 0;
+
+  const isPoi1Inactive = solarLive?.poi1?.status === false && pltsLive.poi1.status === false && poi1Kw === 0;
+  const isPoi2Inactive = solarLive?.poi2?.status === false && pltsLive.poi2.status === false && poi2Kw === 0;
+
   /* ═══ RENDER ═══ */
   return (
     <div className="space-y-6">
@@ -1616,10 +1637,17 @@ export default function Electricity() {
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
               <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-blue-200' : 'text-blue-800'}`}>Grid Import (PLN)</span>
-              <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-blue-600/10 text-blue-700'} flex items-center justify-center`}><IconGrid /></div>
+              <div className="flex items-center gap-1.5">
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold font-mono border ${
+                  isDark ? 'bg-blue-400/20 text-blue-200 border-blue-400/30' : 'bg-blue-600/10 text-blue-700 border-blue-600/20'
+                }`}>
+                  {gridPct.toFixed(1)}% Load
+                </span>
+                <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-blue-600/10 text-blue-700'} flex items-center justify-center`}><IconGrid /></div>
+              </div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-blue-950'}`}>
-              {renderMetricVal(getApiVal("pln/active_power"), (v) => `${v.toLocaleString("id-ID", { maximumFractionDigits: 1 })}`)}
+              {pGridNum.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
               <span className={`text-sm font-bold ml-1 ${isDark ? 'text-blue-200' : 'text-blue-700'}`}>kW</span>
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-blue-200' : 'text-blue-800'}`}>
@@ -1641,17 +1669,25 @@ export default function Electricity() {
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
               <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>Solar Generation</span>
-              <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-emerald-600/10 text-emerald-700'} flex items-center justify-center`}><IconSolar /></div>
+              <div className="flex items-center gap-1.5">
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold font-mono border ${
+                  isDark ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30' : 'bg-emerald-600/10 text-emerald-700 border-emerald-600/20'
+                }`}>
+                  {solarPct.toFixed(1)}% Load
+                </span>
+                <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-emerald-600/10 text-emerald-700'} flex items-center justify-center`}><IconSolar /></div>
+              </div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-emerald-950'}`}>
-              - <span className={`text-sm font-bold ml-1 ${isDark ? 'text-emerald-200' : 'text-emerald-700'}`}>kW</span>
+              {totalSolarKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
+              <span className={`text-sm font-bold ml-1 ${isDark ? 'text-emerald-200' : 'text-emerald-700'}`}>kW</span>
             </div>
-            <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>
+            <div className={`mt-2 flex items-center justify-between text-[10px] ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>
               <span>POI-1: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
-                {solarLive?.poi1?.status === false ? "TIDAK AKTIF" : `${formatNumber(solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 0)} kWh`}
+                {isPoi1Inactive ? "TIDAK AKTIF" : `${formatNumber(poi1Kw)} kW (${poi1Pct.toFixed(1)}%)`}
               </strong></span>
               <span>POI-2: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
-                {solarLive?.poi2?.status === false ? "TIDAK AKTIF" : `${formatNumber(solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 0)} kWh`}
+                {isPoi2Inactive ? "TIDAK AKTIF" : `${formatNumber(poi2Kw)} kW (${poi2Pct.toFixed(1)}%)`}
               </strong></span>
             </div>
           </div>
@@ -1727,16 +1763,12 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-cyan-600/10 text-cyan-700'} flex items-center justify-center`}><IconPlant /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-cyan-950'}`}>
-              {(() => {
-                const pGridVal = getApiVal("pln/active_power");
-                const pGridNum = typeof pGridVal === "number" ? pGridVal : (summaryData?.pqData?.activePower || 0);
-                return pGridNum.toLocaleString("id-ID", { maximumFractionDigits: 1 });
-              })()}
+              {totalPlantLoadKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
               <span className={`text-sm font-bold ml-1 ${isDark ? 'text-cyan-200' : 'text-cyan-700'}`}>kW</span>
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-cyan-200' : 'text-cyan-800'}`}>
-              <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{renderMetricVal(getApiVal("pln/active_power"), (v) => `${v.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kW`)}</strong></span>
-              <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>- kW</strong></span>
+              <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{pGridNum.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW ({gridPct.toFixed(1)}%)</strong></span>
+              <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>{totalSolarKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW ({solarPct.toFixed(1)}%)</strong></span>
             </div>
           </div>
         </div>
@@ -1800,105 +1832,6 @@ export default function Electricity() {
           </div>
         </div>
 
-        {/* Real-time Power Meter Widget */}
-        <div className="mt-5 border-t border-slate-100 dark:border-slate-800/80 pt-5">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-blue-500 font-bold">🔌</span>
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              PLN Power Meter Cubicle (PM8000) — Real-time Readings
-            </h4>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Voltage Phase-Neutral */}
-            <div className="p-4 bg-slate-50/50 dark:bg-slate-950/30 rounded-xl border border-slate-100 dark:border-slate-800/60 shadow-inner">
-              <div className="flex justify-between items-baseline mb-2">
-                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">Voltage L-N</span>
-                <span className="text-[9px] font-bold text-slate-400">Nominal 12kV</span>
-              </div>
-              <div className="space-y-1.5 font-semibold text-xs text-slate-700 dark:text-slate-300">
-                <div className="flex justify-between items-center">
-                  <span>Phase R-N</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/voltage_rn"), (v) => `${(v > 1000 ? (v / Math.sqrt(3)) / 1000 : v).toFixed(2)} kV`)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>Phase S-N</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/voltage_sn"), (v) => `${(v > 1000 ? (v / Math.sqrt(3)) / 1000 : v).toFixed(2)} kV`)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>Phase T-N</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/voltage_tn"), (v) => `${(v > 1000 ? (v / Math.sqrt(3)) / 1000 : v).toFixed(2)} kV`)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Current Phase */}
-            <div className="p-4 bg-slate-50/50 dark:bg-slate-950/30 rounded-xl border border-slate-100 dark:border-slate-800/60 shadow-inner">
-              <div className="flex justify-between items-baseline mb-2">
-                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">Current Phase</span>
-                <span className="text-[9px] font-bold text-slate-400">Rating 165A</span>
-              </div>
-              <div className="space-y-1.5 font-semibold text-xs text-slate-700 dark:text-slate-300">
-                <div className="flex justify-between items-center">
-                  <span>Phase R</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/current_r"), (v) => `${Number(v).toFixed(1)} A`)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>Phase S</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/current_s"), (v) => `${Number(v).toFixed(1)} A`)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>Phase T</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/current_t"), (v) => `${Number(v).toFixed(1)} A`)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Power Summary */}
-            <div className="p-4 bg-slate-50/50 dark:bg-slate-950/30 rounded-xl border border-slate-100 dark:border-slate-800/60 shadow-inner">
-              <div className="flex justify-between items-baseline mb-2">
-                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">Power Parameters</span>
-                <span className="text-[9px] font-bold text-slate-400">Total Load</span>
-              </div>
-              <div className="space-y-1.5 font-semibold text-xs text-slate-700 dark:text-slate-300">
-                <div className="flex justify-between items-center">
-                  <span>Active Power</span>
-                  <span className="font-mono text-emerald-500 font-extrabold">{renderMetricVal(getApiVal("pln/active_power"), (v) => `${(v > 10000 ? v / 1000 : v).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kW`)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>Reactive Power</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/reactive_power"), (v) => `${(v > 10000 ? v / 1000 : v).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kVAR`)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>Apparent Power</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/apparent_power"), (v) => `${(v > 10000 ? v / 1000 : v).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kVA`)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Power Quality */}
-            <div className="p-4 bg-slate-50/50 dark:bg-slate-950/30 rounded-xl border border-slate-100 dark:border-slate-800/60 shadow-inner">
-              <div className="flex justify-between items-baseline mb-2">
-                <span className="text-[10px] font-extrabold uppercase text-[#47729f] dark:text-slate-500">Power Quality</span>
-                <span className="text-[9px] font-bold text-slate-400">Grid Status</span>
-              </div>
-              <div className="space-y-1.5 font-semibold text-xs text-slate-700 dark:text-slate-300">
-                <div className="flex justify-between items-center">
-                  <span>Frequency</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/frequency"), (v) => `${Number(v).toFixed(2)} Hz`)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>V Unbalanced</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/unbalance_v"), (v) => `${(v < 1.0 ? v * 100 : v).toFixed(2)} %`)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>I Unbalanced</span>
-                  <span className="font-mono">{renderMetricVal(getApiVal("pln/unbalance_i"), (v) => `${(v < 1.0 ? v * 100 : v).toFixed(2)} %`)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* ═══════════ SECTION C: PLN TREND + DONUT ═══════════ */}
