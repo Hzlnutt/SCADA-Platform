@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { Line } from "react-chartjs-2";
 import "../../components/charts/chartjs";
 import { getJson } from "../../services/api.client";
@@ -47,6 +48,16 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
   const [exporting, setExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Close modal on Escape key press
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Set quick date preset
   const applyPreset = (preset: "today" | "yesterday" | "7days" | "30days" | "thisMonth" | "thisYear") => {
@@ -732,22 +743,24 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
       // Download file
       const fileName = `Laporan_Kelistrikan_Widatra_${resolution}_${startDate}_ke_${endDate}.xlsx`;
       writeFile(wb, fileName);
-      setExportSuccess(true);
-      setTimeout(() => setExportSuccess(false), 4000);
+      setExporting(false);
+      onClose(); // Automatically close modal after download
     } catch (err: any) {
       console.error("Export error:", err);
       setErrorMessage(err.message || "Gagal membuat file Excel. Silakan coba kembali.");
-    } finally {
       setExporting(false);
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === "undefined") return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-3 sm:p-4 animate-in fade-in duration-200">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[99999] w-screen h-screen flex items-center justify-center bg-black/70 dark:bg-black/80 backdrop-blur-md p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
+      onClick={onClose}
+    >
       <div
-        className="w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden"
+        className="w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -1014,6 +1027,7 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
