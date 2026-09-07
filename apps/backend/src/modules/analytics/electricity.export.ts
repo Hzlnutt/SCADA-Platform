@@ -1,6 +1,7 @@
 import { getPostgresPool } from "../../database/postgres";
 import * as XLSX from "xlsx";
 import { addCharts, ChartSpec } from "chartsheet";
+import JSZip from "jszip";
 
 export interface ElectricityExportParams {
   from: string; // YYYY-MM-DD
@@ -459,11 +460,18 @@ export async function getElectricityExportData(params: ElectricityExportParams):
     const hh = pad(wibDate.getUTCHours());
     const dateFormatted = `${yyyy}-${mm}-${dd}`;
     const timeFormatted = resolution === "hour" ? `${hh}:00` : dateFormatted;
+    const chartTimeLabel = resolution === "hour"
+      ? `${dd}/${mm} ${hh}:00`
+      : (resolution === "month" ? `${mm}/${yyyy}` : `${dd}/${mm}`);
 
-    const gridKw = Number(pln.active_power) || 0;
-    const solarKw = Number(solar.total_solar_kw) || 0;
-    const wf1Kw = Number(wf1.active_power_total) || 0;
-    const wf2Kw = Number(wf2.active_power_total) || 0;
+    // Normalize active power to kW (convert raw Watts to kW if > 10000)
+    const rawPln = Number(pln.active_power) || 0;
+    const gridKw = rawPln > 10000 ? Number((rawPln / 1000).toFixed(2)) : Number(rawPln.toFixed(2));
+    const solarKw = Number(Number(solar.total_solar_kw || 0).toFixed(2));
+    const rawWf1 = Number(wf1.active_power_total) || 0;
+    const wf1Kw = rawWf1 > 10000 ? Number((rawWf1 / 1000).toFixed(2)) : Number(rawWf1.toFixed(2));
+    const rawWf2 = Number(wf2.active_power_total) || 0;
+    const wf2Kw = rawWf2 > 10000 ? Number((rawWf2 / 1000).toFixed(2)) : Number(rawWf2.toFixed(2));
     const totalLoadKw = Number((gridKw + solarKw).toFixed(2));
 
     const solarSharePct = totalLoadKw > 0 ? Number(((solarKw / totalLoadKw) * 100).toFixed(1)) : 0;
@@ -531,6 +539,7 @@ export async function getElectricityExportData(params: ElectricityExportParams):
     overviewRows.push({
       no: idx + 1,
       t_stamp: dateFormatted,
+      chart_label: chartTimeLabel,
       tahun: yyyy,
       bulan: mm,
       hari: dd,
@@ -645,11 +654,12 @@ export async function generateElectricityExcelWorkbook(
   // 2. SHEET DATA TREN & BEBAN (DEDICATED TIME-SERIES NUMBERS SHEET WITH AUTOFILTER)
   const trendHeaders = [
     "No",
+    "Periode / Waktu",
     "Tanggal",
     "Tahun",
     "Bulan",
     "Hari",
-    "Jam / Periode",
+    "Jam",
     "Grid Import PLN (kW)",
     "Solar PLTS (kW)",
     "Total Plant Load (kW)",
@@ -667,6 +677,7 @@ export async function generateElectricityExcelWorkbook(
 
   const trendRows = overviewRows.map((r, i) => [
     i + 1,
+    r.chart_label || r.periode,
     r.t_stamp,
     r.tahun,
     r.bulan,
@@ -688,14 +699,15 @@ export async function generateElectricityExcelWorkbook(
   ]);
 
   const wsTrend = XLSX.utils.aoa_to_sheet([trendHeaders, ...trendRows]);
-  wsTrend["!autofilter"] = { ref: `A1:S${Math.max(2, trendRows.length + 1)}` };
+  wsTrend["!autofilter"] = { ref: `A1:T${Math.max(2, trendRows.length + 1)}` };
   wsTrend["!cols"] = [
     { wch: 6 },
+    { wch: 16 },
     { wch: 13 },
     { wch: 8 },
     { wch: 8 },
+    { wch: 8 },
     { wch: 10 },
-    { wch: 14 },
     { wch: 20 },
     { wch: 18 },
     { wch: 20 },
@@ -715,21 +727,21 @@ export async function generateElectricityExcelWorkbook(
   const numTrendRows = trendRows.length;
 
   if (numTrendRows > 0) {
-    // Chart 1 on Dashboard Utama: Total Load vs Grid vs Solar
+    // Chart 1 on Dashboard Utama: Total Load vs Grid vs Solar (Proper kW scale)
     chartSpecs.push({
       sheet: "Dashboard Utama",
       type: "line",
       title: "Tren Daya Utama: Total Plant Load vs Grid PLN vs Solar PLTS",
       categories: `'Data Tren & Beban'!$B$2:$B$${numTrendRows + 1}`,
       series: [
-        { name: "Total Plant Load (kW)", ref: `'Data Tren & Beban'!$I$2:$I$${numTrendRows + 1}`, color: "10B981" },
-        { name: "Grid Import PLN (kW)", ref: `'Data Tren & Beban'!$G$2:$G$${numTrendRows + 1}`, color: "3B82F6" },
-        { name: "Solar PLTS (kW)", ref: `'Data Tren & Beban'!$H$2:$H$${numTrendRows + 1}`, color: "F59E0B" }
+        { name: "Total Plant Load (kW)", ref: `'Data Tren & Beban'!$J$2:$J$${numTrendRows + 1}`, color: "10B981" },
+        { name: "Grid Import PLN (kW)", ref: `'Data Tren & Beban'!$H$2:$H$${numTrendRows + 1}`, color: "3B82F6" },
+        { name: "Solar PLTS (kW)", ref: `'Data Tren & Beban'!$I$2:$I$${numTrendRows + 1}`, color: "F59E0B" }
       ],
       anchor: { col: 0, row: 20 },
-      width: 950,
-      height: 400,
-      yTitle: "Daya (kW)",
+      width: 1120,
+      height: 460,
+      yTitle: "Daya Aktif (kW)",
       xTitle: "Waktu"
     });
 
@@ -740,12 +752,12 @@ export async function generateElectricityExcelWorkbook(
       title: "Tren Beban Feeder Pabrik: Feeder WF1 (PM5560) vs Feeder WF2 (PM5500)",
       categories: `'Data Tren & Beban'!$B$2:$B$${numTrendRows + 1}`,
       series: [
-        { name: "Feeder WF1 (kW)", ref: `'Data Tren & Beban'!$K$2:$K$${numTrendRows + 1}`, color: "8B5CF6" },
-        { name: "Feeder WF2 (kW)", ref: `'Data Tren & Beban'!$L$2:$L$${numTrendRows + 1}`, color: "EC4899" }
+        { name: "Feeder WF1 (kW)", ref: `'Data Tren & Beban'!$L$2:$L$${numTrendRows + 1}`, color: "8B5CF6" },
+        { name: "Feeder WF2 (kW)", ref: `'Data Tren & Beban'!$M$2:$M$${numTrendRows + 1}`, color: "EC4899" }
       ],
-      anchor: { col: 0, row: 42 },
-      width: 950,
-      height: 380,
+      anchor: { col: 0, row: 48 },
+      width: 1120,
+      height: 420,
       yTitle: "Beban Feeder (kW)",
       xTitle: "Waktu"
     });
@@ -757,11 +769,11 @@ export async function generateElectricityExcelWorkbook(
       title: "Tren Kualitas Daya: Power Factor Operasional (Cos φ)",
       categories: `'Data Tren & Beban'!$B$2:$B$${numTrendRows + 1}`,
       series: [
-        { name: "Power Factor", ref: `'Data Tren & Beban'!$M$2:$M$${numTrendRows + 1}`, color: "059669" }
+        { name: "Power Factor", ref: `'Data Tren & Beban'!$N$2:$N$${numTrendRows + 1}`, color: "059669" }
       ],
-      anchor: { col: 0, row: 63 },
-      width: 950,
-      height: 340,
+      anchor: { col: 0, row: 74 },
+      width: 1120,
+      height: 380,
       yTitle: "Cos φ",
       xTitle: "Waktu"
     });
@@ -773,16 +785,17 @@ export async function generateElectricityExcelWorkbook(
       title: "Tren Finansial Energi: Estimasi Biaya PLN vs Penghematan Solar PLTS (IDR)",
       categories: `'Data Tren & Beban'!$B$2:$B$${numTrendRows + 1}`,
       series: [
-        { name: "Biaya PLN (IDR)", ref: `'Data Tren & Beban'!$R$2:$R$${numTrendRows + 1}`, color: "EF4444" },
-        { name: "Penghematan Solar (IDR)", ref: `'Data Tren & Beban'!$S$2:$S$${numTrendRows + 1}`, color: "10B981" }
+        { name: "Biaya PLN (IDR)", ref: `'Data Tren & Beban'!$S$2:$S$${numTrendRows + 1}`, color: "EF4444" },
+        { name: "Penghematan Solar (IDR)", ref: `'Data Tren & Beban'!$T$2:$T$${numTrendRows + 1}`, color: "10B981" }
       ],
-      anchor: { col: 0, row: 82 },
-      width: 950,
-      height: 380,
+      anchor: { col: 0, row: 98 },
+      width: 1120,
+      height: 420,
       yTitle: "Rupiah (IDR)",
       xTitle: "Waktu"
     });
   }
+
 
   // 3. SHEET PLN - PM8000
   if (selectedSheets.has("pln") && sheets.pln) {
@@ -1018,10 +1031,43 @@ export async function generateElectricityExcelWorkbook(
   if (chartSpecs.length > 0) {
     try {
       buffer = await addCharts(buffer, chartSpecs);
+
+      // Post-process OpenXML chart DrawingML:
+      // 1. Remove blocky square markers (<c:marker val="1"/> -> <c:marker val="0"/>) so lines are smooth and not cluttered
+      // 2. Enable smooth spline curves (<c:smooth val="0"/> -> <c:smooth val="1"/>)
+      // 3. Set c:tickLblSkip and c:tickMarkSkip so date labels along the X axis do not crowd/overlap
+      const zip = await JSZip.loadAsync(buffer);
+      const skip = metadata.resolution === "hour"
+        ? (numTrendRows > 48 ? 24 : (numTrendRows > 24 ? 4 : 2))
+        : Math.max(1, Math.round(numTrendRows / 12));
+
+      for (const filename of Object.keys(zip.files)) {
+        if (/^xl\/charts\/chart\d+\.xml$/.test(filename)) {
+          let xml = await zip.files[filename].async("text");
+
+          // Remove blocky square markers from lines
+          xml = xml.replace(/<c:marker val="1"\/>/g, '<c:marker val="0"/>');
+          xml = xml.replace(/<c:smooth val="0"\/>/g, '<c:smooth val="1"/>');
+          xml = xml.replace(/<\/c:spPr>/g, '</c:spPr><c:marker><c:symbol val="none"/></c:marker>');
+
+          // Set tick label skip on category axis so labels are well-spaced and readable
+          if (xml.includes("<c:catAx>")) {
+            xml = xml.replace(
+              /<c:tickLblPos val="nextTo"\/>/,
+              `<c:tickLblPos val="nextTo"/><c:tickLblSkip val="${skip}"/><c:tickMarkSkip val="${skip}"/>`
+            );
+          }
+
+          zip.file(filename, xml);
+        }
+      }
+
+      buffer = (await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" })) as Buffer;
     } catch (chartErr) {
-      console.error("Warning: Failed to inject native charts into Excel, falling back to base workbook:", chartErr);
+      console.error("Warning: Failed to inject or polish native charts into Excel, falling back to base workbook:", chartErr);
     }
   }
+
 
   return buffer;
 }
