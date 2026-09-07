@@ -83,6 +83,7 @@ export default function HvacLayout({
 
   // Setpoint draft values & handlers
   const [draftSetpoints, setDraftSetpoints] = useState<Record<string, number>>({});
+  const [isSetpointUnlocked, setIsSetpointUnlocked] = useState(false);
 
   useEffect(() => {
     if (setpoints) {
@@ -97,6 +98,17 @@ export default function HvacLayout({
       });
     }
   }, [setpoints]);
+
+  const handleUnlockSetpoint = () => {
+    setModalLabel("Buka Akses Pengaturan Setpoint");
+    setPendingAction(() => async () => {
+      setIsSetpointUnlocked(true);
+    });
+    setPassword("");
+    setPasswordError("");
+    setVerificationMode("password");
+    setIsConfirmModalOpen(true);
+  };
 
   const handleStepSetpoint = (sp: SetpointConfig, delta: number) => {
     const currentVal = draftSetpoints[sp.label] !== undefined ? draftSetpoints[sp.label] : sp.value;
@@ -120,6 +132,7 @@ export default function HvacLayout({
     setPendingAction(() => async () => {
       sp.onChange(clamped);
       setDraftSetpoints((prev) => ({ ...prev, [sp.label]: clamped }));
+      setIsSetpointUnlocked(false);
     });
     setPassword("");
     setPasswordError("");
@@ -492,13 +505,44 @@ export default function HvacLayout({
           {setpoints && setpoints.length > 0 && (
             <div className="flex-[1.3] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-[175px] shadow-sm dark:shadow-2xl transition-all duration-300">
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2 mb-3">
-                <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm tracking-wide">
-                  SETPOINTS
-                </h3>
-                {!hasControlAccess && (
+                <div className="flex items-center gap-2">
+                  <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm tracking-wide">
+                    SETPOINTS
+                  </h3>
+                  {hasControlAccess && (
+                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                      isSetpointUnlocked
+                        ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30 animate-pulse"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
+                    }`}>
+                      {isSetpointUnlocked ? "🔓 Edit Mode" : "🔒 Terkunci"}
+                    </span>
+                  )}
+                </div>
+
+                {!hasControlAccess ? (
                   <span className="text-[10px] text-slate-400 font-mono font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                     View Only
                   </span>
+                ) : !isSetpointUnlocked ? (
+                  <button
+                    type="button"
+                    onClick={handleUnlockSetpoint}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white shadow-xs transition active:scale-95"
+                    title="Verifikasi password akun untuk mengatur setpoint"
+                  >
+                    <span>🔒</span>
+                    <span>Atur Setpoint</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsSetpointUnlocked(false)}
+                    className="flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-rose-500 transition"
+                    title="Kunci kembali pengaturan setpoint"
+                  >
+                    <span>🔒 Kunci</span>
+                  </button>
                 )}
               </div>
               <div className="flex-1 overflow-y-auto space-y-3 pr-1">
@@ -523,7 +567,34 @@ export default function HvacLayout({
                     );
                   }
 
-                  // Stepper & manual input for Unit Head, Senior Unit Head, Admin
+                  if (!isSetpointUnlocked) {
+                    // Locked view for Unit Head / Admin - requires password verification to unlock
+                    return (
+                      <div
+                        key={idx}
+                        onClick={handleUnlockSetpoint}
+                        className="cursor-pointer group flex justify-between items-center p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/30 hover:bg-cyan-500/5 dark:hover:bg-cyan-950/20 border border-slate-100 dark:border-slate-800/60 hover:border-cyan-500/30 transition"
+                        title="Klik untuk membuka pengaturan dengan verifikasi password akun"
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-slate-600 dark:text-slate-300 font-semibold text-[11px] group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition">
+                            {sp.label}
+                          </span>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                            Aktif: <strong className="text-slate-700 dark:text-slate-300">{sp.value.toFixed(1)}{sp.unit}</strong>
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-xs text-slate-800 dark:text-white bg-slate-200/70 dark:bg-slate-700/60 px-2 py-0.5 rounded">
+                            {sp.value.toFixed(1)} {sp.unit}
+                          </span>
+                          <span className="text-xs text-slate-400 group-hover:text-cyan-500 transition">🔒</span>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Unlocked edit mode: Stepper & manual input for Unit Head, Senior Unit Head, Admin
                   return (
                     <div
                       key={idx}
