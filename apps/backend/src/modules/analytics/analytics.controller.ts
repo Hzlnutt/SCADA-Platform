@@ -9,6 +9,7 @@ import { GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
 import { getPostgresPool } from "../../database/postgres";
 import { defaultWaterConfig } from "../config/config.controller";
 import { calculateWaterCost } from "../../utils/water";
+import { getElectricityExportData } from "./electricity.export";
 
 export const getAnalyticsSummaryHandler = async (
   _req: Request,
@@ -1007,6 +1008,30 @@ export const getElectricityReportHandler = async (
     });
 
     res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getElectricityExportDataHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const from = (req.query.from as string) || new Date().toISOString().slice(0, 10);
+    const to = (req.query.to as string) || from;
+    const resolution = (req.query.resolution as "hour" | "day" | "week" | "month" | "year") || "hour";
+    const sheets = (req.query.sheets as string) || "all";
+
+    const data = await getElectricityExportData({
+      from,
+      to,
+      resolution,
+      sheets
+    });
+
+    res.json({ success: true, data });
   } catch (err) {
     next(err);
   }

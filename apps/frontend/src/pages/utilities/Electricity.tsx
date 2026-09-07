@@ -13,6 +13,7 @@ import { useSystemStore } from "../../store/system.store";
 import { ApiSourcesPanel } from "../machines/MachineConfig";
 import { useAuthStore } from "../../store/auth.store";
 import { canAccessConfigAndAudit } from "../../utils/roles";
+import { ElectricityExportModal } from "../../components/electricity/ElectricityExportModal";
 
 /* ═══════════ CONSTANTS ═══════════ */
 const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
@@ -523,6 +524,7 @@ export default function Electricity() {
   const role = useAuthStore((state) => state.user?.role ?? "user");
   const canAccessConfig = canAccessConfigAndAudit(role);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Live API Data states
   const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>({});
@@ -1686,17 +1688,28 @@ export default function Electricity() {
   /* ═══ RENDER ═══ */
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <PageHeader title="Listrik — Overview" description="Monitor beban listrik utama, solar panel, genset, dan total plant load." />
-        {canAccessConfig && (
+        <div className="flex items-center gap-2.5">
           <button
-            onClick={() => setShowConfigPanel(!showConfigPanel)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700"
+            onClick={() => setShowExportModal(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 hover:shadow-emerald-600/30 transition"
           >
-            <IconSettings />
-            Konfigurasi
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 4h7v5h5v11H6V4zm8 8.5 1.5 2.5-1.5 2.5h-1.5l1.5-2.5-1.5-2.5h1.5zm-5 0 1.5 2.5-1.5 2.5H7.5L9 14.5 7.5 12H9z"/>
+            </svg>
+            Export Excel
           </button>
-        )}
+          {canAccessConfig && (
+            <button
+              onClick={() => setShowConfigPanel(!showConfigPanel)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700"
+            >
+              <IconSettings />
+              Konfigurasi
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ═══════════ SECTION A: TOP 4 SUMMARY CARDS ═══════════ */}
@@ -2681,6 +2694,13 @@ export default function Electricity() {
           </div>
         </div>
       )}
+
+      {/* Electricity Export Excel Modal */}
+      <ElectricityExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        isDark={isDark}
+      />
     </div>
   );
 }
