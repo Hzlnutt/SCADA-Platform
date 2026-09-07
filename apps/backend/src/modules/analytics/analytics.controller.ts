@@ -9,7 +9,7 @@ import { GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
 import { getPostgresPool } from "../../database/postgres";
 import { defaultWaterConfig } from "../config/config.controller";
 import { calculateWaterCost } from "../../utils/water";
-import { getElectricityExportData } from "./electricity.export";
+import { getElectricityExportData, generateElectricityExcelWorkbook } from "./electricity.export";
 
 export const getAnalyticsSummaryHandler = async (
   _req: Request,
@@ -1036,3 +1036,43 @@ export const getElectricityExportDataHandler = async (
     next(err);
   }
 };
+
+export const getElectricityExportExcelHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const from = (req.query.from as string) || new Date().toISOString().slice(0, 10);
+    const to = (req.query.to as string) || from;
+    const resolution = (req.query.resolution as "hour" | "day" | "week" | "month" | "year") || "hour";
+    const sheetsParam = (req.query.sheets as string) || "all";
+
+    const data = await getElectricityExportData({
+      from,
+      to,
+      resolution,
+      sheets: sheetsParam
+    });
+
+    const selectedSheets = new Set(
+      sheetsParam === "all" || !sheetsParam
+        ? ["overview", "pln", "wf1", "wf2", "solar", "subdistribution"]
+        : sheetsParam.split(",").map((s) => s.trim().toLowerCase())
+    );
+
+    const buffer = await generateElectricityExcelWorkbook(data, selectedSheets);
+
+    const fileName = `Laporan_Kelistrikan_Widatra_${resolution}_${from}_ke_${to}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.send(buffer);
+  } catch (err) {
+    next(err);
+  }
+};
+
