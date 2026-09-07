@@ -450,7 +450,12 @@ export const getPowerMeterHistoryHandler = async (
     const todayWibStr = nowWib.toISOString().slice(0, 10);
     const targetDate = (req.query.date as string) || todayWibStr;
     const isToday = targetDate === todayWibStr;
-    const currentHour = isToday ? nowWib.getHours() : 23;
+
+    // Use client's local laptop hour if provided, else default to server's Jakarta hour
+    const clientHour = req.query.hour !== undefined ? parseInt(req.query.hour as string, 10) : undefined;
+    const currentHour = isToday
+      ? (Number.isInteger(clientHour) && clientHour! >= 0 && clientHour! <= 23 ? clientHour! : nowWib.getHours())
+      : 23;
 
     const pool = getPostgresPool();
     let dbRes;
@@ -491,36 +496,46 @@ export const getPowerMeterHistoryHandler = async (
         SELECT 
           s.hour,
           to_char(s.hour, 'FM00') || ':00' as label,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.active_power_total ELSE COALESCE(h.active_power_total, m.active_power_total) END,
-            0
-          ) as active_power_total,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.current_a ELSE COALESCE(h.current_a, m.current_a) END,
-            0
-          ) as current_a,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.current_b ELSE COALESCE(h.current_b, m.current_b) END,
-            0
-          ) as current_b,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.current_c ELSE COALESCE(h.current_c, m.current_c) END,
-            0
-          ) as current_c,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.volt_ab ELSE COALESCE(h.volt_ab, m.volt_ab) END,
-            0
-          ) as volt_ab,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.power_factor ELSE COALESCE(h.power_factor, m.power_factor) END,
-            0
-          ) as power_factor,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.active_energy ELSE COALESCE(h.active_energy, m.active_energy) END,
-            0
-          ) as active_energy,
-          COALESCE(m.t_stamp, h.t_stamp) as t_stamp
-        FROM generate_series(0, $2) as s(hour)
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.active_power_total, h.active_power_total)
+            ELSE COALESCE(h.active_power_total, m.active_power_total)
+          END as active_power_total,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.current_a, h.current_a)
+            ELSE COALESCE(h.current_a, m.current_a)
+          END as current_a,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.current_b, h.current_b)
+            ELSE COALESCE(h.current_b, m.current_b)
+          END as current_b,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.current_c, h.current_c)
+            ELSE COALESCE(h.current_c, m.current_c)
+          END as current_c,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.volt_ab, h.volt_ab)
+            ELSE COALESCE(h.volt_ab, m.volt_ab)
+          END as volt_ab,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.power_factor, h.power_factor)
+            ELSE COALESCE(h.power_factor, m.power_factor)
+          END as power_factor,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.active_energy, h.active_energy)
+            ELSE COALESCE(h.active_energy, m.active_energy)
+          END as active_energy,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            ELSE COALESCE(m.t_stamp, h.t_stamp)
+          END as t_stamp
+        FROM generate_series(0, 23) as s(hour)
         LEFT JOIN pln_hourly h ON h.hour = s.hour
         LEFT JOIN pln_minute m ON m.hour = s.hour
         ORDER BY s.hour ASC;
@@ -560,36 +575,46 @@ export const getPowerMeterHistoryHandler = async (
         SELECT 
           s.hour,
           to_char(s.hour, 'FM00') || ':00' as label,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.active_power_total ELSE COALESCE(h.active_power_total, m.active_power_total) END,
-            0
-          ) as active_power_total,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.current_a ELSE COALESCE(h.current_a, m.current_a) END,
-            0
-          ) as current_a,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.current_b ELSE COALESCE(h.current_b, m.current_b) END,
-            0
-          ) as current_b,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.current_c ELSE COALESCE(h.current_c, m.current_c) END,
-            0
-          ) as current_c,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.volt_ab ELSE COALESCE(h.volt_ab, m.volt_ab) END,
-            0
-          ) as volt_ab,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.power_factor ELSE COALESCE(h.power_factor, m.power_factor) END,
-            0
-          ) as power_factor,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.active_energy ELSE COALESCE(h.active_energy, m.active_energy) END,
-            0
-          ) as active_energy,
-          COALESCE(m.t_stamp, h.t_stamp) as t_stamp
-        FROM generate_series(0, $2) as s(hour)
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.active_power_total, h.active_power_total)
+            ELSE COALESCE(h.active_power_total, m.active_power_total)
+          END as active_power_total,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.current_a, h.current_a)
+            ELSE COALESCE(h.current_a, m.current_a)
+          END as current_a,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.current_b, h.current_b)
+            ELSE COALESCE(h.current_b, m.current_b)
+          END as current_b,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.current_c, h.current_c)
+            ELSE COALESCE(h.current_c, m.current_c)
+          END as current_c,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.volt_ab, h.volt_ab)
+            ELSE COALESCE(h.volt_ab, m.volt_ab)
+          END as volt_ab,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.power_factor, h.power_factor)
+            ELSE COALESCE(h.power_factor, m.power_factor)
+          END as power_factor,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.active_energy, h.active_energy)
+            ELSE COALESCE(h.active_energy, m.active_energy)
+          END as active_energy,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            ELSE COALESCE(m.t_stamp, h.t_stamp)
+          END as t_stamp
+        FROM generate_series(0, 23) as s(hour)
         LEFT JOIN wf1_hourly h ON h.hour = s.hour
         LEFT JOIN wf1_minute m ON m.hour = s.hour
         ORDER BY s.hour ASC;
@@ -629,36 +654,46 @@ export const getPowerMeterHistoryHandler = async (
         SELECT 
           s.hour,
           to_char(s.hour, 'FM00') || ':00' as label,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.active_power_total ELSE COALESCE(h.active_power_total, m.active_power_total) END,
-            0
-          ) as active_power_total,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.current_a ELSE COALESCE(h.current_a, m.current_a) END,
-            0
-          ) as current_a,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.current_b ELSE COALESCE(h.current_b, m.current_b) END,
-            0
-          ) as current_b,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.current_c ELSE COALESCE(h.current_c, m.current_c) END,
-            0
-          ) as current_c,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.volt_ab ELSE COALESCE(h.volt_ab, m.volt_ab) END,
-            0
-          ) as volt_ab,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.power_factor ELSE COALESCE(h.power_factor, m.power_factor) END,
-            0
-          ) as power_factor,
-          COALESCE(
-            CASE WHEN s.hour = $2 THEN m.active_energy ELSE COALESCE(h.active_energy, m.active_energy) END,
-            0
-          ) as active_energy,
-          COALESCE(m.t_stamp, h.t_stamp) as t_stamp
-        FROM generate_series(0, $2) as s(hour)
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.active_power_total, h.active_power_total)
+            ELSE COALESCE(h.active_power_total, m.active_power_total)
+          END as active_power_total,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.current_a, h.current_a)
+            ELSE COALESCE(h.current_a, m.current_a)
+          END as current_a,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.current_b, h.current_b)
+            ELSE COALESCE(h.current_b, m.current_b)
+          END as current_b,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.current_c, h.current_c)
+            ELSE COALESCE(h.current_c, m.current_c)
+          END as current_c,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.volt_ab, h.volt_ab)
+            ELSE COALESCE(h.volt_ab, m.volt_ab)
+          END as volt_ab,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.power_factor, h.power_factor)
+            ELSE COALESCE(h.power_factor, m.power_factor)
+          END as power_factor,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            WHEN s.hour = $2 THEN COALESCE(m.active_energy, h.active_energy)
+            ELSE COALESCE(h.active_energy, m.active_energy)
+          END as active_energy,
+          CASE 
+            WHEN s.hour > $2 THEN NULL
+            ELSE COALESCE(m.t_stamp, h.t_stamp)
+          END as t_stamp
+        FROM generate_series(0, 23) as s(hour)
         LEFT JOIN wf2_hourly h ON h.hour = s.hour
         LEFT JOIN wf2_minute m ON m.hour = s.hour
         ORDER BY s.hour ASC;
@@ -701,36 +736,46 @@ export const getPowerMeterHistoryHandler = async (
         SELECT 
           s.hour,
           to_char(s.hour, 'FM00') || ':00' as label,
-          COALESCE(
-            CASE WHEN s.hour = $3 THEN m.active_power_total ELSE COALESCE(h.active_power_total, m.active_power_total) END,
-            0
-          ) as active_power_total,
-          COALESCE(
-            CASE WHEN s.hour = $3 THEN m.current_a ELSE COALESCE(h.current_a, m.current_a) END,
-            0
-          ) as current_a,
-          COALESCE(
-            CASE WHEN s.hour = $3 THEN m.current_b ELSE COALESCE(h.current_b, m.current_b) END,
-            0
-          ) as current_b,
-          COALESCE(
-            CASE WHEN s.hour = $3 THEN m.current_c ELSE COALESCE(h.current_c, m.current_c) END,
-            0
-          ) as current_c,
-          COALESCE(
-            CASE WHEN s.hour = $3 THEN m.volt_ab ELSE COALESCE(h.volt_ab, m.volt_ab) END,
-            0
-          ) as volt_ab,
-          COALESCE(
-            CASE WHEN s.hour = $3 THEN m.power_factor ELSE COALESCE(h.power_factor, m.power_factor) END,
-            0
-          ) as power_factor,
-          COALESCE(
-            CASE WHEN s.hour = $3 THEN m.active_energy ELSE COALESCE(h.active_energy, m.active_energy) END,
-            0
-          ) as active_energy,
-          COALESCE(m.t_stamp, h.t_stamp) as t_stamp
-        FROM generate_series(0, $3) as s(hour)
+          CASE 
+            WHEN s.hour > $3 THEN NULL
+            WHEN s.hour = $3 THEN COALESCE(m.active_power_total, h.active_power_total)
+            ELSE COALESCE(h.active_power_total, m.active_power_total)
+          END as active_power_total,
+          CASE 
+            WHEN s.hour > $3 THEN NULL
+            WHEN s.hour = $3 THEN COALESCE(m.current_a, h.current_a)
+            ELSE COALESCE(h.current_a, m.current_a)
+          END as current_a,
+          CASE 
+            WHEN s.hour > $3 THEN NULL
+            WHEN s.hour = $3 THEN COALESCE(m.current_b, h.current_b)
+            ELSE COALESCE(h.current_b, m.current_b)
+          END as current_b,
+          CASE 
+            WHEN s.hour > $3 THEN NULL
+            WHEN s.hour = $3 THEN COALESCE(m.current_c, h.current_c)
+            ELSE COALESCE(h.current_c, m.current_c)
+          END as current_c,
+          CASE 
+            WHEN s.hour > $3 THEN NULL
+            WHEN s.hour = $3 THEN COALESCE(m.volt_ab, h.volt_ab)
+            ELSE COALESCE(h.volt_ab, m.volt_ab)
+          END as volt_ab,
+          CASE 
+            WHEN s.hour > $3 THEN NULL
+            WHEN s.hour = $3 THEN COALESCE(m.power_factor, h.power_factor)
+            ELSE COALESCE(h.power_factor, m.power_factor)
+          END as power_factor,
+          CASE 
+            WHEN s.hour > $3 THEN NULL
+            WHEN s.hour = $3 THEN COALESCE(m.active_energy, h.active_energy)
+            ELSE COALESCE(h.active_energy, m.active_energy)
+          END as active_energy,
+          CASE 
+            WHEN s.hour > $3 THEN NULL
+            ELSE COALESCE(m.t_stamp, h.t_stamp)
+          END as t_stamp
+        FROM generate_series(0, 23) as s(hour)
         LEFT JOIN pm_hourly h ON h.hour = s.hour
         LEFT JOIN pm_minute m ON m.hour = s.hour
         ORDER BY s.hour ASC;

@@ -46,7 +46,8 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
   const fetchHistory = (showLoading = false) => {
     if (!pm) return;
     if (showLoading) setLoadingHistory(true);
-    getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pm.pm_id}/history?_t=${Date.now()}`)
+    const clientHour = new Date().getHours();
+    getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pm.pm_id}/history?hour=${clientHour}&_t=${Date.now()}`)
       .then((res) => {
         if (res?.data) {
           setHistoryData(res.data);
@@ -69,20 +70,24 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
 
   const isOnline = pm.status !== false;
 
-  // Chart configuration for today's 24-hour progressive history
-  const historyLabels = historyData.map((d) => d.label || `${String(d.hour).padStart(2, "0")}:00`);
+  // Chart configuration for today's 24-hour progressive history (00:00 to 23:00)
+  const fallbackLabels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
+  const historyLabels = historyData.length > 0
+    ? historyData.map((d) => d.label || `${String(d.hour).padStart(2, "0")}:00`)
+    : fallbackLabels;
 
   const powerChartData = {
     labels: historyLabels,
     datasets: [
       {
         label: "Active Power (kW)",
-        data: historyData.map((d) => (d.active_power_total !== null && d.active_power_total !== undefined ? Number(d.active_power_total) : 0)),
+        data: historyData.map((d) => (d.active_power_total !== null && d.active_power_total !== undefined ? Number(d.active_power_total) : null)),
         borderColor: "#38bdf8",
         backgroundColor: "rgba(56,189,248,0.1)",
         borderWidth: 2,
         tension: 0.3,
         fill: true,
+        spanGaps: false,
         pointRadius: 2.5,
         pointHoverRadius: 5
       }
@@ -94,31 +99,34 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
     datasets: [
       {
         label: "Phase A (A)",
-        data: historyData.map((d) => (d.current_a !== null && d.current_a !== undefined ? Number(d.current_a) : 0)),
+        data: historyData.map((d) => (d.current_a !== null && d.current_a !== undefined ? Number(d.current_a) : null)),
         borderColor: "#ef4444",
         backgroundColor: "transparent",
         borderWidth: 1.5,
         tension: 0.3,
+        spanGaps: false,
         pointRadius: 2,
         pointHoverRadius: 4
       },
       {
         label: "Phase B (A)",
-        data: historyData.map((d) => (d.current_b !== null && d.current_b !== undefined ? Number(d.current_b) : 0)),
+        data: historyData.map((d) => (d.current_b !== null && d.current_b !== undefined ? Number(d.current_b) : null)),
         borderColor: "#f59e0b",
         backgroundColor: "transparent",
         borderWidth: 1.5,
         tension: 0.3,
+        spanGaps: false,
         pointRadius: 2,
         pointHoverRadius: 4
       },
       {
         label: "Phase C (A)",
-        data: historyData.map((d) => (d.current_c !== null && d.current_c !== undefined ? Number(d.current_c) : 0)),
+        data: historyData.map((d) => (d.current_c !== null && d.current_c !== undefined ? Number(d.current_c) : null)),
         borderColor: "#10b981",
         backgroundColor: "transparent",
         borderWidth: 1.5,
         tension: 0.3,
+        spanGaps: false,
         pointRadius: 2,
         pointHoverRadius: 4
       }
@@ -128,6 +136,7 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
   const chartOptions = (unit: string) => ({
     responsive: true,
     maintainAspectRatio: false,
+    spanGaps: false,
     plugins: {
       legend: {
         position: "top" as const,
@@ -138,14 +147,17 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
       },
       tooltip: {
         callbacks: {
-          label: (ctx: any) => ` ${ctx.dataset.label}: ${ctx.raw} ${unit}`
+          label: (ctx: any) => {
+            if (ctx.raw === null || ctx.raw === undefined) return "";
+            return ` ${ctx.dataset.label}: ${ctx.raw} ${unit}`;
+          }
         }
       }
     },
     scales: {
       x: {
         grid: { color: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" },
-        ticks: { color: isDark ? "#64748b" : "#94a3b8", font: { size: 9 } }
+        ticks: { color: isDark ? "#64748b" : "#94a3b8", font: { size: 9 }, maxRotation: 0 }
       },
       y: {
         grid: { color: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" },
