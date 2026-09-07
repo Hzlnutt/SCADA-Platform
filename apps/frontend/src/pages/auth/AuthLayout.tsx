@@ -23,7 +23,7 @@ export default function AuthLayout() {
             <div>
               <div className="text-lg font-semibold">WidatraOne</div>
               <div className="text-xs text-[#47729f]">
-                Industrial SCADA Platform
+                Utility HVAC Monitoring System
               </div>
             </div>
           </div>

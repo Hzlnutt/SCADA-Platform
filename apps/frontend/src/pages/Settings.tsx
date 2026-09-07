@@ -208,7 +208,7 @@ export default function Settings() {
               className={`text-slate-700 dark:text-slate-200 ${fontSizes.find(s => s.value === settings.fontSize)?.scale || "text-sm"}`}
               style={{ fontFamily: settings.fontFamily === "system-ui" ? "system-ui" : `'${settings.fontFamily}', sans-serif` }}
             >
-              WIDATRA EMS | Industrial SCADA Dashboard — Plant Operations & Utilities
+              WIDATRA EMS | Utility HVAC Monitoring System — Plant Operations & Utilities
             </p>
           </div>
         </SectionCard>

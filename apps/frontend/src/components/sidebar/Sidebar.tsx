@@ -150,7 +150,7 @@ export const Sidebar = () => {
         </div>
         <div>
           <div className="text-base font-semibold leading-5 text-[#002b5c] dark:text-white">WidatraOne</div>
-          <div className="text-xs text-[#47729f] dark:text-sky-400">Industrial SCADA Platform</div>
+          <div className="text-xs text-[#47729f] dark:text-sky-400">Utility HVAC Monitoring System</div>
         </div>
       </div>
 

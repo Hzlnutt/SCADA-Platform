@@ -54,7 +54,7 @@ export const Topbar = () => {
           Halo, {displayName}!
         </div>
         <div className="mt-1 truncate text-base font-semibold text-[#002b5c] dark:text-slate-200">
-          WIDATRA EMS | Industrial SCADA Dashboard
+          WIDATRA EMS | Utility HVAC Monitoring System
         </div>
         <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
           Plant Operations & Utilities | Local Network
