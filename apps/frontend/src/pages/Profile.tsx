@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { PageHeader } from "../components/ui/PageHeader";
-import { updateProfile, updateBiometrics, verifyPassword } from "../services/auth.service";
+import {
+  updateProfile,
+  updateBiometrics,
+  verifyPassword,
+  requestPasswordChange,
+  fetchMyPasswordRequest,
+  cancelMyPasswordRequest,
+  type PasswordChangeRequest
+} from "../services/auth.service";
 import { useAuthStore } from "../store/auth.store";
 
 const initialsFromName = (name?: string | null) => {
@@ -229,6 +237,94 @@ export default function Profile() {
     }
   };
 
+  // Password Change Request States
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [confirmPasswordModal, setConfirmPasswordModal] = useState(false);
+  const [myPasswordReq, setMyPasswordReq] = useState<PasswordChangeRequest | null>(null);
+
+  const loadPasswordRequest = () => {
+    fetchMyPasswordRequest()
+      .then((res) => setMyPasswordReq(res.data))
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadPasswordRequest();
+  }, []);
+
+  const handlePasswordFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordMsg(null);
+
+    if (!currentPassword) {
+      setPasswordMsg({ text: "Password saat ini wajib diisi.", type: "error" });
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordMsg({ text: "Password baru minimal 6 karakter.", type: "error" });
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPasswordMsg({ text: "Konfirmasi password baru tidak cocok.", type: "error" });
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setPasswordMsg({ text: "Password baru tidak boleh sama dengan password saat ini.", type: "error" });
+      return;
+    }
+
+    setConfirmPasswordModal(true);
+  };
+
+  const executePasswordRequest = async () => {
+    setConfirmPasswordModal(false);
+    setPasswordLoading(true);
+    setPasswordMsg(null);
+    try {
+      const res = await requestPasswordChange({
+        currentPassword,
+        newPassword
+      });
+      setPasswordMsg({
+        text: res.message || "Permintaan ganti password berhasil diajukan ke Administrator dan menunggu persetujuan.",
+        type: "success"
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      loadPasswordRequest();
+    } catch (err) {
+      setPasswordMsg({
+        text: err instanceof Error ? err.message : "Gagal mengajukan perubahan password.",
+        type: "error"
+      });
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const handleCancelPasswordRequest = async () => {
+    if (!myPasswordReq) return;
+    setPasswordLoading(true);
+    setPasswordMsg(null);
+    try {
+      await cancelMyPasswordRequest(myPasswordReq.id);
+      setPasswordMsg({ text: "Permintaan ganti password berhasil dibatalkan.", type: "success" });
+      setMyPasswordReq(null);
+    } catch (err) {
+      setPasswordMsg({
+        text: err instanceof Error ? err.message : "Gagal membatalkan permintaan.",
+        type: "error"
+      });
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     setConfirmSave(true);
@@ -306,6 +402,130 @@ export default function Profile() {
           </button>
         </form>
       </div>
+
+      {/* SECTION GANTI PASSWORD */}
+      <div className="rounded-2xl border border-slate-900 bg-slate-950/60 p-6 space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-base font-bold text-slate-200">Ganti Password Akun</h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Perubahan password memerlukan persetujuan Administrator terlebih dahulu sebelum aktif.
+            </p>
+          </div>
+          {myPasswordReq?.status === "pending" && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-400">
+              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+              Menunggu Persetujuan Admin
+            </span>
+          )}
+        </div>
+
+        {/* Pending Notification Banner */}
+        {myPasswordReq?.status === "pending" && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-4 text-xs text-amber-200 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-semibold text-sm text-amber-300">Permintaan Ganti Password Sedang Ditinjau</div>
+                <div className="mt-1 text-slate-300">
+                  Diajukan pada: <span className="font-medium text-white">{new Date(myPasswordReq.requestedAt).toLocaleString("id-ID")}</span>.
+                  Password lama Anda tetap berlaku hingga disetujui oleh Administrator.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelPasswordRequest}
+                disabled={passwordLoading}
+                className="shrink-0 rounded-lg border border-red-400/50 bg-red-950/40 px-3.5 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-900/60 transition"
+              >
+                Batalkan Permintaan
+              </button>
+            </div>
+          </div>
+        )}
+
+        {myPasswordReq?.status === "rejected" && (
+          <div className="rounded-xl border border-red-500/40 bg-red-950/30 p-4 text-xs text-red-200">
+            <span className="font-semibold">Permintaan sebelumnya ditolak:</span> {myPasswordReq.notes || "Ditolak oleh Administrator."} Anda dapat mengajukan permohonan baru di bawah ini.
+          </div>
+        )}
+
+        {myPasswordReq?.status === "approved" && (
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/30 p-4 text-xs text-emerald-200">
+            <span className="font-semibold">Permintaan terakhir disetujui!</span> Password akun Anda telah berhasil diperbarui oleh Administrator.
+          </div>
+        )}
+
+        {passwordMsg && (
+          <div className={`rounded-xl border px-4 py-3 text-xs ${
+            passwordMsg.type === "success" 
+              ? "border-emerald-500/40 bg-emerald-950/30 text-emerald-200" 
+              : "border-red-500/40 bg-red-950/30 text-red-200"
+          }`}>
+            {passwordMsg.text}
+          </div>
+        )}
+
+        <form onSubmit={handlePasswordFormSubmit} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <label className="text-xs font-semibold text-[#003b75] dark:text-slate-300">Password Saat Ini</label>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="••••••••"
+                disabled={passwordLoading || myPasswordReq?.status === "pending"}
+                className="mt-2 w-full rounded-xl border border-[#d6e9fb] dark:border-slate-800 bg-white dark:bg-slate-900/60 px-4 py-2.5 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:border-[#1f6fb5] focus:outline-none disabled:opacity-50"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#003b75] dark:text-slate-300">Password Baru</label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Min. 6 karakter"
+                disabled={passwordLoading || myPasswordReq?.status === "pending"}
+                className="mt-2 w-full rounded-xl border border-[#d6e9fb] dark:border-slate-800 bg-white dark:bg-slate-900/60 px-4 py-2.5 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:border-[#1f6fb5] focus:outline-none disabled:opacity-50"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#003b75] dark:text-slate-300">Konfirmasi Password Baru</label>
+              <input
+                type="password"
+                value={confirmNewPassword}
+                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                placeholder="Ulangi password baru"
+                disabled={passwordLoading || myPasswordReq?.status === "pending"}
+                className="mt-2 w-full rounded-xl border border-[#d6e9fb] dark:border-slate-800 bg-white dark:bg-slate-900/60 px-4 py-2.5 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:border-[#1f6fb5] focus:outline-none disabled:opacity-50"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <div className="text-[11px] text-slate-500">
+              * Password baru akan langsung dienkripsi dan memerlukan persetujuan Admin sebelum diaktifkan.
+            </div>
+            <button
+              type="submit"
+              disabled={passwordLoading || myPasswordReq?.status === "pending"}
+              className="rounded-full bg-[#1f6fb5] px-5 py-2 text-xs font-semibold text-white transition hover:bg-[#155c99] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {passwordLoading ? "Mengirim Permintaan..." : "Ajukan Ganti Password"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <ConfirmDialog
+        open={confirmPasswordModal}
+        title="Konfirmasi Pengajuan Ganti Password"
+        description="Permintaan perubahan password akan dikirim ke Administrator untuk persetujuan. Password lama Anda tetap aktif sampai disetujui. Apakah Anda yakin ingin mengajukan?"
+        confirmText="Ya, Ajukan"
+        cancelText="Batal"
+        onConfirm={executePasswordRequest}
+        onCancel={() => setConfirmPasswordModal(false)}
+      />
 
       <ConfirmDialog
         open={confirmSave}

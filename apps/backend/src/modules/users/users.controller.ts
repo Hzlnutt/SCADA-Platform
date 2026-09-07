@@ -14,7 +14,12 @@ import {
   updateUserBiometrics,
   getBiometricDescriptors,
   updateUserBiometricsCloud,
-  getBiometricImages
+  getBiometricImages,
+  requestPasswordChange,
+  getMyPasswordRequest,
+  cancelMyPasswordRequest,
+  listPasswordChangeRequests,
+  reviewPasswordChangeRequest
 } from "./users.service";
 import { compareFacesWithGemini } from "../../services/gemini.service";
 import {
@@ -23,7 +28,9 @@ import {
   updateUserSchema,
   usersQuerySchema,
   updateBiometricsSchema,
-  verifyBiometricsSchema
+  verifyBiometricsSchema,
+  requestPasswordChangeSchema,
+  reviewPasswordChangeSchema
 } from "./users.validation";
 
 export const createUserHandler = async (
@@ -333,6 +340,125 @@ export const verifyMeBiometricsHandler = async (
     const valid = minDistance <= 0.22;
 
     res.json({ valid, distance: minDistance });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ==========================================
+// PASSWORD CHANGE REQUEST HANDLERS
+// ==========================================
+
+export const requestPasswordChangeHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const userId = (req as unknown as { user?: { id: string } }).user?.id;
+    if (!userId) {
+      const error = new Error("Unauthorized") as Error & { statusCode?: number };
+      error.statusCode = 401;
+      return next(error);
+    }
+
+    const parsed = requestPasswordChangeSchema.parse(req.body);
+    const result = await requestPasswordChange(userId, parsed);
+
+    await recordAudit({
+      actorId: userId,
+      action: "user.request_password_change",
+      resourceType: "user",
+      resourceId: userId
+    });
+
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getMyPasswordRequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const userId = (req as unknown as { user?: { id: string } }).user?.id;
+    if (!userId) {
+      const error = new Error("Unauthorized") as Error & { statusCode?: number };
+      error.statusCode = 401;
+      return next(error);
+    }
+
+    const data = await getMyPasswordRequest(userId);
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const cancelMyPasswordRequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const userId = (req as unknown as { user?: { id: string } }).user?.id;
+    if (!userId) {
+      const error = new Error("Unauthorized") as Error & { statusCode?: number };
+      error.statusCode = 401;
+      return next(error);
+    }
+
+    const requestId = req.params.id ? Number(req.params.id) : undefined;
+    const result = await cancelMyPasswordRequest(userId, requestId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const listPasswordChangeApprovalsHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const limit = typeof req.query.limit === "string" ? Number(req.query.limit) : 50;
+    const data = await listPasswordChangeRequests(status, limit);
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const reviewPasswordChangeApprovalHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const reviewer = (req as unknown as { user?: { id: string; role?: string; username?: string; name?: string } }).user;
+    if (!reviewer) {
+      const error = new Error("Unauthorized") as Error & { statusCode?: number };
+      error.statusCode = 401;
+      return next(error);
+    }
+
+    const requestId = Number(req.params.id);
+    const parsed = reviewPasswordChangeSchema.parse(req.body);
+    const result = await reviewPasswordChangeRequest(requestId, parsed, reviewer);
+
+    await recordAudit({
+      actorId: reviewer.id,
+      action: parsed.action === "approve" ? "admin.approve_password_change" : "admin.reject_password_change",
+      resourceType: "password_change_request",
+      resourceId: String(requestId)
+    });
+
+    res.json(result);
   } catch (err) {
     next(err);
   }

@@ -46,10 +46,22 @@ export const verifyBiometricsSchema = z.object({
   image: z.string()
 });
 
+export const requestPasswordChangeSchema = z.object({
+  currentPassword: z.string().min(1, "Password saat ini wajib diisi"),
+  newPassword: z.string().min(6, "Password baru minimal 6 karakter")
+});
+
+export const reviewPasswordChangeSchema = z.object({
+  action: z.enum(["approve", "reject"]),
+  notes: z.string().optional()
+});
+
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UserRole = z.infer<typeof userRoleSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type UpdateBiometricsInput = z.infer<typeof updateBiometricsSchema>;
 export type VerifyBiometricsInput = z.infer<typeof verifyBiometricsSchema>;
+export type RequestPasswordChangeInput = z.infer<typeof requestPasswordChangeSchema>;
+export type ReviewPasswordChangeInput = z.infer<typeof reviewPasswordChangeSchema>;
 

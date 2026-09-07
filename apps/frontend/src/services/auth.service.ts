@@ -1,4 +1,4 @@
-import { getJson, patchJson, postJson } from "./api.client";
+import { deleteJson, getJson, patchJson, postJson } from "./api.client";
 import type { AuthSession, AuthUser } from "../store/auth.store";
 
 type AuthResponse = AuthSession & { user: AuthUser };
@@ -56,3 +56,43 @@ export const verifyBiometrics = async (image: string) => {
 export const verifyPassword = async (password: string) => {
   return postJson<{ valid: boolean }>("/auth/verify-password", { password });
 };
+
+export type PasswordChangeRequest = {
+  id: number;
+  userId: string;
+  username: string;
+  userName: string;
+  userRole: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  requestedAt: string;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  notes?: string | null;
+};
+
+export const requestPasswordChange = async (payload: {
+  currentPassword: string;
+  newPassword: string;
+}) => {
+  return postJson<{ id: number; status: string; message: string }>("/users/me/password-request", payload);
+};
+
+export const fetchMyPasswordRequest = async () => {
+  return getJson<{ data: PasswordChangeRequest | null }>("/users/me/password-request");
+};
+
+export const cancelMyPasswordRequest = async (id?: number) => {
+  return deleteJson<{ success: boolean }>(id ? `/users/me/password-request/${id}` : "/users/me/password-request");
+};
+
+export const fetchPasswordApprovals = async (status: string = "all") => {
+  return getJson<{ data: PasswordChangeRequest[] }>(`/approvals/password-requests?status=${status}`);
+};
+
+export const reviewPasswordApproval = async (id: number, action: "approve" | "reject", notes?: string) => {
+  return patchJson<{ success: boolean; status: string; message: string }>(`/approvals/password-requests/${id}`, {
+    action,
+    notes
+  });
+};
+

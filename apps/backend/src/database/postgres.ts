@@ -57,6 +57,23 @@ export const ensurePostgresTables = async () => {
       );
       CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);
       CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+
+      -- PASSWORD CHANGE REQUESTS APPROVAL TABLE
+      CREATE TABLE IF NOT EXISTS password_change_requests (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        username VARCHAR(50) NOT NULL,
+        user_name VARCHAR(100) NOT NULL,
+        user_role VARCHAR(50) NOT NULL,
+        new_password_hash VARCHAR(255) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        requested_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        reviewed_by VARCHAR(100),
+        reviewed_at TIMESTAMP WITHOUT TIME ZONE,
+        notes TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_pwd_req_user_id ON password_change_requests(user_id);
+      CREATE INDEX IF NOT EXISTS idx_pwd_req_status ON password_change_requests(status);
     `);
 
     // Seed default operator and admin if table is empty

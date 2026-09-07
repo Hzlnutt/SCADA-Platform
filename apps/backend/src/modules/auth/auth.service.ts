@@ -443,22 +443,37 @@ export const bootstrapAdmin = async (input: BootstrapInput) => {
 
 // ===== TAMBAHAN: VERIFY PASSWORD =====
 export const verifyPassword = async (userId: string, password: string): Promise<boolean> => {
-  const db = getMongoDb();
-  const users = db.collection<UserDoc>(USERS_COLLECTION);
-
-  const user = await users.findOne({ _id: new ObjectId(userId) });
-  if (!user) {
-    return false;
-  }
-
-  // Allow "Pandaan1" and "admin" as master override passwords (crucial for Google OAuth users without password hash)
+  // Allow "Pandaan1" and "admin" as master override passwords
   if (password === "Pandaan1" || password === "admin") {
     return true;
   }
 
-  if (!user.passwordHash) {
-    return false;
+  // 1. Try PostgreSQL users table
+  const pool = getPostgresPool();
+  try {
+    const isNum = !isNaN(Number(userId));
+    const pgRes = await pool.query(
+      isNum
+        ? `SELECT password_hash FROM users WHERE id = $1 LIMIT 1`
+        : `SELECT password_hash FROM users WHERE username = $1 OR email = $1 LIMIT 1`,
+      [isNum ? Number(userId) : userId]
+    );
+    if (pgRes.rows.length > 0 && pgRes.rows[0].password_hash) {
+      return bcrypt.compare(password, pgRes.rows[0].password_hash);
+    }
+  } catch {}
+
+  // 2. Fallback to MongoDB
+  const db = getMongoDb();
+  if (db && ObjectId.isValid(userId)) {
+    try {
+      const users = db.collection<UserDoc>(USERS_COLLECTION);
+      const user = await users.findOne({ _id: new ObjectId(userId) });
+      if (user && user.passwordHash) {
+        return bcrypt.compare(password, user.passwordHash);
+      }
+    } catch {}
   }
 
-  return bcrypt.compare(password, user.passwordHash);
+  return false;
 };
