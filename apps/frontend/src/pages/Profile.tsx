@@ -21,6 +21,8 @@ const initialsFromName = (name?: string | null) => {
 export default function Profile() {
   const user = useAuthStore((state) => state.user);
   const updateUser = useAuthStore((state) => state.updateUser);
+  const userRole = (user?.role || "").toLowerCase().trim();
+  const isAdmin = userRole === "admin" || userRole === "superadmin" || userRole === "developer" || userRole === "dev";
 
   const [name, setName] = useState(user?.name ?? "");
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl ?? "");
@@ -247,6 +249,7 @@ export default function Profile() {
   const [myPasswordReq, setMyPasswordReq] = useState<PasswordChangeRequest | null>(null);
 
   const loadPasswordRequest = () => {
+    if (isAdmin) return;
     fetchMyPasswordRequest()
       .then((res) => setMyPasswordReq(res.data))
       .catch(() => {});
@@ -409,10 +412,12 @@ export default function Profile() {
           <div>
             <h3 className="text-base font-bold text-slate-200">Ganti Password Akun</h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Perubahan password memerlukan persetujuan Administrator terlebih dahulu sebelum aktif.
+              {isAdmin
+                ? "Perubahan password akun Administrator akan langsung diperbarui dan aktif."
+                : "Perubahan password memerlukan persetujuan Administrator terlebih dahulu sebelum aktif."}
             </p>
           </div>
-          {myPasswordReq?.status === "pending" && (
+          {!isAdmin && myPasswordReq?.status === "pending" && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-400">
               <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
               Menunggu Persetujuan Admin
@@ -421,7 +426,7 @@ export default function Profile() {
         </div>
 
         {/* Pending Notification Banner */}
-        {myPasswordReq?.status === "pending" && (
+        {!isAdmin && myPasswordReq?.status === "pending" && (
           <div className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-4 text-xs text-amber-200 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -443,13 +448,13 @@ export default function Profile() {
           </div>
         )}
 
-        {myPasswordReq?.status === "rejected" && (
+        {!isAdmin && myPasswordReq?.status === "rejected" && (
           <div className="rounded-xl border border-red-500/40 bg-red-950/30 p-4 text-xs text-red-200">
             <span className="font-semibold">Permintaan sebelumnya ditolak:</span> {myPasswordReq.notes || "Ditolak oleh Administrator."} Anda dapat mengajukan permohonan baru di bawah ini.
           </div>
         )}
 
-        {myPasswordReq?.status === "approved" && (
+        {!isAdmin && myPasswordReq?.status === "approved" && (
           <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/30 p-4 text-xs text-emerald-200">
             <span className="font-semibold">Permintaan terakhir disetujui!</span> Password akun Anda telah berhasil diperbarui oleh Administrator.
           </div>
@@ -474,7 +479,7 @@ export default function Profile() {
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 placeholder="••••••••"
-                disabled={passwordLoading || myPasswordReq?.status === "pending"}
+                disabled={passwordLoading || (!isAdmin && myPasswordReq?.status === "pending")}
                 className="mt-2 w-full rounded-xl border border-[#d6e9fb] dark:border-slate-800 bg-white dark:bg-slate-900/60 px-4 py-2.5 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:border-[#1f6fb5] focus:outline-none disabled:opacity-50"
               />
             </div>
@@ -485,7 +490,7 @@ export default function Profile() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Min. 6 karakter"
-                disabled={passwordLoading || myPasswordReq?.status === "pending"}
+                disabled={passwordLoading || (!isAdmin && myPasswordReq?.status === "pending")}
                 className="mt-2 w-full rounded-xl border border-[#d6e9fb] dark:border-slate-800 bg-white dark:bg-slate-900/60 px-4 py-2.5 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:border-[#1f6fb5] focus:outline-none disabled:opacity-50"
               />
             </div>
@@ -496,7 +501,7 @@ export default function Profile() {
                 value={confirmNewPassword}
                 onChange={(e) => setConfirmNewPassword(e.target.value)}
                 placeholder="Ulangi password baru"
-                disabled={passwordLoading || myPasswordReq?.status === "pending"}
+                disabled={passwordLoading || (!isAdmin && myPasswordReq?.status === "pending")}
                 className="mt-2 w-full rounded-xl border border-[#d6e9fb] dark:border-slate-800 bg-white dark:bg-slate-900/60 px-4 py-2.5 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:border-[#1f6fb5] focus:outline-none disabled:opacity-50"
               />
             </div>
@@ -504,14 +509,18 @@ export default function Profile() {
 
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <div className="text-[11px] text-slate-500">
-              * Password baru akan langsung dienkripsi dan memerlukan persetujuan Admin sebelum diaktifkan.
+              {isAdmin
+                ? "* Password baru akan langsung dienkripsi dan langsung aktif pada akun Administrator Anda."
+                : "* Password baru akan langsung dienkripsi dan memerlukan persetujuan Admin sebelum diaktifkan."}
             </div>
             <button
               type="submit"
-              disabled={passwordLoading || myPasswordReq?.status === "pending"}
+              disabled={passwordLoading || (!isAdmin && myPasswordReq?.status === "pending")}
               className="rounded-full bg-[#1f6fb5] px-5 py-2 text-xs font-semibold text-white transition hover:bg-[#155c99] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {passwordLoading ? "Mengirim Permintaan..." : "Ajukan Ganti Password"}
+              {passwordLoading
+                ? (isAdmin ? "Menyimpan Password..." : "Mengirim Permintaan...")
+                : (isAdmin ? "Simpan Password Baru" : "Ajukan Ganti Password")}
             </button>
           </div>
         </form>
@@ -519,9 +528,13 @@ export default function Profile() {
 
       <ConfirmDialog
         open={confirmPasswordModal}
-        title="Konfirmasi Pengajuan Ganti Password"
-        description="Permintaan perubahan password akan dikirim ke Administrator untuk persetujuan. Password lama Anda tetap aktif sampai disetujui. Apakah Anda yakin ingin mengajukan?"
-        confirmText="Ya, Ajukan"
+        title={isAdmin ? "Konfirmasi Ganti Password" : "Konfirmasi Pengajuan Ganti Password"}
+        description={
+          isAdmin
+            ? "Password baru akan langsung dienkripsi dan aktif pada akun Administrator Anda. Apakah Anda yakin ingin mengganti password?"
+            : "Permintaan perubahan password akan dikirim ke Administrator untuk persetujuan. Password lama Anda tetap aktif sampai disetujui. Apakah Anda yakin ingin mengajukan?"
+        }
+        confirmText={isAdmin ? "Ya, Simpan Password" : "Ya, Ajukan"}
         cancelText="Batal"
         onConfirm={executePasswordRequest}
         onCancel={() => setConfirmPasswordModal(false)}

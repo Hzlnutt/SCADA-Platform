@@ -419,6 +419,56 @@ export const requestPasswordChange = async (userId: string, input: RequestPasswo
   const pool = getPostgresPool();
   const numericId = !isNaN(Number(user.id)) ? Number(user.id) : null;
 
+  // Jika user adalah admin/developer, password langsung aktif tanpa perlu persetujuan (approve)
+  const userRole = (user.role || "").toLowerCase().trim();
+  const isAdmin =
+    userRole === "admin" ||
+    userRole === "superadmin" ||
+    userRole === "developer" ||
+    userRole === "dev";
+
+  if (isAdmin) {
+    // 1. Langsung update password di PostgreSQL
+    if (numericId) {
+      await pool.query(
+        `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+        [newPasswordHash, numericId]
+      );
+    } else {
+      await pool.query(
+        `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE username = $2`,
+        [newPasswordHash, user.username]
+      );
+    }
+
+    // 2. Sinkronkan ke MongoDB jika ada
+    const db = getMongoDb();
+    if (db) {
+      try {
+        const usersCol = db.collection<UserDoc>(USERS_COLLECTION);
+        await usersCol.updateOne(
+          { username: user.username },
+          { $set: { passwordHash: newPasswordHash, updatedAt: new Date() } }
+        );
+      } catch {}
+    }
+
+    // 3. Bersihkan permintaan pending jika ada
+    try {
+      await pool.query(
+        `DELETE FROM password_change_requests WHERE user_id = $1 OR username = $2`,
+        [numericId || -1, user.username]
+      );
+    } catch {}
+
+    return {
+      id: 0,
+      status: "approved",
+      directUpdate: true,
+      message: "Password Administrator berhasil diperbarui dan langsung aktif."
+    };
+  }
+
   // 4. Check if pending request exists
   const existingPending = await pool.query(
     numericId
