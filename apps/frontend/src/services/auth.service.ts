@@ -9,8 +9,8 @@ type RegisterInput = {
   password: string;
 };
 
-export const login = async (email: string, password: string) => {
-  return postJson<AuthResponse>("/auth/login", { email, password });
+export const login = async (username: string, password: string) => {
+  return postJson<AuthResponse>("/auth/login", { username, email: username, password });
 };
 
 export const register = async (payload: RegisterInput) => {

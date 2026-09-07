@@ -7,6 +7,7 @@ import { useAuthStore } from "../store/auth.store";
 
 type UserItem = {
   _id: string;
+  username?: string;
   email: string;
   name: string;
   role:
@@ -345,14 +346,14 @@ export default function AdminPanel() {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase">Email Address</label>
+              <label className="block text-xs font-bold text-slate-400 uppercase">Username</label>
               <input
-                type="email"
+                type="text"
                 value={newUser.email}
                 onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))}
                 required
                 className="mt-1 w-full rounded-md border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
-                placeholder="email@widatra.co"
+                placeholder="username (e.g. operator)"
               />
             </div>
             <div>
@@ -414,7 +415,7 @@ export default function AdminPanel() {
                 <thead className="text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 bg-slate-950 z-10 border-b border-slate-800 pb-2">
                   <tr>
                     <th className="px-3 py-2">Name</th>
-                    <th className="px-3 py-2">Email</th>
+                    <th className="px-3 py-2">Username</th>
                     <th className="px-3 py-2">Role</th>
                     <th className="px-3 py-2 text-right">Actions</th>
                   </tr>
@@ -423,7 +424,7 @@ export default function AdminPanel() {
                   {users.map((user) => (
                     <tr key={user._id} className="text-slate-300 hover:bg-slate-900/40">
                       <td className="px-3 py-3 text-slate-200 font-bold">{user.name}</td>
-                      <td className="px-3 py-3 font-mono text-slate-500">{user.email}</td>
+                      <td className="px-3 py-3 font-mono text-slate-400">{user.username || user.email.split("@")[0]}</td>
                       <td className="px-3 py-3">
                         <select
                           value={user.role}

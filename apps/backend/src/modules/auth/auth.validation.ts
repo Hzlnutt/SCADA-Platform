@@ -1,9 +1,14 @@
 import { z } from "zod";
 
-export const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8)
-});
+export const loginSchema = z
+  .object({
+    username: z.string().optional(),
+    email: z.string().optional(),
+    password: z.string().min(1)
+  })
+  .refine((data) => !!(data.username || data.email), {
+    message: "Username is required"
+  });
 
 export const refreshSchema = z.object({
   refreshToken: z.string().min(20)

@@ -11,6 +11,7 @@ import type {
 
 type UserDoc = {
   _id: ObjectId;
+  username?: string;
   email: string;
   name: string;
   role: UserRole;
@@ -36,10 +37,12 @@ export const createUser = async (input: CreateUserInput) => {
   const db = getMongoDb();
   const users = db.collection<UserDoc>(USERS_COLLECTION);
 
-  const email = input.email.toLowerCase();
-  const existing = await users.findOne({ email });
+  const username = (input.username || (input.email ? input.email.split("@")[0] : input.name.toLowerCase().replace(/\s+/g, ""))).trim().toLowerCase();
+  const email = (input.email || `${username}@widatra.co`).toLowerCase();
+
+  const existing = await users.findOne({ $or: [{ email }, { username }] });
   if (existing) {
-    throw createError("Email already exists", 409);
+    throw createError("User already exists", 409);
   }
 
   const passwordHash = await bcrypt.hash(input.password, 10);
@@ -48,6 +51,7 @@ export const createUser = async (input: CreateUserInput) => {
 
   const result = await users.insertOne({
     _id,
+    username,
     email,
     name: input.name,
     role: input.role,
@@ -60,6 +64,7 @@ export const createUser = async (input: CreateUserInput) => {
 
   return {
     id: result.insertedId.toString(),
+    username,
     email,
     name: input.name,
     role: input.role,
@@ -72,11 +77,16 @@ export const listUsers = async (limit: number) => {
   const db = getMongoDb();
   const users = db.collection<UserDoc>(USERS_COLLECTION);
 
-  return users
+  const list = await users
     .find({}, { projection: { passwordHash: 0 } })
     .sort({ createdAt: -1 })
     .limit(limit)
     .toArray();
+
+  return list.map((u) => ({
+    ...u,
+    username: u.username || u.email.split("@")[0]
+  }));
 };
 
 export const getUserById = async (id: string) => {
@@ -90,6 +100,7 @@ export const getUserById = async (id: string) => {
   return {
     ...rest,
     id: user._id.toString(),
+    username: user.username || user.email.split("@")[0],
     hasBiometrics: !!(biometricDescriptors && biometricDescriptors.length > 0) || !!biometricDescriptor || !!(biometricImages && biometricImages.length > 0)
   };
 };

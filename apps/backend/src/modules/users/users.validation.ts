@@ -12,12 +12,17 @@ export const userRoleSchema = z.enum([
   "user"
 ]);
 
-export const createUserSchema = z.object({
-  email: z.string().email(),
-  name: z.string().min(2),
-  role: userRoleSchema,
-  password: z.string().min(8)
-});
+export const createUserSchema = z
+  .object({
+    username: z.string().min(2).optional(),
+    email: z.string().optional(),
+    name: z.string().min(2),
+    role: userRoleSchema,
+    password: z.string().min(1)
+  })
+  .refine((data) => !!(data.username || data.email), {
+    message: "Username or email is required"
+  });
 
 export const usersQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(200).default(50)

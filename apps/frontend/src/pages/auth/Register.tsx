@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { GoogleAuthButton } from "../../components/auth/GoogleAuthButton";
-import { fetchGoogleConfig, loginWithGoogle, register } from "../../services/auth.service";
+import { register } from "../../services/auth.service";
 import { useAuthStore } from "../../store/auth.store";
 
 export default function Register() {
@@ -14,9 +13,6 @@ export default function Register() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [googleClientId, setGoogleClientId] = useState(
-    import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ""
-  );
 
   useEffect(() => {
     navigate("/login", { replace: true });
@@ -38,20 +34,6 @@ export default function Register() {
       navigate("/", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registrasi gagal");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleGoogle = async (credential: string) => {
-    setError(null);
-    setSubmitting(true);
-    try {
-      const result = await loginWithGoogle(credential);
-      setSession(result);
-      navigate("/", { replace: true });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Google login gagal");
     } finally {
       setSubmitting(false);
     }
@@ -134,17 +116,6 @@ export default function Register() {
           Masuk
         </Link>
       </div>
-
-      <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-[#d6e9fb]" />
-        <span className="text-xs text-[#86a9cc]">atau</span>
-        <div className="h-px flex-1 bg-[#d6e9fb]" />
-      </div>
-
-      <GoogleAuthButton
-        clientId={googleClientId}
-        onCredential={handleGoogle}
-      />
     </div>
   );
 }

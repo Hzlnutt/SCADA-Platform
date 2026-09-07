@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 type AuthUser = {
   id: string;
+  username?: string;
   email: string;
   name: string;
   role: string;

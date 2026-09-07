@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
-import { GoogleAuthButton } from "../../components/auth/GoogleAuthButton";
-import { fetchGoogleConfig, login, loginWithGoogle } from "../../services/auth.service";
+import { useLocation, useNavigate, type Location } from "react-router-dom";
+import { login } from "../../services/auth.service";
 import { useAuthStore } from "../../store/auth.store";
 
 export default function Login() {
@@ -10,13 +9,10 @@ export default function Login() {
   const setSession = useAuthStore((state) => state.setSession);
   const accessToken = useAuthStore((state) => state.accessToken);
 
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [googleClientId, setGoogleClientId] = useState(
-    import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ""
-  );
 
   const redirectTo = useMemo(() => {
     const state = location.state as { from?: Location } | null;
@@ -29,47 +25,16 @@ export default function Login() {
     }
   }, [accessToken, navigate, redirectTo]);
 
-  useEffect(() => {
-    let active = true;
-    fetchGoogleConfig()
-      .then((result) => {
-        if (active && result.clientId) {
-          setGoogleClientId(result.clientId);
-        }
-      })
-      .catch(() => {
-        // fallback to env client id if backend is unreachable
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      const result = await login(email, password);
+      const result = await login(username, password);
       setSession(result);
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleGoogle = async (credential: string) => {
-    setError(null);
-    setSubmitting(true);
-    try {
-      const result = await loginWithGoogle(credential);
-      setSession(result);
-      navigate(redirectTo, { replace: true });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Google login failed");
+      setError(err instanceof Error ? err.message : "Login gagal");
     } finally {
       setSubmitting(false);
     }
@@ -89,14 +54,15 @@ export default function Login() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="text-xs font-semibold text-[#003b75]">Email</label>
+          <label className="text-xs font-semibold text-[#003b75]">Username</label>
           <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            type="text"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
             className="mt-2 w-full rounded-xl border border-[#d6e9fb] bg-white px-4 py-3 text-sm focus:border-[#1f6fb5] focus:outline-none"
-            placeholder="operator@widatra.co"
+            placeholder="Masukkan username"
             required
+            autoComplete="username"
           />
         </div>
         <div>
@@ -106,8 +72,9 @@ export default function Login() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             className="mt-2 w-full rounded-xl border border-[#d6e9fb] bg-white px-4 py-3 text-sm focus:border-[#1f6fb5] focus:outline-none"
-            placeholder="Minimum 8 characters"
+            placeholder="Masukkan password"
             required
+            autoComplete="current-password"
           />
         </div>
         {error ? (
@@ -123,17 +90,6 @@ export default function Login() {
           {submitting ? "Processing..." : "Sign In"}
         </button>
       </form>
-
-      <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-[#d6e9fb]" />
-        <span className="text-xs text-[#86a9cc]">or</span>
-        <div className="h-px flex-1 bg-[#d6e9fb]" />
-      </div>
-
-      <GoogleAuthButton
-        clientId={googleClientId}
-        onCredential={handleGoogle}
-      />
 
       <div className="text-center text-xs text-[#47729f]">
         Self-registration is disabled. Please contact your system administrator to register.

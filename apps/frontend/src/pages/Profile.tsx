@@ -256,7 +256,7 @@ export default function Profile() {
             )}
             <div>
               <div className="text-sm font-semibold text-slate-200">
-                {user?.email ?? "user@widatra.co"}
+                @{user?.username || user?.email?.split("@")[0] || "operator"}
               </div>
               <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-full border border-[#acd3ff] px-3 py-1 text-xs text-[#003b75]">
                 <input
