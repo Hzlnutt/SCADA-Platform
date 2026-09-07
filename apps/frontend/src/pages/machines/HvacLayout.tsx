@@ -1,6 +1,6 @@
 import { type ReactNode, useState, useEffect, useRef, useMemo } from "react";
 import { useAuthStore } from "../../store/auth.store";
-import { verifyBiometrics } from "../../services/auth.service";
+import { verifyBiometrics, verifyPassword } from "../../services/auth.service";
 
 export interface SetpointConfig {
   label: string;
@@ -35,7 +35,7 @@ interface HvacLayoutProps {
   setpoints?: SetpointConfig[];
   controlButtons?: ControlButtonItem[];
   currentUser?: string;
-  onVerifyPassword: (password: string) => Promise<boolean>;
+  onVerifyPassword?: (password: string) => Promise<boolean>;
   logs: LogEntry[];
   onRefreshData?: () => Promise<void> | void;
   currentMode?: string;
@@ -52,16 +52,14 @@ export interface LogEntry {
 
 export const canAccessHvacControls = (role?: string | null): boolean => {
   if (!role) return false;
-  const normalized = role.toLowerCase().trim();
+  const normalized = role.toLowerCase().trim().replace(/[\s-]+/g, "_");
   return (
-    normalized === "kashift hvac" ||
-    normalized === "kashift_hvac" ||
-    normalized === "kashift" ||
     normalized === "leader" ||
-    normalized === "team_head" ||
-    normalized === "developer" ||
+    normalized === "kashift_hvac" ||
+    normalized === "kashift_utility_hvac" ||
     normalized === "admin" ||
     normalized === "superadmin" ||
+    normalized === "developer" ||
     normalized === "dev"
   );
 };
@@ -93,6 +91,52 @@ export default function HvacLayout({
   const user = useAuthStore((state) => state.user);
   const userRole = user?.role ?? "";
   const hasControlAccess = useMemo(() => canAccessHvacControls(userRole), [userRole]);
+
+  // Setpoint draft values & handlers
+  const [draftSetpoints, setDraftSetpoints] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (setpoints) {
+      setDraftSetpoints((prev) => {
+        const next = { ...prev };
+        setpoints.forEach((sp) => {
+          if (next[sp.label] === undefined) {
+            next[sp.label] = sp.value;
+          }
+        });
+        return next;
+      });
+    }
+  }, [setpoints]);
+
+  const handleStepSetpoint = (sp: SetpointConfig, delta: number) => {
+    const currentVal = draftSetpoints[sp.label] !== undefined ? draftSetpoints[sp.label] : sp.value;
+    const step = sp.step ?? 0.1;
+    const rawNew = currentVal + delta * step;
+    const clamped = parseFloat(Math.min(sp.max, Math.max(sp.min, rawNew)).toFixed(2));
+    setDraftSetpoints((prev) => ({ ...prev, [sp.label]: clamped }));
+  };
+
+  const handleManualInputSetpoint = (sp: SetpointConfig, valStr: string) => {
+    const num = parseFloat(valStr);
+    if (!isNaN(num)) {
+      setDraftSetpoints((prev) => ({ ...prev, [sp.label]: num }));
+    }
+  };
+
+  const handleTriggerSetpointChange = (sp: SetpointConfig) => {
+    const targetVal = draftSetpoints[sp.label] !== undefined ? draftSetpoints[sp.label] : sp.value;
+    const clamped = parseFloat(Math.min(sp.max, Math.max(sp.min, targetVal)).toFixed(2));
+    setModalLabel(`Ubah ${sp.label} ke ${clamped}${sp.unit}`);
+    setPendingAction(() => async () => {
+      sp.onChange(clamped);
+      setDraftSetpoints((prev) => ({ ...prev, [sp.label]: clamped }));
+    });
+    setPassword("");
+    setPasswordError("");
+    setVerificationMode("password");
+    setIsConfirmModalOpen(true);
+  };
 
   // Biometric state variables
   const [verificationMode, setVerificationMode] = useState<"password" | "biometric">("password");
@@ -272,7 +316,10 @@ export default function HvacLayout({
     setPasswordError("");
 
     try {
-      const isValid = await onVerifyPassword(password);
+      const isValid = onVerifyPassword
+        ? await onVerifyPassword(password)
+        : (await verifyPassword(password)).valid;
+
       if (!isValid) {
         setPasswordError("Password salah. Silakan coba lagi.");
         setIsVerifying(false);
@@ -432,7 +479,7 @@ export default function HvacLayout({
           {/* SYSTEM MODE */}
           <div
             className={`${
-              hasControlAccess && (setpoints?.length || controlButtons?.length) ? "flex-[1.5]" : "flex-1"
+              (hasControlAccess && controlButtons?.length) || setpoints?.length ? "flex-[1.4]" : "flex-1"
             } border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-0 shadow-sm dark:shadow-2xl transition-all duration-300`}
           >
             <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm border-b border-slate-100 dark:border-slate-800 pb-2 mb-3 tracking-wide">
@@ -452,40 +499,123 @@ export default function HvacLayout({
             </div>
           </div>
 
-          {/* SETPOINTS - Only for kashift HVAC, Leader, Developer */}
-          {hasControlAccess && setpoints && setpoints.length > 0 && (
-            <div className="flex-[1.2] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-[160px] shadow-sm dark:shadow-2xl transition-all duration-300">
-              <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm border-b border-slate-100 dark:border-slate-800 pb-2 mb-3 tracking-wide">
-                SETPOINTS
-              </h3>
-              <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-                {setpoints.map((sp, idx) => (
-                  <div key={idx} className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-mono">
-                      <span className="text-slate-500 dark:text-slate-400 font-medium">{sp.label}</span>
-                      <span className="text-slate-800 dark:text-white font-bold">
-                        {sp.value.toFixed(1)}
-                        {sp.unit}
-                      </span>
+          {/* SETPOINTS - Visible to all, editable only by leader, kashift_hvac, admin */}
+          {setpoints && setpoints.length > 0 && (
+            <div className="flex-[1.3] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-[175px] shadow-sm dark:shadow-2xl transition-all duration-300">
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2 mb-3">
+                <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm tracking-wide">
+                  SETPOINTS
+                </h3>
+                {!hasControlAccess && (
+                  <span className="text-[10px] text-slate-400 font-mono font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    View Only
+                  </span>
+                )}
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                {setpoints.map((sp, idx) => {
+                  const currentDraft = draftSetpoints[sp.label] !== undefined ? draftSetpoints[sp.label] : sp.value;
+                  const isModified = Math.abs(currentDraft - sp.value) > 0.001;
+
+                  if (!hasControlAccess) {
+                    // Read-only view for operator / non-control roles
+                    return (
+                      <div
+                        key={idx}
+                        className="flex justify-between items-center p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/60"
+                      >
+                        <span className="text-slate-600 dark:text-slate-400 font-medium text-xs">
+                          {sp.label}
+                        </span>
+                        <span className="font-mono font-bold text-xs text-slate-800 dark:text-white bg-slate-200/70 dark:bg-slate-700/60 px-2 py-0.5 rounded">
+                          {sp.value.toFixed(1)} {sp.unit}
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  // Stepper & manual input for leader, kashift_hvac, admin
+                  return (
+                    <div
+                      key={idx}
+                      className="space-y-1.5 p-2 rounded-lg bg-slate-50/70 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800/60"
+                    >
+                      <div className="flex justify-between items-center text-xs font-mono">
+                        <span className="text-slate-600 dark:text-slate-300 font-semibold text-[11px]">
+                          {sp.label}
+                        </span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                          Aktif: <strong className="text-slate-700 dark:text-slate-300">{sp.value.toFixed(1)}{sp.unit}</strong>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        {/* Decrement Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleStepSetpoint(sp, -1)}
+                          disabled={currentDraft <= sp.min}
+                          className="w-7 h-7 rounded flex items-center justify-center bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 shadow-xs"
+                          title="Turunkan setpoint"
+                        >
+                          ▼
+                        </button>
+
+                        {/* Manual Numeric Input */}
+                        <div className="relative flex-1">
+                          <input
+                            type="number"
+                            min={sp.min}
+                            max={sp.max}
+                            step={sp.step ?? 0.1}
+                            value={currentDraft}
+                            onChange={(e) => handleManualInputSetpoint(sp, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleTriggerSetpointChange(sp);
+                              }
+                            }}
+                            className="w-full text-center px-2 py-1 text-xs font-mono font-bold rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-white focus:outline-none focus:border-cyan-500 transition"
+                          />
+                        </div>
+
+                        {/* Increment Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleStepSetpoint(sp, 1)}
+                          disabled={currentDraft >= sp.max}
+                          className="w-7 h-7 rounded flex items-center justify-center bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 shadow-xs"
+                          title="Naikkan setpoint"
+                        >
+                          ▲
+                        </button>
+
+                        <span className="text-[10px] font-mono font-medium text-slate-500 dark:text-slate-400 w-7 shrink-0 text-center">
+                          {sp.unit}
+                        </span>
+
+                        {/* Set / Confirm Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleTriggerSetpointChange(sp)}
+                          className={`px-2.5 py-1 text-xs font-bold rounded transition active:scale-95 shadow-xs ${
+                            isModified
+                              ? "bg-cyan-600 hover:bg-cyan-500 text-white animate-pulse"
+                              : "bg-slate-200 dark:bg-slate-800 hover:bg-cyan-700 text-slate-700 dark:text-slate-300 hover:text-white"
+                          }`}
+                          title="Konfirmasi perubahan setpoint dengan password akun"
+                        >
+                          Set
+                        </button>
+                      </div>
                     </div>
-                    <div className="relative flex items-center group">
-                      <input
-                        type="range"
-                        min={sp.min}
-                        max={sp.max}
-                        step={sp.step ?? 0.1}
-                        value={sp.value}
-                        onChange={(e) => sp.onChange(parseFloat(e.target.value))}
-                        className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-600 dark:accent-cyan-400 transition-all duration-200"
-                      />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* CONTROL PANEL - Only for kashift HVAC, Leader, Developer */}
+          {/* CONTROL PANEL - Only for leader, kashift_hvac, admin */}
           {hasControlAccess && controlButtons && controlButtons.length > 0 && (
             <div className="flex-[1] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-0 shadow-sm dark:shadow-2xl transition-all duration-300">
               <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm border-b border-slate-100 dark:border-slate-800 pb-2 mb-3 tracking-wide">
@@ -600,7 +730,7 @@ export default function HvacLayout({
             {verificationMode === "password" ? (
               <>
                 <p className="text-sm text-slate-600 dark:text-slate-300 mb-3">
-                  Masukkan password Anda untuk verifikasi:
+                  Masukkan password akun Anda (@{user?.username || user?.name || "operator"}) untuk verifikasi:
                 </p>
                 <input
                   type="password"
