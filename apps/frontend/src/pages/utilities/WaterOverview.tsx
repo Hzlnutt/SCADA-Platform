@@ -11,6 +11,8 @@ import { useSystemStore } from "../../store/system.store";
 import { useConfigStore } from "../../store/config.store";
 import { calculateWaterCost } from "../../utils/water";
 import { ApiSourcesPanel } from "../machines/MachineConfig";
+import { useAuthStore } from "../../store/auth.store";
+import { canAccessConfigAndAudit } from "../../utils/roles";
 
 // Standard formatting helpers
 const formatCurrency = (value: number) =>
@@ -136,6 +138,8 @@ export default function WaterOverview() {
   const [chartEndDate, setChartEndDate] = useState(getLocalTodayString);
   const [range, setRange] = useState<"hour" | "day" | "custom">("day");
   
+  const role = useAuthStore((state) => state.user?.role ?? "user");
+  const canAccessConfig = canAccessConfigAndAudit(role);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
   const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>({});
   const [jsonKeyMap, setJsonKeyMap] = useState<Record<string, string>>({});
@@ -442,14 +446,16 @@ export default function WaterOverview() {
       {/* HEADER ROW */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <PageHeader title="Water Utility — Overview" description="Pantau konsumsi sumur proses deepwell, tangki penyimpanan, dan distribusi air secara real-time." />
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowConfigPanel(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm"
-          >
-            🔌 API Sources Config
-          </button>
-        </div>
+        {canAccessConfig && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowConfigPanel(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm"
+            >
+              🔌 API Sources Config
+            </button>
+          </div>
+        )}
       </div>
 
       {/* SUB PAGE TAB NAV */}
@@ -1161,7 +1167,7 @@ export default function WaterOverview() {
       </section>
 
       {/* ═══════════ CONFIGURATION MODAL (API Sources) ═══════════ */}
-      {showConfigPanel && (
+      {canAccessConfig && showConfigPanel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowConfigPanel(false)}>
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl p-6 space-y-4 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">

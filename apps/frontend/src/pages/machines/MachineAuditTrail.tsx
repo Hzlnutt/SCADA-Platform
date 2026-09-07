@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { getJson } from "../../services/api.client";
+import { useAuthStore } from "../../store/auth.store";
+import { canAccessConfigAndAudit } from "../../utils/roles";
 
 type AuditLogItem = {
   _id: string;
@@ -22,6 +24,9 @@ type Pagination = {
 
 export default function MachineAuditTrail() {
   const { unitId } = useParams<{ unitId: string }>();
+  const role = useAuthStore((state) => state.user?.role ?? "user");
+  const canAccess = canAccessConfigAndAudit(role);
+
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -35,7 +40,7 @@ export default function MachineAuditTrail() {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
   const fetchLogs = useCallback((page = 1) => {
-    if (!unitId) return;
+    if (!unitId || !canAccess) return;
     setLoading(true);
     const searchParam = search ? `&search=${encodeURIComponent(search)}` : "";
     const actionParam = actionFilter ? `&action=${encodeURIComponent(actionFilter)}` : "";
@@ -53,16 +58,32 @@ export default function MachineAuditTrail() {
       .finally(() => {
         setLoading(false);
       });
-  }, [unitId, search, actionFilter, pagination.limit]);
+  }, [unitId, canAccess, search, actionFilter, pagination.limit]);
 
   useEffect(() => {
-    fetchLogs(1);
-  }, [fetchLogs]);
+    if (canAccess) {
+      fetchLogs(1);
+    }
+  }, [canAccess, fetchLogs]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchLogs(1);
+    if (canAccess) {
+      fetchLogs(1);
+    }
   };
+
+  if (!canAccess) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center text-sm text-slate-500 shadow-sm">
+          <div className="text-3xl mb-2">🔒</div>
+          <h3 className="font-bold text-slate-700 dark:text-slate-200 text-base mb-1">Akses Dibatasi</h3>
+          <p>Anda tidak memiliki izin untuk melihat Audit Trail unit ini. Halaman ini hanya dapat diakses oleh Leader, KaShift, dan Admin.</p>
+        </div>
+      </div>
+    );
+  }
 
   const getActionBadgeColor = (action: string) => {
     if (action.includes("delete")) {

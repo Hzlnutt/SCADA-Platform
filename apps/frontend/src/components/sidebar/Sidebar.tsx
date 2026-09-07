@@ -3,6 +3,7 @@ import { NavItem } from "../navigation/NavItem";
 import { machineGroups } from "../../data/machines";
 import { useAuthStore } from "../../store/auth.store";
 import { getJson } from "../../services/api.client";
+import { canAccessConfigAndAudit } from "../../utils/roles";
 
 const IconDashboard = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -88,6 +89,7 @@ export const Sidebar = () => {
   const role = useAuthStore((state) => state.user?.role ?? "user");
   const isAdmin = role === "admin";
   const canApprove = role === "team_head" || role === "leader" || role === "admin";
+  const canAccessConfig = canAccessConfigAndAudit(role);
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const saved = localStorage.getItem("scada.sidebar.open");
@@ -380,7 +382,7 @@ export const Sidebar = () => {
           </div>
           <NavItem to="/wwtp" label="WWTP" icon={<IconDevice />} tone="scada" />
           <NavItem to="/utility-billing" label="Billing" icon={<IconReport />} tone="scada" />
-          <NavItem to="/utility-config" label="Config" icon={<IconSettings />} tone="scada" />
+          {canAccessConfig && <NavItem to="/utility-config" label="Config" icon={<IconSettings />} tone="scada" />}
         </nav>
       )}
 
@@ -401,11 +403,11 @@ export const Sidebar = () => {
           <NavItem to="/tasks" label="Tasks" icon={<IconReport />} tone="scada" />
           <NavItem to="/reports" label="Reports" icon={<IconReport />} tone="scada" />
           <NavItem to="/settings" label="Settings" icon={<IconSettings />} tone="scada" />
-          {isAdmin && <NavItem to="/settings/machines" label="Machine Config" icon={<IconSettings />} tone="scada" />}
+          {canAccessConfig && <NavItem to="/settings/machines" label="Machine Config" icon={<IconSettings />} tone="scada" />}
           {canApprove && <NavItem to="/approvals" label="Approvals" icon={<IconReport />} tone="scada" />}
 
           {isAdmin && <NavItem to="/admin" label="Admin Panel" icon={<IconAdmin />} tone="scada" />}
-          {isAdmin && <NavItem to="/audit-trail" label="Audit Trail" icon={<IconReport />} tone="scada" />}
+          {canAccessConfig && <NavItem to="/audit-trail" label="Audit Trail" icon={<IconReport />} tone="scada" />}
         </nav>
       )}
 

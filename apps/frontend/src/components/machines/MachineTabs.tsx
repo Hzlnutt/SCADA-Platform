@@ -1,4 +1,6 @@
 import { NavItem } from "../navigation/NavItem";
+import { useAuthStore } from "../../store/auth.store";
+import { canAccessConfigAndAudit } from "../../utils/roles";
 
 // ── KONFIGURASI TAB PER MESIN ────────────────────────────────────
 // Tambahkan mapping untuk setiap mesin HVAC di sini
@@ -33,6 +35,9 @@ export const MachineTabs = ({
   groupId,
   currentUnitId,
 }: MachineTabsProps) => {
+  const role = useAuthStore((state) => state.user?.role ?? "user");
+  const canAccessConfig = canAccessConfigAndAudit(role);
+
   // ── Mode HVAC : tab dinamis per mesin ──────────────────────────
   if (isHvacGroup && groupId && currentUnitId) {
     // Ambil tab khusus untuk unit ini (jika ada di mapping)
@@ -60,8 +65,8 @@ export const MachineTabs = ({
           <NavItem to={`${basePath}/maintenance`} label="Maintenance" tone="tabs" />
           <NavItem to={`${basePath}/shift-report`} label="Shift Report" tone="tabs" />
           <NavItem to={`${basePath}/energy`} label="Energy" tone="tabs" />
-          <NavItem to={`${basePath}/configuration`} label="Configuration" tone="tabs" />
-          <NavItem to={`${basePath}/audit-trail`} label="Audit Trail" tone="tabs" />
+          {canAccessConfig && <NavItem to={`${basePath}/configuration`} label="Configuration" tone="tabs" />}
+          {canAccessConfig && <NavItem to={`${basePath}/audit-trail`} label="Audit Trail" tone="tabs" />}
         </nav>
       </div>
     );
@@ -107,16 +112,20 @@ export const MachineTabs = ({
           label="Energy"
           tone="tabs"
         />
-        <NavItem
-          to={`${basePath}/configuration`}
-          label="Configuration"
-          tone="tabs"
-        />
-        <NavItem
-          to={`${basePath}/audit-trail`}
-          label="Audit Trail"
-          tone="tabs"
-        />
+        {canAccessConfig && (
+          <NavItem
+            to={`${basePath}/configuration`}
+            label="Configuration"
+            tone="tabs"
+          />
+        )}
+        {canAccessConfig && (
+          <NavItem
+            to={`${basePath}/audit-trail`}
+            label="Audit Trail"
+            tone="tabs"
+          />
+        )}
       </nav>
     </div>
   );

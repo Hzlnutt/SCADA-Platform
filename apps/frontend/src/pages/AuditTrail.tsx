@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "../components/ui/PageHeader";
 import { getJson } from "../services/api.client";
 import { useAuthStore } from "../store/auth.store";
+import { canAccessConfigAndAudit } from "../utils/roles";
 
 type AuditLogItem = {
   _id: string;
@@ -57,7 +58,7 @@ export default function AuditTrail() {
   };
 
   useEffect(() => {
-    if (role === "admin") {
+    if (canAccessConfigAndAudit(role)) {
       fetchLogs(1);
     }
   }, [role, actionFilter]);
@@ -68,15 +69,17 @@ export default function AuditTrail() {
     fetchLogs(1);
   };
 
-  if (role !== "admin") {
+  if (!canAccessConfigAndAudit(role)) {
     return (
-      <div>
+      <div className="space-y-6">
         <PageHeader
           title="Audit Trail"
           description="Rekam jejak aktivitas sistem SCADA."
         />
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 text-sm text-slate-500">
-          Anda tidak memiliki akses administratif untuk melihat halaman ini.
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center text-sm text-slate-500 shadow-sm">
+          <div className="text-3xl mb-2">🔒</div>
+          <h3 className="font-bold text-slate-700 dark:text-slate-200 text-base mb-1">Akses Dibatasi</h3>
+          <p>Anda tidak memiliki izin untuk mengakses halaman Audit Trail. Halaman ini hanya dapat diakses oleh Leader, KaShift, dan Admin.</p>
         </div>
       </div>
     );

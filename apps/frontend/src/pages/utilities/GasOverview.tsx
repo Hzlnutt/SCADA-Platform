@@ -7,6 +7,8 @@ import { DonutChart } from "../../components/charts/DonutChart";
 import { getJson } from "../../services/api.client";
 import { getSocket } from "../../services/socket.service";
 import { useSystemStore } from "../../store/system.store";
+import { useAuthStore } from "../../store/auth.store";
+import { canAccessConfigAndAudit } from "../../utils/roles";
 
 // Format currency helper
 const formatCurrency = (value: number) =>
@@ -54,6 +56,9 @@ export default function GasOverview() {
   const [chartStartDate, setChartStartDate] = useState(getLocalTodayString);
   const [chartEndDate, setChartEndDate] = useState(getLocalTodayString);
   
+  const role = useAuthStore((state) => state.user?.role ?? "user");
+  const canAccessConfig = canAccessConfigAndAudit(role);
+
   // Server-fetched analytics & configurations
   const [analyticsData, setAnalyticsData] = useState<any>(null);
   const [chartLoading, setChartLoading] = useState(true);
@@ -970,14 +975,16 @@ export default function GasOverview() {
             <span className="text-xl">📊</span>
             <h3 className="text-base font-bold text-slate-800 dark:text-white">Biggest Consumption</h3>
           </div>
-          <Link
-            to="/utility-config"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:border-amber-450 dark:hover:border-amber-450 transition-all duration-300 cursor-pointer"
-            title="Configure Categories"
-          >
-            <span>⚙️</span>
-            <span>Configure</span>
-          </Link>
+          {canAccessConfig && (
+            <Link
+              to="/utility-config"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:border-amber-450 dark:hover:border-amber-450 transition-all duration-300 cursor-pointer"
+              title="Configure Categories"
+            >
+              <span>⚙️</span>
+              <span>Configure</span>
+            </Link>
+          )}
         </div>
 
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
@@ -1035,9 +1042,11 @@ export default function GasOverview() {
             <div className="h-[220px] flex flex-col items-center justify-center text-center">
               <span className="text-2xl mb-2">⚙️</span>
               <p className="text-xs font-bold text-slate-400">No categories enabled or configured.</p>
-              <Link to="/utility-config" className="text-xs text-amber-500 font-bold hover:underline mt-1">
-                Go to settings
-              </Link>
+              {canAccessConfig && (
+                <Link to="/utility-config" className="text-xs text-amber-500 font-bold hover:underline mt-1">
+                  Go to settings
+                </Link>
+              )}
             </div>
           )}
         </div>

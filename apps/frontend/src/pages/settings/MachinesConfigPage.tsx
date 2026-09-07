@@ -16,6 +16,8 @@ import type {
   MachineThreshold
 } from "../../hooks/useMachineConfig";
 import { getJson, postJson } from "../../services/api.client";
+import { useAuthStore } from "../../store/auth.store";
+import { canAccessConfigAndAudit } from "../../utils/roles";
 
 const AREAS = ["Utility", "HVAC", "WWTP", "Production", "Utilities"];
 
@@ -871,6 +873,25 @@ function PidThresholdsTab() {
 // 5. MAIN DEFAULT EXPORT: MachinesConfigPage
 // ==========================================
 export default function MachinesConfigPage() {
+  const role = useAuthStore((state) => state.user?.role ?? "user");
+  const canAccess = canAccessConfigAndAudit(role);
+
+  if (!canAccess) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Machine Configuration"
+          description="Manage dynamic category parameter bounds, api bindings and warning thresholds."
+        />
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center text-sm text-slate-500 shadow-sm">
+          <div className="text-3xl mb-2">🔒</div>
+          <h3 className="font-bold text-slate-700 dark:text-slate-200 text-base mb-1">Akses Dibatasi</h3>
+          <p>Anda tidak memiliki izin untuk mengakses Konfigurasi Mesin. Halaman ini hanya dapat diakses oleh Leader, KaShift, dan Admin.</p>
+        </div>
+      </div>
+    );
+  }
+
   const { machines, categories, isLoading, error, refetch } = useMachineConfig();
   const [activeTab, setActiveTab] = useState<"machines" | "thresholds" | "analysis" | "pid">("machines");
 

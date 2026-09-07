@@ -11,6 +11,8 @@ import { useConfigStore } from "../../store/config.store";
 import { getSocket } from "../../services/socket.service";
 import { useSystemStore } from "../../store/system.store";
 import { ApiSourcesPanel } from "../machines/MachineConfig";
+import { useAuthStore } from "../../store/auth.store";
+import { canAccessConfigAndAudit } from "../../utils/roles";
 
 /* ═══════════ CONSTANTS ═══════════ */
 const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
@@ -506,7 +508,9 @@ export default function Electricity() {
   const [factCategories1, setFactCategories1] = useState<ConsumptionFactCategory[]>([]);
   const [factCategories2, setFactCategories2] = useState<ConsumptionFactCategory[]>([]);
 
-  // Config panel
+  // Config panel & access control
+  const role = useAuthStore((state) => state.user?.role ?? "user");
+  const canAccessConfig = canAccessConfigAndAudit(role);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
 
   // Live API Data states
@@ -1587,13 +1591,15 @@ export default function Electricity() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <PageHeader title="Listrik — Overview" description="Monitor beban listrik utama, solar panel, genset, dan total plant load." />
-        <button
-          onClick={() => setShowConfigPanel(!showConfigPanel)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700"
-        >
-          <IconSettings />
-          Konfigurasi
-        </button>
+        {canAccessConfig && (
+          <button
+            onClick={() => setShowConfigPanel(!showConfigPanel)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700"
+          >
+            <IconSettings />
+            Konfigurasi
+          </button>
+        )}
       </div>
 
       {/* ═══════════ SECTION A: TOP 4 SUMMARY CARDS ═══════════ */}
@@ -2638,7 +2644,7 @@ export default function Electricity() {
       </div>
 
       {/* ═══════════ CONFIGURATION PANEL (API Sources) ═══════════ */}
-      {showConfigPanel && (
+      {canAccessConfig && showConfigPanel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowConfigPanel(false)}>
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl p-6 space-y-4 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">

@@ -8,6 +8,8 @@ import { getJson, postJson } from "../../services/api.client";
 import { getSocket } from "../../services/socket.service";
 import { useSystemStore } from "../../store/system.store";
 import { ApiSourcesPanel } from "../machines/MachineConfig";
+import { useAuthStore } from "../../store/auth.store";
+import { canAccessConfigAndAudit } from "../../utils/roles";
 
 /* ═══════════ CONSTANTS & HELPERS ═══════════ */
 const formatCurrency = (value: number) =>
@@ -149,6 +151,9 @@ export default function IncomingPln() {
     thdVoltageMax: 5.0,
     thdCurrentMax: 8.0
   });
+
+  const role = useAuthStore((state) => state.user?.role ?? "user");
+  const canAccessConfig = canAccessConfigAndAudit(role);
 
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
@@ -806,18 +811,22 @@ export default function IncomingPln() {
           description={`Monitoring real-time parameter kelistrikan ${config.title} - Update setiap 3 detik`}
         />
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowConfigPanel(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm"
-          >
-            🔌 API Sources Config
-          </button>
-          <button
-            onClick={handleOpenConfig}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700 shadow-sm"
-          >
-            ⚙️ Config Standar
-          </button>
+          {canAccessConfig && (
+            <>
+              <button
+                onClick={() => setShowConfigPanel(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm"
+              >
+                🔌 API Sources Config
+              </button>
+              <button
+                onClick={handleOpenConfig}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700 shadow-sm"
+              >
+                ⚙️ Config Standar
+              </button>
+            </>
+          )}
           <span className={`px-3 py-1.5 rounded-full text-xs font-extrabold uppercase flex items-center gap-1.5 border transition-colors duration-300 ${
             isConnected
               ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
@@ -1359,7 +1368,7 @@ export default function IncomingPln() {
       </section>
 
       {/* CONFIG MODAL */}
-      {showConfigModal && (
+      {canAccessConfig && showConfigModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowConfigModal(false)}>
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -1535,7 +1544,7 @@ export default function IncomingPln() {
         </div>
       )}
       {/* API SOURCES CONFIG MODAL */}
-      {showConfigPanel && (
+      {canAccessConfig && showConfigPanel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowConfigPanel(false)}>
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
