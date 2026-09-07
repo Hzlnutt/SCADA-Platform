@@ -20,6 +20,8 @@ type UserItem = {
     | "kashift_utility"
     | "kashift_hvac"
     | "leader"
+    | "operator_utility"
+    | "operator_hvac"
     | "operator"
     | "user";
   status?: "active" | "disabled";
@@ -61,6 +63,8 @@ const roleOptions: Array<UserItem["role"]> = [
   "kashift_utility",
   "kashift_hvac",
   "leader",
+  "operator_utility",
+  "operator_hvac",
   "operator",
   "user"
 ];

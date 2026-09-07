@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useOutletContext } from "react-router-dom";
 import { getJson, postJson } from "../../services/api.client";
 import { verifyPassword } from "../../services/auth.service";
+import { useAuthStore } from "../../store/auth.store";
+import { canInteractWithTask, isHvacUnit } from "../../utils/roles";
 import type { MachineOutletContext } from "./MachineLayout";
 
 interface Task {
@@ -24,6 +26,11 @@ const ALL_COMPONENTS = [
   "Strainer 1", "Strainer 2", "Strainer 3", "Strainer 4", "Strainer 5", "Strainer 6", "Strainer 7", "Strainer 8", "Strainer 9",
   "CT 1", "CT 2", "CT 3",
   "Cooling Tank", "Panel"
+];
+
+const HVAC_COMPONENTS = [
+  "AHU-FAN", "PRE-FILTER", "MED-FILTER", "HEPA-FILTER",
+  "COOL-COIL", "HEAT-COIL", "HUMIDIFIER", "DRAIN-TRAP"
 ];
 
 const MOTOR_KEY_TO_TAG_ID: Record<string, string> = {
@@ -59,6 +66,12 @@ const MOTOR_KEY_TO_TAG_ID: Record<string, string> = {
 
 export default function MachineTasks() {
   const { unitId } = useOutletContext<MachineOutletContext>();
+  const user = useAuthStore((state) => state.user);
+  const userRole = user?.role ?? "user";
+  const isUnitHvac = isHvacUnit(unitId);
+  const canInteract = canInteractWithTask(userRole, unitId);
+  const availableComponents = isUnitHvac ? HVAC_COMPONENTS : ALL_COMPONENTS;
+
   const [dbTasks, setDbTasks] = useState<any[]>([]);
   const [runningHours, setRunningHours] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -132,6 +145,10 @@ export default function MachineTasks() {
   };
 
   const handleOpenPasswordVerification = (taskKey: string) => {
+    if (!canInteract) {
+      alert("Akses Ditolak: Anda tidak berwenang menyelesaikan tugas pada unit ini (No cross-handling).");
+      return;
+    }
     setPendingTaskKey(taskKey);
     setVerifyPasswordInput("");
     setPasswordError("");
@@ -258,7 +275,7 @@ export default function MachineTasks() {
               className="bg-white dark:bg-slate-900 border border-[#acd3ff] dark:border-slate-700 text-xs text-[#002b5c] dark:text-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none font-semibold h-[34px]"
             >
               <option value="all">All Components</option>
-              {ALL_COMPONENTS.map((comp) => (
+              {availableComponents.map((comp) => (
                 <option key={comp} value={comp}>
                   {comp}
                 </option>
@@ -316,6 +333,22 @@ export default function MachineTasks() {
           </span>
         </div>
       </div>
+
+      {/* Domain Isolation Warning Notice */}
+      {!canInteract && (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-medium">
+          <svg className="w-5 h-5 flex-shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div>
+            <span className="font-bold">Akses Dibatasi (Domain Isolation):</span> Anda terautentikasi sebagai{" "}
+            <span className="font-bold underline">{userRole.replace(/_/g, " ").toUpperCase()}</span>.
+            {isUnitHvac
+              ? " Mesin ini merupakan unit HVAC/AHU. Tugas pemeliharaan hanya dapat diselesaikan oleh Operator HVAC (No cross-handling)."
+              : " Mesin ini merupakan unit Utility. Tugas pemeliharaan hanya dapat diselesaikan oleh Operator Utility (No cross-handling)."}
+          </div>
+        </div>
+      )}
 
       {/* Tasks List Grid */}
       <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm">
@@ -376,12 +409,21 @@ export default function MachineTasks() {
                     Created: {task.createdDate}
                   </span>
                   {(task.status === "overdue" || task.status === "open") && task.taskKey && (
-                    <button
-                      onClick={() => handleOpenPasswordVerification(task.taskKey!)}
-                      className="px-4 py-1.5 rounded-lg text-xs font-bold transition duration-200 shadow-sm bg-blue-600 hover:bg-blue-700 active:scale-95 text-white shadow-blue-500/20"
-                    >
-                      Mark Done
-                    </button>
+                    canInteract ? (
+                      <button
+                        onClick={() => handleOpenPasswordVerification(task.taskKey!)}
+                        className="px-4 py-1.5 rounded-lg text-xs font-bold transition duration-200 shadow-sm bg-blue-600 hover:bg-blue-700 active:scale-95 text-white shadow-blue-500/20"
+                      >
+                        Mark Done
+                      </button>
+                    ) : (
+                      <span
+                        title="Tugas mesin ini berada di luar domain kewenangan Anda (No cross-handling)"
+                        className="px-3 py-1.5 rounded-lg text-[10px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                      >
+                        Domain Terbatas
+                      </span>
+                    )
                   )}
                 </div>
               </div>

@@ -10,6 +10,8 @@ export const userRoleSchema = z.enum([
   "kashift_utility",
   "kashift_hvac",
   "leader",
+  "operator_utility",
+  "operator_hvac",
   "operator",
   "user"
 ]);

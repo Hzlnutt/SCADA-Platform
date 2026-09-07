@@ -29,7 +29,10 @@ const writeRoles = [
   "kashift_utility",
   "kashift_hvac",
   "leader",
-  "team_head"
+  "team_head",
+  "operator_utility",
+  "operator_hvac",
+  "operator"
 ];
 
 const approvalRoles = [

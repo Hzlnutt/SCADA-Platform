@@ -48,3 +48,75 @@ export const canAccessConfigAndAudit = (role?: string | null): boolean => {
 export const canAccessHvacControls = (role?: string | null): boolean => {
   return isUnitHeadOrAdmin(role);
 };
+
+export type UserDomain = "utility" | "hvac" | "all";
+
+/**
+ * Determines whether a user role is scoped to Utility, HVAC, or All (unrestricted).
+ */
+export const getRoleDomain = (role?: string | null): UserDomain => {
+  if (!role) return "all";
+  const normalized = role.toLowerCase().trim().replace(/[\s-]+/g, "_");
+  if (
+    normalized === "operator_utility" ||
+    normalized === "kashift_utility" ||
+    normalized === "unit_head_utility"
+  ) {
+    return "utility";
+  }
+  if (
+    normalized === "operator_hvac" ||
+    normalized === "kashift_hvac" ||
+    normalized === "unit_head_hvac"
+  ) {
+    return "hvac";
+  }
+  return "all"; // admin, leader, senior_unit_head, kashift_utility_hvac, operator (legacy generic)
+};
+
+/**
+ * Checks if a unit ID belongs to the HVAC domain.
+ */
+export const isHvacUnit = (unitId?: string | null): boolean => {
+  if (!unitId) return false;
+  const lower = unitId.toLowerCase();
+  return lower.startsWith("ahu-") || lower.startsWith("hvac-") || lower.startsWith("oac-");
+};
+
+/**
+ * Checks if a unit ID belongs to the Utility domain.
+ */
+export const isUtilityUnit = (unitId?: string | null): boolean => {
+  if (!unitId) return false;
+  return !isHvacUnit(unitId);
+};
+
+/**
+ * Verifies if the operator/user role is authorized to complete/interact with tasks on this unit.
+ * Enforces strict NO CROSS-HANDLING:
+ * - Operator Utility can ONLY interact with Utility tasks.
+ * - Operator HVAC can ONLY interact with HVAC tasks.
+ */
+export const canInteractWithTask = (
+  role?: string | null,
+  unitId?: string | null
+): boolean => {
+  const domain = getRoleDomain(role);
+  if (domain === "all") return true;
+  if (domain === "utility") return isUtilityUnit(unitId);
+  if (domain === "hvac") return isHvacUnit(unitId);
+  return true;
+};
+
+/**
+ * Checks if a role is any operator variant (operator_utility, operator_hvac, or legacy operator).
+ */
+export const isOperatorRole = (role?: string | null): boolean => {
+  if (!role) return false;
+  const normalized = role.toLowerCase().trim().replace(/[\s-]+/g, "_");
+  return (
+    normalized === "operator" ||
+    normalized === "operator_utility" ||
+    normalized === "operator_hvac"
+  );
+};

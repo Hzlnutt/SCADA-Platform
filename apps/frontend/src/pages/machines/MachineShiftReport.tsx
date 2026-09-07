@@ -97,7 +97,14 @@ export default function MachineShiftReport() {
     return null;
   }
 
-  const canCreate = ["operator", "team_head", "leader", "admin"].includes(role);
+  const canCreate = [
+    "operator",
+    "operator_utility",
+    "operator_hvac",
+    "team_head",
+    "leader",
+    "admin"
+  ].includes(role);
 
   const handleChange = (field: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));

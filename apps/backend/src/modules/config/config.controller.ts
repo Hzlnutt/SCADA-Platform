@@ -538,6 +538,81 @@ export const defaultRhTaskRules = [
   }
 ];
 
+export const defaultHvacRhTaskRules = [
+  {
+    itemKey: "AHU-FAN",
+    displayName: "Supply / Exhaust Fan",
+    rules: [
+      { targetHours: 500, warningHours: 168, tasks: ["Check V-Belt Tension", "Visual & Vibration Inspection"] },
+      { targetHours: 1000, warningHours: 168, tasks: ["Bearing Lubrication", "Clean Fan Impeller"] }
+    ]
+  },
+  {
+    itemKey: "PRE-FILTER",
+    displayName: "Pre-Filter AHU",
+    rules: [
+      { targetHours: 250, warningHours: 72, tasks: ["Differential Pressure Check"] },
+      { targetHours: 720, warningHours: 168, tasks: ["Wash & Replace Pre-Filter Element"] }
+    ]
+  },
+  {
+    itemKey: "MED-FILTER",
+    displayName: "Medium Filter AHU",
+    rules: [
+      { targetHours: 1000, warningHours: 168, tasks: ["Inspect Filter Integrity & Dust Accumulation"] },
+      { targetHours: 2000, warningHours: 240, tasks: ["Replace Medium Filter Bag"] }
+    ]
+  },
+  {
+    itemKey: "HEPA-FILTER",
+    displayName: "HEPA Filter Cleanroom",
+    rules: [
+      { targetHours: 2000, warningHours: 240, tasks: ["Integrity Test & Velocity Measurement (SOP-QC)"] },
+      { targetHours: 4000, warningHours: 360, tasks: ["HEPA Filter Terminal Replacement"] }
+    ]
+  },
+  {
+    itemKey: "COOL-COIL",
+    displayName: "Cooling Coil & Chilled Water",
+    rules: [
+      { targetHours: 1000, warningHours: 168, tasks: ["Inspect & Comb Aluminum Fins", "Modulating Valve Actuator Check"] }
+    ]
+  },
+  {
+    itemKey: "HEAT-COIL",
+    displayName: "Heating Coil (Heater)",
+    rules: [
+      { targetHours: 1000, warningHours: 168, tasks: ["Heater Element Resistance & Contact Inspection"] }
+    ]
+  },
+  {
+    itemKey: "HUMIDIFIER",
+    displayName: "Humidifier System",
+    rules: [
+      { targetHours: 500, warningHours: 168, tasks: ["Clean Steam Cylinder & Scale Inspection"] },
+      { targetHours: 1000, warningHours: 168, tasks: ["Electrode Descaling & RO Water Inlet Check"] }
+    ]
+  },
+  {
+    itemKey: "DRAIN-TRAP",
+    displayName: "Condensate Drain Trap",
+    rules: [
+      { targetHours: 350, warningHours: 72, tasks: ["Flush Drain Trap & Clean U-Bend Sediment"] }
+    ]
+  }
+];
+
+export const isHvacUnit = (unitId?: string | null): boolean => {
+  if (!unitId) return false;
+  const lower = unitId.toLowerCase();
+  return lower.startsWith("ahu-") || lower.startsWith("hvac-") || lower.startsWith("oac-");
+};
+
+export const isUtilityUnit = (unitId?: string | null): boolean => {
+  if (!unitId) return false;
+  return !isHvacUnit(unitId);
+};
+
 export const getRhTaskRulesHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const pool = getPostgresPool();
@@ -899,8 +974,69 @@ export const getRhTasksHandler = async (req: Request, res: Response, next: NextF
       }
     }
 
+    // 4b. Evaluate HVAC units: 'ahu-01', 'ahu-02', 'ahu-03'
+    const hvacUnits = ["ahu-01", "ahu-02", "ahu-03"];
+    const HVAC_DEFAULT_HOURS: Record<string, number> = {
+      "AHU-FAN": 1250,
+      "PRE-FILTER": 730,
+      "MED-FILTER": 1050,
+      "HEPA-FILTER": 2100,
+      "COOL-COIL": 1020,
+      "HEAT-COIL": 1050,
+      "HUMIDIFIER": 520,
+      "DRAIN-TRAP": 360
+    };
+
+    for (const unitId of hvacUnits) {
+      for (const config of defaultHvacRhTaskRules) {
+        const specKey = config.itemKey;
+        const tagId = `hvac/${unitId}/${specKey.toLowerCase()}`;
+        const actualRh = runningHoursMap[tagId] ?? (HVAC_DEFAULT_HOURS[specKey] || 500);
+
+        for (const rule of config.rules) {
+          const warningBuffer = typeof rule.warningHours === "number" ? rule.warningHours : 168;
+          for (const task of rule.tasks) {
+            if (!task || !task.trim()) continue;
+            const taskClean = task.trim();
+
+            const baselineKey = `${unitId}_${specKey}_${rule.targetHours}_${taskClean}`;
+            const baseline = baselineMap[baselineKey] || 0.0;
+
+            const warningThreshold = baseline + rule.targetHours - warningBuffer;
+            const isTriggered = actualRh >= warningThreshold;
+
+            if (isTriggered) {
+              const taskKey = `${unitId}_${specKey}_${rule.targetHours}_${taskClean}_${baseline}`;
+              const currentStatus = existingTasksMap[taskKey];
+
+              let targetStatus: "open" | "overdue" = "open";
+              if (actualRh >= baseline + rule.targetHours) {
+                targetStatus = "overdue";
+              }
+
+              if (!currentStatus) {
+                await pool.query(
+                  `INSERT INTO running_hours_tasks (unit_id, motor_key, target_hours, warning_hours, task_name, status, trigger_base_hours, actual_hours_at_trigger)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                  [unitId, specKey, rule.targetHours, warningBuffer, taskClean, targetStatus, baseline, actualRh]
+                );
+              } else if (currentStatus !== "close" && currentStatus !== targetStatus) {
+                await pool.query(
+                  `UPDATE running_hours_tasks 
+                   SET status = $1 
+                   WHERE unit_id = $2 AND motor_key = $3 AND target_hours = $4 AND task_name = $5 AND trigger_base_hours = $6`,
+                  [targetStatus, unitId, specKey, rule.targetHours, taskClean, baseline]
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+
     // 5. Query tasks using filters
-    const { status, unitId, motorKey, startDate, endDate } = req.query;
+    const { status, unitId, motorKey, startDate, endDate, domain } = req.query;
+    const userRole = req.user?.role;
     
     // Date Range filters default: This month
     const now = new Date();
@@ -932,6 +1068,13 @@ export const getRhTasksHandler = async (req: Request, res: Response, next: NextF
       queryParams.push(motorKey);
     }
 
+    // Strict role-based domain scoping: no cross handling
+    if (userRole === "operator_utility" || domain === "utility") {
+      queryStr += ` AND (unit_id NOT LIKE 'ahu-%' AND unit_id NOT LIKE 'hvac-%' AND unit_id NOT LIKE 'oac-%')`;
+    } else if (userRole === "operator_hvac" || domain === "hvac") {
+      queryStr += ` AND (unit_id LIKE 'ahu-%' OR unit_id LIKE 'hvac-%' OR unit_id LIKE 'oac-%')`;
+    }
+
     queryStr += ` ORDER BY CASE WHEN status = 'overdue' THEN 1 WHEN status = 'open' THEN 2 ELSE 3 END, created_at DESC`;
 
     const finalRes = await pool.query(queryStr, queryParams);
@@ -957,6 +1100,25 @@ export const completeRhTaskHandler = async (req: Request, res: Response, next: N
 
     if (task.status === "close") {
       res.status(400).json({ error: "Task already closed" });
+      return;
+    }
+
+    // Role boundary check: strict no cross-handling
+    const userRole = req.user?.role;
+    const isTaskHvac = isHvacUnit(task.unit_id);
+    const isTaskUtility = isUtilityUnit(task.unit_id);
+
+    if (userRole === "operator_utility" && isTaskHvac) {
+      res.status(403).json({
+        error: "Akses Ditolak: Operator Utility tidak diizinkan menyelesaikan tugas pemeliharaan HVAC."
+      });
+      return;
+    }
+
+    if (userRole === "operator_hvac" && isTaskUtility) {
+      res.status(403).json({
+        error: "Akses Ditolak: Operator HVAC tidak diizinkan menyelesaikan tugas pemeliharaan Utility."
+      });
       return;
     }
 

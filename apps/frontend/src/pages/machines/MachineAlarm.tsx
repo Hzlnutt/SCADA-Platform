@@ -373,7 +373,7 @@ export default function MachineAlarm() {
     "kashift_utility",
     "kashift_hvac"
   ].includes(userRole);
-  const isOperator = userRole === "operator";
+  const isOperator = userRole === "operator" || userRole === "operator_utility" || userRole === "operator_hvac";
   const canAck = isKaShiftOrAbove || isOperator;
   const canEditFinalized = isKaShiftOrAbove;
 

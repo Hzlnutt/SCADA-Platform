@@ -193,7 +193,14 @@ export default function MachineMaintenance() {
 
   if (!machine) return null;
 
-  const canCreate = ["operator", "team_head", "leader", "admin"].includes(role);
+  const canCreate = [
+    "operator",
+    "operator_utility",
+    "operator_hvac",
+    "team_head",
+    "leader",
+    "admin"
+  ].includes(role);
   const canEditNameplate = [
     "admin",
     "senior_unit_head",

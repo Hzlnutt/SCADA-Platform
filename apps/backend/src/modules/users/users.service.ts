@@ -296,6 +296,8 @@ export const listOperators = async () => {
         role: {
           $in: [
             "operator",
+            "operator_utility",
+            "operator_hvac",
             "kashift_utility_hvac",
             "kashift_utility",
             "kashift_hvac",

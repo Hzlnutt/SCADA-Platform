@@ -91,6 +91,18 @@ export const ensurePostgresTables = async () => {
       logger.info("Default users seeded into PostgreSQL users table with encrypted passwords (bcrypt)");
     }
 
+    // Ensure dedicated operator_utility and operator_hvac users exist
+    const opRoleHash = await bcrypt.hash("operator123", 10);
+    await pool.query(`
+      INSERT INTO users (username, name, email, role, password_hash, status)
+      VALUES 
+        ('operator_utility', 'Operator Utility Widatra', 'operator.utility@widatra.co', 'operator_utility', $1, 'active'),
+        ('operator_hvac', 'Operator HVAC Widatra', 'operator.hvac@widatra.co', 'operator_hvac', $1, 'active')
+      ON CONFLICT (username) DO NOTHING
+    `, [opRoleHash]).catch((err) => {
+      logger.warn("Seeding operator_utility and operator_hvac failed (ignored): " + err.message);
+    });
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cooling_tower_telemetry (
         id SERIAL PRIMARY KEY,
