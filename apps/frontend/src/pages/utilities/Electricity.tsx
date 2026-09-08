@@ -184,31 +184,79 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
   const daysInMonth = Math.max(currentData.length, previousData.length, 28);
   const dayLabels = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, "0")), [daysInMonth]);
 
-  const data = useMemo(() => ({
-    labels: dayLabels,
-    datasets: [
-      {
-        label: currMonthName ? `Bulan Ini (${currMonthName})` : "Bulan Ini",
-        data: currentData,
-        backgroundColor: "rgba(59, 130, 246, 0.85)",
-        hoverBackgroundColor: "rgba(37, 99, 235, 1)",
-        borderWidth: 0,
-        borderRadius: 2,
-        barPercentage: 0.45,
-        categoryPercentage: 0.8
-      },
-      {
-        label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
-        data: previousData,
-        backgroundColor: "rgba(239, 68, 68, 0.75)",
-        hoverBackgroundColor: "rgba(220, 38, 38, 1)",
-        borderWidth: 0,
-        borderRadius: 2,
-        barPercentage: 0.45,
-        categoryPercentage: 0.8
-      }
-    ]
-  }), [dayLabels, currentData, previousData, currMonthName, prevMonthName]);
+  const data = useMemo(() => {
+    if (selectorType === "all") {
+      const plnData = (currentBreakdown || []).map((b) => b.pln || 0);
+      const solarData = (currentBreakdown || []).map((b) => (b.poi1 || 0) + (b.poi2 || 0));
+
+      return {
+        labels: dayLabels,
+        datasets: [
+          {
+            label: "PLN Grid",
+            data: plnData,
+            backgroundColor: "rgba(59, 130, 246, 0.85)",
+            hoverBackgroundColor: "rgba(37, 99, 235, 1)",
+            borderWidth: 0,
+            borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 2, bottomRight: 2 },
+            stack: "current",
+            barPercentage: 0.55,
+            categoryPercentage: 0.8
+          },
+          {
+            label: "Solar PLTS",
+            data: solarData,
+            backgroundColor: "rgba(16, 185, 129, 0.85)",
+            hoverBackgroundColor: "rgba(5, 150, 105, 1)",
+            borderWidth: 0,
+            borderRadius: { topLeft: 2, topRight: 2, bottomLeft: 0, bottomRight: 0 },
+            stack: "current",
+            barPercentage: 0.55,
+            categoryPercentage: 0.8
+          },
+          {
+            label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
+            data: previousData,
+            backgroundColor: "rgba(239, 68, 68, 0.75)",
+            hoverBackgroundColor: "rgba(220, 38, 38, 1)",
+            borderWidth: 0,
+            borderRadius: 2,
+            stack: "previous",
+            barPercentage: 0.55,
+            categoryPercentage: 0.8
+          }
+        ]
+      };
+    }
+
+    return {
+      labels: dayLabels,
+      datasets: [
+        {
+          label: currMonthName ? `Bulan Ini (${currMonthName})` : "Bulan Ini",
+          data: currentData,
+          backgroundColor: "rgba(59, 130, 246, 0.85)",
+          hoverBackgroundColor: "rgba(37, 99, 235, 1)",
+          borderWidth: 0,
+          borderRadius: 2,
+          stack: "current",
+          barPercentage: 0.55,
+          categoryPercentage: 0.8
+        },
+        {
+          label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
+          data: previousData,
+          backgroundColor: "rgba(239, 68, 68, 0.75)",
+          hoverBackgroundColor: "rgba(220, 38, 38, 1)",
+          borderWidth: 0,
+          borderRadius: 2,
+          stack: "previous",
+          barPercentage: 0.55,
+          categoryPercentage: 0.8
+        }
+      ]
+    };
+  }, [dayLabels, currentData, previousData, currMonthName, prevMonthName, selectorType, currentBreakdown]);
 
   const options: any = useMemo(() => ({
     responsive: true,
@@ -252,17 +300,25 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         bodyColor: isDark ? "#f1f5f9" : "#0f172a",
         borderColor: isDark ? "rgba(56, 189, 248, 0.3)" : "rgba(14, 165, 233, 0.3)",
         borderWidth: 1,
-        padding: 12,
+        padding: 10,
         boxPadding: 4,
         bodyFont: { family: "IBM Plex Mono, monospace", size: 11 },
         callbacks: {
           title: (items: any[]) => {
             if (!items || items.length === 0) return "";
             const dayNum = String(items[0].dataIndex + 1).padStart(2, "0");
-            return `📅 Tanggal ${dayNum} (${currMonthName || "Bulan Ini"} vs ${prevMonthName || "Bulan Lalu"})`;
+            return `Tanggal ${dayNum} ${currMonthName || "Bulan Ini"}`;
           },
           label: (ctx: any) => {
             const val = Number(ctx.parsed.y || 0);
+            if (val <= 0 && ctx.dataset.stack === "previous") return null;
+            const idx = ctx.dataIndex;
+            const curVal = Number(currentData[idx] || 0);
+
+            if (selectorType === "all" && ctx.dataset.stack === "current" && curVal > 0) {
+              const pct = Math.round((val / curVal) * 100);
+              return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh (${pct}%)`;
+            }
             return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`;
           },
           afterBody: (items: any[]) => {
@@ -270,52 +326,35 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             const idx = items[0].dataIndex;
             const curVal = Number(currentData[idx] || 0);
             const prevVal = Number(previousData[idx] || 0);
-            const diff = curVal - prevVal;
-            const pct = prevVal > 0 ? ((diff / prevVal) * 100).toFixed(1) : null;
-            const diffSign = diff > 0 ? "+" : "";
-            const diffText = `📊 Selisih: ${diffSign}${diff.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh${pct !== null ? ` (${diffSign}${pct}%)` : ""}`;
+            const lines: string[] = [];
 
-            const lines: string[] = ["", diffText];
-
-            if (selectorType === "all" && currentBreakdown && currentBreakdown[idx]) {
-              const b = currentBreakdown[idx];
-              const curTotal = b.pln + b.poi1 + b.poi2;
-              const plnPct = curTotal > 0 ? ((b.pln / curTotal) * 100).toFixed(1) : "0";
-              const pltsTotal = b.poi1 + b.poi2;
-              const pltsPct = curTotal > 0 ? ((pltsTotal / curTotal) * 100).toFixed(1) : "0";
-
-              lines.push("───────────────────────────────");
-              lines.push("⚡ Sumber Energi (Bulan Ini):");
-              lines.push(`  • PLN Grid   : ${b.pln.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh (${plnPct}%)`);
-              lines.push(`  • PLTS Total : ${pltsTotal.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh (${pltsPct}%)`);
-              lines.push(`    ├ POI-1    : ${b.poi1.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
-              lines.push(`    └ POI-2    : ${b.poi2.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
-
-              if (previousBreakdown && previousBreakdown[idx]) {
-                const pb = previousBreakdown[idx];
-                const prevPlts = pb.poi1 + pb.poi2;
-                if (pb.pln > 0 || prevPlts > 0) {
-                  lines.push("───────────────────────────────");
-                  lines.push("⚡ Sumber Energi (Bulan Lalu):");
-                  lines.push(`  • PLN Grid   : ${pb.pln.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
-                  lines.push(`  • PLTS Total : ${prevPlts.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh (POI-1: ${pb.poi1.toLocaleString("id-ID", { maximumFractionDigits: 0 })}, POI-2: ${pb.poi2.toLocaleString("id-ID", { maximumFractionDigits: 0 })})`);
-                }
+            if (selectorType === "all") {
+              const b = currentBreakdown?.[idx];
+              if (b && (b.poi1 > 0 || b.poi2 > 0)) {
+                lines.push(`• Rincian PLTS: POI-1 ${b.poi1.toLocaleString("id-ID", { maximumFractionDigits: 1 })} | POI-2 ${b.poi2.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
               }
-            } else if ((selectorType === "pln" || selectorType === "wf1" || selectorType === "wf2") && currentBreakdown && currentBreakdown[idx]) {
+              lines.push(`Total Konsumsi: ${curVal.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
+            }
+
+            if (prevVal > 0) {
+              const diff = curVal - prevVal;
+              const diffSign = diff > 0 ? "+" : "";
+              const pct = ((diff / prevVal) * 100).toFixed(1);
+              lines.push(`Selisih vs Bulan Lalu: ${diffSign}${diff.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh (${diffSign}${pct}%)`);
+            } else if (prevVal === 0 && selectorType !== "all") {
+              lines.push(`Bulan Lalu: 0 kWh`);
+            }
+
+            if ((selectorType === "pln" || selectorType === "wf1" || selectorType === "wf2") && currentBreakdown?.[idx]) {
               const b = currentBreakdown[idx];
               if (b.wbp > 0 || b.lwbp > 0) {
-                lines.push("───────────────────────────────");
-                lines.push("⚡ Tarif WBP / LWBP (Bulan Ini):");
-                lines.push(`  • LWBP (Siang): ${b.lwbp.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
-                lines.push(`  • WBP (Malam) : ${b.wbp.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
+                lines.push(`• LWBP: ${b.lwbp.toLocaleString("id-ID", { maximumFractionDigits: 1 })} | WBP: ${b.wbp.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
               }
-            } else if ((selectorType === "poi1" || selectorType === "poi2") && currentBreakdown && currentBreakdown[idx]) {
+            } else if ((selectorType === "poi1" || selectorType === "poi2") && currentBreakdown?.[idx]) {
               const b = currentBreakdown[idx];
               const kwh = selectorType === "poi1" ? b.poi1 : b.poi2;
               const rate = solarRate || 1444.7;
-              const savings = kwh * rate;
-              lines.push("───────────────────────────────");
-              lines.push(`☀️ Estimasi Hemat: Rp ${Math.round(savings).toLocaleString("id-ID")}`);
+              lines.push(`Estimasi Hemat: Rp ${Math.round(kwh * rate).toLocaleString("id-ID")}`);
             }
 
             return lines;
@@ -325,10 +364,12 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
     },
     scales: {
       x: {
+        stacked: true,
         grid: { display: false },
         ticks: { color: isDark ? "rgba(148, 163, 184, 0.7)" : "rgba(71, 85, 105, 0.7)", font: { size: 9 }, maxRotation: 0 }
       },
       y: {
+        stacked: true,
         grid: { color: isDark ? "rgba(51, 65, 85, 0.4)" : "rgba(203, 213, 225, 0.5)" },
         ticks: {
           color: isDark ? "rgba(148, 163, 184, 0.7)" : "rgba(71, 85, 105, 0.7)",
@@ -2298,11 +2339,10 @@ export default function Electricity() {
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500">Solar Panel (PLTS)</h3>
           </div>
           <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-            ONLINE (POLLING 1s)
+            ONLINE
           </span>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -2337,7 +2377,7 @@ export default function Electricity() {
               <span className={`h-2 w-2 rounded-full ${
                 solarLive?.poi1?.status === false
                   ? "bg-rose-500"
-                  : "bg-emerald-500 animate-ping"
+                  : "bg-emerald-500"
               }`} />
             </div>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
@@ -2376,7 +2416,7 @@ export default function Electricity() {
               <span className={`h-2 w-2 rounded-full ${
                 solarLive?.poi2?.status === false
                   ? "bg-rose-500"
-                  : "bg-emerald-500 animate-ping"
+                  : "bg-emerald-500"
               }`} />
             </div>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
@@ -2632,7 +2672,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Peak Demand</div>
             <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {cubicleSummary.peakDemand > 0 ? `${cubicleSummary.peakDemand.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "- kW"}
+              - kW
             </div>
           </div>
           {cubiclePoiView ? (
