@@ -33,6 +33,7 @@ export type GasCategory = {
 type ConfigState = {
   wbpRate: number;
   lwbpRate: number;
+  pvRate: number;
   waterConfig: WaterConfig;
   electricityTariffs: ElectricityTariff[];
   gasConfig: GasConfig | null;
@@ -45,13 +46,15 @@ type ConfigState = {
     waterConfig?: WaterConfig,
     electricityTariffs?: ElectricityTariff[],
     gasConfig?: GasConfig,
-    gasCategories?: GasCategory[]
+    gasCategories?: GasCategory[],
+    pvRate?: number
   ) => Promise<void>;
 };
 
 export const useConfigStore = create<ConfigState>((set) => ({
   wbpRate: 1600,
   lwbpRate: 1112,
+  pvRate: 0,
   waterConfig: {
     taxRate: 0.20,
     ar: 0.18,
@@ -76,6 +79,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
         data: {
           wbpRate: number;
           lwbpRate: number;
+          pvRate?: number;
           waterConfig?: WaterConfig;
           electricityTariffs?: ElectricityTariff[];
           gasConfig?: GasConfig;
@@ -86,6 +90,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
         set({ 
           wbpRate: res.data.wbpRate, 
           lwbpRate: res.data.lwbpRate,
+          pvRate: res.data.pvRate ?? 0,
           ...(res.data.waterConfig ? { waterConfig: res.data.waterConfig } : {}),
           ...(res.data.gasConfig ? { gasConfig: res.data.gasConfig } : {}),
           ...(res.data.gasCategories ? { gasCategories: res.data.gasCategories } : {}),
@@ -100,13 +105,16 @@ export const useConfigStore = create<ConfigState>((set) => ({
       set({ loading: false });
     }
   },
-  setRates: async (wbp, lwbp, waterConfig, electricityTariffs, gasConfig, gasCategories) => {
+  setRates: async (wbp, lwbp, waterConfig, electricityTariffs, gasConfig, gasCategories, pvRate) => {
     try {
       set({ loading: true });
       const payload: any = {
         wbpRate: wbp,
         lwbpRate: lwbp
       };
+      if (pvRate !== undefined) {
+        payload.pvRate = pvRate;
+      }
       if (waterConfig) {
         payload.waterConfig = waterConfig;
       }
@@ -123,6 +131,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
         data: {
           wbpRate: number;
           lwbpRate: number;
+          pvRate?: number;
           waterConfig?: WaterConfig;
           electricityTariffs?: ElectricityTariff[];
           gasConfig?: GasConfig;
@@ -133,6 +142,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
         set({ 
           wbpRate: res.data.wbpRate, 
           lwbpRate: res.data.lwbpRate,
+          pvRate: res.data.pvRate ?? 0,
           ...(res.data.waterConfig ? { waterConfig: res.data.waterConfig } : {}),
           ...(res.data.gasConfig ? { gasConfig: res.data.gasConfig } : {}),
           ...(res.data.gasCategories ? { gasCategories: res.data.gasCategories } : {}),

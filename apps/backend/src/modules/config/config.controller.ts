@@ -297,6 +297,7 @@ const electricityTariffSchema = z.object({
 const utilityConfigSchema = z.object({
   wbpRate: z.number().nonnegative(),
   lwbpRate: z.number().nonnegative(),
+  pvRate: z.number().nonnegative().optional(),
   waterConfig: waterConfigSchema.optional(),
   electricityTariffs: z.array(electricityTariffSchema).optional(),
   gasConfig: gasConfigSchema.optional(),
@@ -339,6 +340,7 @@ export const getUtilityConfigHandler = async (req: Request, res: Response, next:
         data: {
           wbpRate: config.wbpRate,
           lwbpRate: config.lwbpRate,
+          pvRate: config.pvRate ?? 0,
           waterConfig: config.waterConfig || defaultWaterConfig,
           electricityTariffs: config.electricityTariffs || [
             { validFrom: "2024-01", wbpRate: config.wbpRate || 1600, lwbpRate: config.lwbpRate || 1112 }
@@ -352,6 +354,7 @@ export const getUtilityConfigHandler = async (req: Request, res: Response, next:
         data: {
           wbpRate: 1600,
           lwbpRate: 1112,
+          pvRate: 0,
           waterConfig: defaultWaterConfig,
           electricityTariffs: defaultElectricityTariffs,
           gasConfig: defaultGasConfig,
@@ -372,6 +375,7 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
     const beforeDoc = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
     const oldWbpRate = beforeDoc ? beforeDoc.wbpRate : 1600;
     const oldLwbpRate = beforeDoc ? beforeDoc.lwbpRate : 1112;
+    const oldPvRate = beforeDoc ? (beforeDoc.pvRate ?? 0) : 0;
     const oldWaterConfig = beforeDoc?.waterConfig || defaultWaterConfig;
     const oldElectricityTariffs = beforeDoc?.electricityTariffs || [
       { validFrom: "2024-01", wbpRate: oldWbpRate, lwbpRate: oldLwbpRate }
@@ -382,6 +386,7 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
     // Determine latest rates for top-level backward compatibility
     let wbpRate = parsed.wbpRate;
     let lwbpRate = parsed.lwbpRate;
+    const pvRate = parsed.pvRate !== undefined ? parsed.pvRate : oldPvRate;
     const tariffs = parsed.electricityTariffs || [];
     if (tariffs.length > 0) {
       const sorted = [...tariffs].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
@@ -393,6 +398,7 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
       key: "utility",
       wbpRate,
       lwbpRate,
+      pvRate,
       waterConfig: parsed.waterConfig || oldWaterConfig,
       electricityTariffs: tariffs.length > 0 ? tariffs : oldElectricityTariffs,
       gasConfig: parsed.gasConfig || oldGasConfig,

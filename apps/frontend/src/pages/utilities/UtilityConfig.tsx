@@ -26,6 +26,7 @@ export default function UtilityConfig() {
 
   const storeWbpRate = useConfigStore((state) => state.wbpRate);
   const storeLwbpRate = useConfigStore((state) => state.lwbpRate);
+  const storePvRate = useConfigStore((state) => state.pvRate);
   const storeWaterConfig = useConfigStore((state) => state.waterConfig);
   const storeElectricityTariffs = useConfigStore((state) => state.electricityTariffs);
   const storeGasConfig = useConfigStore((state) => state.gasConfig);
@@ -35,6 +36,7 @@ export default function UtilityConfig() {
 
   const [wbpRate, setWbpRate] = useState(storeWbpRate);
   const [lwbpRate, setLwbpRate] = useState(storeLwbpRate);
+  const [pvRate, setPvRate] = useState(storePvRate);
   const [waterConfig, setWaterConfig] = useState<WaterConfig | null>(null);
   const [electricityTariffs, setElectricityTariffs] = useState<ElectricityTariff[]>(storeElectricityTariffs);
   
@@ -53,6 +55,7 @@ export default function UtilityConfig() {
 
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRates();
@@ -61,11 +64,12 @@ export default function UtilityConfig() {
   useEffect(() => {
     setWbpRate(storeWbpRate);
     setLwbpRate(storeLwbpRate);
+    setPvRate(storePvRate);
     if (storeWaterConfig) setWaterConfig(storeWaterConfig);
     if (storeElectricityTariffs) setElectricityTariffs(storeElectricityTariffs);
     if (storeGasConfig) setGasConfig(storeGasConfig);
     if (storeGasCategories) setGasCategories(storeGasCategories);
-  }, [storeWbpRate, storeLwbpRate, storeWaterConfig, storeElectricityTariffs, storeGasConfig, storeGasCategories]);
+  }, [storeWbpRate, storeLwbpRate, storePvRate, storeWaterConfig, storeElectricityTariffs, storeGasConfig, storeGasCategories]);
 
   const handleAddTariff = () => {
     if (!newValidFrom || newWbpRate === "" || newLwbpRate === "") {
@@ -116,6 +120,7 @@ export default function UtilityConfig() {
     e.preventDefault();
     setSaving(true);
     setSuccess(false);
+    setErrorMsg(null);
 
     try {
       // Find latest rates for top-level config backward compatibility
@@ -129,12 +134,14 @@ export default function UtilityConfig() {
         waterConfig || undefined,
         electricityTariffs,
         gasConfig || undefined,
-        gasCategories
+        gasCategories,
+        Number(pvRate) || 0
       );
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("Failed to save utility config:", err);
+      setErrorMsg(err?.message || "Gagal menyimpan konfigurasi utility. Silakan coba lagi.");
     } finally {
       setSaving(false);
     }
@@ -178,18 +185,24 @@ export default function UtilityConfig() {
     return `${monthNames[parseInt(month) - 1]} ${year}`;
   };
 
+  const sortedTariffs = [...electricityTariffs].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
+  const currentLwbpRate = sortedTariffs[0]?.lwbpRate ?? lwbpRate ?? 1112;
+
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-7xl">
       <PageHeader
         title="Config"
         description="Pengaturan parameter manual untuk kalkulasi konsumsi utilitas."
       />
 
       <form onSubmit={handleSave} className="space-y-6">
-        {/* Electricity Card */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
-          <h3 className="text-base font-bold text-slate-800 dark:text-white mb-1">
-            Parameter Tarif Listrik PLN (History)
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+          {/* Left Column: PLN Electricity Tariffs History & Solar PV Rates */}
+          <div className="space-y-6">
+            {/* Electricity Card */}
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
+              <h3 className="text-base font-bold text-slate-800 dark:text-white mb-1">
+                Parameter Tarif Listrik PLN (History)
           </h3>
           <p className="text-xs text-slate-400 dark:text-slate-500 mb-6">
             Mencegah penyesuaian tarif listrik baru merusak kalkulasi biaya historis di bulan-bulan sebelumnya.
@@ -280,6 +293,84 @@ export default function UtilityConfig() {
           </div>
         </div>
 
+        {/* Solar PV Rate Card */}
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-base font-bold text-slate-800 dark:text-white">
+              Parameter Tarif Biaya Solar PV (PLTS)
+            </h3>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+              </svg>
+              Solar PLTS
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mb-6">
+            Tarif kontrak biaya Solar PV per kWh. Digunakan untuk menghitung <strong>Estimasi Biaya PV</strong> dan selisihnya dengan tarif PLN (LWBP) untuk <strong>Estimasi Penghematan</strong>.
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">
+                Tarif Biaya PV (Rp/kWh)
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">
+                  Rp
+                </span>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder="Contoh: 950"
+                  value={pvRate}
+                  onChange={(e) => setPvRate(e.target.value === "" ? 0 : Number(e.target.value))}
+                  required
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 pl-11 pr-4 py-2.5 text-sm font-semibold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/40 transition"
+                />
+              </div>
+            </div>
+
+            {/* Formula & Live Margin Info Box */}
+            <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/30 p-4 space-y-2.5">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                </svg>
+                Simulasi Margin Tarif
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                <div className="bg-white dark:bg-slate-900/80 p-2.5 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+                  <div className="text-[10px] text-slate-400 font-semibold uppercase">Tarif PLN (LWBP)</div>
+                  <div className="text-sm font-bold text-slate-800 dark:text-white font-mono">
+                    Rp {currentLwbpRate.toLocaleString("id-ID")}<span className="text-[10px] font-normal text-slate-400">/kWh</span>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-slate-900/80 p-2.5 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+                  <div className="text-[10px] text-amber-500 font-semibold uppercase">Tarif PV</div>
+                  <div className="text-sm font-bold text-amber-600 dark:text-amber-400 font-mono">
+                    Rp {(Number(pvRate) || 0).toLocaleString("id-ID")}<span className="text-[10px] font-normal text-slate-400">/kWh</span>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-slate-900/80 p-2.5 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+                  <div className="text-[10px] text-emerald-500 font-semibold uppercase">Margin Hemat</div>
+                  <div className={`text-sm font-bold font-mono ${(currentLwbpRate - (Number(pvRate) || 0)) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500"}`}>
+                    Rp {(currentLwbpRate - (Number(pvRate) || 0)).toLocaleString("id-ID")}<span className="text-[10px] font-normal text-slate-400">/kWh</span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 space-y-0.5 pt-1">
+                <div>• <strong>Estimasi Biaya PV</strong> = Total kWh Solar × Tarif PV</div>
+                <div>• <strong>Estimasi Penghematan</strong> = (Total kWh Solar × Tarif PLN LWBP) - Estimasi Biaya PV</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Right Column: Water and Gas Parameters */}
+      <div className="space-y-6">
         {/* Water Card */}
         {waterConfig && (
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
@@ -499,28 +590,39 @@ export default function UtilityConfig() {
             </div>
           </div>
         )}
+        </div>
+      </div>
 
-          <div className="flex items-center gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className={`rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider px-6 py-3 shadow-md transition-all active:scale-[0.98] ${
-                saving ? "opacity-75 cursor-not-allowed" : ""
-              }`}
-            >
-              {saving ? "Saving..." : "Save Settings"}
-            </button>
+      <div className="flex items-center gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+        <button
+          type="submit"
+          disabled={saving}
+          className={`rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider px-6 py-3 shadow-md transition-all active:scale-[0.98] ${
+            saving ? "opacity-75 cursor-not-allowed" : ""
+          }`}
+        >
+          {saving ? "Saving..." : "Save Settings"}
+        </button>
 
-            {success && (
-              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 animate-fade-in">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                </svg>
-                Settings saved successfully!
-              </span>
-            )}
-          </div>
-      </form>
-    </div>
+        {success && (
+          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 animate-fade-in">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+            </svg>
+            Settings saved successfully!
+          </span>
+        )}
+
+        {errorMsg && (
+          <span className="text-xs font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 animate-fade-in">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+            </svg>
+            {errorMsg}
+          </span>
+        )}
+      </div>
+    </form>
+  </div>
   );
 }

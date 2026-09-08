@@ -65,6 +65,9 @@ export interface SolarAnalyticsResult {
     rangePoi1Kwh?: number;
     rangePoi2Kwh?: number;
     solarRate?: number;
+    pvRate?: number;
+    estimasiBiayaPv?: number;
+    estimasiPenghematan?: number;
   };
   charts: {
     hourly: number[];
@@ -99,11 +102,17 @@ export const getSolarAnalytics = async (
   const toQueryVal = `${toPlusDate.getFullYear()}-${pad(toPlusDate.getMonth() + 1)}-${pad(toPlusDate.getDate())} ${pad(toPlusDate.getHours())}:${pad(toPlusDate.getMinutes())}:${pad(toPlusDate.getSeconds())}`;
 
   // Fetch electricity tariff for cost savings estimation
-  let solarRate = 1444.7; // default standard PLN tariff per kWh
+  let solarRate = 1112; // default standard PLN tariff per kWh (LWBP)
+  let pvRate = 0;
   try {
     const configDoc = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
     if (configDoc?.electricityTariffs && configDoc.electricityTariffs.length > 0) {
       solarRate = configDoc.electricityTariffs[0].lwbpRate || 1112;
+    } else if (configDoc?.lwbpRate) {
+      solarRate = configDoc.lwbpRate;
+    }
+    if (configDoc?.pvRate !== undefined) {
+      pvRate = Number(configDoc.pvRate) || 0;
     }
   } catch {}
 
@@ -331,6 +340,8 @@ export const getSolarAnalytics = async (
   const poi1TotalKwh = live?.poi1?.totalKwh ?? 0;
   const poi2TotalKwh = live?.poi2?.totalKwh ?? 0;
   const estimasiBiaya = totalKwh * solarRate;
+  const estimasiBiayaPv = totalKwh * pvRate;
+  const estimasiPenghematan = estimasiBiaya - estimasiBiayaPv;
   const todayCost = todayKwh * solarRate;
 
   return {
@@ -340,6 +351,8 @@ export const getSolarAnalytics = async (
       monthlyKwh,
       yearlyKwh,
       estimasiBiaya,
+      estimasiBiayaPv,
+      estimasiPenghematan,
       todayCost,
       poi1TodayKwh,
       poi2TodayKwh,
@@ -353,7 +366,8 @@ export const getSolarAnalytics = async (
       rangePeakDemand,
       rangePoi1Kwh: Array.from(dailyMapPoi1.values()).reduce((a, b) => a + b, 0),
       rangePoi2Kwh: Array.from(dailyMapPoi2.values()).reduce((a, b) => a + b, 0),
-      solarRate
+      solarRate,
+      pvRate
     },
     charts: {
       hourly,
