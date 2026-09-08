@@ -81,7 +81,9 @@ export default function HvacControlPage({
 
   // Activity log modal
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
-  const [logFilter, setLogFilter] = useState<"all" | "start" | "stop" | "maintenance">("all");
+  const [logFilter, setLogFilter] = useState<"all" | "start" | "stop" | "maintenance" | "setpoint">("all");
+  const [selectedDetailLog, setSelectedDetailLog] = useState<LogEntry | null>(null);
+  const [copiedMac, setCopiedMac] = useState(false);
 
   // Active tab filter: 'all' | 'ahu-01' | 'ahu-02' | 'ahu-03'
   const [activeUnitTab, setActiveUnitTab] = useState<"all" | "ahu-01" | "ahu-02" | "ahu-03">("all");
@@ -546,24 +548,82 @@ export default function HvacControlPage({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {logs.slice(0, 6).map((log) => (
-            <div
-              key={log.id}
-              className="flex flex-col p-3 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800/80 text-xs"
-            >
-              <div className="flex justify-between items-start">
-                <span className="font-bold text-slate-800 dark:text-slate-200">
-                  {log.action}
-                </span>
-                <span className="text-[10px] font-mono text-slate-400">
-                  {new Date(log.timestamp).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                </span>
+          {logs.slice(0, 6).map((log) => {
+            const hasChanges = log.details?.changes && log.details.changes.length > 0;
+            const isSetpoint = log.type === "setpoint" || log.action.includes("SETPOINT");
+            const isStart = log.type === "start" || log.action.includes("START");
+            const isStop = log.type === "stop" || log.action.includes("STOP");
+
+            return (
+              <div
+                key={log.id}
+                className="flex flex-col justify-between p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200/80 dark:border-slate-800 hover:border-cyan-500/50 transition shadow-sm hover:shadow group text-xs"
+              >
+                <div>
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="font-bold text-slate-800 dark:text-slate-200 text-xs line-clamp-1 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition">
+                      {log.action}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 whitespace-nowrap">
+                      {new Date(log.timestamp).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    </span>
+                  </div>
+
+                  {/* Operator & Type badges */}
+                  <div className="flex items-center justify-between mt-1.5 text-[11px]">
+                    <span className="text-slate-500 dark:text-slate-400">
+                      Operator: <strong className="text-slate-700 dark:text-slate-300">{log.user}</strong>
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase font-mono border ${
+                      isSetpoint ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" :
+                      isStart ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" :
+                      isStop ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20" :
+                      "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
+                    }`}>
+                      {log.type}
+                    </span>
+                  </div>
+
+                  {/* Changes preview pill if available */}
+                  {hasChanges && (
+                    <div className="mt-2 p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 text-[10px] font-mono">
+                      {log.details!.changes!.slice(0, 1).map((ch, idx) => (
+                        <div key={idx} className="flex items-center justify-between gap-1">
+                          <span className="text-slate-400 truncate">{ch.field}:</span>
+                          <span className="text-slate-600 dark:text-slate-300">
+                            <span className="line-through text-rose-500 mr-1">{ch.from}</span>
+                            <span className="font-bold text-emerald-500">{ch.to}</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Network specs pill: IP & MAC Address */}
+                  <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-800/80 text-[10px] font-mono text-slate-500">
+                    <span className="truncate" title={`IP Address: ${log.ip || '127.0.0.1'}`}>
+                      IP: <span className="text-slate-700 dark:text-slate-300 font-semibold">{log.ip || "127.0.0.1"}</span>
+                    </span>
+                    <span className="truncate" title={`MAC Address: ${log.mac || '00:A5:54:BB:6A:0C'}`}>
+                      MAC: <span className="text-slate-700 dark:text-slate-300 font-semibold">{log.mac || "00:A5:54:BB:6A:0C"}</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Click button for detailed view */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedDetailLog(log)}
+                  className="mt-2.5 w-full py-1.5 px-3 rounded-lg text-[11px] font-bold text-cyan-700 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 border border-cyan-200/70 dark:border-cyan-800/70 transition flex items-center justify-center gap-1.5"
+                >
+                  <span>Detail Lengkap</span>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                  </svg>
+                </button>
               </div>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                Operator: <strong className="text-slate-700 dark:text-slate-300">{log.user}</strong>
-              </span>
-            </div>
-          ))}
+            );
+          })}
           {logs.length === 0 && (
             <p className="text-xs text-slate-400 dark:text-slate-500 italic col-span-3 py-3 text-center">
               Belum ada riwayat kontrol yang tercatat.
@@ -722,11 +782,16 @@ export default function HvacControlPage({
       {/* MODAL FULL LOGS */}
       {isLogModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 max-w-2xl w-full border border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 max-w-3xl w-full border border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3 mb-4">
-              <h3 className="text-base font-bold font-mono text-slate-800 dark:text-white">
-                Log Aktivitas Kendali HVAC
-              </h3>
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-base font-bold font-mono text-slate-800 dark:text-white">
+                  Log Aktivitas Kendali HVAC
+                </h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-bold">
+                  {filteredLogs.length} Entri
+                </span>
+              </div>
               <button
                 onClick={() => setIsLogModalOpen(false)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold"
@@ -736,15 +801,15 @@ export default function HvacControlPage({
             </div>
 
             {/* Filter buttons */}
-            <div className="flex gap-2 mb-4">
-              {(["all", "start", "stop", "maintenance"] as const).map((filter) => (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {(["all", "start", "stop", "maintenance", "setpoint"] as const).map((filter) => (
                 <button
                   key={filter}
                   onClick={() => setLogFilter(filter)}
                   className={`px-3 py-1 rounded-lg text-xs font-mono uppercase font-bold transition ${
                     logFilter === filter
-                      ? "bg-cyan-600 text-white"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                      ? "bg-cyan-600 text-white shadow-sm"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
                   }`}
                 >
                   {filter}
@@ -752,25 +817,227 @@ export default function HvacControlPage({
               ))}
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2 pr-2 text-xs">
+            <div className="flex-1 overflow-y-auto space-y-2.5 pr-2 text-xs">
               {filteredLogs.length === 0 ? (
-                <p className="text-center py-6 text-slate-400 italic">Tidak ada log untuk filter ini.</p>
+                <p className="text-center py-8 text-slate-400 italic">Tidak ada log untuk filter ini.</p>
               ) : (
-                filteredLogs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="flex justify-between items-center p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800"
-                  >
-                    <div>
-                      <span className="font-bold text-slate-800 dark:text-slate-200 block">{log.action}</span>
-                      <span className="text-[11px] text-slate-500">Operator: {log.user}</span>
+                filteredLogs.map((log) => {
+                  const isSetpoint = log.type === "setpoint" || log.action.includes("SETPOINT");
+                  const isStart = log.type === "start" || log.action.includes("START");
+                  const isStop = log.type === "stop" || log.action.includes("STOP");
+                  return (
+                    <div
+                      key={log.id}
+                      className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800 hover:border-cyan-500/40 transition"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase font-mono border ${
+                            isSetpoint ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" :
+                            isStart ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" :
+                            isStop ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20" :
+                            "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
+                          }`}>
+                            {log.type}
+                          </span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{log.action}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-[11px] text-slate-500 font-mono">
+                          <span>Operator: <strong className="text-slate-700 dark:text-slate-300">{log.user}</strong></span>
+                          <span>•</span>
+                          <span>IP: <strong className="text-slate-700 dark:text-slate-300">{log.ip || "127.0.0.1"}</strong></span>
+                          <span>•</span>
+                          <span>MAC: <strong className="text-slate-700 dark:text-slate-300">{log.mac || "00:A5:54:BB:6A:0C"}</strong></span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-[11px] text-slate-400 whitespace-nowrap">
+                          {new Date(log.timestamp).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "medium" })}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDetailLog(log)}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-cyan-700 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/50 hover:bg-cyan-100 dark:hover:bg-cyan-900/60 border border-cyan-200 dark:border-cyan-800 transition"
+                        >
+                          Detail Lengkap ↗
+                        </button>
+                      </div>
                     </div>
-                    <span className="font-mono text-[11px] text-slate-400">
-                      {new Date(log.timestamp).toLocaleString("id-ID")}
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL RINCIAN DETAIL AKTIVITAS (IP, MAC, SETPOINT & ON/OFF) */}
+      {selectedDetailLog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 max-w-xl w-full border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto space-y-5">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3.5">
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl border ${
+                  selectedDetailLog.type === "setpoint" ? "bg-amber-500/10 border-amber-500/20 text-amber-500" :
+                  selectedDetailLog.type === "start" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" :
+                  selectedDetailLog.type === "stop" ? "bg-rose-500/10 border-rose-500/20 text-rose-500" :
+                  "bg-cyan-500/10 border-cyan-500/20 text-cyan-500"
+                }`}>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">
+                    Audit Trail Detail #{selectedDetailLog.id}
+                  </span>
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-white font-mono">
+                    {selectedDetailLog.action}
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedDetailLog(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Section 1: Rincian Aksi & Parameter (Setpoint & ON/OFF) */}
+            <div className="space-y-2.5">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 font-mono flex items-center gap-1.5">
+                <span>⚡ Rincian Aksi & Perubahan Nilai</span>
+              </h4>
+
+              {selectedDetailLog.details?.changes && selectedDetailLog.details.changes.length > 0 ? (
+                <div className="overflow-hidden border border-slate-200 dark:border-slate-800 rounded-xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800 text-[10px] font-bold text-slate-500 uppercase">
+                      <tr>
+                        <th className="py-2.5 px-3">Parameter</th>
+                        <th className="py-2.5 px-3">Nilai Sebelum</th>
+                        <th className="py-2.5 px-3">Nilai Sesudah</th>
+                        <th className="py-2.5 px-3 text-right">Selisih</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-xs">
+                      {selectedDetailLog.details.changes.map((ch, idx) => (
+                        <tr key={idx} className="bg-white dark:bg-slate-900/40">
+                          <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">{ch.field}</td>
+                          <td className="py-2.5 px-3 text-rose-500 line-through">{ch.from}</td>
+                          <td className="py-2.5 px-3 text-emerald-600 dark:text-emerald-400 font-bold">{ch.to}</td>
+                          <td className="py-2.5 px-3 text-right">
+                            <span className="px-2 py-0.5 rounded bg-cyan-50 dark:bg-cyan-950/50 text-cyan-600 dark:text-cyan-400 font-bold">
+                              {ch.delta || "—"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : selectedDetailLog.details?.before || selectedDetailLog.details?.after ? (
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-xs font-mono">
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase block font-bold">Status Sebelum:</span>
+                    <span className="text-rose-500 font-bold text-sm">
+                      {selectedDetailLog.details.before?.status || "—"} ({selectedDetailLog.details.before?.status === "Running" ? "ON" : "OFF"})
                     </span>
                   </div>
-                ))
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase block font-bold">Status Sesudah:</span>
+                    <span className="text-emerald-500 font-bold text-sm">
+                      {selectedDetailLog.details.after?.status || "—"} ({selectedDetailLog.details.after?.status === "Running" ? "ON" : "OFF"})
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-600 dark:text-slate-300">
+                  {selectedDetailLog.action}
+                </div>
               )}
+            </div>
+
+            {/* Section 2: Spesifikasi Jaringan & Perangkat (IP & MAC Address) */}
+            <div className="space-y-2.5">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 font-mono flex items-center gap-1.5">
+                <span>🌐 Spesifikasi Jaringan & Perangkat (Terminal Hardware)</span>
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* IP Address Card */}
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase font-bold text-slate-400">IP Address Klien</span>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/10 text-blue-500 font-mono font-bold">IPv4</span>
+                  </div>
+                  <div className="text-base font-bold font-mono text-[#002b5c] dark:text-slate-100 mt-1">
+                    {selectedDetailLog.ip || "127.0.0.1"}
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono block mt-0.5">Terminal Subnet Network</span>
+                </div>
+
+                {/* MAC Address Card */}
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 relative group">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase font-bold text-slate-400">MAC Address Fisik</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedDetailLog.mac) {
+                          navigator.clipboard.writeText(selectedDetailLog.mac);
+                          setCopiedMac(true);
+                          setTimeout(() => setCopiedMac(false), 2000);
+                        }
+                      }}
+                      className="px-2 py-0.5 rounded text-[9px] bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 font-mono font-bold transition"
+                    >
+                      {copiedMac ? "✓ Disalin" : "Salin MAC"}
+                    </button>
+                  </div>
+                  <div className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+                    {selectedDetailLog.mac || "00:A5:54:BB:6A:0C"}
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono block mt-0.5">IEEE 802 Physical Hardware</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Operator & Waktu */}
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+              <div>
+                <span className="text-[10px] text-slate-400 block font-bold font-mono">OPERATOR / ROLE</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">
+                  {selectedDetailLog.user}
+                </span>
+                <span className="text-[11px] text-slate-500 font-mono">
+                  Role: {selectedDetailLog.role || "Operator"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block font-bold font-mono">WAKTU EKSEKUSI (WIB)</span>
+                <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 block mt-0.5">
+                  {new Date(selectedDetailLog.timestamp).toLocaleDateString("id-ID", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}
+                </span>
+                <span className="font-mono text-[11px] text-slate-500">
+                  {new Date(selectedDetailLog.timestamp).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} WIB
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedDetailLog(null)}
+                className="px-5 py-2 text-xs font-bold text-white bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 rounded-xl transition shadow"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { recordAudit } from "../../services/audit.service";
+import { recordAudit, getClientIp, getClientMac } from "../../services/audit.service";
 import {
   createMaintenance,
   createShiftReport,
@@ -337,6 +337,16 @@ export const updateHvacStateHandler = async (
 
     const parsed = hvacControlSchema.parse(req.body);
     const actorId = getActorId(req);
+    const clientIp = parsed.clientIp || getClientIp(req);
+    const clientMac = parsed.clientMac || getClientMac(req, clientIp);
+
+    const roomMap: Record<string, string> = {
+      "ahu-01": "AHU-01",
+      "ahu-02": "AHU-02",
+      "ahu-03": "AHU-03",
+      "utility": "UTILITY"
+    };
+    const roomName = roomMap[parsed.unitId] || parsed.unitId.toUpperCase();
 
     const data = await updateHvacState(parsed.unitId, {
       status: parsed.status,
@@ -345,30 +355,129 @@ export const updateHvacStateHandler = async (
       humid: parsed.humid
     });
 
-    if (parsed.actionLabel && actorId) {
-      const roomMap: Record<string, string> = {
-        "ahu-01": "AHU-01",
-        "ahu-02": "AHU-02",
-        "ahu-03": "AHU-03",
-        "utility": "UTILITY"
-      };
-      const roomName = roomMap[parsed.unitId] || parsed.unitId.toUpperCase();
+    const previous = (data as any).previous || parsed.previousState || {};
 
+    // 1. Check if setpoint changed (Temperature or Humidity)
+    const isTempChanged = parsed.temp !== undefined && Math.abs(parsed.temp - (previous.temp ?? parsed.temp)) > 0.01;
+    const isHumidChanged = parsed.humid !== undefined && Math.abs(parsed.humid - (previous.humid ?? parsed.humid)) > 0.01;
+
+    if ((isTempChanged || isHumidChanged) && actorId) {
+      const changes: Array<{ field: string; from: string; to: string; delta: string }> = [];
+      if (isTempChanged) {
+        const prevT = typeof previous.temp === "number" ? previous.temp : 0;
+        const delta = parsed.temp! - prevT;
+        const sign = delta > 0 ? "+" : "";
+        changes.push({
+          field: "Temperature Setpoint",
+          from: `${previous.temp !== undefined ? Number(previous.temp).toFixed(1) : "—"} °C`,
+          to: `${parsed.temp!.toFixed(1)} °C`,
+          delta: `${sign}${delta.toFixed(1)} °C`
+        });
+      }
+      if (isHumidChanged) {
+        const prevH = typeof previous.humid === "number" ? previous.humid : 0;
+        const delta = parsed.humid! - prevH;
+        const sign = delta > 0 ? "+" : "";
+        changes.push({
+          field: "Humidity Setpoint",
+          from: `${previous.humid !== undefined ? Number(previous.humid).toFixed(1) : "—"} %RH`,
+          to: `${parsed.humid!.toFixed(1)} %RH`,
+          delta: `${sign}${delta.toFixed(1)} %RH`
+        });
+      }
+
+      const changeSummary = changes.map(c => `${c.field}: ${c.from} → ${c.to} (${c.delta})`).join(", ");
+      const actionTitle = `SETPOINT DIUBAH (${changes.map(c => `${c.field.split(" ")[0]} ${c.to}`).join(", ")})`;
+
+      await recordAudit({
+        actorId,
+        action: "hvac.setpoint_change",
+        resourceType: "hvac",
+        resourceId: parsed.unitId,
+        ip: clientIp,
+        mac: clientMac,
+        meta: {
+          actionLabel: actionTitle,
+          roomName,
+          type: "setpoint",
+          operatorRole: actorRole || "Operator",
+          changes,
+          before: { temp: previous.temp, humid: previous.humid },
+          after: { temp: data.temp, humid: data.humid },
+          description: `Perubahan setpoint pada ${roomName}: ${changeSummary}`,
+          networkInfo: {
+            ip: clientIp,
+            mac: clientMac,
+            userAgent: req.headers["user-agent"]
+          }
+        }
+      });
+    }
+
+    // 2. Check if operational command / status changed (START / STOP / MAINTENANCE / MODE)
+    const isStatusChanged = parsed.status !== undefined && parsed.status !== previous.status;
+    const isModeChanged = parsed.mode !== undefined && parsed.mode !== previous.mode;
+
+    if ((parsed.actionLabel || isStatusChanged || isModeChanged) && actorId) {
       let type: "start" | "stop" | "maintenance" | "other" = "other";
-      const lowerAction = parsed.actionLabel.toLowerCase();
-      if (lowerAction.includes("start")) type = "start";
-      else if (lowerAction.includes("stop")) type = "stop";
-      else if (lowerAction.includes("maintenance")) type = "maintenance";
+      const effectiveStatus = parsed.status || previous.status;
+      if (parsed.actionLabel) {
+        const lower = parsed.actionLabel.toLowerCase();
+        if (lower.includes("start")) type = "start";
+        else if (lower.includes("stop")) type = "stop";
+        else if (lower.includes("maintenance")) type = "maintenance";
+      } else if (effectiveStatus === "Running") {
+        type = "start";
+      } else if (effectiveStatus === "Stopped") {
+        type = "stop";
+      } else if (effectiveStatus === "Maintenance") {
+        type = "maintenance";
+      }
+
+      const statusFrom = previous.status || "Stopped";
+      const statusTo = parsed.status || statusFrom;
+      const modeFrom = previous.mode || "Auto";
+      const modeTo = parsed.mode || modeFrom;
+
+      const actionTitle = parsed.actionLabel || (type === "start" ? "START (ON)" : type === "stop" ? "STOP (OFF)" : type === "maintenance" ? "MAINTENANCE" : "MODE UPDATE");
+
+      const changes: Array<{ field: string; from: string; to: string; delta?: string }> = [];
+      if (isStatusChanged) {
+        changes.push({
+          field: "Status Operasional",
+          from: `${statusFrom} (${statusFrom === "Running" ? "ON" : "OFF"})`,
+          to: `${statusTo} (${statusTo === "Running" ? "ON" : "OFF"})`
+        });
+      }
+      if (isModeChanged) {
+        changes.push({
+          field: "Mode Sistem",
+          from: modeFrom,
+          to: modeTo
+        });
+      }
 
       await recordAudit({
         actorId,
         action: "hvac.control",
         resourceType: "hvac",
         resourceId: parsed.unitId,
+        ip: clientIp,
+        mac: clientMac,
         meta: {
-          actionLabel: parsed.actionLabel,
+          actionLabel: actionTitle,
           roomName,
-          type
+          type,
+          operatorRole: actorRole || "Operator",
+          changes,
+          before: { status: statusFrom, mode: modeFrom },
+          after: { status: statusTo, mode: modeTo },
+          description: `Eksekusi kendali pada ${roomName}: ${actionTitle}. Status: ${statusFrom} → ${statusTo}, Mode: ${modeFrom} → ${modeTo}`,
+          networkInfo: {
+            ip: clientIp,
+            mac: clientMac,
+            userAgent: req.headers["user-agent"]
+          }
         }
       });
     }

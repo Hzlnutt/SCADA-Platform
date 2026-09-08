@@ -49,7 +49,15 @@ export const hvacControlSchema = z.object({
   mode: z.enum(["Auto", "Manual"]).optional(),
   temp: z.number().optional(),
   humid: z.number().optional(),
-  actionLabel: z.string().optional()
+  actionLabel: z.string().optional(),
+  clientIp: z.string().optional(),
+  clientMac: z.string().optional(),
+  previousState: z.object({
+    temp: z.number().optional(),
+    humid: z.number().optional(),
+    status: z.string().optional(),
+    mode: z.string().optional()
+  }).optional()
 });
 
 export type MaintenanceInput = z.infer<typeof maintenanceSchema>;

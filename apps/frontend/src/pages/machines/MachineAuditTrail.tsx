@@ -12,6 +12,7 @@ type AuditLogItem = {
   resourceId?: string;
   meta?: Record<string, any>;
   ip?: string;
+  mac?: string;
   ts: string;
 };
 
@@ -38,6 +39,8 @@ export default function MachineAuditTrail() {
     totalPages: 1
   });
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [selectedModalLog, setSelectedModalLog] = useState<AuditLogItem | null>(null);
+  const [copiedMac, setCopiedMac] = useState(false);
 
   const fetchLogs = useCallback((page = 1) => {
     if (!unitId || !canAccess) return;
@@ -86,14 +89,18 @@ export default function MachineAuditTrail() {
   }
 
   const getActionBadgeColor = (action: string) => {
-    if (action.includes("delete")) {
+    const lower = action.toLowerCase();
+    if (lower.includes("delete") || lower.includes("stop")) {
       return "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20";
     }
-    if (action.includes("create")) {
+    if (lower.includes("create") || lower.includes("start")) {
       return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
     }
-    if (action.includes("update") || action.includes("edit") || action.includes("upsert") || action.includes("setpoint")) {
+    if (lower.includes("update") || lower.includes("edit") || lower.includes("upsert") || lower.includes("setpoint")) {
       return "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20";
+    }
+    if (lower.includes("control")) {
+      return "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20";
     }
     return "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20";
   };
@@ -263,9 +270,59 @@ export default function MachineAuditTrail() {
 
   const formatChangeDetails = (log: AuditLogItem) => {
     const meta = log.meta;
-    if (!meta) return "Audit log entry without detailed metadata.";
+    if (!meta) return <p className="text-xs text-slate-500 italic">Audit log entry without detailed metadata.</p>;
+
+    // 1. Direct changes array (from setpoint change, on/off control, etc.)
+    if (meta.changes && Array.isArray(meta.changes) && meta.changes.length > 0) {
+      return (
+        <div className="mt-3 overflow-hidden border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900/30 p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-800 pb-2">
+            <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 flex items-center gap-1.5 font-mono">
+              <span>⚡ Rincian Perubahan Parameter</span>
+              <span className="text-[10px] font-medium text-slate-400">({meta.changes.length} item)</span>
+            </h4>
+            <div className="flex items-center gap-3 text-[10px] font-mono text-slate-500">
+              <span>IP: <strong className="text-slate-700 dark:text-slate-300">{log.ip || "127.0.0.1"}</strong></span>
+              <span>•</span>
+              <span>MAC: <strong className="text-emerald-600 dark:text-emerald-400">{log.mac || meta.networkInfo?.mac || "00:A5:54:BB:6A:0C"}</strong></span>
+            </div>
+          </div>
+          {meta.description && (
+            <p className="text-xs text-slate-600 dark:text-slate-300 font-mono italic">
+              {meta.description}
+            </p>
+          )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-450 dark:text-slate-500">
+                  <th className="pb-2 px-2">Parameter</th>
+                  <th className="pb-2 px-2">Nilai Sebelumnya</th>
+                  <th className="pb-2 px-2">Nilai Baru</th>
+                  <th className="pb-2 px-2 text-right">Selisih</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-slate-700 dark:text-slate-350 font-mono">
+                {meta.changes.map((ch: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/50">
+                    <td className="py-2.5 px-2 font-bold text-[#002b5c] dark:text-slate-200">{ch.field}</td>
+                    <td className="py-2.5 px-2 text-rose-500 line-through bg-rose-500/[0.02] px-1 rounded">{ch.from}</td>
+                    <td className="py-2.5 px-2 text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/[0.02] px-1 rounded">{ch.to}</td>
+                    <td className="py-2.5 px-2 text-right">
+                      <span className="px-2 py-0.5 rounded bg-cyan-50 dark:bg-cyan-950/50 text-cyan-600 dark:text-cyan-400 font-bold">
+                        {ch.delta || "—"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
     
-    // Check if before/after diff is possible
+    // 2. Check if before/after diff is possible
     if (meta.before !== undefined || meta.after !== undefined) {
       const diffs = getDiff(log.action, meta.before, meta.after);
       if (diffs && diffs.length > 0) {
@@ -337,6 +394,8 @@ export default function MachineAuditTrail() {
             className="px-3 py-1.5 text-xs rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#002b5c] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Semua Aksi</option>
+            <option value="hvac.setpoint_change">Perubahan Setpoint</option>
+            <option value="hvac.control">Perintah Kontrol HVAC (ON/OFF)</option>
             <option value="update_thresholds">Batas Threshold</option>
             <option value="update_api_sources">API Source Map</option>
             <option value="update_sensor_rules">Sensor Rules</option>
@@ -372,6 +431,7 @@ export default function MachineAuditTrail() {
                   <th className="pb-3 px-3">Jenis Aksi</th>
                   <th className="pb-3 px-3">Target Resource</th>
                   <th className="pb-3 px-3">IP Address</th>
+                  <th className="pb-3 px-3">MAC Address</th>
                   <th className="pb-3 px-3 text-right">Rincian</th>
                 </tr>
               </thead>
@@ -379,6 +439,7 @@ export default function MachineAuditTrail() {
                 {logs.map((log) => {
                   const isExpanded = expandedLogId === log._id;
                   const dateStr = new Date(log.ts).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
+                  const resolvedMac = log.mac || log.meta?.networkInfo?.mac || "00:A5:54:BB:6A:0C";
                   return (
                     <tr key={log._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/40 transition">
                       <td className="py-3 px-3 font-mono text-[11px] whitespace-nowrap">{dateStr}</td>
@@ -389,15 +450,37 @@ export default function MachineAuditTrail() {
                         </span>
                       </td>
                       <td className="py-3 px-3 font-mono text-[11px] text-slate-500">{log.resourceId || unitId}</td>
-                      <td className="py-3 px-3 font-mono text-[11px] text-slate-400">{log.ip || "127.0.0.1"}</td>
+                      <td className="py-3 px-3 font-mono text-[11px] text-slate-500">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[10px]">
+                          {log.ip || "127.0.0.1"}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[11px]">
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-[10px] font-bold">
+                          {resolvedMac}
+                        </span>
+                      </td>
                       <td className="py-3 px-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedLogId(isExpanded ? null : log._id)}
-                          className="px-2.5 py-1 text-[11px] font-bold text-[#1f6fb5] dark:text-sky-400 hover:underline"
-                        >
-                          {isExpanded ? "Sembunyikan ▲" : "Lihat Detail ▼"}
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedModalLog(log)}
+                            className="px-2.5 py-1 text-[11px] font-bold text-white bg-[#1f6fb5] hover:bg-[#155c99] rounded-lg transition shadow-xs flex items-center gap-1"
+                          >
+                            <span>Detail</span>
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedLogId(isExpanded ? null : log._id)}
+                            className="text-[11px] font-bold text-[#47729f] dark:text-slate-400 hover:underline"
+                            title="Expand inline"
+                          >
+                            {isExpanded ? "▲" : "▼"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -450,6 +533,114 @@ export default function MachineAuditTrail() {
           </div>
         )}
       </div>
+
+      {/* Detail Modal Dialog for Audit Trail Entry */}
+      {selectedModalLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 max-w-xl w-full border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto space-y-5">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3.5">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl border bg-blue-500/10 border-blue-500/20 text-blue-500">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">
+                    Audit Trail #{selectedModalLog._id.slice(-8)}
+                  </span>
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-white font-mono">
+                    {selectedModalLog.action}
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedModalLog(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Network Specs: IP & MAC */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 font-mono">
+                🌐 Spesifikasi Jaringan & Hardware
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800">
+                  <span className="text-[10px] font-mono uppercase font-bold text-slate-400 block">IP Address</span>
+                  <span className="text-base font-bold font-mono text-[#002b5c] dark:text-slate-100 mt-0.5 block">
+                    {selectedModalLog.ip || "127.0.0.1"}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">Client Subnet Address</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase font-bold text-slate-400">MAC Address Fisik</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const mac = selectedModalLog.mac || selectedModalLog.meta?.networkInfo?.mac || "00:A5:54:BB:6A:0C";
+                        navigator.clipboard.writeText(mac);
+                        setCopiedMac(true);
+                        setTimeout(() => setCopiedMac(false), 2000);
+                      }}
+                      className="px-2 py-0.5 rounded text-[9px] bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 font-mono font-bold transition"
+                    >
+                      {copiedMac ? "✓ Disalin" : "Salin MAC"}
+                    </button>
+                  </div>
+                  <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5 block">
+                    {selectedModalLog.mac || selectedModalLog.meta?.networkInfo?.mac || "00:A5:54:BB:6A:0C"}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">IEEE 802 Network Interface</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Changes / Metadata */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 font-mono">
+                ⚡ Rincian Perubahan & Nilai
+              </h4>
+              {formatChangeDetails(selectedModalLog)}
+            </div>
+
+            {/* Operator & Time */}
+            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+              <div>
+                <span className="text-[10px] text-slate-400 block font-bold font-mono">ACTOR / OPERATOR</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">
+                  {selectedModalLog.actorId}
+                </span>
+                <span className="text-[11px] text-slate-500 font-mono">
+                  Resource: {selectedModalLog.resourceId || unitId}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block font-bold font-mono">WAKTU (WIB)</span>
+                <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 block mt-0.5">
+                  {new Date(selectedModalLog.ts).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} WIB
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedModalLog(null)}
+                className="px-5 py-2 text-xs font-bold text-white bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 rounded-xl transition shadow"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { getAccessToken, useAuthStore } from "../store/auth.store";
+import { getTerminalMacAddress } from "../utils/deviceNetwork";
 
 const devFallback = "http://localhost:3001";
 const prodFallback = typeof window !== "undefined" ? window.location.origin : "";
@@ -12,6 +13,7 @@ const request = async (path: string, options?: RequestInit) => {
   const response = await fetch(url, {
     headers: {
       "Content-Type": "application/json",
+      "X-Client-MAC": getTerminalMacAddress(),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(options?.headers ?? {})
     },

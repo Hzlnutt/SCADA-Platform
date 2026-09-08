@@ -536,11 +536,18 @@ export const updateHvacState = async (
   };
   const def = defaults[unitId] || { temp: 20, humid: 50, mode: "Auto", status: "Running" };
 
+  const previous = {
+    temp: current?.temp !== undefined ? current.temp : def.temp,
+    humid: current?.humid !== undefined ? current.humid : def.humid,
+    mode: current?.mode !== undefined ? current.mode : def.mode,
+    status: current?.status !== undefined ? current.status : def.status,
+  };
+
   const merged = {
-    temp: updates.temp !== undefined ? updates.temp : (current?.temp !== undefined ? current.temp : def.temp),
-    humid: updates.humid !== undefined ? updates.humid : (current?.humid !== undefined ? current.humid : def.humid),
-    mode: updates.mode !== undefined ? updates.mode : (current?.mode !== undefined ? current.mode : def.mode),
-    status: updates.status !== undefined ? updates.status : (current?.status !== undefined ? current.status : def.status),
+    temp: updates.temp !== undefined ? updates.temp : previous.temp,
+    humid: updates.humid !== undefined ? updates.humid : previous.humid,
+    mode: updates.mode !== undefined ? updates.mode : previous.mode,
+    status: updates.status !== undefined ? updates.status : previous.status,
   };
 
   await collection.updateOne(
@@ -554,7 +561,7 @@ export const updateHvacState = async (
     { upsert: true }
   );
 
-  return merged;
+  return { ...merged, previous };
 };
 
 export const getHvacLogs = async (limit: number = 50) => {
@@ -563,7 +570,13 @@ export const getHvacLogs = async (limit: number = 50) => {
   const usersCollection = db.collection(USERS_COLLECTION);
 
   const logs = await auditCollection
-    .find({ action: "hvac.control" })
+    .find({
+      $or: [
+        { action: "hvac.control" },
+        { action: "hvac.setpoint_change" },
+        { resourceType: "hvac" }
+      ]
+    })
     .sort({ ts: -1 })
     .limit(limit)
     .toArray();
@@ -578,17 +591,37 @@ export const getHvacLogs = async (limit: number = 50) => {
 
   const users = await usersCollection
     .find({ _id: { $in: actorIds } })
-    .project({ _id: 1, name: 1 })
+    .project({ _id: 1, name: 1, role: 1, email: 1 })
     .toArray();
 
-  const userMap = new Map(users.map((u: any) => [u._id.toString(), u.name]));
+  const userMap = new Map(users.map((u: any) => [u._id.toString(), { name: u.name, role: u.role }]));
 
-  return logs.map((log: any) => ({
-    id: log._id.toString(),
-    action: log.meta?.actionLabel ? `${log.meta.roomName} - ${log.meta.actionLabel}` : log.action,
-    user: userMap.get(log.actorId) || "System / Unknown",
-    timestamp: log.ts,
-    type: log.meta?.type || "other"
-  }));
+  return logs.map((log: any) => {
+    const userInfo = userMap.get(log.actorId);
+    return {
+      id: log._id.toString(),
+      action: log.meta?.actionLabel ? `${log.meta.roomName ? `${log.meta.roomName} - ` : ""}${log.meta.actionLabel}` : log.action,
+      user: userInfo?.name || (typeof log.actorId === "string" && !log.actorId.match(/^[0-9a-fA-F]{24}$/) ? log.actorId : "System / Unknown"),
+      role: userInfo?.role || log.meta?.operatorRole || "Operator",
+      timestamp: log.ts,
+      type: log.meta?.type || (log.action.includes("setpoint") ? "setpoint" : "other"),
+      ip: log.ip || log.meta?.networkInfo?.ip || "127.0.0.1",
+      mac: log.mac || log.meta?.networkInfo?.mac || "00:A5:54:BB:6A:0C",
+      details: {
+        roomName: log.meta?.roomName,
+        actionLabel: log.meta?.actionLabel,
+        type: log.meta?.type,
+        before: log.meta?.before,
+        after: log.meta?.after,
+        changes: log.meta?.changes || [],
+        description: log.meta?.description,
+        networkInfo: {
+          ip: log.ip || log.meta?.networkInfo?.ip || "127.0.0.1",
+          mac: log.mac || log.meta?.networkInfo?.mac || "00:A5:54:BB:6A:0C",
+          userAgent: log.meta?.networkInfo?.userAgent
+        }
+      }
+    };
+  });
 };
 

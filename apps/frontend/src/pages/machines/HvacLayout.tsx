@@ -107,8 +107,25 @@ export interface LogEntry {
   id: string | number;
   action: string;
   user: string;
+  role?: string;
   timestamp: Date;
-  type: "start" | "stop" | "maintenance" | "other";
+  type: "start" | "stop" | "maintenance" | "setpoint" | "other";
+  ip?: string;
+  mac?: string;
+  details?: {
+    roomName?: string;
+    actionLabel?: string;
+    type?: string;
+    before?: any;
+    after?: any;
+    changes?: Array<{ field: string; from: string; to: string; delta?: string }>;
+    description?: string;
+    networkInfo?: {
+      ip?: string;
+      mac?: string;
+      userAgent?: string;
+    };
+  };
 }
 
 import { canAccessHvacControls } from "../../utils/roles";

@@ -12,6 +12,7 @@ import MachineAHU02Pid from "./diagrams/MachineAHU02Pid";
 import MachineAHU03Pid from "./diagrams/MachineAHU03Pid";
 import MachineUtilityPid from "./diagrams/MachineUtilityPid";
 import HvacControlPage from "./HvacControlPage";
+import { getTerminalMacAddress } from "../../utils/deviceNetwork";
 
 // Inline SVG Icons for control panel
 const startIcon = (
@@ -263,10 +264,20 @@ const MachineCustomTab = () => {
     actionLabel?: string
   ) => {
     try {
+      const clientMac = getTerminalMacAddress();
+      const currentPrev = {
+        temp: unitId === "ahu-01" ? ahu01Temp : unitId === "ahu-02" ? ahu02Temp : unitId === "ahu-03" ? ahu03Temp : utilTemp,
+        humid: unitId === "ahu-01" ? ahu01Humid : unitId === "ahu-02" ? ahu02Humid : unitId === "ahu-03" ? ahu03Humid : utilHumid,
+        status: unitId === "ahu-01" ? ahu01Status : unitId === "ahu-02" ? ahu02Status : unitId === "ahu-03" ? ahu03Status : utilStatus,
+        mode: unitId === "ahu-01" ? ahu01Mode : unitId === "ahu-02" ? ahu02Mode : unitId === "ahu-03" ? ahu03Mode : utilMode,
+      };
+
       await postJson("/operations/hvac/control", {
         unitId,
         ...updates,
-        actionLabel
+        actionLabel,
+        clientMac,
+        previousState: currentPrev
       });
       if (unitId === "ahu-01") {
         if (updates.status !== undefined) setAhu01Status(updates.status);
@@ -289,6 +300,7 @@ const MachineCustomTab = () => {
         if (updates.temp !== undefined) setUtilTemp(updates.temp);
         if (updates.humid !== undefined) setUtilHumid(updates.humid);
       }
+      fetchHvacData();
     } catch (err) {
       console.error("Failed to update HVAC state:", err);
     }
@@ -302,13 +314,28 @@ const MachineCustomTab = () => {
     if (debounceTimers.current[key]) {
       clearTimeout(debounceTimers.current[key]);
     }
-    debounceTimers.current[key] = setTimeout(() => {
-      postJson("/operations/hvac/control", {
-        unitId,
-        ...updates
-      }).catch(err => console.error("Debounced update failed:", err));
+    const currentPrev = {
+      temp: unitId === "ahu-01" ? ahu01Temp : unitId === "ahu-02" ? ahu02Temp : unitId === "ahu-03" ? ahu03Temp : utilTemp,
+      humid: unitId === "ahu-01" ? ahu01Humid : unitId === "ahu-02" ? ahu02Humid : unitId === "ahu-03" ? ahu03Humid : utilHumid,
+      status: unitId === "ahu-01" ? ahu01Status : unitId === "ahu-02" ? ahu02Status : unitId === "ahu-03" ? ahu03Status : utilStatus,
+      mode: unitId === "ahu-01" ? ahu01Mode : unitId === "ahu-02" ? ahu02Mode : unitId === "ahu-03" ? ahu03Mode : utilMode,
+    };
+
+    debounceTimers.current[key] = setTimeout(async () => {
+      try {
+        const clientMac = getTerminalMacAddress();
+        await postJson("/operations/hvac/control", {
+          unitId,
+          ...updates,
+          clientMac,
+          previousState: currentPrev
+        });
+        fetchHvacData();
+      } catch (err) {
+        console.error("Debounced update failed:", err);
+      }
     }, 500);
-  }, []);
+  }, [ahu01Temp, ahu01Humid, ahu01Status, ahu01Mode, ahu02Temp, ahu02Humid, ahu02Status, ahu02Mode, ahu03Temp, ahu03Humid, ahu03Status, ahu03Mode, utilTemp, utilHumid, utilStatus, utilMode, fetchHvacData]);
 
   // ===== FUNGSI VERIFIKASI PASSWORD =====
   const verifyPassword = async (password: string): Promise<boolean> => {
