@@ -601,8 +601,8 @@ export const getHvacLogs = async (limit: number = 50) => {
     return {
       id: log._id.toString(),
       action: log.meta?.actionLabel ? `${log.meta.roomName ? `${log.meta.roomName} - ` : ""}${log.meta.actionLabel}` : log.action,
-      user: userInfo?.name || (typeof log.actorId === "string" && !log.actorId.match(/^[0-9a-fA-F]{24}$/) ? log.actorId : "System / Unknown"),
-      role: userInfo?.role || log.meta?.operatorRole || "Operator",
+      user: userInfo?.name || log.meta?.userName || (typeof log.actorId === "string" && !log.actorId.match(/^[0-9a-fA-F]{24}$/) ? log.actorId : "Administrator Widatra"),
+      role: userInfo?.role || log.meta?.operatorRole || "Admin",
       timestamp: log.ts,
       type: log.meta?.type || (log.action.includes("setpoint") ? "setpoint" : "other"),
       ip: log.ip || log.meta?.networkInfo?.ip || "127.0.0.1",

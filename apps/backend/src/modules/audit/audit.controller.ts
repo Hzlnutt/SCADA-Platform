@@ -18,15 +18,25 @@ export const getAuditLogsHandler = async (
 
     // Unit / Machine specific filtering
     if (req.query.unitId) {
-      const unitIdStr = String(req.query.unitId);
+      const unitIdStr = String(req.query.unitId).trim();
       const unitRegex = new RegExp(unitIdStr, "i");
+      
+      const relatedUnits: string[] = [unitIdStr];
+      const lowerUnit = unitIdStr.toLowerCase();
+      if (lowerUnit.includes("retained") || lowerUnit.includes("qc") || lowerUnit.includes("hvac-qc")) {
+        relatedUnits.push("ahu-01", "ahu-02", "ahu-03", "hvac-qc-retained-sample", "utility", "hvac-qc");
+      } else if (["ahu-01", "ahu-02", "ahu-03", "utility"].includes(lowerUnit)) {
+        relatedUnits.push("hvac-qc-retained-sample", "hvac-qc");
+      }
+
       query.$or = [
-        { resourceId: unitIdStr },
+        { resourceId: { $in: relatedUnits } },
         { resourceId: unitRegex },
-        { "meta.unitId": unitIdStr },
+        { "meta.unitId": { $in: relatedUnits } },
         { "meta.unitId": unitRegex },
-        { "meta.machineId": unitIdStr },
-        { "meta.machineId": unitRegex }
+        { "meta.machineId": { $in: relatedUnits } },
+        { "meta.machineId": unitRegex },
+        { "meta.parentUnitId": { $in: relatedUnits } }
       ];
     }
 

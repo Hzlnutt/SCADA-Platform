@@ -336,7 +336,8 @@ export const updateHvacStateHandler = async (
     }
 
     const parsed = hvacControlSchema.parse(req.body);
-    const actorId = getActorId(req);
+    const actorId = getActorId(req) || (req as any).user?.id || (req as any).user?._id?.toString() || "admin";
+    const actorName = (req as any).user?.name || (req as any).user?.username || "Administrator Widatra";
     const clientIp = parsed.clientIp || getClientIp(req);
     const clientMac = parsed.clientMac || getClientMac(req, clientIp);
 
@@ -358,10 +359,10 @@ export const updateHvacStateHandler = async (
     const previous = (data as any).previous || parsed.previousState || {};
 
     // 1. Check if setpoint changed (Temperature or Humidity)
-    const isTempChanged = parsed.temp !== undefined && Math.abs(parsed.temp - (previous.temp ?? parsed.temp)) > 0.01;
-    const isHumidChanged = parsed.humid !== undefined && Math.abs(parsed.humid - (previous.humid ?? parsed.humid)) > 0.01;
+    const isTempChanged = parsed.temp !== undefined && (previous.temp === undefined || Math.abs(parsed.temp - previous.temp) > 0.01);
+    const isHumidChanged = parsed.humid !== undefined && (previous.humid === undefined || Math.abs(parsed.humid - previous.humid) > 0.01);
 
-    if ((isTempChanged || isHumidChanged) && actorId) {
+    if (isTempChanged || isHumidChanged) {
       const changes: Array<{ field: string; from: string; to: string; delta: string }> = [];
       if (isTempChanged) {
         const prevT = typeof previous.temp === "number" ? previous.temp : 0;
@@ -401,6 +402,10 @@ export const updateHvacStateHandler = async (
           roomName,
           type: "setpoint",
           operatorRole: actorRole || "Operator",
+          userName: actorName,
+          machineId: "hvac-qc-retained-sample",
+          unitId: parsed.unitId,
+          parentUnitId: "hvac-qc-retained-sample",
           changes,
           before: { temp: previous.temp, humid: previous.humid },
           after: { temp: data.temp, humid: data.humid },
@@ -418,7 +423,7 @@ export const updateHvacStateHandler = async (
     const isStatusChanged = parsed.status !== undefined && parsed.status !== previous.status;
     const isModeChanged = parsed.mode !== undefined && parsed.mode !== previous.mode;
 
-    if ((parsed.actionLabel || isStatusChanged || isModeChanged) && actorId) {
+    if (parsed.actionLabel || isStatusChanged || isModeChanged) {
       let type: "start" | "stop" | "maintenance" | "other" = "other";
       const effectiveStatus = parsed.status || previous.status;
       if (parsed.actionLabel) {
@@ -469,6 +474,10 @@ export const updateHvacStateHandler = async (
           roomName,
           type,
           operatorRole: actorRole || "Operator",
+          userName: actorName,
+          machineId: "hvac-qc-retained-sample",
+          unitId: parsed.unitId,
+          parentUnitId: "hvac-qc-retained-sample",
           changes,
           before: { status: statusFrom, mode: modeFrom },
           after: { status: statusTo, mode: modeTo },
