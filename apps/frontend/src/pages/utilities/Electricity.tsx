@@ -151,14 +151,35 @@ const Sparkline = ({ color = "#4ade80" }: { color?: string }) => {
 };
 
 /* ═══════════ MONTHLY COMPARISON BAR CHART ═══════════ */
+interface MonthlyBreakdownItem {
+  day: number;
+  pln: number;
+  poi1: number;
+  poi2: number;
+  wbp: number;
+  lwbp: number;
+}
+
 const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
   currentData,
   previousData,
-  isDark
+  isDark,
+  currMonthName,
+  prevMonthName,
+  selectorType,
+  currentBreakdown,
+  previousBreakdown,
+  solarRate
 }: {
   currentData: number[];
   previousData: number[];
   isDark: boolean;
+  currMonthName?: string;
+  prevMonthName?: string;
+  selectorType?: "all" | "pln" | "wf1" | "wf2" | "poi1" | "poi2";
+  currentBreakdown?: MonthlyBreakdownItem[];
+  previousBreakdown?: MonthlyBreakdownItem[];
+  solarRate?: number;
 }) {
   const daysInMonth = Math.max(currentData.length, previousData.length, 28);
   const dayLabels = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, "0")), [daysInMonth]);
@@ -167,25 +188,27 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
     labels: dayLabels,
     datasets: [
       {
-        label: "Bulan Ini",
+        label: currMonthName ? `Bulan Ini (${currMonthName})` : "Bulan Ini",
         data: currentData,
         backgroundColor: "rgba(59, 130, 246, 0.85)",
+        hoverBackgroundColor: "rgba(37, 99, 235, 1)",
         borderWidth: 0,
         borderRadius: 2,
         barPercentage: 0.45,
         categoryPercentage: 0.8
       },
       {
-        label: "Bulan Lalu",
+        label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
         data: previousData,
         backgroundColor: "rgba(239, 68, 68, 0.75)",
+        hoverBackgroundColor: "rgba(220, 38, 38, 1)",
         borderWidth: 0,
         borderRadius: 2,
         barPercentage: 0.45,
         categoryPercentage: 0.8
       }
     ]
-  }), [dayLabels, currentData, previousData]);
+  }), [dayLabels, currentData, previousData, currMonthName, prevMonthName]);
 
   const options: any = useMemo(() => ({
     responsive: true,
@@ -223,15 +246,80 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           duration: 180,
           easing: "easeOutQuad"
         },
-        backgroundColor: isDark ? "rgba(13, 21, 39, 0.95)" : "rgba(255, 255, 255, 0.95)",
-        titleColor: isDark ? "#f1f5f9" : "#0f172a",
+        backgroundColor: isDark ? "rgba(13, 21, 39, 0.96)" : "rgba(255, 255, 255, 0.98)",
+        titleColor: isDark ? "#38bdf8" : "#0284c7",
+        titleFont: { size: 12, weight: "700" as const },
         bodyColor: isDark ? "#f1f5f9" : "#0f172a",
-        borderColor: isDark ? "rgba(51, 65, 85, 0.5)" : "rgba(203, 213, 225, 0.5)",
+        borderColor: isDark ? "rgba(56, 189, 248, 0.3)" : "rgba(14, 165, 233, 0.3)",
         borderWidth: 1,
-        padding: 10,
+        padding: 12,
+        boxPadding: 4,
         bodyFont: { family: "IBM Plex Mono, monospace", size: 11 },
         callbacks: {
-          label: (ctx: any) => `${ctx.dataset.label}: ${Number(ctx.parsed.y).toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`
+          title: (items: any[]) => {
+            if (!items || items.length === 0) return "";
+            const dayNum = String(items[0].dataIndex + 1).padStart(2, "0");
+            return `📅 Tanggal ${dayNum} (${currMonthName || "Bulan Ini"} vs ${prevMonthName || "Bulan Lalu"})`;
+          },
+          label: (ctx: any) => {
+            const val = Number(ctx.parsed.y || 0);
+            return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`;
+          },
+          afterBody: (items: any[]) => {
+            if (!items || items.length === 0) return [];
+            const idx = items[0].dataIndex;
+            const curVal = Number(currentData[idx] || 0);
+            const prevVal = Number(previousData[idx] || 0);
+            const diff = curVal - prevVal;
+            const pct = prevVal > 0 ? ((diff / prevVal) * 100).toFixed(1) : null;
+            const diffSign = diff > 0 ? "+" : "";
+            const diffText = `📊 Selisih: ${diffSign}${diff.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh${pct !== null ? ` (${diffSign}${pct}%)` : ""}`;
+
+            const lines: string[] = ["", diffText];
+
+            if (selectorType === "all" && currentBreakdown && currentBreakdown[idx]) {
+              const b = currentBreakdown[idx];
+              const curTotal = b.pln + b.poi1 + b.poi2;
+              const plnPct = curTotal > 0 ? ((b.pln / curTotal) * 100).toFixed(1) : "0";
+              const pltsTotal = b.poi1 + b.poi2;
+              const pltsPct = curTotal > 0 ? ((pltsTotal / curTotal) * 100).toFixed(1) : "0";
+
+              lines.push("───────────────────────────────");
+              lines.push("⚡ Sumber Energi (Bulan Ini):");
+              lines.push(`  • PLN Grid   : ${b.pln.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh (${plnPct}%)`);
+              lines.push(`  • PLTS Total : ${pltsTotal.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh (${pltsPct}%)`);
+              lines.push(`    ├ POI-1    : ${b.poi1.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
+              lines.push(`    └ POI-2    : ${b.poi2.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
+
+              if (previousBreakdown && previousBreakdown[idx]) {
+                const pb = previousBreakdown[idx];
+                const prevPlts = pb.poi1 + pb.poi2;
+                if (pb.pln > 0 || prevPlts > 0) {
+                  lines.push("───────────────────────────────");
+                  lines.push("⚡ Sumber Energi (Bulan Lalu):");
+                  lines.push(`  • PLN Grid   : ${pb.pln.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
+                  lines.push(`  • PLTS Total : ${prevPlts.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh (POI-1: ${pb.poi1.toLocaleString("id-ID", { maximumFractionDigits: 0 })}, POI-2: ${pb.poi2.toLocaleString("id-ID", { maximumFractionDigits: 0 })})`);
+                }
+              }
+            } else if ((selectorType === "pln" || selectorType === "wf1" || selectorType === "wf2") && currentBreakdown && currentBreakdown[idx]) {
+              const b = currentBreakdown[idx];
+              if (b.wbp > 0 || b.lwbp > 0) {
+                lines.push("───────────────────────────────");
+                lines.push("⚡ Tarif WBP / LWBP (Bulan Ini):");
+                lines.push(`  • LWBP (Siang): ${b.lwbp.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
+                lines.push(`  • WBP (Malam) : ${b.wbp.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
+              }
+            } else if ((selectorType === "poi1" || selectorType === "poi2") && currentBreakdown && currentBreakdown[idx]) {
+              const b = currentBreakdown[idx];
+              const kwh = selectorType === "poi1" ? b.poi1 : b.poi2;
+              const rate = solarRate || 1444.7;
+              const savings = kwh * rate;
+              lines.push("───────────────────────────────");
+              lines.push(`☀️ Estimasi Hemat: Rp ${Math.round(savings).toLocaleString("id-ID")}`);
+            }
+
+            return lines;
+          }
         }
       }
     },
@@ -249,7 +337,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         }
       }
     }
-  }), [isDark]);
+  }), [isDark, currentData, previousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, solarRate]);
 
   return <Bar data={data} options={options} />;
 });
@@ -258,12 +346,24 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   title,
   currentData,
   previousData,
-  isDark
+  isDark,
+  currMonthName,
+  prevMonthName,
+  selectorType,
+  currentBreakdown,
+  previousBreakdown,
+  solarRate
 }: {
   title: string;
   currentData: number[];
   previousData: number[];
   isDark: boolean;
+  currMonthName?: string;
+  prevMonthName?: string;
+  selectorType?: "all" | "pln" | "wf1" | "wf2" | "poi1" | "poi2";
+  currentBreakdown?: MonthlyBreakdownItem[];
+  previousBreakdown?: MonthlyBreakdownItem[];
+  solarRate?: number;
 }) {
   const hasData = (currentData && currentData.some(v => v > 0)) || (previousData && previousData.some(v => v > 0));
   return (
@@ -271,7 +371,17 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
       <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-4">{title}</h4>
       <div style={{ height: 280 }}>
         {hasData ? (
-          <MonthlyComparisonBarChart currentData={currentData} previousData={previousData} isDark={isDark} />
+          <MonthlyComparisonBarChart
+            currentData={currentData}
+            previousData={previousData}
+            isDark={isDark}
+            currMonthName={currMonthName}
+            prevMonthName={prevMonthName}
+            selectorType={selectorType}
+            currentBreakdown={currentBreakdown}
+            previousBreakdown={previousBreakdown}
+            solarRate={solarRate}
+          />
         ) : (
           <div className="flex flex-col items-center justify-center h-full border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl p-4 text-center bg-slate-50/50 dark:bg-slate-950/20">
             <span className="text-2xl mb-1 opacity-40">📊</span>
@@ -440,14 +550,15 @@ export default function Electricity() {
   const [liveWf1Status, setLiveWf1Status] = useState<boolean>(true);
   const [liveWf2Status, setLiveWf2Status] = useState<boolean>(true);
 
-  // Incoming Cubicle selector (PLN, WF1, WF2, POI1, POI2)
-  const [cubicleSelector, setCubicleSelector] = useState<"pln" | "wf1" | "wf2" | "poi1" | "poi2">("pln");
+  // Incoming Cubicle selector (All, PLN, WF1, WF2, POI1, POI2)
+  const [cubicleSelector, setCubicleSelector] = useState<"all" | "pln" | "wf1" | "wf2" | "poi1" | "poi2">("all");
   const [cubiclePoiView, setCubiclePoiView] = useState(false);
   const [cubicleAnalytics, setCubicleAnalytics] = useState<any>(null);
 
   // Fetch device-specific analytics when cubicle selector changes
   useEffect(() => {
-    let devId = "Cubicle_PLN_PM8000";
+    let devId = "all";
+    if (cubicleSelector === "pln") devId = "Cubicle_PLN_PM8000";
     if (cubicleSelector === "wf1") devId = "Feeder_WF1_PM5560";
     if (cubicleSelector === "wf2") devId = "Feeder_WF2_PM5500";
     if (cubicleSelector === "poi1") devId = "Solar_POI1";
@@ -462,16 +573,34 @@ export default function Electricity() {
 
   // Computed summary metrics based on selected cubicle
   const cubicleSummary = useMemo(() => {
-    const s = cubicleAnalytics?.summary || summaryData?.summary || {};
+    const s = cubicleAnalytics?.summary || (cubicleSelector === "pln" ? summaryData?.summary : {}) || {};
     const isSolar = cubicleSelector === "poi1" || cubicleSelector === "poi2";
-    const peak = Number(s.peakDemand) || (cubicleSelector === "poi1" ? (solarLive?.poi1?.peakDemand || pltsLive.poi1.peak_demand || pltsLive.poi1.active_power) : cubicleSelector === "poi2" ? (solarLive?.poi2?.peakDemand || pltsLive.poi2.peak_demand || pltsLive.poi2.active_power) : Number(summaryData?.pqData?.activePower || 0));
-    const lwbp = isSolar ? 0 : (Number(s.monthlyLwbpKwh ?? s.todayLwbpKwh) || 0);
-    const wbp = isSolar ? 0 : (Number(s.monthlyWbpKwh ?? s.todayWbpKwh) || 0);
-    const total = Number(s.monthlyKwh ?? s.totalKwh ?? (lwbp + wbp)) || (cubicleSelector === "poi1" ? pltsLive.poi1.total_kwh : cubicleSelector === "poi2" ? pltsLive.poi2.total_kwh : 0);
-    const cost = isSolar ? 0 : (Number(s.totalCost ?? (lwbp * lwbpRate + wbp * wbpRate)) || (total * electricityRate));
+    const isAll = cubicleSelector === "all";
 
     const poi1 = solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 0;
     const poi2 = solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 0;
+
+    let peak = Number(s.peakDemand) || 0;
+    if (peak === 0) {
+      if (cubicleSelector === "poi1") peak = solarLive?.poi1?.peakDemand || pltsLive.poi1.peak_demand || pltsLive.poi1.active_power || 0;
+      else if (cubicleSelector === "poi2") peak = solarLive?.poi2?.peakDemand || pltsLive.poi2.peak_demand || pltsLive.poi2.active_power || 0;
+      else if (cubicleSelector === "all") peak = Number(summaryData?.pqData?.activePower || 0) + (solarLive?.poi1?.peakDemand || 0) + (solarLive?.poi2?.peakDemand || 0);
+      else peak = Number(summaryData?.pqData?.activePower || 0);
+    }
+
+    let lwbp = isSolar ? 0 : (Number(s.monthlyLwbpKwh ?? s.todayLwbpKwh) || 0);
+    let wbp = isSolar ? 0 : (Number(s.monthlyWbpKwh ?? s.todayWbpKwh) || 0);
+    let total = Number(s.monthlyKwh ?? s.totalKwh ?? (lwbp + wbp)) || 0;
+
+    if (total === 0) {
+      if (cubicleSelector === "poi1") total = pltsLive.poi1.total_kwh || (solarData?.summary?.poi1TodayKwh || 0);
+      else if (cubicleSelector === "poi2") total = pltsLive.poi2.total_kwh || (solarData?.summary?.poi2TodayKwh || 0);
+    }
+
+    let cost = isSolar ? 0 : (Number(s.totalCost ?? (lwbp * lwbpRate + wbp * wbpRate)) || 0);
+    if (isAll && (!cost || cost === 0)) {
+      cost = Number(summaryData?.summary?.totalCost || 0);
+    }
 
     return {
       peakDemand: peak,
@@ -482,41 +611,148 @@ export default function Electricity() {
       poi1Kwh: poi1,
       poi2Kwh: poi2
     };
-  }, [cubicleAnalytics, summaryData, cubicleSelector, solarLive, solarData, lwbpRate, wbpRate]);
+  }, [cubicleAnalytics, summaryData, cubicleSelector, solarLive, solarData, pltsLive, lwbpRate, wbpRate]);
 
   // Daily Comparison Data (Bulan Ini vs Bulan Lalu) for selected cubicle
   const cubicleDailyData = useMemo(() => {
-    const daysCount = 28;
-    const dailyRecords = cubicleAnalytics?.charts?.daily || summaryData?.charts?.daily || [];
+    const dailyRecords = cubicleAnalytics?.charts?.daily || (cubicleSelector === "pln" ? summaryData?.charts?.daily : []) || [];
     const now = new Date();
-    const currMonthPrefix = `${selectedYear}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const prevMonthPrefix = `${selectedYear}-${String(now.getMonth() === 0 ? 12 : now.getMonth()).padStart(2, "0")}`;
+    const currYear = selectedYear;
+    const currMonth = now.getMonth() + 1; // 1-12
+    const prevYear = currMonth === 1 ? currYear - 1 : currYear;
+    const prevMonth = currMonth === 1 ? 12 : currMonth - 1;
 
-    const currMap: Record<number, number> = {};
-    const prevMap: Record<number, number> = {};
+    const currMonthPrefix = `${currYear}-${String(currMonth).padStart(2, "0")}`;
+    const prevMonthPrefix = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
 
-    dailyRecords.forEach((d: any) => {
-      if (d.day?.startsWith(currMonthPrefix)) {
-        const dayNum = parseInt(d.day.split("-")[2]);
-        currMap[dayNum] = d.value;
-      } else if (d.day?.startsWith(prevMonthPrefix)) {
-        const dayNum = parseInt(d.day.split("-")[2]);
-        prevMap[dayNum] = d.value;
+    const daysInCurrMonth = new Date(currYear, currMonth, 0).getDate();
+    const daysInPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
+    const daysCount = Math.max(daysInCurrMonth, daysInPrevMonth);
+
+    // Build solar daily lookup from solarData if needed as fallback
+    const solarDailyMap: Record<string, { poi1: number; poi2: number }> = {};
+    (solarData?.charts?.daily || []).forEach((d: any) => {
+      if (d.day) {
+        solarDailyMap[d.day] = { poi1: d.poi1 || 0, poi2: d.poi2 || 0 };
       }
     });
 
-    const currentData: number[] = [];
-    const previousData: number[] = [];
+    // Build PLN daily lookup from summaryData if needed
+    const plnDailyMap: Record<string, { value: number; wbp: number; lwbp: number }> = {};
+    (summaryData?.charts?.daily || []).forEach((d: any) => {
+      if (d.day) {
+        plnDailyMap[d.day] = { value: d.value || 0, wbp: d.wbp || 0, lwbp: d.lwbp || 0 };
+      }
+    });
 
-    for (let i = 1; i <= daysCount; i++) {
-      const curVal = currMap[i] ?? 0;
-      const prevVal = prevMap[i] ?? 0;
-      currentData.push(curVal);
-      previousData.push(prevVal);
+    interface DayDetail {
+      val: number;
+      pln: number;
+      poi1: number;
+      poi2: number;
+      wbp: number;
+      lwbp: number;
     }
 
-    return { currentData, previousData };
-  }, [cubicleAnalytics, summaryData, cubicleSelector, selectedYear]);
+    const currMap: Record<number, DayDetail> = {};
+    const prevMap: Record<number, DayDetail> = {};
+
+    dailyRecords.forEach((d: any) => {
+      if (!d.day) return;
+      const dayNum = parseInt(d.day.split("-")[2], 10);
+      const isCurr = d.day.startsWith(currMonthPrefix);
+      const isPrev = d.day.startsWith(prevMonthPrefix);
+      if (!isCurr && !isPrev) return;
+
+      const plnVal = typeof d.pln === "number" ? d.pln : (cubicleSelector === "all" ? (plnDailyMap[d.day]?.value || 0) : d.value || 0);
+      const poi1Val = typeof d.poi1 === "number" ? d.poi1 : (solarDailyMap[d.day]?.poi1 || 0);
+      const poi2Val = typeof d.poi2 === "number" ? d.poi2 : (solarDailyMap[d.day]?.poi2 || 0);
+      const totalVal = cubicleSelector === "all"
+        ? (typeof d.pln === "number" ? d.value : (plnVal + poi1Val + poi2Val))
+        : (d.value || 0);
+
+      const entry: DayDetail = {
+        val: totalVal,
+        pln: plnVal,
+        poi1: poi1Val,
+        poi2: poi2Val,
+        wbp: d.wbp || 0,
+        lwbp: d.lwbp || 0
+      };
+
+      if (isCurr) currMap[dayNum] = entry;
+      if (isPrev) prevMap[dayNum] = entry;
+    });
+
+    // If cubicleSelector === "all" and dailyRecords was empty or didn't have current days yet, fill from plnDailyMap + solarDailyMap
+    if (cubicleSelector === "all") {
+      for (let i = 1; i <= daysCount; i++) {
+        const curDayStr = `${currMonthPrefix}-${String(i).padStart(2, "0")}`;
+        const prevDayStr = `${prevMonthPrefix}-${String(i).padStart(2, "0")}`;
+
+        if (!currMap[i] && (plnDailyMap[curDayStr] || solarDailyMap[curDayStr])) {
+          const p = plnDailyMap[curDayStr]?.value || 0;
+          const s1 = solarDailyMap[curDayStr]?.poi1 || 0;
+          const s2 = solarDailyMap[curDayStr]?.poi2 || 0;
+          currMap[i] = {
+            val: p + s1 + s2,
+            pln: p,
+            poi1: s1,
+            poi2: s2,
+            wbp: plnDailyMap[curDayStr]?.wbp || 0,
+            lwbp: (plnDailyMap[curDayStr]?.lwbp || 0) + s1 + s2
+          };
+        }
+
+        if (!prevMap[i] && (plnDailyMap[prevDayStr] || solarDailyMap[prevDayStr])) {
+          const p = plnDailyMap[prevDayStr]?.value || 0;
+          const s1 = solarDailyMap[prevDayStr]?.poi1 || 0;
+          const s2 = solarDailyMap[prevDayStr]?.poi2 || 0;
+          prevMap[i] = {
+            val: p + s1 + s2,
+            pln: p,
+            poi1: s1,
+            poi2: s2,
+            wbp: plnDailyMap[prevDayStr]?.wbp || 0,
+            lwbp: (plnDailyMap[prevDayStr]?.lwbp || 0) + s1 + s2
+          };
+        }
+      }
+    }
+
+    const currentData: number[] = [];
+    const previousData: number[] = [];
+    const currentBreakdown: { day: number; pln: number; poi1: number; poi2: number; wbp: number; lwbp: number }[] = [];
+    const previousBreakdown: { day: number; pln: number; poi1: number; poi2: number; wbp: number; lwbp: number }[] = [];
+
+    for (let i = 1; i <= daysCount; i++) {
+      const cur = currMap[i] || { val: 0, pln: 0, poi1: 0, poi2: 0, wbp: 0, lwbp: 0 };
+      const prev = prevMap[i] || { val: 0, pln: 0, poi1: 0, poi2: 0, wbp: 0, lwbp: 0 };
+
+      currentData.push(cur.val);
+      previousData.push(prev.val);
+
+      currentBreakdown.push({
+        day: i,
+        pln: cur.pln,
+        poi1: cur.poi1,
+        poi2: cur.poi2,
+        wbp: cur.wbp,
+        lwbp: cur.lwbp
+      });
+
+      previousBreakdown.push({
+        day: i,
+        pln: prev.pln,
+        poi1: prev.poi1,
+        poi2: prev.poi2,
+        wbp: prev.wbp,
+        lwbp: prev.lwbp
+      });
+    }
+
+    return { currentData, previousData, currentBreakdown, previousBreakdown };
+  }, [cubicleAnalytics, summaryData, solarData, cubicleSelector, selectedYear]);
   const [factCategories1, setFactCategories1] = useState<ConsumptionFactCategory[]>([]);
   const [factCategories2, setFactCategories2] = useState<ConsumptionFactCategory[]>([]);
 
@@ -845,6 +1081,11 @@ export default function Electricity() {
     } else if (solarRange === "hour") {
       const todayStr = getLocalTodayString();
       solarUrl += `from=${todayStr}&to=${todayStr}`;
+    } else if (solarRange === "day") {
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const monthNum = solarSelectedMonth + 1;
+      const lastDay = new Date(solarSelectedYear, monthNum, 0).getDate();
+      solarUrl += `from=${solarSelectedYear}-${pad(monthNum)}-01&to=${solarSelectedYear}-${pad(monthNum)}-${pad(lastDay)}`;
     } else {
       solarUrl += `year=${solarSelectedYear}`;
     }
@@ -862,7 +1103,7 @@ export default function Electricity() {
       .catch((err) => {
         console.warn("Failed to load solar data", err);
       });
-  }, [solarRange, solarSelectedYear, solarStartDate, solarEndDate]);
+  }, [solarRange, solarSelectedYear, solarSelectedMonth, solarStartDate, solarEndDate]);
 
   useEffect(() => {
     fetchData(true);
@@ -1367,6 +1608,63 @@ export default function Electricity() {
       return (solarData?.charts?.monthly || []).map((m: any) => m.poi2 || 0);
     }
   }, [solarRange, solarStartDate, solarEndDate, solarSelectedYear, solarSelectedMonth, solarData]);
+
+  // Filtered metrics for Solar Panel (PLTS) top cards
+  const solarFilteredMetrics = useMemo(() => {
+    const poi1Kwh = solarPoi1Values.reduce((acc: number, v: any) => acc + (Number(v) || 0), 0);
+    const poi2Kwh = solarPoi2Values.reduce((acc: number, v: any) => acc + (Number(v) || 0), 0);
+
+    const activeTotalKwh = (solarShowPoi1 ? poi1Kwh : 0) + (solarShowPoi2 ? poi2Kwh : 0);
+
+    const rate = Number(solarData?.summary?.solarRate) || lwbpRate || 1444.7;
+    const savingsCost = activeTotalKwh * rate;
+
+    let poi1Peak = solarData?.summary?.rangePoi1PeakDemand ?? solarData?.summary?.poi1PeakDemand ?? 0;
+    let poi2Peak = solarData?.summary?.rangePoi2PeakDemand ?? solarData?.summary?.poi2PeakDemand ?? 0;
+
+    if (solarRange === "hour" || (solarRange === "custom" && solarStartDate === solarEndDate)) {
+      poi1Peak = Math.max(0, ...solarPoi1Values);
+      poi2Peak = Math.max(0, ...solarPoi2Values);
+    } else if (poi1Peak === 0 && poi2Peak === 0) {
+      poi1Peak = Math.max(0, ...solarPoi1Values);
+      poi2Peak = Math.max(0, ...solarPoi2Values);
+    }
+
+    let periodLabel = "Hari Ini";
+    if (solarRange === "hour") {
+      periodLabel = "Hari Ini (Per Jam)";
+    } else if (solarRange === "day") {
+      periodLabel = `${MONTH_NAMES_ID[solarSelectedMonth]} ${solarSelectedYear}`;
+    } else if (solarRange === "month") {
+      periodLabel = `Tahun ${solarSelectedYear}`;
+    } else if (solarRange === "ytd") {
+      periodLabel = `YTD ${solarSelectedYear}`;
+    } else if (solarRange === "custom") {
+      periodLabel = `${solarStartDate} s/d ${solarEndDate}`;
+    }
+
+    return {
+      poi1Kwh,
+      poi2Kwh,
+      totalKwh: activeTotalKwh,
+      savingsCost,
+      poi1PeakDemand: poi1Peak,
+      poi2PeakDemand: poi2Peak,
+      periodLabel
+    };
+  }, [
+    solarPoi1Values,
+    solarPoi2Values,
+    solarShowPoi1,
+    solarShowPoi2,
+    solarData,
+    lwbpRate,
+    solarRange,
+    solarSelectedMonth,
+    solarSelectedYear,
+    solarStartDate,
+    solarEndDate
+  ]);
 
   const solarBarData = useMemo(() => {
     const datasets: any[] = [];
@@ -2015,10 +2313,10 @@ export default function Electricity() {
               <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500"><IconMoney /></div>
             </div>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {formatCurrency(solarData?.summary?.todayCost || ((solarData?.summary?.todayKwh || 0) * lwbpRate) || 0)}
+              {formatCurrency(solarFilteredMetrics.savingsCost)}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-              {formatNumber(solarData?.summary?.todayKwh || 0)} kWh hari ini
+              {formatNumber(solarFilteredMetrics.totalKwh)} kWh ({solarFilteredMetrics.periodLabel})
             </div>
           </div>
 
@@ -2043,14 +2341,12 @@ export default function Electricity() {
               }`} />
             </div>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {solarLive?.poi1?.status === false
-                ? "TIDAK AKTIF"
-                : `${formatNumber(solarLive?.poi1?.totalKwh ?? solarData?.summary?.poi1TotalKwh ?? 0)} kWh`}
+              {formatNumber(solarFilteredMetrics.poi1Kwh)} kWh
             </div>
             <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
               {solarLive?.poi1?.status === false
                 ? "Status: TIDAK AKTIF"
-                : (solarLive?.poi1?.voltAb ? `${solarLive.poi1.voltAb.toFixed(1)} V | ${solarLive.poi1.frequency.toFixed(2)} Hz` : "-")}
+                : `${solarFilteredMetrics.periodLabel}${solarLive?.poi1?.voltAb ? ` • ${solarLive.poi1.voltAb.toFixed(1)} V` : ""}`}
             </div>
           </div>
 
@@ -2058,9 +2354,9 @@ export default function Electricity() {
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-1)</span>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {formatNumber(solarLive?.poi1?.peakDemand ?? (pltsLive.poi1.peak_demand > 0 ? pltsLive.poi1.peak_demand : (solarData?.summary?.poi1PeakDemand ?? 0)))} kW
+              {formatNumber(solarFilteredMetrics.poi1PeakDemand)} kW
             </div>
-            <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
+            <div className="mt-1 text-[10px] text-slate-400">Puncak beban {solarFilteredMetrics.periodLabel}</div>
           </div>
 
           {/* POI-2 */}
@@ -2084,14 +2380,12 @@ export default function Electricity() {
               }`} />
             </div>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {solarLive?.poi2?.status === false
-                ? "TIDAK AKTIF"
-                : `${formatNumber(solarLive?.poi2?.totalKwh ?? solarData?.summary?.poi2TotalKwh ?? 0)} kWh`}
+              {formatNumber(solarFilteredMetrics.poi2Kwh)} kWh
             </div>
             <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
               {solarLive?.poi2?.status === false
                 ? "Status: TIDAK AKTIF"
-                : (solarLive?.poi2?.voltAb ? `${solarLive.poi2.voltAb.toFixed(1)} V | ${solarLive.poi2.frequency.toFixed(2)} Hz` : "-")}
+                : `${solarFilteredMetrics.periodLabel}${solarLive?.poi2?.voltAb ? ` • ${solarLive.poi2.voltAb.toFixed(1)} V` : ""}`}
             </div>
           </div>
 
@@ -2099,9 +2393,9 @@ export default function Electricity() {
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-2)</span>
             <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {formatNumber(solarLive?.poi2?.peakDemand ?? (pltsLive.poi2.peak_demand > 0 ? pltsLive.poi2.peak_demand : (solarData?.summary?.poi2PeakDemand ?? 0)))} kW
+              {formatNumber(solarFilteredMetrics.poi2PeakDemand)} kW
             </div>
-            <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
+            <div className="mt-1 text-[10px] text-slate-400">Puncak beban {solarFilteredMetrics.periodLabel}</div>
           </div>
         </div>
       </div>
@@ -2302,6 +2596,7 @@ export default function Electricity() {
               onChange={(e) => setCubicleSelector(e.target.value as any)}
               className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer outline-none"
             >
+              <option value="all">All (PLN + Total POI-1 & POI-2)</option>
               <option value="pln">Incoming PLN Grid</option>
               <option value="wf1">Incoming Cubicle WF1</option>
               <option value="wf2">Incoming Cubicle WF2</option>
@@ -2312,6 +2607,7 @@ export default function Electricity() {
               let isOnline = true;
               if (cubicleSelector === "poi1") isOnline = solarLive?.poi1?.status !== false;
               if (cubicleSelector === "poi2") isOnline = solarLive?.poi2?.status !== false;
+              if (cubicleSelector === "all") isOnline = true;
               return (
                 <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
                   isOnline
@@ -2336,7 +2632,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Peak Demand</div>
             <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              - kW
+              {cubicleSummary.peakDemand > 0 ? `${cubicleSummary.peakDemand.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "- kW"}
             </div>
           </div>
           {cubiclePoiView ? (
@@ -2344,13 +2640,13 @@ export default function Electricity() {
               <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4">
                 <span className="text-[10px] font-bold text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">POI-1</span>
                 <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-                  {cubicleSelector.startsWith("poi") || cubicleSelector === "pln" ? `${cubicleSummary.poi1Kwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh` : "0 kWh"}
+                  {cubicleSelector.startsWith("poi") || cubicleSelector === "pln" || cubicleSelector === "all" ? `${cubicleSummary.poi1Kwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh` : "0 kWh"}
                 </div>
               </div>
               <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30 p-4">
                 <span className="text-[10px] font-bold text-cyan-500 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20">POI-2</span>
                 <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-                  {cubicleSelector.startsWith("poi") || cubicleSelector === "pln" ? `${cubicleSummary.poi2Kwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh` : "0 kWh"}
+                  {cubicleSelector.startsWith("poi") || cubicleSelector === "pln" || cubicleSelector === "all" ? `${cubicleSummary.poi2Kwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh` : "0 kWh"}
                 </div>
               </div>
             </>
@@ -2387,6 +2683,7 @@ export default function Electricity() {
         {/* Cubicle monthly comparison chart */}
         <MonthlyComparisonChart
           title={`Konsumsi Bulanan Real Time (vs Bulan Sebelumnya) — ${
+            cubicleSelector === "all" ? "All (PLN + Total POI-1 & POI-2)" :
             cubicleSelector === "pln" ? "Incoming PLN Grid" :
             cubicleSelector === "wf1" ? "Incoming Cubicle WF1" :
             cubicleSelector === "wf2" ? "Incoming Cubicle WF2" :
@@ -2395,6 +2692,12 @@ export default function Electricity() {
           currentData={cubicleDailyData.currentData}
           previousData={cubicleDailyData.previousData}
           isDark={isDark}
+          currMonthName={MONTH_NAMES_ID[new Date().getMonth()]}
+          prevMonthName={MONTH_NAMES_ID[new Date().getMonth() === 0 ? 11 : new Date().getMonth() - 1]}
+          selectorType={cubicleSelector}
+          currentBreakdown={cubicleDailyData.currentBreakdown}
+          previousBreakdown={cubicleDailyData.previousBreakdown}
+          solarRate={solarData?.summary?.solarRate || lwbpRate}
         />
       </div>
 

@@ -59,6 +59,12 @@ export interface SolarAnalyticsResult {
     poi1PeakDemand: number;
     poi2PeakDemand: number;
     peakDemand: number;
+    rangePoi1PeakDemand?: number;
+    rangePoi2PeakDemand?: number;
+    rangePeakDemand?: number;
+    rangePoi1Kwh?: number;
+    rangePoi2Kwh?: number;
+    solarRate?: number;
   };
   charts: {
     hourly: number[];
@@ -251,16 +257,9 @@ export const getSolarAnalytics = async (
     }
   }
 
-  if (live?.poi1?.peakDemand) {
-    poi1PeakDemand = live.poi1.peakDemand;
-  }
-  if (live?.poi2?.peakDemand) {
-    poi2PeakDemand = live.poi2.peakDemand;
-  }
-
-  if (peakDemand === 0 && (poi1PeakDemand > 0 || poi2PeakDemand > 0)) {
-    peakDemand = poi1PeakDemand + poi2PeakDemand;
-  }
+  const rangePoi1PeakDemand = poi1PeakDemand > 0 ? poi1PeakDemand : (live?.poi1?.peakDemand || 0);
+  const rangePoi2PeakDemand = poi2PeakDemand > 0 ? poi2PeakDemand : (live?.poi2?.peakDemand || 0);
+  const rangePeakDemand = peakDemand > 0 ? peakDemand : (rangePoi1PeakDemand + rangePoi2PeakDemand);
 
   let targetDate = toStr || fromStr;
   if (!targetDate) {
@@ -346,9 +345,15 @@ export const getSolarAnalytics = async (
       poi2TodayKwh,
       poi1TotalKwh,
       poi2TotalKwh,
-      poi1PeakDemand,
-      poi2PeakDemand,
-      peakDemand
+      poi1PeakDemand: rangePoi1PeakDemand,
+      poi2PeakDemand: rangePoi2PeakDemand,
+      peakDemand: rangePeakDemand,
+      rangePoi1PeakDemand,
+      rangePoi2PeakDemand,
+      rangePeakDemand,
+      rangePoi1Kwh: Array.from(dailyMapPoi1.values()).reduce((a, b) => a + b, 0),
+      rangePoi2Kwh: Array.from(dailyMapPoi2.values()).reduce((a, b) => a + b, 0),
+      solarRate
     },
     charts: {
       hourly,

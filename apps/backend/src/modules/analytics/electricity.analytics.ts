@@ -215,6 +215,131 @@ export const getElectricityAnalytics = async (
   wbpRate: number = 1600,
   year?: number
 ): Promise<ElectricityAnalyticsResult> => {
+  if ((deviceId || "").toLowerCase() === "all") {
+    const [pln, poi1, poi2] = await Promise.all([
+      getElectricityAnalytics("Cubicle_PLN_PM8000", fromStr, toStr, lwbpRate, wbpRate, year),
+      getElectricityAnalytics("Solar_POI1", fromStr, toStr, lwbpRate, wbpRate, year),
+      getElectricityAnalytics("Solar_POI2", fromStr, toStr, lwbpRate, wbpRate, year)
+    ]);
+
+    // Merge daily records
+    const dailyMap = new Map<string, { day: string; value: number; wbp: number; lwbp: number; pln: number; poi1: number; poi2: number }>();
+    (pln.charts?.daily || []).forEach(d => {
+      dailyMap.set(d.day, { day: d.day, value: d.value, wbp: d.wbp, lwbp: d.lwbp, pln: d.value, poi1: 0, poi2: 0 });
+    });
+    (poi1.charts?.daily || []).forEach(d => {
+      const existing = dailyMap.get(d.day) || { day: d.day, value: 0, wbp: 0, lwbp: 0, pln: 0, poi1: 0, poi2: 0 };
+      existing.poi1 = d.value;
+      existing.lwbp += d.lwbp;
+      existing.wbp += d.wbp;
+      existing.value += d.value;
+      dailyMap.set(d.day, existing);
+    });
+    (poi2.charts?.daily || []).forEach(d => {
+      const existing = dailyMap.get(d.day) || { day: d.day, value: 0, wbp: 0, lwbp: 0, pln: 0, poi1: 0, poi2: 0 };
+      existing.poi2 = d.value;
+      existing.lwbp += d.lwbp;
+      existing.wbp += d.wbp;
+      existing.value += d.value;
+      dailyMap.set(d.day, existing);
+    });
+    const mergedDaily = Array.from(dailyMap.values()).sort((a, b) => a.day.localeCompare(b.day));
+
+    // Merge monthly records
+    const monthlyMap = new Map<string, { month: string; value: number; wbp: number; lwbp: number }>();
+    (pln.charts?.monthly || []).forEach(m => {
+      monthlyMap.set(m.month, { month: m.month, value: m.value, wbp: m.wbp, lwbp: m.lwbp });
+    });
+    (poi1.charts?.monthly || []).forEach(m => {
+      const existing = monthlyMap.get(m.month) || { month: m.month, value: 0, wbp: 0, lwbp: 0 };
+      existing.value += m.value;
+      existing.lwbp += m.lwbp;
+      existing.wbp += m.wbp;
+      monthlyMap.set(m.month, existing);
+    });
+    (poi2.charts?.monthly || []).forEach(m => {
+      const existing = monthlyMap.get(m.month) || { month: m.month, value: 0, wbp: 0, lwbp: 0 };
+      existing.value += m.value;
+      existing.lwbp += m.lwbp;
+      existing.wbp += m.wbp;
+      monthlyMap.set(m.month, existing);
+    });
+    const mergedMonthly = Array.from(monthlyMap.values()).sort((a, b) => a.month.localeCompare(b.month));
+
+    // Merge hourly records
+    const hourlyLen = Math.max(pln.charts?.hourly?.length || 24, 24);
+    const hourly = Array.from({ length: hourlyLen }, (_, i) => (pln.charts?.hourly?.[i] || 0) + (poi1.charts?.hourly?.[i] || 0) + (poi2.charts?.hourly?.[i] || 0));
+    const hourlyWbp = Array.from({ length: hourlyLen }, (_, i) => (pln.charts?.hourlyWbp?.[i] || 0) + (poi1.charts?.hourlyWbp?.[i] || 0) + (poi2.charts?.hourlyWbp?.[i] || 0));
+    const hourlyLwbp = Array.from({ length: hourlyLen }, (_, i) => (pln.charts?.hourlyLwbp?.[i] || 0) + (poi1.charts?.hourlyLwbp?.[i] || 0) + (poi2.charts?.hourlyLwbp?.[i] || 0));
+    const prevHourly = Array.from({ length: hourlyLen }, (_, i) => (pln.charts?.prevHourly?.[i] || 0) + (poi1.charts?.prevHourly?.[i] || 0) + (poi2.charts?.prevHourly?.[i] || 0));
+
+    const totalKwh = pln.summary.totalKwh + poi1.summary.totalKwh + poi2.summary.totalKwh;
+    const wbpKwh = pln.summary.wbpKwh + poi1.summary.wbpKwh + poi2.summary.wbpKwh;
+    const lwbpKwh = pln.summary.lwbpKwh + poi1.summary.lwbpKwh + poi2.summary.lwbpKwh;
+    const todayWbpKwh = pln.summary.todayWbpKwh + poi1.summary.todayWbpKwh + poi2.summary.todayWbpKwh;
+    const todayLwbpKwh = pln.summary.todayLwbpKwh + poi1.summary.todayLwbpKwh + poi2.summary.todayLwbpKwh;
+    const monthlyWbpKwh = pln.summary.monthlyWbpKwh + poi1.summary.monthlyWbpKwh + poi2.summary.monthlyWbpKwh;
+    const monthlyLwbpKwh = pln.summary.monthlyLwbpKwh + poi1.summary.monthlyLwbpKwh + poi2.summary.monthlyLwbpKwh;
+    const peakDemand = pln.summary.peakDemand + poi1.summary.peakDemand + poi2.summary.peakDemand;
+
+    // Per month summary
+    const perMonthSummary = (pln.summary?.perMonthSummary || []).map(pm => {
+      const p1 = poi1.summary?.perMonthSummary?.find(x => x.month === pm.month);
+      const p2 = poi2.summary?.perMonthSummary?.find(x => x.month === pm.month);
+      return {
+        month: pm.month,
+        totalKwh: pm.totalKwh + (p1?.totalKwh || 0) + (p2?.totalKwh || 0),
+        wbpKwh: pm.wbpKwh + (p1?.wbpKwh || 0) + (p2?.wbpKwh || 0),
+        lwbpKwh: pm.lwbpKwh + (p1?.lwbpKwh || 0) + (p2?.lwbpKwh || 0),
+        totalCost: pm.totalCost,
+        wbpCost: pm.wbpCost,
+        lwbpCost: pm.lwbpCost,
+        peakDemand: pm.peakDemand + (p1?.peakDemand || 0) + (p2?.peakDemand || 0),
+        loadFactor: pm.loadFactor
+      };
+    });
+
+    return {
+      summary: {
+        todayKwh: pln.summary.todayKwh + poi1.summary.todayKwh + poi2.summary.todayKwh,
+        todayCost: pln.summary.todayCost,
+        monthlyMwh: Number(((monthlyWbpKwh + monthlyLwbpKwh) / 1000).toFixed(2)),
+        monthlyCost: pln.summary.monthlyCost,
+        yearlyMwh: Number((totalKwh / 1000).toFixed(2)),
+        co2Emitted: Number((totalKwh * 0.00085).toFixed(2)),
+        totalKwh,
+        wbpKwh,
+        lwbpKwh,
+        wbpCost: pln.summary.wbpCost,
+        lwbpCost: pln.summary.lwbpCost,
+        totalCost: pln.summary.totalCost,
+        todayWbpKwh,
+        todayLwbpKwh,
+        monthlyWbpKwh,
+        monthlyLwbpKwh,
+        peakDemand,
+        peakDemandTs: pln.summary.peakDemandTs,
+        perMonthSummary
+      },
+      charts: {
+        hourly,
+        hourlyWbp,
+        hourlyLwbp,
+        prevHourly,
+        daily: mergedDaily as any,
+        monthly: mergedMonthly,
+        breakdown: [
+          { label: "PLN Grid", value: pln.summary.totalKwh, color: "#3b82f6" },
+          { label: "Solar POI-1", value: poi1.summary.totalKwh, color: "#06b6d4" },
+          { label: "Solar POI-2", value: poi2.summary.totalKwh, color: "#10b981" }
+        ],
+        voltage24h: pln.charts.voltage24h,
+        activePower24h: pln.charts.activePower24h
+      },
+      pqData: pln.pqData
+    };
+  }
+
   const db = getMongoDb();
   const hourlyCollection = db.collection(ELECTRICITY_1H_COLLECTION);
   const telemetryCollection = db.collection(ELECTRICITY_RAW_COLLECTION);
