@@ -25,7 +25,26 @@ export interface ControlButtonItem {
   icon?: ReactNode;
 }
 
-// Inline SVG Icons for AHU Status
+// Inline SVG Icons for AHU Status & Controls
+const startIcon = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+  </svg>
+);
+
+const stopIcon = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+    <rect x="5.25" y="5.25" width="13.5" height="13.5" rx="1.5" />
+  </svg>
+);
+
+const maintenanceIcon = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774a1.125 1.125 0 01.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738a1.125 1.125 0 01-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527a1.125 1.125 0 01-1.448-.12l-.774-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.251-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.108-1.204l-.526-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
 const snowflakeIcon = (
   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="12" y1="2" x2="12" y2="22" />
@@ -49,6 +68,20 @@ const dropletIcon = (
   </svg>
 );
 
+export interface UnitControlConfig {
+  unitId: "ahu-01" | "ahu-02" | "ahu-03";
+  unitName: string;
+  status: string; // "Running" | "Stopped" | "Maintenance"
+  mode: string;   // "Auto" | "Manual"
+  ahuStatus?: "ON" | "OFF" | "IDLE";
+  temp: number;
+  humid: number;
+  tempRange: { min: number; max: number; label: string };
+  humidRange: { min: number; max: number; label: string };
+  onUpdateSetpoint: (updates: { temp?: number; humid?: number }) => void;
+  onControlAction: (action: "START" | "STOP" | "MAINTENANCE") => Promise<void>;
+}
+
 interface HvacLayoutProps {
   roomName: string;
   roomType: string;
@@ -58,6 +91,7 @@ interface HvacLayoutProps {
   systemMode: SystemModeItem[];
   setpoints?: SetpointConfig[];
   controlButtons?: ControlButtonItem[];
+  unitControl?: UnitControlConfig;
   currentUser?: string;
   onVerifyPassword?: (password: string) => Promise<boolean>;
   logs: LogEntry[];
@@ -89,6 +123,7 @@ export default function HvacLayout({
   systemMode,
   setpoints,
   controlButtons,
+  unitControl,
   currentUser = "Unknown User",
   onVerifyPassword,
   logs,
@@ -110,6 +145,17 @@ export default function HvacLayout({
   const user = useAuthStore((state) => state.user);
   const userRole = user?.role ?? "";
   const hasControlAccess = useMemo(() => canAccessHvacControls(userRole), [userRole]);
+
+  // Unit control action handler
+  const handleTriggerUnitAction = (action: "START" | "STOP" | "MAINTENANCE") => {
+    if (!unitControl) return;
+    const label = `${action} ${unitControl.unitName}`;
+    setModalLabel(label);
+    setPendingAction(() => () => unitControl.onControlAction(action));
+    setPassword("");
+    setPasswordError("");
+    setIsConfirmModalOpen(true);
+  };
 
   // Setpoint draft values & handlers
   const [draftSetpoints, setDraftSetpoints] = useState<Record<string, number>>({});
@@ -383,7 +429,17 @@ export default function HvacLayout({
     });
   };
 
-  const recentLogs = logs.slice(0, 3);
+  const unitLogs = useMemo(() => {
+    if (!unitControl) return logs;
+    const filtered = logs.filter(
+      (l) =>
+        l.action.toLowerCase().includes(unitControl.unitId.toLowerCase()) ||
+        l.action.toLowerCase().includes(unitControl.unitName.toLowerCase())
+    );
+    return filtered.length > 0 ? filtered : logs;
+  }, [logs, unitControl]);
+
+  const recentLogs = unitLogs.slice(0, 3);
   const filteredLogs = logs.filter((log) => {
     if (logFilter === "all") return true;
     return log.type === logFilter;
@@ -564,24 +620,188 @@ export default function HvacLayout({
       </div>
 
       {/* MAIN AREA */}
-      <div className="flex gap-4 flex-1 min-h-0">
-        <div className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 relative flex items-center justify-center p-2 min-h-0 shadow-sm transition-all duration-300 overflow-hidden">
+      <div className="flex flex-col xl:flex-row gap-4 flex-1 min-h-0">
+        <div className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 relative flex items-center justify-center p-2 min-h-[450px] xl:min-h-0 shadow-sm transition-all duration-300 overflow-hidden">
           <div className="w-full h-full flex items-center justify-center overflow-hidden">
             {diagramComponent}
           </div>
         </div>
 
-        <div className="w-80 flex flex-col gap-4 h-full min-h-0">
+        <div className="w-full xl:w-[380px] shrink-0 flex flex-col gap-4 min-h-0 overflow-y-auto pr-1">
+          {/* HVAC CONTROL STATION (When unitControl is provided) */}
+          {unitControl && (
+            <div className="border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col shadow-sm dark:shadow-2xl transition-all duration-300 shrink-0">
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2.5 mb-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-slate-800 dark:text-white font-black font-mono text-sm tracking-wide">
+                    CONTROL STATION
+                  </h3>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${
+                      unitControl.status === "Running"
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                        : unitControl.status === "Maintenance"
+                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                        : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                    }`}
+                  >
+                    {unitControl.status}
+                  </span>
+                </div>
+                <span
+                  className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded border ${
+                    hasControlAccess
+                      ? "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
+                  }`}
+                >
+                  {hasControlAccess ? "🔓 Control Access" : "🔒 View Only"}
+                </span>
+              </div>
+
+              {/* SETPOINTS PARAMETER */}
+              <div className="space-y-3 mb-4 bg-slate-50/80 dark:bg-slate-950/60 p-3 rounded-xl border border-slate-150 dark:border-slate-800/80">
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] font-bold font-mono uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    Setpoints Parameter
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {hasControlAccess ? "Real-time Slider" : "Read Only"}
+                  </span>
+                </div>
+
+                {/* Temperature Slider */}
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center text-xs font-mono">
+                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">
+                      {unitControl.tempRange.label}
+                    </span>
+                    <span className="text-cyan-600 dark:text-cyan-400 font-bold text-xs bg-cyan-50 dark:bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-200/50 dark:border-cyan-800/50">
+                      {unitControl.temp.toFixed(1)}°C
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={unitControl.tempRange.min}
+                    max={unitControl.tempRange.max}
+                    step={0.1}
+                    value={unitControl.temp}
+                    disabled={!hasControlAccess}
+                    onChange={(e) => unitControl.onUpdateSetpoint({ temp: parseFloat(e.target.value) })}
+                    className="w-full h-2 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-600 dark:accent-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>{unitControl.tempRange.min}°C</span>
+                    <span>{unitControl.tempRange.max}°C</span>
+                  </div>
+                </div>
+
+                {/* Humidity Slider */}
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center text-xs font-mono">
+                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">
+                      {unitControl.humidRange.label}
+                    </span>
+                    <span className="text-cyan-600 dark:text-cyan-400 font-bold text-xs bg-cyan-50 dark:bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-200/50 dark:border-cyan-800/50">
+                      {unitControl.humid.toFixed(1)}%RH
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={unitControl.humidRange.min}
+                    max={unitControl.humidRange.max}
+                    step={0.1}
+                    value={unitControl.humid}
+                    disabled={!hasControlAccess}
+                    onChange={(e) => unitControl.onUpdateSetpoint({ humid: parseFloat(e.target.value) })}
+                    className="w-full h-2 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-600 dark:accent-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>{unitControl.humidRange.min}%</span>
+                    <span>{unitControl.humidRange.max}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* PERINTAH KONTROL */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-bold font-mono text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                  Perintah Kontrol ({unitControl.unitName})
+                </span>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleTriggerUnitAction("START")}
+                    disabled={unitControl.status === "Running" || !hasControlAccess}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-xl font-bold font-mono text-xs transition duration-200 ${
+                      unitControl.status === "Running" || !hasControlAccess
+                        ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-60"
+                        : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm hover:shadow active:scale-95"
+                    }`}
+                    title={
+                      !hasControlAccess
+                        ? "Akses terbatas: Hanya Leader / Kashift"
+                        : unitControl.status === "Running"
+                        ? "Mesin sedang beroperasi (Running)"
+                        : "Mulai Operasional Mesin"
+                    }
+                  >
+                    {startIcon}
+                    <span>START</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleTriggerUnitAction("STOP")}
+                    disabled={unitControl.status === "Stopped" || !hasControlAccess}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-xl font-bold font-mono text-xs transition duration-200 ${
+                      unitControl.status === "Stopped" || !hasControlAccess
+                        ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-60"
+                        : "bg-rose-600 hover:bg-rose-500 text-white shadow-sm hover:shadow active:scale-95"
+                    }`}
+                    title={
+                      !hasControlAccess
+                        ? "Akses terbatas: Hanya Leader / Kashift"
+                        : unitControl.status === "Stopped"
+                        ? "Mesin sedang berhenti (Stopped)"
+                        : "Hentikan Operasional Mesin"
+                    }
+                  >
+                    {stopIcon}
+                    <span>STOP</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleTriggerUnitAction("MAINTENANCE")}
+                    disabled={unitControl.status === "Maintenance" || !hasControlAccess}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-xl font-bold font-mono text-xs transition duration-200 ${
+                      unitControl.status === "Maintenance" || !hasControlAccess
+                        ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-60"
+                        : "bg-blue-600 hover:bg-blue-500 text-white shadow-sm hover:shadow active:scale-95"
+                    }`}
+                    title={
+                      !hasControlAccess
+                        ? "Akses terbatas: Hanya Leader / Kashift"
+                        : unitControl.status === "Maintenance"
+                        ? "Mesin dalam status perawatan (Maintenance)"
+                        : "Alihkan ke Mode Maintenance"
+                    }
+                  >
+                    {maintenanceIcon}
+                    <span>MAINT</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* SYSTEM MODE */}
-          <div
-            className={`${
-              (hasControlAccess && controlButtons?.length) || setpoints?.length ? "flex-[1.4]" : "flex-1"
-            } border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-0 shadow-sm dark:shadow-2xl transition-all duration-300`}
-          >
+          <div className="border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-0 shadow-sm dark:shadow-2xl transition-all duration-300 shrink-0">
             <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm border-b border-slate-100 dark:border-slate-800 pb-2 mb-3 tracking-wide">
               SYSTEM MODE
             </h3>
-            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs">
+            <div className="space-y-2.5 pr-1 text-xs">
               {systemMode.map((item, idx) => (
                 <div key={idx} className="flex justify-between items-center py-0.5">
                   <span className="text-slate-500 dark:text-slate-400 font-medium">
@@ -595,8 +815,8 @@ export default function HvacLayout({
             </div>
           </div>
 
-          {/* SETPOINTS - Visible to all, editable only by Unit Head, Senior Unit Head, Admin */}
-          {setpoints && setpoints.length > 0 && (
+          {/* SETPOINTS (Fallback if unitControl is not passed) */}
+          {!unitControl && setpoints && setpoints.length > 0 && (
             <div className="flex-[1.3] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-[175px] shadow-sm dark:shadow-2xl transition-all duration-300">
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2 mb-3">
                 <div className="flex items-center gap-2">
@@ -645,7 +865,6 @@ export default function HvacLayout({
                   const isModified = Math.abs(currentDraft - sp.value) > 0.001;
 
                   if (!hasControlAccess) {
-                    // Read-only view for operator / non-control roles
                     return (
                       <div
                         key={idx}
@@ -662,7 +881,6 @@ export default function HvacLayout({
                   }
 
                   if (!isSetpointUnlocked) {
-                    // Locked view for Unit Head / Admin - requires password verification to unlock
                     return (
                       <div
                         key={idx}
@@ -688,7 +906,6 @@ export default function HvacLayout({
                     );
                   }
 
-                  // Unlocked edit mode: Stepper & manual input for Unit Head, Senior Unit Head, Admin
                   return (
                     <div
                       key={idx}
@@ -704,7 +921,6 @@ export default function HvacLayout({
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        {/* Decrement Button */}
                         <button
                           type="button"
                           onClick={() => handleStepSetpoint(sp, -1)}
@@ -715,7 +931,6 @@ export default function HvacLayout({
                           ▼
                         </button>
 
-                        {/* Manual Numeric Input */}
                         <div className="relative flex-1">
                           <input
                             type="number"
@@ -733,7 +948,6 @@ export default function HvacLayout({
                           />
                         </div>
 
-                        {/* Increment Button */}
                         <button
                           type="button"
                           onClick={() => handleStepSetpoint(sp, 1)}
@@ -748,7 +962,6 @@ export default function HvacLayout({
                           {sp.unit}
                         </span>
 
-                        {/* Set / Confirm Button */}
                         <button
                           type="button"
                           onClick={() => handleTriggerSetpointChange(sp)}
@@ -769,8 +982,8 @@ export default function HvacLayout({
             </div>
           )}
 
-          {/* CONTROL PANEL - Only for Unit Head, Senior Unit Head, Admin */}
-          {hasControlAccess && controlButtons && controlButtons.length > 0 && (
+          {/* CONTROL PANEL (Fallback if unitControl is not passed) */}
+          {!unitControl && hasControlAccess && controlButtons && controlButtons.length > 0 && (
             <div className="flex-[1] border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col min-h-0 shadow-sm dark:shadow-2xl transition-all duration-300">
               <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm border-b border-slate-100 dark:border-slate-800 pb-2 mb-3 tracking-wide">
                 CONTROL PANEL
@@ -793,9 +1006,7 @@ export default function HvacLayout({
           )}
 
           {/* ACTIVITY LOG CARD */}
-          <div className={`${
-            hasControlAccess && (setpoints?.length || controlButtons?.length) ? "flex-[1.2] min-h-[180px]" : "flex-1 min-h-[220px]"
-          } border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col shadow-sm dark:shadow-2xl transition-all duration-300`}>
+          <div className="border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 flex flex-col shadow-sm dark:shadow-2xl transition-all duration-300 shrink-0">
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2 mb-2">
               <h3 className="text-slate-800 dark:text-white font-bold font-mono text-sm tracking-wide">
                 ACTIVITY LOG
@@ -807,7 +1018,7 @@ export default function HvacLayout({
                 Lihat Semua
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+            <div className="space-y-2 pr-1 text-xs">
               {recentLogs.length === 0 ? (
                 <p className="text-slate-400 dark:text-slate-500 italic text-center py-2">
                   Belum ada aktivitas

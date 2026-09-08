@@ -44,13 +44,7 @@ export const MachineTabs = ({
   // ── Mode HVAC : tab dinamis per mesin ──────────────────────────
   if (isHvacGroup && groupId && currentUnitId) {
     // Ambil tab khusus untuk unit ini (jika ada di mapping)
-    const baseTabs = customTabsMap[currentUnitId] || [];
-    const customTabs = [...baseTabs];
-
-    // Sub-page Control khusus role Leader dan Kashift HVAC (serta Dev/Admin)
-    if (currentUnitId === "hvac-qc-retained-sample" && hasControlAccess) {
-      customTabs.push({ label: "Control", tabId: "control" });
-    }
+    const customTabs = customTabsMap[currentUnitId] || [];
 
     return (
       <div className="mb-4 border-b border-[#acd3ff]">

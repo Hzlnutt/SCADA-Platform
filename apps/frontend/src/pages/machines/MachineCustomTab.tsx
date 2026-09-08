@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Navigate } from "react-router-dom";
 import HvacLayout, { type LogEntry, type SystemModeItem } from "./HvacLayout";
 import { useAuthStore } from "../../store/auth.store";
 import { getJson, postJson } from "../../services/api.client";
@@ -327,81 +327,12 @@ const MachineCustomTab = () => {
     const ambientTemp = typeof ambient.temp === "number" ? ambient.temp : null;
     const ambientHumid = typeof ambient.humidity === "number" ? ambient.humidity : null;
 
-    // ----- SUB-PAGE CONTROL -----
+    // ----- SUB-PAGE CONTROL (Redirect to AHU-01 since Control Station is now embedded beside P&ID) -----
     if (tabId === "control") {
-      const plc1 = hvacRetainLive.PLC1_AHU1_Utl || {};
-      const plc2 = hvacRetainLive.PLC2_AHU2 || {};
-      const plc3 = hvacRetainLive.PLC2_AHU3 || {};
-
-      const isConn1 = plc1.Connected !== undefined ? Boolean(plc1.Connected) : true;
-      const isSf1 = isConn1 && (plc1.xIND_RUN_SF01 !== undefined ? Boolean(plc1.xIND_RUN_SF01) : (ahu01Status === "Running"));
-      const isEh1 = isConn1 && (plc1.xIND_RUN_EH01 !== undefined ? Boolean(plc1.xIND_RUN_EH01) : (ahu01Status === "Running"));
-      const isHf1 = isConn1 && (plc1.xIND_RUN_HF01 !== undefined ? Boolean(plc1.xIND_RUN_HF01) : (ahu01Status === "Running"));
-      const ahuStatus01: "ON" | "OFF" | "IDLE" = !isConn1 ? "OFF" : (isSf1 ? (isEh1 || isHf1 ? "ON" : "IDLE") : (ahu01Status === "Maintenance" ? "IDLE" : "OFF"));
-
-      const isConn2 = plc2.Connected !== undefined ? Boolean(plc2.Connected) : true;
-      const isSf2a = isConn2 && (plc2.xIND_RUN_SF02A !== undefined ? Boolean(plc2.xIND_RUN_SF02A) : (ahu02Status === "Running"));
-      const isSf2b = isConn2 && (plc2.xIND_RUN_SF02B !== undefined ? Boolean(plc2.xIND_RUN_SF02B) : (ahu02Status === "Running"));
-      const isCu2a = isConn2 && (plc2.xIND_RUN_CU02A !== undefined ? Boolean(plc2.xIND_RUN_CU02A) : (ahu02Status === "Running"));
-      const isCu2b = isConn2 && (plc2.xIND_RUN_CU02B !== undefined ? Boolean(plc2.xIND_RUN_CU02B) : (ahu02Status === "Running"));
-      const isEh2 = isConn2 && (plc2.xIND_RUN_EH02 !== undefined ? Boolean(plc2.xIND_RUN_EH02) : false);
-      const isAnyFan2 = isSf2a || isSf2b;
-      const isAnyCu2 = isCu2a || isCu2b;
-      const ahuStatus02: "ON" | "OFF" | "IDLE" = !isConn2 ? "OFF" : (isAnyFan2 ? (isAnyCu2 || isEh2 ? "ON" : "IDLE") : (ahu02Status === "Maintenance" ? "IDLE" : "OFF"));
-
-      const isConn3 = plc3.Connected !== undefined ? Boolean(plc3.Connected) : true;
-      const isRun3 = isConn3 && (ahu03Status === "Running");
-      const ahuStatus03: "ON" | "OFF" | "IDLE" = !isConn3 ? "OFF" : (isRun3 ? "ON" : (ahu03Status === "Maintenance" ? "IDLE" : "OFF"));
-
-      return (
-        <HvacControlPage
-          ahu01={{
-            temp: ahu01Temp,
-            humid: ahu01Humid,
-            mode: ahu01Mode,
-            status: ahu01Status,
-            ahuStatus: ahuStatus01,
-          }}
-          ahu02={{
-            temp: ahu02Temp,
-            humid: ahu02Humid,
-            mode: ahu02Mode,
-            status: ahu02Status,
-            ahuStatus: ahuStatus02,
-          }}
-          ahu03={{
-            temp: ahu03Temp,
-            humid: ahu03Humid,
-            mode: ahu03Mode,
-            status: ahu03Status,
-            ahuStatus: ahuStatus03,
-          }}
-          onUpdateSetpoint={(uId, updates) => {
-            if (uId === "ahu-01") {
-              if (updates.temp !== undefined) setAhu01Temp(updates.temp);
-              if (updates.humid !== undefined) setAhu01Humid(updates.humid);
-            } else if (uId === "ahu-02") {
-              if (updates.temp !== undefined) setAhu02Temp(updates.temp);
-              if (updates.humid !== undefined) setAhu02Humid(updates.humid);
-            } else if (uId === "ahu-03") {
-              if (updates.temp !== undefined) setAhu03Temp(updates.temp);
-              if (updates.humid !== undefined) setAhu03Humid(updates.humid);
-            }
-            debouncedUpdateHvac(uId, updates);
-          }}
-          onControlAction={async (uId, action) => {
-            const status = action === "START" ? "Running" : action === "STOP" ? "Stopped" : "Maintenance";
-            const mode = action === "START" ? "Auto" : "Manual";
-            await updateHvacBackend(uId, { status, mode }, `${action} ${uId.toUpperCase()}`);
-          }}
-          logs={logs}
-          onRefreshData={fetchHvacData}
-          onVerifyPassword={verifyPassword}
-        />
-      );
+      return <Navigate to="../ahu-01" replace />;
     }
 
-    // ----- AHU-01 (MONITORING P&ID) -----
+    // ----- AHU-01 (MONITORING P&ID + CONTROL STATION) -----
     if (tabId === "ahu-01") {
       const plc1 = hvacRetainLive.PLC1_AHU1_Utl || {};
       const isConnected = plc1.Connected !== undefined ? Boolean(plc1.Connected) : true;
@@ -454,6 +385,27 @@ const MachineCustomTab = () => {
             />
           }
           systemMode={systemMode}
+          unitControl={{
+            unitId: "ahu-01",
+            unitName: "AHU-01",
+            status: headerStatus,
+            mode: headerMode,
+            ahuStatus: ahuStatus01,
+            temp: ahu01Temp,
+            humid: ahu01Humid,
+            tempRange: { min: 30.0, max: 50.0, label: "Temperature Setpoint (°C)" },
+            humidRange: { min: 60.0, max: 90.0, label: "Humidity Setpoint (%RH)" },
+            onUpdateSetpoint: (updates) => {
+              if (updates.temp !== undefined) setAhu01Temp(updates.temp);
+              if (updates.humid !== undefined) setAhu01Humid(updates.humid);
+              debouncedUpdateHvac("ahu-01", updates);
+            },
+            onControlAction: async (action) => {
+              const status = action === "START" ? "Running" : action === "STOP" ? "Stopped" : "Maintenance";
+              const mode = action === "START" ? "Auto" : "Manual";
+              await updateHvacBackend("ahu-01", { status, mode }, `${action} AHU-01`);
+            },
+          }}
           currentUser={currentUser}
           onVerifyPassword={verifyPassword}
           logs={logs}
@@ -528,6 +480,27 @@ const MachineCustomTab = () => {
             />
           }
           systemMode={systemMode}
+          unitControl={{
+            unitId: "ahu-02",
+            unitName: "AHU-02",
+            status: headerStatus,
+            mode: headerMode,
+            ahuStatus: ahuStatus02,
+            temp: ahu02Temp,
+            humid: ahu02Humid,
+            tempRange: { min: 15.0, max: 35.0, label: "Cooling Target Temp (°C)" },
+            humidRange: { min: 30.0, max: 80.0, label: "Dehumidify Target (%RH)" },
+            onUpdateSetpoint: (updates) => {
+              if (updates.temp !== undefined) setAhu02Temp(updates.temp);
+              if (updates.humid !== undefined) setAhu02Humid(updates.humid);
+              debouncedUpdateHvac("ahu-02", updates);
+            },
+            onControlAction: async (action) => {
+              const status = action === "START" ? "Running" : action === "STOP" ? "Stopped" : "Maintenance";
+              const mode = action === "START" ? "Auto" : "Manual";
+              await updateHvacBackend("ahu-02", { status, mode }, `${action} AHU-02`);
+            },
+          }}
           currentUser={currentUser}
           onVerifyPassword={verifyPassword}
           logs={logs}
@@ -593,6 +566,27 @@ const MachineCustomTab = () => {
             />
           }
           systemMode={systemMode}
+          unitControl={{
+            unitId: "ahu-03",
+            unitName: "AHU-03",
+            status: headerStatus,
+            mode: headerMode,
+            ahuStatus: ahuStatus03,
+            temp: ahu03Temp,
+            humid: ahu03Humid,
+            tempRange: { min: 15.0, max: 30.0, label: "Room Temp SP (°C)" },
+            humidRange: { min: 30.0, max: 80.0, label: "Room Humidity SP (%RH)" },
+            onUpdateSetpoint: (updates) => {
+              if (updates.temp !== undefined) setAhu03Temp(updates.temp);
+              if (updates.humid !== undefined) setAhu03Humid(updates.humid);
+              debouncedUpdateHvac("ahu-03", updates);
+            },
+            onControlAction: async (action) => {
+              const status = action === "START" ? "Running" : action === "STOP" ? "Stopped" : "Maintenance";
+              const mode = action === "START" ? "Auto" : "Manual";
+              await updateHvacBackend("ahu-03", { status, mode }, `${action} AHU-03`);
+            },
+          }}
           currentUser={currentUser}
           onVerifyPassword={verifyPassword}
           logs={logs}
