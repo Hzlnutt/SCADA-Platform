@@ -88,6 +88,12 @@ export const getMeHandler = async (
     }
 
     const user = await getUserById(userId);
+    if (!user || user.status === "disabled") {
+      const error = new Error("Sesi login tidak valid atau akun telah dihapus.") as Error & { statusCode?: number };
+      error.statusCode = 401;
+      return next(error);
+    }
+
     res.json({ data: user });
   } catch (err) {
     next(err);

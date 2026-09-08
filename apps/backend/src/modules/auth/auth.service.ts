@@ -146,7 +146,7 @@ export const login = async (input: LoginInput) => {
   const pool = getPostgresPool();
   let user: any = null;
 
-  // 1. Try finding user in PostgreSQL users table
+  // 1. Authoritative check in PostgreSQL users table
   try {
     const pgRes = await pool.query(`
       SELECT id, username, name, email, role, password_hash, avatar_url, status
@@ -165,63 +165,9 @@ export const login = async (input: LoginInput) => {
     logger.warn(`PostgreSQL users query error: ${err.message}`);
   }
 
-  // 2. Fallback to MongoDB if not found in PostgreSQL
-  if (!user) {
-    const db = getMongoDb();
-    if (db) {
-      const users = db.collection<UserDoc>(USERS_COLLECTION);
-      const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const mongoUser = await users.findOne({
-        $or: [
-          { username: identifier },
-          { email: identifier },
-          { email: `${identifier}@widatra.co` },
-          { email: new RegExp(`^${escaped}(@.*)?$`, "i") }
-        ]
-      });
-
-      if (mongoUser) {
-        user = {
-          id: mongoUser._id.toString(),
-          username: mongoUser.username || mongoUser.email.split("@")[0],
-          name: mongoUser.name,
-          email: mongoUser.email,
-          role: mongoUser.role,
-          password_hash: mongoUser.passwordHash,
-          avatar_url: mongoUser.avatarUrl,
-          status: mongoUser.status,
-          biometricDescriptor: mongoUser.biometricDescriptor,
-          biometricDescriptors: mongoUser.biometricDescriptors,
-          biometricImages: mongoUser.biometricImages
-        };
-
-        // Auto-sync existing MongoDB user into PostgreSQL with encrypted password
-        try {
-          if (mongoUser.passwordHash) {
-            await pool.query(`
-              INSERT INTO users (username, name, email, role, password_hash, avatar_url, status)
-              VALUES ($1, $2, $3, $4, $5, $6, $7)
-              ON CONFLICT (username) DO UPDATE SET
-                password_hash = EXCLUDED.password_hash,
-                name = EXCLUDED.name,
-                email = EXCLUDED.email,
-                role = EXCLUDED.role,
-                updated_at = NOW()
-            `, [
-              user.username,
-              user.name,
-              user.email,
-              user.role,
-              mongoUser.passwordHash,
-              user.avatar_url || null,
-              user.status || "active"
-            ]);
-          }
-        } catch {}
-      }
-    }
-  }
-
+  // PostgreSQL is the single source of truth for active users.
+  // If user does not exist in PostgreSQL, reject immediately.
+  // Never fallback to MongoDB to resurrect deleted/ghost users.
   if (!user) {
     throw createError("Username atau password salah", 401);
   }
@@ -231,16 +177,11 @@ export const login = async (input: LoginInput) => {
   }
 
   if (!user.password_hash) {
-    if (input.password === "Pandaan1" || input.password === "admin") {
-      return buildAuthResponse(user);
-    }
     throw createError("Akun ini belum memiliki password. Silakan hubungi administrator.", 401);
   }
 
-  const match =
-    (await bcrypt.compare(input.password, user.password_hash)) ||
-    input.password === "Pandaan1" ||
-    input.password === "admin";
+  // Strictly verify hashed password using bcrypt (NO master password backdoor)
+  const match = await bcrypt.compare(input.password, user.password_hash);
   if (!match) {
     throw createError("Username atau password salah", 401);
   }
@@ -393,10 +334,24 @@ export const refreshAccessToken = async (input: RefreshInput) => {
     throw createError("Refresh token expired", 401);
   }
 
-  const userId = new ObjectId(payload.sub);
-  const user = await users.findOne({ _id: userId });
+  // Check user in PostgreSQL
+  const pool = getPostgresPool();
+  let user: any = null;
+  try {
+    const isNum = !isNaN(Number(payload.sub));
+    const pgRes = await pool.query(
+      isNum
+        ? `SELECT id, role, name, status FROM users WHERE id = $1 LIMIT 1`
+        : `SELECT id, role, name, status FROM users WHERE username = $1 LIMIT 1`,
+      [isNum ? Number(payload.sub) : payload.sub]
+    );
+    if (pgRes.rows.length > 0) {
+      user = pgRes.rows[0];
+    }
+  } catch {}
+
   if (!user) {
-    throw createError("User not found", 404);
+    throw createError("User not found or account has been deleted", 401);
   }
 
   if (user.status === "disabled") {
@@ -404,7 +359,7 @@ export const refreshAccessToken = async (input: RefreshInput) => {
   }
 
   const accessToken = signAccessToken({
-    sub: user._id.toString(),
+    sub: String(user.id),
     role: user.role,
     name: user.name
   });
@@ -457,12 +412,9 @@ export const bootstrapAdmin = async (input: BootstrapInput) => {
 
 // ===== TAMBAHAN: VERIFY PASSWORD =====
 export const verifyPassword = async (userId: string, password: string): Promise<boolean> => {
-  // Allow "Pandaan1" and "admin" as master override passwords
-  if (password === "Pandaan1" || password === "admin") {
-    return true;
-  }
+  if (!password) return false;
 
-  // 1. Try PostgreSQL users table
+  // 1. Strictly verify password against PostgreSQL users table using bcrypt
   const pool = getPostgresPool();
   try {
     const isNum = !isNaN(Number(userId));
@@ -476,18 +428,6 @@ export const verifyPassword = async (userId: string, password: string): Promise<
       return bcrypt.compare(password, pgRes.rows[0].password_hash);
     }
   } catch {}
-
-  // 2. Fallback to MongoDB
-  const db = getMongoDb();
-  if (db && ObjectId.isValid(userId)) {
-    try {
-      const users = db.collection<UserDoc>(USERS_COLLECTION);
-      const user = await users.findOne({ _id: new ObjectId(userId) });
-      if (user && user.passwordHash) {
-        return bcrypt.compare(password, user.passwordHash);
-      }
-    } catch {}
-  }
 
   return false;
 };

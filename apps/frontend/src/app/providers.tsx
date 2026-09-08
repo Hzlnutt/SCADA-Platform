@@ -20,20 +20,23 @@ export const AppProviders = ({ children }: { children: ReactNode }) => {
   }, [theme]);
 
   useEffect(() => {
-    if (!accessToken || user) {
+    if (!accessToken) {
       return;
     }
 
+    // Proactively verify user session with the backend upon load.
+    // If the account was deleted or disabled, the server returns 401,
+    // which api.client automatically intercepts to clear localStorage and redirect to /login.
     fetchMe()
       .then((result) => {
-        if (result.data) {
+        if (result?.data) {
           updateUser(result.data);
         }
       })
       .catch(() => {
-        // ignore fetch errors; user can re-login if needed
+        // 401 status is automatically intercepted by api.client to clear session & redirect to /login
       });
-  }, [accessToken, updateUser, user]);
+  }, [accessToken, updateUser]);
 
   return <>{children}</>;
 };

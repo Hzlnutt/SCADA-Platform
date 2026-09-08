@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
-import { USERS_COLLECTION } from "../../database/collections";
+import { AUTH_TOKENS_COLLECTION, USERS_COLLECTION } from "../../database/collections";
 import { getMongoDb } from "../../database/mongo";
 import { getPostgresPool } from "../../database/postgres";
 import type {
@@ -12,6 +12,7 @@ import type {
   ReviewPasswordChangeInput
 } from "./users.validation";
 import { verifyPassword } from "../auth/auth.service";
+import { invalidateUserAuthCache } from "../auth/auth.middleware";
 
 type UserDoc = {
   _id: ObjectId;
@@ -268,20 +269,74 @@ export const updateUserRole = async (id: string, input: UpdateUserInput) => {
     );
   }
 
+  invalidateUserAuthCache(id);
+
   return { id, role: input.role };
 };
 
 export const deleteUser = async (id: string) => {
   const pool = getPostgresPool();
+  let usernameToDelete: string | null = null;
+  let emailToDelete: string | null = null;
+  let pgIdToDelete: number | null = null;
+
+  // 1. Fetch user first to capture username and email for clean cascade deletion
   try {
-    await pool.query(`DELETE FROM users WHERE id::text = $1 OR username = $1 OR email = $1`, [id]);
+    const isNum = !isNaN(Number(id));
+    const uRes = await pool.query(
+      isNum 
+        ? `SELECT id, username, email FROM users WHERE id = $1 LIMIT 1`
+        : `SELECT id, username, email FROM users WHERE username = $1 OR email = $1 LIMIT 1`,
+      [isNum ? Number(id) : id]
+    );
+    if (uRes.rows.length > 0) {
+      pgIdToDelete = uRes.rows[0].id;
+      usernameToDelete = uRes.rows[0].username;
+      emailToDelete = uRes.rows[0].email;
+    }
   } catch {}
 
+  // 2. Delete from PostgreSQL users and password change requests
+  try {
+    if (pgIdToDelete !== null) {
+      await pool.query(`DELETE FROM password_change_requests WHERE user_id = $1 OR username = $2`, [pgIdToDelete, usernameToDelete || id]);
+      await pool.query(`DELETE FROM users WHERE id = $1`, [pgIdToDelete]);
+    } else {
+      await pool.query(`DELETE FROM password_change_requests WHERE username = $1`, [id]);
+      await pool.query(`DELETE FROM users WHERE id::text = $1 OR username = $1 OR email = $1`, [id]);
+    }
+  } catch {}
+
+  // 3. Delete thoroughly from MongoDB users collection and auth tokens
   const db = getMongoDb();
-  if (db && ObjectId.isValid(id)) {
-    const users = db.collection<UserDoc>(USERS_COLLECTION);
-    await users.deleteOne({ _id: new ObjectId(id) });
+  if (db) {
+    try {
+      const users = db.collection<UserDoc>(USERS_COLLECTION);
+      const orFilters: any[] = [];
+      if (ObjectId.isValid(id)) orFilters.push({ _id: new ObjectId(id) });
+      if (usernameToDelete) orFilters.push({ username: usernameToDelete });
+      if (emailToDelete) orFilters.push({ email: emailToDelete });
+      orFilters.push({ username: id });
+      orFilters.push({ email: id });
+
+      await users.deleteMany({ $or: orFilters });
+
+      // Invalidate active auth tokens in MongoDB
+      const authTokens = db.collection(AUTH_TOKENS_COLLECTION);
+      const tokenFilters: any[] = [];
+      if (ObjectId.isValid(id)) tokenFilters.push({ userId: new ObjectId(id) });
+      if (pgIdToDelete !== null) tokenFilters.push({ userId: pgIdToDelete as any });
+      if (tokenFilters.length > 0) {
+        await authTokens.deleteMany({ $or: tokenFilters });
+      }
+    } catch {}
   }
+
+  // 4. Invalidate memory cache so any existing active token gets rejected immediately
+  invalidateUserAuthCache(id);
+  if (usernameToDelete) invalidateUserAuthCache(usernameToDelete);
+  if (emailToDelete) invalidateUserAuthCache(emailToDelete);
+  if (pgIdToDelete !== null) invalidateUserAuthCache(String(pgIdToDelete));
 
   return { success: true };
 };

@@ -2,6 +2,8 @@ import { Pool, types } from "pg";
 import bcrypt from "bcryptjs";
 import { env } from "../config/env.config";
 import { logger } from "../config/logger.config";
+import { getMongoDb } from "./mongo";
+import { USERS_COLLECTION, AUTH_TOKENS_COLLECTION } from "./collections";
 
 // Parse OID 1114 (timestamp without time zone) by treating it as WIB (+07:00) local time.
 // This aligns timezone-naive database values with the application's timezone helpers.
@@ -102,6 +104,31 @@ export const ensurePostgresTables = async () => {
     `, [opRoleHash]).catch((err) => {
       logger.warn("Seeding operator_utility and operator_hvac failed (ignored): " + err.message);
     });
+
+    // Prune orphan users in MongoDB that do not exist in PostgreSQL (e.g. legacy dev@widatra.com)
+    try {
+      const db = getMongoDb();
+      if (db) {
+        const mongoUsersCol = db.collection(USERS_COLLECTION);
+        const mongoUsers = await mongoUsersCol.find({}).toArray();
+        const pgUsersRes = await pool.query(`SELECT username, email FROM users`);
+        const validUsernames = new Set(pgUsersRes.rows.map((r: any) => (r.username || "").toLowerCase()));
+        const validEmails = new Set(pgUsersRes.rows.map((r: any) => (r.email || "").toLowerCase()));
+
+        for (const mu of mongoUsers) {
+          const muUsername = (mu.username || "").toLowerCase();
+          const muEmail = (mu.email || "").toLowerCase();
+          const existsInPg = (muUsername && validUsernames.has(muUsername)) || (muEmail && validEmails.has(muEmail));
+          if (!existsInPg) {
+            await mongoUsersCol.deleteOne({ _id: mu._id });
+            await db.collection(AUTH_TOKENS_COLLECTION).deleteMany({ userId: mu._id });
+            logger.info(`Pruned orphan MongoDB user: ${mu.username || mu.email}`);
+          }
+        }
+      }
+    } catch (err: any) {
+      logger.warn(`MongoDB orphan users cleanup note: ${err.message}`);
+    }
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cooling_tower_telemetry (

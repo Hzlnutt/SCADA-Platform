@@ -30,4 +30,5 @@ __pycache__/
 *.png
 
 # Large database dumps and import files
-import-data/
+import-data/
+.last_sync_success.txt
