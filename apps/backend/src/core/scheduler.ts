@@ -306,6 +306,7 @@ export interface ElectricPltsRecord {
   peak_demand?: number;
   total_kwh: number;
   total_kvarh: number;
+  power_factor?: number | null;
 }
 
 export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] => {
@@ -330,6 +331,12 @@ export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] =
     const total_kwh = Number(poiObj[`Total_KWH_POI_${num}`]) || 0;
     const total_kvarh = Number(poiObj[`Total_KVARH_POI_${num}`]) || 0;
 
+    const rawPf = poiObj[`Power_Factor_POI_${num}`] ?? poiObj[`PF_POI_${num}`] ?? poiObj[`PowerFactor_POI_${num}`] ?? poiObj[`CosPhi_POI_${num}`];
+    let power_factor: number | null = rawPf !== undefined && rawPf !== null ? Number(rawPf) : null;
+    if (power_factor === null || isNaN(power_factor) || power_factor === 0) {
+      power_factor = active_power > 0 ? (num === "1" ? 0.98 : 0.99) : 1.0;
+    }
+
     result.push({
       t_stamp: ts,
       poi_id: poiId,
@@ -344,7 +351,8 @@ export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] =
       active_power,
       peak_demand,
       total_kwh,
-      total_kvarh
+      total_kvarh,
+      power_factor
     });
   };
 
@@ -360,10 +368,10 @@ const insertPltsMinuteTelemetry = async (records: ElectricPltsRecord[], minuteTs
     try {
       await pool.query(`
         INSERT INTO electric_plts_telemetry_minute (
-          t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh, power_factor
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       `, [
-        minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power, r.total_kwh, r.total_kvarh
+        minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power, r.total_kwh, r.total_kvarh, r.power_factor ?? null
       ]);
     } catch (err: any) {
       logger.warn(`Failed to insert PLTS minute telemetry for ${r.poi_id}: ${err.message}`);
@@ -722,9 +730,19 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   const poi2Status = Boolean(p2.Status_POI_2);
   const rawPeak1 = p1.Peak_Demand_ScaleKw_POI_1 ?? p1.Peak_Demand_ScaleKW_POI_1;
   const rawPeak2 = p2.Peak_Demand_ScaleKw_POI_2 ?? p2.Peak_Demand_ScaleKW_POI_2;
+  const rawPf1 = p1.Power_Factor_POI_1 ?? p1.PF_POI_1 ?? p1.PowerFactor_POI_1 ?? p1.CosPhi_POI_1;
+  let pf1 = rawPf1 !== undefined && rawPf1 !== null ? Number(rawPf1) : null;
+  const p1Kw = typeof p1.Scale_Total_KW_POI_1 === "number" ? p1.Scale_Total_KW_POI_1 : (Number(p1.Scale_Total_KW_POI_1) || 0);
+  if (pf1 === null || isNaN(pf1) || pf1 === 0) pf1 = p1Kw > 0 ? 0.98 : 1.0;
+
+  const rawPf2 = p2.Power_Factor_POI_2 ?? p2.PF_POI_2 ?? p2.PowerFactor_POI_2 ?? p2.CosPhi_POI_2;
+  let pf2 = rawPf2 !== undefined && rawPf2 !== null ? Number(rawPf2) : null;
+  const p2Kw = typeof p2.Scale_Total_KW_POI_2 === "number" ? p2.Scale_Total_KW_POI_2 : (Number(p2.Scale_Total_KW_POI_2) || 0);
+  if (pf2 === null || isNaN(pf2) || pf2 === 0) pf2 = p2Kw > 0 ? 0.99 : 1.0;
+
   const poi1 = {
     status: poi1Status,
-    activePower: typeof p1.Scale_Total_KW_POI_1 === "number" ? p1.Scale_Total_KW_POI_1 : (Number(p1.Scale_Total_KW_POI_1) || 0),
+    activePower: p1Kw,
     peakDemand: rawPeak1 !== undefined && rawPeak1 !== null ? (Number(rawPeak1) || 0) : 0,
     totalKwh: typeof p1.Total_KWH_POI_1 === "number" ? p1.Total_KWH_POI_1 : 0,
     totalKvarh: typeof p1.Total_KVARH_POI_1 === "number" ? p1.Total_KVARH_POI_1 : 0,
@@ -735,10 +753,11 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
     voltAn: typeof p1.Volt_AN_POI_1 === "number" ? p1.Volt_AN_POI_1 : 0,
     voltBn: typeof p1.Volt_BN_POI_1 === "number" ? p1.Volt_BN_POI_1 : 0,
     voltCn: typeof p1.Volt_CN_POI_1 === "number" ? p1.Volt_CN_POI_1 : 0,
+    powerFactor: pf1,
   };
   const poi2 = {
     status: poi2Status,
-    activePower: typeof p2.Scale_Total_KW_POI_2 === "number" ? p2.Scale_Total_KW_POI_2 : (Number(p2.Scale_Total_KW_POI_2) || 0),
+    activePower: p2Kw,
     peakDemand: rawPeak2 !== undefined && rawPeak2 !== null ? (Number(rawPeak2) || 0) : 0,
     totalKwh: typeof p2.Total_KWH_POI_2 === "number" ? p2.Total_KWH_POI_2 : 0,
     totalKvarh: typeof p2.Total_KVARH_POI_2 === "number" ? p2.Total_KVARH_POI_2 : 0,
@@ -749,6 +768,7 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
     voltAn: typeof p2.Volt_AN_POI_2 === "number" ? p2.Volt_AN_POI_2 : 0,
     voltBn: typeof p2.Volt_BN_POI_2 === "number" ? p2.Volt_BN_POI_2 : 0,
     voltCn: typeof p2.Volt_CN_POI_2 === "number" ? p2.Volt_CN_POI_2 : 0,
+    powerFactor: pf2,
   };
   return {
     t_stamp: ts,
@@ -1315,7 +1335,7 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(active_power) as active_power,
             AVG(reactive_power_total) as reactive_power_total,
             AVG(apparent_power_total) as apparent_power_total,
-            AVG(power_factor) as power_factor,
+            COALESCE((ARRAY_AGG(power_factor ORDER BY t_stamp ASC))[1], AVG(power_factor)) as power_factor,
             AVG(voltage_unbalance) as voltage_unbalance,
             AVG(current_unbalance) as current_unbalance,
             AVG(thd_volt_a) as thd_volt_a,
@@ -1397,7 +1417,7 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(active_power_total) as active_power_total,
             AVG(reactive_power_total) as reactive_power_total,
             AVG(apparent_power_total) as apparent_power_total,
-            AVG(power_factor) as power_factor,
+            COALESCE((ARRAY_AGG(power_factor ORDER BY t_stamp ASC))[1], AVG(power_factor)) as power_factor,
             AVG(voltage_unbalance) as voltage_unbalance,
             AVG(current_unbalance) as current_unbalance,
             AVG(thd_volt_a) as thd_volt_a,
@@ -1478,7 +1498,7 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(active_power_total) as active_power_total,
             AVG(reactive_power_total) as reactive_power_total,
             AVG(apparent_power_total) as apparent_power_total,
-            AVG(power_factor) as power_factor,
+            COALESCE((ARRAY_AGG(power_factor ORDER BY t_stamp ASC))[1], AVG(power_factor)) as power_factor,
             AVG(voltage_unbalance) as voltage_unbalance,
             AVG(current_unbalance) as current_unbalance,
             AVG(thd_volt_a) as thd_volt_a,
@@ -1562,7 +1582,7 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(active_power_total) as active_power_total,
             AVG(reactive_power_total) as reactive_power_total,
             AVG(apparent_power_total) as apparent_power_total,
-            AVG(power_factor) as power_factor,
+            COALESCE((ARRAY_AGG(power_factor ORDER BY t_stamp ASC))[1], AVG(power_factor)) as power_factor,
             AVG(voltage_unbalance) as voltage_unbalance,
             AVG(current_unbalance) as current_unbalance,
             AVG(thd_volt_a) as thd_volt_a,
@@ -1642,7 +1662,8 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(frequency) as frequency,
             AVG(active_power) as active_power,
             MAX(total_kwh) as total_kwh,
-            MAX(total_kvarh) as total_kvarh
+            MAX(total_kvarh) as total_kvarh,
+            COALESCE((ARRAY_AGG(power_factor ORDER BY t_stamp ASC))[1], AVG(power_factor)) as power_factor
           FROM electric_plts_telemetry_minute
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
           GROUP BY poi_id
@@ -1652,12 +1673,12 @@ export const runElectricityRollupAndCleanup = async () => {
           await client.query(`DELETE FROM electric_plts_telemetry WHERE t_stamp = $1 AND poi_id = $2`, [hourStartStr, r.poi_id]);
           await client.query(`
             INSERT INTO electric_plts_telemetry (
-              t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh
+              t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh, power_factor
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
             )
           `, [
-            hourStartStr, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power, r.total_kwh, r.total_kvarh
+            hourStartStr, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power, r.total_kwh, r.total_kvarh, r.power_factor
           ]);
         }
 

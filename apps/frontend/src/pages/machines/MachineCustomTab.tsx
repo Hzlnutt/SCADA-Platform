@@ -581,7 +581,6 @@ const MachineCustomTab = () => {
           roomName="AHU-03"
           roomType="REF.RETENTION ROOM"
           targetTemp="Max 30°C"
-          targetHumidity="55%RH ± 10%"
           diagramComponent={
             <MachineAHU03Pid
               tempSP={ahu03Temp}
@@ -650,8 +649,6 @@ const MachineCustomTab = () => {
         <HvacLayout
           roomName="UTILITY"
           roomType="CENTRAL UTILITY LOOP"
-          targetTemp="22°C ± 2°C"
-          targetHumidity="55%RH ± 5%"
           diagramComponent={
             <MachineUtilityPid
               tempSP={utilTemp}

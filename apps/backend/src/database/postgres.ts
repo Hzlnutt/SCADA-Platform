@@ -797,7 +797,8 @@ export const ensurePostgresTables = async () => {
         frequency NUMERIC,
         active_power NUMERIC,
         total_kwh NUMERIC,
-        total_kvarh NUMERIC
+        total_kvarh NUMERIC,
+        power_factor NUMERIC
       );
       CREATE INDEX IF NOT EXISTS idx_electric_plts_tstamp ON electric_plts_telemetry (poi_id, t_stamp DESC);
 
@@ -815,9 +816,13 @@ export const ensurePostgresTables = async () => {
         frequency NUMERIC,
         active_power NUMERIC,
         total_kwh NUMERIC,
-        total_kvarh NUMERIC
+        total_kvarh NUMERIC,
+        power_factor NUMERIC
       );
       CREATE INDEX IF NOT EXISTS idx_electric_plts_minute_tstamp ON electric_plts_telemetry_minute (poi_id, t_stamp DESC);
+
+      ALTER TABLE electric_plts_telemetry ADD COLUMN IF NOT EXISTS power_factor NUMERIC;
+      ALTER TABLE electric_plts_telemetry_minute ADD COLUMN IF NOT EXISTS power_factor NUMERIC;
     `).catch((err) => {
       logger.warn({ err }, "Failed to create minute buffer tables");
     });

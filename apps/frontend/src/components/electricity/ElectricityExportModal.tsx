@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 
 interface Props {
@@ -190,7 +190,7 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                 Export Laporan Kelistrikan (.xlsx)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Dashboard eksekutif dengan grafik native per parameter & data multi-sheet berfilter
+                Dashboard eksekutif dengan Bar Chart interaktif & tabel data terstandarisasi (8 kolom)
               </p>
             </div>
           </div>
@@ -365,10 +365,10 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
             </div>
             <ul className="list-disc list-inside space-y-1 pl-1 text-[11px] text-slate-500 dark:text-slate-400">
               <li>
-                <strong className="text-slate-700 dark:text-slate-300">Sheet Dashboard Utama:</strong> Berisi ringkasan eksekutif KPI dan grafik native interaktif untuk masing-masing parameter (Total Load, PLN, Solar, Feeders WF1/WF2, Power Factor, dan Finansial). Tidak ada tabel angka yang menumpuk di bawahnya.
+                <strong className="text-slate-700 dark:text-slate-300">Sheet Dashboard Utama:</strong> Ringkasan eksekutif KPI kelistrikan per item (Incoming PLN, Fact-1, Fact-2, POI-1, POI-2) dilengkapi Bar Chart native interaktif untuk perbandingan energi & finansial.
               </li>
               <li>
-                <strong className="text-slate-700 dark:text-slate-300">Sheet Data Detail & AutoFilter:</strong> Seluruh baris rekaman angka dipisahkan secara rapi ke sheet masing-masing dan dilengkapi <em>AutoFilter</em> kalender/tanggal di Microsoft Excel.
+                <strong className="text-slate-700 dark:text-slate-300">Sheet Data Kelistrikan:</strong> Tabel data terstandarisasi dengan 8 kolom utama (Tgl/Waktu, Nama Item, LWBP, WBP, Power Factor, Est Cost, Est Penghematan, dan Est Net Cost) dilengkapi fitur <em>AutoFilter</em>.
               </li>
             </ul>
           </div>

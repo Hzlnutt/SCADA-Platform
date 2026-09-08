@@ -122,7 +122,8 @@ mockScadaRouter.get("/system/webdev/Utility_Dashboard/electric_plts", (_req, res
       Scale_Total_KW_POI_1: 45.2,
       Frequency_POI_1: 49.98,
       Total_KWH_POI_1: 24558.67,
-      Volt_AB_POI_1: 391.86
+      Volt_AB_POI_1: 391.86,
+      Power_Factor_POI_1: 0.98
     },
     POI_2: {
       Volt_AN_POI_2: 223.64,
@@ -135,7 +136,8 @@ mockScadaRouter.get("/system/webdev/Utility_Dashboard/electric_plts", (_req, res
       Frequency_POI_2: 49.98,
       Volt_AB_POI_2: 383.13,
       Status_POI_2: true,
-      Total_KWH_POI_2: 95707.05
+      Total_KWH_POI_2: 95707.05,
+      Power_Factor_POI_2: 0.99
     }
   });
 });

@@ -85,8 +85,8 @@ export interface UnitControlConfig {
 interface HvacLayoutProps {
   roomName: string;
   roomType: string;
-  targetTemp: string;
-  targetHumidity: string;
+  targetTemp?: string;
+  targetHumidity?: string;
   diagramComponent: ReactNode;
   systemMode: SystemModeItem[];
   setpoints?: SetpointConfig[];
@@ -514,16 +514,18 @@ export default function HvacLayout({
           <p className="text-sm font-semibold text-slate-550 dark:text-slate-400 mt-0.5">
             {roomType}
           </p>
-          <div className="flex items-center gap-2 text-xs text-cyan-600 dark:text-cyan-400 font-mono mt-1.5 bg-cyan-50 dark:bg-cyan-950/30 px-2.5 py-1 rounded-md border border-cyan-100 dark:border-cyan-900/30 w-fit">
-            <span>Target:</span>
-            <span className="font-semibold">{targetTemp}</span>
-            {targetHumidity && (
-              <>
+          {(targetTemp || targetHumidity) && (
+            <div className="flex items-center gap-2 text-xs text-cyan-600 dark:text-cyan-400 font-mono mt-1.5 bg-cyan-50 dark:bg-cyan-950/30 px-2.5 py-1 rounded-md border border-cyan-100 dark:border-cyan-900/30 w-fit">
+              <span>Target:</span>
+              {targetTemp && <span className="font-semibold">{targetTemp}</span>}
+              {targetTemp && targetHumidity && (
                 <span className="text-slate-300 dark:text-slate-700">|</span>
+              )}
+              {targetHumidity && (
                 <span className="font-semibold">{targetHumidity}</span>
-              </>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* STATUS & OPERATION CLUSTER */}
