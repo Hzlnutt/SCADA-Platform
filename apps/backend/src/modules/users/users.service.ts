@@ -271,7 +271,15 @@ export const updateUserRole = async (id: string, input: UpdateUserInput) => {
 
   invalidateUserAuthCache(id);
 
-  return { id, role: input.role };
+  const updated = await getUserById(id);
+  if (updated) {
+    return {
+      ...updated,
+      _id: updated.id
+    };
+  }
+
+  return { id, _id: id, role: input.role };
 };
 
 export const deleteUser = async (id: string) => {

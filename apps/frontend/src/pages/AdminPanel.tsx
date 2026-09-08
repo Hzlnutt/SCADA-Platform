@@ -214,12 +214,21 @@ export default function AdminPanel() {
   const handleSaveRole = async (user: UserItem) => {
     setSavingUserId(user._id);
     try {
-      const result = await patchJson<{ data: UserItem }>(
+      const result = await patchJson<{ data: any }>(
         `/users/${user._id}`,
         { role: user.role }
       );
       setUsers((prev) =>
-        prev.map((item) => (item._id === user._id ? result.data : item))
+        prev.map((item) =>
+          item._id === user._id
+            ? {
+                ...item,
+                ...(result?.data || {}),
+                _id: item._id, // preserve _id
+                role: user.role // preserve selected role
+              }
+            : item
+        )
       );
       setPendingRoleUser(null);
     } catch (err) {
@@ -289,6 +298,8 @@ export default function AdminPanel() {
         prev.map((item) => (item.id === result.data.id ? result.data : item))
       );
       setEditingMaintenance(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to update maintenance record");
     } finally {
       setMaintenanceSaving(false);
     }
@@ -319,6 +330,8 @@ export default function AdminPanel() {
         prev.map((item) => (item.id === result.data.id ? result.data : item))
       );
       setEditingShift(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to update shift report");
     } finally {
       setShiftSaving(false);
     }
@@ -430,8 +443,8 @@ export default function AdminPanel() {
                 <tbody className="divide-y divide-slate-900 font-medium">
                   {users.map((user) => (
                     <tr key={user._id} className="text-slate-300 hover:bg-slate-900/40">
-                      <td className="px-3 py-3 text-slate-200 font-bold">{user.name}</td>
-                      <td className="px-3 py-3 font-mono text-slate-400">{user.username || user.email.split("@")[0]}</td>
+                      <td className="px-3 py-3 text-slate-200 font-bold">{user.name || user.username || "User"}</td>
+                      <td className="px-3 py-3 font-mono text-slate-400">{user.username || (user.email ? user.email.split("@")[0] : "-")}</td>
                       <td className="px-3 py-3">
                         <select
                           value={user.role}
