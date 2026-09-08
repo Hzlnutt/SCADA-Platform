@@ -13,6 +13,7 @@ interface DiagramProps {
   humiditySP?: number;
   running?: boolean;
   data?: Record<string, any>;
+  latest?: Record<string, any>;
   ambientTemp?: number | null;
   ambientHumid?: number | null;
 }
@@ -22,14 +23,23 @@ export default function MachineUtilityPid({
   humiditySP = 60.0,
   running = true,
   data = {},
+  latest = {},
   ambientTemp = null,
   ambientHumid = null,
 }: DiagramProps) {
-  const hpRunning = data.xIND_RUN_HP !== undefined ? Boolean(data.xIND_RUN_HP) : running;
-  const uvRunning = data.UV_LAMP !== undefined ? Boolean(data.UV_LAMP) : running;
+  const plc1Data = data?.PLC1_AHU1_Utl || (latest && latest.PLC1_AHU1_Utl) || data || latest || {};
 
-  const ambientT = ambientTemp !== null ? ambientTemp : (typeof data.Ambient_Temp === "number" ? data.Ambient_Temp : (typeof data.ambient_temp === "number" ? data.ambient_temp : null));
-  const ambientH = ambientHumid !== null ? ambientHumid : (typeof data.Ambient_RH === "number" ? data.Ambient_RH : (typeof data.ambient_humid === "number" ? data.ambient_humid : null));
+  const parseNum = (val: any): number | null => {
+    if (typeof val === "number" && !isNaN(val)) return val;
+    if (typeof val === "string" && val.trim() !== "" && !isNaN(Number(val))) return Number(val);
+    return null;
+  };
+
+  const hpRunning = plc1Data.xIND_RUN_HP !== undefined ? Boolean(plc1Data.xIND_RUN_HP) : running;
+  const uvRunning = plc1Data.UV_LAMP !== undefined ? Boolean(plc1Data.UV_LAMP) : null;
+
+  const ambientT = ambientTemp !== null ? ambientTemp : parseNum(data.Ambient_Temp ?? data.ambient_temp ?? latest?.Ambient_Temp);
+  const ambientH = ambientHumid !== null ? ambientHumid : parseNum(data.Ambient_RH ?? data.ambient_humid ?? latest?.Ambient_RH);
 
   return (
     <svg
@@ -63,7 +73,7 @@ export default function MachineUtilityPid({
         on={hpRunning} dir="down" type="cold" />
       <PipeBend x={369} y={315} size={25} angle={90} />
       <PipeBend x={212} y={90} size={25} angle={90} />
-      <UVLamp x={500} y={285} size={1.2} on={uvRunning} />
+      <UVLamp x={500} y={285} size={1.2} on={Boolean(uvRunning)} />
       <LabelComponent text="HUMIFIER TANK" x={95} y={350} w={150} h={30} hasBorder={true} fontSize={13}/>
       <LabelComponent text="TO AHU-1&2" x={700} y={308} w={150} h={30} hasBorder={true} fontSize={13}/>
       <LabelComponent text="FROM AHU-1&2" x={550} y={80} w={150} h={30} hasBorder={true} fontSize={13}/>

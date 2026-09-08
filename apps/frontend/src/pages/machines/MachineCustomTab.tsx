@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
-import HvacLayout, { type LogEntry } from "./HvacLayout";
+import HvacLayout, { type LogEntry, type SystemModeItem } from "./HvacLayout";
 import { useAuthStore } from "../../store/auth.store";
 import { getJson, postJson } from "../../services/api.client";
 import { getSocket } from "../../services/socket.service";
@@ -183,10 +183,35 @@ const MachineCustomTab = () => {
 
       if (liveRes?.data) {
         setHvacRetainLive(prev => ({
-          PLC1_AHU1_Utl: { ...prev.PLC1_AHU1_Utl, ...liveRes.data.PLC1_AHU1_Utl },
-          PLC2_AHU2: { ...prev.PLC2_AHU2, ...liveRes.data.PLC2_AHU2 },
-          PLC2_AHU3: { ...prev.PLC2_AHU3, ...liveRes.data.PLC2_AHU3 }
+          PLC1_AHU1_Utl: { ...prev.PLC1_AHU1_Utl, ...(liveRes.data.PLC1_AHU1_Utl || {}) },
+          PLC2_AHU2: { ...prev.PLC2_AHU2, ...(liveRes.data.PLC2_AHU2 || {}) },
+          PLC2_AHU3: { ...prev.PLC2_AHU3, ...(liveRes.data.PLC2_AHU3 || {}) }
         }));
+      } else {
+        // Fallback: if backend endpoint didn't respond, try direct fetch from Ignition WebDev
+        try {
+          const fetchDirect = async (ep: string) => {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), 1500);
+            const res = await fetch(`http://10.3.164.3:8088/system/webdev/Utility_Dashboard/${ep}`, { signal: controller.signal });
+            clearTimeout(id);
+            return await res.json();
+          };
+          const [d1, d2, d3] = await Promise.all([
+            fetchDirect("hvac_retain_plc1").catch(() => null),
+            fetchDirect("hvac_retain_plc2_2").catch(() => null),
+            fetchDirect("hvac_retain_plc2_3").catch(() => null)
+          ]);
+          if (d1 || d2 || d3) {
+            setHvacRetainLive(prev => ({
+              PLC1_AHU1_Utl: { ...prev.PLC1_AHU1_Utl, ...(d1?.PLC1_AHU1_Utl || d1 || {}) },
+              PLC2_AHU2: { ...prev.PLC2_AHU2, ...(d2?.PLC2_AHU2 || d2 || {}) },
+              PLC2_AHU3: { ...prev.PLC2_AHU3, ...(d3?.PLC2_AHU3 || d3 || {}) }
+            }));
+          }
+        } catch {
+          // ignore direct network errors
+        }
       }
     } catch (error) {
       console.error("Failed to fetch HVAC data:", error);
@@ -451,7 +476,6 @@ const MachineCustomTab = () => {
       const isCu02aActive = isConnected && (plc2.xIND_RUN_CU02A !== undefined ? Boolean(plc2.xIND_RUN_CU02A) : (ahu02Status === "Running"));
       const isCu02bActive = isConnected && (plc2.xIND_RUN_CU02B !== undefined ? Boolean(plc2.xIND_RUN_CU02B) : (ahu02Status === "Running"));
       const isEh02On = isConnected && (plc2.xIND_RUN_EH02 !== undefined ? Boolean(plc2.xIND_RUN_EH02) : false);
-      const isHf02Running = isConnected && (plc2.xIND_RUN_HF02 !== undefined ? Boolean(plc2.xIND_RUN_HF02) : (ahu02Status === "Running"));
 
       const isAnyFanRunning = isSf02aRunning || isSf02bRunning;
       const isAnyCuActive = isCu02aActive || isCu02bActive;
@@ -473,17 +497,18 @@ const MachineCustomTab = () => {
           ? "STANDBY"
           : (isAnyCuActive ? "COOLING" : (isEh02On ? "HEATING" : "COOLING"));
 
-      // Card 2: Humidity Status: ON / OFF
-      const humidityStatus02: "ON" | "OFF" = isHf02Running ? "ON" : "OFF";
+      // Card 2: Humidity Status: ON / OFF (only if sensor exists in API)
+      const humidityStatus02: "ON" | "OFF" | null = plc2.xIND_RUN_HF02 !== undefined 
+        ? (plc2.xIND_RUN_HF02 ? "ON" : "OFF") 
+        : null;
 
-      const systemMode = [
+      const systemMode: SystemModeItem[] = [
         { label: "Operating Mode", value: headerMode, statusColor: headerMode === "Auto" ? "cyan" : "yellow" as any },
         { label: "Fan-02 A Status", value: isSf02aRunning ? "Running" : "Stopped", statusColor: isSf02aRunning ? "green" : "red" as any },
         { label: "Fan-02 B Status", value: isSf02bRunning ? "Running" : "Stopped", statusColor: isSf02bRunning ? "green" : "red" as any },
         { label: "CU-02 A Status", value: isCu02aActive ? "Active" : "Inactive", statusColor: isCu02aActive ? "cyan" : "default" as any },
         { label: "CU-02 B Status", value: isCu02bActive ? "Active" : "Inactive", statusColor: isCu02bActive ? "cyan" : "default" as any },
         { label: "Electric Heater Status", value: isEh02On ? "On" : "Off", statusColor: isEh02On ? "green" : "default" as any },
-        { label: "Humidity Fan Status", value: isHf02Running ? "Running" : "Stopped", statusColor: isHf02Running ? "green" : "red" as any },
       ];
 
       return (
@@ -533,13 +558,22 @@ const MachineCustomTab = () => {
       // Card 1: strictly omitted on AHU-03 per user instruction
       const machineJob03 = null;
 
-      // Card 2: Humidity Status: ON / OFF
-      const humidityStatus03: "ON" | "OFF" = isRunning ? "ON" : "OFF";
+      // Card 2: Humidity Status: omitted since no humidity tag exists in API 3
+      const humidityStatus03 = null;
 
-      const systemMode = [
+      const systemMode: SystemModeItem[] = [
         { label: "Operating Mode", value: headerMode, statusColor: headerMode === "Auto" ? "cyan" : "yellow" as any },
-        { label: "Fan Status", value: isRunning ? "Running" : "Stopped", statusColor: isRunning ? "green" : (headerStatus === "Maintenance" ? "cyan" : "red") as any },
-        { label: "Cooling", value: isRunning ? "Active" : "Inactive", statusColor: isRunning ? "cyan" : "default" as any },
+        { 
+          label: "Room Temp 3A", 
+          value: typeof plc3.ACT_RTx_3A === "number" ? `${plc3.ACT_RTx_3A.toFixed(1)} °C` : "—", 
+          statusColor: typeof plc3.ACT_RTx_3A === "number" ? "green" : "default" 
+        },
+        { 
+          label: "Room Temp 3B", 
+          value: typeof plc3.ACT_RTx_3B === "number" ? `${plc3.ACT_RTx_3B.toFixed(1)} °C` : "—", 
+          statusColor: typeof plc3.ACT_RTx_3B === "number" ? "green" : "default" 
+        },
+        { label: "PLC Connection", value: isConnected ? "Connected" : "Disconnected", statusColor: isConnected ? "green" : "red" as any },
       ];
 
       return (
@@ -585,10 +619,10 @@ const MachineCustomTab = () => {
         ? "OFF"
         : (isHpRunning ? "ON" : (utilStatus === "Maintenance" ? "IDLE" : "OFF"));
 
-      const systemMode = [
+      const systemMode: SystemModeItem[] = [
         { label: "Operating Mode", value: headerMode, statusColor: headerMode === "Auto" ? "cyan" : "yellow" as any },
-        { label: "Pump Status", value: isHpRunning ? "Running" : "Stopped", statusColor: isHpRunning ? "green" : "red" as any },
-        { label: "UV Lamp Status", value: isConnected ? "Active" : "Off", statusColor: isConnected ? "green" : "default" as any },
+        { label: "Humi Pump Status", value: isHpRunning ? "Running" : "Stopped", statusColor: isHpRunning ? "green" : "red" as any },
+        { label: "PLC Connection", value: isConnected ? "Connected" : "Disconnected", statusColor: isConnected ? "green" : "red" as any },
       ];
 
       return (

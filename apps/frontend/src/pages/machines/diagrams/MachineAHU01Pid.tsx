@@ -21,6 +21,7 @@ interface PidProps {
   humiditySP?: number;
   running?: boolean;
   data?: Record<string, any>;
+  latest?: Record<string, any>;
   ambientTemp?: number | null;
   ambientHumid?: number | null;
 }
@@ -30,33 +31,51 @@ export default function MachineAHU01Pid({
   humiditySP = 75.0,
   running = true,
   data = {},
+  latest = {},
   ambientTemp = null,
   ambientHumid = null,
 }: PidProps) {
-  const isConnected = data.Connected !== undefined ? Boolean(data.Connected) : true;
-  const isMachineRunning = isConnected && (data.xIND_RUN_SF01 !== undefined ? Boolean(data.xIND_RUN_SF01) : running);
+  // Support data directly, wrapped in PLC1_AHU1_Utl, or passed via latest
+  const plc1Data = data?.PLC1_AHU1_Utl || (latest && latest.PLC1_AHU1_Utl) || data || latest || {};
 
-  const ambientT = ambientTemp !== null ? ambientTemp : (typeof data.Ambient_Temp === "number" ? data.Ambient_Temp : (typeof data.ambient_temp === "number" ? data.ambient_temp : null));
-  const ambientH = ambientHumid !== null ? ambientHumid : (typeof data.Ambient_RH === "number" ? data.Ambient_RH : (typeof data.ambient_humid === "number" ? data.ambient_humid : null));
+  const parseNum = (val: any): number | null => {
+    if (typeof val === "number" && !isNaN(val)) return val;
+    if (typeof val === "string" && val.trim() !== "" && !isNaN(Number(val))) return Number(val);
+    return null;
+  };
 
-  // Extract live parameters from PLC1_AHU1_Utl
-  const rt1A = isMachineRunning && typeof data.ACT_RTx_1A === "number" ? data.ACT_RTx_1A : null;
-  const rh1A = isMachineRunning && typeof data.ACT_RHx_1A === "number" ? data.ACT_RHx_1A : null;
-  const rt1B = isMachineRunning && typeof data.ACT_RTx_1B === "number" ? data.ACT_RTx_1B : null;
-  const rh1B = isMachineRunning && typeof data.ACT_RHx_1B === "number" ? data.ACT_RHx_1B : null;
-  const rat1 = isMachineRunning && typeof data.ACT_RATx_1 === "number" ? data.ACT_RATx_1 : null;
-  const rah1 = isMachineRunning && typeof data.ACT_RAHx_1 === "number" ? data.ACT_RAHx_1 : null;
+  const parseBool = (val: any): boolean | null => {
+    if (typeof val === "boolean") return val;
+    if (val === 1 || val === "1" || val === "true") return true;
+    if (val === 0 || val === "0" || val === "false") return false;
+    return null;
+  };
 
-  const sf01Running = data.xIND_RUN_SF01 !== undefined ? Boolean(data.xIND_RUN_SF01) : running;
-  const sf01Cap = data.ACT_SF01_CAP !== undefined ? Number(data.ACT_SF01_CAP) : 90.0;
-  const sf01Spd = data.ACT_SF01_SPD !== undefined ? Number(data.ACT_SF01_SPD) : 1839.8;
-  const sf01Cur = data.ACT_SF01_CUR !== undefined ? Number(data.ACT_SF01_CUR) : 1.88;
+  const isConnected = plc1Data.Connected !== undefined 
+    ? Boolean(plc1Data.Connected) 
+    : (data.Connected !== undefined ? Boolean(data.Connected) : true);
 
-  const eh01Running = data.xIND_RUN_EH01 !== undefined ? Boolean(data.xIND_RUN_EH01) : running;
-  const eh01Cap = data.ACT_EH01_CAP !== undefined ? Number(data.ACT_EH01_CAP) : 30.0;
+  const ambientT = ambientTemp !== null ? ambientTemp : parseNum(data.Ambient_Temp ?? data.ambient_temp ?? latest?.Ambient_Temp);
+  const ambientH = ambientHumid !== null ? ambientHumid : parseNum(data.Ambient_RH ?? data.ambient_humid ?? latest?.Ambient_RH);
 
-  const hf01Running = data.xIND_RUN_HF01 !== undefined ? Boolean(data.xIND_RUN_HF01) : running;
-  const pf01Dp = data.PF_01_DP !== undefined ? Number(data.PF_01_DP) : 0.0;
+  // Extract live parameters from PLC1_AHU1_Utl (no dummy fallbacks)
+  const rt1A = parseNum(plc1Data.ACT_RTx_1A ?? data.ACT_RTx_1A ?? latest?.ACT_RTx_1A);
+  const rh1A = parseNum(plc1Data.ACT_RHx_1A ?? data.ACT_RHx_1A ?? latest?.ACT_RHx_1A);
+  const rt1B = parseNum(plc1Data.ACT_RTx_1B ?? data.ACT_RTx_1B ?? latest?.ACT_RTx_1B);
+  const rh1B = parseNum(plc1Data.ACT_RHx_1B ?? data.ACT_RHx_1B ?? latest?.ACT_RHx_1B);
+  const rat1 = parseNum(plc1Data.ACT_RATx_1 ?? data.ACT_RATx_1 ?? latest?.ACT_RATx_1);
+  const rah1 = parseNum(plc1Data.ACT_RAHx_1 ?? data.ACT_RAHx_1 ?? latest?.ACT_RAHx_1);
+
+  const sf01Running = parseBool(plc1Data.xIND_RUN_SF01 ?? data.xIND_RUN_SF01) ?? running;
+  const sf01Cap = parseNum(plc1Data.ACT_SF01_CAP ?? data.ACT_SF01_CAP);
+  const sf01Spd = parseNum(plc1Data.ACT_SF01_SPD ?? data.ACT_SF01_SPD);
+  const sf01Cur = parseNum(plc1Data.ACT_SF01_CUR ?? data.ACT_SF01_CUR);
+
+  const eh01Running = parseBool(plc1Data.xIND_RUN_EH01 ?? data.xIND_RUN_EH01) ?? false;
+  const eh01Cap = parseNum(plc1Data.ACT_EH01_CAP ?? data.ACT_EH01_CAP);
+
+  const hf01Running = parseBool(plc1Data.xIND_RUN_HF01 ?? data.xIND_RUN_HF01) ?? false;
+  const pf01Dp = parseNum(plc1Data.PF_01_DP ?? data.PF_01_DP);
 
   return (
     <svg

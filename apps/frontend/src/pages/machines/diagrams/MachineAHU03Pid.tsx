@@ -20,6 +20,7 @@ interface PidProps {
   humiditySP?: number;
   running?: boolean;
   data?: Record<string, any>;
+  latest?: Record<string, any>;
   ambientTemp?: number | null;
   ambientHumid?: number | null;
 }
@@ -29,19 +30,31 @@ export default function MachineAHU03Pid({
   humiditySP = 55.0,
   running = true,
   data = {},
+  latest = {},
   ambientTemp = null,
   ambientHumid = null,
 }: PidProps) {
-  const isConnected = data.Connected !== undefined ? Boolean(data.Connected) : true;
-  const isRunning = isConnected && (data.isRunning !== undefined ? Boolean(data.isRunning) : running);
+  // Support data directly, wrapped in PLC2_AHU3, or passed via latest
+  const plc3Data = data?.PLC2_AHU3 || (latest && latest.PLC2_AHU3) || data || latest || {};
 
-  const ambientT = ambientTemp !== null ? ambientTemp : (typeof data.Ambient_Temp === "number" ? data.Ambient_Temp : (typeof data.ambient_temp === "number" ? data.ambient_temp : null));
-  const ambientH = ambientHumid !== null ? ambientHumid : (typeof data.Ambient_RH === "number" ? data.Ambient_RH : (typeof data.ambient_humid === "number" ? data.ambient_humid : null));
+  const parseNum = (val: any): number | null => {
+    if (typeof val === "number" && !isNaN(val)) return val;
+    if (typeof val === "string" && val.trim() !== "" && !isNaN(Number(val))) return Number(val);
+    return null;
+  };
 
-  // Extract live parameters without dummy numbers
-  const rt3A = isRunning && typeof data.ACT_RTx_3A === "number" ? data.ACT_RTx_3A : null;
-  const rt3B = isRunning && typeof data.ACT_RTx_3B === "number" ? data.ACT_RTx_3B : null;
-  const pf03Dp = isRunning && typeof data.PF_03_DP === "number" ? data.PF_03_DP : null;
+  const isConnected = plc3Data.Connected !== undefined 
+    ? Boolean(plc3Data.Connected) 
+    : (data.Connected !== undefined ? Boolean(data.Connected) : true);
+  const isRunning = isConnected && (plc3Data.isRunning !== undefined ? Boolean(plc3Data.isRunning) : (data.isRunning !== undefined ? Boolean(data.isRunning) : running));
+
+  const ambientT = ambientTemp !== null ? ambientTemp : parseNum(data.Ambient_Temp ?? data.ambient_temp ?? latest?.Ambient_Temp);
+  const ambientH = ambientHumid !== null ? ambientHumid : parseNum(data.Ambient_RH ?? data.ambient_humid ?? latest?.Ambient_RH);
+
+  // Extract live parameters from PLC2_AHU3 - room temperature is independent of fan status
+  const rt3A = parseNum(plc3Data.ACT_RTx_3A ?? data.ACT_RTx_3A ?? latest?.ACT_RTx_3A);
+  const rt3B = parseNum(plc3Data.ACT_RTx_3B ?? data.ACT_RTx_3B ?? latest?.ACT_RTx_3B);
+  const pf03Dp = parseNum(plc3Data.PF_03_DP ?? data.PF_03_DP ?? latest?.PF_03_DP);
 
   return (
     <svg

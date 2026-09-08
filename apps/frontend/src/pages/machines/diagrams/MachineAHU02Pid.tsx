@@ -23,6 +23,7 @@ interface PidProps {
   humiditySP?: number;
   running?: boolean;
   data?: Record<string, any>;
+  latest?: Record<string, any>;
   ambientTemp?: number | null;
   ambientHumid?: number | null;
 }
@@ -32,43 +33,59 @@ export default function MachineAHU02Pid({
   humiditySP = 55.0,
   running = true,
   data = {},
+  latest = {},
   ambientTemp = null,
   ambientHumid = null,
 }: PidProps) {
-  const isConnected = data.Connected !== undefined ? Boolean(data.Connected) : true;
-  const isSf02a = data.xIND_RUN_SF02A !== undefined ? Boolean(data.xIND_RUN_SF02A) : running;
-  const isSf02b = data.xIND_RUN_SF02B !== undefined ? Boolean(data.xIND_RUN_SF02B) : running;
-  const isMachineRunning = isConnected && (isSf02a || isSf02b || running);
+  // Support data directly, wrapped in PLC2_AHU2, or passed via latest
+  const plc2Data = data?.PLC2_AHU2 || (latest && latest.PLC2_AHU2) || data || latest || {};
 
-  const ambientT = ambientTemp !== null ? ambientTemp : (typeof data.Ambient_Temp === "number" ? data.Ambient_Temp : (typeof data.ambient_temp === "number" ? data.ambient_temp : null));
-  const ambientH = ambientHumid !== null ? ambientHumid : (typeof data.Ambient_RH === "number" ? data.Ambient_RH : (typeof data.ambient_humid === "number" ? data.ambient_humid : null));
+  const parseNum = (val: any): number | null => {
+    if (typeof val === "number" && !isNaN(val)) return val;
+    if (typeof val === "string" && val.trim() !== "" && !isNaN(Number(val))) return Number(val);
+    return null;
+  };
 
-  // Extract live parameters from PLC2_AHU2 without dummy fallback numbers
-  const rt2A = isMachineRunning && typeof data.ACT_RTx_2A === "number" ? data.ACT_RTx_2A : null;
-  const rh2A = isMachineRunning && typeof data.ACT_RHx_2A === "number" ? data.ACT_RHx_2A : null;
-  const rt2B = isMachineRunning && typeof data.ACT_RTx_2B === "number" ? data.ACT_RTx_2B : null;
-  const rh2B = isMachineRunning && typeof data.ACT_RHx_2B === "number" ? data.ACT_RHx_2B : null;
-  const rat2 = isMachineRunning && typeof data.ACT_RATx_2 === "number" ? data.ACT_RATx_2 : null;
-  const rah2 = isMachineRunning && typeof data.ACT_RAHx_2 === "number" ? data.ACT_RAHx_2 : null;
+  const parseBool = (val: any): boolean | null => {
+    if (typeof val === "boolean") return val;
+    if (val === 1 || val === "1" || val === "true") return true;
+    if (val === 0 || val === "0" || val === "false") return false;
+    return null;
+  };
 
-  const sf02aRunning = data.xIND_RUN_SF02A !== undefined ? Boolean(data.xIND_RUN_SF02A) : running;
-  const sf02aCap = data.ACT_SF02_CAP !== undefined ? Number(data.ACT_SF02_CAP) : 90.0;
-  const sf02aSpd = data.ACT_SF02A_SPD !== undefined ? Number(data.ACT_SF02A_SPD) : 1828.7;
-  const sf02aCur = data.ACT_SF02A_CUR !== undefined ? Number(data.ACT_SF02A_CUR) : (data.ACT_SF02B_CUR !== undefined ? Number(data.ACT_SF02B_CUR) : 1.54);
+  const isConnected = plc2Data.Connected !== undefined 
+    ? Boolean(plc2Data.Connected) 
+    : (data.Connected !== undefined ? Boolean(data.Connected) : true);
 
-  const sf02bRunning = data.xIND_RUN_SF02B !== undefined ? Boolean(data.xIND_RUN_SF02B) : running;
-  const sf02bCap = data.ACT_SF02_CAP !== undefined ? Number(data.ACT_SF02_CAP) : 90.0;
-  const sf02bSpd = data.ACT_SF02B_SPD !== undefined ? Number(data.ACT_SF02B_SPD) : 1846.3;
-  const sf02bCur = data.ACT_SF02B_CUR !== undefined ? Number(data.ACT_SF02B_CUR) : 1.54;
+  const ambientT = ambientTemp !== null ? ambientTemp : parseNum(data.Ambient_Temp ?? data.ambient_temp ?? latest?.Ambient_Temp);
+  const ambientH = ambientHumid !== null ? ambientHumid : parseNum(data.Ambient_RH ?? data.ambient_humid ?? latest?.Ambient_RH);
 
-  const eh02Running = data.xIND_RUN_EH02 !== undefined ? Boolean(data.xIND_RUN_EH02) : false;
-  const eh02Cap = data.ACT_EH02_CAP !== undefined ? Number(data.ACT_EH02_CAP) : 0.0;
+  // Extract live parameters from PLC2_AHU2 (no dummy fallbacks)
+  const rt2A = parseNum(plc2Data.ACT_RTx_2A ?? data.ACT_RTx_2A ?? latest?.ACT_RTx_2A);
+  const rh2A = parseNum(plc2Data.ACT_RHx_2A ?? data.ACT_RHx_2A ?? latest?.ACT_RHx_2A);
+  const rt2B = parseNum(plc2Data.ACT_RTx_2B ?? data.ACT_RTx_2B ?? latest?.ACT_RTx_2B);
+  const rh2B = parseNum(plc2Data.ACT_RHx_2B ?? data.ACT_RHx_2B ?? latest?.ACT_RHx_2B);
+  const rat2 = parseNum(plc2Data.ACT_RATx_2 ?? data.ACT_RATx_2 ?? latest?.ACT_RATx_2);
+  const rah2 = parseNum(plc2Data.ACT_RAHx_2 ?? data.ACT_RAHx_2 ?? latest?.ACT_RAHx_2);
 
-  const cu02aRunning = data.xIND_RUN_CU02A !== undefined ? Boolean(data.xIND_RUN_CU02A) : running;
-  const cu02bRunning = data.xIND_RUN_CU02B !== undefined ? Boolean(data.xIND_RUN_CU02B) : running;
+  const sf02aRunning = parseBool(plc2Data.xIND_RUN_SF02A ?? data.xIND_RUN_SF02A) ?? running;
+  const sf02aCap = parseNum(plc2Data.ACT_SF02_CAP ?? data.ACT_SF02_CAP);
+  const sf02aSpd = parseNum(plc2Data.ACT_SF02A_SPD ?? data.ACT_SF02A_SPD);
+  const sf02aCur = parseNum(plc2Data.ACT_SF02A_CUR ?? data.ACT_SF02A_CUR); // Only B is in API; A is null if not provided
 
-  const hf02Running = data.xIND_RUN_HF02 !== undefined ? Boolean(data.xIND_RUN_HF02) : running;
-  const pf02Dp = data.PF_02_DP !== undefined ? Number(data.PF_02_DP) : 0.0;
+  const sf02bRunning = parseBool(plc2Data.xIND_RUN_SF02B ?? data.xIND_RUN_SF02B) ?? running;
+  const sf02bCap = parseNum(plc2Data.ACT_SF02_CAP ?? data.ACT_SF02_CAP);
+  const sf02bSpd = parseNum(plc2Data.ACT_SF02B_SPD ?? data.ACT_SF02B_SPD);
+  const sf02bCur = parseNum(plc2Data.ACT_SF02B_CUR ?? data.ACT_SF02B_CUR);
+
+  const eh02Running = parseBool(plc2Data.xIND_RUN_EH02 ?? data.xIND_RUN_EH02) ?? false;
+  const eh02Cap = parseNum(plc2Data.ACT_EH02_CAP ?? data.ACT_EH02_CAP);
+
+  const cu02aRunning = parseBool(plc2Data.xIND_RUN_CU02A ?? data.xIND_RUN_CU02A) ?? false;
+  const cu02bRunning = parseBool(plc2Data.xIND_RUN_CU02B ?? data.xIND_RUN_CU02B) ?? false;
+
+  const hf02Running = parseBool(plc2Data.xIND_RUN_HF02 ?? data.xIND_RUN_HF02);
+  const pf02Dp = parseNum(plc2Data.PF_02_DP ?? data.PF_02_DP);
 
   return (
     <svg
@@ -155,8 +172,8 @@ export default function MachineAHU02Pid({
 
       <Partition x={440} y={60} width={14} height={190} color="#606060" />
 
-      <HumidityFan x={420} y={55} width={250} height={100} running={hf02Running} />
-      <HumidityFan x={420} y={150} width={250} height={100} running={hf02Running} />
+      <HumidityFan x={420} y={55} width={250} height={100} running={Boolean(hf02Running)} />
+      <HumidityFan x={420} y={150} width={250} height={100} running={Boolean(hf02Running)} />
 
       <DifferentialPressureSwitch
         x={800}

@@ -1668,98 +1668,137 @@ function HvacOverview({
     return DEFAULT_HVAC_CONFIG;
   }, [unitId]);
 
-  const alarms = useMemo(() => {
-    const saved = localStorage.getItem(`scada.alarm_logs.${unitId}`);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return INITIAL_ALARMS;
-  }, [unitId]);
-
-  const eqConfigs = useMemo(() => {
-    let configs = getDefaultEqConfigs(unitId);
-    const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
-    if (savedEq) {
-      try {
-        configs = JSON.parse(savedEq);
-      } catch (e) {}
-    }
-    return configs;
-  }, [unitId]);
-
-  const dynamicAlarms = useMemo(() => {
-    return eqConfigs
-      .filter((item) => item.enableAlert && (item.runHoursBeforeMaintenance ?? item.baseline) >= item.highLimit)
-      .map((item) => ({
-        id: `maint-overdue-${item.tagKey}`,
-        timestamp: "08:00:00",
-        description: `Maintenance Overdue: ${item.tagName} (${(item.runHoursBeforeMaintenance ?? item.baseline).toLocaleString()} / ${item.highLimit.toLocaleString()} hrs)`,
-        equipment: item.tagKey,
-        operatorAction: "",
-        status: "Active" as const,
-        rtn: "—",
-        operatorName: "",
-        approverName: ""
-      }));
-  }, [eqConfigs]);
-
-  const allActiveAlarms = useMemo(() => {
-    const staticActive = alarms.filter((item: any) => item.status === "Active");
-    return [...dynamicAlarms, ...staticActive];
-  }, [alarms, dynamicAlarms]);
-
-  const activeAlarmsCount = allActiveAlarms.length;
-  const criticalAlarmsCount = allActiveAlarms.filter(
-    (a: any) => a.description.toLowerCase().includes("critical") || a.description.toLowerCase().includes("overdue")
-  ).length;
-
-  const [liveDataState, setLiveDataState] = useState({
-    ahu1: { temp: 27.6, humidity: 74.4, supplyAir: 23.4, running: true, fan: true, heater: true, humidifier: true },
-    ahu2: { temp: 40.0, humidity: 75.1, running: true, fan: true, cooling: true, heater: true, humidifier: true },
-    ahu3: { temp: 30.0, humidity: 75.6, running: true, fan: true, cooling: true },
-    ambient: { temp1: 29.8, temp2: 29.9, humidity1: 60.1, humidity2: 59.9 },
-    energyToday: 312.6,
-    runningHours: 25264,
-    equipment: [
-      { area: "DU-03", status: "RUNNING", flow: 43.0, pow: 15.1, hrs: 6789, maint: "Good" },
-      { area: "BP-03", status: "RUNNING", flow: 36.5, pow: 10.8, hrs: 5432, maint: "Good" },
-      { area: "PREP 03", status: "RUNNING", flow: 55.7, pow: 18.5, hrs: 4521, maint: "Warning" },
-      { area: "S1-03", status: "STANDBY", flow: 0.0, pow: 0.0, hrs: 3456, maint: "Good" },
-      { area: "WASHING", status: "RUNNING", flow: 19.3, pow: 7.1, hrs: 2789, maint: "Good" },
-      { area: "MINI LAB", status: "RUNNING", flow: 7.2, pow: 3.3, hrs: 1567, maint: "Good" }
-    ]
+  // Live retained-sample state from the 3 APIs
+  const [retainLive, setRetainLive] = useState<any>({
+    PLC1_AHU1_Utl: {},
+    PLC2_AHU2: {},
+    PLC2_AHU3: {},
   });
 
-  const latest = useTelemetryStore((state) => state.latest);
+  useEffect(() => {
+    let isMounted = true;
+    const fetchRetain = async () => {
+      try {
+        const res = await getJson<{ data: any }>("/operations/hvac/retained-sample/live");
+        if (res?.data && isMounted) {
+          setRetainLive(res.data);
+          return;
+        }
+      } catch {
+        // ignore
+      }
 
-  // Compute live data reactively by merging state with real socket telemetry if present
-  const liveData = useMemo(() => {
-    const ahu1Temp = latest["hvac/qc-lab_temp"]?.value;
-    const ahu2Temp = latest["hvac/qc-retained-sample_temp"]?.value;
-    const ahu3Temp = latest["hvac/wh-3_temp"]?.value;
-
-    return {
-      ...liveDataState,
-      ahu1: {
-        ...liveDataState.ahu1,
-        temp: typeof ahu1Temp === "number" ? ahu1Temp : liveDataState.ahu1.temp,
-      },
-      ahu2: {
-        ...liveDataState.ahu2,
-        temp: typeof ahu2Temp === "number" ? ahu2Temp : liveDataState.ahu2.temp,
-      },
-      ahu3: {
-        ...liveDataState.ahu3,
-        temp: typeof ahu3Temp === "number" ? ahu3Temp : liveDataState.ahu3.temp,
+      // Direct fallback
+      try {
+        const directFetch = async (ep: string) => {
+          const controller = new AbortController();
+          const id = setTimeout(() => controller.abort(), 1500);
+          const res = await fetch(`http://10.3.164.3:8088/system/webdev/Utility_Dashboard/${ep}`, { signal: controller.signal });
+          clearTimeout(id);
+          return await res.json();
+        };
+        const [d1, d2, d3] = await Promise.all([
+          directFetch("hvac_retain_plc1").catch(() => null),
+          directFetch("hvac_retain_plc2_2").catch(() => null),
+          directFetch("hvac_retain_plc2_3").catch(() => null)
+        ]);
+        if ((d1 || d2 || d3) && isMounted) {
+          setRetainLive({
+            PLC1_AHU1_Utl: d1?.PLC1_AHU1_Utl || d1 || {},
+            PLC2_AHU2: d2?.PLC2_AHU2 || d2 || {},
+            PLC2_AHU3: d3?.PLC2_AHU3 || d3 || {}
+          });
+        }
+      } catch {
+        // ignore
       }
     };
-  }, [liveDataState, latest]);
 
-  const [timeStr, setTimeStr] = useState("Sun 07 Jun 2026 - 10:44:13");
+    fetchRetain();
+    const interval = setInterval(fetchRetain, 4000);
+
+    const socket = getSocket();
+    const handleLive = (data: any) => {
+      if (data && isMounted) setRetainLive((prev: any) => ({ ...prev, ...data }));
+    };
+    socket.on("hvac:retain_live", handleLive);
+    socket.on("hvac:live_update", handleLive);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      socket.off("hvac:retain_live", handleLive);
+      socket.off("hvac:live_update", handleLive);
+    };
+  }, []);
+
+  const plc1 = retainLive.PLC1_AHU1_Utl || {};
+  const plc2 = retainLive.PLC2_AHU2 || {};
+  const plc3 = retainLive.PLC2_AHU3 || {};
+
+  const pNum = (v: any): number | null => (typeof v === "number" && !isNaN(v) ? v : (typeof v === "string" && v !== "" && !isNaN(Number(v)) ? Number(v) : null));
+  const pBool = (v: any): boolean => Boolean(v);
+
+  // AHU-01 live data
+  const ahu01 = {
+    temp1: pNum(plc1.ACT_RTx_1A),
+    temp2: pNum(plc1.ACT_RTx_1B),
+    rh1: pNum(plc1.ACT_RHx_1A),
+    rh2: pNum(plc1.ACT_RHx_1B),
+    rat: pNum(plc1.ACT_RATx_1),
+    rah: pNum(plc1.ACT_RAHx_1),
+    fanRunning: pBool(plc1.xIND_RUN_SF01),
+    fanSpd: pNum(plc1.ACT_SF01_SPD),
+    fanCur: pNum(plc1.ACT_SF01_CUR),
+    fanCap: pNum(plc1.ACT_SF01_CAP),
+    heaterRunning: pBool(plc1.xIND_RUN_EH01),
+    heaterCap: pNum(plc1.ACT_EH01_CAP),
+    humidifierRunning: pBool(plc1.xIND_RUN_HF01),
+    connected: plc1.Connected !== undefined ? Boolean(plc1.Connected) : true,
+  };
+
+  // AHU-02 live data
+  const ahu02 = {
+    temp1: pNum(plc2.ACT_RTx_2A),
+    temp2: pNum(plc2.ACT_RTx_2B),
+    rh1: pNum(plc2.ACT_RHx_2A),
+    rh2: pNum(plc2.ACT_RHx_2B),
+    rat: pNum(plc2.ACT_RATx_2),
+    rah: pNum(plc2.ACT_RAHx_2),
+    fanA: pBool(plc2.xIND_RUN_SF02A),
+    fanASpd: pNum(plc2.ACT_SF02A_SPD),
+    fanB: pBool(plc2.xIND_RUN_SF02B),
+    fanBSpd: pNum(plc2.ACT_SF02B_SPD),
+    fanBCur: pNum(plc2.ACT_SF02B_CUR),
+    fanCap: pNum(plc2.ACT_SF02_CAP),
+    cuA: pBool(plc2.xIND_RUN_CU02A),
+    cuB: pBool(plc2.xIND_RUN_CU02B),
+    heaterRunning: pBool(plc2.xIND_RUN_EH02),
+    heaterCap: pNum(plc2.ACT_EH02_CAP),
+    connected: plc2.Connected !== undefined ? Boolean(plc2.Connected) : true,
+  };
+
+  // AHU-03 live data (from API 3)
+  const ahu03 = {
+    temp1: pNum(plc3.ACT_RTx_3A),
+    temp2: pNum(plc3.ACT_RTx_3B),
+    connected: plc3.Connected !== undefined ? Boolean(plc3.Connected) : true,
+  };
+
+  // Central Utility live data
+  const utility = {
+    humiPump: pBool(plc1.xIND_RUN_HP),
+    connected: plc1.Connected !== undefined ? Boolean(plc1.Connected) : true,
+  };
+
+  const formatVal = (num: number | null, unit: string = "", decimals = 1): string => {
+    if (num === null || num === undefined) return "—";
+    return `${num.toFixed(decimals)}${unit}`;
+  };
+
+  const [timeStr, setTimeStr] = useState("");
   useEffect(() => {
-    const clockTimer = setInterval(() => {
+    const updateTime = () => {
       const now = new Date();
       setTimeStr(now.toLocaleString("en-US", {
         weekday: "short",
@@ -1771,119 +1810,61 @@ function HvacOverview({
         second: "2-digit",
         hour12: false
       }).replace(/,/g, ""));
-    }, 1000);
+    };
+    updateTime();
+    const clockTimer = setInterval(updateTime, 1000);
     return () => clearInterval(clockTimer);
   }, []);
 
-  // Drift simulation disabled for production telemetry integration
-  useEffect(() => {
-    // Timer drift simulation turned off to prevent mock data display
-  }, [config]);
-
-  const tempChartData = useMemo(() => {
-    const labels = Array.from({ length: 24 }, (_, i) => {
-      const h = (new Date().getHours() - (23 - i) + 24) % 24;
-      return `${h.toString().padStart(2, "0")}:00`;
-    });
-
-    const ahu1Series = labels.map((_, i) => config.ahu1.tempSp + Math.sin(i / 5) * 0.3 + Math.random() * 0.1);
-    const ahu2Series = labels.map((_, i) => config.ahu2.tempSp + Math.sin(i / 4) * 0.2 + Math.random() * 0.1);
-    const ahu3Series = labels.map((_, i) => config.ahu3.tempSp + Math.cos(i / 6) * 0.3 + Math.random() * 0.1);
-
-    return {
-      labels,
-      datasets: [
-        {
-          label: `AHU-01 (${config.ahu1.lowTemp}-${config.ahu1.highTemp}°C)`,
-          data: ahu1Series,
-          borderColor: "rgba(56, 189, 248, 0.9)",
-          borderWidth: 2,
-          pointRadius: 0,
-          tension: 0.3
-        },
-        {
-          label: `AHU-02 (${config.ahu2.tempSp}±2°C)`,
-          data: ahu2Series,
-          borderColor: "rgba(249, 115, 22, 0.9)",
-          borderWidth: 2,
-          pointRadius: 0,
-          tension: 0.3
-        },
-        {
-          label: `AHU-03 (${config.ahu3.tempSp}±2°C)`,
-          data: ahu3Series,
-          borderColor: "rgba(167, 139, 250, 0.9)",
-          borderWidth: 2,
-          pointRadius: 0,
-          tension: 0.3
-        }
-      ]
-    };
-  }, [config]);
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        labels: {
-          color: isDark ? "#94a3b8" : "#47729f",
-          font: { size: 11, family: "Plus Jakarta Sans", weight: "bold" as const }
-        }
-      },
-      tooltip: { mode: "index" as const, intersect: false }
-    },
-    scales: {
-      x: {
-        grid: { display: false },
-        ticks: { color: isDark ? "#64748b" : "#47729f", font: { size: 9 } }
-      },
-      y: {
-        min: 20,
-        max: 45,
-        grid: { color: isDark ? "rgba(51, 65, 85, 0.3)" : "rgba(203, 213, 225, 0.4)" },
-        ticks: { color: isDark ? "#64748b" : "#47729f", font: { size: 9 } }
-      }
-    }
-  };
+  const allConnected = ahu01.connected && ahu02.connected && ahu03.connected;
 
   return (
     <div className="space-y-6">
+      {/* Top Header Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3 bg-slate-900 border border-slate-800 rounded-xl p-3 text-white font-semibold text-[11px] items-center">
         <div className="flex flex-col px-2 py-1 border-r border-slate-800 col-span-2">
           <span className="text-[9px] uppercase tracking-wider text-slate-500 font-extrabold">DATE / TIME</span>
           <span className="font-mono text-xs text-sky-400 font-bold truncate mt-0.5">{timeStr}</span>
         </div>
 
-        <div className={`flex items-center justify-center border rounded px-3 py-2 font-black tracking-widest text-xs uppercase ${activeAlarmsCount > 0 ? "bg-rose-500/20 text-rose-500 border-rose-500/30 animate-pulse" : "bg-emerald-500/20 text-emerald-500 border-emerald-500/30"}`}>
-          {activeAlarmsCount > 0 ? "ALARM" : "NORMAL"}
+        <div className={`flex items-center justify-center border rounded px-3 py-2 font-black tracking-widest text-xs uppercase ${allConnected ? "bg-emerald-500/20 text-emerald-500 border-emerald-500/30" : "bg-rose-500/20 text-rose-500 border-rose-500/30 animate-pulse"}`}>
+          {allConnected ? "NORMAL" : "OFFLINE"}
         </div>
 
-        <div className="flex flex-col items-center bg-amber-500/10 text-amber-500 border border-amber-500/30 rounded px-2.5 py-1">
-          <span className="text-[8px] text-slate-500 font-extrabold">ACTIVE ALARMS</span>
-          <span className="text-sm font-bold font-mono">{activeAlarmsCount}</span>
+        <div className="flex flex-col items-center bg-slate-800/40 border border-slate-700/50 rounded px-2.5 py-1">
+          <span className="text-[8px] text-slate-400 font-extrabold">PLC 1 (AHU-01)</span>
+          <span className={`text-xs font-bold font-mono ${ahu01.connected ? "text-emerald-400" : "text-rose-400"}`}>
+            {ahu01.connected ? "ONLINE" : "OFFLINE"}
+          </span>
         </div>
 
-        <div className="flex flex-col items-center bg-rose-500/10 text-rose-500 border border-rose-500/30 rounded px-2.5 py-1">
-          <span className="text-[8px] text-slate-500 font-extrabold">CRITICAL</span>
-          <span className="text-sm font-bold font-mono">{criticalAlarmsCount}</span>
+        <div className="flex flex-col items-center bg-slate-800/40 border border-slate-700/50 rounded px-2.5 py-1">
+          <span className="text-[8px] text-slate-400 font-extrabold">PLC 2 (AHU-02)</span>
+          <span className={`text-xs font-bold font-mono ${ahu02.connected ? "text-emerald-400" : "text-rose-400"}`}>
+            {ahu02.connected ? "ONLINE" : "OFFLINE"}
+          </span>
         </div>
 
-        <div className="flex flex-col px-3 py-1 border-l border-r border-slate-800">
-          <span className="text-[9px] uppercase tracking-wider text-slate-500 font-extrabold">ENERGY TODAY</span>
-          <span className="font-mono text-xs text-emerald-400 font-bold truncate mt-0.5">{liveData.energyToday.toFixed(1)} kWh</span>
+        <div className="flex flex-col items-center bg-slate-800/40 border border-slate-700/50 rounded px-2.5 py-1">
+          <span className="text-[8px] text-slate-400 font-extrabold">PLC 2 (AHU-03)</span>
+          <span className={`text-xs font-bold font-mono ${ahu03.connected ? "text-emerald-400" : "text-rose-400"}`}>
+            {ahu03.connected ? "ONLINE" : "OFFLINE"}
+          </span>
         </div>
 
-        <div className="flex flex-col px-3 py-1 border-r border-slate-800">
-          <span className="text-[9px] uppercase tracking-wider text-slate-500 font-extrabold">RUNNING HRS</span>
-          <span className="font-mono text-xs text-slate-300 font-bold truncate mt-0.5">{liveData.runningHours.toLocaleString()}</span>
+        <div className="flex flex-col items-center bg-slate-800/40 border border-slate-700/50 rounded px-2.5 py-1">
+          <span className="text-[8px] text-slate-400 font-extrabold">UTILITY PUMP</span>
+          <span className={`text-xs font-bold font-mono ${utility.humiPump ? "text-cyan-400" : "text-slate-400"}`}>
+            {utility.humiPump ? "RUNNING" : "STOPPED"}
+          </span>
         </div>
 
         <div className="flex items-center justify-center bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded px-3 py-2 font-bold text-xs uppercase">
-          CO2
+          HVAC SCADA
         </div>
       </div>
 
+      {/* 4 HVAC Machine Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* Accelerated Stability Room (AHU-01) */}
         <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col transition hover:shadow-md">
@@ -1892,42 +1873,41 @@ function HvacOverview({
               <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-01 · ACCELERATED</span>
               <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">ACCELERATED STABILITY ROOM</h4>
             </div>
-            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
-              NORMAL
+            <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border uppercase tracking-wider ${ahu01.connected ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"}`}>
+              {ahu01.connected ? "ONLINE" : "OFFLINE"}
             </span>
           </div>
           <div className="p-4 flex-grow flex flex-col justify-between flex-1">
             <div className="space-y-4">
-              <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu1.targetTemp} ± {config.ahu1.tolerance}°C · RH: {config.ahu1.targetHumidity}% ± 5%</div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="text-[10px] text-slate-400 font-bold font-mono">Target: 40°C ± 2°C · RH: 75%RH ± 5%</div>
+              <div className="grid grid-cols-2 gap-3">
                 <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 1</span>
-                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP 1A</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{formatVal(ahu01.temp1, " °C")}</span>
                 </div>
                 <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 2</span>
-                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP 1B</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{formatVal(ahu01.temp2, " °C")}</span>
                 </div>
                 <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 1</span>
-                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.humidity.toFixed(1)} <span className="text-xs">%</span></span>
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH 1A</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{formatVal(ahu01.rh1, " %")}</span>
                 </div>
                 <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 2</span>
-                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.humidity.toFixed(1)} <span className="text-xs">%</span></span>
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH 1B</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{formatVal(ahu01.rh2, " %")}</span>
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900 mt-4">
+            <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900 mt-4">
               {[
-                { label: "AHU-01", status: liveData.ahu1.running },
-                { label: "FAN", status: liveData.ahu1.fan },
-                { label: "HEATER", status: liveData.ahu1.heater },
-                { label: "HUMID", status: liveData.ahu1.humidifier }
+                { label: "FAN", status: ahu01.fanRunning },
+                { label: "HEATER", status: ahu01.heaterRunning },
+                { label: "HUMID", status: ahu01.humidifierRunning }
               ].map((ind, iIdx) => (
                 <div key={iIdx} className="flex flex-col items-center p-1 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
                   <span className="text-[8px] font-bold text-slate-400 uppercase truncate w-full text-center">{ind.label}</span>
-                  <span className={`w-2 h-2 rounded-full mt-1.5 ${ind.status ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                  <span className={`w-2 h-2 rounded-full mt-1.5 ${ind.status ? "bg-emerald-500 animate-pulse" : "bg-slate-400 dark:bg-slate-600"}`} />
                 </div>
               ))}
             </div>
@@ -1935,267 +1915,247 @@ function HvacOverview({
         </div>
 
         {/* Longterm Stability Room (AHU-02) */}
-        <div className="bg-white dark:bg-slate-950 border border-rose-500/20 dark:border-rose-500/10 rounded-xl overflow-hidden shadow-sm flex flex-col transition hover:shadow-md">
-          <div className="p-3.5 bg-rose-500/5 dark:bg-rose-950/10 border-b border-rose-500/10 flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col transition hover:shadow-md">
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border-b border-[#acd3ff]/30 dark:border-slate-800/40 flex items-center justify-between">
             <div>
               <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-02 · LONG-TERM</span>
-              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">Longterm Stability Room</h4>
+              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">LONGTERM STABILITY ROOM</h4>
             </div>
-            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-rose-500/10 text-rose-500 border border-rose-500/20 uppercase tracking-wider animate-pulse">
-              ALARM
+            <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border uppercase tracking-wider ${ahu02.connected ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"}`}>
+              {ahu02.connected ? "ONLINE" : "OFFLINE"}
             </span>
           </div>
           <div className="p-4 flex-grow flex flex-col justify-between flex-1">
             <div className="space-y-4">
-              <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu2.targetTemp}°C ± 2°C · RH: {config.ahu2.targetHumidity}% ± 5%</div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="text-[10px] text-slate-400 font-bold font-mono">Target: 30°C ± 2°C · RH: 75%RH ± 5%</div>
+              <div className="grid grid-cols-2 gap-3">
                 <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 1</span>
-                  <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP 2A</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{formatVal(ahu02.temp1, " °C")}</span>
                 </div>
                 <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 2</span>
-                  <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP 2B</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{formatVal(ahu02.temp2, " °C")}</span>
                 </div>
                 <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 1</span>
-                  <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.humidity.toFixed(1)} <span className="text-xs">%</span></span>
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH 2A</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{formatVal(ahu02.rh1, " %")}</span>
                 </div>
                 <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH - 2</span>
-                  <span className="text-lg font-extrabold text-rose-500 mt-1 font-mono">{liveData.ahu2.humidity.toFixed(1)} <span className="text-xs">%</span></span>
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM RH 2B</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{formatVal(ahu02.rh2, " %")}</span>
                 </div>
               </div>
             </div>
             <div className="grid grid-cols-5 gap-1 pt-2 border-t border-slate-100 dark:border-slate-900 mt-4">
               {[
-                { label: "AHU-02", status: liveData.ahu2.running },
-                { label: "FAN-1", status: liveData.ahu2.fan },
-                { label: "FAN-2", status: liveData.ahu2.fan },
-                { label: "COOL-1", status: liveData.ahu2.cooling },
-                { label: "COOL-2", status: liveData.ahu2.cooling },
-                { label: "HEATER", status: liveData.ahu2.heater },
-                { label: "HUMID", status: liveData.ahu2.humidifier }
+                { label: "FAN-A", status: ahu02.fanA },
+                { label: "FAN-B", status: ahu02.fanB },
+                { label: "CU-A", status: ahu02.cuA },
+                { label: "CU-B", status: ahu02.cuB },
+                { label: "HEATER", status: ahu02.heaterRunning }
               ].map((ind, iIdx) => (
                 <div key={iIdx} className="flex flex-col items-center p-1 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
                   <span className="text-[7.5px] font-bold text-slate-400 uppercase truncate w-full text-center">{ind.label}</span>
-                  <span className={`w-2 h-2 rounded-full mt-1.5 ${ind.status ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                  <span className={`w-2 h-2 rounded-full mt-1.5 ${ind.status ? "bg-emerald-500 animate-pulse" : "bg-slate-400 dark:bg-slate-600"}`} />
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Stability Room (AHU-03) */}
+        {/* Ref. Retention Room (AHU-03) - LIVE FROM API 3 */}
         <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col transition hover:shadow-md">
           <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border-b border-[#acd3ff]/30 dark:border-slate-800/40 flex items-center justify-between">
             <div>
               <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-03 · RETENTION</span>
               <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">REF. RETENTION ROOM</h4>
             </div>
-            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
-              NORMAL
+            <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border uppercase tracking-wider ${ahu03.connected ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"}`}>
+              {ahu03.connected ? "ONLINE" : "OFFLINE"}
             </span>
           </div>
           <div className="p-4 flex-grow flex flex-col justify-between flex-1">
             <div className="space-y-4">
-              <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu3.maxTemp}°C</div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="text-[10px] text-slate-400 font-bold font-mono">Target: Max 30°C · 2 Sensor Points</div>
+              <div className="grid grid-cols-2 gap-3">
                 <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 1</span>
-                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP 3A</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{formatVal(ahu03.temp1, " °C")}</span>
                 </div>
                 <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP - 2</span>
-                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu3.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMP 3B</span>
+                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{formatVal(ahu03.temp2, " °C")}</span>
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900 mt-4">
-              {[
-                { label: "AHU-03", status: liveData.ahu3.running },
-                { label: "FAN", status: liveData.ahu3.fan },
-                { label: "COOLING", status: liveData.ahu3.cooling }
-              ].map((ind, iIdx) => (
-                <div key={iIdx} className="flex flex-col items-center p-1 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
-                  <span className="text-[8px] font-bold text-slate-400 uppercase truncate w-full text-center">{ind.label}</span>
-                  <span className={`w-2 h-2 rounded-full mt-1.5 ${ind.status ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
-                </div>
-              ))}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-900 mt-4">
+              <div className="flex flex-col items-center p-1.5 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
+                <span className="text-[8px] font-bold text-slate-400 uppercase">PLC SENSOR</span>
+                <span className={`text-[10px] font-bold mt-1 ${ahu03.temp1 !== null ? "text-emerald-500" : "text-slate-400"}`}>
+                  {ahu03.temp1 !== null ? "ACTIVE" : "NO DATA"}
+                </span>
+              </div>
+              <div className="flex flex-col items-center p-1.5 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
+                <span className="text-[8px] font-bold text-slate-400 uppercase">CONNECTION</span>
+                <span className={`text-[10px] font-bold mt-1 ${ahu03.connected ? "text-emerald-500" : "text-rose-500"}`}>
+                  {ahu03.connected ? "CONNECTED" : "DISCONNECTED"}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Retained Sample Room (AHU-01) */}
+        {/* Central Utility & Return Air Loop */}
         <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col transition hover:shadow-md">
           <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border-b border-[#acd3ff]/30 dark:border-slate-800/40 flex items-center justify-between">
             <div>
-              <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">AHU-01 · CLEAN AREA</span>
-              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">Retained Sample Room</h4>
+              <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">UTILITY LOOP & RETURN AIR</span>
+              <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">CENTRAL UTILITY</h4>
             </div>
-            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
-              NORMAL
+            <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border uppercase tracking-wider ${utility.connected ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"}`}>
+              {utility.connected ? "ONLINE" : "OFFLINE"}
             </span>
           </div>
           <div className="p-4 flex-grow flex flex-col justify-between flex-1">
             <div className="space-y-4">
-              <div className="text-[10px] text-slate-400 font-bold font-mono">Target: {config.ahu1.lowTemp}-{config.ahu1.highTemp}°C</div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 1</span>
-                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.temp.toFixed(1)} <span className="text-xs">°C</span></span>
+              <div className="text-[10px] text-slate-400 font-bold font-mono">Return Air & Humidity Loop</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-2 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[8px] text-slate-500 uppercase font-semibold">AHU-01 RETURN T</span>
+                  <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 mt-0.5 font-mono">{formatVal(ahu01.rat, " °C")}</span>
                 </div>
-                <div className="p-2.5 rounded-lg bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
-                  <span className="text-[9px] text-slate-500 uppercase font-semibold">ROOM TEMPERATURE 2</span>
-                  <span className="text-lg font-extrabold text-[#002b5c] dark:text-slate-200 mt-1 font-mono">{liveData.ahu1.supplyAir.toFixed(1)} <span className="text-xs">°C</span></span>
+                <div className="p-2 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[8px] text-slate-500 uppercase font-semibold">AHU-01 RETURN RH</span>
+                  <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 mt-0.5 font-mono">{formatVal(ahu01.rah, " %")}</span>
+                </div>
+                <div className="p-2 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[8px] text-slate-500 uppercase font-semibold">AHU-02 RETURN T</span>
+                  <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 mt-0.5 font-mono">{formatVal(ahu02.rat, " °C")}</span>
+                </div>
+                <div className="p-2 bg-[#f8fafc] dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 flex flex-col">
+                  <span className="text-[8px] text-slate-500 uppercase font-semibold">AHU-02 RETURN RH</span>
+                  <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 mt-0.5 font-mono">{formatVal(ahu02.rah, " %")}</span>
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-900 mt-4">
-              {[
-                { label: "AHU-01", status: liveData.ahu1.running },
-                { label: "FAN", status: liveData.ahu1.fan },
-                { label: "HEATER", status: liveData.ahu1.heater },
-                { label: "HUMID", status: liveData.ahu1.humidifier }
-              ].map((ind, iIdx) => (
-                <div key={iIdx} className="flex flex-col items-center p-1 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
-                  <span className="text-[8px] font-bold text-slate-400 uppercase truncate w-full text-center">{ind.label}</span>
-                  <span className={`w-2 h-2 rounded-full mt-1.5 ${ind.status ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-[#f8fafc] dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-4 shadow-sm transition hover:shadow-md flex flex-col justify-between">
-          <div className="border-b border-[#acd3ff]/30 dark:border-slate-800/40 pb-2 mb-3">
-            <h4 className="text-xs font-bold text-[#002b5c] dark:text-slate-200 uppercase tracking-wide">Ambient Temp & RH</h4>
-            <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold block">Dual Sensors Integration</span>
-          </div>
-          <div className="grid grid-cols-2 gap-3 text-xs flex-1">
-            <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-900 flex flex-col justify-center">
-              <span className="text-[8px] text-slate-400 uppercase font-bold">Ambient Temp 1</span>
-              <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 font-mono mt-0.5">{liveData.ambient.temp1.toFixed(1)} °C</span>
-            </div>
-            <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-900 flex flex-col justify-center">
-              <span className="text-[8px] text-slate-400 uppercase font-bold">Ambient RH 1</span>
-              <span className="text-sm font-extrabold text-[#002b5c] dark:text-slate-200 font-mono mt-0.5">{liveData.ambient.humidity1.toFixed(1)} %</span>
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-900 mt-4">
+              <div className="flex flex-col items-center p-1.5 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
+                <span className="text-[8px] font-bold text-slate-400 uppercase">HUMI PUMP</span>
+                <span className={`text-[10px] font-bold mt-1 ${utility.humiPump ? "text-emerald-500" : "text-slate-400"}`}>
+                  {utility.humiPump ? "RUNNING" : "STOPPED"}
+                </span>
+              </div>
+              <div className="flex flex-col items-center p-1.5 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-900">
+                <span className="text-[8px] font-bold text-slate-400 uppercase">LOOP STATUS</span>
+                <span className="text-[10px] font-bold mt-1 text-emerald-500">
+                  ACTIVE
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm">
-          <h4 className="text-sm font-extrabold text-[#002b5c] dark:text-slate-100 mb-4 border-b border-[#acd3ff]/30 pb-2 uppercase tracking-wide">
-            Equipment Status & Area Matrix
-          </h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
-                  <th className="pb-3 px-3">Area</th>
-                  <th className="pb-3 px-3">Status</th>
-                  <th className="pb-3 px-3 text-right">Flow (m³/h)</th>
-                  <th className="pb-3 px-3 text-right">Power (kW)</th>
-                  <th className="pb-3 px-3 text-right">Running Hours</th>
-                  <th className="pb-3 px-3 text-center">Maintenance</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-[#002b5c] dark:text-slate-300">
-                {liveData.equipment.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
-                    <td className="py-2.5 px-3 font-bold">{row.area}</td>
-                    <td className="py-2.5 px-3">
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${row.status === "RUNNING"
-                          ? "bg-emerald-500/15 text-emerald-500"
-                          : "bg-amber-500/15 text-amber-500"
-                        }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${row.status === "RUNNING" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono">{row.flow.toFixed(1)}</td>
-                    <td className="py-2.5 px-3 text-right font-mono">{row.pow.toFixed(1)}</td>
-                    <td className="py-2.5 px-3 text-right font-mono text-[#47729f] dark:text-slate-500">{row.hrs.toLocaleString()}</td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${row.maint === "Good"
-                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                          : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-                        }`}>
-                        {row.maint}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm flex flex-col justify-between transition-colors duration-300">
-          <div>
-            <div className="mb-4 flex items-center justify-between border-b border-[#acd3ff]/50 dark:border-slate-800/50 pb-2">
-              <h3 className="text-xs font-extrabold text-[#002b5c] dark:text-slate-100 flex items-center gap-2 uppercase tracking-wider">
-                <svg className="w-4 h-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                LATEST ALARMS
-              </h3>
-            </div>
-            <div className="space-y-2.5">
-              {allActiveAlarms.length > 0 ? (
-                allActiveAlarms.slice(0, 5).map((alarm) => {
-                  const isCritical = alarm.description.toLowerCase().includes("critical") || alarm.description.toLowerCase().includes("overdue");
-                  const isMajor = alarm.description.toLowerCase().includes("trip") || alarm.description.toLowerCase().includes("high");
-                  const type = isCritical ? "Critical" : isMajor ? "Major" : "Alarm";
-                  const tone = isCritical
-                    ? "bg-rose-500/10 text-rose-500 border border-rose-500/30"
-                    : isMajor
-                    ? "bg-orange-500/10 text-orange-500 border border-orange-500/30"
-                    : "bg-amber-500/10 text-amber-600 border border-amber-500/30";
-
-                  return (
-                    <div key={alarm.id} className="flex items-start justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 hover:border-sky-300 dark:hover:border-slate-700 transition">
-                      <div className="space-y-0.5">
-                        <div className="text-[10px] font-bold text-[#002b5c] dark:text-slate-200 line-clamp-1">
-                          {alarm.description}
-                        </div>
-                        <div className="text-[8px] text-[#47729f] dark:text-slate-500 font-mono">
-                          {alarm.equipment} | {alarm.timestamp}
-                        </div>
-                      </div>
-                      <span className={`text-[7.5px] font-extrabold uppercase px-1.5 py-0.5 rounded ${tone}`}>
-                        {type}
-                      </span>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="py-6 text-center text-xs text-[#47729f] dark:text-slate-500 italic font-semibold">
-                  No active alarms. System operating normal.
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-900 text-center">
-            <Link
-              to={`/machines/${groupId}/${unitId}/alarm`}
-              className="text-xs font-bold text-[#1f6fb5] hover:text-[#002b5c] dark:hover:text-slate-200 hover:underline"
-            >
-              View All Alarms &rarr;
-            </Link>
-          </div>
-        </div>
-      </div>
-
+      {/* Real HVAC Equipment & Telemetry Matrix */}
       <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm">
         <h4 className="text-sm font-extrabold text-[#002b5c] dark:text-slate-100 mb-4 border-b border-[#acd3ff]/30 pb-2 uppercase tracking-wide flex justify-between items-center">
-          <span>24H TEMPERATURE OVERVIEW</span>
-          <span className="text-[9px] text-[#47729f] dark:text-slate-500 font-extrabold">Clean Area, Reference & Stability Rooms</span>
+          <span>HVAC Equipment & Telemetry Matrix</span>
+          <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-mono font-bold">100% LIVE API DATA</span>
         </h4>
-        <div className="h-64">
-          <Line data={tempChartData} options={chartOptions} />
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
+                <th className="pb-3 px-3">Unit / Machine</th>
+                <th className="pb-3 px-3">Area / Room</th>
+                <th className="pb-3 px-3">Status</th>
+                <th className="pb-3 px-3 text-right">Fan Speed (RPM)</th>
+                <th className="pb-3 px-3 text-right">Fan Current (A)</th>
+                <th className="pb-3 px-3 text-right">Fan Cap (%)</th>
+                <th className="pb-3 px-3 text-right">Heater Cap (%)</th>
+                <th className="pb-3 px-3 text-center">Connection</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-900 font-medium text-[#002b5c] dark:text-slate-300">
+              <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
+                <td className="py-2.5 px-3 font-bold">AHU-01</td>
+                <td className="py-2.5 px-3">Accelerated Stability</td>
+                <td className="py-2.5 px-3">
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${ahu01.fanRunning ? "bg-emerald-500/15 text-emerald-500" : "bg-slate-500/15 text-slate-500"}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${ahu01.fanRunning ? "bg-emerald-500 animate-pulse" : "bg-slate-500"}`} />
+                    {ahu01.fanRunning ? "RUNNING" : "STOPPED"}
+                  </span>
+                </td>
+                <td className="py-2.5 px-3 text-right font-mono">{formatVal(ahu01.fanSpd, "", 0)}</td>
+                <td className="py-2.5 px-3 text-right font-mono">{formatVal(ahu01.fanCur, "", 2)}</td>
+                <td className="py-2.5 px-3 text-right font-mono">{formatVal(ahu01.fanCap, "%", 0)}</td>
+                <td className="py-2.5 px-3 text-right font-mono">{formatVal(ahu01.heaterCap, "%", 0)}</td>
+                <td className="py-2.5 px-3 text-center">
+                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${ahu01.connected ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-600"}`}>
+                    {ahu01.connected ? "Connected" : "Disconnected"}
+                  </span>
+                </td>
+              </tr>
+              <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
+                <td className="py-2.5 px-3 font-bold">AHU-02</td>
+                <td className="py-2.5 px-3">Longterm Stability</td>
+                <td className="py-2.5 px-3">
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${(ahu02.fanA || ahu02.fanB) ? "bg-emerald-500/15 text-emerald-500" : "bg-slate-500/15 text-slate-500"}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${(ahu02.fanA || ahu02.fanB) ? "bg-emerald-500 animate-pulse" : "bg-slate-500"}`} />
+                    {(ahu02.fanA || ahu02.fanB) ? "RUNNING" : "STOPPED"}
+                  </span>
+                </td>
+                <td className="py-2.5 px-3 text-right font-mono">{formatVal(ahu02.fanBSpd ?? ahu02.fanASpd, "", 0)}</td>
+                <td className="py-2.5 px-3 text-right font-mono">{formatVal(ahu02.fanBCur, "", 2)}</td>
+                <td className="py-2.5 px-3 text-right font-mono">{formatVal(ahu02.fanCap, "%", 0)}</td>
+                <td className="py-2.5 px-3 text-right font-mono">{formatVal(ahu02.heaterCap, "%", 0)}</td>
+                <td className="py-2.5 px-3 text-center">
+                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${ahu02.connected ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-600"}`}>
+                    {ahu02.connected ? "Connected" : "Disconnected"}
+                  </span>
+                </td>
+              </tr>
+              <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
+                <td className="py-2.5 px-3 font-bold">AHU-03</td>
+                <td className="py-2.5 px-3">Ref. Retention Room</td>
+                <td className="py-2.5 px-3">
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${ahu03.temp1 !== null ? "bg-emerald-500/15 text-emerald-500" : "bg-slate-500/15 text-slate-500"}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${ahu03.temp1 !== null ? "bg-emerald-500 animate-pulse" : "bg-slate-500"}`} />
+                    {ahu03.temp1 !== null ? "MONITORING" : "STANDBY"}
+                  </span>
+                </td>
+                <td className="py-2.5 px-3 text-right font-mono text-slate-400">—</td>
+                <td className="py-2.5 px-3 text-right font-mono text-slate-400">—</td>
+                <td className="py-2.5 px-3 text-right font-mono text-slate-400">—</td>
+                <td className="py-2.5 px-3 text-right font-mono text-slate-400">—</td>
+                <td className="py-2.5 px-3 text-center">
+                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${ahu03.connected ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-600"}`}>
+                    {ahu03.connected ? "Connected" : "Disconnected"}
+                  </span>
+                </td>
+              </tr>
+              <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
+                <td className="py-2.5 px-3 font-bold">Utility</td>
+                <td className="py-2.5 px-3">Central Utility Loop</td>
+                <td className="py-2.5 px-3">
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${utility.humiPump ? "bg-emerald-500/15 text-emerald-500" : "bg-slate-500/15 text-slate-500"}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${utility.humiPump ? "bg-emerald-500 animate-pulse" : "bg-slate-500"}`} />
+                    {utility.humiPump ? "RUNNING" : "STOPPED"}
+                  </span>
+                </td>
+                <td className="py-2.5 px-3 text-right font-mono text-slate-400">—</td>
+                <td className="py-2.5 px-3 text-right font-mono text-slate-400">—</td>
+                <td className="py-2.5 px-3 text-right font-mono text-slate-400">—</td>
+                <td className="py-2.5 px-3 text-right font-mono text-slate-400">—</td>
+                <td className="py-2.5 px-3 text-center">
+                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${utility.connected ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-600"}`}>
+                    {utility.connected ? "Connected" : "Disconnected"}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

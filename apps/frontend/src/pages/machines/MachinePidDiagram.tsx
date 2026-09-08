@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, Navigate } from "react-router-dom";
 import { usePageActive } from "../../hooks/usePageActive";
 import { getUnitById } from "../../data/machines";
 import type { MachineOutletContext } from "./MachineLayout";
@@ -786,91 +786,7 @@ export default function MachinePidDiagram() {
 
   // ── KONDISI KHUSUS UNTUK HVAC ──────────────────────────
   if (isHvacTarget(unitId)) {
-    // Layout Baru Sesuai Screenshot HVAC
-    return (
-      <div className="flex flex-col h-full w-full gap-4 p-2">
-        {/* 1. TOP BAR: Room Info (Card 1) */}
-        <div className="flex justify-between items-start bg-[#1e293b] border border-slate-600 p-4 rounded-lg shadow-sm">
-          <div>
-            <h2 className="text-xl font-bold text-white">Room Name : {machine.name}</h2>
-            <p className="text-lg text-slate-300">ACCELERATED STABILITY ROOM</p>
-            <div className="text-sm text-cyan-400 mt-1">
-              Target: 38°C ± 2°C | 75%RH ± 5%
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400 text-sm font-mono">MODE</span>
-              <span className="text-cyan-400 font-semibold font-mono">Auto</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400 text-sm font-mono">STATUS</span>
-              <span className="text-green-400 font-semibold font-mono">Running</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. MAIN AREA: P&ID & SIDEBAR */}
-        <div className="flex gap-4 flex-1 min-h-0">
-
-          {/* P&ID Canvas (Card 2) */}
-          <div className="flex-1 rounded-lg border border-slate-600 bg-slate-900/70 relative overflow-hidden">
-            <div className="absolute inset-0 overflow-auto">
-              {PidDiagram ? (
-                <PidDiagram motorStatus={motorStatus} runningHours={runningHours} pidThresholds={pidThresholds} latest={mergedLatest} />
-              ) : (
-                <div className="flex items-center justify-center h-full text-slate-400">
-                  Diagram untuk {machine.name} belum tersedia.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* RIGHT SIDEBAR */}
-          <div className="w-80 flex flex-col gap-2 h-full">
-
-            {/* 3. SYSTEM MODE */}
-            <div className="flex-1 border border-slate-600 rounded-lg bg-[#1e293b] p-4 flex flex-col gap-2 min-h-[150px]">
-              <h3 className="text-white font-bold font-mono border-b border-slate-600 pb-2 mb-2">SYSTEM MODE</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-slate-400">Operating Mode</span><span className="text-cyan-400 font-semibold">Auto</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Fan Status</span><span className="text-green-400 font-semibold">Running</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Electric Heater</span><span className="text-green-400 font-semibold">On</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Humidity Fan</span><span className="text-green-400 font-semibold">Running</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Utility Status</span><span className="text-green-400 font-semibold">On</span></div>
-              </div>
-            </div>
-
-            {/* 4. SETPOINTS */}
-            <div className="flex-1 border border-slate-600 rounded-lg bg-[#1e293b] p-4 flex flex-col gap-2 min-h-[150px]">
-              <h3 className="text-white font-bold font-mono border-b border-slate-600 pb-2 mb-2">SETPOINTS</h3>
-              <div className="space-y-3 mt-2">
-                <div>
-                  <div className="flex justify-between text-xs font-mono"><span className="text-slate-400">Temperature SP</span><span className="text-white">46.8°C</span></div>
-                  <input type="range" className="w-full h-1 bg-slate-700 rounded appearance-none mt-1" />
-                </div>
-                <div>
-                  <div className="flex justify-between text-xs font-mono"><span className="text-slate-400">Humidity SP</span><span className="text-white">75.0%RH</span></div>
-                  <input type="range" className="w-full h-1 bg-slate-700 rounded appearance-none mt-1" />
-                </div>
-              </div>
-            </div>
-
-            {/* 5. CONTROL PANEL */}
-            <div className="flex-1 border border-slate-600 rounded-lg bg-[#1e293b] p-4 flex flex-col gap-2 min-h-[150px]">
-              <h3 className="text-white font-bold font-mono border-b border-slate-600 pb-2 mb-2">CONTROL PANEL</h3>
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <button className="p-2 rounded bg-cyan-800/40 text-cyan-400 text-xs font-bold hover:bg-cyan-800/60 border border-cyan-800/50">START AHU</button>
-                <button className="p-2 rounded bg-red-900/40 text-red-400 text-xs font-bold hover:bg-red-900/60 border border-red-900/50">STOP AHU</button>
-                <button className="p-2 rounded bg-blue-900/40 text-blue-400 text-xs font-bold hover:bg-blue-900/60 border border-blue-900/50">MAINTENANCE</button>
-                <button className="p-2 rounded bg-slate-700/40 text-slate-400 text-xs font-bold hover:bg-slate-700/60 border border-slate-700/50">CALIBRATION</button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </div>
-    );
+    return <Navigate to={`/machines/hvac/${unitId}/custom-tab/ahu-01`} replace />;
   }
 
   // ── LAYOUT STANDAR (NON-HVAC) ──────────────────────────

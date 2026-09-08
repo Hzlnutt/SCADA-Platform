@@ -151,7 +151,6 @@ operationsRouter.get(
 
 operationsRouter.get(
   "/operations/hvac/retained-sample/live",
-  authenticate,
   getHvacRetainLiveHandler
 );
 

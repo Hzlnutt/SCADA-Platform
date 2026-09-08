@@ -770,7 +770,7 @@ const fetchApiData = async (endpoint: string) => {
   const orderedBases = [cachedWorkingBaseUrl, ...CANDIDATE_BASES.filter((b) => b !== cachedWorkingBaseUrl)];
   for (const base of orderedBases) {
     try {
-      const res = await fetchJsonWithTimeout(`${base}/system/webdev/Utility_Dashboard/${endpoint}`, 600);
+      const res = await fetchJsonWithTimeout(`${base}/system/webdev/Utility_Dashboard/${endpoint}`, 2500);
       if (res) {
         cachedWorkingBaseUrl = base;
         return res;
