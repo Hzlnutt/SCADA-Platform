@@ -11,7 +11,8 @@ import {
   getSolarAnalyticsHandler,
   getElectricityReportHandler,
   getElectricityExportDataHandler,
-  getElectricityExportExcelHandler
+  getElectricityExportExcelHandler,
+  getElectricityExportPreviewHandler,
 } from "./analytics.controller";
 
 export const analyticsRouter = Router();
@@ -21,6 +22,7 @@ analyticsRouter.get("/analytics/electricity", getElectricityAnalyticsHandler);
 analyticsRouter.get("/analytics/electricity/report", getElectricityReportHandler);
 analyticsRouter.get("/analytics/electricity/export-data", getElectricityExportDataHandler);
 analyticsRouter.get("/analytics/electricity/export-excel", getElectricityExportExcelHandler);
+analyticsRouter.get("/analytics/electricity/export-preview", getElectricityExportPreviewHandler);
 analyticsRouter.get("/analytics/electricity/power-meters", getPowerMetersLatestHandler);
 analyticsRouter.get("/analytics/electricity/power-meters/:pmId/history", getPowerMeterHistoryHandler);
 analyticsRouter.get("/analytics/solar", getSolarAnalyticsHandler);

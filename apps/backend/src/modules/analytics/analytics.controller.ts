@@ -1076,3 +1076,34 @@ export const getElectricityExportExcelHandler = async (
   }
 };
 
+export const getElectricityExportPreviewHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const from = (req.query.from as string) || new Date().toISOString().slice(0, 10);
+    const to = (req.query.to as string) || from;
+    const resolution = (req.query.resolution as "hour" | "day" | "week" | "month" | "year") || "hour";
+
+    const data = await getElectricityExportData({
+      from,
+      to,
+      resolution,
+      sheets: "all"
+    });
+
+    res.json({
+      status: "success",
+      data: {
+        metadata: data.metadata,
+        summary: data.summary,
+        rows: data.rows.slice(0, 200),
+        totalRows: data.rows.length
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

@@ -320,13 +320,26 @@ export const getSolarAnalytics = async (
   }
 
   // Daily records
-  const allDates = Array.from(new Set([...dailyMapPoi1.keys(), ...dailyMapPoi2.keys(), ...dailyMapTotal.keys()])).sort();
-  const daily = allDates.map(day => ({
-    day,
-    poi1: dailyMapPoi1.get(day) || 0,
-    poi2: dailyMapPoi2.get(day) || 0,
-    total: dailyMapTotal.get(day) || ((dailyMapPoi1.get(day) || 0) + (dailyMapPoi2.get(day) || 0))
-  }));
+  const daily: { day: string; poi1: number; poi2: number; total: number }[] = [];
+  if (fromStr && toStr) {
+    const cur = new Date(fromDate);
+    while (cur <= toDate) {
+      const dStr = `${cur.getFullYear()}-${pad(cur.getMonth() + 1)}-${pad(cur.getDate())}`;
+      const p1 = dailyMapPoi1.get(dStr) || 0;
+      const p2 = dailyMapPoi2.get(dStr) || 0;
+      const tot = dailyMapTotal.get(dStr) || (p1 + p2);
+      daily.push({ day: dStr, poi1: p1, poi2: p2, total: tot });
+      cur.setDate(cur.getDate() + 1);
+    }
+  } else {
+    const allDates = Array.from(new Set([...dailyMapPoi1.keys(), ...dailyMapPoi2.keys(), ...dailyMapTotal.keys()])).sort();
+    allDates.forEach(day => {
+      const p1 = dailyMapPoi1.get(day) || 0;
+      const p2 = dailyMapPoi2.get(day) || 0;
+      const tot = dailyMapTotal.get(day) || (p1 + p2);
+      daily.push({ day, poi1: p1, poi2: p2, total: tot });
+    });
+  }
 
   // Monthly records
   const monthly: { month: string; poi1: number; poi2: number; total: number }[] = [];

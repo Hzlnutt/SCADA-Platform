@@ -812,6 +812,57 @@ export default function Electricity() {
 
     return { currentData, previousData, currentBreakdown, previousBreakdown };
   }, [cubicleAnalytics, summaryData, solarData, cubicleSelector, selectedYear]);
+
+  // Executive monthly consumption metrics (PLN + PV) for the current active month
+  const monthlyMetrics = useMemo(() => {
+    let plnKwh = 0;
+    let poi1Kwh = 0;
+    let poi2Kwh = 0;
+    let wbpKwh = 0;
+    let lwbpKwh = 0;
+
+    cubicleDailyData.currentBreakdown.forEach((d) => {
+      plnKwh += d.pln || 0;
+      poi1Kwh += d.poi1 || 0;
+      poi2Kwh += d.poi2 || 0;
+      wbpKwh += d.wbp || 0;
+      lwbpKwh += d.lwbp || 0;
+    });
+
+    if (plnKwh === 0 && summaryData?.summary?.monthlyKwh) {
+      plnKwh = summaryData.summary.monthlyKwh;
+      wbpKwh = summaryData.summary.monthlyWbpKwh || 0;
+      lwbpKwh = summaryData.summary.monthlyLwbpKwh || 0;
+    }
+    if (poi1Kwh === 0 && poi2Kwh === 0 && solarData?.summary) {
+      poi1Kwh = solarData.summary.poi1MonthlyKwh || 0;
+      poi2Kwh = solarData.summary.poi2MonthlyKwh || 0;
+    }
+
+    const totalPvKwh = poi1Kwh + poi2Kwh;
+    const totalKwh = plnKwh + totalPvKwh;
+
+    const effectiveLwbpRate = typeof lwbpRate === "number" && lwbpRate > 0 ? lwbpRate : 1112;
+    const effectiveWbpRate = typeof wbpRate === "number" && wbpRate > 0 ? wbpRate : 1668;
+    const effectivePvRate = typeof pvRate === "number" ? pvRate : (Number(solarData?.summary?.pvRate) || 0);
+
+    const plnCost = (wbpKwh * effectiveWbpRate) + (lwbpKwh * effectiveLwbpRate) || (plnKwh * effectiveLwbpRate);
+    const pvCost = totalPvKwh * effectivePvRate;
+    const savingsRate = Math.max(0, effectiveLwbpRate - effectivePvRate);
+    const savingsCost = totalPvKwh * savingsRate;
+
+    return {
+      totalKwh,
+      plnKwh,
+      totalPvKwh,
+      plnCost,
+      pvCost,
+      savingsCost,
+      effectiveLwbpRate,
+      effectivePvRate
+    };
+  }, [cubicleDailyData, summaryData, solarData, lwbpRate, wbpRate, pvRate]);
+
   const [factCategories1, setFactCategories1] = useState<ConsumptionFactCategory[]>([]);
   const [factCategories2, setFactCategories2] = useState<ConsumptionFactCategory[]>([]);
 
@@ -1610,11 +1661,6 @@ export default function Electricity() {
     if (solarRange === "hour" || (solarRange === "custom" && solarStartDate === solarEndDate)) {
       return Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`);
     } else if (solarRange === "day") {
-      const targetMonthStr = `${solarSelectedYear}-${String(solarSelectedMonth + 1).padStart(2, "0")}`;
-      const monthDaily = (solarData?.charts?.daily || []).filter((d: any) => d.day && d.day.startsWith(targetMonthStr));
-      if (monthDaily.length > 0) {
-        return monthDaily.map((d: any) => d.day.split("-")[2]);
-      }
       const daysCount = new Date(solarSelectedYear, solarSelectedMonth + 1, 0).getDate();
       return Array.from({ length: daysCount }, (_, i) => String(i + 1).padStart(2, "0"));
     } else if (solarRange === "custom") {
@@ -1643,9 +1689,17 @@ export default function Electricity() {
       return solarData?.charts?.hourlyPoi1 || Array(24).fill(0);
     } else if (solarRange === "day") {
       const targetMonthStr = `${solarSelectedYear}-${String(solarSelectedMonth + 1).padStart(2, "0")}`;
-      return (solarData?.charts?.daily || [])
-        .filter((d: any) => d.day && d.day.startsWith(targetMonthStr))
-        .map((d: any) => d.poi1 || 0);
+      const daysCount = new Date(solarSelectedYear, solarSelectedMonth + 1, 0).getDate();
+      const lookup: Record<string, number> = {};
+      (solarData?.charts?.daily || []).forEach((d: any) => {
+        if (d.day && d.day.startsWith(targetMonthStr)) {
+          lookup[d.day] = Number(d.poi1) || 0;
+        }
+      });
+      return Array.from({ length: daysCount }, (_, i) => {
+        const dStr = `${targetMonthStr}-${String(i + 1).padStart(2, "0")}`;
+        return lookup[dStr] || 0;
+      });
     } else if (solarRange === "custom") {
       return (solarData?.charts?.daily || []).map((d: any) => d.poi1 || 0);
     } else {
@@ -1658,9 +1712,17 @@ export default function Electricity() {
       return solarData?.charts?.hourlyPoi2 || Array(24).fill(0);
     } else if (solarRange === "day") {
       const targetMonthStr = `${solarSelectedYear}-${String(solarSelectedMonth + 1).padStart(2, "0")}`;
-      return (solarData?.charts?.daily || [])
-        .filter((d: any) => d.day && d.day.startsWith(targetMonthStr))
-        .map((d: any) => d.poi2 || 0);
+      const daysCount = new Date(solarSelectedYear, solarSelectedMonth + 1, 0).getDate();
+      const lookup: Record<string, number> = {};
+      (solarData?.charts?.daily || []).forEach((d: any) => {
+        if (d.day && d.day.startsWith(targetMonthStr)) {
+          lookup[d.day] = Number(d.poi2) || 0;
+        }
+      });
+      return Array.from({ length: daysCount }, (_, i) => {
+        const dStr = `${targetMonthStr}-${String(i + 1).padStart(2, "0")}`;
+        return lookup[dStr] || 0;
+      });
     } else if (solarRange === "custom") {
       return (solarData?.charts?.daily || []).map((d: any) => d.poi2 || 0);
     } else {
@@ -2524,7 +2586,7 @@ export default function Electricity() {
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Trend Panel Distribusi</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Beban Incoming PLN — data historis (WBP & LWBP).</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
               {(range === "ytd" || range === "day" || range === "month") && (
                 <select
                   value={selectedYear}
@@ -2734,11 +2796,11 @@ export default function Electricity() {
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Trend Produksi Solar Panel (PLTS)</h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Produksi energi POI-1 & POI-2 — data historis per jam.</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Trend Produksi Solar Panel (PLTS)</h3>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Produksi energi POI-1 & POI-2 — data historis per jam.</p>
+              </div>
               {/* Checklist options: POI-1, POI-2 */}
               <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/60 p-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
                 <label className="flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer select-none font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition">
@@ -2772,7 +2834,9 @@ export default function Electricity() {
                   </span>
                 </label>
               </div>
+            </div>
 
+            <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
               {/* Year / Month / Date Pickers */}
               {(solarRange === "ytd" || solarRange === "day" || solarRange === "month") && (
                 <select
@@ -2965,66 +3029,89 @@ export default function Electricity() {
                 </span>
               );
             })()}
-            <button
-              onClick={() => setCubiclePoiView(!cubiclePoiView)}
-              className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-blue-500 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 transition"
-            >
-              {cubiclePoiView ? "View: Total kWh" : "View: POI Mode"}
-            </button>
           </div>
         </div>
 
-        {/* Cubicle summary cards */}
-        <div className="grid gap-3 sm:grid-cols-5">
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Peak Demand</div>
-            <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              - kW
+        {/* Monthly consumption summary cards */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Card 1: kWh Total (PLN + PV) */}
+          <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                  kWh Total (PLN + PV)
+                </span>
+                <div className="h-6 w-6 rounded bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                  <IconBolt />
+                </div>
+              </div>
+              <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                {formatNumber(monthlyMetrics.totalKwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
+              </div>
+            </div>
+            <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+              <span>PLN: <strong className="text-slate-700 dark:text-slate-200 font-mono">{formatNumber(monthlyMetrics.plnKwh)}</strong></span>
+              <span>PV: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{formatNumber(monthlyMetrics.totalPvKwh)}</strong></span>
             </div>
           </div>
-          {cubiclePoiView ? (
-            <>
-              <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4">
-                <span className="text-[10px] font-bold text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">POI-1</span>
-                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-                  {cubicleSelector.startsWith("poi") || cubicleSelector === "pln" || cubicleSelector === "all" ? `${cubicleSummary.poi1Kwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh` : "0 kWh"}
+
+          {/* Card 2: Est Cost Total PLN */}
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                  Est Cost Total PLN
+                </span>
+                <div className="h-6 w-6 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
+                  <IconMoney />
                 </div>
               </div>
-              <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30 p-4">
-                <span className="text-[10px] font-bold text-cyan-500 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20">POI-2</span>
-                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-                  {cubicleSelector.startsWith("poi") || cubicleSelector === "pln" || cubicleSelector === "all" ? `${cubicleSummary.poi2Kwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh` : "0 kWh"}
-                </div>
+              <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                {formatCurrency(monthlyMetrics.plnCost)}
               </div>
-            </>
-          ) : (
-            <>
-              <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4">
-                <span className="text-[10px] font-bold text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">LWBP</span>
-                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-                  {cubicleSummary.lwbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh
-                </div>
-              </div>
-              <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30 p-4">
-                <span className="text-[10px] font-bold text-rose-500 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">WBP</span>
-                <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-                  {cubicleSummary.wbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh
-                </div>
-              </div>
-            </>
-          )}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Monthly Usage</div>
-            <div className="mt-1 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {cubicleSummary.monthlyKwh.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh
+            </div>
+            <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+              Beban Incoming PLN bulan ini
             </div>
           </div>
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-4">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              {cubicleSelector === "poi1" || cubicleSelector === "poi2" ? "Biaya PV" : "Estimation Cost"}
+
+          {/* Card 3: Est Cost Total PV */}
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                  Est Cost Total PV
+                </span>
+                <div className="h-6 w-6 rounded bg-amber-500/10 flex items-center justify-center text-amber-500">
+                  <IconMoney />
+                </div>
+              </div>
+              <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                {formatCurrency(monthlyMetrics.pvCost)}
+              </div>
             </div>
-            <div className="mt-1 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {cubicleSummary.cost > 0 ? formatCurrency(cubicleSummary.cost) : (cubicleSelector === "poi1" || cubicleSelector === "poi2" ? "Rp 0,00" : "Rp 0,00 (Free / Solar)")}
+            <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+              Tarif PV: Rp {monthlyMetrics.effectivePvRate.toLocaleString("id-ID")}/kWh
+            </div>
+          </div>
+
+          {/* Card 4: Est Saving */}
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  Est Saving
+                </span>
+                <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                  <IconMoney />
+                </div>
+              </div>
+              <div className="mt-2 text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-tight">
+                {formatCurrency(monthlyMetrics.savingsCost)}
+              </div>
+            </div>
+            <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+              Selisih PLN (LWBP) - Biaya PV
             </div>
           </div>
         </div>
