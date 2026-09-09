@@ -332,10 +332,7 @@ export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] =
     const total_kvarh = Number(poiObj[`Total_KVARH_POI_${num}`]) || 0;
 
     const rawPf = poiObj[`Power_Factor_POI_${num}`] ?? poiObj[`PF_POI_${num}`] ?? poiObj[`PowerFactor_POI_${num}`] ?? poiObj[`CosPhi_POI_${num}`];
-    let power_factor: number | null = rawPf !== undefined && rawPf !== null ? Number(rawPf) : null;
-    if (power_factor === null || isNaN(power_factor) || power_factor === 0) {
-      power_factor = active_power > 0 ? (num === "1" ? 0.98 : 0.99) : 1.0;
-    }
+    let power_factor: number | null = rawPf !== undefined && rawPf !== null && !isNaN(Number(rawPf)) ? Number(rawPf) : null;
 
     result.push({
       t_stamp: ts,
@@ -364,17 +361,34 @@ export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] =
 
 const insertPltsMinuteTelemetry = async (records: ElectricPltsRecord[], minuteTs: Date) => {
   const pool = getPostgresPool();
+  const isExactHour = minuteTs.getMinutes() === 0;
+
   for (const r of records) {
     try {
+      // In minute buffer table: do not store PF per minute (only store on exact hour mark if available, otherwise null)
+      const minutePf = isExactHour ? (r.power_factor ?? null) : null;
+
       await pool.query(`
         INSERT INTO electric_plts_telemetry_minute (
           t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh, power_factor
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       `, [
-        minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power, r.total_kwh, r.total_kvarh, r.power_factor ?? null
+        minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power, r.total_kwh, r.total_kvarh, minutePf
       ]);
+
+      // Polling per jam: at the exact hour mark (:00:00), save sampled hourly power factor & telemetry directly to electric_plts_telemetry
+      if (isExactHour) {
+        await pool.query(`DELETE FROM electric_plts_telemetry WHERE t_stamp = $1 AND poi_id = $2`, [minuteTs, r.poi_id]);
+        await pool.query(`
+          INSERT INTO electric_plts_telemetry (
+            t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh, power_factor
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        `, [
+          minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power, r.total_kwh, r.total_kvarh, r.power_factor ?? null
+        ]);
+      }
     } catch (err: any) {
-      logger.warn(`Failed to insert PLTS minute telemetry for ${r.poi_id}: ${err.message}`);
+      logger.warn(`Failed to insert PLTS telemetry for ${r.poi_id}: ${err.message}`);
     }
   }
 };
@@ -731,14 +745,12 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   const rawPeak1 = p1.Peak_Demand_ScaleKw_POI_1 ?? p1.Peak_Demand_ScaleKW_POI_1;
   const rawPeak2 = p2.Peak_Demand_ScaleKw_POI_2 ?? p2.Peak_Demand_ScaleKW_POI_2;
   const rawPf1 = p1.Power_Factor_POI_1 ?? p1.PF_POI_1 ?? p1.PowerFactor_POI_1 ?? p1.CosPhi_POI_1;
-  let pf1 = rawPf1 !== undefined && rawPf1 !== null ? Number(rawPf1) : null;
+  let pf1 = rawPf1 !== undefined && rawPf1 !== null && !isNaN(Number(rawPf1)) ? Number(rawPf1) : null;
   const p1Kw = typeof p1.Scale_Total_KW_POI_1 === "number" ? p1.Scale_Total_KW_POI_1 : (Number(p1.Scale_Total_KW_POI_1) || 0);
-  if (pf1 === null || isNaN(pf1) || pf1 === 0) pf1 = p1Kw > 0 ? 0.98 : 1.0;
 
   const rawPf2 = p2.Power_Factor_POI_2 ?? p2.PF_POI_2 ?? p2.PowerFactor_POI_2 ?? p2.CosPhi_POI_2;
-  let pf2 = rawPf2 !== undefined && rawPf2 !== null ? Number(rawPf2) : null;
+  let pf2 = rawPf2 !== undefined && rawPf2 !== null && !isNaN(Number(rawPf2)) ? Number(rawPf2) : null;
   const p2Kw = typeof p2.Scale_Total_KW_POI_2 === "number" ? p2.Scale_Total_KW_POI_2 : (Number(p2.Scale_Total_KW_POI_2) || 0);
-  if (pf2 === null || isNaN(pf2) || pf2 === 0) pf2 = p2Kw > 0 ? 0.99 : 1.0;
 
   const poi1 = {
     status: poi1Status,
@@ -1663,7 +1675,10 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(active_power) as active_power,
             MAX(total_kwh) as total_kwh,
             MAX(total_kvarh) as total_kvarh,
-            COALESCE((ARRAY_AGG(power_factor ORDER BY t_stamp ASC))[1], AVG(power_factor)) as power_factor
+            COALESCE(
+              (ARRAY_AGG(power_factor ORDER BY t_stamp ASC) FILTER (WHERE power_factor IS NOT NULL))[1],
+              (SELECT power_factor FROM electric_plts_telemetry WHERE t_stamp = $1::timestamp AND poi_id = electric_plts_telemetry_minute.poi_id)
+            ) as power_factor
           FROM electric_plts_telemetry_minute
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
           GROUP BY poi_id

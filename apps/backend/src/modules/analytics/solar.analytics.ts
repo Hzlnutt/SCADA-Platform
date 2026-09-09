@@ -24,7 +24,7 @@ export interface SolarLiveItem {
   voltAn: number;
   voltBn: number;
   voltCn: number;
-  powerFactor?: number;
+  powerFactor?: number | null;
 }
 
 export interface SolarLiveState {

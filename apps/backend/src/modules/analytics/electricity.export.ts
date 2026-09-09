@@ -191,7 +191,7 @@ export async function getElectricityExportData(params: ElectricityExportParams):
     t_stamp: Date;
     lwbp: number;
     wbp: number;
-    pf: number;
+    pf: number | null;
   }
 
   const computeHourlyPoints = (
@@ -225,11 +225,15 @@ export async function getElectricityExportData(params: ElectricityExportParams):
       const wibHour = new Date(currTs.getTime() + 7 * 3600 * 1000).getUTCHours();
       const isWbp = wibHour >= 17 && wibHour <= 21;
 
-      let pf = curr.power_factor !== null && curr.power_factor !== undefined ? Number(curr.power_factor) : defaultPf;
-      if (isNaN(pf) || pf <= 0) {
-        pf = isSolar ? (deltaKwh > 0 ? defaultPf : 1.0) : defaultPf;
+      let pf: number | null = null;
+      if (curr.power_factor !== null && curr.power_factor !== undefined && !isNaN(Number(curr.power_factor)) && Number(curr.power_factor) > 0) {
+        pf = Math.min(1.0, Math.max(0.70, Number(Number(curr.power_factor).toFixed(3))));
+      } else if (!isSolar) {
+        pf = defaultPf;
+      } else {
+        // Solar historical / unpolled remains null
+        pf = null;
       }
-      pf = Math.min(1.0, Math.max(0.70, Number(pf.toFixed(3))));
 
       points.push({
         t_stamp: currTs,
@@ -303,9 +307,11 @@ export async function getElectricityExportData(params: ElectricityExportParams):
       const kwh = p.lwbp + p.wbp;
       acc.lwbp += p.lwbp;
       acc.wbp += p.wbp;
-      acc.pfWeightedSum += p.pf * kwh;
-      acc.pfTotalKwh += kwh;
-      acc.pfList.push(p.pf);
+      if (p.pf !== null && p.pf !== undefined) {
+        acc.pfWeightedSum += p.pf * kwh;
+        acc.pfTotalKwh += kwh;
+        acc.pfList.push(p.pf);
+      }
     }
   };
 
@@ -355,13 +361,17 @@ export async function getElectricityExportData(params: ElectricityExportParams):
       const wbp = acc.wbp;
       const totKwh = lwbp + wbp;
 
-      let pf = defaultPfMap[itemName];
+      let pf: number | null = null;
       if (acc.pfTotalKwh > 0) {
         pf = acc.pfWeightedSum / acc.pfTotalKwh;
       } else if (acc.pfList.length > 0) {
         pf = acc.pfList.reduce((a: number, b: number) => a + b, 0) / acc.pfList.length;
+      } else if (!isSolar) {
+        pf = defaultPfMap[itemName];
       }
-      pf = Math.min(1.0, Math.max(0.70, Number(pf.toFixed(3))));
+      if (pf !== null) {
+        pf = Math.min(1.0, Math.max(0.70, Number(pf.toFixed(3))));
+      }
 
       let estCost = 0;
       let estPenghematan = 0;
@@ -380,9 +390,11 @@ export async function getElectricityExportData(params: ElectricityExportParams):
       const s = summaryMap[itemName];
       s.lwbp += lwbp;
       s.wbp += wbp;
-      s.pfWeightedSum += pf * totKwh;
-      s.pfTotalKwh += totKwh;
-      s.pfList.push(pf);
+      if (pf !== null) {
+        s.pfWeightedSum += pf * totKwh;
+        s.pfTotalKwh += totKwh;
+        s.pfList.push(pf);
+      }
       s.estCost += estCost;
       s.estPenghematan += estPenghematan;
       s.estNetCost += estNetCost;
@@ -401,13 +413,16 @@ export async function getElectricityExportData(params: ElectricityExportParams):
     const estSaving = poi1.estPenghematan + poi2.estPenghematan;
     const estNetCostRow = pln.estNetCost + wf1.estNetCost + wf2.estNetCost + poi1.estNetCost + poi2.estNetCost;
 
-    // Weighted average PF across all items (by kWh)
+    // Weighted average PF across items that have valid power factor
     const allItemsArr = [pln, wf1, wf2, poi1, poi2];
-    const totalKwhAll = allItemsArr.reduce((s, x) => s + x.totKwh, 0);
-    const weightedPfSum = allItemsArr.reduce((s, x) => s + x.pf * x.totKwh, 0);
-    const avgPf = totalKwhAll > 0
-      ? Math.min(1.0, Math.max(0.70, Number((weightedPfSum / totalKwhAll).toFixed(3))))
-      : Number(((pln.pf + wf1.pf + wf2.pf + poi1.pf + poi2.pf) / 5).toFixed(3));
+    const validPfItems = allItemsArr.filter((x) => x.pf !== null && x.pf !== undefined);
+    const validPfKwhTotal = validPfItems.reduce((s, x) => s + x.totKwh, 0);
+    const weightedPfSum = validPfItems.reduce((s, x) => s + (x.pf as number) * x.totKwh, 0);
+    const avgPf = validPfKwhTotal > 0
+      ? Math.min(1.0, Math.max(0.70, Number((weightedPfSum / validPfKwhTotal).toFixed(3))))
+      : validPfItems.length > 0
+        ? Number((validPfItems.reduce((s, x) => s + (x.pf as number), 0) / validPfItems.length).toFixed(3))
+        : 0.95;
 
     exportRows.push({
       tgl_waktu: bKey,
