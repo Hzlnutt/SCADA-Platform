@@ -2282,19 +2282,15 @@ export default function Electricity() {
               <span>Fact 1: <strong className={isDark ? 'text-white' : 'text-blue-950'}>
                 {isFact1Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
-                ) : fact1Kw === 0 ? (
-                  "TIDAK AKTIF"
                 ) : (
-                  `${formatNumber(fact1Kw)} kW (${fact1Pct.toFixed(1)}%)`
+                  `${(fact1Kw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${fact1Pct.toFixed(1)}%)`
                 )}
               </strong></span>
               <span>Fact 2: <strong className={isDark ? 'text-white' : 'text-blue-950'}>
                 {isFact2Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
-                ) : fact2Kw === 0 ? (
-                  "TIDAK AKTIF"
                 ) : (
-                  `${formatNumber(fact2Kw)} kW (${fact2Pct.toFixed(1)}%)`
+                  `${(fact2Kw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${fact2Pct.toFixed(1)}%)`
                 )}
               </strong></span>
             </div>
@@ -2338,19 +2334,15 @@ export default function Electricity() {
               <span>POI-1: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
                 {isPoi1Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
-                ) : poi1Kw === 0 ? (
-                  "TIDAK AKTIF"
                 ) : (
-                  `${formatNumber(poi1Kw)} kW (${poi1Pct.toFixed(1)}%)`
+                  `${(poi1Kw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${poi1Pct.toFixed(1)}%)`
                 )}
               </strong></span>
               <span>POI-2: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
                 {isPoi2Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
-                ) : poi2Kw === 0 ? (
-                  "TIDAK AKTIF"
                 ) : (
-                  `${formatNumber(poi2Kw)} kW (${poi2Pct.toFixed(1)}%)`
+                  `${(poi2Kw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${poi2Pct.toFixed(1)}%)`
                 )}
               </strong></span>
             </div>

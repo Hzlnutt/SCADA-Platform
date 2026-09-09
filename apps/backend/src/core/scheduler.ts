@@ -924,8 +924,7 @@ let cachedWorkingBaseUrl = "http://10.3.161.3:8088";
 const CANDIDATE_BASES = [
   "http://10.3.161.3:8088",
   "http://10.3.164.3:8088",
-  "https://utility.widatra.com",
-  "http://127.0.0.1:3001"
+  "https://utility.widatra.com"
 ];
 
 const fetchApiData = async (endpoint: string) => {

@@ -185,9 +185,16 @@ export const getSolarAnalytics = async (
       diffPoi2 = Math.max(0, curr.poi_2 - prev.poi_2);
     }
 
+    // Solar PV total capacity is 1,700 kWp. A single hour cannot physically produce > 2,000 kWh per POI.
+    // Protect against meter resets, counter wraps, or corrupted mock data jumps.
+    const MAX_HOURLY_POI_KWH = 2000;
+    if (diffPoi1 > MAX_HOURLY_POI_KWH) diffPoi1 = 0;
+    if (diffPoi2 > MAX_HOURLY_POI_KWH) diffPoi2 = 0;
+
     let diffTot = 0;
     if (curr.total !== null && prev.total !== null && timeDiffMs <= 90 * 60 * 1000) {
       diffTot = Math.max(0, curr.total - prev.total);
+      if (diffTot > MAX_HOURLY_POI_KWH * 2) diffTot = diffPoi1 + diffPoi2;
     } else {
       diffTot = diffPoi1 + diffPoi2;
     }
