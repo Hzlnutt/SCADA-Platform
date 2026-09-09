@@ -920,10 +920,10 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   };
 };
 
-let cachedWorkingBaseUrl = "http://10.3.164.3:8088";
+let cachedWorkingBaseUrl = "http://10.3.161.3:8088";
 const CANDIDATE_BASES = [
-  "http://10.3.164.3:8088",
   "http://10.3.161.3:8088",
+  "http://10.3.164.3:8088",
   "https://utility.widatra.com",
   "http://127.0.0.1:3001"
 ];
@@ -999,8 +999,20 @@ export const startIncomingElectricityPolling = () => {
     if (!plnParsed) {
       plnParsed = getNullPlnRecord(ts);
       broadcastLiveTelemetryOffline("Cubicle_PLN_PM8000");
+      setLatestPowerFactor(null, "offline");
+      const io = getSocketServer();
+      if (io) {
+        io.emit("power_factor:status", { value: null, status: "offline" });
+      }
     } else {
       broadcastLiveTelemetry("Cubicle_PLN_PM8000", plnParsed);
+      const isOnline = plnParsed.status_pm8000 !== null ? !!plnParsed.status_pm8000 : true;
+      const pfVal = plnParsed.power_factor !== null ? Math.abs(Number(plnParsed.power_factor)) : null;
+      setLatestPowerFactor(pfVal, isOnline ? "connected" : "offline");
+      const io = getSocketServer();
+      if (io) {
+        io.emit("power_factor:status", { value: pfVal, status: isOnline ? "connected" : "offline" });
+      }
     }
 
     if (isNewMinute) {
@@ -2072,6 +2084,9 @@ export const startPowerFactorPolling = () => {
   if (pfPollingInterval) return;
 
   const poll = async () => {
+    // If incoming electricity polling is already active, it updates power factor directly in lockstep every 1 second
+    if (incomingElectricityPollingInterval) return;
+
     try {
       const val = await fetchPowerFactor();
       const io = getSocketServer();
@@ -2158,7 +2173,7 @@ export const startCoolingTowerPolling = () => {
       
       let tagToUrlMap: Record<string, string> = {};
       let tagToJsonKeyMap: Record<string, string> = {};
-      const defaultUrl = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3";
+      const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
 
       // Cache configs for 60s to avoid querying PostgreSQL every poll tick
       if (cachedCoolingConfigs && now - cachedCoolingConfigs.ts < 60000) {

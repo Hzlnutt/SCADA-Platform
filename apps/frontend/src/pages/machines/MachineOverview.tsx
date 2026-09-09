@@ -156,7 +156,7 @@ function StandardMachineOverview({
   useEffect(() => {
     const defaultMap: Record<string, string> = {};
     if (unitId.startsWith("cooling-water")) {
-      const defaultUrl = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3";
+      const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
       const sensorList = getDefaultSensorConfigs(unitId);
       sensorList.forEach((s) => {
         defaultMap[s.tagKey] = defaultUrl;
@@ -1721,7 +1721,7 @@ function HvacOverview({
         const directFetch = async (ep: string) => {
           const controller = new AbortController();
           const id = setTimeout(() => controller.abort(), 1500);
-          const res = await fetch(`http://10.3.164.3:8088/system/webdev/Utility_Dashboard/${ep}`, { signal: controller.signal });
+          const res = await fetch(`http://10.3.161.3:8088/system/webdev/Utility_Dashboard/${ep}`, { signal: controller.signal });
           clearTimeout(id);
           return await res.json();
         };

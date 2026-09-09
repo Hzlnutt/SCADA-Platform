@@ -51,7 +51,7 @@ const DEFAULT_JSON_KEYS: Record<string, string> = {
 };
 
 const getDefaultApiSourceConfigs = (unitId: string): ApiSourceRow[] => {
-  const defaultUrl = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3";
+  const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
   const isCooling = unitId === "cooling-water-1" || unitId === "cooling-water-2" || unitId === "cooling-water-3";
   
   if (!isCooling) {

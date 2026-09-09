@@ -68,9 +68,9 @@ const formatPeakTs = (tsStr: string) => {
   return `${day} ${month} ${year}, ${hrs}:${mins} WIB`;
 };
 
-const DEFAULT_PLN_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln";
-const DEFAULT_WF1_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1";
-const DEFAULT_WF2_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2";
+const DEFAULT_PLN_API_URL = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_pln";
+const DEFAULT_WF1_API_URL = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_wf1";
+const DEFAULT_WF2_API_URL = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_wf2";
 
 const DEFAULT_PLN_JSON_KEYS: Record<string, string> = {
   "pln/active_power": "Active_Power",
@@ -909,7 +909,7 @@ export default function Electricity() {
       });
   }, []);
 
-  const DEFAULT_PLTS_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_plts";
+  const DEFAULT_PLTS_API_URL = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_plts";
 
   // Poll active URLs (PLN, PLTS, WF1, WF2, etc.)
   useEffect(() => {
@@ -973,39 +973,9 @@ export default function Electricity() {
                   }
                 });
               }
-            } else {
-              // API returned success: false or invalid response
-              if (url.includes("electric_wf1")) {
-                setLiveWf1Kw(null);
-                setLiveWf1Status(false);
-              }
-              if (url.includes("electric_wf2")) {
-                setLiveWf2Kw(null);
-                setLiveWf2Status(false);
-              }
-              if (url.includes("electric_plts")) {
-                setPltsLive({
-                  poi1: { status: false, volt_ab: 0, active_power: 0, peak_demand: 0, total_kwh: 0, frequency: 0 },
-                  poi2: { status: false, volt_ab: 0, active_power: 0, peak_demand: 0, total_kwh: 0, frequency: 0 }
-                });
-              }
             }
           } catch (err) {
             console.error(`Live API poll error on Electricity for URL ${url}:`, err);
-            if (url.includes("electric_wf1")) {
-              setLiveWf1Kw(null);
-              setLiveWf1Status(false);
-            }
-            if (url.includes("electric_wf2")) {
-              setLiveWf2Kw(null);
-              setLiveWf2Status(false);
-            }
-            if (url.includes("electric_plts")) {
-              setPltsLive({
-                poi1: { status: false, volt_ab: 0, active_power: 0, peak_demand: 0, total_kwh: 0, frequency: 0 },
-                poi2: { status: false, volt_ab: 0, active_power: 0, peak_demand: 0, total_kwh: 0, frequency: 0 }
-              });
-            }
           }
         })
       );
@@ -2214,15 +2184,19 @@ export default function Electricity() {
 
   const apiPlnVal = getCleanNum(getApiVal("pln/active_power"));
   const rawPGridVal = livePGridKw !== null && livePGridKw !== undefined ? livePGridKw : apiPlnVal;
-  const isPlnOffline = pfStatus === "offline" || (rawPGridVal === null && (summaryData?.pqData?.activePower === null || summaryData?.pqData?.activePower === undefined || summaryData?.pqData?.pfStatus === "offline"));
+  const isPlnOffline = rawPGridVal === null
+    ? (summaryData?.pqData?.activePower === null || summaryData?.pqData?.activePower === undefined || summaryData?.pqData?.pfStatus === "offline" || pfStatus === "offline")
+    : false;
   const pGridNum = rawPGridVal !== null
     ? Math.max(0, rawPGridVal)
     : ((fact1Kw ?? 0) + (fact2Kw ?? 0) > 0)
     ? ((fact1Kw ?? 0) + (fact2Kw ?? 0))
     : (typeof summaryData?.pqData?.activePower === "number" && !isPlnOffline ? Math.max(0, summaryData.pqData.activePower) : null);
 
-  const isPoi1Offline = pltsLive.poi1.status === false || pltsLive.poi1.online === false || solarLive?.poi1?.status === false || (solarLive as any)?.online === false;
-  const isPoi2Offline = pltsLive.poi2.status === false || pltsLive.poi2.online === false || solarLive?.poi2?.status === false || (solarLive as any)?.online === false;
+  const hasPoi1Data = pltsLive.poi1.status === true || (typeof pltsLive.poi1.active_power === "number" && pltsLive.poi1.active_power > 0) || solarLive?.poi1?.status === true;
+  const isPoi1Offline = !hasPoi1Data && (pltsLive.poi1.status === false || solarLive?.poi1?.status === false);
+  const hasPoi2Data = pltsLive.poi2.status === true || (typeof pltsLive.poi2.active_power === "number" && pltsLive.poi2.active_power > 0) || solarLive?.poi2?.status === true;
+  const isPoi2Offline = !hasPoi2Data && (pltsLive.poi2.status === false || solarLive?.poi2?.status === false);
   const poi1Kw = !isPoi1Offline ? Math.max(0, pltsLive.poi1.active_power || solarLive?.poi1?.activePower || 0) : null;
   const poi2Kw = !isPoi2Offline ? Math.max(0, pltsLive.poi2.active_power || solarLive?.poi2?.activePower || 0) : null;
   const isSolarOffline = isPoi1Offline && isPoi2Offline;

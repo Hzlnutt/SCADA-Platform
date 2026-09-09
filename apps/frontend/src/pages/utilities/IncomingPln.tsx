@@ -16,9 +16,9 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
 const DEFAULT_API_URLS: Record<string, string> = {
-  pln: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln",
-  fact1: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1",
-  fact2: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2"
+  pln: "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_pln",
+  fact1: "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_wf1",
+  fact2: "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_wf2"
 };
 
 const DEFAULT_JSON_KEYS: Record<string, string> = {

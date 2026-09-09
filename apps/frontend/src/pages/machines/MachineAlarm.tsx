@@ -92,7 +92,7 @@ export default function MachineAlarm() {
     const defaultSensors = getDefaultSensorConfigs(unitId);
     const defaultMap: Record<string, string> = {};
     if (unitId.startsWith("cooling-water")) {
-      const defaultUrl = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3";
+      const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
       defaultSensors.forEach((s) => {
         defaultMap[s.tagKey] = defaultUrl;
       });
