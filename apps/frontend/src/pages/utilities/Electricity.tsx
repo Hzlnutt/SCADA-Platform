@@ -14,6 +14,7 @@ import { ApiSourcesPanel } from "../machines/MachineConfig";
 import { useAuthStore } from "../../store/auth.store";
 import { canAccessConfigAndAudit } from "../../utils/roles";
 import { ElectricityExportModal } from "../../components/electricity/ElectricityExportModal";
+import { ErrorBoundary } from "../../components/ui/ErrorBoundary";
 
 /* ═══════════ CONSTANTS ═══════════ */
 const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
@@ -3578,11 +3579,13 @@ export default function Electricity() {
       )}
 
       {/* Electricity Export Excel Modal */}
-      <ElectricityExportModal
-        isOpen={showExportModal}
-        onClose={() => setShowExportModal(false)}
-        isDark={isDark}
-      />
+      <ErrorBoundary>
+        <ElectricityExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          isDark={isDark}
+        />
+      </ErrorBoundary>
     </div>
   );
 }

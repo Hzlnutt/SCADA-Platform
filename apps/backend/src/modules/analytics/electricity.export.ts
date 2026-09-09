@@ -14,6 +14,7 @@ export interface ElectricityExportParams {
 export interface ElectricityExportItemSummary {
   no: number;
   name: string;
+  itemName?: string;
   lwbp: number;
   wbp: number;
   totalKwh: number;
@@ -226,8 +227,9 @@ export async function getElectricityExportData(params: ElectricityExportParams):
       const isWbp = wibHour >= 17 && wibHour <= 21;
 
       let pf: number | null = null;
-      if (curr.power_factor !== null && curr.power_factor !== undefined && !isNaN(Number(curr.power_factor)) && Number(curr.power_factor) > 0) {
-        pf = Math.min(1.0, Math.max(0.70, Number(Number(curr.power_factor).toFixed(3))));
+      const rawPfNum = curr.power_factor !== null && curr.power_factor !== undefined ? Math.abs(Number(curr.power_factor)) : null;
+      if (rawPfNum !== null && !isNaN(rawPfNum) && rawPfNum > 0) {
+        pf = Math.min(1.0, Math.max(0.70, Number(rawPfNum.toFixed(3))));
       } else if (!isSolar) {
         pf = defaultPf;
       } else {
@@ -462,6 +464,7 @@ export async function getElectricityExportData(params: ElectricityExportParams):
     return {
       no: i + 1,
       name: itemName,
+      itemName: itemName,
       lwbp: Number(s.lwbp.toFixed(2)),
       wbp: Number(s.wbp.toFixed(2)),
       totalKwh,

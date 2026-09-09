@@ -10,7 +10,9 @@ interface Props {
 type ResolutionType = "hour" | "day" | "week" | "month" | "year";
 
 interface SummaryItem {
-  itemName: string;
+  no?: number;
+  name?: string;
+  itemName?: string;
   lwbp: number;
   wbp: number;
   avgPowerFactor: number;
@@ -389,36 +391,42 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {previewData?.summary?.items && previewData.summary.items.length > 0 ? (
                         previewData.summary.items.map((item, idx) => {
-                          const totKwh = item.lwbp + item.wbp;
+                          const name = item.itemName || item.name || `Item ${idx + 1}`;
+                          const lwbp = item.lwbp ?? 0;
+                          const wbp = item.wbp ?? 0;
+                          const totKwh = lwbp + wbp;
+                          const pfStr = typeof item.avgPowerFactor === "number" && !isNaN(item.avgPowerFactor)
+                            ? item.avgPowerFactor.toFixed(3)
+                            : "-";
                           return (
                             <tr key={idx} className="hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition">
                               <td className="py-2 px-3 font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                                 <span className={`h-2 w-2 rounded-full ${
-                                  item.itemName.startsWith("POI") ? "bg-emerald-500" :
-                                  item.itemName === "Incoming PLN" ? "bg-blue-500" : "bg-cyan-500"
+                                  name.startsWith("POI") ? "bg-emerald-500" :
+                                  name === "Incoming PLN" ? "bg-blue-500" : "bg-cyan-500"
                                 }`} />
-                                {item.itemName}
+                                {name}
                               </td>
                               <td className="py-2 px-3 text-right font-mono text-slate-600 dark:text-slate-300">
-                                {formatNumber(item.lwbp)}
+                                {formatNumber(lwbp)}
                               </td>
                               <td className="py-2 px-3 text-right font-mono text-slate-600 dark:text-slate-300">
-                                {formatNumber(item.wbp)}
+                                {formatNumber(wbp)}
                               </td>
                               <td className="py-2 px-3 text-right font-mono font-bold text-slate-800 dark:text-slate-100">
                                 {formatNumber(totKwh)}
                               </td>
                               <td className="py-2 px-3 text-right font-mono text-purple-600 dark:text-purple-400 font-semibold">
-                                {item.avgPowerFactor.toFixed(3)}
+                                {pfStr}
                               </td>
                               <td className="py-2 px-3 text-right font-mono text-slate-700 dark:text-slate-200">
-                                {formatCurrency(item.estCost)}
+                                {formatCurrency(item.estCost ?? 0)}
                               </td>
                               <td className="py-2 px-3 text-right font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-                                {item.estPenghematan > 0 ? formatCurrency(item.estPenghematan) : "Rp 0"}
+                                {(item.estPenghematan ?? 0) > 0 ? formatCurrency(item.estPenghematan) : "Rp 0"}
                               </td>
                               <td className="py-2 px-3 text-right font-mono text-blue-600 dark:text-cyan-400 font-bold">
-                                {formatCurrency(item.estNetCost)}
+                                {formatCurrency(item.estNetCost ?? 0)}
                               </td>
                             </tr>
                           );
@@ -436,25 +444,27 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                         <tr>
                           <td className="py-2.5 px-3 text-slate-800 dark:text-white">TOTAL KESELURUHAN</td>
                           <td className="py-2.5 px-3 text-right font-mono text-slate-800 dark:text-slate-100">
-                            {formatNumber(previewData.summary.items.reduce((a, b) => a + b.lwbp, 0))}
+                            {formatNumber(previewData.summary.items.reduce((a, b) => a + (b.lwbp ?? 0), 0))}
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono text-slate-800 dark:text-slate-100">
-                            {formatNumber(previewData.summary.items.reduce((a, b) => a + b.wbp, 0))}
+                            {formatNumber(previewData.summary.items.reduce((a, b) => a + (b.wbp ?? 0), 0))}
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono text-slate-900 dark:text-white font-extrabold">
-                            {formatNumber(previewData.summary.items.reduce((a, b) => a + b.lwbp + b.wbp, 0))}
+                            {formatNumber(previewData.summary.items.reduce((a, b) => a + (b.lwbp ?? 0) + (b.wbp ?? 0), 0))}
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono text-purple-600 dark:text-purple-400">
-                            {previewData.summary.avgPowerFactor.toFixed(3)}
+                            {typeof previewData.summary?.avgPowerFactor === "number" && !isNaN(previewData.summary.avgPowerFactor)
+                              ? previewData.summary.avgPowerFactor.toFixed(3)
+                              : "-"}
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono text-slate-900 dark:text-white">
-                            {formatCurrency(previewData.summary.totalCost)}
+                            {formatCurrency(previewData.summary?.totalCost ?? 0)}
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
-                            {formatCurrency(previewData.summary.totalPenghematan)}
+                            {formatCurrency(previewData.summary?.totalPenghematan ?? 0)}
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono text-blue-600 dark:text-cyan-400 font-extrabold">
-                            {formatCurrency(previewData.summary.totalNetCost)}
+                            {formatCurrency(previewData.summary?.totalNetCost ?? 0)}
                           </td>
                         </tr>
                       </tfoot>
@@ -519,7 +529,9 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                             <td className="py-1.5 px-2 text-right text-yellow-600 dark:text-yellow-400">{formatCurrency(r.est_cost_pv)}</td>
                             <td className="py-1.5 px-2 text-right text-green-600 dark:text-green-400 font-semibold">{formatCurrency(r.est_saving)}</td>
                             <td className="py-1.5 px-2 text-right text-blue-700 dark:text-cyan-400 font-bold">{formatCurrency(r.est_net_cost)}</td>
-                            <td className="py-1.5 px-2 text-right text-purple-600 dark:text-purple-400">{r.pf.toFixed(3)}</td>
+                            <td className="py-1.5 px-2 text-right text-purple-600 dark:text-purple-400">
+                              {typeof r.pf === "number" && !isNaN(r.pf) ? r.pf.toFixed(3) : "-"}
+                            </td>
                           </tr>
                         ))
                       ) : (

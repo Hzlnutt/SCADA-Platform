@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { MobileNav } from "../components/navigation/MobileNav";
 import { Sidebar } from "../components/sidebar/Sidebar";
 import { Topbar } from "../components/topbar/Topbar";
+import { ErrorBoundary } from "../components/ui/ErrorBoundary";
 
 export const AppLayout = () => {
   return (
@@ -14,7 +15,9 @@ export const AppLayout = () => {
             <MobileNav />
           </div>
           <div className="px-5 py-5 lg:px-6">
-            <Outlet />
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
           </div>
         </main>
       </div>
