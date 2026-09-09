@@ -1731,6 +1731,58 @@ export default function Electricity() {
     solarEndDate
   ]);
 
+  // Executive period label for the top summary cards
+  const executivePeriodLabel = useMemo(() => {
+    if (range === "hour") return "Hari Ini (Per Jam)";
+    if (range === "day") return `${MONTH_NAMES_ID[selectedMonth]} ${selectedYear}`;
+    if (range === "month") return `Tahun ${selectedYear}`;
+    if (range === "ytd") return `YTD ${selectedYear}`;
+    if (range === "custom") return `${chartStartDate} s/d ${chartEndDate}`;
+    return "Hari Ini";
+  }, [range, selectedMonth, selectedYear, chartStartDate, chartEndDate]);
+
+  // Executive summary combining PLN and Solar PV
+  const executiveSummary = useMemo(() => {
+    const plnCost = cardSummary.totalCost;
+    const plnKwh = cardSummary.totalKwh;
+
+    const totalPvKwh = (solarFilteredMetrics.poi1Kwh || 0) + (solarFilteredMetrics.poi2Kwh || 0);
+    const effectiveLwbpRate = typeof lwbpRate === "number" && lwbpRate > 0 ? lwbpRate : (Number(solarData?.summary?.solarRate) || 1112);
+    const effectivePvRate = typeof pvRate === "number" ? pvRate : (Number(solarData?.summary?.pvRate) || 0);
+
+    const pvCost = totalPvKwh * effectivePvRate;
+    const savingsRate = Math.max(0, effectiveLwbpRate - effectivePvRate);
+    const savingsCost = totalPvKwh * savingsRate;
+
+    const totalCost = plnCost + pvCost;
+    const totalKwh = plnKwh + totalPvKwh;
+    const netCost = Math.max(0, totalCost - savingsCost);
+
+    const pctCostPln = totalCost > 0 ? (plnCost / totalCost) * 100 : 0;
+    const pctCostPv = totalCost > 0 ? (pvCost / totalCost) * 100 : 0;
+
+    const pctKwhPln = totalKwh > 0 ? (plnKwh / totalKwh) * 100 : 0;
+    const pctKwhPv = totalKwh > 0 ? (totalPvKwh / totalKwh) * 100 : 0;
+
+    return {
+      plnCost,
+      pvCost,
+      totalCost,
+      pctCostPln,
+      pctCostPv,
+      plnKwh,
+      totalPvKwh,
+      totalKwh,
+      pctKwhPln,
+      pctKwhPv,
+      effectiveLwbpRate,
+      effectivePvRate,
+      savingsRate,
+      savingsCost,
+      netCost
+    };
+  }, [cardSummary, solarFilteredMetrics, lwbpRate, pvRate, solarData]);
+
   const solarBarData = useMemo(() => {
     const datasets: any[] = [];
     if (solarShowPoi1) {
@@ -2235,6 +2287,175 @@ export default function Electricity() {
         </div>
       </section>
 
+      {/* ═══════════ SECTION: TOTAL REKAPITULASI BIAYA & ENERGI (PLN + PV) ═══════════ */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400">
+              Total Rekapitulasi Biaya & Konsumsi Listrik
+            </h3>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+              PLN + Solar PV
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+            <span>Periode: <strong className="text-slate-700 dark:text-slate-200">{executivePeriodLabel}</strong></span>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Card 1: Total Biaya Listrik (PLN + PV) */}
+          <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                  Total Biaya Listrik
+                </span>
+                <div className="h-6 w-6 rounded bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                  <IconMoney />
+                </div>
+              </div>
+              <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                {summaryLoading && !summaryData ? "..." : formatCurrency(executiveSummary.totalCost)}
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60">
+              {/* Ratio bar */}
+              <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
+                <div 
+                  className="bg-blue-500 transition-all duration-500" 
+                  style={{ width: `${executiveSummary.pctCostPln}%` }} 
+                  title={`PLN: ${executiveSummary.pctCostPln.toFixed(1)}%`}
+                />
+                <div 
+                  className="bg-amber-500 transition-all duration-500" 
+                  style={{ width: `${executiveSummary.pctCostPv}%` }} 
+                  title={`PV: ${executiveSummary.pctCostPv.toFixed(1)}%`}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />
+                  PLN: <strong className="text-blue-600 dark:text-blue-400 font-mono">{executiveSummary.pctCostPln.toFixed(1)}%</strong>
+                  <span className="text-slate-400">({formatCurrency(executiveSummary.plnCost)})</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" />
+                  PV: <strong className="text-amber-600 dark:text-amber-400 font-mono">{executiveSummary.pctCostPv.toFixed(1)}%</strong>
+                  <span className="text-slate-400">({formatCurrency(executiveSummary.pvCost)})</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Total Konsumsi Energi (PLN + PV) */}
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                  Total Konsumsi Energi
+                </span>
+                <div className="h-6 w-6 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
+                  <IconBolt />
+                </div>
+              </div>
+              <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                {summaryLoading && !summaryData ? "..." : `${formatNumber(executiveSummary.totalKwh)} kWh`}
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60">
+              {/* Ratio bar */}
+              <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
+                <div 
+                  className="bg-blue-500 transition-all duration-500" 
+                  style={{ width: `${executiveSummary.pctKwhPln}%` }} 
+                  title={`PLN: ${executiveSummary.pctKwhPln.toFixed(1)}%`}
+                />
+                <div 
+                  className="bg-emerald-500 transition-all duration-500" 
+                  style={{ width: `${executiveSummary.pctKwhPv}%` }} 
+                  title={`PV: ${executiveSummary.pctKwhPv.toFixed(1)}%`}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />
+                  PLN: <strong className="text-blue-600 dark:text-blue-400 font-mono">{executiveSummary.pctKwhPln.toFixed(1)}%</strong>
+                  <span className="text-slate-400">({formatNumber(executiveSummary.plnKwh)} kWh)</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block" />
+                  PV: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{executiveSummary.pctKwhPv.toFixed(1)}%</strong>
+                  <span className="text-slate-400">({formatNumber(executiveSummary.totalPvKwh)} kWh)</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Estimasi Penghematan */}
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  Estimasi Penghematan
+                </span>
+                <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                  <IconMoney />
+                </div>
+              </div>
+              <div className="mt-2 text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-tight">
+                {summaryLoading && !summaryData ? "..." : formatCurrency(executiveSummary.savingsCost)}
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60 flex flex-col gap-1 text-[10px]">
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                <span>Total PV (POI-1 + POI-2):</span>
+                <strong className="text-slate-700 dark:text-slate-200 font-mono">{formatNumber(executiveSummary.totalPvKwh)} kWh</strong>
+              </div>
+              <div className="text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                <span>Selisih Tarif LWBP - PV:</span>
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+                  Rp {executiveSummary.savingsRate.toLocaleString("id-ID")}/kWh
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Net Biaya Listrik */}
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30 p-4 hover:border-cyan-400 transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                  Net Biaya Listrik
+                </span>
+                <div className="h-6 w-6 rounded bg-cyan-500/10 flex items-center justify-center text-cyan-500">
+                  <IconMoney />
+                </div>
+              </div>
+              <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                {summaryLoading && !summaryData ? "..." : formatCurrency(executiveSummary.netCost)}
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60 flex flex-col gap-1 text-[10px]">
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                <span>Setelah Penghematan:</span>
+                <span className="font-bold text-cyan-600 dark:text-cyan-400 font-mono">
+                  {executiveSummary.totalCost > 0 ? ((executiveSummary.savingsCost / executiveSummary.totalCost) * 100).toFixed(1) : 0}% terhemat
+                </span>
+              </div>
+              <div className="text-slate-400 dark:text-slate-500 truncate" title="Total Biaya Listrik - Estimasi Penghematan">
+                Total Biaya - Penghematan
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ═══════════ SECTION B: PLN DETAIL ═══════════ */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
@@ -2305,25 +2526,65 @@ export default function Electricity() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {(range === "ytd" || range === "day" || range === "month") && (
-                <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition">
+                <select
+                  value={selectedYear}
+                  onChange={(e) => {
+                    const yr = Number(e.target.value);
+                    setSelectedYear(yr);
+                    setSolarSelectedYear(yr);
+                  }}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                >
                   {AVAILABLE_YEARS.map((yr) => <option key={yr} value={yr}>{yr}</option>)}
                 </select>
               )}
               {range === "day" && (
-                <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition">
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => {
+                    const mo = Number(e.target.value);
+                    setSelectedMonth(mo);
+                    setSolarSelectedMonth(mo);
+                  }}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                >
                   {MONTH_NAMES_ID.map((name, idx) => <option key={idx} value={idx}>{name}</option>)}
                 </select>
               )}
               {range === "custom" && (
                 <div className="flex items-center gap-2">
-                  <input type="date" value={chartStartDate} onChange={(e) => setChartStartDate(e.target.value)} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition" />
+                  <input
+                    type="date"
+                    value={chartStartDate}
+                    onChange={(e) => {
+                      setChartStartDate(e.target.value);
+                      setSolarStartDate(e.target.value);
+                    }}
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                  />
                   <span className="text-xs font-bold text-slate-400">s/d</span>
-                  <input type="date" value={chartEndDate} onChange={(e) => setChartEndDate(e.target.value)} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition" />
+                  <input
+                    type="date"
+                    value={chartEndDate}
+                    onChange={(e) => {
+                      setChartEndDate(e.target.value);
+                      setSolarEndDate(e.target.value);
+                    }}
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                  />
                 </div>
               )}
               <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-0.5 text-xs">
                 {ranges.map((item) => (
-                  <button key={item.id} type="button" onClick={() => setRange(item.id)} className={`rounded-md px-3 py-1.5 font-bold transition-all ${range === item.id ? "bg-cyan-500 text-white shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"}`}>
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setRange(item.id);
+                      setSolarRange(item.id);
+                    }}
+                    className={`rounded-md px-3 py-1.5 font-bold transition-all ${range === item.id ? "bg-cyan-500 text-white shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"}`}
+                  >
                     {item.label}
                   </button>
                 ))}
@@ -2374,7 +2635,7 @@ export default function Electricity() {
             ONLINE
           </span>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
           {/* Estimasi Biaya PV */}
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
             <div className="flex items-center justify-between">
@@ -2386,20 +2647,6 @@ export default function Electricity() {
             </div>
             <div className="mt-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
               {formatNumber(solarFilteredMetrics.totalKwh)} kWh ({solarFilteredMetrics.periodLabel})
-            </div>
-          </div>
-
-          {/* Estimasi Penghematan */}
-          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Estimasi Penghematan</span>
-              <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500"><IconMoney /></div>
-            </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
-              {formatCurrency(solarFilteredMetrics.savingsCost)}
-            </div>
-            <div className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-              Selisih PLN (LWBP) - Biaya PV
             </div>
           </div>
 
@@ -2530,7 +2777,11 @@ export default function Electricity() {
               {(solarRange === "ytd" || solarRange === "day" || solarRange === "month") && (
                 <select
                   value={solarSelectedYear}
-                  onChange={(e) => setSolarSelectedYear(Number(e.target.value))}
+                  onChange={(e) => {
+                    const yr = Number(e.target.value);
+                    setSolarSelectedYear(yr);
+                    setSelectedYear(yr);
+                  }}
                   className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
                 >
                   {AVAILABLE_YEARS.map((yr) => <option key={yr} value={yr}>{yr}</option>)}
@@ -2539,7 +2790,11 @@ export default function Electricity() {
               {solarRange === "day" && (
                 <select
                   value={solarSelectedMonth}
-                  onChange={(e) => setSolarSelectedMonth(Number(e.target.value))}
+                  onChange={(e) => {
+                    const mo = Number(e.target.value);
+                    setSolarSelectedMonth(mo);
+                    setSelectedMonth(mo);
+                  }}
                   className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
                 >
                   {MONTH_NAMES_ID.map((name, idx) => <option key={idx} value={idx}>{name}</option>)}
@@ -2550,14 +2805,20 @@ export default function Electricity() {
                   <input
                     type="date"
                     value={solarStartDate}
-                    onChange={(e) => setSolarStartDate(e.target.value)}
+                    onChange={(e) => {
+                      setSolarStartDate(e.target.value);
+                      setChartStartDate(e.target.value);
+                    }}
                     className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
                   />
                   <span className="text-xs font-bold text-slate-400">s/d</span>
                   <input
                     type="date"
                     value={solarEndDate}
-                    onChange={(e) => setSolarEndDate(e.target.value)}
+                    onChange={(e) => {
+                      setSolarEndDate(e.target.value);
+                      setChartEndDate(e.target.value);
+                    }}
                     className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
                   />
                 </div>
@@ -2569,7 +2830,10 @@ export default function Electricity() {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setSolarRange(item.id)}
+                    onClick={() => {
+                      setSolarRange(item.id);
+                      setRange(item.id);
+                    }}
                     className={`rounded-md px-3 py-1.5 font-bold transition-all ${
                       solarRange === item.id
                         ? "bg-cyan-500 text-white shadow-sm"
