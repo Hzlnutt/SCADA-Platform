@@ -544,9 +544,12 @@ export default function MachineConfig() {
             });
             if (res && res.success && res.data) {
               aggregatedData[url] = res.data;
+            } else {
+              aggregatedData[url] = null;
             }
           } catch (err) {
             console.error(`Live API poll error for URL ${url}:`, err);
+            aggregatedData[url] = null;
           }
         })
       );
@@ -1833,6 +1836,8 @@ export default function MachineConfig() {
                     liveValStr = typeof rawVal === "number" ? rawVal.toFixed(2) : String(rawVal);
                   }
 
+                  const isPollFailed = hasUrl && urlData === null;
+
                   return (
                     <tr key={sensor.tagKey || idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                       <td className="py-3 px-3 text-center font-mono text-slate-400 font-bold">
@@ -1858,14 +1863,12 @@ export default function MachineConfig() {
                           </div>
                         ) : (
                           <>
-                            <div className="font-bold text-[#002b5c] dark:text-slate-200">
-                              {sensor.tagName}
-                            </div>
-                            <div className="text-[10px] text-slate-400 font-mono">{sensor.unit}</div>
+                            <div className="font-bold text-xs">{sensor.tagName}</div>
+                            <div className="text-[10px] text-slate-400">{sensor.unit}</div>
                           </>
                         )}
                       </td>
-                      <td className="py-3 px-3 font-mono text-[11px] text-[#47729f] dark:text-slate-400">
+                      <td className="py-3 px-3 font-mono text-[11px] text-slate-500">
                         {isUnlocked ? (
                           <input
                             type="text"
@@ -1917,12 +1920,14 @@ export default function MachineConfig() {
                           className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
                             isValPresent
                               ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                              : isPollFailed
+                              ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
                               : hasUrl
                               ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
                               : "bg-slate-500/10 text-slate-400 border-slate-500/20"
                           }`}
                         >
-                          {isValPresent ? "⚡ API Active" : hasUrl ? "⏳ No Data" : "⏳ belum ada api"}
+                          {isValPresent ? "⚡ API Active" : isPollFailed ? "⚠️ Gagal Polling API" : hasUrl ? "⏳ No Data" : "⏳ belum ada api"}
                         </span>
                       </td>
                       <td className="py-3 px-3 text-right font-mono font-bold text-xs">
@@ -1931,6 +1936,8 @@ export default function MachineConfig() {
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                             {liveValStr} {sensor.unit}
                           </span>
+                        ) : isPollFailed ? (
+                          <span className="text-amber-500 font-mono font-bold text-xs">Gagal Polling API</span>
                         ) : (
                           <span className="text-slate-400 italic font-mono">xx {sensor.unit}</span>
                         )}

@@ -53,9 +53,12 @@ export function SensorIndicator({
       return { color: customColor, display };
     }
 
-    // ── Jika value adalah string info status (seperti "Belum Ada API" atau "XX") ──
+    // ── Jika value adalah string info status (seperti "Belum Ada API", "Gagal Polling API", atau "XX") ──
     if (typeof value === 'string') {
       const upper = value.toUpperCase();
+      if (upper.includes("GAGAL") || upper.includes("OFFLINE")) {
+        return { color: "#f59e0b", display: "FAIL" };
+      }
       if (upper.includes("BELUM") || upper.includes("NO API") || upper === "XX" || upper.includes("TIDAK")) {
         return { color: "#ff2222", display: "xx" };
       }

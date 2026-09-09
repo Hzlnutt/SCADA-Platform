@@ -318,9 +318,12 @@ export default function MachinePidDiagram() {
             });
             if (res && res.success && res.data) {
               aggregatedData[url] = res.data;
+            } else {
+              aggregatedData[url] = null;
             }
           } catch (err) {
             console.error(`Live API poll error on P&ID diagram for URL ${url}:`, err);
+            aggregatedData[url] = null;
           }
         })
       );
@@ -369,6 +372,13 @@ export default function MachinePidDiagram() {
               quality: "good",
               meta: { tagId: tagKey }
             };
+          } else if (apiLiveData[retUrl] === null || apiLiveData[suppUrl] === null) {
+            merged[tagKey] = {
+              ts: new Date().toISOString(),
+              value: "Gagal Polling API",
+              quality: "bad",
+              meta: { tagId: tagKey }
+            };
           } else {
             merged[tagKey] = {
               ts: new Date().toISOString(),
@@ -392,7 +402,7 @@ export default function MachinePidDiagram() {
         }
 
         let val = apiLiveData[url]?.[jsonKey];
-        if (val === undefined && jsonKey) {
+        if (val === undefined && jsonKey && apiLiveData[url]) {
           if (jsonKey === "Scaled_Temp_Tank_Cooling3_Supp") val = apiLiveData[url]?.["Scaled_Temp_Tank_Colling3_Supp"];
           else if (jsonKey === "Scaled_Temp_Tank_Colling3_Supp") val = apiLiveData[url]?.["Scaled_Temp_Tank_Cooling3_Supp"];
           else if (jsonKey === "Scaled_Temp_Tank_Cooling3_Return") val = apiLiveData[url]?.["Scaled_Temp_Tank_Colling3_Return"];
@@ -401,18 +411,25 @@ export default function MachinePidDiagram() {
           else if (jsonKey === "Scaled_Press_PrepU3") val = apiLiveData[url]?.["Scaled_Press_Prep3"];
         }
 
-        if (val === undefined || val === null) {
+        if (val !== undefined && val !== null) {
           merged[tagKey] = {
             ts: new Date().toISOString(),
-            value: "xx",
+            value: val,
+            quality: "good",
+            meta: { tagId: tagKey }
+          };
+        } else if (apiLiveData[url] === null) {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: "Gagal Polling API",
             quality: "bad",
             meta: { tagId: tagKey }
           };
         } else {
           merged[tagKey] = {
             ts: new Date().toISOString(),
-            value: val,
-            quality: "good",
+            value: "xx",
+            quality: "bad",
             meta: { tagId: tagKey }
           };
         }

@@ -823,6 +823,15 @@ export const ensurePostgresTables = async () => {
 
       ALTER TABLE electric_plts_telemetry ADD COLUMN IF NOT EXISTS power_factor NUMERIC;
       ALTER TABLE electric_plts_telemetry_minute ADD COLUMN IF NOT EXISTS power_factor NUMERIC;
+
+      DELETE FROM electric_wf1_telemetry_minute a USING electric_wf1_telemetry_minute b WHERE a.id < b.id AND a.t_stamp = b.t_stamp;
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_wf1_minute_tstamp ON electric_wf1_telemetry_minute (t_stamp);
+
+      DELETE FROM electric_wf2_telemetry_minute a USING electric_wf2_telemetry_minute b WHERE a.id < b.id AND a.t_stamp = b.t_stamp;
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_wf2_minute_tstamp ON electric_wf2_telemetry_minute (t_stamp);
+
+      DELETE FROM electric_plts_telemetry_minute a USING electric_plts_telemetry_minute b WHERE a.id < b.id AND a.t_stamp = b.t_stamp AND a.poi_id = b.poi_id;
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_plts_minute_tstamp ON electric_plts_telemetry_minute (t_stamp, poi_id);
     `).catch((err) => {
       logger.warn({ err }, "Failed to create minute buffer tables");
     });

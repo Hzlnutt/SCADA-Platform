@@ -299,6 +299,29 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
     )
+    ON CONFLICT (t_stamp) DO UPDATE SET
+      status_pm5500 = EXCLUDED.status_pm5500,
+      volt_ab = EXCLUDED.volt_ab,
+      volt_bc = EXCLUDED.volt_bc,
+      volt_ca = EXCLUDED.volt_ca,
+      volt_ll = EXCLUDED.volt_ll,
+      current_a = EXCLUDED.current_a,
+      current_b = EXCLUDED.current_b,
+      current_c = EXCLUDED.current_c,
+      frequency = EXCLUDED.frequency,
+      active_power_total = EXCLUDED.active_power_total,
+      reactive_power_total = EXCLUDED.reactive_power_total,
+      apparent_power_total = EXCLUDED.apparent_power_total,
+      power_factor = EXCLUDED.power_factor,
+      voltage_unbalance = EXCLUDED.voltage_unbalance,
+      current_unbalance = EXCLUDED.current_unbalance,
+      thd_volt_a = EXCLUDED.thd_volt_a,
+      thd_volt_b = EXCLUDED.thd_volt_b,
+      thd_volt_c = EXCLUDED.thd_volt_c,
+      thd_current_a = EXCLUDED.thd_current_a,
+      thd_current_b = EXCLUDED.thd_current_b,
+      thd_current_c = EXCLUDED.thd_current_c,
+      active_energy = EXCLUDED.active_energy;
   `, [
     minuteTs, payload.status_pm5500, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
     payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power_total,
@@ -428,6 +451,19 @@ const insertPltsMinuteTelemetry = async (records: ElectricPltsRecord[], minuteTs
         INSERT INTO electric_plts_telemetry_minute (
           t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh, power_factor
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ON CONFLICT (t_stamp, poi_id) DO UPDATE SET
+          status = EXCLUDED.status,
+          volt_ab = EXCLUDED.volt_ab,
+          volt_bc = EXCLUDED.volt_bc,
+          volt_ca = EXCLUDED.volt_ca,
+          volt_an = EXCLUDED.volt_an,
+          volt_bn = EXCLUDED.volt_bn,
+          volt_cn = EXCLUDED.volt_cn,
+          frequency = EXCLUDED.frequency,
+          active_power = EXCLUDED.active_power,
+          total_kwh = EXCLUDED.total_kwh,
+          total_kvarh = EXCLUDED.total_kvarh,
+          power_factor = EXCLUDED.power_factor;
       `, [
         minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power ?? null, r.total_kwh ?? null, r.total_kvarh ?? null, minutePf
       ]);
@@ -2207,6 +2243,12 @@ export const startCoolingTowerPolling = () => {
         return data[jk];
       };
 
+      const getStatusVal = (tagId: string): number | null => {
+        const v = getVal(tagId);
+        if (v === undefined || v === null) return null;
+        return v ? 1 : 0;
+      };
+
       const retVal = getVal("cooling-water/return_temp");
       const suppVal = getVal("cooling-water/supply_temp");
       const deltaVal = (typeof retVal === "number" && typeof suppVal === "number")
@@ -2215,68 +2257,65 @@ export const startCoolingTowerPolling = () => {
 
       // Map API fields to telemetry tag points
       const pointsMapping = [
-        { tagId: "cooling-water/fan_status_1", value: getVal("cooling-water/fan_status_1") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/fan_status_2", value: getVal("cooling-water/fan_status_2") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/fan_status_3", value: getVal("cooling-water/fan_status_3") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/motor_status_1", value: getVal("cooling-water/motor_status_1") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/motor_status_2", value: getVal("cooling-water/motor_status_2") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/motor_status_3", value: getVal("cooling-water/motor_status_3") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/pressure_1", value: getVal("cooling-water/pressure_1"), unit: "bar" },
-        { tagId: "cooling-water/pressure_2", value: getVal("cooling-water/pressure_2"), unit: "bar" },
-        { tagId: "cooling-water/pressure_3", value: getVal("cooling-water/pressure_3"), unit: "bar" },
-        { tagId: "cooling-water/basin_lvl", value: getVal("cooling-water/basin_lvl"), unit: "%" },
-        { tagId: "cooling-water/eq_status_du03", value: getVal("cooling-water/eq_status_du03") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/eq_press_du03", value: getVal("cooling-water/eq_press_du03"), unit: "bar" },
-        { tagId: "cooling-water/eq_status_bp03", value: getVal("cooling-water/eq_status_bp03") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/eq_press_bp03", value: getVal("cooling-water/eq_press_bp03"), unit: "bar" },
-        { tagId: "cooling-water/eq_status_prep03", value: getVal("cooling-water/eq_status_prep03") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/eq_press_prep03", value: getVal("cooling-water/eq_press_prep03"), unit: "bar" },
-        { tagId: "cooling-water/eq_status_st03", value: getVal("cooling-water/eq_status_st03") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/eq_press_st03", value: getVal("cooling-water/eq_press_st03"), unit: "bar" },
-        { tagId: "cooling-water/eq_status_washing", value: getVal("cooling-water/eq_status_washing") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/eq_press_washing", value: getVal("cooling-water/eq_press_washing"), unit: "bar" },
-        { tagId: "cooling-water/supply_temp", value: suppVal, unit: "C" },
-        { tagId: "cooling-water/return_temp", value: retVal, unit: "C" },
-        { tagId: "cooling-water/st3_return_temp", value: getVal("cooling-water/st3_return_temp"), unit: "C" },
-        { tagId: "cooling-water/eq_temp_du03", value: getVal("cooling-water/eq_temp_du03"), unit: "C" },
-        { tagId: "cooling-water/eq_temp_prep03", value: getVal("cooling-water/eq_temp_prep03"), unit: "C" },
-        { tagId: "cooling-water/eq_temp_washing", value: getVal("cooling-water/eq_temp_washing"), unit: "C" },
-        { tagId: "cooling-water/eq_temp_st03_supply", value: getVal("cooling-water/eq_temp_st03_supply"), unit: "C" },
-        { tagId: "cooling-water/st3_heating", value: getVal("cooling-water/st3_heating") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/st3_cooling", value: getVal("cooling-water/st3_cooling") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/st3_steril", value: getVal("cooling-water/st3_steril") ? 1 : 0, unit: "status" },
+        { tagId: "cooling-water/fan_status_1", value: getStatusVal("cooling-water/fan_status_1"), unit: "status" },
+        { tagId: "cooling-water/fan_status_2", value: getStatusVal("cooling-water/fan_status_2"), unit: "status" },
+        { tagId: "cooling-water/fan_status_3", value: getStatusVal("cooling-water/fan_status_3"), unit: "status" },
+        { tagId: "cooling-water/motor_status_1", value: getStatusVal("cooling-water/motor_status_1"), unit: "status" },
+        { tagId: "cooling-water/motor_status_2", value: getStatusVal("cooling-water/motor_status_2"), unit: "status" },
+        { tagId: "cooling-water/motor_status_3", value: getStatusVal("cooling-water/motor_status_3"), unit: "status" },
+        { tagId: "cooling-water/pressure_1", value: getVal("cooling-water/pressure_1") ?? null, unit: "bar" },
+        { tagId: "cooling-water/pressure_2", value: getVal("cooling-water/pressure_2") ?? null, unit: "bar" },
+        { tagId: "cooling-water/pressure_3", value: getVal("cooling-water/pressure_3") ?? null, unit: "bar" },
+        { tagId: "cooling-water/basin_lvl", value: getVal("cooling-water/basin_lvl") ?? null, unit: "%" },
+        { tagId: "cooling-water/eq_status_du03", value: getStatusVal("cooling-water/eq_status_du03"), unit: "status" },
+        { tagId: "cooling-water/eq_press_du03", value: getVal("cooling-water/eq_press_du03") ?? null, unit: "bar" },
+        { tagId: "cooling-water/eq_status_bp03", value: getStatusVal("cooling-water/eq_status_bp03"), unit: "status" },
+        { tagId: "cooling-water/eq_press_bp03", value: getVal("cooling-water/eq_press_bp03") ?? null, unit: "bar" },
+        { tagId: "cooling-water/eq_status_prep03", value: getStatusVal("cooling-water/eq_status_prep03"), unit: "status" },
+        { tagId: "cooling-water/eq_press_prep03", value: getVal("cooling-water/eq_press_prep03") ?? null, unit: "bar" },
+        { tagId: "cooling-water/eq_status_st03", value: getStatusVal("cooling-water/eq_status_st03"), unit: "status" },
+        { tagId: "cooling-water/eq_press_st03", value: getVal("cooling-water/eq_press_st03") ?? null, unit: "bar" },
+        { tagId: "cooling-water/eq_status_washing", value: getStatusVal("cooling-water/eq_status_washing"), unit: "status" },
+        { tagId: "cooling-water/eq_press_washing", value: getVal("cooling-water/eq_press_washing") ?? null, unit: "bar" },
+        { tagId: "cooling-water/supply_temp", value: suppVal ?? null, unit: "C" },
+        { tagId: "cooling-water/return_temp", value: retVal ?? null, unit: "C" },
+        { tagId: "cooling-water/st3_return_temp", value: getVal("cooling-water/st3_return_temp") ?? null, unit: "C" },
+        { tagId: "cooling-water/eq_temp_du03", value: getVal("cooling-water/eq_temp_du03") ?? null, unit: "C" },
+        { tagId: "cooling-water/eq_temp_prep03", value: getVal("cooling-water/eq_temp_prep03") ?? null, unit: "C" },
+        { tagId: "cooling-water/eq_temp_washing", value: getVal("cooling-water/eq_temp_washing") ?? null, unit: "C" },
+        { tagId: "cooling-water/eq_temp_st03_supply", value: getVal("cooling-water/eq_temp_st03_supply") ?? null, unit: "C" },
+        { tagId: "cooling-water/st3_heating", value: getStatusVal("cooling-water/st3_heating"), unit: "status" },
+        { tagId: "cooling-water/st3_cooling", value: getStatusVal("cooling-water/st3_cooling"), unit: "status" },
+        { tagId: "cooling-water/st3_steril", value: getStatusVal("cooling-water/st3_steril"), unit: "status" },
         { tagId: "cooling-water/jumo_pieces", value: getVal("cooling-water/jumo_pieces") || "", unit: "" },
-        { tagId: "cooling-water/delta_temp", value: deltaVal, unit: "C" },
+        { tagId: "cooling-water/delta_temp", value: deltaVal ?? null, unit: "C" },
         
         // Makeup, Ambient & Chemical
-        { tagId: "cooling-water/makeup_wtr_tds", value: getVal("cooling-water/makeup_wtr_tds"), unit: "uS/cm" },
-        { tagId: "cooling-water/makeup_wtr_ph", value: getVal("cooling-water/makeup_wtr_ph"), unit: "pH" },
-        { tagId: "cooling-water/makeup_wtr_flow", value: getVal("cooling-water/makeup_wtr_flow"), unit: "m3/h" },
-        { tagId: "cooling-water/makeup_wtr_vol", value: getVal("cooling-water/makeup_wtr_vol"), unit: "L" },
-        { tagId: "cooling-water/cooling_tank_tds", value: getVal("cooling-water/cooling_tank_tds"), unit: "uS/cm" },
-        { tagId: "cooling-water/cooling_tank_ph", value: getVal("cooling-water/cooling_tank_ph"), unit: "pH" },
-        { tagId: "cooling-water/ambient_temp", value: getVal("cooling-water/ambient_temp"), unit: "C" },
-        { tagId: "cooling-water/ambient_humidity", value: getVal("cooling-water/ambient_humidity"), unit: "%" },
-        { tagId: "cooling-water/ct_efficiency", value: getVal("cooling-water/ct_efficiency"), unit: "%" },
-        { tagId: "cooling-water/total_energy", value: getVal("cooling-water/total_energy"), unit: "kWh" },
-        { tagId: "cooling-water/chemical_357_pump", value: getVal("cooling-water/chemical_357_pump") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/chemical_357_lvl", value: getVal("cooling-water/chemical_357_lvl"), unit: "%" },
-        { tagId: "cooling-water/chemical_357_vol", value: getVal("cooling-water/chemical_357_vol"), unit: "L" },
-        { tagId: "cooling-water/chemical_327_pump", value: getVal("cooling-water/chemical_327_pump") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/chemical_327_lvl", value: getVal("cooling-water/chemical_327_lvl"), unit: "%" },
-        { tagId: "cooling-water/chemical_327_vol", value: getVal("cooling-water/chemical_327_vol"), unit: "L" },
-        { tagId: "cooling-water/blowdown_status", value: getVal("cooling-water/blowdown_status") ? 1 : 0, unit: "status" },
-        { tagId: "cooling-water/blowdown_flow", value: getVal("cooling-water/blowdown_flow"), unit: "L/h" },
-        { tagId: "cooling-water/blowdown_vol", value: getVal("cooling-water/blowdown_vol"), unit: "m3" }
+        { tagId: "cooling-water/makeup_wtr_tds", value: getVal("cooling-water/makeup_wtr_tds") ?? null, unit: "uS/cm" },
+        { tagId: "cooling-water/makeup_wtr_ph", value: getVal("cooling-water/makeup_wtr_ph") ?? null, unit: "pH" },
+        { tagId: "cooling-water/makeup_wtr_flow", value: getVal("cooling-water/makeup_wtr_flow") ?? null, unit: "m3/h" },
+        { tagId: "cooling-water/makeup_wtr_vol", value: getVal("cooling-water/makeup_wtr_vol") ?? null, unit: "L" },
+        { tagId: "cooling-water/cooling_tank_tds", value: getVal("cooling-water/cooling_tank_tds") ?? null, unit: "uS/cm" },
+        { tagId: "cooling-water/cooling_tank_ph", value: getVal("cooling-water/cooling_tank_ph") ?? null, unit: "pH" },
+        { tagId: "cooling-water/ambient_temp", value: getVal("cooling-water/ambient_temp") ?? null, unit: "C" },
+        { tagId: "cooling-water/ambient_humidity", value: getVal("cooling-water/ambient_humidity") ?? null, unit: "%" },
+        { tagId: "cooling-water/ct_efficiency", value: getVal("cooling-water/ct_efficiency") ?? null, unit: "%" },
+        { tagId: "cooling-water/total_energy", value: getVal("cooling-water/total_energy") ?? null, unit: "kWh" },
+        { tagId: "cooling-water/chemical_357_pump", value: getStatusVal("cooling-water/chemical_357_pump"), unit: "status" },
+        { tagId: "cooling-water/chemical_357_lvl", value: getVal("cooling-water/chemical_357_lvl") ?? null, unit: "%" },
+        { tagId: "cooling-water/chemical_357_vol", value: getVal("cooling-water/chemical_357_vol") ?? null, unit: "L" },
+        { tagId: "cooling-water/chemical_327_pump", value: getStatusVal("cooling-water/chemical_327_pump"), unit: "status" },
+        { tagId: "cooling-water/chemical_327_lvl", value: getVal("cooling-water/chemical_327_lvl") ?? null, unit: "%" },
+        { tagId: "cooling-water/chemical_327_vol", value: getVal("cooling-water/chemical_327_vol") ?? null, unit: "L" },
+        { tagId: "cooling-water/blowdown_status", value: getStatusVal("cooling-water/blowdown_status"), unit: "status" },
+        { tagId: "cooling-water/blowdown_flow", value: getVal("cooling-water/blowdown_flow") ?? null, unit: "L/h" },
+        { tagId: "cooling-water/blowdown_vol", value: getVal("cooling-water/blowdown_vol") ?? null, unit: "m3" }
       ];
 
-      // Filter out undefined values before saving/emitting
-      const activePoints = pointsMapping.filter(p => p.value !== undefined && p.value !== null);
-
-      const points = activePoints.map((p) => ({
+      const points = pointsMapping.map((p) => ({
         ts: ts.toISOString(),
         value: p.value,
-        quality: "good" as const,
+        quality: (p.value !== null && p.value !== undefined ? "good" : "bad") as "good" | "bad",
         meta: {
           tagId: p.tagId,
           deviceId: "cooling-water-1",
@@ -2302,18 +2341,18 @@ export const startCoolingTowerPolling = () => {
             return_temp = EXCLUDED.return_temp,
             supply_temp = EXCLUDED.supply_temp,
             st3_return_temp = EXCLUDED.st3_return_temp,
-            flow = COALESCE(EXCLUDED.flow, cooling_tower_telemetry_minute.flow),
-            tds = COALESCE(EXCLUDED.tds, cooling_tower_telemetry_minute.tds),
-            ph = COALESCE(EXCLUDED.ph, cooling_tower_telemetry_minute.ph),
-            humidity = COALESCE(EXCLUDED.humidity, cooling_tower_telemetry_minute.humidity),
-            ambient_temp = COALESCE(EXCLUDED.ambient_temp, cooling_tower_telemetry_minute.ambient_temp),
-            makeup_vol = COALESCE(EXCLUDED.makeup_vol, cooling_tower_telemetry_minute.makeup_vol),
-            makeup_tds = COALESCE(EXCLUDED.makeup_tds, cooling_tower_telemetry_minute.makeup_tds),
-            blowdown_vol = COALESCE(EXCLUDED.blowdown_vol, cooling_tower_telemetry_minute.blowdown_vol),
-            press_ct_p1 = COALESCE(EXCLUDED.press_ct_p1, cooling_tower_telemetry_minute.press_ct_p1),
-            press_ct_p2 = COALESCE(EXCLUDED.press_ct_p2, cooling_tower_telemetry_minute.press_ct_p2),
-            press_ct3_p11 = COALESCE(EXCLUDED.press_ct3_p11, cooling_tower_telemetry_minute.press_ct3_p11),
-            scaled_level_tank_cooling3 = COALESCE(EXCLUDED.scaled_level_tank_cooling3, cooling_tower_telemetry_minute.scaled_level_tank_cooling3)
+            flow = EXCLUDED.flow,
+            tds = EXCLUDED.tds,
+            ph = EXCLUDED.ph,
+            humidity = EXCLUDED.humidity,
+            ambient_temp = EXCLUDED.ambient_temp,
+            makeup_vol = EXCLUDED.makeup_vol,
+            makeup_tds = EXCLUDED.makeup_tds,
+            blowdown_vol = EXCLUDED.blowdown_vol,
+            press_ct_p1 = EXCLUDED.press_ct_p1,
+            press_ct_p2 = EXCLUDED.press_ct_p2,
+            press_ct3_p11 = EXCLUDED.press_ct3_p11,
+            scaled_level_tank_cooling3 = EXCLUDED.scaled_level_tank_cooling3
         `, [
           minuteTs,
           "cooling-water-1",

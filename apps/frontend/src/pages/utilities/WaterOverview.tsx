@@ -218,9 +218,12 @@ export default function WaterOverview() {
             });
             if (res && res.success && res.data) {
               data[url] = res.data;
+            } else {
+              data[url] = null;
             }
           } catch (e) {
             console.error("Error polling water API url:", url, e);
+            data[url] = null;
           }
         })
       );
@@ -308,15 +311,49 @@ export default function WaterOverview() {
   }, [dw3PumpState, dw4PumpState, isPageActive]);
 
   // Bind values to configured API endpoint, or fall back to simulated jitter
-  const getVal = useCallback((tagKey: string, fallback: number) => {
+  const getVal = useCallback((tagKey: string, fallback: number): number | string => {
     const url = apiSourceUrls[tagKey] || "";
     if (!url.trim()) return fallback;
+    if (apiLiveData[url] === null) return "Gagal Polling API";
     const jsonKey = jsonKeyMap[tagKey] || tagKey.split("/")[1];
     if (!jsonKey) return fallback;
     const val = apiLiveData[url]?.[jsonKey];
     if (val === undefined || val === null || isNaN(Number(val))) return fallback;
     return Number(val);
   }, [apiSourceUrls, jsonKeyMap, apiLiveData]);
+
+  const isDw3Offline = useMemo(() => {
+    const urls = [
+      apiSourceUrls["dw3/flow_rate"],
+      apiSourceUrls["dw3/pressure"],
+      apiSourceUrls["dw3/current"],
+      apiSourceUrls["dw3/tds"],
+      apiSourceUrls["dw3/ph"]
+    ].filter((u) => u && u.trim());
+    return urls.length > 0 && urls.every((u) => apiLiveData[u] === null);
+  }, [apiSourceUrls, apiLiveData]);
+
+  const isDw4Offline = useMemo(() => {
+    const urls = [
+      apiSourceUrls["dw4/flow_rate"],
+      apiSourceUrls["dw4/pressure"],
+      apiSourceUrls["dw4/current"],
+      apiSourceUrls["dw4/tds"],
+      apiSourceUrls["dw4/ph"]
+    ].filter((u) => u && u.trim());
+    return urls.length > 0 && urls.every((u) => apiLiveData[u] === null);
+  }, [apiSourceUrls, apiLiveData]);
+
+  const renderMetric = (val: number | string, unit: string) => {
+    if (val === "Gagal Polling API" || val === "GAGAL POLLING API") {
+      return <span className="text-amber-400 font-bold text-xs">Gagal Polling API</span>;
+    }
+    return (
+      <>
+        {val} <span className="text-[10px] text-slate-500 font-normal">{unit}</span>
+      </>
+    );
+  };
 
   // Read status from API or switch override
   const getStatus = useCallback((tagKey: string, fallback: boolean) => {
@@ -705,10 +742,17 @@ export default function WaterOverview() {
                 </h4>
                 <p className="text-[10px] text-slate-400">Deepwell Pump Station</p>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${dw3PumpState ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"}`}>
-                <span className={`h-2 w-2 rounded-full ${dw3PumpState ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
-                {dw3PumpState ? "Running" : "Stopped"}
-              </span>
+              {isDw3Offline ? (
+                <span className="px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                  <span className="h-2 w-2 rounded-full bg-amber-500" />
+                  GAGAL POLLING API
+                </span>
+              ) : (
+                <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${dw3PumpState ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"}`}>
+                  <span className={`h-2 w-2 rounded-full ${dw3PumpState ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                  {dw3PumpState ? "Running" : "Stopped"}
+                </span>
+              )}
             </div>
 
             {/* SCADA Interactive Box */}
@@ -748,13 +792,13 @@ export default function WaterOverview() {
                   <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Flow Rate</div>
                     <div className="mt-1 font-mono font-extrabold text-sky-400 text-sm">
-                      {getVal("dw3/flow_rate", scadaJitter.dw3Flow)} <span className="text-[10px] text-slate-500 font-normal">L/min</span>
+                      {renderMetric(getVal("dw3/flow_rate", scadaJitter.dw3Flow), "L/min")}
                     </div>
                   </div>
                   <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Pressure</div>
                     <div className="mt-1 font-mono font-extrabold text-indigo-400 text-sm">
-                      {getVal("dw3/pressure", scadaJitter.dw3Pressure)} <span className="text-[10px] text-slate-500 font-normal">bar</span>
+                      {renderMetric(getVal("dw3/pressure", scadaJitter.dw3Pressure), "bar")}
                     </div>
                   </div>
                   <div className={`col-span-2 rounded-xl p-3 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"} flex flex-col justify-center items-center`}>
@@ -772,7 +816,7 @@ export default function WaterOverview() {
                   <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Current</div>
                     <div className="mt-1 font-mono font-extrabold text-[#ec4899] text-xs">
-                      {getVal("dw3/current", scadaJitter.dw3Current)} A
+                      {renderMetric(getVal("dw3/current", scadaJitter.dw3Current), "A")}
                     </div>
                   </div>
                 </div>
@@ -784,24 +828,36 @@ export default function WaterOverview() {
               <div>
                 <div className="flex justify-between items-center text-xs font-semibold text-slate-500 mb-1">
                   <span>🟢 TDS Air Sumur</span>
-                  <span className="font-mono font-bold text-slate-700 dark:text-slate-200">
-                    {getVal("dw3/tds", scadaJitter.dw3Tds)} ppm
-                  </span>
+                  {typeof getVal("dw3/tds", scadaJitter.dw3Tds) === "number" ? (
+                    <span className="font-mono font-bold text-slate-700 dark:text-slate-200">
+                      {getVal("dw3/tds", scadaJitter.dw3Tds)} ppm
+                    </span>
+                  ) : (
+                    <span className="font-mono font-bold text-amber-400 text-xs">
+                      Gagal Polling API
+                    </span>
+                  )}
                 </div>
                 <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(scadaJitter.dw3Tds / 400) * 100}%` }} />
+                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: typeof getVal("dw3/tds", scadaJitter.dw3Tds) === "number" ? `${(scadaJitter.dw3Tds / 400) * 100}%` : "0%" }} />
                 </div>
               </div>
 
               <div>
                 <div className="flex justify-between items-center text-xs font-semibold text-slate-500 mb-1">
                   <span>🟣 pH Air Sumur</span>
-                  <span className="font-mono font-bold text-slate-700 dark:text-slate-200">
-                    {getVal("dw3/ph", scadaJitter.dw3Ph)} scale
-                  </span>
+                  {typeof getVal("dw3/ph", scadaJitter.dw3Ph) === "number" ? (
+                    <span className="font-mono font-bold text-slate-700 dark:text-slate-200">
+                      {getVal("dw3/ph", scadaJitter.dw3Ph)} scale
+                    </span>
+                  ) : (
+                    <span className="font-mono font-bold text-amber-400 text-xs">
+                      Gagal Polling API
+                    </span>
+                  )}
                 </div>
                 <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                  <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${(scadaJitter.dw3Ph / 14) * 100}%` }} />
+                  <div className="h-full bg-indigo-500 rounded-full" style={{ width: typeof getVal("dw3/ph", scadaJitter.dw3Ph) === "number" ? `${(scadaJitter.dw3Ph / 14) * 100}%` : "0%" }} />
                 </div>
               </div>
             </div>
@@ -828,10 +884,17 @@ export default function WaterOverview() {
                 </h4>
                 <p className="text-[10px] text-slate-400">Deepwell Pump Station</p>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${dw4PumpState ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"}`}>
-                <span className={`h-2 w-2 rounded-full ${dw4PumpState ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
-                {dw4PumpState ? "Running" : "Stopped"}
-              </span>
+              {isDw4Offline ? (
+                <span className="px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                  <span className="h-2 w-2 rounded-full bg-amber-500" />
+                  GAGAL POLLING API
+                </span>
+              ) : (
+                <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${dw4PumpState ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"}`}>
+                  <span className={`h-2 w-2 rounded-full ${dw4PumpState ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                  {dw4PumpState ? "Running" : "Stopped"}
+                </span>
+              )}
             </div>
 
             {/* SCADA Interactive Box */}
@@ -871,13 +934,13 @@ export default function WaterOverview() {
                   <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Flow Rate</div>
                     <div className="mt-1 font-mono font-extrabold text-sky-400 text-sm">
-                      {getVal("dw4/flow_rate", scadaJitter.dw4Flow)} <span className="text-[10px] text-slate-500 font-normal">L/min</span>
+                      {renderMetric(getVal("dw4/flow_rate", scadaJitter.dw4Flow), "L/min")}
                     </div>
                   </div>
                   <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Pressure</div>
                     <div className="mt-1 font-mono font-extrabold text-indigo-400 text-sm">
-                      {getVal("dw4/pressure", scadaJitter.dw4Pressure)} <span className="text-[10px] text-slate-500 font-normal">bar</span>
+                      {renderMetric(getVal("dw4/pressure", scadaJitter.dw4Pressure), "bar")}
                     </div>
                   </div>
                   <div className={`col-span-2 rounded-xl p-3 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"} flex flex-col justify-center items-center`}>
@@ -895,7 +958,7 @@ export default function WaterOverview() {
                   <div className={`rounded-xl p-2.5 border ${isDark ? "bg-[#131d31] border-slate-800" : "bg-white border-slate-200"}`}>
                     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Current</div>
                     <div className="mt-1 font-mono font-extrabold text-[#ec4899] text-xs">
-                      {getVal("dw4/current", scadaJitter.dw4Current)} A
+                      {renderMetric(getVal("dw4/current", scadaJitter.dw4Current), "A")}
                     </div>
                   </div>
                 </div>
@@ -907,24 +970,36 @@ export default function WaterOverview() {
               <div>
                 <div className="flex justify-between items-center text-xs font-semibold text-slate-500 mb-1">
                   <span>🟢 TDS Air Sumur</span>
-                  <span className="font-mono font-bold text-slate-700 dark:text-slate-200">
-                    {getVal("dw4/tds", scadaJitter.dw4Tds)} ppm
-                  </span>
+                  {typeof getVal("dw4/tds", scadaJitter.dw4Tds) === "number" ? (
+                    <span className="font-mono font-bold text-slate-700 dark:text-slate-200">
+                      {getVal("dw4/tds", scadaJitter.dw4Tds)} ppm
+                    </span>
+                  ) : (
+                    <span className="font-mono font-bold text-amber-400 text-xs">
+                      Gagal Polling API
+                    </span>
+                  )}
                 </div>
                 <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(scadaJitter.dw4Tds / 400) * 100}%` }} />
+                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: typeof getVal("dw4/tds", scadaJitter.dw4Tds) === "number" ? `${(scadaJitter.dw4Tds / 400) * 100}%` : "0%" }} />
                 </div>
               </div>
 
               <div>
                 <div className="flex justify-between items-center text-xs font-semibold text-slate-500 mb-1">
                   <span>🟣 pH Air Sumur</span>
-                  <span className="font-mono font-bold text-slate-700 dark:text-slate-200">
-                    {getVal("dw4/ph", scadaJitter.dw4Ph)} scale
-                  </span>
+                  {typeof getVal("dw4/ph", scadaJitter.dw4Ph) === "number" ? (
+                    <span className="font-mono font-bold text-slate-700 dark:text-slate-200">
+                      {getVal("dw4/ph", scadaJitter.dw4Ph)} scale
+                    </span>
+                  ) : (
+                    <span className="font-mono font-bold text-amber-400 text-xs">
+                      Gagal Polling API
+                    </span>
+                  )}
                 </div>
                 <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                  <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${(scadaJitter.dw4Ph / 14) * 100}%` }} />
+                  <div className="h-full bg-indigo-500 rounded-full" style={{ width: typeof getVal("dw4/ph", scadaJitter.dw4Ph) === "number" ? `${(scadaJitter.dw4Ph / 14) * 100}%` : "0%" }} />
                 </div>
               </div>
             </div>

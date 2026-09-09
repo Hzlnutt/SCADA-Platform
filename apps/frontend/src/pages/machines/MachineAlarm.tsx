@@ -183,9 +183,12 @@ export default function MachineAlarm() {
             });
             if (res && res.success && res.data) {
               aggregatedData[url] = res.data;
+            } else {
+              aggregatedData[url] = null;
             }
           } catch (err) {
             console.error(`Live API poll error on Alarm Log for URL ${url}:`, err);
+            aggregatedData[url] = null;
           }
         })
       );
@@ -226,13 +229,20 @@ export default function MachineAlarm() {
               quality: "good",
               meta: { tagId: tagKey }
             };
+          } else if (apiLiveData[retUrl] === null || apiLiveData[suppUrl] === null) {
+            merged[tagKey] = {
+              ts: new Date().toISOString(),
+              value: "Gagal Polling API",
+              quality: "bad",
+              meta: { tagId: tagKey }
+            };
           }
           return;
         }
 
         let jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
         let val = apiLiveData[url]?.[jsonKey];
-        if (val === undefined && jsonKey) {
+        if (val === undefined && jsonKey && apiLiveData[url]) {
           if (jsonKey === "Scaled_Temp_Tank_Cooling3_Supp") val = apiLiveData[url]?.["Scaled_Temp_Tank_Colling3_Supp"];
           else if (jsonKey === "Scaled_Temp_Tank_Colling3_Supp") val = apiLiveData[url]?.["Scaled_Temp_Tank_Cooling3_Supp"];
           else if (jsonKey === "Scaled_Temp_Tank_Cooling3_Return") val = apiLiveData[url]?.["Scaled_Temp_Tank_Colling3_Return"];
@@ -246,6 +256,13 @@ export default function MachineAlarm() {
             ts: new Date().toISOString(),
             value: val,
             quality: "good",
+            meta: { tagId: tagKey }
+          };
+        } else if (apiLiveData[url] === null) {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: "Gagal Polling API",
+            quality: "bad",
             meta: { tagId: tagKey }
           };
         }
