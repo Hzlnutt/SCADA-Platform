@@ -243,6 +243,9 @@ export const formatMinuteString = (d: Date = new Date()): string => {
 
 const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>, minuteTs: Date) => {
   const pool = getPostgresPool();
+  const isExactHour = minuteTs.getMinutes() === 0;
+
+  // In minute buffer table: power_factor tidak perlu di minute (hanya disimpan per jam di tabel utama)
   await pool.query(`
     INSERT INTO electric_pln_telemetry_minute (
       t_stamp, status_pm8000, volt_ab, volt_bc, volt_ca, volt_ll,
@@ -251,7 +254,8 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
       voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
       thd_current_a, thd_current_b, thd_current_c, active_energy
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL,
+      $14, $15, $16, $17, $18, $19, $20, $21, $22
     )
     ON CONFLICT (t_stamp) DO UPDATE SET
       status_pm8000 = EXCLUDED.status_pm8000,
@@ -266,7 +270,7 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
       active_power = EXCLUDED.active_power,
       reactive_power_total = EXCLUDED.reactive_power_total,
       apparent_power_total = EXCLUDED.apparent_power_total,
-      power_factor = EXCLUDED.power_factor,
+      power_factor = NULL,
       voltage_unbalance = EXCLUDED.voltage_unbalance,
       current_unbalance = EXCLUDED.current_unbalance,
       thd_volt_a = EXCLUDED.thd_volt_a,
@@ -279,16 +283,46 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
   `, [
     minuteTs, payload.status_pm8000, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
     payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power,
-    payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
+    payload.reactive_power_total, payload.apparent_power_total,
     payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
     payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy
   ]).catch((err) => {
     logger.warn(`Failed to insert PLN minute telemetry: ${err.message}`);
   });
+
+  // Polling per jam: pas saat tepat per jam (:00:00), simpan langsung ke database utama electric_pln_telemetry
+  if (isExactHour) {
+    try {
+      await pool.query(`DELETE FROM electric_pln_telemetry WHERE t_stamp = $1`, [minuteTs]);
+      await pool.query(`
+        INSERT INTO electric_pln_telemetry (
+          t_stamp, status_pm8000, volt_ab, volt_bc, volt_ca, volt_ll,
+          current_a, current_b, current_c, frequency, active_power,
+          reactive_power_total, apparent_power_total, power_factor,
+          voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+          thd_current_a, thd_current_b, thd_current_c, active_energy
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+        )
+      `, [
+        minuteTs, payload.status_pm8000, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
+        payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power,
+        payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
+        payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
+        payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy
+      ]);
+    } catch (err: any) {
+      logger.warn(`Failed to save hourly PLN telemetry to main table: ${err.message}`);
+    }
+  }
 };
 
 const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | "electric_wf2_telemetry_minute", payload: ReturnType<typeof parseWfApi>, minuteTs: Date) => {
   const pool = getPostgresPool();
+  const isExactHour = minuteTs.getMinutes() === 0;
+  const mainTable = table === "electric_wf1_telemetry_minute" ? "electric_wf1_telemetry" : "electric_wf2_telemetry";
+
+  // In minute buffer table: power_factor tidak perlu di minute (hanya disimpan per jam di database utama)
   await pool.query(`
     INSERT INTO ${table} (
       t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
@@ -297,7 +331,8 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
       voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
       thd_current_a, thd_current_b, thd_current_c, active_energy
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL,
+      $14, $15, $16, $17, $18, $19, $20, $21, $22
     )
     ON CONFLICT (t_stamp) DO UPDATE SET
       status_pm5500 = EXCLUDED.status_pm5500,
@@ -312,7 +347,7 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
       active_power_total = EXCLUDED.active_power_total,
       reactive_power_total = EXCLUDED.reactive_power_total,
       apparent_power_total = EXCLUDED.apparent_power_total,
-      power_factor = EXCLUDED.power_factor,
+      power_factor = NULL,
       voltage_unbalance = EXCLUDED.voltage_unbalance,
       current_unbalance = EXCLUDED.current_unbalance,
       thd_volt_a = EXCLUDED.thd_volt_a,
@@ -325,12 +360,38 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
   `, [
     minuteTs, payload.status_pm5500, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
     payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power_total,
-    payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
+    payload.reactive_power_total, payload.apparent_power_total,
     payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
     payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy
   ]).catch((err) => {
     logger.warn(`Failed to insert WF minute telemetry to ${table}: ${err.message}`);
   });
+
+  // Polling per jam: pas saat tepat per jam (:00:00), simpan langsung ke database utama (electric_wf1_telemetry / electric_wf2_telemetry)
+  if (isExactHour) {
+    try {
+      await pool.query(`DELETE FROM ${mainTable} WHERE t_stamp = $1`, [minuteTs]);
+      await pool.query(`
+        INSERT INTO ${mainTable} (
+          t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
+          current_a, current_b, current_c, frequency, active_power_total,
+          reactive_power_total, apparent_power_total, power_factor,
+          voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+          thd_current_a, thd_current_b, thd_current_c, active_energy
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+        )
+      `, [
+        minuteTs, payload.status_pm5500, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
+        payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power_total,
+        payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
+        payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
+        payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy
+      ]);
+    } catch (err: any) {
+      logger.warn(`Failed to save hourly WF telemetry to ${mainTable}: ${err.message}`);
+    }
+  }
 };
 
 export interface ElectricPltsRecord {
@@ -410,7 +471,7 @@ export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] =
     const total_kwh = Number(poiObj[`Total_KWH_POI_${num}`]) || 0;
     const total_kvarh = Number(poiObj[`Total_KVARH_POI_${num}`]) || 0;
 
-    const rawPf = poiObj[`Power_Factor_POI_${num}`] ?? poiObj[`PF_POI_${num}`] ?? poiObj[`PowerFactor_POI_${num}`] ?? poiObj[`CosPhi_POI_${num}`];
+    const rawPf = poiObj[`PFO_POI_${num}`] ?? poiObj[`PF0_POI_${num}`] ?? poiObj[`Power_Factor_POI_${num}`] ?? poiObj[`PF_POI_${num}`] ?? poiObj[`PowerFactor_POI_${num}`] ?? poiObj[`CosPhi_POI_${num}`];
     let power_factor: number | null = rawPf !== undefined && rawPf !== null && !isNaN(Number(rawPf)) ? Number(rawPf) : null;
 
     result.push({
@@ -444,13 +505,11 @@ const insertPltsMinuteTelemetry = async (records: ElectricPltsRecord[], minuteTs
 
   for (const r of records) {
     try {
-      // In minute buffer table: do not store PF per minute (only store on exact hour mark if available, otherwise null)
-      const minutePf = isExactHour ? (r.power_factor ?? null) : null;
-
+      // In minute buffer table: power_factor tidak perlu di minute (NULL)
       await pool.query(`
         INSERT INTO electric_plts_telemetry_minute (
           t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh, power_factor
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL)
         ON CONFLICT (t_stamp, poi_id) DO UPDATE SET
           status = EXCLUDED.status,
           volt_ab = EXCLUDED.volt_ab,
@@ -463,9 +522,9 @@ const insertPltsMinuteTelemetry = async (records: ElectricPltsRecord[], minuteTs
           active_power = EXCLUDED.active_power,
           total_kwh = EXCLUDED.total_kwh,
           total_kvarh = EXCLUDED.total_kvarh,
-          power_factor = EXCLUDED.power_factor;
+          power_factor = NULL;
       `, [
-        minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power ?? null, r.total_kwh ?? null, r.total_kvarh ?? null, minutePf
+        minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power ?? null, r.total_kwh ?? null, r.total_kvarh ?? null
       ]);
 
       // Polling per jam: at the exact hour mark (:00:00), save sampled hourly power factor & telemetry directly to electric_plts_telemetry
@@ -874,11 +933,11 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   const poi2Status = Boolean(p2.Status_POI_2);
   const rawPeak1 = p1.Peak_Demand_ScaleKw_POI_1 ?? p1.Peak_Demand_ScaleKW_POI_1;
   const rawPeak2 = p2.Peak_Demand_ScaleKw_POI_2 ?? p2.Peak_Demand_ScaleKW_POI_2;
-  const rawPf1 = p1.Power_Factor_POI_1 ?? p1.PF_POI_1 ?? p1.PowerFactor_POI_1 ?? p1.CosPhi_POI_1;
+  const rawPf1 = p1.PFO_POI_1 ?? p1.PF0_POI_1 ?? p1.Power_Factor_POI_1 ?? p1.PF_POI_1 ?? p1.PowerFactor_POI_1 ?? p1.CosPhi_POI_1;
   let pf1 = rawPf1 !== undefined && rawPf1 !== null && !isNaN(Number(rawPf1)) ? Number(rawPf1) : null;
   const p1Kw = typeof p1.Scale_Total_KW_POI_1 === "number" ? p1.Scale_Total_KW_POI_1 : (Number(p1.Scale_Total_KW_POI_1) || 0);
 
-  const rawPf2 = p2.Power_Factor_POI_2 ?? p2.PF_POI_2 ?? p2.PowerFactor_POI_2 ?? p2.CosPhi_POI_2;
+  const rawPf2 = p2.PFO_POI_2 ?? p2.PF0_POI_2 ?? p2.Power_Factor_POI_2 ?? p2.PF_POI_2 ?? p2.PowerFactor_POI_2 ?? p2.CosPhi_POI_2;
   let pf2 = rawPf2 !== undefined && rawPf2 !== null && !isNaN(Number(rawPf2)) ? Number(rawPf2) : null;
   const p2Kw = typeof p2.Scale_Total_KW_POI_2 === "number" ? p2.Scale_Total_KW_POI_2 : (Number(p2.Scale_Total_KW_POI_2) || 0);
 
@@ -1478,7 +1537,11 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(active_power) as active_power,
             AVG(reactive_power_total) as reactive_power_total,
             AVG(apparent_power_total) as apparent_power_total,
-            COALESCE((ARRAY_AGG(power_factor ORDER BY t_stamp ASC))[1], AVG(power_factor)) as power_factor,
+            COALESCE(
+              (SELECT power_factor FROM electric_pln_telemetry WHERE t_stamp = $1::timestamp),
+              (ARRAY_AGG(power_factor ORDER BY t_stamp ASC) FILTER (WHERE power_factor IS NOT NULL))[1],
+              AVG(power_factor)
+            ) as power_factor,
             AVG(voltage_unbalance) as voltage_unbalance,
             AVG(current_unbalance) as current_unbalance,
             AVG(thd_volt_a) as thd_volt_a,
@@ -1560,7 +1623,11 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(active_power_total) as active_power_total,
             AVG(reactive_power_total) as reactive_power_total,
             AVG(apparent_power_total) as apparent_power_total,
-            COALESCE((ARRAY_AGG(power_factor ORDER BY t_stamp ASC))[1], AVG(power_factor)) as power_factor,
+            COALESCE(
+              (SELECT power_factor FROM electric_wf1_telemetry WHERE t_stamp = $1::timestamp),
+              (ARRAY_AGG(power_factor ORDER BY t_stamp ASC) FILTER (WHERE power_factor IS NOT NULL))[1],
+              AVG(power_factor)
+            ) as power_factor,
             AVG(voltage_unbalance) as voltage_unbalance,
             AVG(current_unbalance) as current_unbalance,
             AVG(thd_volt_a) as thd_volt_a,
@@ -1641,7 +1708,11 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(active_power_total) as active_power_total,
             AVG(reactive_power_total) as reactive_power_total,
             AVG(apparent_power_total) as apparent_power_total,
-            COALESCE((ARRAY_AGG(power_factor ORDER BY t_stamp ASC))[1], AVG(power_factor)) as power_factor,
+            COALESCE(
+              (SELECT power_factor FROM electric_wf2_telemetry WHERE t_stamp = $1::timestamp),
+              (ARRAY_AGG(power_factor ORDER BY t_stamp ASC) FILTER (WHERE power_factor IS NOT NULL))[1],
+              AVG(power_factor)
+            ) as power_factor,
             AVG(voltage_unbalance) as voltage_unbalance,
             AVG(current_unbalance) as current_unbalance,
             AVG(thd_volt_a) as thd_volt_a,
@@ -1807,8 +1878,8 @@ export const runElectricityRollupAndCleanup = async () => {
             MAX(total_kwh) as total_kwh,
             MAX(total_kvarh) as total_kvarh,
             COALESCE(
-              (ARRAY_AGG(power_factor ORDER BY t_stamp ASC) FILTER (WHERE power_factor IS NOT NULL))[1],
-              (SELECT power_factor FROM electric_plts_telemetry WHERE t_stamp = $1::timestamp AND poi_id = electric_plts_telemetry_minute.poi_id)
+              (SELECT power_factor FROM electric_plts_telemetry WHERE t_stamp = $1::timestamp AND poi_id = electric_plts_telemetry_minute.poi_id),
+              (ARRAY_AGG(power_factor ORDER BY t_stamp ASC) FILTER (WHERE power_factor IS NOT NULL))[1]
             ) as power_factor
           FROM electric_plts_telemetry_minute
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
