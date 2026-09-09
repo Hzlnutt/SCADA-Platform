@@ -1,8 +1,7 @@
 import { getPostgresPool } from "../../database/postgres";
 import { getMongoDb } from "../../database/mongo";
 import { GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
-import * as XLSX from "xlsx";
-import { addCharts, ChartSpec } from "chartsheet";
+import ExcelJS from "exceljs";
 
 export interface ElectricityExportParams {
   from: string; // YYYY-MM-DD
@@ -30,26 +29,31 @@ export interface ElectricityExportDataRow {
   lwbp_pln: number;
   wbp_pln: number;
   total_pln: number;
+  pf_pln: number | null;
+  est_cost_pln: number;
   // Fact-1
   lwbp_wf1: number;
   wbp_wf1: number;
   total_wf1: number;
+  pf_wf1: number | null;
+  est_cost_wf1: number;
   // Fact-2
   lwbp_wf2: number;
   wbp_wf2: number;
   total_wf2: number;
+  pf_wf2: number | null;
+  est_cost_wf2: number;
   // PV Solar
   poi1_kwh: number;
+  pf_poi1: number | null;
   poi2_kwh: number;
+  pf_poi2: number | null;
   total_pv: number;
-  // Financial
-  est_cost_pln: number;
-  est_cost_wf1: number;
-  est_cost_wf2: number;
   est_cost_pv: number;
+  // Financial
   est_saving: number;
   est_net_cost: number;
-  // Power Factor (average of all items)
+  // Power Factor (overall average)
   pf: number;
 }
 
@@ -116,27 +120,31 @@ export async function getElectricityExportData(params: ElectricityExportParams):
   // 2. Query historical telemetry (querying 1 hour before fromStr to accurately calculate energy delta)
   const [plnRes, wf1Res, wf2Res, pltsRes] = await Promise.all([
     pool.query(`
-      SELECT t_stamp, active_power, power_factor, active_energy
+      SELECT to_char(t_stamp, 'YYYY-MM-DD HH24:MI:SS') as t_stamp_str,
+             t_stamp, active_power, power_factor, active_energy
       FROM electric_pln_telemetry
-      WHERE t_stamp >= $1::timestamp - INTERVAL '1 hour' AND t_stamp <= $2
+      WHERE t_stamp >= $1::timestamp - INTERVAL '1 hour' AND t_stamp <= $2::timestamp
       ORDER BY t_stamp ASC
     `, [fromStr, toStr]),
     pool.query(`
-      SELECT t_stamp, active_power_total as active_power, power_factor, active_energy
+      SELECT to_char(t_stamp, 'YYYY-MM-DD HH24:MI:SS') as t_stamp_str,
+             t_stamp, active_power_total as active_power, power_factor, active_energy
       FROM electric_wf1_telemetry
-      WHERE t_stamp >= $1::timestamp - INTERVAL '1 hour' AND t_stamp <= $2
+      WHERE t_stamp >= $1::timestamp - INTERVAL '1 hour' AND t_stamp <= $2::timestamp
       ORDER BY t_stamp ASC
     `, [fromStr, toStr]),
     pool.query(`
-      SELECT t_stamp, active_power_total as active_power, power_factor, active_energy
+      SELECT to_char(t_stamp, 'YYYY-MM-DD HH24:MI:SS') as t_stamp_str,
+             t_stamp, active_power_total as active_power, power_factor, active_energy
       FROM electric_wf2_telemetry
-      WHERE t_stamp >= $1::timestamp - INTERVAL '1 hour' AND t_stamp <= $2
+      WHERE t_stamp >= $1::timestamp - INTERVAL '1 hour' AND t_stamp <= $2::timestamp
       ORDER BY t_stamp ASC
     `, [fromStr, toStr]),
     pool.query(`
-      SELECT t_stamp, poi_id, active_power, power_factor, total_kwh as active_energy
+      SELECT to_char(t_stamp, 'YYYY-MM-DD HH24:MI:SS') as t_stamp_str,
+             t_stamp, poi_id, active_power, power_factor, total_kwh as active_energy
       FROM electric_plts_telemetry
-      WHERE t_stamp >= $1::timestamp - INTERVAL '1 hour' AND t_stamp <= $2
+      WHERE t_stamp >= $1::timestamp - INTERVAL '1 hour' AND t_stamp <= $2::timestamp
       ORDER BY t_stamp ASC, poi_id ASC
     `, [fromStr, toStr])
   ]);
@@ -147,31 +155,35 @@ export async function getElectricityExportData(params: ElectricityExportParams):
     try {
       const [plnMin, wf1Min, wf2Min, pltsMin] = await Promise.all([
         pool.query(`
-          SELECT t_stamp, active_power, power_factor, active_energy
+          SELECT to_char(t_stamp, 'YYYY-MM-DD HH24:MI:SS') as t_stamp_str,
+                 t_stamp, active_power, power_factor, active_energy
           FROM electric_pln_telemetry_minute
-          WHERE t_stamp > (SELECT COALESCE(MAX(t_stamp), '1970-01-01') FROM electric_pln_telemetry WHERE t_stamp <= $1)
-            AND t_stamp <= $1
+          WHERE t_stamp > (SELECT COALESCE(MAX(t_stamp), '1970-01-01') FROM electric_pln_telemetry WHERE t_stamp <= $1::timestamp)
+            AND t_stamp <= $1::timestamp
           ORDER BY t_stamp DESC LIMIT 1
         `, [toStr]),
         pool.query(`
-          SELECT t_stamp, active_power_total as active_power, power_factor, active_energy
+          SELECT to_char(t_stamp, 'YYYY-MM-DD HH24:MI:SS') as t_stamp_str,
+                 t_stamp, active_power_total as active_power, power_factor, active_energy
           FROM electric_wf1_telemetry_minute
-          WHERE t_stamp > (SELECT COALESCE(MAX(t_stamp), '1970-01-01') FROM electric_wf1_telemetry WHERE t_stamp <= $1)
-            AND t_stamp <= $1
+          WHERE t_stamp > (SELECT COALESCE(MAX(t_stamp), '1970-01-01') FROM electric_wf1_telemetry WHERE t_stamp <= $1::timestamp)
+            AND t_stamp <= $1::timestamp
           ORDER BY t_stamp DESC LIMIT 1
         `, [toStr]),
         pool.query(`
-          SELECT t_stamp, active_power_total as active_power, power_factor, active_energy
+          SELECT to_char(t_stamp, 'YYYY-MM-DD HH24:MI:SS') as t_stamp_str,
+                 t_stamp, active_power_total as active_power, power_factor, active_energy
           FROM electric_wf2_telemetry_minute
-          WHERE t_stamp > (SELECT COALESCE(MAX(t_stamp), '1970-01-01') FROM electric_wf2_telemetry WHERE t_stamp <= $1)
-            AND t_stamp <= $1
+          WHERE t_stamp > (SELECT COALESCE(MAX(t_stamp), '1970-01-01') FROM electric_wf2_telemetry WHERE t_stamp <= $1::timestamp)
+            AND t_stamp <= $1::timestamp
           ORDER BY t_stamp DESC LIMIT 1
         `, [toStr]),
         pool.query(`
-          SELECT t_stamp, poi_id, active_power, power_factor, total_kwh as active_energy
+          SELECT to_char(t_stamp, 'YYYY-MM-DD HH24:MI:SS') as t_stamp_str,
+                 t_stamp, poi_id, active_power, power_factor, total_kwh as active_energy
           FROM electric_plts_telemetry_minute
-          WHERE t_stamp > (SELECT COALESCE(MAX(t_stamp), '1970-01-01') FROM electric_plts_telemetry WHERE t_stamp <= $1)
-            AND t_stamp <= $1
+          WHERE t_stamp > (SELECT COALESCE(MAX(t_stamp), '1970-01-01') FROM electric_plts_telemetry WHERE t_stamp <= $1::timestamp)
+            AND t_stamp <= $1::timestamp
           ORDER BY t_stamp DESC LIMIT 2
         `, [toStr]),
       ]);
@@ -189,6 +201,7 @@ export async function getElectricityExportData(params: ElectricityExportParams):
   const poi2Rows = pltsRes.rows.filter((r: any) => r.poi_id === "POI_2");
 
   interface HourlyPoint {
+    timeStr: string;
     t_stamp: Date;
     lwbp: number;
     wbp: number;
@@ -200,16 +213,16 @@ export async function getElectricityExportData(params: ElectricityExportParams):
     defaultPf: number,
     isSolar: boolean = false
   ): HourlyPoint[] => {
-    const sorted = [...rows].sort((a, b) => new Date(a.t_stamp).getTime() - new Date(b.t_stamp).getTime());
+    const sorted = [...rows].sort((a, b) => (a.t_stamp_str || "").localeCompare(b.t_stamp_str || ""));
     const points: HourlyPoint[] = [];
 
     for (let i = 1; i < sorted.length; i++) {
       const curr = sorted[i];
       const prev = sorted[i - 1];
-      const currTs = new Date(curr.t_stamp);
-      const currTsStr = currTs.toISOString();
+      const timeStr = curr.t_stamp_str || "";
+      if (!timeStr) continue;
 
-      const currDateStr = currTsStr.substring(0, 10);
+      const currDateStr = timeStr.substring(0, 10);
       if (currDateStr < from || currDateStr > to) continue;
 
       const currE = curr.active_energy !== null && curr.active_energy !== undefined ? Number(curr.active_energy) : null;
@@ -223,8 +236,8 @@ export async function getElectricityExportData(params: ElectricityExportParams):
       }
       deltaKwh = Math.max(0, deltaKwh);
 
-      const wibHour = new Date(currTs.getTime() + 7 * 3600 * 1000).getUTCHours();
-      const isWbp = wibHour >= 17 && wibHour <= 21;
+      const hour = parseInt(timeStr.substring(11, 13), 10) || 0;
+      const isWbp = hour >= 17 && hour <= 21;
 
       let pf: number | null = null;
       const rawPfNum = curr.power_factor !== null && curr.power_factor !== undefined ? Math.abs(Number(curr.power_factor)) : null;
@@ -233,12 +246,12 @@ export async function getElectricityExportData(params: ElectricityExportParams):
       } else if (!isSolar) {
         pf = defaultPf;
       } else {
-        // Solar historical / unpolled remains null
         pf = null;
       }
 
       points.push({
-        t_stamp: currTs,
+        timeStr,
+        t_stamp: new Date(curr.t_stamp),
         lwbp: isWbp ? 0 : deltaKwh,
         wbp: isWbp ? deltaKwh : 0,
         pf
@@ -254,26 +267,26 @@ export async function getElectricityExportData(params: ElectricityExportParams):
   const poi1Points = computeHourlyPoints(poi1Rows, 0.98, true);
   const poi2Points = computeHourlyPoints(poi2Rows, 0.99, true);
 
-  const formatBucketKey = (d: Date, res: ElectricityExportParams["resolution"]): string => {
-    const wib = new Date(d.getTime() + 7 * 3600 * 1000);
-    const y = wib.getUTCFullYear();
-    const m = String(wib.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(wib.getUTCDate()).padStart(2, "0");
-    const h = String(wib.getUTCHours()).padStart(2, "0");
+  const formatBucketKey = (timeStr: string, res: ElectricityExportParams["resolution"]): string => {
+    const dateStr = timeStr.substring(0, 10);
+    const hourStr = timeStr.substring(11, 13);
+    const y = dateStr.substring(0, 4);
+    const m = dateStr.substring(5, 7);
 
     if (res === "hour") {
-      return `${y}-${m}-${day} ${h}:00:00`;
+      return `${dateStr} ${hourStr}:00:00`;
     }
     if (res === "day") {
-      return `${y}-${m}-${day}`;
+      return dateStr;
     }
     if (res === "week") {
-      const dayOfWeek = wib.getUTCDay() || 7;
-      const mon = new Date(wib);
-      mon.setUTCDate(wib.getUTCDate() - dayOfWeek + 1);
-      const my = mon.getUTCFullYear();
-      const mm = String(mon.getUTCMonth() + 1).padStart(2, "0");
-      const md = String(mon.getUTCDate()).padStart(2, "0");
+      const [yearNum, monthNum, dayNum] = dateStr.split("-").map(Number);
+      const dt = new Date(Date.UTC(yearNum, monthNum - 1, dayNum));
+      const dayOfWeek = dt.getUTCDay() || 7;
+      dt.setUTCDate(dt.getUTCDate() - dayOfWeek + 1);
+      const my = dt.getUTCFullYear();
+      const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+      const md = String(dt.getUTCDate()).padStart(2, "0");
       return `${my}-${mm}-${md} (Minggu)`;
     }
     if (res === "month") {
@@ -282,7 +295,7 @@ export async function getElectricityExportData(params: ElectricityExportParams):
     if (res === "year") {
       return `${y}`;
     }
-    return `${y}-${m}-${day} ${h}:00:00`;
+    return `${dateStr} ${hourStr}:00:00`;
   };
 
   interface BucketAcc {
@@ -297,7 +310,7 @@ export async function getElectricityExportData(params: ElectricityExportParams):
 
   const addPointsToBuckets = (points: HourlyPoint[], itemName: string) => {
     for (const p of points) {
-      const key = formatBucketKey(p.t_stamp, resolution);
+      const key = formatBucketKey(p.timeStr, resolution);
       if (!allBucketsMap.has(key)) {
         allBucketsMap.set(key, new Map());
       }
@@ -401,7 +414,15 @@ export async function getElectricityExportData(params: ElectricityExportParams):
       s.estPenghematan += estPenghematan;
       s.estNetCost += estNetCost;
 
-      return { lwbp: Number(lwbp.toFixed(2)), wbp: Number(wbp.toFixed(2)), totKwh: Number(totKwh.toFixed(2)), pf, estCost, estPenghematan, estNetCost };
+      return {
+        lwbp: Number(lwbp.toFixed(2)),
+        wbp: Number(wbp.toFixed(2)),
+        totKwh: Number(totKwh.toFixed(2)),
+        pf,
+        estCost,
+        estPenghematan,
+        estNetCost
+      };
     };
 
     const pln = computeItem("Incoming PLN", false);
@@ -428,22 +449,32 @@ export async function getElectricityExportData(params: ElectricityExportParams):
 
     exportRows.push({
       tgl_waktu: bKey,
+      // PLN
       lwbp_pln: pln.lwbp,
       wbp_pln: pln.wbp,
       total_pln: pln.totKwh,
+      pf_pln: pln.pf,
+      est_cost_pln: pln.estCost,
+      // Fact-1
       lwbp_wf1: wf1.lwbp,
       wbp_wf1: wf1.wbp,
       total_wf1: wf1.totKwh,
+      pf_wf1: wf1.pf,
+      est_cost_wf1: wf1.estCost,
+      // Fact-2
       lwbp_wf2: wf2.lwbp,
       wbp_wf2: wf2.wbp,
       total_wf2: wf2.totKwh,
-      poi1_kwh: poi1.totKwh,
-      poi2_kwh: poi2.totKwh,
-      total_pv: totalPv,
-      est_cost_pln: pln.estCost,
-      est_cost_wf1: wf1.estCost,
+      pf_wf2: wf2.pf,
       est_cost_wf2: wf2.estCost,
+      // Solar
+      poi1_kwh: poi1.totKwh,
+      pf_poi1: poi1.pf,
+      poi2_kwh: poi2.totKwh,
+      pf_poi2: poi2.pf,
+      total_pv: totalPv,
       est_cost_pv: estCostPv,
+      // Financial
       est_saving: estSaving,
       est_net_cost: estNetCostRow,
       pf: avgPf
@@ -523,9 +554,11 @@ export async function generateElectricityExcelWorkbook(
   exportData: ElectricityExportResult,
   _selectedSheets?: Set<string>
 ): Promise<Buffer> {
-  const wb = XLSX.utils.book_new();
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "PT Widatra Bhakti - SCADA Utility System";
+  workbook.created = new Date();
+
   const { metadata, summary, rows } = exportData;
-  const chartSpecs: ChartSpec[] = [];
 
   const resMap: Record<string, string> = {
     hour: "Per Jam (Hourly)",
@@ -540,55 +573,120 @@ export async function generateElectricityExcelWorkbook(
   const expTimeStr = expDate.toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }) + " WIB";
 
   // ==========================================
-  // SHEET 1: DASHBOARD UTAMA (EXECUTIVE SUMMARY & BAR CHARTS)
+  // SHEET 1: DASHBOARD UTAMA (EXECUTIVE SUMMARY)
   // ==========================================
-  const dashboardAoa: any[][] = [
-    ["PT WIDATRA BHAKTI - SCADA UTILITY SYSTEM"],
-    ["LAPORAN KELISTRIKAN & EFISIENSI ENERGI (EXECUTIVE DASHBOARD)"],
-    [
-      `Periode: ${metadata.from} s/d ${metadata.to}`,
-      "",
-      `Resolusi: ${resolutionLabel}`,
-      "",
-      `Waktu Ekspor: ${expTimeStr}`
-    ],
-    [
-      `Tarif Acuan: LWBP = Rp ${metadata.lwbpRate.toLocaleString("id-ID")}/kWh`,
-      "",
-      `WBP = Rp ${metadata.wbpRate.toLocaleString("id-ID")}/kWh`,
-      "",
-      `Biaya PV = Rp ${metadata.pvRate.toLocaleString("id-ID")}/kWh`
-    ],
-    [],
-    [
-      "No",
-      "Nama Item",
-      "LWBP (kWh)",
-      "WBP (kWh)",
-      "Total Konsumsi (kWh)",
-      "Power Factor Rata-rata",
-      "Est Cost (Rp)",
-      "Est Penghematan (Rp)",
-      "Est Net Cost (Rp)"
-    ]
-  ];
-
-  // Add summary items (Rows 7 to 11 in Excel, 1-based indexing)
-  summary.items.forEach((item) => {
-    dashboardAoa.push([
-      item.no,
-      item.name,
-      item.lwbp,
-      item.wbp,
-      item.totalKwh,
-      item.avgPowerFactor,
-      item.estCost,
-      item.estPenghematan,
-      item.estNetCost
-    ]);
+  const wsDashboard = workbook.addWorksheet("Dashboard Utama", {
+    views: [{ showGridLines: true }]
   });
 
-  // Add Summary Total row (Row 12)
+  // Title Block
+  wsDashboard.mergeCells("A1:I1");
+  wsDashboard.getCell("A1").value = "PT WIDATRA BHAKTI - SCADA UTILITY SYSTEM";
+  wsDashboard.getCell("A1").font = { name: "Arial", size: 14, bold: true, color: { argb: "FF1E3A8A" } };
+  wsDashboard.getCell("A1").alignment = { vertical: "middle" };
+
+  wsDashboard.mergeCells("A2:I2");
+  wsDashboard.getCell("A2").value = "LAPORAN KELISTRIKAN & EFISIENSI ENERGI (EXECUTIVE DASHBOARD)";
+  wsDashboard.getCell("A2").font = { name: "Arial", size: 10, bold: true, color: { argb: "FF475569" } };
+  wsDashboard.getCell("A2").alignment = { vertical: "middle" };
+
+  // Metadata Block
+  wsDashboard.getCell("A4").value = "Periode:";
+  wsDashboard.getCell("B4").value = `${metadata.from} s/d ${metadata.to}`;
+  wsDashboard.getCell("D4").value = "Resolusi:";
+  wsDashboard.getCell("E4").value = resolutionLabel;
+  wsDashboard.getCell("G4").value = "Waktu Ekspor:";
+  wsDashboard.getCell("H4").value = expTimeStr;
+
+  wsDashboard.getCell("A5").value = "Tarif LWBP:";
+  wsDashboard.getCell("B5").value = metadata.lwbpRate;
+  wsDashboard.getCell("B5").numFmt = '"Rp "#,##0"/kWh"';
+  wsDashboard.getCell("D5").value = "Tarif WBP:";
+  wsDashboard.getCell("E5").value = metadata.wbpRate;
+  wsDashboard.getCell("E5").numFmt = '"Rp "#,##0"/kWh"';
+  wsDashboard.getCell("G5").value = "Tarif PV:";
+  wsDashboard.getCell("H5").value = metadata.pvRate;
+  wsDashboard.getCell("H5").numFmt = '"Rp "#,##0"/kWh"';
+
+  for (const r of [4, 5]) {
+    for (const c of ["A", "D", "G"]) {
+      const cell = wsDashboard.getCell(`${c}${r}`);
+      cell.font = { bold: true, color: { argb: "FF334155" } };
+    }
+  }
+
+  // Section Header
+  wsDashboard.getCell("A7").value = "RINGKASAN KONSUMSI & FINANSIAL PER ITEM";
+  wsDashboard.getCell("A7").font = { name: "Arial", size: 11, bold: true, color: { argb: "FF0F172A" } };
+
+  // Summary Table Headers
+  const summaryHeaders = [
+    "No", "Nama Item", "LWBP (kWh)", "WBP (kWh)", "Total (kWh)",
+    "Power Factor Rata-rata", "Est Cost (Rp)", "Est Penghematan (Rp)", "Est Net Cost (Rp)"
+  ];
+  const sHeaderRow = wsDashboard.getRow(8);
+  sHeaderRow.height = 24;
+  summaryHeaders.forEach((h, i) => {
+    const cell = sHeaderRow.getCell(i + 1);
+    cell.value = h;
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+    cell.alignment = { vertical: "middle", horizontal: i >= 2 ? "right" : i === 0 ? "center" : "left" };
+    cell.border = {
+      top: { style: "thin", color: { argb: "FF0F172A" } },
+      bottom: { style: "thin", color: { argb: "FF0F172A" } },
+      left: { style: "thin", color: { argb: "FF334155" } },
+      right: { style: "thin", color: { argb: "FF334155" } }
+    };
+  });
+
+  // Summary Rows
+  summary.items.forEach((item, idx) => {
+    const rowNum = 9 + idx;
+    const row = wsDashboard.getRow(rowNum);
+    row.height = 20;
+
+    row.getCell(1).value = item.no;
+    row.getCell(2).value = item.name;
+    row.getCell(3).value = item.lwbp;
+    row.getCell(4).value = item.wbp;
+    row.getCell(5).value = item.totalKwh;
+    row.getCell(6).value = item.avgPowerFactor;
+    row.getCell(7).value = item.estCost;
+    row.getCell(8).value = item.estPenghematan;
+    row.getCell(9).value = item.estNetCost;
+
+    row.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+    row.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
+    for (let c = 3; c <= 5; c++) {
+      row.getCell(c).numFmt = "#,##0.00";
+      row.getCell(c).alignment = { horizontal: "right", vertical: "middle" };
+    }
+    row.getCell(6).numFmt = "0.000";
+    row.getCell(6).alignment = { horizontal: "right", vertical: "middle" };
+    for (let c = 7; c <= 9; c++) {
+      row.getCell(c).numFmt = '"Rp "#,##0';
+      row.getCell(c).alignment = { horizontal: "right", vertical: "middle" };
+    }
+
+    const rowBg = idx % 2 === 1 ? "FFF8FAFC" : "FFFFFFFF";
+    for (let c = 1; c <= 9; c++) {
+      const cell = row.getCell(c);
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: rowBg } };
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFE2E8F0" } },
+        bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+        left: { style: "thin", color: { argb: "FFE2E8F0" } },
+        right: { style: "thin", color: { argb: "FFE2E8F0" } }
+      };
+    }
+  });
+
+  // Summary Total Row
+  const totalRowNum = 9 + summary.items.length;
+  const totRow = wsDashboard.getRow(totalRowNum);
+  totRow.height = 22;
+
   const sumLwbp = Number(summary.items.reduce((a, b) => a + b.lwbp, 0).toFixed(2));
   const sumWbp = Number(summary.items.reduce((a, b) => a + b.wbp, 0).toFixed(2));
   const sumKwh = Number(summary.items.reduce((a, b) => a + b.totalKwh, 0).toFixed(2));
@@ -596,164 +694,242 @@ export async function generateElectricityExcelWorkbook(
   const sumEstPenghematan = summary.items.reduce((a, b) => a + b.estPenghematan, 0);
   const sumEstNetCost = summary.items.reduce((a, b) => a + b.estNetCost, 0);
 
-  dashboardAoa.push([
-    "Total",
-    "Total Sistem & Solar",
-    sumLwbp,
-    sumWbp,
-    sumKwh,
-    summary.avgPowerFactor,
-    sumEstCost,
-    sumEstPenghematan,
-    sumEstNetCost
-  ]);
+  totRow.getCell(1).value = "TOTAL";
+  totRow.getCell(2).value = "Total Seluruh Feeder & PLTS";
+  totRow.getCell(3).value = sumLwbp;
+  totRow.getCell(4).value = sumWbp;
+  totRow.getCell(5).value = sumKwh;
+  totRow.getCell(6).value = summary.avgPowerFactor;
+  totRow.getCell(7).value = sumEstCost;
+  totRow.getCell(8).value = sumEstPenghematan;
+  totRow.getCell(9).value = sumEstNetCost;
 
-  dashboardAoa.push([]);
-  dashboardAoa.push(["GRAFIK PERBANDINGAN KELISTRIKAN & FINANSIAL ENERGI"]);
-  dashboardAoa.push(["Catatan: Seluruh data time-series terperinci dapat dilihat pada sheet 'Data Kelistrikan'."]);
-
-  const wsDashboard = XLSX.utils.aoa_to_sheet(dashboardAoa);
-  wsDashboard["!cols"] = [
-    { wch: 6 },
-    { wch: 18 },
-    { wch: 16 },
-    { wch: 16 },
-    { wch: 22 },
-    { wch: 22 },
-    { wch: 20 },
-    { wch: 22 },
-    { wch: 20 }
-  ];
-  XLSX.utils.book_append_sheet(wb, wsDashboard, "Dashboard Utama");
-
-  // ==========================================
-  // SHEET 2: DATA KELISTRIKAN (20 COLUMNS - WIDE FORMAT PER TIMESTAMP)
-  // ==========================================
-  const dataHeaders = [
-    "Tgl/Waktu",
-    "LWBP PLN (kWh)",
-    "WBP PLN (kWh)",
-    "Total kWh PLN",
-    "LWBP Fact-1 (kWh)",
-    "WBP Fact-1 (kWh)",
-    "Total kWh Fact-1",
-    "LWBP Fact-2 (kWh)",
-    "WBP Fact-2 (kWh)",
-    "Total kWh Fact-2",
-    "POI-1 kWh",
-    "POI-2 kWh",
-    "Total PV kWh",
-    "Est Cost PLN (Rp)",
-    "Est Cost Fact-1 (Rp)",
-    "Est Cost Fact-2 (Rp)",
-    "Est Cost PV (Rp)",
-    "Est Saving (Rp)",
-    "Est Net Cost (Rp)",
-    "Power Factor"
-  ];
-
-  const dataAoaRows = rows.map((r) => [
-    r.tgl_waktu,
-    r.lwbp_pln,
-    r.wbp_pln,
-    r.total_pln,
-    r.lwbp_wf1,
-    r.wbp_wf1,
-    r.total_wf1,
-    r.lwbp_wf2,
-    r.wbp_wf2,
-    r.total_wf2,
-    r.poi1_kwh,
-    r.poi2_kwh,
-    r.total_pv,
-    r.est_cost_pln,
-    r.est_cost_wf1,
-    r.est_cost_wf2,
-    r.est_cost_pv,
-    r.est_saving,
-    r.est_net_cost,
-    r.pf
-  ]);
-
-  const numCols = dataHeaders.length;
-  const lastCol = String.fromCharCode(64 + numCols); // 'T' for 20 cols
-  const wsData = XLSX.utils.aoa_to_sheet([dataHeaders, ...dataAoaRows]);
-  wsData["!autofilter"] = { ref: `A1:${lastCol}${Math.max(2, dataAoaRows.length + 1)}` };
-  wsData["!cols"] = [
-    { wch: 22 }, // Tgl/Waktu
-    { wch: 16 }, // LWBP PLN
-    { wch: 15 }, // WBP PLN
-    { wch: 15 }, // Total PLN
-    { wch: 18 }, // LWBP Fact-1
-    { wch: 17 }, // WBP Fact-1
-    { wch: 16 }, // Total Fact-1
-    { wch: 18 }, // LWBP Fact-2
-    { wch: 17 }, // WBP Fact-2
-    { wch: 16 }, // Total Fact-2
-    { wch: 13 }, // POI-1
-    { wch: 13 }, // POI-2
-    { wch: 14 }, // Total PV
-    { wch: 18 }, // Est Cost PLN
-    { wch: 20 }, // Est Cost Fact-1
-    { wch: 20 }, // Est Cost Fact-2
-    { wch: 16 }, // Est Cost PV
-    { wch: 16 }, // Est Saving
-    { wch: 18 }, // Est Net Cost
-    { wch: 14 }  // Power Factor
-  ];
-  XLSX.utils.book_append_sheet(wb, wsData, "Data Kelistrikan");
-
-  // ==========================================
-  // NATIVE BAR CHARTS (COLUMN CHARTS) ON DASHBOARD UTAMA
-  // ==========================================
-  // Item category cells: 'Dashboard Utama'!$B$7:$B$11
-  // Series data cells:
-  // LWBP: $C$7:$C$11, WBP: $D$7:$D$11
-  // Est Cost: $G$7:$G$11, Est Penghematan: $H$7:$H$11, Est Net Cost: $I$7:$I$11
-
-  // Chart 1: Bar Chart of Energy Comparison (LWBP vs WBP)
-  chartSpecs.push({
-    sheet: "Dashboard Utama",
-    type: "column",
-    title: "Perbandingan Konsumsi & Generasi Energi (LWBP vs WBP)",
-    categories: `'Dashboard Utama'!$B$7:$B$11`,
-    series: [
-      { name: "LWBP (kWh)", ref: `'Dashboard Utama'!$C$7:$C$11`, color: "3B82F6" },
-      { name: "WBP (kWh)", ref: `'Dashboard Utama'!$D$7:$D$11`, color: "F59E0B" }
-    ],
-    anchor: { col: 0, row: 15 },
-    width: 650,
-    height: 390,
-    yTitle: "Energi (kWh)"
-  });
-
-  // Chart 2: Bar Chart of Financial Comparison (Est Cost vs Est Penghematan vs Est Net Cost)
-  chartSpecs.push({
-    sheet: "Dashboard Utama",
-    type: "column",
-    title: "Estimasi Finansial Energi per Item (Cost vs Penghematan vs Net Cost)",
-    categories: `'Dashboard Utama'!$B$7:$B$11`,
-    series: [
-      { name: "Est Cost (Rp)", ref: `'Dashboard Utama'!$G$7:$G$11`, color: "EF4444" },
-      { name: "Est Penghematan (Rp)", ref: `'Dashboard Utama'!$H$7:$H$11`, color: "10B981" },
-      { name: "Est Net Cost (Rp)", ref: `'Dashboard Utama'!$I$7:$I$11`, color: "06B6D4" }
-    ],
-    anchor: { col: 8, row: 15 },
-    width: 760,
-    height: 390,
-    yTitle: "Rupiah (IDR)"
-  });
-
-  let buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
-
-  if (chartSpecs.length > 0) {
-    try {
-      buffer = await addCharts(buffer, chartSpecs);
-    } catch (chartErr) {
-      console.error("Warning: Failed to inject charts into Excel workbook, fallback to standard workbook:", chartErr);
-    }
+  totRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+  totRow.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
+  for (let c = 3; c <= 5; c++) {
+    totRow.getCell(c).numFmt = "#,##0.00";
+    totRow.getCell(c).alignment = { horizontal: "right", vertical: "middle" };
+  }
+  totRow.getCell(6).numFmt = "0.000";
+  totRow.getCell(6).alignment = { horizontal: "right", vertical: "middle" };
+  for (let c = 7; c <= 9; c++) {
+    totRow.getCell(c).numFmt = '"Rp "#,##0';
+    totRow.getCell(c).alignment = { horizontal: "right", vertical: "middle" };
   }
 
-  return buffer;
+  for (let c = 1; c <= 9; c++) {
+    const cell = totRow.getCell(c);
+    cell.font = { bold: true, size: 10, color: { argb: "FF0F172A" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
+    cell.border = {
+      top: { style: "thin", color: { argb: "FF94A3B8" } },
+      bottom: { style: "double", color: { argb: "FF475569" } },
+      left: { style: "thin", color: { argb: "FFCBD5E1" } },
+      right: { style: "thin", color: { argb: "FFCBD5E1" } }
+    };
+  }
+
+  // Dashboard Notes
+  wsDashboard.getCell(`A${totalRowNum + 2}`).value = "Catatan:";
+  wsDashboard.getCell(`A${totalRowNum + 2}`).font = { bold: true, color: { argb: "FF475569" } };
+  wsDashboard.getCell(`A${totalRowNum + 3}`).value = "1. Seluruh data time-series terperinci per jam / hari / bulan dapat dilihat pada sheet 'Data Kelistrikan'.";
+  wsDashboard.getCell(`A${totalRowNum + 4}`).value = "2. Estimasi Penghematan Solar PV dihitung berdasarkan selisih tarif acuan LWBP PLN terhadap biaya kontrak PV.";
+
+  wsDashboard.columns = [
+    { width: 8 },  // No
+    { width: 26 }, // Nama Item
+    { width: 18 }, // LWBP
+    { width: 18 }, // WBP
+    { width: 22 }, // Total
+    { width: 24 }, // PF
+    { width: 22 }, // Cost
+    { width: 24 }, // Penghematan
+    { width: 22 }  // Net Cost
+  ];
+
+  // ==========================================
+  // SHEET 2: DATA KELISTRIKAN (24 COLUMNS - GROUPED HEADERS WITH COLOR THEMES)
+  // ==========================================
+  const wsData = workbook.addWorksheet("Data Kelistrikan", {
+    views: [{ showGridLines: true, state: "frozen", ySplit: 2 }]
+  });
+
+  // Merge Header Groups (Row 1)
+  wsData.mergeCells("A1:A2");
+  wsData.getCell("A1").value = "Tgl / Waktu";
+
+  wsData.mergeCells("B1:F1");
+  wsData.getCell("B1").value = "PLN (INCOMING)";
+
+  wsData.mergeCells("G1:K1");
+  wsData.getCell("G1").value = "FEEDER FACT-1";
+
+  wsData.mergeCells("L1:P1");
+  wsData.getCell("L1").value = "FEEDER FACT-2";
+
+  wsData.mergeCells("Q1:V1");
+  wsData.getCell("Q1").value = "SOLAR PV GENERATION";
+
+  wsData.mergeCells("W1:X1");
+  wsData.getCell("W1").value = "RINGKASAN FINANSIAL";
+
+  const groupConfigs = [
+    { cell: "A1", fill: "1E293B" }, // Slate
+    { cell: "B1", fill: "1E40AF" }, // Blue
+    { cell: "G1", fill: "0E7490" }, // Cyan
+    { cell: "L1", fill: "0F766E" }, // Teal
+    { cell: "Q1", fill: "047857" }, // Emerald
+    { cell: "W1", fill: "6D28D9" }  // Violet
+  ];
+
+  for (const gc of groupConfigs) {
+    const cell = wsData.getCell(gc.cell);
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + gc.fill } };
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+    cell.alignment = { vertical: "middle", horizontal: "center" };
+    cell.border = {
+      top: { style: "medium", color: { argb: "FF0F172A" } },
+      bottom: { style: "thin", color: { argb: "FFFFFFFF" } },
+      left: { style: "thin", color: { argb: "FFFFFFFF" } },
+      right: { style: "thin", color: { argb: "FFFFFFFF" } }
+    };
+  }
+
+  // Row 2: Sub-headers
+  const subHeaders = [
+    "", // A (merged with A1)
+    "LWBP (kWh)", "WBP (kWh)", "Total (kWh)", "PF PLN", "Cost PLN (Rp)",
+    "LWBP (kWh)", "WBP (kWh)", "Total (kWh)", "PF Fact-1", "Cost Fact-1 (Rp)",
+    "LWBP (kWh)", "WBP (kWh)", "Total (kWh)", "PF Fact-2", "Cost Fact-2 (Rp)",
+    "POI-1 (kWh)", "PF POI-1", "POI-2 (kWh)", "PF POI-2", "Total PV (kWh)", "Cost PV (Rp)",
+    "Penghematan (Rp)", "Net Cost (Rp)"
+  ];
+
+  const row2 = wsData.getRow(2);
+  row2.height = 24;
+  for (let c = 2; c <= 24; c++) {
+    const cell = row2.getCell(c);
+    cell.value = subHeaders[c - 1];
+
+    let fill = "3B82F6"; // Blue
+    if (c >= 7 && c <= 11) fill = "0891B2"; // Cyan
+    else if (c >= 12 && c <= 16) fill = "0D9488"; // Teal
+    else if (c >= 17 && c <= 22) fill = "059669"; // Emerald
+    else if (c >= 23 && c <= 24) fill = "7C3AED"; // Violet
+
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + fill } };
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 9 };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    cell.border = {
+      top: { style: "thin", color: { argb: "FFFFFFFF" } },
+      bottom: { style: "medium", color: { argb: "FF0F172A" } },
+      left: { style: "thin", color: { argb: "FFFFFFFF" } },
+      right: { style: "thin", color: { argb: "FFFFFFFF" } }
+    };
+  }
+
+  // Populate data rows
+  rows.forEach((r, idx) => {
+    const rowNum = 3 + idx;
+    const row = wsData.getRow(rowNum);
+    row.height = 19;
+
+    const values = [
+      r.tgl_waktu,
+      // PLN
+      r.lwbp_pln,
+      r.wbp_pln,
+      r.total_pln,
+      r.pf_pln,
+      r.est_cost_pln,
+      // Fact-1
+      r.lwbp_wf1,
+      r.wbp_wf1,
+      r.total_wf1,
+      r.pf_wf1,
+      r.est_cost_wf1,
+      // Fact-2
+      r.lwbp_wf2,
+      r.wbp_wf2,
+      r.total_wf2,
+      r.pf_wf2,
+      r.est_cost_wf2,
+      // Solar
+      r.poi1_kwh,
+      r.pf_poi1,
+      r.poi2_kwh,
+      r.pf_poi2,
+      r.total_pv,
+      r.est_cost_pv,
+      // Financial
+      r.est_saving,
+      r.est_net_cost
+    ];
+
+    const isEven = idx % 2 === 1;
+    const rowBg = isEven ? "FFF8FAFC" : "FFFFFFFF";
+
+    values.forEach((val, colIdx) => {
+      const cell = row.getCell(colIdx + 1);
+      cell.value = val;
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: rowBg } };
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFE2E8F0" } },
+        bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+        left: { style: "thin", color: { argb: "FFE2E8F0" } },
+        right: { style: "thin", color: { argb: "FFE2E8F0" } }
+      };
+
+      if (colIdx === 0) {
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+      } else {
+        const colNum = colIdx + 1;
+        // PF columns: col 5, 10, 15, 18, 20
+        const isPfCol = [5, 10, 15, 18, 20].includes(colNum);
+        // Cost columns: col 6, 11, 16, 22, 23, 24
+        const isCostCol = [6, 11, 16, 22, 23, 24].includes(colNum);
+
+        if (isPfCol) {
+          if (val !== null && val !== undefined && typeof val === "number") {
+            cell.numFmt = "0.000";
+          } else {
+            cell.value = "-";
+          }
+          cell.alignment = { horizontal: "right", vertical: "middle" };
+        } else if (isCostCol) {
+          cell.numFmt = '"Rp "#,##0';
+          cell.alignment = { horizontal: "right", vertical: "middle" };
+        } else {
+          // kWh energy columns
+          cell.numFmt = "#,##0.00";
+          cell.alignment = { horizontal: "right", vertical: "middle" };
+        }
+      }
+    });
+  });
+
+  // Set column widths
+  const colWidths = [
+    21, // Tgl / Waktu
+    14, 14, 15, 12, 17, // PLN
+    14, 14, 15, 12, 17, // Fact-1
+    14, 14, 15, 12, 17, // Fact-2
+    14, 12, 14, 12, 15, 17, // Solar
+    18, 18 // Finansial
+  ];
+  colWidths.forEach((w, i) => {
+    wsData.getColumn(i + 1).width = w;
+  });
+
+  // Enable autofilter across data columns
+  if (rows.length > 0) {
+    wsData.autoFilter = {
+      from: { row: 2, column: 1 },
+      to: { row: rows.length + 2, column: 24 }
+    };
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }
 

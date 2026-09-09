@@ -23,25 +23,35 @@ interface SummaryItem {
 
 interface ExportRow {
   tgl_waktu: string;
+  // PLN
   lwbp_pln: number;
   wbp_pln: number;
   total_pln: number;
+  pf_pln?: number | null;
+  est_cost_pln: number;
+  // Fact-1
   lwbp_wf1: number;
   wbp_wf1: number;
   total_wf1: number;
+  pf_wf1?: number | null;
+  est_cost_wf1: number;
+  // Fact-2
   lwbp_wf2: number;
   wbp_wf2: number;
   total_wf2: number;
-  poi1_kwh: number;
-  poi2_kwh: number;
-  total_pv: number;
-  est_cost_pln: number;
-  est_cost_wf1: number;
+  pf_wf2?: number | null;
   est_cost_wf2: number;
+  // Solar
+  poi1_kwh: number;
+  pf_poi1?: number | null;
+  poi2_kwh: number;
+  pf_poi2?: number | null;
+  total_pv: number;
   est_cost_pv: number;
+  // Financial
   est_saving: number;
   est_net_cost: number;
-  pf: number;
+  pf?: number;
 }
 
 interface PreviewData {
@@ -235,7 +245,7 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                 Export Laporan Kelistrikan (.xlsx)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Dashboard eksekutif dengan Bar Chart & tabel data terstandarisasi (20 kolom per baris)
+                Dashboard eksekutif & tabel data terstandarisasi per feeder dan solar (24 kolom per baris)
               </p>
             </div>
           </div>
@@ -472,71 +482,113 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                   </table>
                 </div>
               ) : (
-                /* Tab 2: Data Kelistrikan Table - Wide 20-column format */
+                /* Tab 2: Data Kelistrikan Table - Grouped 24-column format */
                 <div className="overflow-x-auto max-h-72 overflow-y-auto">
-                  <table className="text-xs text-left" style={{ minWidth: "1600px" }}>
-                    <thead className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-100/90 dark:bg-slate-800/90 sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
+                  <table className="text-xs text-left" style={{ minWidth: "1850px" }}>
+                    <thead className="text-[9px] font-bold uppercase tracking-wider sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700 shadow-xs">
+                      {/* Row 1: Merged Group Header with distinct theme colors */}
                       <tr>
-                        <th className="py-2 px-2 whitespace-nowrap" rowSpan={2}>Tgl/Waktu</th>
-                        <th className="py-1 px-2 text-center border-b border-blue-300/50" colSpan={3}>PLN (Incoming)</th>
-                        <th className="py-1 px-2 text-center border-b border-cyan-300/50" colSpan={3}>Fact-1</th>
-                        <th className="py-1 px-2 text-center border-b border-teal-300/50" colSpan={3}>Fact-2</th>
-                        <th className="py-1 px-2 text-center border-b border-emerald-300/50" colSpan={3}>Solar PV</th>
-                        <th className="py-1 px-2 text-center border-b border-red-300/50" colSpan={6}>Finansial</th>
-                        <th className="py-2 px-2 whitespace-nowrap" rowSpan={2}>PF</th>
+                        <th className="py-2.5 px-3 whitespace-nowrap text-center bg-slate-800 text-white border-r border-slate-700" rowSpan={2}>
+                          Tgl / Waktu
+                        </th>
+                        <th className="py-2 px-3 text-center bg-blue-700 text-white border-r border-blue-600" colSpan={5}>
+                          PLN (Incoming)
+                        </th>
+                        <th className="py-2 px-3 text-center bg-cyan-700 text-white border-r border-cyan-600" colSpan={5}>
+                          Feeder Fact-1
+                        </th>
+                        <th className="py-2 px-3 text-center bg-teal-700 text-white border-r border-teal-600" colSpan={5}>
+                          Feeder Fact-2
+                        </th>
+                        <th className="py-2 px-3 text-center bg-emerald-700 text-white border-r border-emerald-600" colSpan={6}>
+                          Solar PV Generation
+                        </th>
+                        <th className="py-2 px-3 text-center bg-purple-700 text-white" colSpan={2}>
+                          Ringkasan Finansial
+                        </th>
                       </tr>
-                      <tr>
-                        <th className="py-1.5 px-2 text-right text-blue-600 dark:text-blue-400">LWBP</th>
-                        <th className="py-1.5 px-2 text-right text-blue-600 dark:text-blue-400">WBP</th>
-                        <th className="py-1.5 px-2 text-right text-blue-700 dark:text-blue-300 font-extrabold">Total</th>
-                        <th className="py-1.5 px-2 text-right text-cyan-600 dark:text-cyan-400">LWBP</th>
-                        <th className="py-1.5 px-2 text-right text-cyan-600 dark:text-cyan-400">WBP</th>
-                        <th className="py-1.5 px-2 text-right text-cyan-700 dark:text-cyan-300 font-extrabold">Total</th>
-                        <th className="py-1.5 px-2 text-right text-teal-600 dark:text-teal-400">LWBP</th>
-                        <th className="py-1.5 px-2 text-right text-teal-600 dark:text-teal-400">WBP</th>
-                        <th className="py-1.5 px-2 text-right text-teal-700 dark:text-teal-300 font-extrabold">Total</th>
-                        <th className="py-1.5 px-2 text-right text-emerald-600 dark:text-emerald-400">POI-1</th>
-                        <th className="py-1.5 px-2 text-right text-emerald-600 dark:text-emerald-400">POI-2</th>
-                        <th className="py-1.5 px-2 text-right text-emerald-700 dark:text-emerald-300 font-extrabold">Total</th>
-                        <th className="py-1.5 px-2 text-right text-red-600 dark:text-red-400">Cost PLN</th>
-                        <th className="py-1.5 px-2 text-right text-orange-600 dark:text-orange-400">Cost F-1</th>
-                        <th className="py-1.5 px-2 text-right text-amber-600 dark:text-amber-400">Cost F-2</th>
-                        <th className="py-1.5 px-2 text-right text-yellow-600 dark:text-yellow-400">Cost PV</th>
-                        <th className="py-1.5 px-2 text-right text-green-600 dark:text-green-400">Saving</th>
-                        <th className="py-1.5 px-2 text-right text-blue-700 dark:text-cyan-300 font-extrabold">Net Cost</th>
+                      {/* Row 2: Sub-headers */}
+                      <tr className="bg-slate-100/95 dark:bg-slate-800/95 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
+                        {/* PLN */}
+                        <th className="py-1.5 px-2 text-right text-blue-700 dark:text-blue-400">LWBP</th>
+                        <th className="py-1.5 px-2 text-right text-blue-700 dark:text-blue-400">WBP</th>
+                        <th className="py-1.5 px-2 text-right text-blue-800 dark:text-blue-300 font-extrabold">Total</th>
+                        <th className="py-1.5 px-2 text-right text-purple-700 dark:text-purple-400 font-semibold">PF PLN</th>
+                        <th className="py-1.5 px-2 text-right text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700">Cost PLN</th>
+                        {/* Fact-1 */}
+                        <th className="py-1.5 px-2 text-right text-cyan-700 dark:text-cyan-400">LWBP</th>
+                        <th className="py-1.5 px-2 text-right text-cyan-700 dark:text-cyan-400">WBP</th>
+                        <th className="py-1.5 px-2 text-right text-cyan-800 dark:text-cyan-300 font-extrabold">Total</th>
+                        <th className="py-1.5 px-2 text-right text-purple-700 dark:text-purple-400 font-semibold">PF Fact-1</th>
+                        <th className="py-1.5 px-2 text-right text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700">Cost F-1</th>
+                        {/* Fact-2 */}
+                        <th className="py-1.5 px-2 text-right text-teal-700 dark:text-teal-400">LWBP</th>
+                        <th className="py-1.5 px-2 text-right text-teal-700 dark:text-teal-400">WBP</th>
+                        <th className="py-1.5 px-2 text-right text-teal-800 dark:text-teal-300 font-extrabold">Total</th>
+                        <th className="py-1.5 px-2 text-right text-purple-700 dark:text-purple-400 font-semibold">PF Fact-2</th>
+                        <th className="py-1.5 px-2 text-right text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700">Cost F-2</th>
+                        {/* Solar */}
+                        <th className="py-1.5 px-2 text-right text-emerald-700 dark:text-emerald-400">POI-1</th>
+                        <th className="py-1.5 px-2 text-right text-purple-700 dark:text-purple-400 font-semibold">PF POI-1</th>
+                        <th className="py-1.5 px-2 text-right text-emerald-700 dark:text-emerald-400">POI-2</th>
+                        <th className="py-1.5 px-2 text-right text-purple-700 dark:text-purple-400 font-semibold">PF POI-2</th>
+                        <th className="py-1.5 px-2 text-right text-emerald-800 dark:text-emerald-300 font-extrabold">Total PV</th>
+                        <th className="py-1.5 px-2 text-right text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700">Cost PV</th>
+                        {/* Finansial */}
+                        <th className="py-1.5 px-2 text-right text-emerald-700 dark:text-emerald-400 font-bold">Saving</th>
+                        <th className="py-1.5 px-2 text-right text-blue-700 dark:text-cyan-400 font-extrabold">Net Cost</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
                       {previewData?.rows && previewData.rows.length > 0 ? (
                         previewData.rows.map((r, idx) => (
-                          <tr key={idx} className="hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition">
-                            <td className="py-1.5 px-2 text-slate-600 dark:text-slate-400 whitespace-nowrap font-sans text-[10px]">{r.tgl_waktu}</td>
+                          <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition">
+                            <td className="py-1.5 px-2.5 text-slate-600 dark:text-slate-400 whitespace-nowrap font-sans text-[10px] text-center border-r border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                              {r.tgl_waktu}
+                            </td>
+                            {/* PLN */}
                             <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300">{formatNumber(r.lwbp_pln)}</td>
                             <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300">{formatNumber(r.wbp_pln)}</td>
                             <td className="py-1.5 px-2 text-right font-bold text-blue-700 dark:text-blue-300">{formatNumber(r.total_pln)}</td>
+                            <td className="py-1.5 px-2 text-right text-purple-600 dark:text-purple-400 font-semibold">
+                              {typeof r.pf_pln === "number" && !isNaN(r.pf_pln) ? r.pf_pln.toFixed(3) : "-"}
+                            </td>
+                            <td className="py-1.5 px-2 text-right text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-slate-800">{formatCurrency(r.est_cost_pln)}</td>
+                            {/* Fact-1 */}
                             <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300">{formatNumber(r.lwbp_wf1)}</td>
                             <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300">{formatNumber(r.wbp_wf1)}</td>
                             <td className="py-1.5 px-2 text-right font-bold text-cyan-700 dark:text-cyan-300">{formatNumber(r.total_wf1)}</td>
+                            <td className="py-1.5 px-2 text-right text-purple-600 dark:text-purple-400 font-semibold">
+                              {typeof r.pf_wf1 === "number" && !isNaN(r.pf_wf1) ? r.pf_wf1.toFixed(3) : "-"}
+                            </td>
+                            <td className="py-1.5 px-2 text-right text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-slate-800">{formatCurrency(r.est_cost_wf1)}</td>
+                            {/* Fact-2 */}
                             <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300">{formatNumber(r.lwbp_wf2)}</td>
                             <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300">{formatNumber(r.wbp_wf2)}</td>
                             <td className="py-1.5 px-2 text-right font-bold text-teal-700 dark:text-teal-300">{formatNumber(r.total_wf2)}</td>
+                            <td className="py-1.5 px-2 text-right text-purple-600 dark:text-purple-400 font-semibold">
+                              {typeof r.pf_wf2 === "number" && !isNaN(r.pf_wf2) ? r.pf_wf2.toFixed(3) : "-"}
+                            </td>
+                            <td className="py-1.5 px-2 text-right text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-slate-800">{formatCurrency(r.est_cost_wf2)}</td>
+                            {/* Solar */}
                             <td className="py-1.5 px-2 text-right text-emerald-600 dark:text-emerald-400">{formatNumber(r.poi1_kwh)}</td>
+                            <td className="py-1.5 px-2 text-right text-purple-600 dark:text-purple-400 font-semibold">
+                              {typeof r.pf_poi1 === "number" && !isNaN(r.pf_poi1) ? r.pf_poi1.toFixed(3) : "-"}
+                            </td>
                             <td className="py-1.5 px-2 text-right text-emerald-600 dark:text-emerald-400">{formatNumber(r.poi2_kwh)}</td>
+                            <td className="py-1.5 px-2 text-right text-purple-600 dark:text-purple-400 font-semibold">
+                              {typeof r.pf_poi2 === "number" && !isNaN(r.pf_poi2) ? r.pf_poi2.toFixed(3) : "-"}
+                            </td>
                             <td className="py-1.5 px-2 text-right font-bold text-emerald-700 dark:text-emerald-300">{formatNumber(r.total_pv)}</td>
-                            <td className="py-1.5 px-2 text-right text-red-600 dark:text-red-400">{formatCurrency(r.est_cost_pln)}</td>
-                            <td className="py-1.5 px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(r.est_cost_wf1)}</td>
-                            <td className="py-1.5 px-2 text-right text-amber-600 dark:text-amber-400">{formatCurrency(r.est_cost_wf2)}</td>
-                            <td className="py-1.5 px-2 text-right text-yellow-600 dark:text-yellow-400">{formatCurrency(r.est_cost_pv)}</td>
+                            <td className="py-1.5 px-2 text-right text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-slate-800">{formatCurrency(r.est_cost_pv)}</td>
+                            {/* Finansial */}
                             <td className="py-1.5 px-2 text-right text-green-600 dark:text-green-400 font-semibold">{formatCurrency(r.est_saving)}</td>
                             <td className="py-1.5 px-2 text-right text-blue-700 dark:text-cyan-400 font-bold">{formatCurrency(r.est_net_cost)}</td>
-                            <td className="py-1.5 px-2 text-right text-purple-600 dark:text-purple-400">
-                              {typeof r.pf === "number" && !isNaN(r.pf) ? r.pf.toFixed(3) : "-"}
-                            </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={20} className="py-8 text-center text-slate-400 dark:text-slate-500 font-sans">
+                          <td colSpan={24} className="py-8 text-center text-slate-400 dark:text-slate-500 font-sans">
                             {previewLoading ? "Memuat baris data time-series..." : "Tidak ada baris data pada periode ini."}
                           </td>
                         </tr>
@@ -553,7 +605,7 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
           <div className="text-xs text-slate-500 dark:text-slate-400">
             {previewData?.totalRows ? (
-              <span>Total data siap diexport: <strong className="text-slate-800 dark:text-slate-200">{previewData.totalRows} baris</strong> (2 sheets: Dashboard Utama & Data Kelistrikan – 20 kolom)</span>
+              <span>Total data siap diexport: <strong className="text-slate-800 dark:text-slate-200">{previewData.totalRows} baris</strong> (2 sheets: Dashboard Utama & Data Kelistrikan – 24 kolom)</span>
             ) : (
               <span>Pilih tanggal untuk melihat preview data</span>
             )}
