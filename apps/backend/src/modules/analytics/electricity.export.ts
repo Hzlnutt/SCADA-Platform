@@ -25,13 +25,31 @@ export interface ElectricityExportItemSummary {
 
 export interface ElectricityExportDataRow {
   tgl_waktu: string;
-  nama_item: string;
-  lwbp: number;
-  wbp: number;
-  power_factor: number;
-  est_cost: number;
-  est_penghematan: number;
+  // PLN (Incoming)
+  lwbp_pln: number;
+  wbp_pln: number;
+  total_pln: number;
+  // Fact-1
+  lwbp_wf1: number;
+  wbp_wf1: number;
+  total_wf1: number;
+  // Fact-2
+  lwbp_wf2: number;
+  wbp_wf2: number;
+  total_wf2: number;
+  // PV Solar
+  poi1_kwh: number;
+  poi2_kwh: number;
+  total_pv: number;
+  // Financial
+  est_cost_pln: number;
+  est_cost_wf1: number;
+  est_cost_wf2: number;
+  est_cost_pv: number;
+  est_saving: number;
   est_net_cost: number;
+  // Power Factor (average of all items)
+  pf: number;
 }
 
 export interface ElectricityExportResult {
@@ -299,22 +317,6 @@ export async function getElectricityExportData(params: ElectricityExportParams):
 
   const sortedBucketKeys = Array.from(allBucketsMap.keys()).sort();
 
-  const ITEM_NAMES = [
-    "Incoming PLN",
-    "Fact-1",
-    "Fact-2",
-    "POI-1",
-    "POI-2"
-  ] as const;
-
-  const defaultPfMap: Record<string, number> = {
-    "Incoming PLN": 0.95,
-    "Fact-1": 0.93,
-    "Fact-2": 0.94,
-    "POI-1": 0.98,
-    "POI-2": 0.99
-  };
-
   const exportRows: ElectricityExportDataRow[] = [];
 
   const summaryMap: Record<string, {
@@ -334,10 +336,20 @@ export async function getElectricityExportData(params: ElectricityExportParams):
     "POI-2": { lwbp: 0, wbp: 0, pfWeightedSum: 0, pfTotalKwh: 0, pfList: [], estCost: 0, estPenghematan: 0, estNetCost: 0 }
   };
 
+  const ITEM_NAMES = ["Incoming PLN", "Fact-1", "Fact-2", "POI-1", "POI-2"] as const;
+
+  const defaultPfMap: Record<string, number> = {
+    "Incoming PLN": 0.95,
+    "Fact-1": 0.93,
+    "Fact-2": 0.94,
+    "POI-1": 0.98,
+    "POI-2": 0.99
+  };
+
   for (const bKey of sortedBucketKeys) {
     const itemMap = allBucketsMap.get(bKey)!;
 
-    for (const itemName of ITEM_NAMES) {
+    const computeItem = (itemName: string, isSolar: boolean) => {
       const acc = itemMap.get(itemName) || { lwbp: 0, wbp: 0, pfWeightedSum: 0, pfTotalKwh: 0, pfList: [] };
       const lwbp = acc.lwbp;
       const wbp = acc.wbp;
@@ -347,7 +359,7 @@ export async function getElectricityExportData(params: ElectricityExportParams):
       if (acc.pfTotalKwh > 0) {
         pf = acc.pfWeightedSum / acc.pfTotalKwh;
       } else if (acc.pfList.length > 0) {
-        pf = acc.pfList.reduce((a, b) => a + b, 0) / acc.pfList.length;
+        pf = acc.pfList.reduce((a: number, b: number) => a + b, 0) / acc.pfList.length;
       }
       pf = Math.min(1.0, Math.max(0.70, Number(pf.toFixed(3))));
 
@@ -355,16 +367,16 @@ export async function getElectricityExportData(params: ElectricityExportParams):
       let estPenghematan = 0;
       let estNetCost = 0;
 
-      if (itemName === "POI-1" || itemName === "POI-2") {
+      if (isSolar) {
         estCost = Math.round(lwbp * lwbpRate + wbp * wbpRate);
-        estPenghematan = Math.round(lwbp * (lwbpRate - pvRate) + wbp * (wbpRate - pvRate));
+        estPenghematan = Math.round(totKwh * (lwbpRate - pvRate));
         estNetCost = Math.round(totKwh * pvRate);
       } else {
         estCost = Math.round(lwbp * lwbpRate + wbp * wbpRate);
-        estPenghematan = 0;
         estNetCost = estCost;
       }
 
+      // Accumulate summary
       const s = summaryMap[itemName];
       s.lwbp += lwbp;
       s.wbp += wbp;
@@ -375,17 +387,50 @@ export async function getElectricityExportData(params: ElectricityExportParams):
       s.estPenghematan += estPenghematan;
       s.estNetCost += estNetCost;
 
-      exportRows.push({
-        tgl_waktu: bKey,
-        nama_item: itemName,
-        lwbp: Number(lwbp.toFixed(2)),
-        wbp: Number(wbp.toFixed(2)),
-        power_factor: pf,
-        est_cost: estCost,
-        est_penghematan: estPenghematan,
-        est_net_cost: estNetCost
-      });
-    }
+      return { lwbp: Number(lwbp.toFixed(2)), wbp: Number(wbp.toFixed(2)), totKwh: Number(totKwh.toFixed(2)), pf, estCost, estPenghematan, estNetCost };
+    };
+
+    const pln = computeItem("Incoming PLN", false);
+    const wf1 = computeItem("Fact-1", false);
+    const wf2 = computeItem("Fact-2", false);
+    const poi1 = computeItem("POI-1", true);
+    const poi2 = computeItem("POI-2", true);
+
+    const totalPv = Number((poi1.totKwh + poi2.totKwh).toFixed(2));
+    const estCostPv = poi1.estCost + poi2.estCost;
+    const estSaving = poi1.estPenghematan + poi2.estPenghematan;
+    const estNetCostRow = pln.estNetCost + wf1.estNetCost + wf2.estNetCost + poi1.estNetCost + poi2.estNetCost;
+
+    // Weighted average PF across all items (by kWh)
+    const allItemsArr = [pln, wf1, wf2, poi1, poi2];
+    const totalKwhAll = allItemsArr.reduce((s, x) => s + x.totKwh, 0);
+    const weightedPfSum = allItemsArr.reduce((s, x) => s + x.pf * x.totKwh, 0);
+    const avgPf = totalKwhAll > 0
+      ? Math.min(1.0, Math.max(0.70, Number((weightedPfSum / totalKwhAll).toFixed(3))))
+      : Number(((pln.pf + wf1.pf + wf2.pf + poi1.pf + poi2.pf) / 5).toFixed(3));
+
+    exportRows.push({
+      tgl_waktu: bKey,
+      lwbp_pln: pln.lwbp,
+      wbp_pln: pln.wbp,
+      total_pln: pln.totKwh,
+      lwbp_wf1: wf1.lwbp,
+      wbp_wf1: wf1.wbp,
+      total_wf1: wf1.totKwh,
+      lwbp_wf2: wf2.lwbp,
+      wbp_wf2: wf2.wbp,
+      total_wf2: wf2.totKwh,
+      poi1_kwh: poi1.totKwh,
+      poi2_kwh: poi2.totKwh,
+      total_pv: totalPv,
+      est_cost_pln: pln.estCost,
+      est_cost_wf1: wf1.estCost,
+      est_cost_wf2: wf2.estCost,
+      est_cost_pv: estCostPv,
+      est_saving: estSaving,
+      est_net_cost: estNetCostRow,
+      pf: avgPf
+    });
   }
 
   const summaryItems: ElectricityExportItemSummary[] = ITEM_NAMES.map((itemName, i) => {
@@ -564,41 +609,79 @@ export async function generateElectricityExcelWorkbook(
   XLSX.utils.book_append_sheet(wb, wsDashboard, "Dashboard Utama");
 
   // ==========================================
-  // SHEET 2: DATA KELISTRIKAN (EXACT 8 COLUMNS REQUESTED)
+  // SHEET 2: DATA KELISTRIKAN (20 COLUMNS - WIDE FORMAT PER TIMESTAMP)
   // ==========================================
   const dataHeaders = [
     "Tgl/Waktu",
-    "Nama Item",
-    "LWBP (kWh)",
-    "WBP (kWh)",
-    "Power Factor",
-    "Est Cost (Rp)",
-    "Est Penghematan (Rp)",
-    "Est Net Cost (Rp)"
+    "LWBP PLN (kWh)",
+    "WBP PLN (kWh)",
+    "Total kWh PLN",
+    "LWBP Fact-1 (kWh)",
+    "WBP Fact-1 (kWh)",
+    "Total kWh Fact-1",
+    "LWBP Fact-2 (kWh)",
+    "WBP Fact-2 (kWh)",
+    "Total kWh Fact-2",
+    "POI-1 kWh",
+    "POI-2 kWh",
+    "Total PV kWh",
+    "Est Cost PLN (Rp)",
+    "Est Cost Fact-1 (Rp)",
+    "Est Cost Fact-2 (Rp)",
+    "Est Cost PV (Rp)",
+    "Est Saving (Rp)",
+    "Est Net Cost (Rp)",
+    "Power Factor"
   ];
 
   const dataAoaRows = rows.map((r) => [
     r.tgl_waktu,
-    r.nama_item,
-    r.lwbp,
-    r.wbp,
-    r.power_factor,
-    r.est_cost,
-    r.est_penghematan,
-    r.est_net_cost
+    r.lwbp_pln,
+    r.wbp_pln,
+    r.total_pln,
+    r.lwbp_wf1,
+    r.wbp_wf1,
+    r.total_wf1,
+    r.lwbp_wf2,
+    r.wbp_wf2,
+    r.total_wf2,
+    r.poi1_kwh,
+    r.poi2_kwh,
+    r.total_pv,
+    r.est_cost_pln,
+    r.est_cost_wf1,
+    r.est_cost_wf2,
+    r.est_cost_pv,
+    r.est_saving,
+    r.est_net_cost,
+    r.pf
   ]);
 
+  const numCols = dataHeaders.length;
+  const lastCol = String.fromCharCode(64 + numCols); // 'T' for 20 cols
   const wsData = XLSX.utils.aoa_to_sheet([dataHeaders, ...dataAoaRows]);
-  wsData["!autofilter"] = { ref: `A1:H${Math.max(2, dataAoaRows.length + 1)}` };
+  wsData["!autofilter"] = { ref: `A1:${lastCol}${Math.max(2, dataAoaRows.length + 1)}` };
   wsData["!cols"] = [
-    { wch: 22 },
-    { wch: 18 },
-    { wch: 15 },
-    { wch: 15 },
-    { wch: 14 },
-    { wch: 18 },
-    { wch: 20 },
-    { wch: 18 }
+    { wch: 22 }, // Tgl/Waktu
+    { wch: 16 }, // LWBP PLN
+    { wch: 15 }, // WBP PLN
+    { wch: 15 }, // Total PLN
+    { wch: 18 }, // LWBP Fact-1
+    { wch: 17 }, // WBP Fact-1
+    { wch: 16 }, // Total Fact-1
+    { wch: 18 }, // LWBP Fact-2
+    { wch: 17 }, // WBP Fact-2
+    { wch: 16 }, // Total Fact-2
+    { wch: 13 }, // POI-1
+    { wch: 13 }, // POI-2
+    { wch: 14 }, // Total PV
+    { wch: 18 }, // Est Cost PLN
+    { wch: 20 }, // Est Cost Fact-1
+    { wch: 20 }, // Est Cost Fact-2
+    { wch: 16 }, // Est Cost PV
+    { wch: 16 }, // Est Saving
+    { wch: 18 }, // Est Net Cost
+    { wch: 14 }  // Power Factor
   ];
   XLSX.utils.book_append_sheet(wb, wsData, "Data Kelistrikan");
 

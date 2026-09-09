@@ -21,13 +21,25 @@ interface SummaryItem {
 
 interface ExportRow {
   tgl_waktu: string;
-  nama_item: string;
-  lwbp: number;
-  wbp: number;
-  power_factor: number;
-  est_cost: number;
-  est_penghematan: number;
+  lwbp_pln: number;
+  wbp_pln: number;
+  total_pln: number;
+  lwbp_wf1: number;
+  wbp_wf1: number;
+  total_wf1: number;
+  lwbp_wf2: number;
+  wbp_wf2: number;
+  total_wf2: number;
+  poi1_kwh: number;
+  poi2_kwh: number;
+  total_pv: number;
+  est_cost_pln: number;
+  est_cost_wf1: number;
+  est_cost_wf2: number;
+  est_cost_pv: number;
+  est_saving: number;
   est_net_cost: number;
+  pf: number;
 }
 
 interface PreviewData {
@@ -221,7 +233,7 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                 Export Laporan Kelistrikan (.xlsx)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Dashboard eksekutif dengan Bar Chart & tabel data terstandarisasi (8 kolom)
+                Dashboard eksekutif dengan Bar Chart & tabel data terstandarisasi (20 kolom per baris)
               </p>
             </div>
           </div>
@@ -450,54 +462,69 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                   </table>
                 </div>
               ) : (
-                /* Tab 2: Data Kelistrikan Table */
-                <div className="overflow-x-auto max-h-64 overflow-y-auto">
-                  <table className="w-full text-xs text-left">
-                    <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-100/90 dark:bg-slate-800/90 sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
+                /* Tab 2: Data Kelistrikan Table - Wide 20-column format */
+                <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                  <table className="text-xs text-left" style={{ minWidth: "1600px" }}>
+                    <thead className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-100/90 dark:bg-slate-800/90 sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
                       <tr>
-                        <th className="py-2 px-3">Tgl/Waktu</th>
-                        <th className="py-2 px-3">Nama Item</th>
-                        <th className="py-2 px-3 text-right">LWBP (kWh)</th>
-                        <th className="py-2 px-3 text-right">WBP (kWh)</th>
-                        <th className="py-2 px-3 text-right">Power Factor</th>
-                        <th className="py-2 px-3 text-right">Est Cost</th>
-                        <th className="py-2 px-3 text-right">Est Penghematan</th>
-                        <th className="py-2 px-3 text-right">Est Net Cost</th>
+                        <th className="py-2 px-2 whitespace-nowrap" rowSpan={2}>Tgl/Waktu</th>
+                        <th className="py-1 px-2 text-center border-b border-blue-300/50" colSpan={3}>PLN (Incoming)</th>
+                        <th className="py-1 px-2 text-center border-b border-cyan-300/50" colSpan={3}>Fact-1</th>
+                        <th className="py-1 px-2 text-center border-b border-teal-300/50" colSpan={3}>Fact-2</th>
+                        <th className="py-1 px-2 text-center border-b border-emerald-300/50" colSpan={3}>Solar PV</th>
+                        <th className="py-1 px-2 text-center border-b border-red-300/50" colSpan={6}>Finansial</th>
+                        <th className="py-2 px-2 whitespace-nowrap" rowSpan={2}>PF</th>
+                      </tr>
+                      <tr>
+                        <th className="py-1.5 px-2 text-right text-blue-600 dark:text-blue-400">LWBP</th>
+                        <th className="py-1.5 px-2 text-right text-blue-600 dark:text-blue-400">WBP</th>
+                        <th className="py-1.5 px-2 text-right text-blue-700 dark:text-blue-300 font-extrabold">Total</th>
+                        <th className="py-1.5 px-2 text-right text-cyan-600 dark:text-cyan-400">LWBP</th>
+                        <th className="py-1.5 px-2 text-right text-cyan-600 dark:text-cyan-400">WBP</th>
+                        <th className="py-1.5 px-2 text-right text-cyan-700 dark:text-cyan-300 font-extrabold">Total</th>
+                        <th className="py-1.5 px-2 text-right text-teal-600 dark:text-teal-400">LWBP</th>
+                        <th className="py-1.5 px-2 text-right text-teal-600 dark:text-teal-400">WBP</th>
+                        <th className="py-1.5 px-2 text-right text-teal-700 dark:text-teal-300 font-extrabold">Total</th>
+                        <th className="py-1.5 px-2 text-right text-emerald-600 dark:text-emerald-400">POI-1</th>
+                        <th className="py-1.5 px-2 text-right text-emerald-600 dark:text-emerald-400">POI-2</th>
+                        <th className="py-1.5 px-2 text-right text-emerald-700 dark:text-emerald-300 font-extrabold">Total</th>
+                        <th className="py-1.5 px-2 text-right text-red-600 dark:text-red-400">Cost PLN</th>
+                        <th className="py-1.5 px-2 text-right text-orange-600 dark:text-orange-400">Cost F-1</th>
+                        <th className="py-1.5 px-2 text-right text-amber-600 dark:text-amber-400">Cost F-2</th>
+                        <th className="py-1.5 px-2 text-right text-yellow-600 dark:text-yellow-400">Cost PV</th>
+                        <th className="py-1.5 px-2 text-right text-green-600 dark:text-green-400">Saving</th>
+                        <th className="py-1.5 px-2 text-right text-blue-700 dark:text-cyan-300 font-extrabold">Net Cost</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
                       {previewData?.rows && previewData.rows.length > 0 ? (
                         previewData.rows.map((r, idx) => (
                           <tr key={idx} className="hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition">
-                            <td className="py-1.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                              {r.tgl_waktu}
-                            </td>
-                            <td className="py-1.5 px-3 font-sans font-semibold text-slate-800 dark:text-slate-200">
-                              {r.nama_item}
-                            </td>
-                            <td className="py-1.5 px-3 text-right text-slate-600 dark:text-slate-300">
-                              {formatNumber(r.lwbp)}
-                            </td>
-                            <td className="py-1.5 px-3 text-right text-slate-600 dark:text-slate-300">
-                              {formatNumber(r.wbp)}
-                            </td>
-                            <td className="py-1.5 px-3 text-right text-purple-600 dark:text-purple-400">
-                              {r.power_factor.toFixed(2)}
-                            </td>
-                            <td className="py-1.5 px-3 text-right text-slate-700 dark:text-slate-200">
-                              {formatCurrency(r.est_cost)}
-                            </td>
-                            <td className="py-1.5 px-3 text-right text-emerald-600 dark:text-emerald-400">
-                              {r.est_penghematan > 0 ? formatCurrency(r.est_penghematan) : "Rp 0"}
-                            </td>
-                            <td className="py-1.5 px-3 text-right text-blue-600 dark:text-cyan-400 font-bold">
-                              {formatCurrency(r.est_net_cost)}
-                            </td>
+                            <td className="py-1.5 px-2 text-slate-600 dark:text-slate-400 whitespace-nowrap font-sans text-[10px]">{r.tgl_waktu}</td>
+                            <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300">{formatNumber(r.lwbp_pln)}</td>
+                            <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300">{formatNumber(r.wbp_pln)}</td>
+                            <td className="py-1.5 px-2 text-right font-bold text-blue-700 dark:text-blue-300">{formatNumber(r.total_pln)}</td>
+                            <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300">{formatNumber(r.lwbp_wf1)}</td>
+                            <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300">{formatNumber(r.wbp_wf1)}</td>
+                            <td className="py-1.5 px-2 text-right font-bold text-cyan-700 dark:text-cyan-300">{formatNumber(r.total_wf1)}</td>
+                            <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300">{formatNumber(r.lwbp_wf2)}</td>
+                            <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300">{formatNumber(r.wbp_wf2)}</td>
+                            <td className="py-1.5 px-2 text-right font-bold text-teal-700 dark:text-teal-300">{formatNumber(r.total_wf2)}</td>
+                            <td className="py-1.5 px-2 text-right text-emerald-600 dark:text-emerald-400">{formatNumber(r.poi1_kwh)}</td>
+                            <td className="py-1.5 px-2 text-right text-emerald-600 dark:text-emerald-400">{formatNumber(r.poi2_kwh)}</td>
+                            <td className="py-1.5 px-2 text-right font-bold text-emerald-700 dark:text-emerald-300">{formatNumber(r.total_pv)}</td>
+                            <td className="py-1.5 px-2 text-right text-red-600 dark:text-red-400">{formatCurrency(r.est_cost_pln)}</td>
+                            <td className="py-1.5 px-2 text-right text-orange-600 dark:text-orange-400">{formatCurrency(r.est_cost_wf1)}</td>
+                            <td className="py-1.5 px-2 text-right text-amber-600 dark:text-amber-400">{formatCurrency(r.est_cost_wf2)}</td>
+                            <td className="py-1.5 px-2 text-right text-yellow-600 dark:text-yellow-400">{formatCurrency(r.est_cost_pv)}</td>
+                            <td className="py-1.5 px-2 text-right text-green-600 dark:text-green-400 font-semibold">{formatCurrency(r.est_saving)}</td>
+                            <td className="py-1.5 px-2 text-right text-blue-700 dark:text-cyan-400 font-bold">{formatCurrency(r.est_net_cost)}</td>
+                            <td className="py-1.5 px-2 text-right text-purple-600 dark:text-purple-400">{r.pf.toFixed(3)}</td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={8} className="py-8 text-center text-slate-400 dark:text-slate-500 font-sans">
+                          <td colSpan={20} className="py-8 text-center text-slate-400 dark:text-slate-500 font-sans">
                             {previewLoading ? "Memuat baris data time-series..." : "Tidak ada baris data pada periode ini."}
                           </td>
                         </tr>
@@ -514,7 +541,7 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
           <div className="text-xs text-slate-500 dark:text-slate-400">
             {previewData?.totalRows ? (
-              <span>Total data siap diexport: <strong className="text-slate-800 dark:text-slate-200">{previewData.totalRows} baris</strong> (2 sheets: Dashboard Utama & Data Kelistrikan)</span>
+              <span>Total data siap diexport: <strong className="text-slate-800 dark:text-slate-200">{previewData.totalRows} baris</strong> (2 sheets: Dashboard Utama & Data Kelistrikan – 20 kolom)</span>
             ) : (
               <span>Pilih tanggal untuk melihat preview data</span>
             )}
