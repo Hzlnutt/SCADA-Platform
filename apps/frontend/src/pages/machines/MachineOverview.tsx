@@ -143,7 +143,7 @@ function StandardMachineOverview({
   const latest = useTelemetryStore((state) => state.latest);
 
   const isOfflineVal = (val: any) =>
-    val === "API TIDAK TERKIRIM" || val === "Belum Ada API" || val === "xx";
+    val === null || val === undefined || val === "API TIDAK TERKIRIM" || val === "Belum Ada API" || val === "Gagal Polling API" || val === "xx";
 
   // Sub-tab selection: 'telemetry' or 'process'
   const [subTab, setSubTab] = useState<"telemetry" | "process">("telemetry");
@@ -249,9 +249,12 @@ function StandardMachineOverview({
             });
             if (res && res.success && res.data) {
               aggregatedData[url] = res.data;
+            } else {
+              aggregatedData[url] = null;
             }
           } catch (err) {
             console.error(`Live API poll error on overview for URL ${url}:`, err);
+            aggregatedData[url] = null;
           }
         })
       );
@@ -360,13 +363,20 @@ function StandardMachineOverview({
               quality: "good",
               meta: { tagId: tagKey }
             };
+          } else if (apiLiveData[retUrl] === null || apiLiveData[suppUrl] === null) {
+            merged[tagKey] = {
+              ts: new Date().toISOString(),
+              value: "Gagal Polling API",
+              quality: "bad",
+              meta: { tagId: tagKey }
+            };
           }
           return;
         }
 
         let jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
         let val = apiLiveData[url]?.[jsonKey];
-        if (val === undefined && jsonKey) {
+        if (val === undefined && jsonKey && apiLiveData[url]) {
           if (jsonKey === "Scaled_Temp_Tank_Cooling3_Supp") val = apiLiveData[url]?.["Scaled_Temp_Tank_Colling3_Supp"];
           else if (jsonKey === "Scaled_Temp_Tank_Colling3_Supp") val = apiLiveData[url]?.["Scaled_Temp_Tank_Cooling3_Supp"];
           else if (jsonKey === "Scaled_Temp_Tank_Cooling3_Return") val = apiLiveData[url]?.["Scaled_Temp_Tank_Colling3_Return"];
@@ -380,6 +390,13 @@ function StandardMachineOverview({
             ts: new Date().toISOString(),
             value: val,
             quality: "good",
+            meta: { tagId: tagKey }
+          };
+        } else if (apiLiveData[url] === null) {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: "Gagal Polling API",
+            quality: "bad",
             meta: { tagId: tagKey }
           };
         }
@@ -535,6 +552,9 @@ function StandardMachineOverview({
           const suppKey = jsonKeyMap["cooling-water/supply_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
           const retUrl = apiSourceUrls["cooling-water/return_temp"] || "";
           const suppUrl = apiSourceUrls["cooling-water/supply_temp"] || "";
+          if (apiLiveData[retUrl] === null || apiLiveData[suppUrl] === null) {
+            return "Gagal Polling API";
+          }
           const retVal = retKey && retUrl ? apiLiveData[retUrl]?.[retKey] : undefined;
           const suppVal = suppKey && suppUrl ? apiLiveData[suppUrl]?.[suppKey] : undefined;
           if (typeof retVal === "number" && typeof suppVal === "number") {
@@ -546,6 +566,7 @@ function StandardMachineOverview({
         const jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
         if (!jsonKey) return "xx";
 
+        if (apiLiveData[url] === null) return "Gagal Polling API";
         const val = apiLiveData[url]?.[jsonKey];
         if (val === undefined || val === null) return "xx";
         return val;
@@ -554,6 +575,7 @@ function StandardMachineOverview({
       const formatStatus = (tagKey: string) => {
         const val = getApiVal(tagKey);
         if (val === "Belum Ada API") return "Belum Ada API";
+        if (val === "Gagal Polling API") return "Gagal Polling API";
         if (val === "xx") return "xx";
         if (typeof val === "number") return val === 1 ? "Running" : "Stopped";
         if (typeof val === "boolean") return val ? "Running" : "Stopped";
@@ -568,6 +590,7 @@ function StandardMachineOverview({
       const formatStatusOnOff = (tagKey: string) => {
         const val = getApiVal(tagKey);
         if (val === "Belum Ada API") return "Belum Ada API";
+        if (val === "Gagal Polling API") return "Gagal Polling API";
         if (val === "xx") return "xx";
         if (typeof val === "number") return val === 1 ? "ON" : "OFF";
         if (typeof val === "boolean") return val ? "ON" : "OFF";
@@ -582,6 +605,7 @@ function StandardMachineOverview({
       const formatNum = (tagKey: string) => {
         const val = getApiVal(tagKey);
         if (val === "Belum Ada API") return "Belum Ada API";
+        if (val === "Gagal Polling API") return "Gagal Polling API";
         if (val === "xx") return "xx";
         const num = Number(val);
         if (isNaN(num)) return val;
@@ -941,6 +965,9 @@ function StandardMachineOverview({
     if (typeof liveData.returnTemp === "number" && typeof liveData.supplyTemp === "number") {
       return Number((liveData.returnTemp - liveData.supplyTemp).toFixed(1));
     }
+    if (liveData.returnTemp === "Gagal Polling API" || liveData.supplyTemp === "Gagal Polling API") {
+      return "Gagal Polling API";
+    }
     return "API TIDAK TERKIRIM";
   }, [liveData.supplyTemp, liveData.returnTemp]);
 
@@ -973,7 +1000,7 @@ function StandardMachineOverview({
         const baseVal = baselines[baseKey] ?? baselines[param.key] ?? 0;
         return {
           name: param.label,
-          val: typeof rawValue === "number" ? `${rawValue.toFixed(1)} ${param.unit}` : `— ${param.unit}`,
+          val: typeof rawValue === "number" ? `${rawValue.toFixed(1)} ${param.unit}` : (rawValue === "Gagal Polling API" ? "Gagal Polling API" : `— ${param.unit}`),
           avg: typeof rawValue === "number" ? `${(rawValue * 0.98).toFixed(1)} ${param.unit}` : `— ${param.unit}`,
           base: baseVal ? `${baseVal.toFixed(1)} ${param.unit}` : "—",
           alert: typeof rawValue === "number" && baseVal > 0 && rawValue > baseVal
@@ -1142,42 +1169,42 @@ function StandardMachineOverview({
             label: "Supply Temp", 
             val: typeof liveData.supplyTemp === "number" ? `${liveData.supplyTemp.toFixed(1)} °C` : liveData.supplyTemp, 
             base: `${baselines.SPLY_WTR_TEMP.toFixed(1)} °C`, 
-            color: typeof liveData.supplyTemp === "number" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500 font-bold text-[13px] md:text-sm", 
+            color: typeof liveData.supplyTemp === "number" ? "text-emerald-600 dark:text-emerald-400" : liveData.supplyTemp === "Gagal Polling API" ? "text-amber-500 font-bold text-[13px] md:text-sm" : "text-rose-500 font-bold text-[13px] md:text-sm", 
             bg: "bg-emerald-500/10" 
           },
           { 
             label: "Return Temp", 
             val: typeof liveData.returnTemp === "number" ? `${liveData.returnTemp.toFixed(1)} °C` : liveData.returnTemp, 
             base: `${baselines.RTN_WTR_TEMP.toFixed(1)} °C`, 
-            color: typeof liveData.returnTemp === "number" ? "text-blue-600 dark:text-blue-400" : "text-rose-500 font-bold text-[13px] md:text-sm", 
+            color: typeof liveData.returnTemp === "number" ? "text-blue-600 dark:text-blue-400" : liveData.returnTemp === "Gagal Polling API" ? "text-amber-500 font-bold text-[13px] md:text-sm" : "text-rose-500 font-bold text-[13px] md:text-sm", 
             bg: "bg-blue-500/10" 
           },
           { 
             label: "Delta T", 
             val: typeof deltaT === "number" ? `${deltaT.toFixed(1)} °C` : deltaT, 
             base: `${(baselines.RTN_WTR_TEMP - baselines.SPLY_WTR_TEMP).toFixed(1)} °C`, 
-            color: typeof deltaT === "number" ? "text-indigo-600 dark:text-indigo-400" : "text-rose-500 font-bold text-[13px] md:text-sm", 
+            color: typeof deltaT === "number" ? "text-indigo-600 dark:text-indigo-400" : deltaT === "Gagal Polling API" ? "text-amber-500 font-bold text-[13px] md:text-sm" : "text-rose-500 font-bold text-[13px] md:text-sm", 
             bg: "bg-indigo-500/10" 
           },
           { 
             label: "Ambient Temp", 
             val: typeof liveData.ambientTemp === "number" ? `${liveData.ambientTemp.toFixed(1)} °C` : liveData.ambientTemp, 
             base: "30.0 °C", 
-            color: typeof liveData.ambientTemp === "number" ? "text-amber-600 dark:text-amber-400" : "text-rose-500 font-bold text-[13px] md:text-sm", 
+            color: typeof liveData.ambientTemp === "number" ? "text-amber-600 dark:text-amber-400" : liveData.ambientTemp === "Gagal Polling API" ? "text-amber-500 font-bold text-[13px] md:text-sm" : "text-rose-500 font-bold text-[13px] md:text-sm", 
             bg: "bg-amber-500/10" 
           },
           { 
             label: "CT Efficiency", 
             val: typeof liveData.ctEfficiency === "number" ? `${liveData.ctEfficiency.toFixed(1)} %` : liveData.ctEfficiency, 
             base: "92.0 %", 
-            color: typeof liveData.ctEfficiency === "number" ? "text-purple-600 dark:text-purple-400" : "text-rose-500 font-bold text-[13px] md:text-sm", 
+            color: typeof liveData.ctEfficiency === "number" ? "text-purple-600 dark:text-purple-400" : liveData.ctEfficiency === "Gagal Polling API" ? "text-amber-500 font-bold text-[13px] md:text-sm" : "text-rose-500 font-bold text-[13px] md:text-sm", 
             bg: "bg-purple-500/10" 
           },
           { 
             label: "Total Energy", 
             val: typeof liveData.totalEnergy === "number" ? `${liveData.totalEnergy.toLocaleString()} kWh` : liveData.totalEnergy, 
             base: "N/A", 
-            color: typeof liveData.totalEnergy === "number" ? "text-sky-600 dark:text-sky-400" : "text-rose-500 font-bold text-[13px] md:text-sm", 
+            color: typeof liveData.totalEnergy === "number" ? "text-sky-600 dark:text-sky-400" : liveData.totalEnergy === "Gagal Polling API" ? "text-amber-500 font-bold text-[13px] md:text-sm" : "text-rose-500 font-bold text-[13px] md:text-sm", 
             bg: "bg-sky-500/10" 
           }
         ].map((card, idx) => (
@@ -1306,11 +1333,12 @@ function StandardMachineOverview({
               { id: "CT-3", data: liveData.ct3, color: "from-indigo-500/10 to-purple-500/10" }
             ].map((ct) => {
               const isCtRunning = ct.data.fanStatus === "ON" || ct.data.motorStatus === "ON";
-              const isCtOffline = ct.data.fanStatus === "Belum Ada API" || ct.data.fanStatus === "xx" || ct.data.motorStatus === "Belum Ada API" || ct.data.motorStatus === "xx";
+              const isCtOffline = ct.data.fanStatus === "Belum Ada API" || ct.data.fanStatus === "xx" || ct.data.fanStatus === "Gagal Polling API" || ct.data.motorStatus === "Belum Ada API" || ct.data.motorStatus === "xx" || ct.data.motorStatus === "Gagal Polling API";
               
-              const isValErr = (val: any) => val === "Belum Ada API" || val === "xx";
+              const isValErr = (val: any) => val === "Belum Ada API" || val === "xx" || val === "Gagal Polling API";
               const showVal = (val: any, unitStr = "") => {
                 if (val === "Belum Ada API") return "Belum Ada API";
+                if (val === "Gagal Polling API") return "Gagal Polling API";
                 if (val === "xx") return "xx";
                 if (typeof val === "number") return `${val.toFixed(1)} ${unitStr}`.trim();
                 return `${val} ${unitStr}`.trim();
@@ -1323,12 +1351,12 @@ function StandardMachineOverview({
                 >
                   <div className={`p-4 bg-gradient-to-r ${ct.color} border-b border-[#acd3ff]/50 dark:border-slate-800/50 flex items-center justify-between`}>
                     <h4 className="font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">
-                      <span className={`w-2.5 h-2.5 rounded-full ${isCtOffline ? "bg-rose-500 animate-pulse" : isCtRunning ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+                      <span className={`w-2.5 h-2.5 rounded-full ${isCtOffline ? "bg-amber-500 animate-pulse" : isCtRunning ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
                       Cooling Tower {ct.id}
                     </h4>
                     {isCtOffline ? (
-                      <div className="flex items-center gap-1.5 text-xs text-rose-500 font-bold bg-rose-500/10 px-2 py-0.5 rounded-full">
-                        OFFLINE
+                      <div className="flex items-center gap-1.5 text-xs text-amber-500 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full">
+                        {ct.data.fanStatus === "Gagal Polling API" || ct.data.motorStatus === "Gagal Polling API" ? "GAGAL POLLING API" : "OFFLINE"}
                       </div>
                     ) : isCtRunning ? (
                       <div className="flex items-center gap-1.5 text-xs text-[#087f5b] dark:text-emerald-400 font-bold bg-[#dff4ea] dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">
@@ -1397,7 +1425,7 @@ function StandardMachineOverview({
                   { label: "Tank Level", rawVal: liveData.coolingTank.lvl, suffix: " %", max: 100, barColor: "bg-indigo-500" },
                   { label: "Temperature", rawVal: liveData.coolingTank.temp, suffix: " °C", max: 50, barColor: "bg-amber-500" }
                 ].map((item, idx) => {
-                  const isOffline = item.rawVal === "API TIDAK TERKIRIM" || item.rawVal === "Belum Ada API" || item.rawVal === "xx";
+                  const isOffline = item.rawVal === "API TIDAK TERKIRIM" || item.rawVal === "Belum Ada API" || item.rawVal === "Gagal Polling API" || item.rawVal === "xx";
                   const val = isOffline ? item.rawVal : `${typeof item.rawVal === "number" ? item.rawVal.toFixed(1) : item.rawVal}${item.suffix}`;
                   const fill = isOffline ? 0 : (typeof item.rawVal === "number" ? (item.rawVal / item.max) * 100 : 0);
 
@@ -1405,7 +1433,7 @@ function StandardMachineOverview({
                     <div key={idx} className="space-y-1">
                       <div className="flex justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
                         <span>{item.label}</span>
-                        <span className={`font-mono ${isOffline ? "text-rose-500 font-bold" : "text-[#002b5c] dark:text-slate-200"}`}>{val}</span>
+                        <span className={`font-mono ${isOffline ? (item.rawVal === "Gagal Polling API" ? "text-amber-500 font-bold" : "text-rose-500 font-bold") : "text-[#002b5c] dark:text-slate-200"}`}>{val}</span>
                       </div>
                       <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
                         <div className={`h-full ${item.barColor} rounded-full transition-all duration-500`} style={{ width: `${fill}%` }} />
@@ -1429,7 +1457,7 @@ function StandardMachineOverview({
                   { label: "Flow Rate", rawVal: liveData.makeupWater.flow, suffix: " m³/h", max: 10, barColor: "bg-sky-500" },
                   { label: "Makeup Volume", rawVal: liveData.makeupWater.vol, suffix: " m³", max: 100, barColor: "bg-blue-600" }
                 ].map((item, idx) => {
-                  const isOffline = item.rawVal === "API TIDAK TERKIRIM" || item.rawVal === "Belum Ada API" || item.rawVal === "xx";
+                  const isOffline = item.rawVal === "API TIDAK TERKIRIM" || item.rawVal === "Belum Ada API" || item.rawVal === "Gagal Polling API" || item.rawVal === "xx";
                   const val = isOffline ? item.rawVal : `${typeof item.rawVal === "number" ? item.rawVal.toFixed(1) : item.rawVal}${item.suffix}`;
                   const fill = isOffline ? 0 : (typeof item.rawVal === "number" ? (item.rawVal / item.max) * 100 : 0);
 
@@ -1437,7 +1465,7 @@ function StandardMachineOverview({
                     <div key={idx} className="space-y-1">
                       <div className="flex justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
                         <span>{item.label}</span>
-                        <span className={`font-mono ${isOffline ? "text-rose-500 font-bold" : "text-[#002b5c] dark:text-slate-200"}`}>{val}</span>
+                        <span className={`font-mono ${isOffline ? (item.rawVal === "Gagal Polling API" ? "text-amber-500 font-bold" : "text-rose-500 font-bold") : "text-[#002b5c] dark:text-slate-200"}`}>{val}</span>
                       </div>
                       <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
                         <div className={`h-full ${item.barColor} rounded-full transition-all duration-500`} style={{ width: `${fill}%` }} />

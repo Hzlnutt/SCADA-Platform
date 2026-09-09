@@ -103,7 +103,7 @@ function UnbalancedGauge({
         </svg>
         <div className="absolute bottom-2 text-center flex flex-col items-center justify-center w-full px-1">
           {isOffline ? (
-            <span className="text-[9px] font-bold font-mono text-red-500 uppercase leading-none text-center select-none break-all">{value}</span>
+            <span className="text-[9px] font-bold font-mono text-amber-500 uppercase leading-none text-center select-none break-all">{value === "BELUM ADA API" ? "BELUM ADA API" : "GAGAL POLLING API"}</span>
           ) : (
             <div>
               <span className="text-2xl font-extrabold font-mono text-slate-800 dark:text-white">{numVal.toFixed(2)}</span>
@@ -114,8 +114,8 @@ function UnbalancedGauge({
       </div>
 
       {isOffline ? (
-        <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-red-500/10 border border-red-500/20 text-[10px] font-extrabold uppercase text-red-500 tracking-wider">
-          ✕ API TIDAK AKTIF
+        <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-amber-500/10 border border-amber-500/20 text-[10px] font-extrabold uppercase text-amber-500 tracking-wider">
+          ✕ {value === "BELUM ADA API" ? "BELUM ADA API" : "GAGAL POLLING API"}
         </div>
       ) : numVal > maxAllowed ? (
         <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-red-500/10 border border-red-500/20 text-[10px] font-extrabold uppercase text-red-500 tracking-wider">
@@ -316,9 +316,12 @@ export default function IncomingPln() {
             });
             if (res && res.success && res.data) {
               aggregatedData[url] = res.data;
+            } else {
+              aggregatedData[url] = null;
             }
           } catch (err) {
             console.error(`Live API poll error on Incoming for URL ${url}:`, err);
+            aggregatedData[url] = null;
           }
         })
       );
@@ -406,8 +409,13 @@ export default function IncomingPln() {
       }
     }
 
+    // If live API poll explicitly failed for this URL, do not fallback to stale metrics
+    if (url && apiLiveData[url] === null) {
+      return "GAGAL POLLING API";
+    }
+
     // Fallback to metrics from backend WebSocket
-    if (metrics) {
+    if (metrics && metrics.isConnected) {
       if (rawKey === "voltage" && metrics.voltage > 0) return metrics.voltage;
       if (rawKey === "frequency" && metrics.frequency > 0) return metrics.frequency;
       if (rawKey === "active_power" && metrics.activePower > 0) return metrics.activePower;
@@ -435,7 +443,7 @@ export default function IncomingPln() {
   }, [mode, apiSourceUrls, jsonKeyMap, apiLiveData, metrics]);
 
   const isOfflineVal = useCallback((val: any) => {
-    return val === "BELUM ADA API" || val === "API TIDAK TERKIRIM" || val === "xx";
+    return val === null || val === undefined || val === "BELUM ADA API" || val === "API TIDAK TERKIRIM" || val === "Gagal Polling API" || val === "GAGAL POLLING API" || val === "xx";
   }, []);
 
   // Load database analytics fallback
@@ -444,29 +452,30 @@ export default function IncomingPln() {
       .then((res) => {
         if (res?.data?.pqData) {
           const pq = res.data.pqData;
+          const isOffline = pq.pfStatus === "offline" || pq.pfStatus === "disconnected" || res.data.online === false || res.data.status === false;
           setMetrics((prev) => ({
             ...prev,
-            voltage: pq.voltage !== undefined ? pq.voltage : prev.voltage,
-            frequency: pq.freq !== undefined ? pq.freq : (pq.frequency !== undefined ? pq.frequency : prev.frequency),
-            activePower: pq.activePower !== undefined ? pq.activePower : prev.activePower,
-            powerFactor: pq.pf !== undefined && pq.pf !== null ? pq.pf : prev.powerFactor,
-            reactivePower: pq.reactivePower !== undefined ? pq.reactivePower : prev.reactivePower,
-            apparentPower: pq.apparentPower !== undefined ? pq.apparentPower : prev.apparentPower,
-            unbalanceV: pq.vUnb !== undefined ? pq.vUnb : prev.unbalanceV,
-            unbalanceI: pq.iUnb !== undefined ? pq.iUnb : prev.unbalanceI,
-            vR: pq.vR !== undefined ? pq.vR : prev.vR,
-            vS: pq.vS !== undefined ? pq.vS : prev.vS,
-            vT: pq.vT !== undefined ? pq.vT : prev.vT,
-            iR: pq.iR !== undefined ? pq.iR : prev.iR,
-            iS: pq.iS !== undefined ? pq.iS : prev.iS,
-            iT: pq.iT !== undefined ? pq.iT : prev.iT,
-            thdV_R: pq.thdV_R !== undefined ? pq.thdV_R : prev.thdV_R,
-            thdV_S: pq.thdV_S !== undefined ? pq.thdV_S : prev.thdV_S,
-            thdV_T: pq.thdV_T !== undefined ? pq.thdV_T : prev.thdV_T,
-            thdI_R: pq.thdI_R !== undefined ? pq.thdI_R : prev.thdI_R,
-            thdI_S: pq.thdI_S !== undefined ? pq.thdI_S : prev.thdI_S,
-            thdI_T: pq.thdI_T !== undefined ? pq.thdI_T : prev.thdI_T,
-            isConnected: pq.pfStatus === "connected"
+            voltage: !isOffline && pq.voltage !== undefined && pq.voltage !== null ? pq.voltage : (isOffline ? 0 : prev.voltage),
+            frequency: !isOffline && pq.freq !== undefined && pq.freq !== null ? pq.freq : (isOffline ? 0 : prev.frequency),
+            activePower: !isOffline && pq.activePower !== undefined && pq.activePower !== null ? pq.activePower : (isOffline ? 0 : prev.activePower),
+            powerFactor: !isOffline && pq.pf !== undefined && pq.pf !== null ? pq.pf : (isOffline ? 0 : prev.powerFactor),
+            reactivePower: !isOffline && pq.reactivePower !== undefined && pq.reactivePower !== null ? pq.reactivePower : (isOffline ? 0 : prev.reactivePower),
+            apparentPower: !isOffline && pq.apparentPower !== undefined && pq.apparentPower !== null ? pq.apparentPower : (isOffline ? 0 : prev.apparentPower),
+            unbalanceV: !isOffline && pq.vUnb !== undefined && pq.vUnb !== null ? pq.vUnb : (isOffline ? 0 : prev.unbalanceV),
+            unbalanceI: !isOffline && pq.iUnb !== undefined && pq.iUnb !== null ? pq.iUnb : (isOffline ? 0 : prev.unbalanceI),
+            vR: !isOffline && pq.vR !== undefined && pq.vR !== null ? pq.vR : (isOffline ? 0 : prev.vR),
+            vS: !isOffline && pq.vS !== undefined && pq.vS !== null ? pq.vS : (isOffline ? 0 : prev.vS),
+            vT: !isOffline && pq.vT !== undefined && pq.vT !== null ? pq.vT : (isOffline ? 0 : prev.vT),
+            iR: !isOffline && pq.iR !== undefined && pq.iR !== null ? pq.iR : (isOffline ? 0 : prev.iR),
+            iS: !isOffline && pq.iS !== undefined && pq.iS !== null ? pq.iS : (isOffline ? 0 : prev.iS),
+            iT: !isOffline && pq.iT !== undefined && pq.iT !== null ? pq.iT : (isOffline ? 0 : prev.iT),
+            thdV_R: !isOffline && pq.thdV_R !== undefined && pq.thdV_R !== null ? pq.thdV_R : (isOffline ? 0 : prev.thdV_R),
+            thdV_S: !isOffline && pq.thdV_S !== undefined && pq.thdV_S !== null ? pq.thdV_S : (isOffline ? 0 : prev.thdV_S),
+            thdV_T: !isOffline && pq.thdV_T !== undefined && pq.thdV_T !== null ? pq.thdV_T : (isOffline ? 0 : prev.thdV_T),
+            thdI_R: !isOffline && pq.thdI_R !== undefined && pq.thdI_R !== null ? pq.thdI_R : (isOffline ? 0 : prev.thdI_R),
+            thdI_S: !isOffline && pq.thdI_S !== undefined && pq.thdI_S !== null ? pq.thdI_S : (isOffline ? 0 : prev.thdI_S),
+            thdI_T: !isOffline && pq.thdI_T !== undefined && pq.thdI_T !== null ? pq.thdI_T : (isOffline ? 0 : prev.thdI_T),
+            isConnected: !isOffline && pq.pfStatus === "connected"
           }));
         }
         if (res?.data?.charts) {
@@ -519,32 +528,54 @@ export default function IncomingPln() {
     const socket = getSocket();
     
     const handleLiveUpdate = (payload: any) => {
-      if (payload && payload.deviceId === config.deviceId && payload.pqData) {
-        const pq = payload.pqData;
-        setMetrics((prev) => ({
-          ...prev,
-          voltage: pq.voltage !== undefined ? pq.voltage : prev.voltage,
-          frequency: pq.freq !== undefined ? pq.freq : prev.frequency,
-          activePower: pq.activePower !== undefined ? pq.activePower : prev.activePower,
-          powerFactor: pq.pf !== undefined && pq.pf !== null ? pq.pf : prev.powerFactor,
-          reactivePower: pq.reactivePower !== undefined ? pq.reactivePower : prev.reactivePower,
-          apparentPower: pq.apparentPower !== undefined ? pq.apparentPower : prev.apparentPower,
-          unbalanceV: pq.vUnb !== undefined ? pq.vUnb : prev.unbalanceV,
-          unbalanceI: pq.iUnb !== undefined ? pq.iUnb : prev.unbalanceI,
-          vR: pq.vR !== undefined ? pq.vR : prev.vR,
-          vS: pq.vS !== undefined ? pq.vS : prev.vS,
-          vT: pq.vT !== undefined ? pq.vT : prev.vT,
-          iR: pq.iR !== undefined ? pq.iR : prev.iR,
-          iS: pq.iS !== undefined ? pq.iS : prev.iS,
-          iT: pq.iT !== undefined ? pq.iT : prev.iT,
-          thdV_R: pq.thdV_R !== undefined ? pq.thdV_R : prev.thdV_R,
-          thdV_S: pq.thdV_S !== undefined ? pq.thdV_S : prev.thdV_S,
-          thdV_T: pq.thdV_T !== undefined ? pq.thdV_T : prev.thdV_T,
-          thdI_R: pq.thdI_R !== undefined ? pq.thdI_R : prev.thdI_R,
-          thdI_S: pq.thdI_S !== undefined ? pq.thdI_S : prev.thdI_S,
-          thdI_T: pq.thdI_T !== undefined ? pq.thdI_T : prev.thdI_T,
-          isConnected: pq.pfStatus === "connected"
-        }));
+      if (payload && payload.deviceId === config.deviceId) {
+        const isOffline = payload.online === false || payload.status === false || payload.pqData?.pfStatus === "offline" || payload.error;
+        if (isOffline) {
+          setMetrics((prev) => ({
+            ...prev,
+            voltage: 0,
+            frequency: 0,
+            activePower: 0,
+            powerFactor: 0,
+            reactivePower: 0,
+            apparentPower: 0,
+            unbalanceV: 0,
+            unbalanceI: 0,
+            vR: 0, vS: 0, vT: 0,
+            iR: 0, iS: 0, iT: 0,
+            thdV_R: 0, thdV_S: 0, thdV_T: 0,
+            thdI_R: 0, thdI_S: 0, thdI_T: 0,
+            isConnected: false
+          }));
+          return;
+        }
+        if (payload.pqData) {
+          const pq = payload.pqData;
+          setMetrics((prev) => ({
+            ...prev,
+            voltage: pq.voltage !== undefined ? pq.voltage : prev.voltage,
+            frequency: pq.freq !== undefined ? pq.freq : prev.frequency,
+            activePower: pq.activePower !== undefined ? pq.activePower : prev.activePower,
+            powerFactor: pq.pf !== undefined && pq.pf !== null ? pq.pf : prev.powerFactor,
+            reactivePower: pq.reactivePower !== undefined ? pq.reactivePower : prev.reactivePower,
+            apparentPower: pq.apparentPower !== undefined ? pq.apparentPower : prev.apparentPower,
+            unbalanceV: pq.vUnb !== undefined ? pq.vUnb : prev.unbalanceV,
+            unbalanceI: pq.iUnb !== undefined ? pq.iUnb : prev.unbalanceI,
+            vR: pq.vR !== undefined ? pq.vR : prev.vR,
+            vS: pq.vS !== undefined ? pq.vS : prev.vS,
+            vT: pq.vT !== undefined ? pq.vT : prev.vT,
+            iR: pq.iR !== undefined ? pq.iR : prev.iR,
+            iS: pq.iS !== undefined ? pq.iS : prev.iS,
+            iT: pq.iT !== undefined ? pq.iT : prev.iT,
+            thdV_R: pq.thdV_R !== undefined ? pq.thdV_R : prev.thdV_R,
+            thdV_S: pq.thdV_S !== undefined ? pq.thdV_S : prev.thdV_S,
+            thdV_T: pq.thdV_T !== undefined ? pq.thdV_T : prev.thdV_T,
+            thdI_R: pq.thdI_R !== undefined ? pq.thdI_R : prev.thdI_R,
+            thdI_S: pq.thdI_S !== undefined ? pq.thdI_S : prev.thdI_S,
+            thdI_T: pq.thdI_T !== undefined ? pq.thdI_T : prev.thdI_T,
+            isConnected: pq.pfStatus === "connected"
+          }));
+        }
       }
     };
 
@@ -568,7 +599,7 @@ export default function IncomingPln() {
   const liveMetrics = useMemo(() => {
     const pickVal = (tag: string, metricVal: any) => {
       const apiV = getApiVal(`${prefix}/${tag}`);
-      if (apiV !== "BELUM ADA API" && apiV !== "API TIDAK TERKIRIM" && apiV !== "xx") {
+      if (apiV !== "BELUM ADA API" && apiV !== "API TIDAK TERKIRIM" && apiV !== "GAGAL POLLING API" && apiV !== "Gagal Polling API" && apiV !== "xx") {
         return apiV;
       }
       return metricVal;
@@ -595,7 +626,7 @@ export default function IncomingPln() {
       thdI_R: pickVal("thd_i_r", metrics.thdI_R),
       thdI_S: pickVal("thd_i_s", metrics.thdI_S),
       thdI_T: pickVal("thd_i_t", metrics.thdI_T),
-      isConnected: metrics.isConnected || (getApiVal(`${prefix}/active_power`) !== "BELUM ADA API" && getApiVal(`${prefix}/active_power`) !== "API TIDAK TERKIRIM")
+      isConnected: metrics.isConnected || (getApiVal(`${prefix}/active_power`) !== "BELUM ADA API" && getApiVal(`${prefix}/active_power`) !== "API TIDAK TERKIRIM" && getApiVal(`${prefix}/active_power`) !== "GAGAL POLLING API" && getApiVal(`${prefix}/active_power`) !== "Gagal Polling API")
     };
   }, [prefix, getApiVal, metrics]);
 
@@ -603,12 +634,15 @@ export default function IncomingPln() {
     if (val === "BELUM ADA API") {
       return <span className="text-red-500 text-xs font-extrabold font-mono uppercase tracking-wider">BELUM ADA API</span>;
     }
-    if (val === "API TIDAK TERKIRIM" || val === "xx") {
-      return <span className="text-red-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">API TIDAK TERKIRIM</span>;
+    if (val === "API TIDAK TERKIRIM" || val === "Gagal Polling API" || val === "GAGAL POLLING API" || val === "xx") {
+      return <span className="text-amber-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">GAGAL POLLING API</span>;
+    }
+    if (val === null || val === undefined) {
+      return <span className="text-amber-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">GAGAL POLLING API</span>;
     }
     const num = Number(val);
     if (isNaN(num)) {
-      return <span className="text-red-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">API TIDAK TERKIRIM</span>;
+      return <span className="text-amber-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">GAGAL POLLING API</span>;
     }
     return formatFn(num);
   }, []);
@@ -830,12 +864,12 @@ export default function IncomingPln() {
           <span className={`px-3 py-1.5 rounded-full text-xs font-extrabold uppercase flex items-center gap-1.5 border transition-colors duration-300 ${
             isConnected
               ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-              : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+              : "bg-amber-500/10 text-amber-500 border-amber-500/20"
           }`}>
             <span className={`h-2 w-2 rounded-full animate-pulse ${
-              isConnected ? "bg-emerald-500" : "bg-rose-500"
+              isConnected ? "bg-emerald-500" : "bg-amber-500"
             }`} />
-            {isConnected ? config.connectedLabel : "DISCONNECTED"}
+            {isConnected ? config.connectedLabel : "GAGAL POLLING API"}
           </span>
         </div>
       </div>

@@ -13,17 +13,17 @@ function getWibDateString(date: Date): string {
 
 export interface SolarLiveItem {
   status: boolean;
-  activePower?: number;
-  peakDemand?: number;
-  totalKwh: number;
-  totalKvarh: number;
-  frequency: number;
-  voltAb: number;
-  voltBc: number;
-  voltCa: number;
-  voltAn: number;
-  voltBn: number;
-  voltCn: number;
+  activePower?: number | null;
+  peakDemand?: number | null;
+  totalKwh?: number | null;
+  totalKvarh?: number | null;
+  frequency?: number | null;
+  voltAb?: number | null;
+  voltBc?: number | null;
+  voltCa?: number | null;
+  voltAn?: number | null;
+  voltBn?: number | null;
+  voltCn?: number | null;
   powerFactor?: number | null;
 }
 
@@ -31,7 +31,9 @@ export interface SolarLiveState {
   t_stamp: Date | string;
   poi1: SolarLiveItem;
   poi2: SolarLiveItem;
-  totalKwh: number;
+  totalKwh?: number | null;
+  online?: boolean;
+  status?: boolean;
 }
 
 // In-memory cache for latest live reading

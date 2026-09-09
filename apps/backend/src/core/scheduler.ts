@@ -255,7 +255,26 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
     )
     ON CONFLICT (t_stamp) DO UPDATE SET
       status_pm8000 = EXCLUDED.status_pm8000,
+      volt_ab = EXCLUDED.volt_ab,
+      volt_bc = EXCLUDED.volt_bc,
+      volt_ca = EXCLUDED.volt_ca,
+      volt_ll = EXCLUDED.volt_ll,
+      current_a = EXCLUDED.current_a,
+      current_b = EXCLUDED.current_b,
+      current_c = EXCLUDED.current_c,
+      frequency = EXCLUDED.frequency,
       active_power = EXCLUDED.active_power,
+      reactive_power_total = EXCLUDED.reactive_power_total,
+      apparent_power_total = EXCLUDED.apparent_power_total,
+      power_factor = EXCLUDED.power_factor,
+      voltage_unbalance = EXCLUDED.voltage_unbalance,
+      current_unbalance = EXCLUDED.current_unbalance,
+      thd_volt_a = EXCLUDED.thd_volt_a,
+      thd_volt_b = EXCLUDED.thd_volt_b,
+      thd_volt_c = EXCLUDED.thd_volt_c,
+      thd_current_a = EXCLUDED.thd_current_a,
+      thd_current_b = EXCLUDED.thd_current_b,
+      thd_current_c = EXCLUDED.thd_current_c,
       active_energy = EXCLUDED.active_energy;
   `, [
     minuteTs, payload.status_pm8000, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
@@ -302,12 +321,49 @@ export interface ElectricPltsRecord {
   volt_bn: number | null;
   volt_cn: number | null;
   frequency: number | null;
-  active_power: number;
-  peak_demand?: number;
-  total_kwh: number;
-  total_kvarh: number;
+  active_power: number | null;
+  peak_demand?: number | null;
+  total_kwh: number | null;
+  total_kvarh: number | null;
   power_factor?: number | null;
 }
+
+const getNullPltsRecords = (ts: Date): ElectricPltsRecord[] => [
+  {
+    t_stamp: ts,
+    poi_id: "POI_1",
+    status: false,
+    volt_ab: null,
+    volt_bc: null,
+    volt_ca: null,
+    volt_an: null,
+    volt_bn: null,
+    volt_cn: null,
+    frequency: null,
+    active_power: null,
+    peak_demand: null,
+    total_kwh: null,
+    total_kvarh: null,
+    power_factor: null
+  },
+  {
+    t_stamp: ts,
+    poi_id: "POI_2",
+    status: false,
+    volt_ab: null,
+    volt_bc: null,
+    volt_ca: null,
+    volt_an: null,
+    volt_bn: null,
+    volt_cn: null,
+    frequency: null,
+    active_power: null,
+    peak_demand: null,
+    total_kwh: null,
+    total_kvarh: null,
+    power_factor: null
+  }
+];
 
 export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] => {
   const result: ElectricPltsRecord[] = [];
@@ -373,7 +429,7 @@ const insertPltsMinuteTelemetry = async (records: ElectricPltsRecord[], minuteTs
           t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh, power_factor
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       `, [
-        minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power, r.total_kwh, r.total_kvarh, minutePf
+        minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power ?? null, r.total_kwh ?? null, r.total_kvarh ?? null, minutePf
       ]);
 
       // Polling per jam: at the exact hour mark (:00:00), save sampled hourly power factor & telemetry directly to electric_plts_telemetry
@@ -384,7 +440,7 @@ const insertPltsMinuteTelemetry = async (records: ElectricPltsRecord[], minuteTs
             t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh, power_factor
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         `, [
-          minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power, r.total_kwh, r.total_kvarh, r.power_factor ?? null
+          minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power ?? null, r.total_kwh ?? null, r.total_kvarh ?? null, r.power_factor ?? null
         ]);
       }
     } catch (err: any) {
@@ -688,6 +744,8 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
 
   io.emit("electricity:live_update", {
     deviceId,
+    status: isConnected,
+    online: isConnected,
     pqData: {
       activePower: Number(activePowerVal.toFixed(1)),
       reactivePower: Number(reactivePowerVal.toFixed(1)),
@@ -720,7 +778,8 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
       thdI_R: Number(thdIR.toFixed(2)),
       thdI_S: Number(thdIS.toFixed(2)),
       thdI_T: Number(thdIT.toFixed(2)),
-      voltage: Number(voltLAvg.toFixed(2))
+      voltage: Number(voltLAvg.toFixed(2)),
+      status: isConnected
     }
   });
 };
@@ -729,8 +788,43 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
   if (!io) return;
   io.emit("electricity:live_update", {
     deviceId,
+    status: false,
+    online: false,
+    error: "Gagal polling API",
     pqData: {
-      pfStatus: "offline"
+      activePower: null,
+      reactivePower: null,
+      apparentPower: null,
+      pf: null,
+      pfStatus: "offline",
+      freq: null,
+      vUnb: null,
+      iUnb: null,
+      thdV: null,
+      thdI: null,
+      vll1: null,
+      vll2: null,
+      vll3: null,
+      vln1: null,
+      vln2: null,
+      vln3: null,
+      current1: null,
+      current2: null,
+      current3: null,
+      vR: null,
+      vS: null,
+      vT: null,
+      iR: null,
+      iS: null,
+      iT: null,
+      thdV_R: null,
+      thdV_S: null,
+      thdV_T: null,
+      thdI_R: null,
+      thdI_S: null,
+      thdI_T: null,
+      voltage: null,
+      status: false
     }
   });
 };
@@ -1004,25 +1098,34 @@ export const startIncomingElectricityPolling = () => {
     };
 
     // 4. Process PLTS (Solar POI 1 & POI 2)
-    let pltsParsed: SolarLiveState;
+    let pltsParsed: SolarLiveState | null = null;
+    let pltsRecords: ElectricPltsRecord[] = [];
     if (pltsRaw) {
       try {
         pltsParsed = parseSolarApi(pltsRaw, ts);
-      } catch {
-        pltsParsed = {
-          t_stamp: ts,
-          poi1: { status: false, activePower: 0, peakDemand: 0, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
-          poi2: { status: false, activePower: 0, peakDemand: 0, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
-          totalKwh: 0
-        };
+        pltsRecords = parsePltsApiRecords(pltsRaw, ts);
+      } catch (err: any) {
+        logger.warn(`Incoming PLTS parsing failed: ${err.message}`);
       }
-    } else {
+    }
+
+    if (!pltsParsed || pltsRecords.length === 0) {
+      pltsRecords = getNullPltsRecords(ts);
       pltsParsed = {
         t_stamp: ts,
-        poi1: { status: false, activePower: 0, peakDemand: 0, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
-        poi2: { status: false, activePower: 0, peakDemand: 0, totalKwh: 0, totalKvarh: 0, frequency: 0, voltAb: 0, voltBc: 0, voltCa: 0, voltAn: 0, voltBn: 0, voltCn: 0 },
-        totalKwh: 0
+        online: false,
+        status: false,
+        poi1: { status: false, activePower: null, peakDemand: null, totalKwh: null, totalKvarh: null, frequency: null, voltAb: null, voltBc: null, voltCa: null, voltAn: null, voltBn: null, voltCn: null, powerFactor: null },
+        poi2: { status: false, activePower: null, peakDemand: null, totalKwh: null, totalKvarh: null, frequency: null, voltAb: null, voltBc: null, voltCa: null, voltAn: null, voltBn: null, voltCn: null, powerFactor: null },
+        totalKwh: null
       };
+      broadcastLiveTelemetryOffline("Solar_POI1");
+      broadcastLiveTelemetryOffline("Solar_POI2");
+    } else {
+      const poi1 = pltsRecords.find((p) => p.poi_id === "POI_1");
+      const poi2 = pltsRecords.find((p) => p.poi_id === "POI_2");
+      if (poi1) broadcastLiveTelemetry("Solar_POI1", poi1);
+      if (poi2) broadcastLiveTelemetry("Solar_POI2", poi2);
     }
 
     setLatestSolarLiveState(pltsParsed);
@@ -1030,25 +1133,11 @@ export const startIncomingElectricityPolling = () => {
     if (io) {
       io.emit("electricity:solar_live", pltsParsed);
       io.emit("solar:live_update", pltsParsed);
+      io.emit("electricity:plts_live", { data: pltsRecords, t_stamp: ts, online: Boolean(pltsRaw), status: Boolean(pltsRaw) });
     }
 
-    if (pltsRaw) {
-      try {
-        const parsed = parsePltsApiRecords(pltsRaw, ts);
-        if (isNewMinute && parsed.length > 0) {
-          await insertPltsMinuteTelemetry(parsed, minuteTs);
-        }
-        const poi1 = parsed.find((p) => p.poi_id === "POI_1");
-        const poi2 = parsed.find((p) => p.poi_id === "POI_2");
-        if (poi1) broadcastLiveTelemetry("Solar_POI1", poi1);
-        if (poi2) broadcastLiveTelemetry("Solar_POI2", poi2);
-
-        if (io && parsed.length > 0) {
-          io.emit("electricity:plts_live", { data: parsed, t_stamp: ts });
-        }
-      } catch (err: any) {
-        logger.warn(`PLTS telemetry record parse failed: ${err.message}`);
-      }
+    if (isNewMinute && pltsRecords.length > 0) {
+      await insertPltsMinuteTelemetry(pltsRecords, minuteTs);
     }
 
     // 5. Process EW23 (Sub-distribution Power Meters)
@@ -1129,35 +1218,30 @@ export const startIncomingElectricityPolling = () => {
         return true;
       };
 
-      if (plc1Data || plc2_2Data || plc2_3Data) {
-        const conn1 = parseConnected(plc1Data, "PLC1_AHU1_Utl");
-        const conn2 = parseConnected(plc2_2Data, "PLC2_AHU2");
-        const conn3 = parseConnected(plc2_3Data, "PLC2_AHU3");
+      const conn1 = parseConnected(plc1Data, "PLC1_AHU1_Utl");
+      const conn2 = parseConnected(plc2_2Data, "PLC2_AHU2");
+      const conn3 = parseConnected(plc2_3Data, "PLC2_AHU3");
 
-        const retainLive: HvacRetainLiveState = {
-          PLC1_AHU1_Utl: {
-            ...latestHvacRetainLiveState.PLC1_AHU1_Utl,
-            ...(plc1Data?.PLC1_AHU1_Utl || (typeof plc1Data === "object" ? plc1Data : {}) || {}),
-            Connected: conn1
-          },
-          PLC2_AHU2: {
-            ...latestHvacRetainLiveState.PLC2_AHU2,
-            ...(plc2_2Data?.PLC2_AHU2 || (typeof plc2_2Data === "object" ? plc2_2Data : {}) || {}),
-            Connected: conn2
-          },
-          PLC2_AHU3: {
-            ...latestHvacRetainLiveState.PLC2_AHU3,
-            ...(plc2_3Data?.PLC2_AHU3 || (typeof plc2_3Data === "object" ? plc2_3Data : {}) || {}),
-            Connected: conn3
-          },
-          t_stamp: ts
-        };
-        latestHvacRetainLiveState = retainLive;
+      const retainLive: HvacRetainLiveState = {
+        PLC1_AHU1_Utl: conn1 && plc1Data ? {
+          ...(plc1Data?.PLC1_AHU1_Utl || (typeof plc1Data === "object" ? plc1Data : {}) || {}),
+          Connected: true
+        } : { Connected: false },
+        PLC2_AHU2: conn2 && plc2_2Data ? {
+          ...(plc2_2Data?.PLC2_AHU2 || (typeof plc2_2Data === "object" ? plc2_2Data : {}) || {}),
+          Connected: true
+        } : { Connected: false },
+        PLC2_AHU3: conn3 && plc2_3Data ? {
+          ...(plc2_3Data?.PLC2_AHU3 || (typeof plc2_3Data === "object" ? plc2_3Data : {}) || {}),
+          Connected: true
+        } : { Connected: false },
+        t_stamp: ts
+      };
+      latestHvacRetainLiveState = retainLive;
 
-        if (io) {
-          io.emit("hvac:retain_live", retainLive);
-          io.emit("hvac:live_update", retainLive);
-        }
+      if (io) {
+        io.emit("hvac:retain_live", retainLive);
+        io.emit("hvac:live_update", retainLive);
       }
     } catch (err: any) {
       logger.warn(`HVAC Retained Sample polling failed: ${err.message}`);
