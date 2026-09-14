@@ -609,8 +609,8 @@ export default function Electricity() {
   const [cubiclePoiView, setCubiclePoiView] = useState(false);
   const [cubicleAnalytics, setCubicleAnalytics] = useState<any>(null);
 
-  // Fetch device-specific analytics when cubicle selector changes
-  useEffect(() => {
+  // Fetch device-specific analytics when cubicle selector changes or on interval
+  const fetchCubicleAnalytics = useCallback(() => {
     let devId = "all";
     if (cubicleSelector === "pln") devId = "Cubicle_PLN_PM8000";
     if (cubicleSelector === "wf1") devId = "Feeder_WF1_PM5560";
@@ -624,6 +624,10 @@ export default function Electricity() {
       })
       .catch((err) => console.error("Failed to load cubicle analytics:", err));
   }, [cubicleSelector, selectedYear]);
+
+  useEffect(() => {
+    fetchCubicleAnalytics();
+  }, [fetchCubicleAnalytics]);
 
   // Computed summary metrics based on selected cubicle
   const cubicleSummary = useMemo(() => {
@@ -1238,6 +1242,7 @@ export default function Electricity() {
       if (active) {
         fetchData(false);
         fetchSolarData();
+        fetchCubicleAnalytics();
       }
     }, 10000);
     const socket = getSocket();
@@ -1245,6 +1250,7 @@ export default function Electricity() {
       if (active) {
         fetchData(false);
         fetchSolarData();
+        fetchCubicleAnalytics();
       }
     };
     const handleSolarUpdate = () => {
@@ -1330,7 +1336,7 @@ export default function Electricity() {
       socket.off("config:update", handleConfigUpdate);
       socket.off("power_factor:status", handlePfStatus);
     };
-  }, [fetchData, fetchSolarData]);
+  }, [fetchData, fetchSolarData, fetchCubicleAnalytics]);
 
   // Load consumption fact categories
   useEffect(() => {
