@@ -2,6 +2,7 @@
 
 services:
   gateway-proxy:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: apps/gateway-proxy/Dockerfile
@@ -17,6 +18,7 @@ services:
       - scada_net
 
   frontend:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: apps/frontend/Dockerfile
@@ -24,6 +26,7 @@ services:
       - scada_net
 
   backend:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: apps/backend/Dockerfile
@@ -54,6 +57,7 @@ services:
       - scada_net
 
   mongo:
+    restart: unless-stopped
     image: mongo:7
     environment:
       - MONGO_INITDB_ROOT_USERNAME=scada
@@ -64,6 +68,7 @@ services:
       - scada_net
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     volumes:
       - scada_redis:/data
@@ -71,6 +76,7 @@ services:
       - scada_net
 
   python-biometrics:
+    restart: unless-stopped
     build:
       context: ./apps/python-biometrics
       dockerfile: Dockerfile
