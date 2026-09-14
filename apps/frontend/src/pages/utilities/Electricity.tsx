@@ -573,6 +573,10 @@ export default function Electricity() {
   // Solar Panel (PLTS) states
   const [solarData, setSolarData] = useState<any>(null);
   const [solarLive, setSolarLive] = useState<any>(null);
+
+  // Dedicated state for fixed monthly executive recap (Bulan Ini)
+  const [fixedMonthlyPln, setFixedMonthlyPln] = useState<any>(null);
+  const [fixedMonthlySolar, setFixedMonthlySolar] = useState<any>(null);
   const [solarRange, setSolarRange] = useState<"hour" | "day" | "month" | "ytd" | "custom">("ytd");
   const [solarStartDate, setSolarStartDate] = useState(getLocalTodayString);
   const [solarEndDate, setSolarEndDate] = useState(getLocalTodayString);
@@ -1227,6 +1231,26 @@ export default function Electricity() {
       });
   }, [solarRange, solarSelectedYear, solarSelectedMonth, solarStartDate, solarEndDate]);
 
+  // Dedicated fetcher for fixed monthly executive recap (Bulan Ini)
+  const fetchFixedMonthlyData = useCallback(() => {
+    const curYear = new Date().getFullYear();
+    Promise.all([
+      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${curYear}&_t=${Date.now()}`),
+      getJson<{ data: any }>(`/analytics/solar?year=${curYear}&_t=${Date.now()}`)
+    ])
+      .then(([resPln, resSolar]) => {
+        if (resPln?.data) setFixedMonthlyPln(resPln.data);
+        if (resSolar?.data) setFixedMonthlySolar(resSolar.data);
+      })
+      .catch((err) => {
+        console.warn("Failed to load fixed monthly executive data:", err);
+      });
+  }, []);
+
+  useEffect(() => {
+    fetchFixedMonthlyData();
+  }, [fetchFixedMonthlyData]);
+
   useEffect(() => {
     fetchData(true);
   }, [fetchData]);
@@ -1243,6 +1267,7 @@ export default function Electricity() {
         fetchData(false);
         fetchSolarData();
         fetchCubicleAnalytics();
+        fetchFixedMonthlyData();
       }
     }, 10000);
     const socket = getSocket();
@@ -1251,11 +1276,13 @@ export default function Electricity() {
         fetchData(false);
         fetchSolarData();
         fetchCubicleAnalytics();
+        fetchFixedMonthlyData();
       }
     };
     const handleSolarUpdate = () => {
       if (active) {
         fetchSolarData();
+        fetchFixedMonthlyData();
       }
     };
     const handleLiveUpdate = (payload: any) => {
@@ -1336,7 +1363,7 @@ export default function Electricity() {
       socket.off("config:update", handleConfigUpdate);
       socket.off("power_factor:status", handlePfStatus);
     };
-  }, [fetchData, fetchSolarData, fetchCubicleAnalytics]);
+  }, [fetchData, fetchSolarData, fetchCubicleAnalytics, fetchFixedMonthlyData]);
 
   // Load consumption fact categories
   useEffect(() => {
@@ -1824,24 +1851,73 @@ export default function Electricity() {
     solarEndDate
   ]);
 
-  // Executive period label for the top summary cards
+  // Executive period label for the top summary cards - fixed to current active month
   const executivePeriodLabel = useMemo(() => {
-    if (range === "hour") return "Hari Ini (Per Jam)";
-    if (range === "day") return `${MONTH_NAMES_ID[selectedMonth]} ${selectedYear}`;
-    if (range === "month") return `Tahun ${selectedYear}`;
-    if (range === "ytd") return `YTD ${selectedYear}`;
-    if (range === "custom") return `${chartStartDate} s/d ${chartEndDate}`;
-    return "Hari Ini";
-  }, [range, selectedMonth, selectedYear, chartStartDate, chartEndDate]);
+    const now = new Date();
+    const currMonthName = MONTH_NAMES_ID[now.getMonth()];
+    const currYear = now.getFullYear();
+    return `Bulan Ini (${currMonthName} ${currYear})`;
+  }, []);
 
-  // Executive summary combining PLN and Solar PV
+  // Executive summary combining PLN and Solar PV - fixed for the current month
   const executiveSummary = useMemo(() => {
-    const plnCost = cardSummary.totalCost;
-    const plnKwh = cardSummary.totalKwh;
+    const now = new Date();
+    const currMonthIdx = now.getMonth(); // 0-11
+    const currMonthStr = `${now.getFullYear()}-${String(currMonthIdx + 1).padStart(2, "0")}`;
 
-    const totalPvKwh = (solarFilteredMetrics.poi1Kwh || 0) + (solarFilteredMetrics.poi2Kwh || 0);
-    const effectiveLwbpRate = typeof lwbpRate === "number" && lwbpRate > 0 ? lwbpRate : (Number(solarData?.summary?.solarRate) || 1112);
-    const effectivePvRate = typeof pvRate === "number" ? pvRate : (Number(solarData?.summary?.pvRate) || 0);
+    // 1. PLN Monthly Metrics for Current Month
+    let plnKwh = 0;
+    let plnCost = 0;
+
+    const plnSource = fixedMonthlyPln?.summary || summaryData?.summary;
+    if (plnSource?.perMonthSummary && Array.isArray(plnSource.perMonthSummary)) {
+      const curMonthPln = plnSource.perMonthSummary.find((m: any) => m.month === currMonthStr) || plnSource.perMonthSummary[currMonthIdx];
+      if (curMonthPln) {
+        plnKwh = Number(curMonthPln.totalKwh) || 0;
+        plnCost = Number(curMonthPln.totalCost) || 0;
+      }
+    }
+
+    if (plnKwh === 0 && plnSource?.monthlyKwh) {
+      plnKwh = Number(plnSource.monthlyKwh) || 0;
+    }
+    if (plnCost === 0 && plnSource?.monthlyCost) {
+      plnCost = Number(plnSource.monthlyCost) || 0;
+    }
+
+    if (plnKwh === 0) {
+      const daily = fixedMonthlyPln?.charts?.daily || summaryData?.charts?.daily || [];
+      daily.forEach((d: any) => {
+        if (d.day && d.day.startsWith(currMonthStr)) {
+          plnKwh += Number(d.value) || 0;
+        }
+      });
+      if (plnCost === 0 && plnKwh > 0) {
+        const effectiveLwbpRate = typeof lwbpRate === "number" && lwbpRate > 0 ? lwbpRate : 1112;
+        plnCost = plnKwh * effectiveLwbpRate;
+      }
+    }
+
+    // 2. Solar PV Monthly Metrics for Current Month
+    const solarSource = fixedMonthlySolar || solarData;
+    let poi1Kwh = 0;
+    let poi2Kwh = 0;
+    let totalPvKwh = 0;
+
+    const monthlySolarCharts = solarSource?.charts?.monthly || [];
+    const curMonthSolar = monthlySolarCharts.find((m: any) => m.month === currMonthStr) || monthlySolarCharts[currMonthIdx];
+    if (curMonthSolar) {
+      poi1Kwh = Number(curMonthSolar.poi1) || 0;
+      poi2Kwh = Number(curMonthSolar.poi2) || 0;
+      totalPvKwh = Number(curMonthSolar.total) || (poi1Kwh + poi2Kwh);
+    } else if (solarSource?.summary?.monthlyKwh) {
+      totalPvKwh = Number(solarSource.summary.monthlyKwh) || 0;
+      poi1Kwh = Number(solarSource.summary.poi1MonthlyKwh) || (totalPvKwh * 0.27);
+      poi2Kwh = Number(solarSource.summary.poi2MonthlyKwh) || (totalPvKwh * 0.73);
+    }
+
+    const effectiveLwbpRate = typeof lwbpRate === "number" && lwbpRate > 0 ? lwbpRate : (Number(solarSource?.summary?.solarRate) || 1112);
+    const effectivePvRate = typeof pvRate === "number" ? pvRate : (Number(solarSource?.summary?.pvRate) || 0);
 
     const pvCost = totalPvKwh * effectivePvRate;
     const savingsRate = Math.max(0, effectiveLwbpRate - effectivePvRate);
@@ -1874,7 +1950,7 @@ export default function Electricity() {
       savingsCost,
       netCost
     };
-  }, [cardSummary, solarFilteredMetrics, lwbpRate, pvRate, solarData]);
+  }, [fixedMonthlyPln, fixedMonthlySolar, summaryData, solarData, lwbpRate, pvRate]);
 
   const solarBarData = useMemo(() => {
     const datasets: any[] = [];
