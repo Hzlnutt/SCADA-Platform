@@ -21,8 +21,8 @@ const start = async () => {
     startDummyGenerator();
   }
 
-  httpServer.listen(env.port, () => {
-    logger.info({ port: env.port }, "backend listening");
+  httpServer.listen(env.port, "0.0.0.0", () => {
+    logger.info({ port: env.port, host: "0.0.0.0" }, "backend listening");
   });
 };
 

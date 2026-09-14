@@ -24,8 +24,9 @@ sudo docker compose exec -T backend pnpm build
 echo "[2/3] Copying updated frontend build into Nginx..."
 sudo docker cp apps/frontend/dist/. "${FRONTEND_CID}:/usr/share/nginx/html/"
 
-echo "[3/3] Restarting backend & reloading Nginx..."
+echo "[3/3] Restarting backend, frontend & reloading gateway-proxy..."
 sudo docker compose restart backend
 sudo docker compose restart frontend
+sudo docker compose restart gateway-proxy
 
 echo "=== UPDATE SUCCESSFUL! SCADA Platform is live and running. ==="
