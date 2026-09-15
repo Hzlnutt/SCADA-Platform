@@ -791,7 +791,7 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   const activePowerVal = rawActive !== null ? (Number(rawActive) > 10000 ? Number(rawActive) / 1000.0 : Number(rawActive)) : 0;
   const reactivePowerVal = pgPq.reactive_power_total !== null ? (Number(pgPq.reactive_power_total) > 10000 ? Number(pgPq.reactive_power_total) / 1000.0 : Number(pgPq.reactive_power_total)) : 0;
   const apparentPowerVal = pgPq.apparent_power_total !== null ? (Number(pgPq.apparent_power_total) > 10000 ? Number(pgPq.apparent_power_total) / 1000.0 : Number(pgPq.apparent_power_total)) : 0;
-  const pfVal = pgPq.power_factor !== null ? Math.abs(Number(pgPq.power_factor)) : 1.0;
+  const pfVal = pgPq.power_factor !== null && pgPq.power_factor !== undefined ? Math.abs(Number(pgPq.power_factor)) : null;
   const freqVal = pgPq.frequency !== null ? Number(pgPq.frequency) : 50.0;
   const voltLAvg = pgPq.volt_ll !== null ? (Number(pgPq.volt_ll) > 1000 ? Number(pgPq.volt_ll) / 1000.0 : Number(pgPq.volt_ll)) : 20.0;
   const voltABVal = pgPq.volt_ab !== null ? (Number(pgPq.volt_ab) > 1000 ? Number(pgPq.volt_ab) / 1000.0 : Number(pgPq.volt_ab)) : 20.0;

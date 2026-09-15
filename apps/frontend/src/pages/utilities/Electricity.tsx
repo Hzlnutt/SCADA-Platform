@@ -1073,9 +1073,16 @@ export default function Electricity() {
                   }
                 });
               }
+            } else if (url.includes("electric_pln")) {
+              setLivePf(null);
+              setPfStatus("offline");
             }
           } catch (err) {
             console.error(`Live API poll error on Electricity for URL ${url}:`, err);
+            if (url.includes("electric_pln")) {
+              setLivePf(null);
+              setPfStatus("offline");
+            }
           }
         })
       );
@@ -1133,8 +1140,16 @@ export default function Electricity() {
   }, [apiSourceUrls, isPageActive]);
 
   const getApiVal = useCallback((tagKey: string): any => {
-    if (tagKey === "pln/power_factor" && livePf !== null && livePf !== undefined) {
-      return livePf;
+    if (tagKey === "pln/power_factor") {
+      if (livePf !== null && livePf !== undefined && !isNaN(Number(livePf))) {
+        return Math.abs(Number(livePf));
+      }
+      const plnApi = apiLiveData[DEFAULT_PLN_API_URL];
+      if (plnApi && plnApi.Power_Factor !== undefined && plnApi.Power_Factor !== null) {
+        const num = Number(plnApi.Power_Factor);
+        if (!isNaN(num)) return Math.abs(num);
+      }
+      return null;
     }
     const isPlnTag = tagKey.startsWith("pln/") || tagKey === "electricity/p_grid";
     const isWf1Tag = tagKey.startsWith("wf1/");
@@ -1179,7 +1194,6 @@ export default function Electricity() {
       const pq = summaryData.pqData;
       if (tagKey === "pln/reactive_power") return pq.reactivePower;
       if (tagKey === "pln/apparent_power") return pq.apparentPower;
-      if (tagKey === "pln/power_factor") return pq.pf !== null && pq.pf !== undefined ? Math.abs(pq.pf) : null;
       if (tagKey === "pln/voltage") return pq.voltage;
       if (tagKey === "pln/frequency") return pq.freq;
       if (tagKey === "pln/current_r") return pq.current1 ?? pq.iR;
@@ -1277,10 +1291,6 @@ export default function Electricity() {
         if (res?.data) {
           setSummaryData(res.data);
           setChartData(res.data);
-          if (res.data.pqData) {
-            setLivePf(res.data.pqData.pf);
-            setPfStatus(res.data.pqData.pfStatus || "offline");
-          }
         }
         setSummaryLoading(false);
         setChartLoading(false);
@@ -2781,18 +2791,27 @@ export default function Electricity() {
           <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 dark:bg-purple-950/30 p-4 hover:border-purple-400 transition">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">PF</span>
-              <span className={`h-2 w-2 rounded-full ${pfStatus === "connected" || livePf !== null ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} title={pfStatus === "connected" || livePf !== null ? "Live Real-Time (1s)" : "Offline"} />
+              <span 
+                className={`h-2 w-2 rounded-full ${pfStatus === "connected" && (livePf !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== null)) ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} 
+                title={pfStatus === "connected" ? "Live Real-Time Polling API" : "Gagal Polling API"} 
+              />
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {(() => {
-                const pf = (livePf !== null && livePf !== undefined) ? livePf : getCleanNum(getApiVal("pln/power_factor"));
-                return renderMetricVal(pf, (v) => `${Math.abs(v).toFixed(2)}`);
+                const liveVal = (livePf !== null && livePf !== undefined && !isNaN(Number(livePf))) 
+                  ? Number(livePf) 
+                  : (apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== null)
+                    ? Number(apiLiveData[DEFAULT_PLN_API_URL].Power_Factor)
+                    : null;
+                return renderMetricVal(liveVal, (v) => `${Math.abs(v).toFixed(2)}`);
               })()}
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
               <span>Stabilitas beban listrik</span>
-              {(livePf !== null && livePf !== undefined) && (
+              {pfStatus === "connected" && (livePf !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== null)) ? (
                 <span className="text-[9px] font-semibold text-emerald-500 font-mono">1s Live</span>
+              ) : (
+                <span className="text-[9px] font-semibold text-amber-500 font-mono">Gagal Polling API</span>
               )}
             </div>
           </div>
