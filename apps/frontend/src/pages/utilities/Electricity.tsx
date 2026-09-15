@@ -612,6 +612,7 @@ export default function Electricity() {
   const [liveWf2Kw, setLiveWf2Kw] = useState<number | null>(null);
   const [liveWf1Status, setLiveWf1Status] = useState<boolean>(true);
   const [liveWf2Status, setLiveWf2Status] = useState<boolean>(true);
+  const [isLiveLoading, setIsLiveLoading] = useState<boolean>(true);
 
   // Incoming Cubicle selector (All, PLN, WF1, WF2, POI1, POI2)
   const [cubicleSelector, setCubicleSelector] = useState<"all" | "pln" | "wf1" | "wf2" | "poi1" | "poi2">("all");
@@ -952,6 +953,12 @@ export default function Electricity() {
             });
             if (res && res.success && res.data) {
               aggregatedData[url] = res.data;
+              // Extract PLN
+              if (url.includes("electric_pln") && res.data.Active_Power !== undefined) {
+                let plnKw = Number(res.data.Active_Power) || 0;
+                if (plnKw > 10000) plnKw = plnKw / 1000.0;
+                setLivePGridKw(Math.max(0, plnKw));
+              }
               // Extract WF1
               if (url.includes("electric_wf1") && res.data.Active_Power_Total !== undefined) {
                 setLiveWf1Kw(Math.max(0, Number(res.data.Active_Power_Total) || 0));
@@ -996,6 +1003,7 @@ export default function Electricity() {
 
       if (isMounted) {
         setApiLiveData(aggregatedData);
+        setIsLiveLoading(false);
       }
     };
 
@@ -1087,7 +1095,6 @@ export default function Electricity() {
     // Fallback to live pqData from backend WebSocket / summaryData
     if (summaryData?.pqData && (isPlnTag || tagKey.startsWith("pln/"))) {
       const pq = summaryData.pqData;
-      if (tagKey === "pln/active_power" || tagKey === "electricity/p_grid") return pq.activePower;
       if (tagKey === "pln/reactive_power") return pq.reactivePower;
       if (tagKey === "pln/apparent_power") return pq.apparentPower;
       if (tagKey === "pln/power_factor") return pq.pf !== null && pq.pf !== undefined ? Math.abs(pq.pf) : null;
@@ -1134,7 +1141,7 @@ export default function Electricity() {
     }
 
     if (tagKey === "electricity/p_grid") {
-      const plnRaw = apiLiveData[DEFAULT_PLN_API_URL]?.[DEFAULT_PLN_JSON_KEYS["pln/active_power"]] ?? summaryData?.pqData?.activePower;
+      const plnRaw = apiLiveData[DEFAULT_PLN_API_URL]?.[DEFAULT_PLN_JSON_KEYS["pln/active_power"]];
       if (typeof plnRaw === "number" && plnRaw > 10000) return plnRaw / 1000.0;
       if (typeof plnRaw === "number") return plnRaw;
       return "API TIDAK TERKIRIM";
@@ -1304,6 +1311,7 @@ export default function Electricity() {
           }
           if (typeof payload.pqData.activePower === "number") {
             setLivePGridKw(payload.pqData.activePower);
+            setIsLiveLoading(false);
           }
         }
       } else if (payload.deviceId === "Feeder_WF1_PM5560") {
@@ -2237,41 +2245,35 @@ export default function Electricity() {
     return null;
   };
 
-  // Power metrics & percentages for Top Overview Cards
+  // Power metrics & percentages for Top Overview Cards (Pure Real-Time API Polling)
   const apiWf1Val = getCleanNum(getApiVal("wf1/active_power"));
   const rawFact1Val = liveWf1Kw !== null && liveWf1Kw !== undefined ? liveWf1Kw : apiWf1Val;
-  const isFact1Offline = rawFact1Val === null || (liveWf1Status === false && rawFact1Val === 0 && apiWf1Val === null);
+  const isFact1Offline = !isLiveLoading && (rawFact1Val === null || (liveWf1Status === false && rawFact1Val === 0 && apiWf1Val === null));
   const fact1Kw = rawFact1Val !== null ? Math.max(0, rawFact1Val) : null;
 
   const apiWf2Val = getCleanNum(getApiVal("wf2/active_power"));
   const rawFact2Val = liveWf2Kw !== null && liveWf2Kw !== undefined ? liveWf2Kw : apiWf2Val;
-  const isFact2Offline = rawFact2Val === null || (liveWf2Status === false && rawFact2Val === 0 && apiWf2Val === null);
+  const isFact2Offline = !isLiveLoading && (rawFact2Val === null || (liveWf2Status === false && rawFact2Val === 0 && apiWf2Val === null));
   const fact2Kw = rawFact2Val !== null ? Math.max(0, rawFact2Val) : null;
 
   const apiPlnVal = getCleanNum(getApiVal("pln/active_power"));
   const rawPGridVal = livePGridKw !== null && livePGridKw !== undefined ? livePGridKw : apiPlnVal;
-  const isPlnOffline = rawPGridVal === null
-    ? (summaryData?.pqData?.activePower === null || summaryData?.pqData?.activePower === undefined || summaryData?.pqData?.pfStatus === "offline" || pfStatus === "offline")
-    : false;
-  const pGridNum = rawPGridVal !== null
-    ? Math.max(0, rawPGridVal)
-    : ((fact1Kw ?? 0) + (fact2Kw ?? 0) > 0)
-    ? ((fact1Kw ?? 0) + (fact2Kw ?? 0))
-    : (typeof summaryData?.pqData?.activePower === "number" && !isPlnOffline ? Math.max(0, summaryData.pqData.activePower) : null);
+  const isPlnOffline = !isLiveLoading && rawPGridVal === null;
+  const pGridNum = rawPGridVal !== null ? Math.max(0, rawPGridVal) : null;
 
   const hasPoi1Data = pltsLive.poi1.status === true || (typeof pltsLive.poi1.active_power === "number" && pltsLive.poi1.active_power > 0) || solarLive?.poi1?.status === true;
-  const isPoi1Offline = !hasPoi1Data && (pltsLive.poi1.status === false || solarLive?.poi1?.status === false);
+  const isPoi1Offline = !isLiveLoading && !hasPoi1Data && (pltsLive.poi1.status === false || solarLive?.poi1?.status === false);
   const hasPoi2Data = pltsLive.poi2.status === true || (typeof pltsLive.poi2.active_power === "number" && pltsLive.poi2.active_power > 0) || solarLive?.poi2?.status === true;
-  const isPoi2Offline = !hasPoi2Data && (pltsLive.poi2.status === false || solarLive?.poi2?.status === false);
+  const isPoi2Offline = !isLiveLoading && !hasPoi2Data && (pltsLive.poi2.status === false || solarLive?.poi2?.status === false);
   const poi1Kw = !isPoi1Offline ? Math.max(0, pltsLive.poi1.active_power || solarLive?.poi1?.activePower || 0) : null;
   const poi2Kw = !isPoi2Offline ? Math.max(0, pltsLive.poi2.active_power || solarLive?.poi2?.activePower || 0) : null;
-  const isSolarOffline = isPoi1Offline && isPoi2Offline;
+  const isSolarOffline = !isLiveLoading && isPoi1Offline && isPoi2Offline;
   const totalSolarKw = (!isSolarOffline && (poi1Kw !== null || poi2Kw !== null)) ? ((poi1Kw ?? 0) + (poi2Kw ?? 0)) : null;
 
   const gensetRunning = Number(getCleanNum(getApiVal("electricity/genset_running"))) || 0;
   const pGensetNum = gensetRunning === 1 ? 850 : gensetRunning > 1 ? 1850 : 0;
 
-  const totalPlantLoadKw = (pGridNum !== null || totalSolarKw !== null || pGensetNum > 0)
+  const totalPlantLoadKw = !isLiveLoading && (pGridNum !== null || totalSolarKw !== null || pGensetNum > 0)
     ? (pGridNum ?? 0) + (totalSolarKw ?? 0) + pGensetNum
     : null;
 
@@ -2325,17 +2327,21 @@ export default function Electricity() {
               <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-blue-200' : 'text-blue-800'}`}>Grid Import (PLN)</span>
               <div className="flex items-center gap-1.5">
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold font-mono border ${
-                  isPlnOffline
+                  isLiveLoading
+                    ? isDark ? 'bg-blue-400/10 text-blue-300 border-blue-400/20 animate-pulse' : 'bg-blue-600/10 text-blue-700 border-blue-600/20 animate-pulse'
+                    : isPlnOffline
                     ? isDark ? 'bg-amber-400/20 text-amber-300 border-amber-400/30' : 'bg-amber-500/15 text-amber-700 border-amber-500/30'
                     : isDark ? 'bg-blue-400/20 text-blue-200 border-blue-400/30' : 'bg-blue-600/10 text-blue-700 border-blue-600/20'
                 }`}>
-                  {isPlnOffline ? "OFFLINE" : `${gridPct.toFixed(1)}% Load`}
+                  {isLiveLoading ? "POLLING..." : isPlnOffline ? "OFFLINE" : `${gridPct.toFixed(1)}% Load`}
                 </span>
                 <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-blue-600/10 text-blue-700'} flex items-center justify-center`}><IconGrid /></div>
               </div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-blue-950'}`}>
-              {isPlnOffline ? (
+              {isLiveLoading ? (
+                <div className="h-9 w-32 bg-blue-400/20 dark:bg-blue-300/20 rounded-lg animate-pulse" />
+              ) : isPlnOffline ? (
                 <span className="text-xl text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
               ) : (
                 <>
@@ -2346,14 +2352,18 @@ export default function Electricity() {
             </div>
             <div className={`mt-2 flex items-center justify-between text-[10px] ${isDark ? 'text-blue-200' : 'text-blue-800'}`}>
               <span>Fact 1: <strong className={isDark ? 'text-white' : 'text-blue-950'}>
-                {isFact1Offline ? (
+                {isLiveLoading ? (
+                  <span className="opacity-40">...</span>
+                ) : isFact1Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
                   `${(fact1Kw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${fact1Pct.toFixed(1)}%)`
                 )}
               </strong></span>
               <span>Fact 2: <strong className={isDark ? 'text-white' : 'text-blue-950'}>
-                {isFact2Offline ? (
+                {isLiveLoading ? (
+                  <span className="opacity-40">...</span>
+                ) : isFact2Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
                   `${(fact2Kw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${fact2Pct.toFixed(1)}%)`
@@ -2377,17 +2387,21 @@ export default function Electricity() {
               <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>Solar Generation</span>
               <div className="flex items-center gap-1.5">
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold font-mono border ${
-                  isSolarOffline
+                  isLiveLoading
+                    ? isDark ? 'bg-emerald-400/10 text-emerald-300 border-emerald-400/20 animate-pulse' : 'bg-emerald-600/10 text-emerald-700 border-emerald-600/20 animate-pulse'
+                    : isSolarOffline
                     ? isDark ? 'bg-amber-400/20 text-amber-300 border-amber-400/30' : 'bg-amber-500/15 text-amber-700 border-amber-500/30'
                     : isDark ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30' : 'bg-emerald-600/10 text-emerald-700 border-emerald-600/20'
                 }`}>
-                  {isSolarOffline ? "OFFLINE" : `${solarPct.toFixed(1)}% Load`}
+                  {isLiveLoading ? "POLLING..." : isSolarOffline ? "OFFLINE" : `${solarPct.toFixed(1)}% Load`}
                 </span>
                 <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-emerald-600/10 text-emerald-700'} flex items-center justify-center`}><IconSolar /></div>
               </div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-emerald-950'}`}>
-              {isSolarOffline ? (
+              {isLiveLoading ? (
+                <div className="h-9 w-32 bg-emerald-400/20 dark:bg-emerald-300/20 rounded-lg animate-pulse" />
+              ) : isSolarOffline ? (
                 <span className="text-xl text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
               ) : (
                 <>
@@ -2398,14 +2412,18 @@ export default function Electricity() {
             </div>
             <div className={`mt-2 flex items-center justify-between text-[10px] ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>
               <span>POI-1: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
-                {isPoi1Offline ? (
+                {isLiveLoading ? (
+                  <span className="opacity-40">...</span>
+                ) : isPoi1Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
                   `${(poi1Kw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${poi1Pct.toFixed(1)}%)`
                 )}
               </strong></span>
               <span>POI-2: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
-                {isPoi2Offline ? (
+                {isLiveLoading ? (
+                  <span className="opacity-40">...</span>
+                ) : isPoi2Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
                   `${(poi2Kw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${poi2Pct.toFixed(1)}%)`
@@ -2485,7 +2503,9 @@ export default function Electricity() {
               <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-cyan-600/10 text-cyan-700'} flex items-center justify-center`}><IconPlant /></div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-cyan-950'}`}>
-              {totalPlantLoadKw === null || (isPlnOffline && isSolarOffline && pGensetNum === 0) ? (
+              {isLiveLoading ? (
+                <div className="h-9 w-36 bg-cyan-400/20 dark:bg-cyan-300/20 rounded-lg animate-pulse" />
+              ) : totalPlantLoadKw === null || (isPlnOffline && isSolarOffline && pGensetNum === 0) ? (
                 <span className="text-xl text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
               ) : (
                 <>
@@ -2496,14 +2516,18 @@ export default function Electricity() {
             </div>
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-cyan-200' : 'text-cyan-800'}`}>
               <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>
-                {isPlnOffline ? (
+                {isLiveLoading ? (
+                  <span className="opacity-40">...</span>
+                ) : isPlnOffline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
                   `${(pGridNum ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${gridPct.toFixed(1)}%)`
                 )}
               </strong></span>
               <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>
-                {isSolarOffline ? (
+                {isLiveLoading ? (
+                  <span className="opacity-40">...</span>
+                ) : isSolarOffline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
                   `${(totalSolarKw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${solarPct.toFixed(1)}%)`
