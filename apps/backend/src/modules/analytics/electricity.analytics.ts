@@ -37,15 +37,16 @@ function parsePowerFactor(data: any): number | null {
     }
   }
   if (data && typeof data === "object") {
-    const keys = ["power_factor", "powerFactor", "pf", "value", "val"];
+    const keys = ["Power_Factor", "power_factor", "powerFactor", "PowerFactor", "PF", "pf", "value", "val"];
     for (const k of keys) {
-      if (data[k] !== undefined) {
+      if (data[k] !== undefined && data[k] !== null) {
         const val = parseFloat(data[k]);
         if (!isNaN(val)) return Math.abs(val);
       }
     }
     for (const k of Object.keys(data)) {
-      if (k.toLowerCase().includes("power") || k.toLowerCase().includes("pf")) {
+      const lower = k.toLowerCase();
+      if ((lower.includes("factor") || lower === "pf" || lower.endsWith("_pf")) && !lower.includes("active") && !lower.includes("reactive") && !lower.includes("apparent")) {
         const val = parseFloat(data[k]);
         if (!isNaN(val)) return Math.abs(val);
       }

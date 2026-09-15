@@ -979,10 +979,10 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   };
 };
 
-let cachedWorkingBaseUrl = "http://10.3.161.3:8088";
+let cachedWorkingBaseUrl = "http://10.3.164.3:8088";
 const CANDIDATE_BASES = [
-  "http://10.3.161.3:8088",
   "http://10.3.164.3:8088",
+  "http://10.3.161.3:8088",
   "https://utility.widatra.com"
 ];
 
@@ -2243,7 +2243,7 @@ export const startCoolingTowerPolling = () => {
       
       let tagToUrlMap: Record<string, string> = {};
       let tagToJsonKeyMap: Record<string, string> = {};
-      const defaultUrl = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/cooling3";
+      const defaultUrl = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/cooling3";
 
       // Cache configs for 60s to avoid querying PostgreSQL every poll tick
       if (cachedCoolingConfigs && now - cachedCoolingConfigs.ts < 60000) {

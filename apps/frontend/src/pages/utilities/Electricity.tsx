@@ -69,9 +69,9 @@ const formatPeakTs = (tsStr: string) => {
   return `${day} ${month} ${year}, ${hrs}:${mins} WIB`;
 };
 
-const DEFAULT_PLN_API_URL = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_pln";
-const DEFAULT_WF1_API_URL = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_wf1";
-const DEFAULT_WF2_API_URL = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_wf2";
+const DEFAULT_PLN_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln";
+const DEFAULT_WF1_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1";
+const DEFAULT_WF2_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2";
 
 const DEFAULT_PLN_JSON_KEYS: Record<string, string> = {
   "pln/active_power": "Active_Power",
@@ -994,7 +994,7 @@ export default function Electricity() {
       });
   }, []);
 
-  const DEFAULT_PLTS_API_URL = "http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_plts";
+  const DEFAULT_PLTS_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_plts";
 
   // Poll active URLs (PLN, PLTS, WF1, WF2, etc.)
   useEffect(() => {
@@ -1024,10 +1024,19 @@ export default function Electricity() {
             if (res && res.success && res.data) {
               aggregatedData[url] = res.data;
               // Extract PLN
-              if (url.includes("electric_pln") && res.data.Active_Power !== undefined) {
-                let plnKw = Number(res.data.Active_Power) || 0;
-                if (plnKw > 10000) plnKw = plnKw / 1000.0;
-                setLivePGridKw(Math.max(0, plnKw));
+              if (url.includes("electric_pln")) {
+                if (res.data.Active_Power !== undefined) {
+                  let plnKw = Number(res.data.Active_Power) || 0;
+                  if (plnKw > 10000) plnKw = plnKw / 1000.0;
+                  setLivePGridKw(Math.max(0, plnKw));
+                }
+                if (res.data.Power_Factor !== undefined && res.data.Power_Factor !== null) {
+                  const pfNum = Math.abs(Number(res.data.Power_Factor));
+                  if (!isNaN(pfNum)) {
+                    setLivePf(pfNum);
+                    setPfStatus(res.data.Status_PM8000 !== false ? "connected" : "offline");
+                  }
+                }
               }
               // Extract WF1
               if (url.includes("electric_wf1") && res.data.Active_Power_Total !== undefined) {
@@ -1078,7 +1087,7 @@ export default function Electricity() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 10000); // 10s fallback polling (WebSocket handles real-time)
+    const interval = setInterval(fetchActiveApiData, 2000); // 2s fallback polling (WebSocket handles 1s real-time)
 
     const socket = getSocket();
     const handlePltsLive = (payload: any) => {
@@ -1124,6 +1133,9 @@ export default function Electricity() {
   }, [apiSourceUrls, isPageActive]);
 
   const getApiVal = useCallback((tagKey: string): any => {
+    if (tagKey === "pln/power_factor" && livePf !== null && livePf !== undefined) {
+      return livePf;
+    }
     const isPlnTag = tagKey.startsWith("pln/") || tagKey === "electricity/p_grid";
     const isWf1Tag = tagKey.startsWith("wf1/");
     const isWf2Tag = tagKey.startsWith("wf2/");
@@ -1219,7 +1231,7 @@ export default function Electricity() {
 
     if (!url.trim()) return "BELUM ADA API";
     return "API TIDAK TERKIRIM";
-  }, [apiSourceUrls, jsonKeyMap, apiLiveData, summaryData, pltsLive, solarData, solarLive]);
+  }, [apiSourceUrls, jsonKeyMap, apiLiveData, summaryData, pltsLive, solarData, solarLive, livePf]);
 
   const isOfflineVal = useCallback((val: any) => {
     return val === null || val === undefined || val === "BELUM ADA API" || val === "API TIDAK TERKIRIM" || val === "Gagal Polling API" || val === "GAGAL POLLING API" || val === "xx";
@@ -2767,11 +2779,22 @@ export default function Electricity() {
 
           {/* PF / Power Factor */}
           <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 dark:bg-purple-950/30 p-4 hover:border-purple-400 transition">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">PF</span>
-            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-              {renderMetricVal(getApiVal("pln/power_factor"), (v) => `${Math.abs(v).toFixed(2)}`)}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">PF</span>
+              <span className={`h-2 w-2 rounded-full ${pfStatus === "connected" || livePf !== null ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} title={pfStatus === "connected" || livePf !== null ? "Live Real-Time (1s)" : "Offline"} />
             </div>
-            <div className="mt-1 text-[10px] text-slate-400">Stabilitas beban listrik</div>
+            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+              {(() => {
+                const pf = (livePf !== null && livePf !== undefined) ? livePf : getCleanNum(getApiVal("pln/power_factor"));
+                return renderMetricVal(pf, (v) => `${Math.abs(v).toFixed(2)}`);
+              })()}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
+              <span>Stabilitas beban listrik</span>
+              {(livePf !== null && livePf !== undefined) && (
+                <span className="text-[9px] font-semibold text-emerald-500 font-mono">1s Live</span>
+              )}
+            </div>
           </div>
 
           {/* Peak Demand */}
