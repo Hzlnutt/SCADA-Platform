@@ -579,9 +579,9 @@ export default function Electricity() {
   const [solarData, setSolarData] = useState<any>(null);
   const [solarLive, setSolarLive] = useState<any>(null);
 
-  // Dedicated state for fixed yearly executive recap (Tahun Penuh / 1 Tahun)
-  const [fixedYearlyPln, setFixedYearlyPln] = useState<any>(null);
-  const [fixedYearlySolar, setFixedYearlySolar] = useState<any>(null);
+  // Dedicated state for fixed monthly executive recap (Bulan Ini)
+  const [fixedMonthlyPln, setFixedMonthlyPln] = useState<any>(null);
+  const [fixedMonthlySolar, setFixedMonthlySolar] = useState<any>(null);
   const [solarRange, setSolarRange] = useState<"hour" | "day" | "month" | "ytd" | "custom">("ytd");
   const [solarStartDate, setSolarStartDate] = useState(getLocalTodayString);
   const [solarEndDate, setSolarEndDate] = useState(getLocalTodayString);
@@ -1243,24 +1243,25 @@ export default function Electricity() {
       });
   }, [solarRange, solarSelectedYear, solarSelectedMonth, solarStartDate, solarEndDate]);
 
-  // Dedicated fetcher for fixed yearly executive recap (Tahun Penuh / 1 Tahun)
-  const fetchFixedYearlyData = useCallback(() => {
+  // Dedicated fetcher for fixed monthly executive recap (Bulan Ini)
+  const fetchFixedMonthlyData = useCallback(() => {
+    const curYear = new Date().getFullYear();
     Promise.all([
-      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${selectedYear}&_t=${Date.now()}`),
-      getJson<{ data: any }>(`/analytics/solar?year=${selectedYear}&_t=${Date.now()}`)
+      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${curYear}&_t=${Date.now()}`),
+      getJson<{ data: any }>(`/analytics/solar?year=${curYear}&_t=${Date.now()}`)
     ])
       .then(([resPln, resSolar]) => {
-        if (resPln?.data) setFixedYearlyPln(resPln.data);
-        if (resSolar?.data) setFixedYearlySolar(resSolar.data);
+        if (resPln?.data) setFixedMonthlyPln(resPln.data);
+        if (resSolar?.data) setFixedMonthlySolar(resSolar.data);
       })
       .catch((err) => {
-        console.warn("Failed to load fixed yearly executive data:", err);
+        console.warn("Failed to load fixed monthly executive data:", err);
       });
-  }, [selectedYear]);
+  }, []);
 
   useEffect(() => {
-    fetchFixedYearlyData();
-  }, [fetchFixedYearlyData]);
+    fetchFixedMonthlyData();
+  }, [fetchFixedMonthlyData]);
 
   useEffect(() => {
     fetchData(true);
@@ -1278,7 +1279,7 @@ export default function Electricity() {
         fetchData(false);
         fetchSolarData();
         fetchCubicleAnalytics();
-        fetchFixedYearlyData();
+        fetchFixedMonthlyData();
       }
     }, 10000);
     const socket = getSocket();
@@ -1287,13 +1288,13 @@ export default function Electricity() {
         fetchData(false);
         fetchSolarData();
         fetchCubicleAnalytics();
-        fetchFixedYearlyData();
+        fetchFixedMonthlyData();
       }
     };
     const handleSolarUpdate = () => {
       if (active) {
         fetchSolarData();
-        fetchFixedYearlyData();
+        fetchFixedMonthlyData();
       }
     };
     const handleLiveUpdate = (payload: any) => {
@@ -1375,7 +1376,7 @@ export default function Electricity() {
       socket.off("config:update", handleConfigUpdate);
       socket.off("power_factor:status", handlePfStatus);
     };
-  }, [fetchData, fetchSolarData, fetchCubicleAnalytics, fetchFixedYearlyData]);
+  }, [fetchData, fetchSolarData, fetchCubicleAnalytics, fetchFixedMonthlyData]);
 
   // Load consumption fact categories
   useEffect(() => {
@@ -1863,48 +1864,69 @@ export default function Electricity() {
     solarEndDate
   ]);
 
-  // Executive period label for the top summary cards - fixed to full 1-year period
+  // Executive period label for the top summary cards - fixed to current active month (Bulan Saat Ini)
   const executivePeriodLabel = useMemo(() => {
-    return `Tahun ${selectedYear}`;
-  }, [selectedYear]);
+    const now = new Date();
+    const currMonthName = MONTH_NAMES_ID[now.getMonth()];
+    const currYear = now.getFullYear();
+    return `Bulan Ini (${currMonthName} ${currYear})`;
+  }, []);
 
-  // Executive summary combining PLN and Solar PV - fixed for 1 full year period (Tahun Penuh)
+  // Executive summary combining PLN and Solar PV - fixed for current month (Bulan Saat Ini)
   const executiveSummary = useMemo(() => {
-    // 1. PLN Yearly Metrics
-    const plnSource = fixedYearlyPln?.summary || (range === "ytd" || range === "month" ? summaryData?.summary : null);
-    let plnKwh = Number(plnSource?.totalKwh ?? 0);
-    let plnCost = Number(plnSource?.totalCost ?? 0);
+    const now = new Date();
+    const currMonthIdx = now.getMonth(); // 0-11
+    const currMonthStr = `${now.getFullYear()}-${String(currMonthIdx + 1).padStart(2, "0")}`;
 
-    if (plnKwh === 0 && plnSource?.perMonthSummary && Array.isArray(plnSource.perMonthSummary)) {
-      plnSource.perMonthSummary.forEach((m: any) => {
-        plnKwh += Number(m.totalKwh) || 0;
-        plnCost += Number(m.totalCost) || 0;
-      });
+    // 1. PLN Monthly Metrics for Current Month
+    let plnKwh = 0;
+    let plnCost = 0;
+
+    const plnSource = fixedMonthlyPln?.summary || summaryData?.summary;
+    if (plnSource?.perMonthSummary && Array.isArray(plnSource.perMonthSummary)) {
+      const curMonthPln = plnSource.perMonthSummary.find((m: any) => m.month === currMonthStr) || plnSource.perMonthSummary[currMonthIdx];
+      if (curMonthPln) {
+        plnKwh = Number(curMonthPln.totalKwh) || 0;
+        plnCost = Number(curMonthPln.totalCost) || 0;
+      }
     }
 
-    // 2. Solar PV Yearly Metrics
-    const solarSource = fixedYearlySolar || (solarRange === "ytd" || solarRange === "month" ? solarData : null);
+    if (plnKwh === 0 && plnSource?.monthlyKwh) {
+      plnKwh = Number(plnSource.monthlyKwh) || 0;
+    }
+    if (plnCost === 0 && plnSource?.monthlyCost) {
+      plnCost = Number(plnSource.monthlyCost) || 0;
+    }
+
+    if (plnKwh === 0) {
+      const daily = fixedMonthlyPln?.charts?.daily || summaryData?.charts?.daily || [];
+      daily.forEach((d: any) => {
+        if (d.day && d.day.startsWith(currMonthStr)) {
+          plnKwh += Number(d.value) || 0;
+        }
+      });
+      if (plnCost === 0 && plnKwh > 0) {
+        const effectiveLwbpRate = typeof lwbpRate === "number" && lwbpRate > 0 ? lwbpRate : 1112;
+        plnCost = plnKwh * effectiveLwbpRate;
+      }
+    }
+
+    // 2. Solar PV Monthly Metrics for Current Month
+    const solarSource = fixedMonthlySolar || solarData;
     let poi1Kwh = 0;
     let poi2Kwh = 0;
     let totalPvKwh = 0;
 
     const monthlySolarCharts = solarSource?.charts?.monthly || [];
-    if (monthlySolarCharts.length > 0) {
-      monthlySolarCharts.forEach((m: any) => {
-        const p1 = Number(m.poi1) || 0;
-        const p2 = Number(m.poi2) || 0;
-        poi1Kwh += p1;
-        poi2Kwh += p2;
-        totalPvKwh += Number(m.total) || (p1 + p2);
-      });
-    } else if (solarSource?.summary?.yearlyKwh) {
-      totalPvKwh = Number(solarSource.summary.yearlyKwh) || 0;
-      poi1Kwh = Number(solarSource.summary.poi1YearlyKwh) || (totalPvKwh * 0.27);
-      poi2Kwh = Number(solarSource.summary.poi2YearlyKwh) || (totalPvKwh * 0.73);
-    } else if (solarSource?.summary?.totalKwh) {
-      totalPvKwh = Number(solarSource.summary.totalKwh) || 0;
-      poi1Kwh = totalPvKwh * 0.27;
-      poi2Kwh = totalPvKwh * 0.73;
+    const curMonthSolar = monthlySolarCharts.find((m: any) => m.month === currMonthStr) || monthlySolarCharts[currMonthIdx];
+    if (curMonthSolar) {
+      poi1Kwh = Number(curMonthSolar.poi1) || 0;
+      poi2Kwh = Number(curMonthSolar.poi2) || 0;
+      totalPvKwh = Number(curMonthSolar.total) || (poi1Kwh + poi2Kwh);
+    } else if (solarSource?.summary?.monthlyKwh) {
+      totalPvKwh = Number(solarSource.summary.monthlyKwh) || 0;
+      poi1Kwh = Number(solarSource.summary.poi1MonthlyKwh) || (totalPvKwh * 0.27);
+      poi2Kwh = Number(solarSource.summary.poi2MonthlyKwh) || (totalPvKwh * 0.73);
     }
 
     const effectiveLwbpRate = typeof lwbpRate === "number" && lwbpRate > 0 ? lwbpRate : (Number(solarSource?.summary?.solarRate) || 1112);
@@ -1941,7 +1963,7 @@ export default function Electricity() {
       savingsCost,
       netCost
     };
-  }, [fixedYearlyPln, fixedYearlySolar, summaryData, solarData, range, solarRange, lwbpRate, pvRate]);
+  }, [fixedMonthlyPln, fixedMonthlySolar, summaryData, solarData, lwbpRate, pvRate]);
 
   const solarBarData = useMemo(() => {
     const datasets: any[] = [];
@@ -2568,7 +2590,7 @@ export default function Electricity() {
                 </div>
               </div>
               <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                {!fixedYearlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.plnCost)}
+                {!fixedMonthlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.plnCost)}
               </div>
               <div className="mt-1 flex items-center gap-1.5 text-xs font-bold font-mono text-blue-600 dark:text-blue-400">
                 <span className="text-[10px] font-semibold text-slate-400 uppercase">Konsumsi:</span>
@@ -2608,7 +2630,7 @@ export default function Electricity() {
                 </div>
               </div>
               <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                {!fixedYearlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.pvCost)}
+                {!fixedMonthlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.pvCost)}
               </div>
               <div className="mt-1 flex items-center gap-1.5 text-xs font-bold font-mono text-amber-600 dark:text-amber-400">
                 <span className="text-[10px] font-semibold text-slate-400 uppercase">Produksi:</span>
@@ -2648,7 +2670,7 @@ export default function Electricity() {
                 </div>
               </div>
               <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                {!fixedYearlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.totalCost)}
+                {!fixedMonthlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.totalCost)}
               </div>
               <div className="mt-1 flex items-center gap-1.5 text-xs font-bold font-mono text-indigo-600 dark:text-indigo-400">
                 <span className="text-[10px] font-semibold text-slate-400 uppercase">Total Konsumsi:</span>
@@ -2696,7 +2718,7 @@ export default function Electricity() {
                 </div>
               </div>
               <div className="mt-2 text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-tight">
-                {!fixedYearlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.savingsCost)}
+                {!fixedMonthlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.savingsCost)}
               </div>
               <div className="mt-1 flex items-center gap-1.5 text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400">
                 <span className="text-[10px] font-semibold text-slate-400 uppercase">Total PV:</span>
