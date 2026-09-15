@@ -54,7 +54,7 @@ type ConfigState = {
 export const useConfigStore = create<ConfigState>((set) => ({
   wbpRate: 1600,
   lwbpRate: 1112,
-  pvRate: 0,
+  pvRate: 549,
   waterConfig: {
     taxRate: 0.20,
     ar: 0.18,
@@ -90,7 +90,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
         set({ 
           wbpRate: res.data.wbpRate, 
           lwbpRate: res.data.lwbpRate,
-          pvRate: res.data.pvRate ?? 0,
+          pvRate: (typeof res.data.pvRate === "number" && res.data.pvRate > 0) ? res.data.pvRate : 549,
           ...(res.data.waterConfig ? { waterConfig: res.data.waterConfig } : {}),
           ...(res.data.gasConfig ? { gasConfig: res.data.gasConfig } : {}),
           ...(res.data.gasCategories ? { gasCategories: res.data.gasCategories } : {}),

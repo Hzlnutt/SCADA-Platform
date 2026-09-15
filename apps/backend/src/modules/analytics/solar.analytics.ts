@@ -174,27 +174,27 @@ export const getSolarAnalytics = async (
     const prevDateObj = new Date(prev.ts_text);
     const currDateObj = new Date(curr.ts_text);
     const timeDiffMs = currDateObj.getTime() - prevDateObj.getTime();
+    const timeDiffHours = Math.max(1, Math.round(timeDiffMs / (3600 * 1000)));
 
     let diffPoi1 = 0;
-    if (curr.poi_1 !== null && prev.poi_1 !== null && timeDiffMs <= 90 * 60 * 1000) {
+    if (curr.poi_1 !== null && prev.poi_1 !== null && timeDiffMs <= 24 * 60 * 60 * 1000) {
       diffPoi1 = Math.max(0, curr.poi_1 - prev.poi_1);
     }
 
     let diffPoi2 = 0;
-    if (curr.poi_2 !== null && prev.poi_2 !== null && timeDiffMs <= 90 * 60 * 1000) {
+    if (curr.poi_2 !== null && prev.poi_2 !== null && timeDiffMs <= 24 * 60 * 60 * 1000) {
       diffPoi2 = Math.max(0, curr.poi_2 - prev.poi_2);
     }
 
-    // Solar PV total capacity is 1,700 kWp. A single hour cannot physically produce > 2,000 kWh per POI.
-    // Protect against meter resets, counter wraps, or corrupted mock data jumps.
-    const MAX_HOURLY_POI_KWH = 2000;
-    if (diffPoi1 > MAX_HOURLY_POI_KWH) diffPoi1 = 0;
-    if (diffPoi2 > MAX_HOURLY_POI_KWH) diffPoi2 = 0;
+    // Solar PV total capacity is 1,700 kWp. Protect against meter resets, counter wraps, or corrupted jumps.
+    const maxPoiKwh = 2000 * Math.min(timeDiffHours, 24);
+    if (diffPoi1 > maxPoiKwh) diffPoi1 = 0;
+    if (diffPoi2 > maxPoiKwh) diffPoi2 = 0;
 
     let diffTot = 0;
-    if (curr.total !== null && prev.total !== null && timeDiffMs <= 90 * 60 * 1000) {
+    if (curr.total !== null && prev.total !== null && timeDiffMs <= 24 * 60 * 60 * 1000) {
       diffTot = Math.max(0, curr.total - prev.total);
-      if (diffTot > MAX_HOURLY_POI_KWH * 2) diffTot = diffPoi1 + diffPoi2;
+      if (diffTot > maxPoiKwh * 2) diffTot = diffPoi1 + diffPoi2;
     } else {
       diffTot = diffPoi1 + diffPoi2;
     }
@@ -248,6 +248,10 @@ export const getSolarAnalytics = async (
   }
 
   // Add current ongoing hour's live generation to summary totals (without affecting completed hourly chart bars)
+  let appliedDeltaPoi1 = 0;
+  let appliedDeltaPoi2 = 0;
+  let appliedDeltaTot = 0;
+
   if (live && records.length > 0) {
     const lastRec = records[records.length - 1];
     const lastTs = (lastRec.ts_text || "").split(".")[0];
@@ -266,6 +270,9 @@ export const getSolarAnalytics = async (
       }
       const deltaTot = deltaPoi1 + deltaPoi2;
       if (deltaTot > 0 && deltaTot < 5000) {
+        appliedDeltaPoi1 = deltaPoi1;
+        appliedDeltaPoi2 = deltaPoi2;
+        appliedDeltaTot = deltaTot;
         totalKwh += deltaTot;
         todayKwh += deltaTot;
         yearlyKwh += deltaTot;
@@ -334,18 +341,28 @@ export const getSolarAnalytics = async (
     const cur = new Date(fromDate);
     while (cur <= toDate) {
       const dStr = `${cur.getFullYear()}-${pad(cur.getMonth() + 1)}-${pad(cur.getDate())}`;
-      const p1 = dailyMapPoi1.get(dStr) || 0;
-      const p2 = dailyMapPoi2.get(dStr) || 0;
-      const tot = dailyMapTotal.get(dStr) || (p1 + p2);
+      let p1 = dailyMapPoi1.get(dStr) || 0;
+      let p2 = dailyMapPoi2.get(dStr) || 0;
+      let tot = dailyMapTotal.get(dStr) || (p1 + p2);
+      if (dStr === todayStr && appliedDeltaTot > 0) {
+        p1 += appliedDeltaPoi1;
+        p2 += appliedDeltaPoi2;
+        tot += appliedDeltaTot;
+      }
       daily.push({ day: dStr, poi1: p1, poi2: p2, total: tot });
       cur.setDate(cur.getDate() + 1);
     }
   } else {
     const allDates = Array.from(new Set([...dailyMapPoi1.keys(), ...dailyMapPoi2.keys(), ...dailyMapTotal.keys()])).sort();
     allDates.forEach(day => {
-      const p1 = dailyMapPoi1.get(day) || 0;
-      const p2 = dailyMapPoi2.get(day) || 0;
-      const tot = dailyMapTotal.get(day) || (p1 + p2);
+      let p1 = dailyMapPoi1.get(day) || 0;
+      let p2 = dailyMapPoi2.get(day) || 0;
+      let tot = dailyMapTotal.get(day) || (p1 + p2);
+      if (day === todayStr && appliedDeltaTot > 0) {
+        p1 += appliedDeltaPoi1;
+        p2 += appliedDeltaPoi2;
+        tot += appliedDeltaTot;
+      }
       daily.push({ day, poi1: p1, poi2: p2, total: tot });
     });
   }
@@ -354,9 +371,14 @@ export const getSolarAnalytics = async (
   const monthly: { month: string; poi1: number; poi2: number; total: number }[] = [];
   for (let m = 1; m <= 12; m++) {
     const mStr = `${selectedYear}-${String(m).padStart(2, "0")}`;
-    const p1 = monthlyMapPoi1.get(mStr) || 0;
-    const p2 = monthlyMapPoi2.get(mStr) || 0;
-    const tot = monthlyMapTotal.get(mStr) || (p1 + p2);
+    let p1 = monthlyMapPoi1.get(mStr) || 0;
+    let p2 = monthlyMapPoi2.get(mStr) || 0;
+    let tot = monthlyMapTotal.get(mStr) || (p1 + p2);
+    if (mStr === currentMonthStr && appliedDeltaTot > 0) {
+      p1 += appliedDeltaPoi1;
+      p2 += appliedDeltaPoi2;
+      tot += appliedDeltaTot;
+    }
     monthly.push({ month: mStr, poi1: p1, poi2: p2, total: tot });
   }
 
