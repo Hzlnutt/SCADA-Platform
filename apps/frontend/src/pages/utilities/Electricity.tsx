@@ -2536,7 +2536,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
                   PLN (Incoming Grid)
                 </span>
                 <div className="h-6 w-6 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
@@ -2546,11 +2546,15 @@ export default function Electricity() {
               <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
                 {!fixedYearlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.plnCost)}
               </div>
+              <div className="mt-1 flex items-center gap-1.5 text-xs font-bold font-mono text-blue-600 dark:text-blue-400">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase">Konsumsi:</span>
+                <span>{formatNumber(executiveSummary.plnKwh)} kWh</span>
+              </div>
             </div>
 
             <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60">
               {/* Ratio bar */}
-              <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
+              <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
                 <div 
                   className="bg-blue-500 transition-all duration-500" 
                   style={{ width: `${executiveSummary.pctKwhPln}%` }} 
@@ -2562,14 +2566,8 @@ export default function Electricity() {
                   title={`PV: ${executiveSummary.pctKwhPv.toFixed(1)}%`}
                 />
               </div>
-              <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                <span className="flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />
-                  Energi: <strong className="text-blue-600 dark:text-blue-400 font-mono">{formatNumber(executiveSummary.plnKwh)} kWh</strong>
-                </span>
-                <span className="font-mono text-slate-600 dark:text-slate-300 font-bold">
-                  {executiveSummary.pctKwhPln.toFixed(1)}% <span className="text-slate-400 font-normal">(vs PV {executiveSummary.pctKwhPv.toFixed(1)}%)</span>
-                </span>
+              <div className="text-center text-xs font-semibold text-slate-600 dark:text-slate-300">
+                <strong className="text-blue-600 dark:text-blue-400 font-mono text-xs">{executiveSummary.pctKwhPln.toFixed(1)}%</strong> porsi energi <span className="text-slate-400 dark:text-slate-500 font-mono text-[11px]">(vs PV {executiveSummary.pctKwhPv.toFixed(1)}%)</span>
               </div>
             </div>
           </div>
@@ -2578,7 +2576,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
                   Solar PV (PLTS)
                 </span>
                 <div className="h-6 w-6 rounded bg-amber-500/10 flex items-center justify-center text-amber-500">
@@ -2588,11 +2586,15 @@ export default function Electricity() {
               <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
                 {!fixedYearlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.pvCost)}
               </div>
+              <div className="mt-1 flex items-center gap-1.5 text-xs font-bold font-mono text-amber-600 dark:text-amber-400">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase">Produksi:</span>
+                <span>{formatNumber(executiveSummary.totalPvKwh)} kWh</span>
+              </div>
             </div>
 
             <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60">
               {/* Ratio bar */}
-              <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
+              <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
                 <div 
                   className="bg-amber-500 transition-all duration-500" 
                   style={{ width: `${executiveSummary.pctKwhPv}%` }} 
@@ -2604,14 +2606,8 @@ export default function Electricity() {
                   title={`PLN: ${executiveSummary.pctKwhPln.toFixed(1)}%`}
                 />
               </div>
-              <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                <span className="flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" />
-                  Energi: <strong className="text-amber-600 dark:text-amber-400 font-mono">{formatNumber(executiveSummary.totalPvKwh)} kWh</strong>
-                </span>
-                <span className="font-mono text-slate-600 dark:text-slate-300 font-bold">
-                  {executiveSummary.pctKwhPv.toFixed(1)}% <span className="text-slate-400 font-normal">(vs PLN {executiveSummary.pctKwhPln.toFixed(1)}%)</span>
-                </span>
+              <div className="text-center text-xs font-semibold text-slate-600 dark:text-slate-300">
+                <strong className="text-amber-600 dark:text-amber-400 font-mono text-xs">{executiveSummary.pctKwhPv.toFixed(1)}%</strong> porsi energi <span className="text-slate-400 dark:text-slate-500 font-mono text-[11px]">(vs PLN {executiveSummary.pctKwhPln.toFixed(1)}%)</span>
               </div>
             </div>
           </div>
@@ -2620,7 +2616,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
                   Total (PLN + PV)
                 </span>
                 <div className="h-6 w-6 rounded bg-indigo-500/10 flex items-center justify-center text-indigo-500">
@@ -2630,11 +2626,15 @@ export default function Electricity() {
               <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
                 {!fixedYearlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.totalCost)}
               </div>
+              <div className="mt-1 flex items-center gap-1.5 text-xs font-bold font-mono text-indigo-600 dark:text-indigo-400">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase">Total Konsumsi:</span>
+                <span>{formatNumber(executiveSummary.totalKwh)} kWh</span>
+              </div>
             </div>
 
             <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60">
               {/* Ratio bar */}
-              <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
+              <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
                 <div 
                   className="bg-blue-500 transition-all duration-500" 
                   style={{ width: `${executiveSummary.pctKwhPln}%` }} 
@@ -2646,11 +2646,16 @@ export default function Electricity() {
                   title={`PV: ${executiveSummary.pctKwhPv.toFixed(1)}%`}
                 />
               </div>
-              <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
                 <span className="flex items-center gap-1">
-                  Total Energi: <strong className="text-indigo-600 dark:text-indigo-400 font-mono">{formatNumber(executiveSummary.totalKwh)} kWh</strong>
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                  <strong className="text-blue-600 dark:text-blue-400 font-mono">PLN {executiveSummary.pctKwhPln.toFixed(1)}%</strong>
                 </span>
-                <span className="text-slate-400 font-mono font-bold">(PLN + PV)</span>
+                <span className="text-slate-300 dark:text-slate-600">•</span>
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  <strong className="text-amber-600 dark:text-amber-400 font-mono">PV {executiveSummary.pctKwhPv.toFixed(1)}%</strong>
+                </span>
               </div>
             </div>
           </div>
@@ -2659,7 +2664,7 @@ export default function Electricity() {
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                   Estimasi Penghematan
                 </span>
                 <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500">
@@ -2669,18 +2674,27 @@ export default function Electricity() {
               <div className="mt-2 text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-tight">
                 {!fixedYearlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.savingsCost)}
               </div>
+              <div className="mt-1 flex items-center gap-1.5 text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase">Total PV:</span>
+                <span>{formatNumber(executiveSummary.totalPvKwh)} kWh</span>
+              </div>
             </div>
 
-            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60 flex flex-col gap-1 text-[10px]">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                <span>Total PV (POI-1 + POI-2):</span>
-                <strong className="text-slate-700 dark:text-slate-200 font-mono">{formatNumber(executiveSummary.totalPvKwh)} kWh</strong>
+            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60">
+              {/* Savings bar */}
+              <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
+                <div 
+                  className="bg-emerald-500 transition-all duration-500" 
+                  style={{ width: `${executiveSummary.totalCost > 0 ? ((executiveSummary.savingsCost / executiveSummary.totalCost) * 100).toFixed(1) : 0}%` }} 
+                  title={`Terhemat: ${executiveSummary.totalCost > 0 ? ((executiveSummary.savingsCost / executiveSummary.totalCost) * 100).toFixed(1) : 0}%`}
+                />
+                <div 
+                  className="bg-slate-300 dark:bg-slate-700 transition-all duration-500" 
+                  style={{ width: `${executiveSummary.totalCost > 0 ? (100 - (executiveSummary.savingsCost / executiveSummary.totalCost) * 100).toFixed(1) : 100}%` }} 
+                />
               </div>
-              <div className="text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                <span>Selisih Tarif LWBP - PV:</span>
-                <span className="font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
-                  Rp {executiveSummary.savingsRate.toLocaleString("id-ID")}/kWh
-                </span>
+              <div className="text-center text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                Selisih Tarif: <strong className="font-mono font-bold text-emerald-600 dark:text-emerald-300">Rp {executiveSummary.savingsRate.toLocaleString("id-ID")}/kWh</strong>
               </div>
             </div>
           </div>
