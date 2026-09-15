@@ -139,6 +139,11 @@ const IconBolt = () => (
     <path strokeLinecap="round" strokeLinejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />
   </svg>
 );
+const IconSun = () => (
+  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+  </svg>
+);
 const IconSettings = () => (
   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
@@ -2527,12 +2532,96 @@ export default function Electricity() {
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Card 1: Total Biaya Listrik (PLN + PV) */}
+          {/* Card 1: PLN */}
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                  PLN (Incoming Grid)
+                </span>
+                <div className="h-6 w-6 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
+                  <IconBolt />
+                </div>
+              </div>
+              <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                {!fixedYearlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.plnCost)}
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60">
+              {/* Ratio bar */}
+              <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
+                <div 
+                  className="bg-blue-500 transition-all duration-500" 
+                  style={{ width: `${executiveSummary.pctKwhPln}%` }} 
+                  title={`PLN: ${executiveSummary.pctKwhPln.toFixed(1)}%`}
+                />
+                <div 
+                  className="bg-slate-300 dark:bg-slate-700 transition-all duration-500" 
+                  style={{ width: `${executiveSummary.pctKwhPv}%` }} 
+                  title={`PV: ${executiveSummary.pctKwhPv.toFixed(1)}%`}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />
+                  Energi: <strong className="text-blue-600 dark:text-blue-400 font-mono">{formatNumber(executiveSummary.plnKwh)} kWh</strong>
+                </span>
+                <span className="font-mono text-slate-600 dark:text-slate-300 font-bold">
+                  {executiveSummary.pctKwhPln.toFixed(1)}% <span className="text-slate-400 font-normal">(vs PV {executiveSummary.pctKwhPv.toFixed(1)}%)</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Solar PV */}
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                  Solar PV (PLTS)
+                </span>
+                <div className="h-6 w-6 rounded bg-amber-500/10 flex items-center justify-center text-amber-500">
+                  <IconSun />
+                </div>
+              </div>
+              <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                {!fixedYearlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.pvCost)}
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60">
+              {/* Ratio bar */}
+              <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
+                <div 
+                  className="bg-amber-500 transition-all duration-500" 
+                  style={{ width: `${executiveSummary.pctKwhPv}%` }} 
+                  title={`PV: ${executiveSummary.pctKwhPv.toFixed(1)}%`}
+                />
+                <div 
+                  className="bg-slate-300 dark:bg-slate-700 transition-all duration-500" 
+                  style={{ width: `${executiveSummary.pctKwhPln}%` }} 
+                  title={`PLN: ${executiveSummary.pctKwhPln.toFixed(1)}%`}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" />
+                  Energi: <strong className="text-amber-600 dark:text-amber-400 font-mono">{formatNumber(executiveSummary.totalPvKwh)} kWh</strong>
+                </span>
+                <span className="font-mono text-slate-600 dark:text-slate-300 font-bold">
+                  {executiveSummary.pctKwhPv.toFixed(1)}% <span className="text-slate-400 font-normal">(vs PLN {executiveSummary.pctKwhPln.toFixed(1)}%)</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Total Cost & Total kWh PLN & PV */}
           <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                  Total Biaya Listrik
+                  Total (PLN + PV)
                 </span>
                 <div className="h-6 w-6 rounded bg-indigo-500/10 flex items-center justify-center text-indigo-500">
                   <IconMoney />
@@ -2548,76 +2637,25 @@ export default function Electricity() {
               <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
                 <div 
                   className="bg-blue-500 transition-all duration-500" 
-                  style={{ width: `${executiveSummary.pctCostPln}%` }} 
-                  title={`PLN: ${executiveSummary.pctCostPln.toFixed(1)}%`}
-                />
-                <div 
-                  className="bg-amber-500 transition-all duration-500" 
-                  style={{ width: `${executiveSummary.pctCostPv}%` }} 
-                  title={`PV: ${executiveSummary.pctCostPv.toFixed(1)}%`}
-                />
-              </div>
-              <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                <span className="flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />
-                  PLN: <strong className="text-blue-600 dark:text-blue-400 font-mono">{executiveSummary.pctCostPln.toFixed(1)}%</strong>
-                  <span className="text-slate-400">({formatCurrency(executiveSummary.plnCost)})</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" />
-                  PV: <strong className="text-amber-600 dark:text-amber-400 font-mono">{executiveSummary.pctCostPv.toFixed(1)}%</strong>
-                  <span className="text-slate-400">({formatCurrency(executiveSummary.pvCost)})</span>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 2: Total Konsumsi Energi (PLN + PV) */}
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                  Total Konsumsi Energi
-                </span>
-                <div className="h-6 w-6 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
-                  <IconBolt />
-                </div>
-              </div>
-              <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                {!fixedYearlyPln && !summaryData ? "..." : `${formatNumber(executiveSummary.totalKwh)} kWh`}
-              </div>
-            </div>
-
-            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60">
-              {/* Ratio bar */}
-              <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
-                <div 
-                  className="bg-blue-500 transition-all duration-500" 
                   style={{ width: `${executiveSummary.pctKwhPln}%` }} 
                   title={`PLN: ${executiveSummary.pctKwhPln.toFixed(1)}%`}
                 />
                 <div 
-                  className="bg-emerald-500 transition-all duration-500" 
+                  className="bg-amber-500 transition-all duration-500" 
                   style={{ width: `${executiveSummary.pctKwhPv}%` }} 
                   title={`PV: ${executiveSummary.pctKwhPv.toFixed(1)}%`}
                 />
               </div>
               <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
                 <span className="flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />
-                  PLN: <strong className="text-blue-600 dark:text-blue-400 font-mono">{executiveSummary.pctKwhPln.toFixed(1)}%</strong>
-                  <span className="text-slate-400">({formatNumber(executiveSummary.plnKwh)} kWh)</span>
+                  Total Energi: <strong className="text-indigo-600 dark:text-indigo-400 font-mono">{formatNumber(executiveSummary.totalKwh)} kWh</strong>
                 </span>
-                <span className="flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block" />
-                  PV: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{executiveSummary.pctKwhPv.toFixed(1)}%</strong>
-                  <span className="text-slate-400">({formatNumber(executiveSummary.totalPvKwh)} kWh)</span>
-                </span>
+                <span className="text-slate-400 font-mono font-bold">(PLN + PV)</span>
               </div>
             </div>
           </div>
 
-          {/* Card 3: Estimasi Penghematan */}
+          {/* Card 4: Total Estimasi Penghematan */}
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
@@ -2643,35 +2681,6 @@ export default function Electricity() {
                 <span className="font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
                   Rp {executiveSummary.savingsRate.toLocaleString("id-ID")}/kWh
                 </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 4: Net Biaya Listrik */}
-          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30 p-4 hover:border-cyan-400 transition flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
-                  Net Biaya Listrik
-                </span>
-                <div className="h-6 w-6 rounded bg-cyan-500/10 flex items-center justify-center text-cyan-500">
-                  <IconMoney />
-                </div>
-              </div>
-              <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                {!fixedYearlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.netCost)}
-              </div>
-            </div>
-
-            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60 flex flex-col gap-1 text-[10px]">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                <span>Setelah Penghematan:</span>
-                <span className="font-bold text-cyan-600 dark:text-cyan-400 font-mono">
-                  {executiveSummary.totalCost > 0 ? ((executiveSummary.savingsCost / executiveSummary.totalCost) * 100).toFixed(1) : 0}% terhemat
-                </span>
-              </div>
-              <div className="text-slate-400 dark:text-slate-500 truncate" title="Total Biaya Listrik - Estimasi Penghematan">
-                Total Biaya - Penghematan
               </div>
             </div>
           </div>
