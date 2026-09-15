@@ -395,7 +395,6 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                         <th className="py-2.5 px-3 text-right">Power Factor</th>
                         <th className="py-2.5 px-3 text-right">Est Cost</th>
                         <th className="py-2.5 px-3 text-right">Est Penghematan</th>
-                        <th className="py-2.5 px-3 text-right">Est Net Cost</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -435,15 +434,12 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                               <td className="py-2 px-3 text-right font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
                                 {(item.estPenghematan ?? 0) > 0 ? formatCurrency(item.estPenghematan) : "Rp 0"}
                               </td>
-                              <td className="py-2 px-3 text-right font-mono text-blue-600 dark:text-cyan-400 font-bold">
-                                {formatCurrency(item.estNetCost ?? 0)}
-                              </td>
                             </tr>
                           );
                         })
                       ) : (
                         <tr>
-                          <td colSpan={8} className="py-8 text-center text-slate-400 dark:text-slate-500">
+                          <td colSpan={7} className="py-8 text-center text-slate-400 dark:text-slate-500">
                             {previewLoading ? "Sedang menghitung ringkasan data..." : "Tidak ada data pada rentang waktu yang dipilih."}
                           </td>
                         </tr>
@@ -473,18 +469,15 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                           <td className="py-2.5 px-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
                             {formatCurrency(previewData.summary?.totalPenghematan ?? 0)}
                           </td>
-                          <td className="py-2.5 px-3 text-right font-mono text-blue-600 dark:text-cyan-400 font-extrabold">
-                            {formatCurrency(previewData.summary?.totalNetCost ?? 0)}
-                          </td>
                         </tr>
                       </tfoot>
                     )}
                   </table>
                 </div>
               ) : (
-                /* Tab 2: Data Kelistrikan Table - Grouped 24-column format */
+                /* Tab 2: Data Kelistrikan Table - Grouped 23-column format */
                 <div className="overflow-x-auto max-h-72 overflow-y-auto">
-                  <table className="text-xs text-left" style={{ minWidth: "1850px" }}>
+                  <table className="text-xs text-left" style={{ minWidth: "1750px" }}>
                     <thead className="text-[9px] font-bold uppercase tracking-wider sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700 shadow-xs">
                       {/* Row 1: Merged Group Header with distinct theme colors */}
                       <tr>
@@ -503,7 +496,7 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                         <th className="py-2 px-3 text-center bg-emerald-700 text-white border-r border-emerald-600" colSpan={6}>
                           Solar PV Generation
                         </th>
-                        <th className="py-2 px-3 text-center bg-purple-700 text-white" colSpan={2}>
+                        <th className="py-2 px-3 text-center bg-purple-700 text-white" colSpan={1}>
                           Ringkasan Finansial
                         </th>
                       </tr>
@@ -536,7 +529,6 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                         <th className="py-1.5 px-2 text-right text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700">Cost PV</th>
                         {/* Finansial */}
                         <th className="py-1.5 px-2 text-right text-emerald-700 dark:text-emerald-400 font-bold">Saving</th>
-                        <th className="py-1.5 px-2 text-right text-blue-700 dark:text-cyan-400 font-extrabold">Net Cost</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
@@ -583,12 +575,11 @@ export function ElectricityExportModal({ isOpen, onClose, isDark }: Props) {
                             <td className="py-1.5 px-2 text-right text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-slate-800">{formatCurrency(r.est_cost_pv)}</td>
                             {/* Finansial */}
                             <td className="py-1.5 px-2 text-right text-green-600 dark:text-green-400 font-semibold">{formatCurrency(r.est_saving)}</td>
-                            <td className="py-1.5 px-2 text-right text-blue-700 dark:text-cyan-400 font-bold">{formatCurrency(r.est_net_cost)}</td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={24} className="py-8 text-center text-slate-400 dark:text-slate-500 font-sans">
+                          <td colSpan={23} className="py-8 text-center text-slate-400 dark:text-slate-500 font-sans">
                             {previewLoading ? "Memuat baris data time-series..." : "Tidak ada baris data pada periode ini."}
                           </td>
                         </tr>

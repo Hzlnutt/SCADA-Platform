@@ -580,12 +580,12 @@ export async function generateElectricityExcelWorkbook(
   });
 
   // Title Block
-  wsDashboard.mergeCells("A1:I1");
+  wsDashboard.mergeCells("A1:H1");
   wsDashboard.getCell("A1").value = "PT WIDATRA BHAKTI - SCADA UTILITY SYSTEM";
   wsDashboard.getCell("A1").font = { name: "Arial", size: 14, bold: true, color: { argb: "FF1E3A8A" } };
   wsDashboard.getCell("A1").alignment = { vertical: "middle" };
 
-  wsDashboard.mergeCells("A2:I2");
+  wsDashboard.mergeCells("A2:H2");
   wsDashboard.getCell("A2").value = "LAPORAN KELISTRIKAN & EFISIENSI ENERGI (EXECUTIVE DASHBOARD)";
   wsDashboard.getCell("A2").font = { name: "Arial", size: 10, bold: true, color: { argb: "FF475569" } };
   wsDashboard.getCell("A2").alignment = { vertical: "middle" };
@@ -622,7 +622,7 @@ export async function generateElectricityExcelWorkbook(
   // Summary Table Headers
   const summaryHeaders = [
     "No", "Nama Item", "LWBP (kWh)", "WBP (kWh)", "Total (kWh)",
-    "Power Factor Rata-rata", "Est Cost (Rp)", "Est Penghematan (Rp)", "Est Net Cost (Rp)"
+    "Power Factor Rata-rata", "Est Cost (Rp)", "Est Penghematan (Rp)"
   ];
   const sHeaderRow = wsDashboard.getRow(8);
   sHeaderRow.height = 24;
@@ -654,7 +654,6 @@ export async function generateElectricityExcelWorkbook(
     row.getCell(6).value = item.avgPowerFactor;
     row.getCell(7).value = item.estCost;
     row.getCell(8).value = item.estPenghematan;
-    row.getCell(9).value = item.estNetCost;
 
     row.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
     row.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
@@ -664,13 +663,13 @@ export async function generateElectricityExcelWorkbook(
     }
     row.getCell(6).numFmt = "0.000";
     row.getCell(6).alignment = { horizontal: "right", vertical: "middle" };
-    for (let c = 7; c <= 9; c++) {
+    for (let c = 7; c <= 8; c++) {
       row.getCell(c).numFmt = '"Rp "#,##0';
       row.getCell(c).alignment = { horizontal: "right", vertical: "middle" };
     }
 
     const rowBg = idx % 2 === 1 ? "FFF8FAFC" : "FFFFFFFF";
-    for (let c = 1; c <= 9; c++) {
+    for (let c = 1; c <= 8; c++) {
       const cell = row.getCell(c);
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: rowBg } };
       cell.border = {
@@ -692,7 +691,6 @@ export async function generateElectricityExcelWorkbook(
   const sumKwh = Number(summary.items.reduce((a, b) => a + b.totalKwh, 0).toFixed(2));
   const sumEstCost = summary.items.reduce((a, b) => a + b.estCost, 0);
   const sumEstPenghematan = summary.items.reduce((a, b) => a + b.estPenghematan, 0);
-  const sumEstNetCost = summary.items.reduce((a, b) => a + b.estNetCost, 0);
 
   totRow.getCell(1).value = "TOTAL";
   totRow.getCell(2).value = "Total Seluruh Feeder & PLTS";
@@ -702,7 +700,6 @@ export async function generateElectricityExcelWorkbook(
   totRow.getCell(6).value = summary.avgPowerFactor;
   totRow.getCell(7).value = sumEstCost;
   totRow.getCell(8).value = sumEstPenghematan;
-  totRow.getCell(9).value = sumEstNetCost;
 
   totRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
   totRow.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
@@ -712,12 +709,12 @@ export async function generateElectricityExcelWorkbook(
   }
   totRow.getCell(6).numFmt = "0.000";
   totRow.getCell(6).alignment = { horizontal: "right", vertical: "middle" };
-  for (let c = 7; c <= 9; c++) {
+  for (let c = 7; c <= 8; c++) {
     totRow.getCell(c).numFmt = '"Rp "#,##0';
     totRow.getCell(c).alignment = { horizontal: "right", vertical: "middle" };
   }
 
-  for (let c = 1; c <= 9; c++) {
+  for (let c = 1; c <= 8; c++) {
     const cell = totRow.getCell(c);
     cell.font = { bold: true, size: 10, color: { argb: "FF0F172A" } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
@@ -743,8 +740,7 @@ export async function generateElectricityExcelWorkbook(
     { width: 22 }, // Total
     { width: 24 }, // PF
     { width: 22 }, // Cost
-    { width: 24 }, // Penghematan
-    { width: 22 }  // Net Cost
+    { width: 24 }  // Penghematan
   ];
 
   // ==========================================
@@ -770,7 +766,6 @@ export async function generateElectricityExcelWorkbook(
   wsData.mergeCells("Q1:V1");
   wsData.getCell("Q1").value = "SOLAR PV GENERATION";
 
-  wsData.mergeCells("W1:X1");
   wsData.getCell("W1").value = "RINGKASAN FINANSIAL";
 
   const groupConfigs = [
@@ -802,12 +797,12 @@ export async function generateElectricityExcelWorkbook(
     "LWBP (kWh)", "WBP (kWh)", "Total (kWh)", "PF Fact-1", "Cost Fact-1 (Rp)",
     "LWBP (kWh)", "WBP (kWh)", "Total (kWh)", "PF Fact-2", "Cost Fact-2 (Rp)",
     "POI-1 (kWh)", "PF POI-1", "POI-2 (kWh)", "PF POI-2", "Total PV (kWh)", "Cost PV (Rp)",
-    "Penghematan (Rp)", "Net Cost (Rp)"
+    "Penghematan (Rp)"
   ];
 
   const row2 = wsData.getRow(2);
   row2.height = 24;
-  for (let c = 2; c <= 24; c++) {
+  for (let c = 2; c <= 23; c++) {
     const cell = row2.getCell(c);
     cell.value = subHeaders[c - 1];
 
@@ -815,7 +810,7 @@ export async function generateElectricityExcelWorkbook(
     if (c >= 7 && c <= 11) fill = "0891B2"; // Cyan
     else if (c >= 12 && c <= 16) fill = "0D9488"; // Teal
     else if (c >= 17 && c <= 22) fill = "059669"; // Emerald
-    else if (c >= 23 && c <= 24) fill = "7C3AED"; // Violet
+    else if (c === 23) fill = "7C3AED"; // Violet
 
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + fill } };
     cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 9 };
@@ -862,8 +857,7 @@ export async function generateElectricityExcelWorkbook(
       r.total_pv,
       r.est_cost_pv,
       // Financial
-      r.est_saving,
-      r.est_net_cost
+      r.est_saving
     ];
 
     const isEven = idx % 2 === 1;
@@ -886,8 +880,8 @@ export async function generateElectricityExcelWorkbook(
         const colNum = colIdx + 1;
         // PF columns: col 5, 10, 15, 18, 20
         const isPfCol = [5, 10, 15, 18, 20].includes(colNum);
-        // Cost columns: col 6, 11, 16, 22, 23, 24
-        const isCostCol = [6, 11, 16, 22, 23, 24].includes(colNum);
+        // Cost columns: col 6, 11, 16, 22, 23
+        const isCostCol = [6, 11, 16, 22, 23].includes(colNum);
 
         if (isPfCol) {
           if (val !== null && val !== undefined && typeof val === "number") {
@@ -915,7 +909,7 @@ export async function generateElectricityExcelWorkbook(
     14, 14, 15, 12, 17, // Fact-1
     14, 14, 15, 12, 17, // Fact-2
     14, 12, 14, 12, 15, 17, // Solar
-    18, 18 // Finansial
+    20 // Finansial (Penghematan)
   ];
   colWidths.forEach((w, i) => {
     wsData.getColumn(i + 1).width = w;
@@ -925,7 +919,7 @@ export async function generateElectricityExcelWorkbook(
   if (rows.length > 0) {
     wsData.autoFilter = {
       from: { row: 2, column: 1 },
-      to: { row: rows.length + 2, column: 24 }
+      to: { row: rows.length + 2, column: 23 }
     };
   }
 
