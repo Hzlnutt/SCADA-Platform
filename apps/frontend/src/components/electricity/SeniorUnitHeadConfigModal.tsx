@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { getJson, postJson, deleteJson } from "../../services/api.client";
 
@@ -15,9 +15,23 @@ export interface ConsumptionFactCategory {
     department?: "Utility" | "HVAC" | "Other";
     subArea?: string;
     kWh?: number;
+    factory?: string;
   };
   sort_order: number;
   enabled: boolean;
+}
+
+export interface AvailablePowerMeter {
+  pm_id: string;
+  label: string;
+  endpoint_url: string;
+  json_key?: string;
+  group_id?: string;
+  factory?: "consumption_fact_1" | "consumption_fact_2" | "all";
+  department?: "Utility" | "HVAC" | "Other";
+  subArea?: string;
+  is_database?: boolean;
+  is_new_pm?: boolean;
 }
 
 interface Props {
@@ -31,12 +45,6 @@ interface Props {
   initialDept?: "all" | "Utility" | "HVAC" | "Other";
 }
 
-const COMMON_SUBAREAS: Record<string, string[]> = {
-  Utility: ["Boiler", "Compressors", "Cooling Towers", "Water / WTP", "Electrical Substation", "Generators"],
-  HVAC: ["Chillers", "AHUs", "AC Split / FCU", "Cleanroom HVAC", "Exhaust / Ventilation"],
-  Other: ["Production Lines", "Packaging", "QC Laboratory", "Warehouse", "Others"]
-};
-
 export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
   isOpen,
   onClose,
@@ -48,105 +56,196 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
 }) => {
   const [activeFact, setActiveFact] = useState<"consumption_fact_1" | "consumption_fact_2">(initialFact);
   const [deptFilter, setDeptFilter] = useState<"all" | "Utility" | "HVAC" | "Other">(initialDept);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<ConsumptionFactCategory | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showAllFactories, setShowAllFactories] = useState(false);
 
-  // 2 Opsi Mode: "existing" (Pilih yang sudah ada) vs "new" (Tambah PM Baru)
-  const [inputMode, setInputMode] = useState<"existing" | "new">("existing");
-  const [availablePms, setAvailablePms] = useState<any[]>([]);
-  const [selectedExistingPm, setSelectedExistingPm] = useState<string>("");
+  // Available PMs from database
+  const [availablePms, setAvailablePms] = useState<AvailablePowerMeter[]>([]);
+  const [isLoadingPms, setIsLoadingPms] = useState(false);
 
-  // Form states
-  const [formLabel, setFormLabel] = useState("");
-  const [formPmId, setFormPmId] = useState("");
-  const [formFact, setFormFact] = useState<"consumption_fact_1" | "consumption_fact_2">(initialFact);
-  const [formDept, setFormDept] = useState<"Utility" | "HVAC" | "Other">("Utility");
-  const [formSubArea, setFormSubArea] = useState("");
-  const [formEndpoint, setFormEndpoint] = useState("");
-  const [formJsonKey, setFormJsonKey] = useState("");
-  const [formKwh, setFormKwh] = useState<number | string>(0);
-  const [formEnabled, setFormEnabled] = useState(true);
+  // Add New PM form toggle & state
+  const [isAddPmOpen, setIsAddPmOpen] = useState(false);
+  const [newPmTargetFact, setNewPmTargetFact] = useState<"consumption_fact_1" | "consumption_fact_2">(initialFact);
+  const [newPmDept, setNewPmDept] = useState<"Utility" | "HVAC" | "Other">("Utility");
+  const [newPmId, setNewPmId] = useState("");
+  const [newPmLabel, setNewPmLabel] = useState("");
+  const [newPmEndpoint, setNewPmEndpoint] = useState("");
 
-  // Load available PMs from database on open
-  useEffect(() => {
-    if (isOpen) {
-      getJson<{ data: any[] }>("/config/electricity/available-pms")
-        .then((res) => {
-          if (res?.data) {
-            setAvailablePms(res.data);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [isOpen]);
-
-  // Test API state
+  // Testing new PM API
   const [isTestingApi, setIsTestingApi] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
-    value?: any;
-    availableKeys?: string[];
-  } | null>(null);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Label Edit modal state
+  const [editingPm, setEditingPm] = useState<{ pm_id: string; currentLabel: string } | null>(null);
+  const [editLabelInput, setEditLabelInput] = useState("");
 
   // Loading & notification states
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Reset or initialize form when opening
-  const handleOpenAdd = () => {
-    setEditingItem(null);
-    setInputMode("existing");
-    setSelectedExistingPm("");
-    setFormLabel("");
-    setFormPmId("");
-    setFormFact(activeFact);
-    setFormDept(deptFilter === "all" ? "Utility" : deptFilter);
-    setFormSubArea(COMMON_SUBAREAS[deptFilter === "all" ? "Utility" : deptFilter]?.[0] || "");
-    setFormEndpoint("");
-    setFormJsonKey("");
-    setFormKwh(0);
-    setFormEnabled(true);
-    setTestResult(null);
-    setIsFormOpen(true);
-  };
+  // Load available PMs from database
+  const loadAvailablePms = useCallback(() => {
+    setIsLoadingPms(true);
+    getJson<{ data: AvailablePowerMeter[] }>("/config/electricity/available-pms")
+      .then((res) => {
+        if (res?.data) {
+          setAvailablePms(res.data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        setIsLoadingPms(false);
+      });
+  }, []);
 
-  const handleOpenEdit = (item: ConsumptionFactCategory) => {
-    setEditingItem(item);
-    setInputMode(item.value?.is_new_pm ? "new" : "existing");
-    setSelectedExistingPm(item.value?.pm_id || "");
-    setFormLabel(item.label || "");
-    setFormPmId(item.value?.pm_id || "");
-    setFormFact(item.config_type as any || "consumption_fact_1");
-    setFormDept(item.value?.department || "Utility");
-    setFormSubArea(item.value?.subArea || "");
-    setFormEndpoint(item.value?.endpoint_url || "");
-    setFormJsonKey(item.value?.json_key || "");
-    setFormKwh(item.value?.kWh ?? 0);
-    setFormEnabled(item.enabled !== false);
-    setTestResult(null);
-    setIsFormOpen(true);
-  };
+  useEffect(() => {
+    if (isOpen) {
+      loadAvailablePms();
+      setActiveFact(initialFact);
+      setDeptFilter(initialDept);
+      setSearchQuery("");
+      setIsAddPmOpen(false);
+      setTestResult(null);
+      setActionMessage(null);
+    }
+  }, [isOpen, initialFact, initialDept, loadAvailablePms]);
 
-  // When user selects an existing PM from dropdown
-  const handleSelectExistingPm = (pmId: string) => {
-    setSelectedExistingPm(pmId);
-    setFormPmId(pmId);
-    const found = availablePms.find((p) => p.pm_id.toUpperCase() === pmId.toUpperCase());
-    if (found) {
-      if (!editingItem) {
-        setFormLabel(found.label?.split("—")[1]?.trim() || found.label || found.pm_id);
+  // Map of currently configured items for active fact: pm_id (uppercase) -> ConsumptionFactCategory
+  const activeFactItems = useMemo(() => {
+    return activeFact === "consumption_fact_1" ? fact1Items : fact2Items;
+  }, [activeFact, fact1Items, fact2Items]);
+
+  const configMap = useMemo(() => {
+    const map = new Map<string, ConsumptionFactCategory>();
+    for (const item of activeFactItems) {
+      const pmId = (item.value?.pm_id || item.value?.json_key || item.config_key).toUpperCase();
+      map.set(pmId, item);
+      // Also index by raw config_key
+      map.set(item.config_key.toUpperCase(), item);
+    }
+    return map;
+  }, [activeFactItems]);
+
+  // Filter available PMs based on activeFact, dept, and search query
+  const displayedPms = useMemo(() => {
+    return availablePms.filter((pm) => {
+      const idUpper = pm.pm_id.toUpperCase();
+
+      // Factory filter (unless showAllFactories is checked)
+      if (!showAllFactories) {
+        const isAssignedToThisFact =
+          pm.factory === activeFact ||
+          pm.factory === "all" ||
+          (!pm.factory && (activeFact === "consumption_fact_1" ? pm.group_id === "ew21" : pm.group_id === "ew22")) ||
+          configMap.has(idUpper);
+
+        if (!isAssignedToThisFact) return false;
       }
-      setFormEndpoint(found.endpoint_url || "");
-      setFormJsonKey(found.json_key || found.pm_id);
-      setFormDept(found.department || "Utility");
-      setFormSubArea(found.subArea || COMMON_SUBAREAS[found.department || "Utility"]?.[0] || "");
+
+      // Department filter
+      if (deptFilter !== "all" && pm.department !== deptFilter) {
+        return false;
+      }
+
+      // Search query filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchId = pm.pm_id.toLowerCase().includes(q);
+        const matchLabel = (pm.label || "").toLowerCase().includes(q);
+        const matchDept = (pm.department || "").toLowerCase().includes(q);
+        const matchEndpoint = (pm.endpoint_url || "").toLowerCase().includes(q);
+        if (!matchId && !matchLabel && !matchDept && !matchEndpoint) return false;
+      }
+
+      return true;
+    });
+  }, [availablePms, activeFact, deptFilter, searchQuery, showAllFactories, configMap]);
+
+  // Count active in activeFact
+  const activeCount = useMemo(() => {
+    return activeFactItems.filter((i) => i.enabled !== false).length;
+  }, [activeFactItems]);
+
+  // Toggle single PM checklist
+  const handleTogglePm = async (pm: AvailablePowerMeter) => {
+    const idUpper = pm.pm_id.toUpperCase();
+    const existing = configMap.get(idUpper);
+    const nextEnabled = existing ? !existing.enabled : true;
+
+    // Optimistic message
+    setActionMessage(null);
+
+    try {
+      await postJson("/config/electricity/toggle", {
+        config_type: activeFact,
+        pm_id: pm.pm_id,
+        enabled: nextEnabled,
+        label: existing?.label || pm.label || pm.pm_id,
+        endpoint_url: pm.endpoint_url,
+        department: pm.department || "Utility",
+        subArea: pm.subArea || ""
+      });
+
+      setActionMessage({
+        type: "success",
+        text: nextEnabled
+          ? `✓ '${pm.pm_id}' diaktifkan untuk ditampilkan di ${activeFact === "consumption_fact_1" ? "Fact 1" : "Fact 2"}.`
+          : `✕ '${pm.pm_id}' dinonaktifkan dari tampilan ${activeFact === "consumption_fact_1" ? "Fact 1" : "Fact 2"}.`
+      });
+
+      onRefresh();
+    } catch (err: any) {
+      setActionMessage({
+        type: "error",
+        text: err?.message || "Gagal mengubah status Power Meter."
+      });
     }
   };
 
-  // Test API endpoint
-  const handleTestApi = async () => {
-    if (!formEndpoint.trim()) {
+  // Bulk toggle (Select All / Deselect All)
+  const handleBulkToggle = async (enableAll: boolean) => {
+    if (displayedPms.length === 0) return;
+    setIsProcessing(true);
+    setActionMessage(null);
+
+    try {
+      await postJson("/config/electricity/batch-toggle", {
+        config_type: activeFact,
+        enabled: enableAll,
+        pms: displayedPms.map((pm) => {
+          const idUpper = pm.pm_id.toUpperCase();
+          const existing = configMap.get(idUpper);
+          return {
+            pm_id: pm.pm_id,
+            label: existing?.label || pm.label || pm.pm_id,
+            endpoint_url: pm.endpoint_url,
+            department: pm.department || "Utility",
+            subArea: pm.subArea || ""
+          };
+        })
+      });
+
+      setActionMessage({
+        type: "success",
+        text: enableAll
+          ? `✓ Berhasil mengaktifkan ${displayedPms.length} Power Meter di ${activeFact === "consumption_fact_1" ? "Fact 1" : "Fact 2"}.`
+          : `✕ Berhasil menonaktifkan ${displayedPms.length} Power Meter dari tampilan.`
+      });
+
+      onRefresh();
+    } catch (err: any) {
+      setActionMessage({
+        type: "error",
+        text: err?.message || "Gagal memperbarui status Power Meter secara massal."
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Test API for new PM
+  const handleTestNewPmApi = async () => {
+    if (!newPmEndpoint.trim()) {
       setTestResult({ success: false, message: "Masukkan Endpoint URL terlebih dahulu." });
       return;
     }
@@ -155,140 +254,144 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
 
     try {
       const res = await postJson<{ success: boolean; data?: any; message?: string }>("/config/api-sources/test", {
-        url: formEndpoint.trim(),
+        url: newPmEndpoint.trim(),
         method: "GET"
       });
 
       if (res && res.success && res.data) {
-        const payload = res.data;
-        const available = Object.keys(payload);
-
-        if (formJsonKey.trim()) {
-          const rawVal = payload[formJsonKey.trim()];
-          if (rawVal !== undefined) {
-            setTestResult({
-              success: true,
-              message: `Endpoint terhubung! Nilai tag '${formJsonKey.trim()}': ${rawVal}`,
-              value: rawVal
-            });
-            if (typeof rawVal === "number" || (!isNaN(Number(rawVal)) && rawVal !== "")) {
-              setFormKwh(Number(rawVal));
-            }
-          } else {
-            setTestResult({
-              success: false,
-              message: `Endpoint terhubung, namun key '${formJsonKey.trim()}' tidak ada di respon JSON.`,
-              availableKeys: available.slice(0, 10)
-            });
-          }
-        } else {
-          setTestResult({
-            success: true,
-            message: "Endpoint terhubung! Pilih salah satu tag JSON key di bawah:",
-            availableKeys: available.slice(0, 15)
-          });
-        }
+        setTestResult({
+          success: true,
+          message: "✓ Endpoint terhubung sukses! Data API berhasil diterima."
+        });
       } else {
         setTestResult({
           success: false,
-          message: res?.message || "Gagal menghubungi endpoint API. Periksa URL dan koneksi jaringan."
+          message: res?.message || "Gagal menghubungi endpoint. Periksa URL dan koneksi jaringan."
         });
       }
     } catch (err: any) {
       setTestResult({
         success: false,
-        message: `Koneksi gagal: ${err?.message || "Unknown error"}`
+        message: `Koneksi gagal: ${err?.message || "Network error"}`
       });
     } finally {
       setIsTestingApi(false);
     }
   };
 
-  // Save / Update item
-  const handleSaveItem = async (e: React.FormEvent) => {
+  // Submit Add New PM (ONLY Endpoint, Label, and PM ID)
+  const handleAddNewPm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formLabel.trim()) {
-      setActionMessage({ type: "error", text: "Nama / Label Item tidak boleh kosong." });
+    if (!newPmId.trim()) {
+      setActionMessage({ type: "error", text: "Power Meter ID (PM ID) wajib diisi." });
+      return;
+    }
+    if (!newPmLabel.trim()) {
+      setActionMessage({ type: "error", text: "Nama / Label Item wajib diisi." });
+      return;
+    }
+    if (!newPmEndpoint.trim()) {
+      setActionMessage({ type: "error", text: "Endpoint URL wajib diisi." });
       return;
     }
 
-    setIsSubmitting(true);
+    setIsProcessing(true);
     setActionMessage(null);
 
     try {
-      const configKey = editingItem?.config_key ||
-        (formLabel.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_") + "_" + Math.random().toString(36).substring(2, 6));
-
       const payload = {
-        config_type: formFact,
-        config_key: configKey,
-        label: formLabel.trim(),
-        value: {
-          endpoint_url: formEndpoint.trim(),
-          json_key: formJsonKey.trim(),
-          pm_id: formPmId.trim() || undefined,
-          department: formDept,
-          subArea: formSubArea.trim() || undefined,
-          kWh: Number(formKwh) || 0,
-          mode: inputMode
-        },
-        sort_order: editingItem?.sort_order ?? 0,
-        enabled: formEnabled
+        config_type: newPmTargetFact,
+        config_key: newPmId.toLowerCase().trim().replace(/[^a-z0-9_]/g, ""),
+        label: newPmLabel.trim(),
+        pm_id: newPmId.trim(),
+        endpoint_url: newPmEndpoint.trim(),
+        department: newPmDept,
+        enabled: true
       };
 
-      const res = await postJson<{ data: any; isExisting?: boolean; pmId?: string; message?: string }>("/config/electricity", payload);
-      if (res) {
-        setActionMessage({
-          type: "success",
-          text: res.message || `Item '${formLabel}' berhasil disimpan!`
-        });
-        setIsFormOpen(false);
-        onRefresh();
-      }
+      const res = await postJson<{ message?: string }>("/config/electricity", payload);
+
+      setActionMessage({
+        type: "success",
+        text: res?.message || `✓ Power Meter baru '${newPmId.trim()}' berhasil didaftarkan dan aktif disimpan!`
+      });
+
+      // Reset form & reload
+      setNewPmId("");
+      setNewPmLabel("");
+      setNewPmEndpoint("");
+      setTestResult(null);
+      setIsAddPmOpen(false);
+
+      loadAvailablePms();
+      onRefresh();
     } catch (err: any) {
-      setActionMessage({ type: "error", text: err?.message || "Gagal menyimpan item konfigurasi." });
+      setActionMessage({
+        type: "error",
+        text: err?.message || "Gagal menambahkan Power Meter baru."
+      });
     } finally {
-      setIsSubmitting(false);
+      setIsProcessing(false);
     }
   };
 
-  // Delete item
-  const handleDeleteItem = async (item: ConsumptionFactCategory) => {
-    if (!window.confirm(`Hapus item '${item.label}' dari konfigurasi ${item.config_type === "consumption_fact_1" ? "Fact 1" : "Fact 2"}?`)) {
+  // Save edited label
+  const handleSaveLabel = async () => {
+    if (!editingPm || !editLabelInput.trim()) return;
+    setIsProcessing(true);
+    try {
+      const idUpper = editingPm.pm_id.toUpperCase();
+      const existing = configMap.get(idUpper);
+      const pmObj = availablePms.find((p) => p.pm_id.toUpperCase() === idUpper);
+
+      await postJson("/config/electricity/toggle", {
+        config_type: activeFact,
+        pm_id: editingPm.pm_id,
+        enabled: existing ? existing.enabled !== false : true,
+        label: editLabelInput.trim(),
+        endpoint_url: pmObj?.endpoint_url || existing?.value?.endpoint_url || "",
+        department: pmObj?.department || existing?.value?.department || "Utility",
+        subArea: pmObj?.subArea || existing?.value?.subArea || ""
+      });
+
+      setActionMessage({
+        type: "success",
+        text: `✓ Label '${editingPm.pm_id}' diperbarui menjadi '${editLabelInput.trim()}'.`
+      });
+
+      setEditingPm(null);
+      setEditLabelInput("");
+      loadAvailablePms();
+      onRefresh();
+    } catch (err: any) {
+      setActionMessage({
+        type: "error",
+        text: err?.message || "Gagal memperbarui label."
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Delete custom configured item
+  const handleDeleteItem = async (pmId: string) => {
+    const idUpper = pmId.toUpperCase();
+    const existing = configMap.get(idUpper);
+    if (!existing) return;
+
+    if (!window.confirm(`Hapus item '${existing.label || pmId}' dari konfigurasi ${activeFact === "consumption_fact_1" ? "Fact 1" : "Fact 2"}?`)) {
       return;
     }
 
     try {
-      await deleteJson(`/config/electricity/${item.id}`);
-      setActionMessage({ type: "success", text: `Item '${item.label}' berhasil dihapus.` });
+      await deleteJson(`/config/electricity/${existing.id}`);
+      setActionMessage({ type: "success", text: `✓ Item '${existing.label}' berhasil dihapus.` });
       onRefresh();
+      loadAvailablePms();
     } catch (err: any) {
       setActionMessage({ type: "error", text: err?.message || "Gagal menghapus item." });
     }
   };
-
-  // Quick toggle enabled
-  const handleToggleEnabled = async (item: ConsumptionFactCategory) => {
-    try {
-      await postJson("/config/electricity", {
-        ...item,
-        enabled: !item.enabled
-      });
-      onRefresh();
-    } catch (err: any) {
-      setActionMessage({ type: "error", text: err?.message || "Gagal mengubah status item." });
-    }
-  };
-
-  // Current filtered items
-  const currentItems = useMemo(() => {
-    const source = activeFact === "consumption_fact_1" ? fact1Items : fact2Items;
-    if (deptFilter === "all") return source;
-    return source.filter((item) => {
-      const dept = item.value?.department || "Other";
-      return dept === deptFilter;
-    });
-  }, [activeFact, fact1Items, fact2Items, deptFilter]);
 
   if (!isOpen) return null;
 
@@ -298,26 +401,26 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl p-6 space-y-5 my-auto max-h-[92vh] flex flex-col"
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl p-6 space-y-4 my-auto max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-sky-500/10 text-sky-500 flex items-center justify-center font-bold text-lg">
-              ⚙️
+              ⚡
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-slate-800 dark:text-white">
-                  Kelola Item Sub-Metering & Konsumsi
+                  Kelola Tampilan Power Meter & Sub-Metering
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20">
                   Senior Unit Head Only
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Konfigurasi daftar item, nama label, dan endpoint API untuk Fact 1, Fact 2, Utility, dan HVAC.
+                Cukup <strong className="text-sky-500">checklist</strong> Power Meter yang ingin ditampilkan di dashboard, atau daftarkan PM baru.
               </p>
             </div>
           </div>
@@ -329,10 +432,10 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
           </button>
         </div>
 
-        {/* Action alert */}
+        {/* Action Alert Banner */}
         {actionMessage && (
           <div
-            className={`px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between ${
+            className={`px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between transition ${
               actionMessage.type === "success"
                 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
                 : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
@@ -345,14 +448,14 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
           </div>
         )}
 
-        {/* Top Controls: Fact Switcher & Department Filter */}
+        {/* Top Controls: Fact Tabs & Add PM Button */}
         <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
           {/* Fact Selector Tabs */}
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => {
                 setActiveFact("consumption_fact_1");
-                setIsFormOpen(false);
+                setIsAddPmOpen(false);
               }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
                 activeFact === "consumption_fact_1"
@@ -361,14 +464,18 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
               }`}
             >
               <span>Biggest Consumption Fact 1</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${activeFact === "consumption_fact_1" ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-700"}`}>
-                {fact1Items.length}
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                  activeFact === "consumption_fact_1" ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-700"
+                }`}
+              >
+                {fact1Items.filter((i) => i.enabled !== false).length} Aktif
               </span>
             </button>
             <button
               onClick={() => {
                 setActiveFact("consumption_fact_2");
-                setIsFormOpen(false);
+                setIsAddPmOpen(false);
               }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
                 activeFact === "consumption_fact_2"
@@ -377,204 +484,81 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
               }`}
             >
               <span>Biggest Consumption Fact 2</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${activeFact === "consumption_fact_2" ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-700"}`}>
-                {fact2Items.length}
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                  activeFact === "consumption_fact_2" ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-700"
+                }`}
+              >
+                {fact2Items.filter((i) => i.enabled !== false).length} Aktif
               </span>
             </button>
           </div>
 
-          {/* Department Filter & Add Item Button */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
-              <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">Dept:</span>
-              {(["all", "Utility", "HVAC", "Other"] as const).map((d) => (
-                <button
-                  key={d}
-                  onClick={() => setDeptFilter(d)}
-                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition ${
-                    deptFilter === d
-                      ? "bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900"
-                      : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-                  }`}
-                >
-                  {d === "all" ? "Semua" : d}
-                </button>
-              ))}
-            </div>
-
-            {!isFormOpen && (
-              <button
-                onClick={handleOpenAdd}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition flex items-center gap-1.5"
-              >
-                <span>➕</span>
-                <span>Tambah Item</span>
-              </button>
-            )}
-          </div>
+          {/* Add New PM Toggle Button */}
+          <button
+            onClick={() => {
+              setIsAddPmOpen(!isAddPmOpen);
+              setNewPmTargetFact(activeFact);
+              setTestResult(null);
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+              isAddPmOpen
+                ? "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200"
+                : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm"
+            }`}
+          >
+            <span>{isAddPmOpen ? "✕ Tutup Form" : "➕ Tambah PM Baru"}</span>
+          </button>
         </div>
 
-        {/* Inline Add / Edit Form */}
-        {isFormOpen && (
+        {/* Minimal Add New PM Form (ONLY Endpoint, Label, and PM ID) */}
+        {isAddPmOpen && (
           <form
-            onSubmit={handleSaveItem}
-            className="p-5 rounded-xl border border-sky-500/30 bg-sky-500/5 dark:bg-sky-950/20 space-y-4 animate-fadeIn"
+            onSubmit={handleAddNewPm}
+            className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 space-y-3 animate-fadeIn"
           >
-            <div className="flex items-center justify-between border-b border-sky-500/20 pb-2">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
-                <span>{editingItem ? "✏️ Edit Item Konfigurasi" : "➕ Tambah Item Baru"}</span>
-              </h4>
-              <button
-                type="button"
-                onClick={() => setIsFormOpen(false)}
-                className="text-xs text-slate-400 hover:text-slate-600 font-bold"
-              >
-                ✕ Batal
-              </button>
-            </div>
-
-            {/* 2 OPSI MODE SELECTION */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl w-full sm:w-fit">
-                <button
-                  type="button"
-                  onClick={() => setInputMode("existing")}
-                  className={`py-1.5 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                    inputMode === "existing"
-                      ? "bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                  }`}
-                >
-                  <span>⚡</span>
-                  <span>Pilih yang Sudah Ada</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputMode("new");
-                    setSelectedExistingPm("");
-                    if (!editingItem) {
-                      setFormLabel("");
-                      setFormPmId("");
-                      setFormEndpoint("");
-                      setFormJsonKey("");
-                    }
-                  }}
-                  className={`py-1.5 px-3.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                    inputMode === "new"
-                      ? "bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                  }`}
-                >
-                  <span>➕</span>
-                  <span>Tambah PM Baru</span>
-                </button>
+            <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">➕</span>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                  Pendaftaran Power Meter Baru ke Database
+                </h4>
               </div>
-
-              {/* OPSI 1: Dropdown Power Meter yang Sudah Ada */}
-              {inputMode === "existing" && (
-                <div className="p-3.5 bg-sky-500/10 dark:bg-sky-950/30 rounded-xl border border-sky-500/20 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-sky-700 dark:text-sky-300 flex items-center gap-1.5">
-                      <span>⚡</span>
-                      <span>Pilih Power Meter dari Database (Aktif Polling & Tersimpan):</span>
-                    </label>
-                    <span className="text-[10px] font-mono text-sky-600 dark:text-sky-400 bg-sky-500/20 px-2 py-0.5 rounded-full">
-                      {availablePms.length} Power Meter Tersedia
-                    </span>
-                  </div>
-                  <select
-                    value={selectedExistingPm}
-                    onChange={(e) => handleSelectExistingPm(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-sky-300 dark:border-sky-700/60 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-bold focus:ring-2 focus:ring-sky-500 outline-none"
-                  >
-                    <option value="">-- Klik untuk memilih Power Meter yang sudah ada --</option>
-                    {availablePms.map((m) => (
-                      <option key={m.pm_id} value={m.pm_id}>
-                        {m.label || m.pm_id} [{m.department || "Utility"} • {m.group_id?.toUpperCase()}]
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    💡 Memilih dari daftar ini akan otomatis menghubungkan endpoint, tag JSON, dan data historis database.
-                  </p>
-                </div>
-              )}
-
-              {/* OPSI 2: Info Tambah PM Baru */}
-              {inputMode === "new" && (
-                <div className="p-3.5 bg-emerald-500/10 dark:bg-emerald-950/30 rounded-xl border border-emerald-500/20 space-y-1">
-                  <div className="text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
-                    <span>💡</span>
-                    <span>Pendaftaran Power Meter / Endpoint Baru ke Database</span>
-                  </div>
-                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
-                    Masukkan endpoint API baru di bawah. Backend akan mengecek apakah endpoint ini baru, lalu otomatis meregistrasikannya ke database <strong className="font-mono">electric_pm</strong> untuk disimpan <strong>per menit</strong> dan <strong>per jam</strong>.
-                  </p>
-                </div>
-              )}
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                Otomatis disimpan per menit & per jam
+              </span>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {/* Target Fact */}
+            <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+              Cukup masukkan <strong>Endpoint URL</strong>, <strong>Label</strong>, dan <strong>PM ID</strong>.
+              Semua parameter teknis (Active Power, Energy, Tegangan, Arus, Power Factor, Frekuensi) akan otomatis dibaca dan disimpan ke database <span className="font-mono text-emerald-600">electric_pm</span>.
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {/* Target Factory */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Target Factory *
                 </label>
                 <select
-                  value={formFact}
-                  onChange={(e) => setFormFact(e.target.value as any)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:ring-2 focus:ring-sky-500 outline-none"
+                  value={newPmTargetFact}
+                  onChange={(e) => setNewPmTargetFact(e.target.value as any)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 outline-none"
                 >
                   <option value="consumption_fact_1">Fact 1 (Utility & Production)</option>
                   <option value="consumption_fact_2">Fact 2 (Utility & HVAC)</option>
                 </select>
               </div>
 
-              {/* Label / Item Name */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Nama / Label Item *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Chiller Daikin 1 / Boiler 3"
-                  value={formLabel}
-                  onChange={(e) => setFormLabel(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:ring-2 focus:ring-sky-500 outline-none"
-                />
-              </div>
-
-              {/* Power Meter ID */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Power Meter ID (PM ID)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Contoh: PM350 / PM_CHILLER_TRANE"
-                  value={formPmId}
-                  onChange={(e) => setFormPmId(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-sky-500 outline-none"
-                />
-              </div>
-
               {/* Department */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Departemen *
                 </label>
                 <select
-                  value={formDept}
-                  onChange={(e) => {
-                    const d = e.target.value as any;
-                    setFormDept(d);
-                    if (!formSubArea || COMMON_SUBAREAS[formDept]?.includes(formSubArea)) {
-                      setFormSubArea(COMMON_SUBAREAS[d][0] || "");
-                    }
-                  }}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:ring-2 focus:ring-sky-500 outline-none"
+                  value={newPmDept}
+                  onChange={(e) => setNewPmDept(e.target.value as any)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 outline-none"
                 >
                   <option value="Utility">Utility</option>
                   <option value="HVAC">HVAC</option>
@@ -582,272 +566,338 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
                 </select>
               </div>
 
-              {/* Sub-Area */}
+              {/* Power Meter ID */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Sub-Area / Klasifikasi Sistem
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Power Meter ID (PM ID) *
                 </label>
                 <input
                   type="text"
-                  list="subarea-suggestions"
-                  placeholder="Contoh: Chillers, AHUs, Boiler..."
-                  value={formSubArea}
-                  onChange={(e) => setFormSubArea(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:ring-2 focus:ring-sky-500 outline-none"
+                  required
+                  placeholder="Contoh: PM350 / PM_CHILLER_3"
+                  value={newPmId}
+                  onChange={(e) => setNewPmId(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
-                <datalist id="subarea-suggestions">
-                  {(COMMON_SUBAREAS[formDept] || []).map((s) => (
-                    <option key={s} value={s} />
-                  ))}
-                </datalist>
               </div>
 
-              {/* Endpoint URL */}
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Endpoint URL (Ignition Webdev API) *
+              {/* Label / Item Name */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nama / Label Item *
                 </label>
                 <input
                   type="text"
-                  placeholder="electric_ew21 atau http://10.3.164.3:8088/system/webdev/Utility_Dashboard/..."
-                  value={formEndpoint}
-                  onChange={(e) => setFormEndpoint(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-sky-500 outline-none"
+                  required
+                  placeholder="Contoh: Chiller Daikin 1"
+                  value={newPmLabel}
+                  onChange={(e) => setNewPmLabel(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
-              </div>
-
-              {/* JSON Key */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  JSON Key / Metric Tag
-                </label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Active_Power_Total / kWh"
-                  value={formJsonKey}
-                  onChange={(e) => setFormJsonKey(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-sky-500 outline-none"
-                />
-              </div>
-
-              {/* Fallback / Manual kWh */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Nilai Awal / Fallback kWh
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  value={formKwh}
-                  onChange={(e) => setFormKwh(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-sky-500 outline-none"
-                />
-              </div>
-
-              {/* Enabled Toggle */}
-              <div className="flex items-center gap-2 pt-6">
-                <input
-                  type="checkbox"
-                  id="form-enabled"
-                  checked={formEnabled}
-                  onChange={(e) => setFormEnabled(e.target.checked)}
-                  className="h-4 w-4 rounded text-sky-600 focus:ring-sky-500 cursor-pointer"
-                />
-                <label htmlFor="form-enabled" className="text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
-                  Aktifkan di Dashboard & Chart
-                </label>
               </div>
             </div>
 
-            {/* Test Connection Button & Result */}
-            <div className="pt-2 border-t border-sky-500/10 flex flex-wrap items-center justify-between gap-3">
+            {/* Endpoint URL */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Endpoint URL (Ignition Webdev API) *
+              </label>
               <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  required
+                  placeholder="http://10.3.164.3:8088/system/webdev/Utility_Dashboard/PM350 atau endpoint API lainnya"
+                  value={newPmEndpoint}
+                  onChange={(e) => setNewPmEndpoint(e.target.value)}
+                  className="flex-1 px-3 py-1.5 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
                 <button
                   type="button"
-                  onClick={handleTestApi}
-                  disabled={isTestingApi || !formEndpoint.trim()}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition"
+                  onClick={handleTestNewPmApi}
+                  disabled={isTestingApi || !newPmEndpoint.trim()}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition shrink-0"
                 >
-                  {isTestingApi ? "Menguji API..." : "🔍 Test Endpoint & JSON Key"}
-                </button>
-                {testResult && (
-                  <span
-                    className={`text-xs px-2.5 py-1 rounded-lg font-mono font-bold ${
-                      testResult.success
-                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                        : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-                    }`}
-                  >
-                    {testResult.message}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsFormOpen(false)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-1.5 rounded-lg text-xs font-bold bg-[#1f6fb5] hover:bg-[#1a5c96] text-white shadow-sm transition disabled:opacity-50"
-                >
-                  {isSubmitting ? "Menyimpan..." : editingItem ? "Simpan Perubahan" : "Tambahkan Item"}
+                  {isTestingApi ? "Menguji API..." : "🔍 Test API"}
                 </button>
               </div>
-            </div>
-
-            {/* Available JSON Keys helper if returned */}
-            {testResult?.availableKeys && (
-              <div className="text-[11px] bg-slate-100 dark:bg-slate-800/80 p-2.5 rounded-lg space-y-1">
-                <span className="font-semibold text-slate-600 dark:text-slate-300">Keys yang tersedia di payload:</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {testResult.availableKeys.map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => setFormJsonKey(k)}
-                      className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-sky-600 dark:text-sky-400 font-mono text-[10px] hover:bg-sky-50"
-                    >
-                      {k}
-                    </button>
-                  ))}
+              {testResult && (
+                <div
+                  className={`mt-1.5 text-[11px] font-semibold ${
+                    testResult.success ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                  }`}
+                >
+                  {testResult.message}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+
+            {/* Form Submit Footer */}
+            <div className="flex items-center justify-end gap-2 pt-1 border-t border-emerald-500/10">
+              <button
+                type="button"
+                onClick={() => setIsAddPmOpen(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={isProcessing}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <span>✓</span>
+                <span>{isProcessing ? "Menyimpan..." : "Simpan & Daftarkan PM Baru"}</span>
+              </button>
+            </div>
           </form>
         )}
 
-        {/* Items List Table */}
+        {/* Filter Toolbar: Dept Filter, Search, and Bulk Actions */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          {/* Dept Filter */}
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl text-xs">
+            <span className="text-[10px] font-bold uppercase text-slate-400 px-2">Dept:</span>
+            {(["all", "Utility", "HVAC", "Other"] as const).map((d) => (
+              <button
+                key={d}
+                onClick={() => setDeptFilter(d)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                  deptFilter === d
+                    ? "bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                {d === "all" ? "Semua" : d}
+              </button>
+            ))}
+          </div>
+
+          {/* Search Box & Show All Switch */}
+          <div className="flex items-center gap-3 flex-1 sm:flex-initial justify-end">
+            <div className="relative w-full sm:w-64">
+              <input
+                type="text"
+                placeholder="Cari PM ID atau nama alat..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-sky-500 outline-none"
+              />
+              <span className="absolute left-2.5 top-1.5 text-slate-400 text-xs">🔍</span>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1.5 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <label className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showAllFactories}
+                onChange={(e) => setShowAllFactories(e.target.checked)}
+                className="h-3.5 w-3.5 rounded text-sky-600 focus:ring-sky-500"
+              />
+              <span>Tampilkan semua PM</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Bulk Action Header Bar */}
+        <div className="flex items-center justify-between px-3 py-2 bg-sky-500/5 dark:bg-sky-950/20 rounded-xl border border-sky-500/10 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-sky-700 dark:text-sky-300">
+              {activeCount} Power Meter Aktif Ditampilkan
+            </span>
+            <span className="text-slate-400">•</span>
+            <span className="text-slate-500 dark:text-slate-400">
+              {displayedPms.length} PM ditemukan
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleBulkToggle(true)}
+              disabled={isProcessing || displayedPms.length === 0}
+              className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-sky-600 dark:text-sky-400 hover:bg-sky-500/10 border border-sky-500/20 transition disabled:opacity-50"
+              title="Aktifkan semua PM yang tampil di tabel ini"
+            >
+              ✓ Centang Semua
+            </button>
+            <button
+              onClick={() => handleBulkToggle(false)}
+              disabled={isProcessing || displayedPms.length === 0}
+              className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 transition disabled:opacity-50"
+              title="Hapus semua centang dari PM yang tampil di tabel ini"
+            >
+              ✕ Hapus Semua Centang
+            </button>
+          </div>
+        </div>
+
+        {/* Main Power Meter Checklist Table */}
         <div className="flex-1 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200 dark:border-slate-800 sticky top-0">
+            <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
               <tr>
-                <th className="py-2.5 px-4 w-12 text-center">Status</th>
-                <th className="py-2.5 px-4">Nama Item / Label</th>
-                <th className="py-2.5 px-4">Departemen & Sub-Area</th>
-                <th className="py-2.5 px-4">Endpoint & Tag Key</th>
-                <th className="py-2.5 px-4 text-right">Nilai Saat Ini</th>
-                <th className="py-2.5 px-4 w-28 text-center">Aksi</th>
+                <th className="py-2.5 px-4 w-14 text-center">Tampilkan</th>
+                <th className="py-2.5 px-4 w-28">PM ID</th>
+                <th className="py-2.5 px-4">Nama / Label Item</th>
+                <th className="py-2.5 px-4 w-40">Departemen</th>
+                <th className="py-2.5 px-4">Endpoint API</th>
+                <th className="py-2.5 px-4 w-36 text-center">Status</th>
+                <th className="py-2.5 px-4 w-24 text-center">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {currentItems.length > 0 ? (
-                currentItems.map((item) => (
-                  <tr
-                    key={item.id || item.config_key}
-                    className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition ${
-                      !item.enabled ? "opacity-50" : ""
-                    }`}
-                  >
-                    {/* Toggle Active */}
-                    <td className="py-3 px-4 text-center">
-                      <input
-                        type="checkbox"
-                        checked={item.enabled !== false}
-                        onChange={() => handleToggleEnabled(item)}
-                        title={item.enabled ? "Klik untuk nonaktifkan" : "Klik untuk aktifkan"}
-                        className="h-4 w-4 rounded text-sky-600 focus:ring-sky-500 cursor-pointer"
-                      />
-                    </td>
+              {isLoadingPms ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <div className="animate-spin text-2xl mb-2">⏳</div>
+                    <div className="font-semibold text-xs">Memuat daftar Power Meter dari database...</div>
+                  </td>
+                </tr>
+              ) : displayedPms.length > 0 ? (
+                displayedPms.map((pm) => {
+                  const idUpper = pm.pm_id.toUpperCase();
+                  const configured = configMap.get(idUpper);
+                  const isChecked = configured ? configured.enabled !== false : false;
+                  const displayLabel = configured?.label || pm.label || pm.pm_id;
 
-                    {/* Label */}
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-slate-800 dark:text-white">{item.label}</span>
-                        {item.value?.pm_id && (
-                          <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
-                            {item.value.pm_id}
-                          </span>
-                        )}
-                        {item.value?.is_new_pm && (
-                          <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                            NEW PM
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[10px] font-mono text-slate-400">
-                        {item.config_key}
-                      </div>
-                    </td>
+                  return (
+                    <tr
+                      key={pm.pm_id}
+                      className={`hover:bg-sky-500/5 dark:hover:bg-sky-950/20 transition cursor-pointer ${
+                        isChecked
+                          ? "bg-sky-50/40 dark:bg-sky-950/10"
+                          : "opacity-60 hover:opacity-100"
+                      }`}
+                      onClick={() => handleTogglePm(pm)}
+                    >
+                      {/* Checkbox Checklist */}
+                      <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleTogglePm(pm)}
+                          className="h-4 w-4 rounded text-sky-600 focus:ring-sky-500 cursor-pointer accent-[#1f6fb5]"
+                          title={isChecked ? "Klik untuk sembunyikan dari dashboard" : "Klik untuk tampilkan di dashboard"}
+                        />
+                      </td>
 
-                    {/* Department & SubArea */}
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-1.5">
+                      {/* PM ID */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-extrabold text-slate-800 dark:text-white text-xs">
+                            {pm.pm_id}
+                          </span>
+                          {pm.is_new_pm && (
+                            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                              NEW
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Item Label */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-800 dark:text-white">
+                            {displayLabel}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingPm({ pm_id: pm.pm_id, currentLabel: displayLabel });
+                              setEditLabelInput(displayLabel);
+                            }}
+                            className="text-slate-400 hover:text-sky-500 opacity-40 hover:opacity-100 transition text-xs"
+                            title="Edit nama label ini"
+                          >
+                            ✏️
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* Department */}
+                      <td className="py-3 px-4">
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                            item.value?.department === "HVAC"
+                            pm.department === "HVAC"
                               ? "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20"
-                              : item.value?.department === "Utility"
+                              : pm.department === "Utility"
                               ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
                               : "bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20"
                           }`}
                         >
-                          {item.value?.department || "Other"}
+                          {pm.department || "Utility"}
                         </span>
-                        {item.value?.subArea && (
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                            › {item.value.subArea}
+                        {pm.subArea && (
+                          <span className="text-[10px] text-slate-400 ml-1.5">
+                            › {pm.subArea}
                           </span>
                         )}
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Endpoint & Tag Key */}
-                    <td className="py-3 px-4">
-                      {item.value?.endpoint_url ? (
-                        <div className="space-y-0.5">
-                          <div className="font-mono text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[220px]" title={item.value.endpoint_url}>
-                            {item.value.endpoint_url}
-                          </div>
-                          {item.value.json_key && (
-                            <div className="font-mono text-[10px] font-bold text-sky-600 dark:text-sky-400">
-                              Key: {item.value.json_key}
-                            </div>
+                      {/* Endpoint API */}
+                      <td className="py-3 px-4">
+                        <div className="font-mono text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[240px]" title={pm.endpoint_url}>
+                          {pm.endpoint_url || "—"}
+                        </div>
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3 px-4 text-center">
+                        {isChecked ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            ✓ Tampil di Chart
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-400">
+                            Tidak Ditampilkan
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingPm({ pm_id: pm.pm_id, currentLabel: displayLabel });
+                              setEditLabelInput(displayLabel);
+                            }}
+                            className="px-2 py-0.5 rounded text-[10px] font-bold text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-950/30 transition"
+                            title="Ubah nama item"
+                          >
+                            ✏️ Edit
+                          </button>
+                          {configured && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteItem(pm.pm_id)}
+                              className="px-1.5 py-0.5 rounded text-[10px] font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition"
+                              title="Hapus kustomisasi"
+                            >
+                              🗑️
+                            </button>
                           )}
                         </div>
-                      ) : (
-                        <span className="text-[10px] text-slate-400 italic">Manual / Belum ada API</span>
-                      )}
-                    </td>
-
-                    {/* Live Value */}
-                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-800 dark:text-white">
-                      {(item.value?.kWh ?? 0).toLocaleString("id-ID", { maximumFractionDigits: 2 })} <span className="text-[10px] text-slate-400 font-sans">kWh</span>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => handleOpenEdit(item)}
-                          className="px-2 py-1 rounded text-[11px] font-bold text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-950/30 transition"
-                          title="Edit Item"
-                        >
-                          ✏️ Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteItem(item)}
-                          className="px-2 py-1 rounded text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition"
-                          title="Hapus Item"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
-                    <div className="text-xl mb-1 opacity-40">📋</div>
-                    <div className="font-bold text-xs">Belum ada item terkonfigurasi</div>
-                    <div className="text-[11px] mt-0.5">
-                      Klik tombol &quot;➕ Tambah Item&quot; di atas untuk menambahkan item sub-metering.
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <div className="text-2xl mb-1 opacity-40">🔍</div>
+                    <div className="font-bold text-xs">Tidak ada Power Meter yang cocok</div>
+                    <div className="text-[11px] mt-0.5 text-slate-400">
+                      Coba ganti filter departemen, kosongkan kata kunci pencarian, atau klik &quot;➕ Tambah PM Baru&quot;.
                     </div>
                   </td>
                 </tr>
@@ -856,10 +906,56 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
           </table>
         </div>
 
-        {/* Footer */}
+        {/* Edit Label Modal Dialog */}
+        {editingPm && (
+          <div
+            className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4"
+            onClick={() => setEditingPm(null)}
+          >
+            <div
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl w-full max-w-md p-5 space-y-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-white flex items-center gap-1.5">
+                <span>✏️</span>
+                <span>Edit Nama / Label: {editingPm.pm_id}</span>
+              </h4>
+              <p className="text-[11px] text-slate-400">
+                Nama ini akan ditampilkan pada chart dan card konsumsi.
+              </p>
+              <input
+                type="text"
+                value={editLabelInput}
+                onChange={(e) => setEditLabelInput(e.target.value)}
+                placeholder="Nama / Label Item"
+                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:ring-2 focus:ring-sky-500 outline-none"
+                autoFocus
+              />
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingPm(null)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveLabel}
+                  disabled={isProcessing || !editLabelInput.trim()}
+                  className="px-4 py-1.5 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white transition disabled:opacity-50"
+                >
+                  {isProcessing ? "Menyimpan..." : "Simpan Nama"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Footer */}
         <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3 text-xs text-slate-400">
           <div>
-            Total {currentItems.length} item ({currentItems.filter((i) => i.enabled !== false).length} aktif)
+            Total <strong className="text-slate-700 dark:text-slate-300">{displayedPms.length}</strong> Power Meter terdaftar ({activeCount} aktif di {activeFact === "consumption_fact_1" ? "Fact 1" : "Fact 2"})
           </div>
           <button
             onClick={onClose}

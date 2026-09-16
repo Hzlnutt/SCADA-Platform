@@ -1455,15 +1455,30 @@ export default function Electricity() {
           let changed = false;
           const nextList = list.map(item => {
             const u = item.value?.endpoint_url;
-            const k = item.value?.json_key;
-            if (u && k && aggregatedData[u]) {
-              const raw = aggregatedData[u][k];
-              if (raw !== undefined && raw !== null) {
-                const num = Number(raw);
-                if (!isNaN(num) && item.value?.kWh !== num) {
-                  changed = true;
-                  return { ...item, value: { ...item.value, kWh: num } };
+            const pmId = (item.value?.pm_id || item.value?.json_key || item.config_key || "").toUpperCase();
+            if (u && aggregatedData[u]) {
+              const dataPayload = aggregatedData[u];
+              let foundVal: number | null = null;
+              if (Array.isArray(dataPayload)) {
+                const entry = dataPayload.find((p: any) => String(p.PM || p.pm_id || p.PM_ID || "").toUpperCase() === pmId);
+                if (entry) {
+                  const candidate = entry.ActiveEnergy ?? entry.Active_Energy ?? entry.ActivePower ?? entry.Active_Power_Total ?? entry.kWh;
+                  if (candidate !== undefined && candidate !== null) foundVal = Number(candidate);
                 }
+              } else if (typeof dataPayload === "object") {
+                if (item.value?.json_key && dataPayload[item.value.json_key] !== undefined) {
+                  foundVal = Number(dataPayload[item.value.json_key]);
+                } else if (dataPayload[pmId] !== undefined) {
+                  const sub = dataPayload[pmId];
+                  foundVal = typeof sub === "object" ? Number(sub.ActiveEnergy ?? sub.Active_Energy ?? sub.ActivePower ?? sub.Active_Power_Total ?? sub.kWh) : Number(sub);
+                } else {
+                  const candidate = dataPayload.ActiveEnergy ?? dataPayload.Active_Energy ?? dataPayload.ActivePower ?? dataPayload.Active_Power_Total ?? dataPayload.kWh;
+                  if (candidate !== undefined && candidate !== null) foundVal = Number(candidate);
+                }
+              }
+              if (foundVal !== null && !isNaN(foundVal) && item.value?.kWh !== foundVal) {
+                changed = true;
+                return { ...item, value: { ...item.value, kWh: foundVal } };
               }
             }
             return item;

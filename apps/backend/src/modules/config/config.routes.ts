@@ -28,6 +28,8 @@ import {
   getElectricityConfigHandler,
   getAvailablePowerMetersHandler,
   upsertElectricityConfigHandler,
+  toggleElectricityPmHandler,
+  batchToggleElectricityPmHandler,
   deleteElectricityConfigHandler,
   upsertApiSourcesMapHandler,
   getApiSourcesMapHandler
@@ -83,5 +85,7 @@ configRouter.post("/config/api-sources-map", authenticate, authorize(configAdmin
 configRouter.get("/config/electricity", authenticate, getElectricityConfigHandler);
 configRouter.get("/config/electricity/available-pms", authenticate, getAvailablePowerMetersHandler);
 configRouter.post("/config/electricity", authenticate, authorize(seniorUnitHeadOnlyRoles), upsertElectricityConfigHandler);
+configRouter.post("/config/electricity/toggle", authenticate, authorize(seniorUnitHeadOnlyRoles), toggleElectricityPmHandler);
+configRouter.post("/config/electricity/batch-toggle", authenticate, authorize(seniorUnitHeadOnlyRoles), batchToggleElectricityPmHandler);
 configRouter.delete("/config/electricity/:id", authenticate, authorize(seniorUnitHeadOnlyRoles), deleteElectricityConfigHandler);
 

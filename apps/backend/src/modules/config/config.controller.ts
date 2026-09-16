@@ -1526,7 +1526,8 @@ export const getAvailablePowerMetersHandler = async (req: Request, res: Response
 
     // 1. Seed standard meters
     for (const m of STANDARD_METERS) {
-      pmMap.set(m.pm_id.toUpperCase(), { ...m, is_database: true });
+      const factory = m.group_id === "ew21" ? "consumption_fact_1" : m.group_id === "ew22" ? "consumption_fact_2" : "all";
+      pmMap.set(m.pm_id.toUpperCase(), { ...m, factory, is_database: true });
     }
 
     // 2. Query distinct PMs recorded in electric_pm_telemetry and minute table
@@ -1543,12 +1544,14 @@ export const getAvailablePowerMetersHandler = async (req: Request, res: Response
       for (const row of dbRes.rows) {
         const id = String(row.pm_id).toUpperCase();
         if (!pmMap.has(id)) {
+          const factory = row.group_id === "ew21" ? "consumption_fact_1" : row.group_id === "ew22" ? "consumption_fact_2" : "all";
           pmMap.set(id, {
             pm_id: id,
             label: `${id} (${row.group_id || "Sub-distribution"})`,
             endpoint_url: `electric_${row.group_id || "ew23"}`,
             json_key: id,
             group_id: row.group_id || "ew23",
+            factory,
             department: row.group_id === "hvac" ? "HVAC" : "Utility",
             subArea: "General",
             is_database: true
@@ -1560,14 +1563,15 @@ export const getAvailablePowerMetersHandler = async (req: Request, res: Response
     // 3. Query electricity_config for any custom configured items
     try {
       const cfgRes = await pool.query(`
-        SELECT config_key, label, value
+        SELECT config_type, config_key, label, value
         FROM electricity_config
-        WHERE enabled = true AND value->>'endpoint_url' IS NOT NULL
+        WHERE value->>'endpoint_url' IS NOT NULL
       `);
       for (const row of cfgRes.rows) {
         const val = row.value || {};
         const pmId = String(val.pm_id || val.json_key || row.config_key).toUpperCase().replace(/[^A-Z0-9_]/g, "");
         const normalizedPmId = pmId.startsWith("PM") ? pmId : `PM_${pmId}`;
+        const factory = row.config_type || (val.group_id === "ew21" ? "consumption_fact_1" : "consumption_fact_2");
         if (!pmMap.has(normalizedPmId)) {
           pmMap.set(normalizedPmId, {
             pm_id: normalizedPmId,
@@ -1575,10 +1579,17 @@ export const getAvailablePowerMetersHandler = async (req: Request, res: Response
             endpoint_url: val.endpoint_url,
             json_key: val.json_key || normalizedPmId,
             group_id: (val.department || "utility").toLowerCase(),
+            factory,
             department: val.department || "Utility",
             subArea: val.subArea || "General",
-            is_database: false
+            is_database: !val.is_new_pm,
+            is_new_pm: Boolean(val.is_new_pm)
           });
+        } else {
+          const existing = pmMap.get(normalizedPmId);
+          if (row.config_type && existing.factory === "all") {
+            existing.factory = row.config_type;
+          }
         }
       }
     } catch {}
@@ -1607,17 +1618,20 @@ export const getElectricityConfigHandler = async (req: Request, res: Response, n
 
 export const upsertElectricityConfigHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { config_type, config_key, label, value, sort_order, enabled } = req.body;
-    if (!config_type || !config_key || !label) {
-      res.status(400).json({ error: "config_type, config_key, and label are required" });
+    const { config_type, config_key, label, value, sort_order, enabled, pm_id, endpoint_url, department, subArea } = req.body;
+    if (!config_type || !label) {
+      res.status(400).json({ error: "config_type and label are required" });
       return;
     }
     const pool = getPostgresPool();
 
     // Determine normalized PM ID
-    const rawPmId = String(value?.pm_id || value?.json_key || config_key).toUpperCase().replace(/[^A-Z0-9_]/g, "");
+    const rawPmId = String(value?.pm_id || pm_id || value?.json_key || config_key || label).toUpperCase().replace(/[^A-Z0-9_]/g, "");
     const resolvedPmId = rawPmId.startsWith("PM") ? rawPmId : `PM_${rawPmId}`;
-    const cleanEndpoint = String(value?.endpoint_url || "").trim();
+    const cleanKey = (config_key || resolvedPmId).toLowerCase().replace(/[^a-z0-9_]/g, "");
+    const cleanEndpoint = String(value?.endpoint_url || endpoint_url || "").trim();
+    const resolvedDept = department || value?.department || "Utility";
+    const resolvedSubArea = subArea || value?.subArea || "General";
 
     // Check if this PM ID already exists in the database
     let isExisting = false;
@@ -1639,6 +1653,9 @@ export const upsertElectricityConfigHandler = async (req: Request, res: Response
     const itemValue = {
       ...(value || {}),
       pm_id: resolvedPmId,
+      endpoint_url: cleanEndpoint,
+      department: resolvedDept,
+      subArea: resolvedSubArea,
       is_new_pm: !isExisting,
       registered_at: isExisting ? (value?.registered_at || undefined) : new Date().toISOString()
     };
@@ -1659,7 +1676,7 @@ export const upsertElectricityConfigHandler = async (req: Request, res: Response
        ON CONFLICT (config_type, config_key)
        DO UPDATE SET label = EXCLUDED.label, value = EXCLUDED.value, sort_order = EXCLUDED.sort_order, enabled = EXCLUDED.enabled, updated_at = NOW()
        RETURNING id, config_type, config_key, label, value, sort_order, enabled`,
-      [config_type, config_key, label, JSON.stringify(itemValue), sort_order ?? 0, enabled !== false]
+      [config_type, cleanKey, label, JSON.stringify(itemValue), sort_order ?? 0, enabled !== false]
     );
 
     // Refresh dynamic custom PM polling in scheduler
@@ -1677,6 +1694,109 @@ export const upsertElectricityConfigHandler = async (req: Request, res: Response
       pmId: resolvedPmId,
       message
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const toggleElectricityPmHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { config_type, pm_id, enabled, label, endpoint_url, department, subArea } = req.body;
+    if (!config_type || !pm_id) {
+      res.status(400).json({ error: "config_type and pm_id are required" });
+      return;
+    }
+
+    const pool = getPostgresPool();
+    const rawPmId = String(pm_id).toUpperCase().replace(/[^A-Z0-9_]/g, "");
+    const resolvedPmId = rawPmId.startsWith("PM") ? rawPmId : `PM_${rawPmId}`;
+    const configKey = resolvedPmId.toLowerCase();
+
+    // Check existing row
+    const existingRes = await pool.query(
+      `SELECT id, label, value FROM electricity_config WHERE config_type = $1 AND config_key = $2`,
+      [config_type, configKey]
+    );
+
+    let resultRow;
+    if (existingRes.rows.length > 0) {
+      const existingVal = existingRes.rows[0].value || {};
+      const updatedVal = {
+        ...existingVal,
+        pm_id: resolvedPmId,
+        endpoint_url: endpoint_url || existingVal.endpoint_url || "",
+        department: department || existingVal.department || "Utility",
+        subArea: subArea || existingVal.subArea || ""
+      };
+      const updateRes = await pool.query(
+        `UPDATE electricity_config 
+         SET enabled = $1, value = $2, label = COALESCE($3, label), updated_at = NOW() 
+         WHERE id = $4 RETURNING *`,
+        [enabled === true, JSON.stringify(updatedVal), label || null, existingRes.rows[0].id]
+      );
+      resultRow = updateRes.rows[0];
+    } else {
+      const itemVal = {
+        pm_id: resolvedPmId,
+        endpoint_url: endpoint_url || "",
+        department: department || "Utility",
+        subArea: subArea || ""
+      };
+      const insertRes = await pool.query(
+        `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
+         VALUES ($1, $2, $3, $4, 0, $5, NOW())
+         RETURNING *`,
+        [config_type, configKey, label || resolvedPmId, JSON.stringify(itemVal), enabled === true]
+      );
+      resultRow = insertRes.rows[0];
+    }
+
+    res.json({ success: true, data: resultRow });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const batchToggleElectricityPmHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { config_type, enabled, pms } = req.body;
+    if (!config_type || !Array.isArray(pms)) {
+      res.status(400).json({ error: "config_type and pms array are required" });
+      return;
+    }
+
+    const pool = getPostgresPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const pm of pms) {
+        const rawPmId = String(pm.pm_id).toUpperCase().replace(/[^A-Z0-9_]/g, "");
+        const resolvedPmId = rawPmId.startsWith("PM") ? rawPmId : `PM_${rawPmId}`;
+        const configKey = resolvedPmId.toLowerCase();
+
+        const itemVal = {
+          pm_id: resolvedPmId,
+          endpoint_url: pm.endpoint_url || "",
+          department: pm.department || "Utility",
+          subArea: pm.subArea || ""
+        };
+
+        await client.query(
+          `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
+           VALUES ($1, $2, $3, $4, 0, $5, NOW())
+           ON CONFLICT (config_type, config_key)
+           DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = NOW()`,
+          [config_type, configKey, pm.label || resolvedPmId, JSON.stringify(itemVal), enabled === true]
+        );
+      }
+      await client.query("COMMIT");
+      res.json({ success: true, count: pms.length });
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     next(err);
   }
