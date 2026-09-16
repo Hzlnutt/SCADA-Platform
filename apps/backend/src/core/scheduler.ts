@@ -987,6 +987,9 @@ const CANDIDATE_BASES = [
 ];
 
 const fetchApiData = async (endpoint: string) => {
+  if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
+    return await fetchJsonWithTimeout(endpoint, 2500).catch(() => null);
+  }
   const orderedBases = [cachedWorkingBaseUrl, ...CANDIDATE_BASES.filter((b) => b !== cachedWorkingBaseUrl)];
   for (const base of orderedBases) {
     try {
@@ -1000,6 +1003,56 @@ const fetchApiData = async (endpoint: string) => {
     }
   }
   return null;
+};
+
+export interface DynamicCustomPm {
+  id: number;
+  config_key: string;
+  label: string;
+  endpoint_url: string;
+  json_key?: string;
+  pm_id: string;
+  group_id: string;
+}
+
+let cachedDynamicCustomPms: DynamicCustomPm[] = [];
+let lastDynamicPmFetch = 0;
+
+export const refreshDynamicCustomPmSources = async (): Promise<void> => {
+  const pool = getPostgresPool();
+  try {
+    const res = await pool.query(`
+      SELECT id, config_key, label, value
+      FROM electricity_config
+      WHERE enabled = true
+        AND value->>'endpoint_url' IS NOT NULL
+        AND length(trim(value->>'endpoint_url')) > 0
+    `);
+    const list: DynamicCustomPm[] = [];
+
+    for (const r of res.rows) {
+      const val = r.value || {};
+      const endpoint = String(val.endpoint_url || "").trim();
+      const rawPmId = String(val.pm_id || val.json_key || r.config_key).toUpperCase().replace(/[^A-Z0-9_]/g, "");
+      const normalizedPmId = rawPmId.startsWith("PM") ? rawPmId : `PM_${rawPmId}`;
+      const dept = String(val.department || "Utility").toLowerCase();
+      const groupId = dept === "hvac" ? "hvac" : dept === "utility" ? "utility" : "custom";
+
+      list.push({
+        id: r.id,
+        config_key: r.config_key,
+        label: r.label,
+        endpoint_url: endpoint,
+        json_key: val.json_key ? String(val.json_key).trim() : undefined,
+        pm_id: normalizedPmId,
+        group_id: groupId
+      });
+    }
+    cachedDynamicCustomPms = list;
+    lastDynamicPmFetch = Date.now();
+  } catch (err: any) {
+    logger.warn(`Failed to refresh dynamic custom PM sources: ${err.message}`);
+  }
 };
 
 export const startIncomingElectricityPolling = () => {
@@ -1314,6 +1367,110 @@ export const startIncomingElectricityPolling = () => {
       await insertPmMinuteTelemetryBatch(ew22Parsed, minuteTs);
     }
     broadcastEwLiveTelemetry("ew22", ew22Parsed);
+
+    // 7b. Process Dynamic Custom Power Meters (User Configured PMs)
+    if (Date.now() - lastDynamicPmFetch > 30000 || (cachedDynamicCustomPms.length === 0 && lastDynamicPmFetch === 0)) {
+      await refreshDynamicCustomPmSources().catch(() => {});
+    }
+
+    if (cachedDynamicCustomPms.length > 0) {
+      try {
+        const customRecords: ElectricPmRecord[] = [];
+        const coreEndpointSet = new Set(["electric_pln", "electric_wf1", "electric_wf2", "electric_plts", "electric_ew23", "electric_ew21", "electric_ew22"]);
+        const distinctCustomUrls = [...new Set(cachedDynamicCustomPms.map(p => p.endpoint_url).filter(u => !coreEndpointSet.has(u)))];
+
+        const customFetchResults = await Promise.all(
+          distinctCustomUrls.map(async ep => {
+            try {
+              const data = await fetchApiData(ep);
+              return { ep, data };
+            } catch {
+              return { ep, data: null };
+            }
+          })
+        );
+        const customDataMap = new Map(customFetchResults.map(r => [r.ep, r.data]));
+
+        const coreDataMap = new Map<string, any>([
+          ["electric_ew21", ew21Raw],
+          ["electric_ew22", ew22Raw],
+          ["electric_ew23", ew23Raw],
+          ["electric_pln", plnRaw],
+          ["electric_wf1", wf1Raw],
+          ["electric_wf2", wf2Raw]
+        ]);
+
+        for (const customPm of cachedDynamicCustomPms) {
+          const raw = customDataMap.get(customPm.endpoint_url) ?? coreDataMap.get(customPm.endpoint_url);
+          if (!raw) continue;
+
+          let rec: ElectricPmRecord | null = null;
+          if (Array.isArray(raw)) {
+            const parsedArr = parseEwApi(raw, ts, customPm.group_id);
+            rec = parsedArr.find(p => p.pm_id.toUpperCase() === customPm.pm_id.toUpperCase()) || null;
+          } else if (typeof raw === "object") {
+            const subObj = (customPm.json_key && raw[customPm.json_key] && typeof raw[customPm.json_key] === "object")
+              ? raw[customPm.json_key]
+              : raw;
+
+            const getNum = (fields: string[]): number | null => {
+              for (const f of fields) {
+                if (subObj[f] !== undefined && subObj[f] !== null) {
+                  const n = Number(subObj[f]);
+                  if (!isNaN(n)) return n;
+                }
+              }
+              return null;
+            };
+
+            const directVal = customPm.json_key && typeof subObj[customPm.json_key] === "number" ? subObj[customPm.json_key] : null;
+            const activePower = directVal ?? getNum(["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower"]);
+            const activeEnergy = getNum(["Active_Energy", "ActiveEnergy", "Energy", "total_kwh", "kWh", "Total_kWh"]);
+
+            rec = {
+              t_stamp: ts,
+              group_id: customPm.group_id,
+              pm_id: customPm.pm_id,
+              status: true,
+              volt_ab: getNum(["Volt_AB", "VoltAB", "VR", "V_AB"]),
+              volt_bc: getNum(["Volt_BC", "VoltBC", "VS", "V_BC"]),
+              volt_ca: getNum(["Volt_CA", "VoltCA", "VT", "V_CA"]),
+              volt_ll: getNum(["Volt_LL", "VoltLL", "VLL"]),
+              current_a: getNum(["Current_A", "CurrentA", "IR", "I_A"]),
+              current_b: getNum(["Current_B", "CurrentB", "IS", "I_B"]),
+              current_c: getNum(["Current_C", "CurrentC", "IT", "I_C"]),
+              frequency: getNum(["Frequency", "Freq", "Hz"]),
+              active_power_total: activePower,
+              reactive_power_total: getNum(["Reactive_Power_Total", "Reactive_Power", "kVAR"]),
+              apparent_power_total: getNum(["Apparent_Power_Total", "Apparent_Power", "kVA"]),
+              power_factor: getNum(["Power_Factor", "PF"]),
+              voltage_unbalance: getNum(["Voltage_Unbalance"]),
+              current_unbalance: getNum(["Current_Unbalance"]),
+              thd_volt_a: getNum(["THD_Volt_A"]),
+              thd_volt_b: getNum(["THD_Volt_B"]),
+              thd_volt_c: getNum(["THD_Volt_C"]),
+              thd_current_a: getNum(["THD_Current_A"]),
+              thd_current_b: getNum(["THD_Current_B"]),
+              thd_current_c: getNum(["THD_Current_C"]),
+              active_energy: activeEnergy
+            };
+          }
+
+          if (rec) {
+            customRecords.push(rec);
+          }
+        }
+
+        if (customRecords.length > 0) {
+          if (isNewMinute) {
+            await insertPmMinuteTelemetryBatch(customRecords, minuteTs);
+          }
+          broadcastEwLiveTelemetry("custom_pm", customRecords);
+        }
+      } catch (err: any) {
+        logger.warn(`Failed to process dynamic custom PM telemetry: ${err.message}`);
+      }
+    }
 
     // 8. Process HVAC Retained Sample PLCs (PLC1_AHU1_Utl, PLC2_AHU2, PLC2_AHU3)
     try {

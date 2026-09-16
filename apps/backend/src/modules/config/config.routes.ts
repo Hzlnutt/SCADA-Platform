@@ -26,6 +26,7 @@ import {
   deleteApiSourceHandler,
   testApiSourceHandler,
   getElectricityConfigHandler,
+  getAvailablePowerMetersHandler,
   upsertElectricityConfigHandler,
   deleteElectricityConfigHandler,
   upsertApiSourcesMapHandler,
@@ -80,6 +81,7 @@ configRouter.post("/config/api-sources-map", authenticate, authorize(configAdmin
 
 // Electricity config management (restricted to Senior Unit Head & Admin)
 configRouter.get("/config/electricity", authenticate, getElectricityConfigHandler);
+configRouter.get("/config/electricity/available-pms", authenticate, getAvailablePowerMetersHandler);
 configRouter.post("/config/electricity", authenticate, authorize(seniorUnitHeadOnlyRoles), upsertElectricityConfigHandler);
 configRouter.delete("/config/electricity/:id", authenticate, authorize(seniorUnitHeadOnlyRoles), deleteElectricityConfigHandler);
 

@@ -1107,3 +1107,180 @@ export const getElectricityExportPreviewHandler = async (
   }
 };
 
+export const getEquipmentMonthlyAnalyticsHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const rawPmId = req.query.pmId as string | undefined;
+    const configKey = req.query.configKey as string | undefined;
+    const machine = req.query.machine as string | undefined;
+    const currentMonth = (req.query.currentMonth as string) || new Date().toISOString().slice(0, 7); // YYYY-MM
+    
+    // Comparison month defaults to previous month
+    let comparisonMonth = req.query.comparisonMonth as string | undefined;
+    if (!comparisonMonth) {
+      const [currY, currM] = currentMonth.split("-").map(Number);
+      const prevDate = new Date(currY, currM - 2, 1);
+      comparisonMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    const pool = getPostgresPool();
+    let targetPmId: string | null = null;
+    let targetLabel: string = machine || rawPmId || configKey || "Equipment";
+
+    // 1. If explicit pmId provided
+    if (rawPmId && rawPmId.trim()) {
+      targetPmId = rawPmId.trim().toUpperCase();
+    }
+
+    // 2. Look up configKey if pmId not resolved
+    if (!targetPmId && configKey) {
+      try {
+        const cfgRes = await pool.query(`SELECT config_key, label, value FROM electricity_config WHERE config_key = $1 LIMIT 1`, [configKey]);
+        if (cfgRes.rows.length > 0) {
+          const val = cfgRes.rows[0].value || {};
+          targetPmId = (val.pm_id || val.json_key || cfgRes.rows[0].config_key).toUpperCase();
+          targetLabel = cfgRes.rows[0].label || targetLabel;
+        }
+      } catch {}
+    }
+
+    // 3. Fallback map from standard machine name
+    const MACHINE_PM_MAP: Record<string, string> = {
+      "f1 main supply qc office & lab": "PM320",
+      "cooling tower wf1": "PM321",
+      "cooling tower wf1 (ct-1)": "PM321",
+      "boiler 3 wf1": "PM321",
+      "boiler-3 wf1": "PM321",
+      "compressed air wf1 (ale-30)": "PM325",
+      "compressed air wf1 (zt-30.1)": "PM325",
+      "compressed air wf1 (zt-30.2)": "PM325",
+      "compressed air wf1 (zt-55)": "PM325",
+      "hvac qc (micro)": "PM327",
+      "hvac qc (retained sample)": "PM327",
+      "hvac qc (sampling)": "PM327",
+      "hvac produksi (wf1-u3)": "PM327",
+      "cooling tower wf2 (ct-2)": "PM206",
+      "boiler-4": "PM211",
+      "boiler-5": "PM211",
+      "compressed air wf2 (ale-250)": "PM210",
+      "compressed air wf2 (zt-110)": "PM210",
+      "chiller wf-2 (trane-100)": "PM208",
+      "chiller wf-2 (trane-275)": "PM208",
+      "chiller hvac wf-2 (trane-250)": "PM207",
+      "chiller hvac wf-2 (trane-185)": "PM207",
+      "hvac warehouse (wh-2)": "PM209",
+      "hvac warehouse (wh-3)": "PM209",
+      "hvac warehouse (wh-4)": "PM209",
+      "hvac warehouse (wh-5)": "PM209",
+      "hvac warehouse (wh-6)": "PM209",
+      "hvac warehouse (wh-7)": "PM209",
+      "hvac produksi (wf2-u1)": "PM205",
+      "hvac produksi (wf2-u2)": "PM205"
+    };
+
+    if (!targetPmId && machine) {
+      targetPmId = MACHINE_PM_MAP[machine.toLowerCase().trim()] || null;
+      if (!targetPmId) {
+        try {
+          const cfgRes = await pool.query(`SELECT config_key, label, value FROM electricity_config WHERE LOWER(label) = LOWER($1) LIMIT 1`, [machine.trim()]);
+          if (cfgRes.rows.length > 0) {
+            const val = cfgRes.rows[0].value || {};
+            targetPmId = (val.pm_id || val.json_key || cfgRes.rows[0].config_key).toUpperCase();
+          }
+        } catch {}
+      }
+    }
+
+    if (!targetPmId) {
+      targetPmId = (rawPmId || configKey || machine || "UNKNOWN").toUpperCase().replace(/[^A-Z0-9_]/g, "");
+    }
+
+    const queryMonthDaily = async (yearMonth: string) => {
+      const [year, month] = yearMonth.split("-").map(Number);
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const startStr = `${yearMonth}-01 00:00:00`;
+      const nextMonthDate = new Date(year, month, 1);
+      const nextMonthStr = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}-01 00:00:00`;
+
+      const sql = `
+        WITH hourly_combined AS (
+          SELECT 
+            EXTRACT(DAY FROM t_stamp)::int as day_num,
+            EXTRACT(HOUR FROM t_stamp)::int as hour_num,
+            AVG(active_power_total) as avg_kw,
+            MAX(active_energy) as max_energy,
+            MIN(active_energy) as min_energy
+          FROM electric_pm_telemetry
+          WHERE UPPER(pm_id) = UPPER($1)
+            AND t_stamp >= $2::timestamp
+            AND t_stamp < $3::timestamp
+          GROUP BY EXTRACT(DAY FROM t_stamp), EXTRACT(HOUR FROM t_stamp)
+          
+          UNION ALL
+          
+          SELECT 
+            EXTRACT(DAY FROM t_stamp)::int as day_num,
+            EXTRACT(HOUR FROM t_stamp)::int as hour_num,
+            AVG(active_power_total) as avg_kw,
+            MAX(active_energy) as max_energy,
+            MIN(active_energy) as min_energy
+          FROM electric_pm_telemetry_minute
+          WHERE UPPER(pm_id) = UPPER($1)
+            AND t_stamp >= $2::timestamp
+            AND t_stamp < $3::timestamp
+          GROUP BY EXTRACT(DAY FROM t_stamp), EXTRACT(HOUR FROM t_stamp)
+        )
+        SELECT 
+          day_num,
+          COALESCE(
+            NULLIF(MAX(max_energy) - MIN(min_energy), 0),
+            ROUND(SUM(COALESCE(avg_kw, 0)), 2)
+          )::float as daily_kwh
+        FROM hourly_combined
+        GROUP BY day_num
+        ORDER BY day_num ASC;
+      `;
+
+      const dbRes = await pool.query(sql, [targetPmId, startStr, nextMonthStr]);
+      const dailyMap = new Map<number, number>();
+      for (const row of dbRes.rows) {
+        dailyMap.set(Number(row.day_num), Number(row.daily_kwh) || 0);
+      }
+
+      const daily: number[] = [];
+      let totalKwh = 0;
+      for (let d = 1; d <= daysInMonth; d++) {
+        const val = dailyMap.get(d) ?? 0;
+        daily.push(Math.round(val * 10) / 10);
+        totalKwh += val;
+      }
+
+      return {
+        month: yearMonth,
+        daysInMonth,
+        totalKwh: Math.round(totalKwh * 10) / 10,
+        daily,
+        hasData: totalKwh > 0
+      };
+    };
+
+    const [currentRes, comparisonRes] = await Promise.all([
+      queryMonthDaily(currentMonth),
+      queryMonthDaily(comparisonMonth)
+    ]);
+
+    res.json({
+      pmId: targetPmId,
+      label: targetLabel,
+      currentMonth: currentRes,
+      comparisonMonth: comparisonRes,
+      hasData: currentRes.hasData || comparisonRes.hasData
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

@@ -460,11 +460,19 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
 const DynamicSelectionChart = memo(function DynamicSelectionChart({
   isDark,
   currMonthName,
-  prevMonthName
+  prevMonthName,
+  currentYear,
+  currentMonthIdx,
+  compYear,
+  compMonthIdx
 }: {
   isDark: boolean;
   currMonthName?: string;
   prevMonthName?: string;
+  currentYear?: number;
+  currentMonthIdx?: number;
+  compYear?: number;
+  compMonthIdx?: number;
 }) {
   const [factory, setFactory] = useState<"wf1" | "wf2">("wf1");
   const [machine, setMachine] = useState("F1 MAIN SUPPLY QC OFFICE & LAB");
@@ -514,11 +522,67 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
     }
   }, [machineOptions, machine]);
 
-  // Empty data for integration ready state
-  const currentData = useMemo(() => [], []);
-  const previousData = useMemo(() => [], []);
-  const currTotalKwh = useMemo(() => (currentData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [currentData]);
-  const prevTotalKwh = useMemo(() => (previousData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [previousData]);
+  // Dynamic state from database
+  const [dbData, setDbData] = useState<{
+    currentData: number[];
+    previousData: number[];
+    currTotalKwh: number;
+    prevTotalKwh: number;
+    pmId?: string;
+    hasData: boolean;
+    loading: boolean;
+  }>({
+    currentData: [],
+    previousData: [],
+    currTotalKwh: 0,
+    prevTotalKwh: 0,
+    hasData: false,
+    loading: false
+  });
+
+  useEffect(() => {
+    let isCancelled = false;
+    const now = new Date();
+    const cYear = currentYear ?? now.getFullYear();
+    const cMonth = currentMonthIdx !== undefined ? currentMonthIdx + 1 : now.getMonth() + 1;
+    const pYear = compYear ?? (cMonth === 1 ? cYear - 1 : cYear);
+    const pMonth = compMonthIdx !== undefined ? compMonthIdx + 1 : (cMonth === 1 ? 12 : cMonth - 1);
+
+    const currMonthStr = `${cYear}-${String(cMonth).padStart(2, "0")}`;
+    const compMonthStr = `${pYear}-${String(pMonth).padStart(2, "0")}`;
+
+    setDbData((prev) => ({ ...prev, loading: true }));
+
+    getJson<{
+      pmId: string;
+      label: string;
+      currentMonth: { daily: number[]; totalKwh: number; hasData: boolean };
+      comparisonMonth: { daily: number[]; totalKwh: number; hasData: boolean };
+      hasData: boolean;
+    }>(`/analytics/electricity/equipment-monthly?machine=${encodeURIComponent(machine)}&currentMonth=${currMonthStr}&comparisonMonth=${compMonthStr}`)
+      .then((res) => {
+        if (!isCancelled && res) {
+          setDbData({
+            currentData: res.currentMonth?.daily || [],
+            previousData: res.comparisonMonth?.daily || [],
+            currTotalKwh: res.currentMonth?.totalKwh || 0,
+            prevTotalKwh: res.comparisonMonth?.totalKwh || 0,
+            pmId: res.pmId,
+            hasData: Boolean(res.hasData),
+            loading: false
+          });
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setDbData((prev) => ({ ...prev, loading: false }));
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [machine, currentYear, currentMonthIdx, compYear, compMonthIdx]);
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
@@ -531,11 +595,11 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
           <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
             <span className="px-2 py-0.5 rounded-md font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
               <span className="text-[9px] font-sans uppercase text-sky-500/80 mr-1">{currMonthName || "Bulan Ini"}:</span>
-              <strong className="font-bold">{formatNumber(currTotalKwh)}</strong> kWh
+              <strong className="font-bold">{formatNumber(dbData.currTotalKwh)}</strong> kWh
             </span>
             <span className="px-2 py-0.5 rounded-md font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
               <span className="text-[9px] font-sans uppercase text-amber-500/80 mr-1">{prevMonthName || "Bulan Pembanding"}:</span>
-              <strong className="font-bold">{formatNumber(prevTotalKwh)}</strong> kWh
+              <strong className="font-bold">{formatNumber(dbData.prevTotalKwh)}</strong> kWh
             </span>
           </div>
         </div>
@@ -562,18 +626,42 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
           </select>
 
           {/* Status Indicator */}
-          <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20">BELUM TERHUBUNG</span>
+          {dbData.hasData ? (
+            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-mono">
+              DATABASE AKTIF ({dbData.pmId})
+            </span>
+          ) : dbData.loading ? (
+            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-sky-500/10 text-sky-500 border border-sky-500/20">
+              MEMUAT DATA...
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20" title="Data sedang diakumulasikan per menit & per jam di database">
+              {dbData.pmId ? `MENUNGGU REKAMAN (${dbData.pmId})` : "BELUM TERHUBUNG"}
+            </span>
+          )}
         </div>
       </div>
 
       <div style={{ height: 280 }}>
-        {currentData.length > 0 ? (
-          <MonthlyComparisonBarChart currentData={currentData} previousData={previousData} isDark={isDark} />
+        {dbData.hasData ? (
+          <MonthlyComparisonBarChart
+            currentData={dbData.currentData}
+            previousData={dbData.previousData}
+            isDark={isDark}
+            currMonthName={currMonthName}
+            prevMonthName={prevMonthName}
+          />
         ) : (
           <div className="flex flex-col items-center justify-center h-full border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl p-4 text-center bg-slate-50/50 dark:bg-slate-950/20">
             <span className="text-2xl mb-1 opacity-40">📊</span>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering mesin {machine} belum terpasang</span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+              {dbData.loading ? "Mengambil data historis dari database..." : "Data Belum Tersedia di Database"}
+            </span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+              {dbData.pmId
+                ? `Power meter ${dbData.pmId} aktif merekam per menit & per jam. Menunggu akumulasi konsumsi energi.`
+                : `Sub-metering mesin ${machine} belum terpasang.`}
+            </span>
           </div>
         )}
       </div>
@@ -786,7 +874,15 @@ const SectionHEquipment = memo(function SectionHEquipment({
       </div>
 
       {/* Dynamic Selection Chart (Sesuai Pilihan) */}
-      <DynamicSelectionChart isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+      <DynamicSelectionChart
+        isDark={isDark}
+        currMonthName={currMonthLabel}
+        prevMonthName={compMonthLabel}
+        currentYear={currentYear}
+        currentMonthIdx={currentMonthIdx}
+        compYear={compYear}
+        compMonthIdx={compMonth}
+      />
     </div>
   );
 });

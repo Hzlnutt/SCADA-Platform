@@ -12,6 +12,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getSocketServer } from "../../services/socket.manager";
 import { recordAudit, getClientIp } from "../../services/audit.service";
+import { refreshDynamicCustomPmSources } from "../../core/scheduler";
 
 // Zod schemas for validation
 const machinePayloadSchema = z.object({
@@ -1473,8 +1474,121 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
 
 
 // ═══════════════════════════════════════════════
-// ELECTRICITY CONFIG MANAGEMENT
+// ELECTRICITY CONFIG & POWER METERS MANAGEMENT
 // ═══════════════════════════════════════════════
+
+const STANDARD_METERS = [
+  // EW21 (Factory 1)
+  { pm_id: "PM318", label: "PM318 — F1 MDP 1.1", endpoint_url: "electric_ew21", json_key: "PM318", group_id: "ew21", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM319", label: "PM319 — F1 MDP 1.2", endpoint_url: "electric_ew21", json_key: "PM319", group_id: "ew21", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM320", label: "PM320 — F1 MDP 2", endpoint_url: "electric_ew21", json_key: "PM320", group_id: "ew21", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM321", label: "PM321 — F1 MDP 3 (CT & Boiler)", endpoint_url: "electric_ew21", json_key: "PM321", group_id: "ew21", department: "Utility", subArea: "Boiler" },
+  { pm_id: "PM322", label: "PM322 — F1 Cap Bank", endpoint_url: "electric_ew21", json_key: "PM322", group_id: "ew21", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM323", label: "PM323 — F1 MDP Prod 1", endpoint_url: "electric_ew21", json_key: "PM323", group_id: "ew21", department: "Other", subArea: "Production Lines" },
+  { pm_id: "PM324", label: "PM324 — F1 MDP Prod 2", endpoint_url: "electric_ew21", json_key: "PM324", group_id: "ew21", department: "Other", subArea: "Production Lines" },
+  { pm_id: "PM325", label: "PM325 — F1 MDP Utility (Kompresor)", endpoint_url: "electric_ew21", json_key: "PM325", group_id: "ew21", department: "Utility", subArea: "Compressors" },
+  { pm_id: "PM327", label: "PM327 — F1 Chiller / HVAC", endpoint_url: "electric_ew21", json_key: "PM327", group_id: "ew21", department: "HVAC", subArea: "Chillers" },
+  { pm_id: "PM337", label: "PM337 — F1 WTP / Boiler", endpoint_url: "electric_ew21", json_key: "PM337", group_id: "ew21", department: "Utility", subArea: "Water / WTP" },
+
+  // EW22 (Factory 2)
+  { pm_id: "PM201", label: "PM201 — F2 PUTR 1", endpoint_url: "electric_ew22", json_key: "PM201", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM202", label: "PM202 — F2 PUTR 2", endpoint_url: "electric_ew22", json_key: "PM202", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM203", label: "PM203 — F2 Cap Bank", endpoint_url: "electric_ew22", json_key: "PM203", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM205", label: "PM205 — F2 SDP Produksi", endpoint_url: "electric_ew22", json_key: "PM205", group_id: "ew22", department: "Other", subArea: "Production Lines" },
+  { pm_id: "PM206", label: "PM206 — F2 SDP Utility (Cooling Tower)", endpoint_url: "electric_ew22", json_key: "PM206", group_id: "ew22", department: "Utility", subArea: "Cooling Towers" },
+  { pm_id: "PM207", label: "PM207 — F2 SDP HVAC", endpoint_url: "electric_ew22", json_key: "PM207", group_id: "ew22", department: "HVAC", subArea: "AHUs" },
+  { pm_id: "PM208", label: "PM208 — F2 SDP Chiller", endpoint_url: "electric_ew22", json_key: "PM208", group_id: "ew22", department: "HVAC", subArea: "Chillers" },
+  { pm_id: "PM209", label: "PM209 — F2 SDP Warehouse", endpoint_url: "electric_ew22", json_key: "PM209", group_id: "ew22", department: "HVAC", subArea: "AC Split / FCU" },
+  { pm_id: "PM210", label: "PM210 — F2 SDP Kompresor", endpoint_url: "electric_ew22", json_key: "PM210", group_id: "ew22", department: "Utility", subArea: "Compressors" },
+  { pm_id: "PM211", label: "PM211 — F2 SDP Boiler", endpoint_url: "electric_ew22", json_key: "PM211", group_id: "ew22", department: "Utility", subArea: "Boiler" },
+  { pm_id: "PM212", label: "PM212 — F2 SDP WTP", endpoint_url: "electric_ew22", json_key: "PM212", group_id: "ew22", department: "Utility", subArea: "Water / WTP" },
+  { pm_id: "PM213", label: "PM213 — F2 SDP QC Lab", endpoint_url: "electric_ew22", json_key: "PM213", group_id: "ew22", department: "Other", subArea: "QC Laboratory" },
+  { pm_id: "PM214", label: "PM214 — F2 SDP Office", endpoint_url: "electric_ew22", json_key: "PM214", group_id: "ew22", department: "Other", subArea: "Warehouse" },
+  { pm_id: "PM215", label: "PM215 — F2 SDP Workshop", endpoint_url: "electric_ew22", json_key: "PM215", group_id: "ew22", department: "Other", subArea: "Others" },
+  { pm_id: "PM226", label: "PM226 — F2 SDP Spare 1", endpoint_url: "electric_ew22", json_key: "PM226", group_id: "ew22", department: "Other", subArea: "Others" },
+  { pm_id: "PM229", label: "PM229 — F2 SDP Spare 2", endpoint_url: "electric_ew22", json_key: "PM229", group_id: "ew22", department: "Other", subArea: "Others" },
+  { pm_id: "PM271", label: "PM271 — F2 Feeder 1", endpoint_url: "electric_ew22", json_key: "PM271", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM272", label: "PM272 — F2 Feeder 2", endpoint_url: "electric_ew22", json_key: "PM272", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM273", label: "PM273 — F2 Feeder 3", endpoint_url: "electric_ew22", json_key: "PM273", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM274", label: "PM274 — F2 Feeder 4", endpoint_url: "electric_ew22", json_key: "PM274", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM288", label: "PM288 — F2 Feeder 5", endpoint_url: "electric_ew22", json_key: "PM288", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
+
+  // Main Feeders & Cubicles
+  { pm_id: "PM410", label: "PM410 — Cubicle PLN (PM8000)", endpoint_url: "electric_pln", json_key: "PM410", group_id: "ew23", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM411", label: "PM411 — Feeder WF1 (PM5560)", endpoint_url: "electric_wf1", json_key: "PM411", group_id: "ew23", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM412", label: "PM412 — Feeder WF2 (PM5500)", endpoint_url: "electric_wf2", json_key: "PM412", group_id: "ew23", department: "Utility", subArea: "Electrical Substation" }
+];
+
+export const getAvailablePowerMetersHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pool = getPostgresPool();
+    const pmMap = new Map<string, any>();
+
+    // 1. Seed standard meters
+    for (const m of STANDARD_METERS) {
+      pmMap.set(m.pm_id.toUpperCase(), { ...m, is_database: true });
+    }
+
+    // 2. Query distinct PMs recorded in electric_pm_telemetry and minute table
+    try {
+      const dbRes = await pool.query(`
+        SELECT DISTINCT UPPER(pm_id) as pm_id, LOWER(group_id) as group_id
+        FROM (
+          SELECT pm_id, group_id FROM electric_pm_telemetry
+          UNION
+          SELECT pm_id, group_id FROM electric_pm_telemetry_minute
+        ) c
+        WHERE pm_id IS NOT NULL AND pm_id != ''
+      `);
+      for (const row of dbRes.rows) {
+        const id = String(row.pm_id).toUpperCase();
+        if (!pmMap.has(id)) {
+          pmMap.set(id, {
+            pm_id: id,
+            label: `${id} (${row.group_id || "Sub-distribution"})`,
+            endpoint_url: `electric_${row.group_id || "ew23"}`,
+            json_key: id,
+            group_id: row.group_id || "ew23",
+            department: row.group_id === "hvac" ? "HVAC" : "Utility",
+            subArea: "General",
+            is_database: true
+          });
+        }
+      }
+    } catch {}
+
+    // 3. Query electricity_config for any custom configured items
+    try {
+      const cfgRes = await pool.query(`
+        SELECT config_key, label, value
+        FROM electricity_config
+        WHERE enabled = true AND value->>'endpoint_url' IS NOT NULL
+      `);
+      for (const row of cfgRes.rows) {
+        const val = row.value || {};
+        const pmId = String(val.pm_id || val.json_key || row.config_key).toUpperCase().replace(/[^A-Z0-9_]/g, "");
+        const normalizedPmId = pmId.startsWith("PM") ? pmId : `PM_${pmId}`;
+        if (!pmMap.has(normalizedPmId)) {
+          pmMap.set(normalizedPmId, {
+            pm_id: normalizedPmId,
+            label: `${normalizedPmId} — ${row.label}`,
+            endpoint_url: val.endpoint_url,
+            json_key: val.json_key || normalizedPmId,
+            group_id: (val.department || "utility").toLowerCase(),
+            department: val.department || "Utility",
+            subArea: val.subArea || "General",
+            is_database: false
+          });
+        }
+      }
+    } catch {}
+
+    const result = Array.from(pmMap.values()).sort((a, b) => a.pm_id.localeCompare(b.pm_id));
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+};
 
 export const getElectricityConfigHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -1499,15 +1613,70 @@ export const upsertElectricityConfigHandler = async (req: Request, res: Response
       return;
     }
     const pool = getPostgresPool();
+
+    // Determine normalized PM ID
+    const rawPmId = String(value?.pm_id || value?.json_key || config_key).toUpperCase().replace(/[^A-Z0-9_]/g, "");
+    const resolvedPmId = rawPmId.startsWith("PM") ? rawPmId : `PM_${rawPmId}`;
+    const cleanEndpoint = String(value?.endpoint_url || "").trim();
+
+    // Check if this PM ID already exists in the database
+    let isExisting = false;
+    try {
+      const checkRes = await pool.query(`
+        SELECT 1 FROM electric_pm_telemetry WHERE UPPER(pm_id) = $1
+        UNION
+        SELECT 1 FROM electric_pm_telemetry_minute WHERE UPPER(pm_id) = $1
+        LIMIT 1
+      `, [resolvedPmId]);
+      isExisting = (checkRes.rowCount ?? 0) > 0;
+    } catch {}
+
+    // Also check standard meters set
+    if (!isExisting) {
+      isExisting = STANDARD_METERS.some(m => m.pm_id.toUpperCase() === resolvedPmId);
+    }
+
+    const itemValue = {
+      ...(value || {}),
+      pm_id: resolvedPmId,
+      is_new_pm: !isExisting,
+      registered_at: isExisting ? (value?.registered_at || undefined) : new Date().toISOString()
+    };
+
+    // If new PM, also register into api_sources so it is tracked uniformly
+    if (!isExisting && cleanEndpoint) {
+      try {
+        await pool.query(`
+          INSERT INTO api_sources (unit_id, name, url, method, enabled, polling_interval_ms)
+          VALUES ('electric_pm', $1, $2, 'GET', true, 2000)
+        `, [label, cleanEndpoint]);
+      } catch {}
+    }
+
     const pgRes = await pool.query(
       `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, NOW())
        ON CONFLICT (config_type, config_key)
        DO UPDATE SET label = EXCLUDED.label, value = EXCLUDED.value, sort_order = EXCLUDED.sort_order, enabled = EXCLUDED.enabled, updated_at = NOW()
        RETURNING id, config_type, config_key, label, value, sort_order, enabled`,
-      [config_type, config_key, label, JSON.stringify(value || {}), sort_order ?? 0, enabled !== false]
+      [config_type, config_key, label, JSON.stringify(itemValue), sort_order ?? 0, enabled !== false]
     );
-    res.json({ data: pgRes.rows[0] });
+
+    // Refresh dynamic custom PM polling in scheduler
+    try {
+      await refreshDynamicCustomPmSources();
+    } catch {}
+
+    const message = isExisting
+      ? `Power meter '${resolvedPmId}' terdaftar di database (data historis aktif).`
+      : `Power meter baru '${resolvedPmId}' berhasil didaftarkan ke database electric_pm, sistem mulai menyimpan per menit dan per jam.`;
+
+    res.json({
+      data: pgRes.rows[0],
+      isExisting,
+      pmId: resolvedPmId,
+      message
+    });
   } catch (err) {
     next(err);
   }
@@ -1518,6 +1687,12 @@ export const deleteElectricityConfigHandler = async (req: Request, res: Response
     const { id } = req.params;
     const pool = getPostgresPool();
     await pool.query(`DELETE FROM electricity_config WHERE id = $1`, [id]);
+
+    // Refresh dynamic custom PM polling in scheduler
+    try {
+      await refreshDynamicCustomPmSources();
+    } catch {}
+
     res.json({ success: true });
   } catch (err) {
     next(err);
