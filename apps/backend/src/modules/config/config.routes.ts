@@ -42,6 +42,13 @@ const configAdminRoles = [
   "unit_head"
 ];
 
+const seniorUnitHeadOnlyRoles = [
+  "admin",
+  "superadmin",
+  "developer",
+  "senior_unit_head"
+];
+
 configRouter.get("/config/categories", authenticate, getCategoriesHandler);
 configRouter.get("/config/machines", authenticate, getMachinesHandler);
 configRouter.post("/config/machines", authenticate, authorize(configAdminRoles), createMachineHandler);
@@ -71,8 +78,8 @@ configRouter.post("/config/api-sources/test", authenticate, testApiSourceHandler
 configRouter.get("/config/api-sources-map", authenticate, getApiSourcesMapHandler);
 configRouter.post("/config/api-sources-map", authenticate, authorize(configAdminRoles), upsertApiSourcesMapHandler);
 
-// Electricity config management
+// Electricity config management (restricted to Senior Unit Head & Admin)
 configRouter.get("/config/electricity", authenticate, getElectricityConfigHandler);
-configRouter.post("/config/electricity", authenticate, authorize(configAdminRoles), upsertElectricityConfigHandler);
-configRouter.delete("/config/electricity/:id", authenticate, authorize(configAdminRoles), deleteElectricityConfigHandler);
+configRouter.post("/config/electricity", authenticate, authorize(seniorUnitHeadOnlyRoles), upsertElectricityConfigHandler);
+configRouter.delete("/config/electricity/:id", authenticate, authorize(seniorUnitHeadOnlyRoles), deleteElectricityConfigHandler);
 

@@ -12,8 +12,9 @@ import { getSocket } from "../../services/socket.service";
 import { useSystemStore } from "../../store/system.store";
 import { ApiSourcesPanel } from "../machines/MachineConfig";
 import { useAuthStore } from "../../store/auth.store";
-import { canAccessConfigAndAudit } from "../../utils/roles";
+import { canAccessConfigAndAudit, isSeniorUnitHeadOrAdmin } from "../../utils/roles";
 import { ElectricityExportModal } from "../../components/electricity/ElectricityExportModal";
+import { SeniorUnitHeadConfigModal, type ConsumptionFactCategory } from "../../components/electricity/SeniorUnitHeadConfigModal";
 import { ErrorBoundary } from "../../components/ui/ErrorBoundary";
 
 /* ═══════════ CONSTANTS ═══════════ */
@@ -91,17 +92,6 @@ const DEFAULT_PLN_JSON_KEYS: Record<string, string> = {
   "electricity/p_grid": "Active_Power",
   "wf1/active_power": "Active_Power_Total",
   "wf2/active_power": "Active_Power_Total"
-};
-
-/* ═══════════ TYPES ═══════════ */
-type ConsumptionFactCategory = {
-  id: number;
-  config_type: string;
-  config_key: string;
-  label: string;
-  value: any;
-  sort_order: number;
-  enabled: boolean;
 };
 
 /* ═══════════ DEFAULT FACT CATEGORIES (MODULE LEVEL) ═══════════ */
@@ -423,9 +413,24 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   pvRate?: number;
 }) {
   const hasData = (currentData && currentData.some(v => v > 0)) || (previousData && previousData.some(v => v > 0));
+  const currTotalKwh = useMemo(() => (currentData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [currentData]);
+  const prevTotalKwh = useMemo(() => (previousData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [previousData]);
+
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
-      <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-4">{title}</h4>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">{title}</h4>
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
+          <span className="px-2 py-0.5 rounded-md font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20" title={`Total Konsumsi ${currMonthName || "Bulan Ini"}`}>
+            <span className="text-[9px] font-sans uppercase text-sky-500/80 mr-1">{currMonthName || "Bulan Ini"}:</span>
+            <strong className="font-bold">{formatNumber(currTotalKwh)}</strong> kWh
+          </span>
+          <span className="px-2 py-0.5 rounded-md font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20" title={`Total Konsumsi ${prevMonthName || "Bulan Pembanding"}`}>
+            <span className="text-[9px] font-sans uppercase text-amber-500/80 mr-1">{prevMonthName || "Bulan Pembanding"}:</span>
+            <strong className="font-bold">{formatNumber(prevTotalKwh)}</strong> kWh
+          </span>
+        </div>
+      </div>
       <div style={{ height: 280 }}>
         {hasData ? (
           <MonthlyComparisonBarChart
@@ -452,7 +457,15 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   );
 });
 
-const DynamicSelectionChart = memo(function DynamicSelectionChart({ isDark }: { isDark: boolean }) {
+const DynamicSelectionChart = memo(function DynamicSelectionChart({
+  isDark,
+  currMonthName,
+  prevMonthName
+}: {
+  isDark: boolean;
+  currMonthName?: string;
+  prevMonthName?: string;
+}) {
   const [factory, setFactory] = useState<"wf1" | "wf2">("wf1");
   const [machine, setMachine] = useState("F1 MAIN SUPPLY QC OFFICE & LAB");
 
@@ -504,14 +517,28 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({ isDark }: { 
   // Empty data for integration ready state
   const currentData = useMemo(() => [], []);
   const previousData = useMemo(() => [], []);
+  const currTotalKwh = useMemo(() => (currentData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [currentData]);
+  const prevTotalKwh = useMemo(() => (previousData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [previousData]);
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-          <span>Konsumsi Bulanan Real Time (vs Bulan Sebelumnya)</span>
-          <span className="text-red-500 font-extrabold">› Sesuai pilihan</span>
-        </h4>
+        <div className="space-y-1">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+            <span>Konsumsi Bulanan Real Time (vs Bulan Pembanding)</span>
+            <span className="text-red-500 font-extrabold">› Sesuai pilihan</span>
+          </h4>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
+            <span className="px-2 py-0.5 rounded-md font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+              <span className="text-[9px] font-sans uppercase text-sky-500/80 mr-1">{currMonthName || "Bulan Ini"}:</span>
+              <strong className="font-bold">{formatNumber(currTotalKwh)}</strong> kWh
+            </span>
+            <span className="px-2 py-0.5 rounded-md font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+              <span className="text-[9px] font-sans uppercase text-amber-500/80 mr-1">{prevMonthName || "Bulan Pembanding"}:</span>
+              <strong className="font-bold">{formatNumber(prevTotalKwh)}</strong> kWh
+            </span>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           {/* Factory Selector */}
           <select
@@ -550,6 +577,216 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({ isDark }: { 
           </div>
         )}
       </div>
+    </div>
+  );
+});
+
+interface SectionHEquipmentProps {
+  isDark: boolean;
+  currentMonthIdx: number;
+  currentYear: number;
+  ct1Series: { current: number[]; previous: number[] };
+  ct2Series: { current: number[]; previous: number[] };
+  boiler3Series: { current: number[]; previous: number[] };
+  boiler4Series: { current: number[]; previous: number[] };
+  boiler5Series: { current: number[]; previous: number[] };
+  compAle30Series: { current: number[]; previous: number[] };
+  compZt301Series: { current: number[]; previous: number[] };
+  compZt302Series: { current: number[]; previous: number[] };
+  compZt55Series: { current: number[]; previous: number[] };
+  compAle250Series: { current: number[]; previous: number[] };
+  compZt110Series: { current: number[]; previous: number[] };
+  chillerDaikin1Series: { current: number[]; previous: number[] };
+  chillerDaikin2Series: { current: number[]; previous: number[] };
+  chillerTraneCgam40Series: { current: number[]; previous: number[] };
+  chillerTrane100Series: { current: number[]; previous: number[] };
+  chillerTrane275Series: { current: number[]; previous: number[] };
+  chillerTrane250Series: { current: number[]; previous: number[] };
+  chillerTrane185Series: { current: number[]; previous: number[] };
+  hvacWh2Series: { current: number[]; previous: number[] };
+  hvacWh3Series: { current: number[]; previous: number[] };
+  hvacWh4Series: { current: number[]; previous: number[] };
+  hvacWh5Series: { current: number[]; previous: number[] };
+  hvacWh6Series: { current: number[]; previous: number[] };
+  hvacWh7Series: { current: number[]; previous: number[] };
+  hvacQcMicroSeries: { current: number[]; previous: number[] };
+  hvacQcRetainedSeries: { current: number[]; previous: number[] };
+  hvacQcSamplingSeries: { current: number[]; previous: number[] };
+  hvacWf1U3Series: { current: number[]; previous: number[] };
+  hvacWf2U1Series: { current: number[]; previous: number[] };
+  hvacWf2U2Series: { current: number[]; previous: number[] };
+}
+
+const SectionHEquipment = memo(function SectionHEquipment({
+  isDark,
+  currentMonthIdx,
+  currentYear,
+  ct1Series,
+  ct2Series,
+  boiler3Series,
+  boiler4Series,
+  boiler5Series,
+  compAle30Series,
+  compZt301Series,
+  compZt302Series,
+  compZt55Series,
+  compAle250Series,
+  compZt110Series,
+  chillerDaikin1Series,
+  chillerDaikin2Series,
+  chillerTraneCgam40Series,
+  chillerTrane100Series,
+  chillerTrane275Series,
+  chillerTrane250Series,
+  chillerTrane185Series,
+  hvacWh2Series,
+  hvacWh3Series,
+  hvacWh4Series,
+  hvacWh5Series,
+  hvacWh6Series,
+  hvacWh7Series,
+  hvacQcMicroSeries,
+  hvacQcRetainedSeries,
+  hvacQcSamplingSeries,
+  hvacWf1U3Series,
+  hvacWf2U1Series,
+  hvacWf2U2Series
+}: SectionHEquipmentProps) {
+  const [compMonth, setCompMonth] = useState<number>(() => {
+    return currentMonthIdx === 0 ? 11 : currentMonthIdx - 1;
+  });
+  const [compYear, setCompYear] = useState<number>(() => {
+    return currentMonthIdx === 0 ? currentYear - 1 : currentYear;
+  });
+
+  const currMonthLabel = `${MONTH_NAMES_ID[currentMonthIdx]} ${currentYear}`;
+  const compMonthLabel = `${MONTH_NAMES_ID[compMonth]} ${compYear}`;
+
+  return (
+    <div className="space-y-8">
+      {/* Header with Comparison Filter */}
+      <div className="flex flex-wrap items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 gap-3">
+        <div>
+          <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-700 dark:text-slate-300">
+            Konsumsi Per-Equipment (Bulanan vs Bulan Pembanding)
+          </h3>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+            Perbandingan konsumsi listrik per-equipment antara Bulan Ini dan Bulan Pembanding yang dipilih.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Base Month Chip */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-sky-500/20 bg-sky-500/5 text-sky-600 dark:text-sky-400 text-xs font-bold">
+            <span className="text-[10px] uppercase text-sky-500/70">Bulan Ini:</span>
+            <span>{currMonthLabel}</span>
+          </div>
+
+          <span className="text-xs font-bold text-slate-400">VS</span>
+
+          {/* Comparison Month & Year Selectors */}
+          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/60 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+            <span className="text-[10px] font-bold uppercase text-slate-400 px-1">Bulan Pembanding:</span>
+            <select
+              value={compMonth}
+              onChange={(e) => setCompMonth(Number(e.target.value))}
+              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
+            >
+              {MONTH_NAMES_ID.map((name, idx) => (
+                <option key={idx} value={idx}>{name}</option>
+              ))}
+            </select>
+            <select
+              value={compYear}
+              onChange={(e) => setCompYear(Number(e.target.value))}
+              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
+            >
+              {AVAILABLE_YEARS.map((yr) => (
+                <option key={yr} value={yr}>{yr}</option>
+              ))}
+            </select>
+          </div>
+
+          <span className="text-[11px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full">
+            Sub-metering belum terpasang (Belum ada data)
+          </span>
+        </div>
+      </div>
+
+      {/* Cooling Tower Section */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Cooling Tower</h4>
+        <div className="grid gap-6 md:grid-cols-2">
+          <MonthlyComparisonChart title="Cooling Tower WF1" currentData={ct1Series.current} previousData={ct1Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="Cooling Tower WF2" currentData={ct2Series.current} previousData={ct2Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+        </div>
+      </div>
+
+      {/* Boiler Section */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Boiler</h4>
+        <div className="grid gap-6 md:grid-cols-3">
+          <MonthlyComparisonChart title="Boiler 3 WF1" currentData={boiler3Series.current} previousData={boiler3Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="Boiler 4" currentData={boiler4Series.current} previousData={boiler4Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="Boiler 5" currentData={boiler5Series.current} previousData={boiler5Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+        </div>
+      </div>
+
+      {/* Compressed Air Section */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Compressed Air</h4>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <MonthlyComparisonChart title="Compressed Air WF1 — ALE-30" currentData={compAle30Series.current} previousData={compAle30Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="Compressed Air WF1 — ZT-30.1" currentData={compZt301Series.current} previousData={compZt301Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="Compressed Air WF1 — ZT-30.2" currentData={compZt302Series.current} previousData={compZt302Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="Compressed Air WF1 — ZT-55" currentData={compZt55Series.current} previousData={compZt55Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="Compressed Air WF2 — ALE-250" currentData={compAle250Series.current} previousData={compAle250Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="Compressed Air WF2 — ZT-110" currentData={compZt110Series.current} previousData={compZt110Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+        </div>
+      </div>
+
+      {/* Chiller Section */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Chiller</h4>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <MonthlyComparisonChart title="Chiller WF1 — Daikin-1" currentData={chillerDaikin1Series.current} previousData={chillerDaikin1Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="Chiller WF1 — Daikin-2" currentData={chillerDaikin2Series.current} previousData={chillerDaikin2Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="Chiller WF1 — Trane-CGAM40" currentData={chillerTraneCgam40Series.current} previousData={chillerTraneCgam40Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="Chiller WF2 — Trane-100" currentData={chillerTrane100Series.current} previousData={chillerTrane100Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="Chiller WF2 — Trane-275" currentData={chillerTrane275Series.current} previousData={chillerTrane275Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+        </div>
+      </div>
+
+      {/* Chiller HVAC & Warehouse Section */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Chiller HVAC & Warehouse</h4>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <MonthlyComparisonChart title="Chiller HVAC WF2 — Trane-250" currentData={chillerTrane250Series.current} previousData={chillerTrane250Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="Chiller HVAC WF2 — Trane-185" currentData={chillerTrane185Series.current} previousData={chillerTrane185Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="HVAC Warehouse — WH-2" currentData={hvacWh2Series.current} previousData={hvacWh2Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="HVAC Warehouse — WH-3" currentData={hvacWh3Series.current} previousData={hvacWh3Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="HVAC Warehouse — WH-4" currentData={hvacWh4Series.current} previousData={hvacWh4Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="HVAC Warehouse — WH-5" currentData={hvacWh5Series.current} previousData={hvacWh5Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="HVAC Warehouse — WH-6" currentData={hvacWh6Series.current} previousData={hvacWh6Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="HVAC Warehouse — WH-7" currentData={hvacWh7Series.current} previousData={hvacWh7Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+        </div>
+      </div>
+
+      {/* HVAC QC & Produksi Section */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC QC & Produksi</h4>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <MonthlyComparisonChart title="HVAC QC — Micro" currentData={hvacQcMicroSeries.current} previousData={hvacQcMicroSeries.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="HVAC QC — Retained Sample" currentData={hvacQcRetainedSeries.current} previousData={hvacQcRetainedSeries.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="HVAC QC — Sampling" currentData={hvacQcSamplingSeries.current} previousData={hvacQcSamplingSeries.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="HVAC Produksi — WF1-U3" currentData={hvacWf1U3Series.current} previousData={hvacWf1U3Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="HVAC Produksi — WF2-U1" currentData={hvacWf2U1Series.current} previousData={hvacWf2U1Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          <MonthlyComparisonChart title="HVAC Produksi — WF2-U2" currentData={hvacWf2U2Series.current} previousData={hvacWf2U2Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+        </div>
+      </div>
+
+      {/* Dynamic Selection Chart (Sesuai Pilihan) */}
+      <DynamicSelectionChart isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
     </div>
   );
 });
@@ -954,8 +1191,29 @@ export default function Electricity() {
   // Config panel & access control
   const role = useAuthStore((state) => state.user?.role ?? "user");
   const canAccessConfig = canAccessConfigAndAudit(role);
+  const isSeniorUnitHead = isSeniorUnitHeadOrAdmin(role);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+
+  // Senior Unit Head item configuration modal state
+  const [showSeniorConfigModal, setShowSeniorConfigModal] = useState(false);
+  const [seniorModalFact, setSeniorModalFact] = useState<"consumption_fact_1" | "consumption_fact_2">("consumption_fact_1");
+  const [seniorModalDept, setSeniorModalDept] = useState<"all" | "Utility" | "HVAC" | "Other">("all");
+
+  const openSeniorConfigModal = (fact: "consumption_fact_1" | "consumption_fact_2", dept: "all" | "Utility" | "HVAC" | "Other" = "all") => {
+    setSeniorModalFact(fact);
+    setSeniorModalDept(dept);
+    setShowSeniorConfigModal(true);
+  };
+
+  const refreshFactCategories = useCallback(() => {
+    getJson<{ data: ConsumptionFactCategory[] }>("/config/electricity?configType=consumption_fact_1")
+      .then((res) => { if (res?.data) setFactCategories1(res.data); })
+      .catch(() => {});
+    getJson<{ data: ConsumptionFactCategory[] }>("/config/electricity?configType=consumption_fact_2")
+      .then((res) => { if (res?.data) setFactCategories2(res.data); })
+      .catch(() => {});
+  }, []);
 
   // Live API Data states
   const [apiSourceUrls, setApiSourceUrls] = useState<Record<string, string>>({});
@@ -1001,8 +1259,13 @@ export default function Electricity() {
     let isMounted = true;
     const fetchActiveApiData = async () => {
       if (!isPageActive) return;
+      const factConfigUrls = [...factCategories1, ...factCategories2]
+        .map(c => c.value?.endpoint_url)
+        .filter((u): u is string => typeof u === "string" && u.trim().length > 0);
+
       const uniqueUrls = Array.from(new Set([
         ...Object.values(apiSourceUrls),
+        ...factConfigUrls,
         DEFAULT_PLN_API_URL,
         DEFAULT_WF1_API_URL,
         DEFAULT_WF2_API_URL,
@@ -1090,6 +1353,29 @@ export default function Electricity() {
       if (isMounted) {
         setApiLiveData(aggregatedData);
         setIsLiveLoading(false);
+
+        // Dynamically update factCategories with live data from configured endpoints
+        const updateWithLive = (list: ConsumptionFactCategory[]) => {
+          let changed = false;
+          const nextList = list.map(item => {
+            const u = item.value?.endpoint_url;
+            const k = item.value?.json_key;
+            if (u && k && aggregatedData[u]) {
+              const raw = aggregatedData[u][k];
+              if (raw !== undefined && raw !== null) {
+                const num = Number(raw);
+                if (!isNaN(num) && item.value?.kWh !== num) {
+                  changed = true;
+                  return { ...item, value: { ...item.value, kWh: num } };
+                }
+              }
+            }
+            return item;
+          });
+          return changed ? nextList : list;
+        };
+        setFactCategories1(prev => updateWithLive(prev));
+        setFactCategories2(prev => updateWithLive(prev));
       }
     };
 
@@ -1472,21 +1758,22 @@ export default function Electricity() {
 
   // Load consumption fact categories
   useEffect(() => {
-    getJson<{ data: ConsumptionFactCategory[] }>("/config/electricity?configType=consumption_fact_1")
-      .then((res) => { if (res?.data) setFactCategories1(res.data); })
-      .catch(() => {});
-    getJson<{ data: ConsumptionFactCategory[] }>("/config/electricity?configType=consumption_fact_2")
-      .then((res) => { if (res?.data) setFactCategories2(res.data); })
-      .catch(() => {});
-  }, []);
+    refreshFactCategories();
+  }, [refreshFactCategories]);
 
   // Filters for Utility and HVAC Departments ("Fact 1", "Fact 2")
   const [utilityFilter, setUtilityFilter] = useState<"Fact 1" | "Fact 2">("Fact 1");
   const [hvacFilter, setHvacFilter] = useState<"Fact 1" | "Fact 2">("Fact 1");
 
   // Helper to classify category name into department and sub-area
-  const classifyArea = useCallback((label: string): { department: "Utility" | "HVAC" | "Other"; subArea: string } => {
-    const lbl = label.toLowerCase();
+  const classifyArea = useCallback((label: string, itemValue?: any): { department: "Utility" | "HVAC" | "Other"; subArea: string } => {
+    if (itemValue?.department) {
+      return {
+        department: itemValue.department,
+        subArea: itemValue.subArea || (itemValue.department === "Utility" ? "Utility System" : itemValue.department === "HVAC" ? "HVAC System" : "Others")
+      };
+    }
+    const lbl = (label || "").toLowerCase();
     
     // HVAC matchers
     if (lbl.includes("chiller")) return { department: "HVAC", subArea: "Chillers" };
@@ -1525,7 +1812,7 @@ export default function Electricity() {
   const utilityData = useMemo(() => {
     const filtered = combinedAllCategories.filter(c => c.enabled && c.fact === utilityFilter);
     const categorized = filtered
-      .map(c => ({ ...c, info: classifyArea(c.label) }))
+      .map(c => ({ ...c, info: classifyArea(c.label, c.value) }))
       .filter(c => c.info.department === "Utility");
 
     const subAreaSums: Record<string, number> = {};
@@ -1547,7 +1834,7 @@ export default function Electricity() {
   const hvacData = useMemo(() => {
     const filtered = combinedAllCategories.filter(c => c.enabled && c.fact === hvacFilter);
     const categorized = filtered
-      .map(c => ({ ...c, info: classifyArea(c.label) }))
+      .map(c => ({ ...c, info: classifyArea(c.label, c.value) }))
       .filter(c => c.info.department === "HVAC");
 
     const subAreaSums: Record<string, number> = {};
@@ -3326,88 +3613,374 @@ export default function Electricity() {
         </div>
 
         {/* Monthly consumption summary cards */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Card 1: kWh Total (PLN + PV) */}
-          <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                  kWh Total (PLN + PV)
-                </span>
-                <div className="h-6 w-6 rounded bg-indigo-500/10 flex items-center justify-center text-indigo-500">
-                  <IconBolt />
-                </div>
-              </div>
-              <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                {formatNumber(monthlyMetrics.totalKwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
-              </div>
-            </div>
-            <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
-              <span>PLN: <strong className="text-slate-700 dark:text-slate-200 font-mono">{formatNumber(monthlyMetrics.plnKwh)}</strong></span>
-              <span>PV: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{formatNumber(monthlyMetrics.totalPvKwh)}</strong></span>
-            </div>
-          </div>
+        {(() => {
+          const wf1Kwh = cubicleSelector === "wf1"
+            ? ((cubicleDailyData.currentData || []).reduce((a, b) => a + b, 0) || cubicleSummary.monthlyKwh || 0)
+            : 0;
+          const wf1Cost = cubicleSelector === "wf1"
+            ? (cubicleSummary.cost || (wf1Kwh * (monthlyMetrics.effectiveLwbpRate || 1112)))
+            : 0;
 
-          {/* Card 2: Est Cost Total PLN */}
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                  Est Cost Total PLN
-                </span>
-                <div className="h-6 w-6 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
-                  <IconMoney />
-                </div>
-              </div>
-              <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                {formatCurrency(monthlyMetrics.plnCost)}
-              </div>
-            </div>
-            <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-              Beban Incoming PLN bulan ini
-            </div>
-          </div>
+          const wf2Kwh = cubicleSelector === "wf2"
+            ? ((cubicleDailyData.currentData || []).reduce((a, b) => a + b, 0) || cubicleSummary.monthlyKwh || 0)
+            : 0;
+          const wf2Cost = cubicleSelector === "wf2"
+            ? (cubicleSummary.cost || (wf2Kwh * (monthlyMetrics.effectiveLwbpRate || 1112)))
+            : 0;
 
-          {/* Card 3: Est Cost Total PV */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                  Est Cost Total PV
-                </span>
-                <div className="h-6 w-6 rounded bg-amber-500/10 flex items-center justify-center text-amber-500">
-                  <IconMoney />
-                </div>
-              </div>
-              <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                {formatCurrency(monthlyMetrics.pvCost)}
-              </div>
-            </div>
-            <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-              Tarif PV: Rp {monthlyMetrics.effectivePvRate.toLocaleString("id-ID")}/kWh
-            </div>
-          </div>
+          const poi1Kwh = monthlyMetrics.poi1Kwh || (cubicleSelector === "poi1" ? (cubicleDailyData.currentData || []).reduce((a, b) => a + b, 0) : 0) || cubicleSummary.poi1Kwh || 0;
+          const poi1Cost = poi1Kwh * monthlyMetrics.effectivePvRate;
+          const poi1Savings = poi1Kwh * monthlyMetrics.savingsRate;
 
-          {/* Card 4: Est Saving */}
-          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                  Est Saving
-                </span>
-                <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-                  <IconMoney />
-                </div>
-              </div>
-              <div className="mt-2 text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-tight">
-                {formatCurrency(monthlyMetrics.savingsCost)}
-              </div>
+          const poi2Kwh = monthlyMetrics.poi2Kwh || (cubicleSelector === "poi2" ? (cubicleDailyData.currentData || []).reduce((a, b) => a + b, 0) : 0) || cubicleSummary.poi2Kwh || 0;
+          const poi2Cost = poi2Kwh * monthlyMetrics.effectivePvRate;
+          const poi2Savings = poi2Kwh * monthlyMetrics.savingsRate;
+
+          const gridColsClass = cubicleSelector === "all"
+            ? "sm:grid-cols-2 lg:grid-cols-4"
+            : (cubicleSelector === "poi1" || cubicleSelector === "poi2")
+            ? "sm:grid-cols-3"
+            : "sm:grid-cols-2";
+
+          return (
+            <div className={`grid gap-3 ${gridColsClass}`}>
+              {/* All (PLN + PV): 4 cards */}
+              {cubicleSelector === "all" && (
+                <>
+                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                          kWh Total (PLN + PV)
+                        </span>
+                        <div className="h-6 w-6 rounded bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                          <IconBolt />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                        {formatNumber(monthlyMetrics.totalKwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                      <span>PLN: <strong className="text-slate-700 dark:text-slate-200 font-mono">{formatNumber(monthlyMetrics.plnKwh)}</strong></span>
+                      <span>PV: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{formatNumber(monthlyMetrics.totalPvKwh)}</strong></span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                          Est Cost Total PLN
+                        </span>
+                        <div className="h-6 w-6 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
+                          <IconMoney />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                        {formatCurrency(monthlyMetrics.plnCost)}
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Beban Incoming PLN bulan ini
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                          Est Cost Total PV
+                        </span>
+                        <div className="h-6 w-6 rounded bg-amber-500/10 flex items-center justify-center text-amber-500">
+                          <IconMoney />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                        {formatCurrency(monthlyMetrics.pvCost)}
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Tarif PV: Rp {monthlyMetrics.effectivePvRate.toLocaleString("id-ID")}/kWh
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                          Est Saving
+                        </span>
+                        <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                          <IconMoney />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-tight">
+                        {formatCurrency(monthlyMetrics.savingsCost)}
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Selisih PLN (LWBP) - Biaya PV
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* PLN: 2 cards */}
+              {cubicleSelector === "pln" && (
+                <>
+                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                          kWh Total PLN
+                        </span>
+                        <div className="h-6 w-6 rounded bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                          <IconBolt />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                        {formatNumber(monthlyMetrics.plnKwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Incoming PLN Grid bulan ini
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                          Est Cost Total PLN
+                        </span>
+                        <div className="h-6 w-6 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
+                          <IconMoney />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                        {formatCurrency(monthlyMetrics.plnCost)}
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Beban Incoming PLN bulan ini
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* WF1: 2 cards */}
+              {cubicleSelector === "wf1" && (
+                <>
+                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                          kWh Total WF1
+                        </span>
+                        <div className="h-6 w-6 rounded bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                          <IconBolt />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                        {formatNumber(wf1Kwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Incoming Feeder WF1 bulan ini
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                          Est Cost WF1
+                        </span>
+                        <div className="h-6 w-6 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
+                          <IconMoney />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                        {formatCurrency(wf1Cost)}
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Estimasi biaya pemakaian WF1
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* WF2: 2 cards */}
+              {cubicleSelector === "wf2" && (
+                <>
+                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                          kWh Total WF2
+                        </span>
+                        <div className="h-6 w-6 rounded bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                          <IconBolt />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                        {formatNumber(wf2Kwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Incoming Feeder WF2 bulan ini
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                          Est Cost WF2
+                        </span>
+                        <div className="h-6 w-6 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
+                          <IconMoney />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                        {formatCurrency(wf2Cost)}
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Estimasi biaya pemakaian WF2
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* POI-1: 3 cards */}
+              {cubicleSelector === "poi1" && (
+                <>
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                          kWh Total POI-1
+                        </span>
+                        <div className="h-6 w-6 rounded bg-amber-500/10 flex items-center justify-center text-amber-500">
+                          <IconSun />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                        {formatNumber(poi1Kwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Produksi Solar PV POI-1 bulan ini
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                          Est Cost PV (POI-1)
+                        </span>
+                        <div className="h-6 w-6 rounded bg-amber-500/10 flex items-center justify-center text-amber-500">
+                          <IconMoney />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                        {formatCurrency(poi1Cost)}
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Tarif PV: Rp {monthlyMetrics.effectivePvRate.toLocaleString("id-ID")}/kWh
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                          Est Saving (POI-1)
+                        </span>
+                        <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                          <IconMoney />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-tight">
+                        {formatCurrency(poi1Savings)}
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Selisih PLN (LWBP) - Biaya PV
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* POI-2: 3 cards */}
+              {cubicleSelector === "poi2" && (
+                <>
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                          kWh Total POI-2
+                        </span>
+                        <div className="h-6 w-6 rounded bg-amber-500/10 flex items-center justify-center text-amber-500">
+                          <IconSun />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                        {formatNumber(poi2Kwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Produksi Solar PV POI-2 bulan ini
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                          Est Cost PV (POI-2)
+                        </span>
+                        <div className="h-6 w-6 rounded bg-amber-500/10 flex items-center justify-center text-amber-500">
+                          <IconMoney />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+                        {formatCurrency(poi2Cost)}
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Tarif PV: Rp {monthlyMetrics.effectivePvRate.toLocaleString("id-ID")}/kWh
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                          Est Saving (POI-2)
+                        </span>
+                        <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                          <IconMoney />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-tight">
+                        {formatCurrency(poi2Savings)}
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
+                      Selisih PLN (LWBP) - Biaya PV
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
-            <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-              Selisih PLN (LWBP) - Biaya PV
-            </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Cubicle monthly comparison chart */}
         <MonthlyComparisonChart
@@ -3440,6 +4013,17 @@ export default function Electricity() {
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 1</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Fact-1 categories sorted by highest consumption.</p>
             </div>
+            {isSeniorUnitHead && (
+              <button
+                type="button"
+                onClick={() => openSeniorConfigModal("consumption_fact_1", "all")}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 transition cursor-pointer"
+                title="Kelola Item Fact 1 (Senior Unit Head Only)"
+              >
+                <IconSettings />
+                <span>⚙️ Kelola Item</span>
+              </button>
+            )}
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
             <div style={{ height: 250 }}>
@@ -3463,6 +4047,17 @@ export default function Electricity() {
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 2</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Fact-2 categories sorted by highest consumption.</p>
             </div>
+            {isSeniorUnitHead && (
+              <button
+                type="button"
+                onClick={() => openSeniorConfigModal("consumption_fact_2", "all")}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 transition cursor-pointer"
+                title="Kelola Item Fact 2 (Senior Unit Head Only)"
+              >
+                <IconSettings />
+                <span>⚙️ Kelola Item</span>
+              </button>
+            )}
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
             <div style={{ height: 250 }}>
@@ -3489,14 +4084,27 @@ export default function Electricity() {
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Utility Consumption</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Utility electricity consumption sorted by highest consumer.</p>
             </div>
-            <select
-              value={utilityFilter}
-              onChange={(e) => setUtilityFilter(e.target.value as any)}
-              className="px-2.5 py-1 text-xs rounded border border-slate-350 bg-slate-50 text-slate-800 dark:bg-slate-850 dark:text-slate-200 dark:border-slate-700 font-bold focus:outline-none cursor-pointer"
-            >
-              <option value="Fact 1">Fact 1 Only</option>
-              <option value="Fact 2">Fact 2 Only</option>
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={utilityFilter}
+                onChange={(e) => setUtilityFilter(e.target.value as any)}
+                className="px-2.5 py-1 text-xs rounded border border-slate-350 bg-slate-50 text-slate-800 dark:bg-slate-850 dark:text-slate-200 dark:border-slate-700 font-bold focus:outline-none cursor-pointer"
+              >
+                <option value="Fact 1">Fact 1 Only</option>
+                <option value="Fact 2">Fact 2 Only</option>
+              </select>
+              {isSeniorUnitHead && (
+                <button
+                  type="button"
+                  onClick={() => openSeniorConfigModal(utilityFilter === "Fact 1" ? "consumption_fact_1" : "consumption_fact_2", "Utility")}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition cursor-pointer"
+                  title="Kelola Item Utility (Senior Unit Head Only)"
+                >
+                  <IconSettings />
+                  <span>⚙️ Kelola Item</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
@@ -3556,14 +4164,27 @@ export default function Electricity() {
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#06b6d4] dark:text-cyan-400">HVAC Consumption</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">HVAC electricity consumption sorted by highest consumer.</p>
             </div>
-            <select
-              value={hvacFilter}
-              onChange={(e) => setHvacFilter(e.target.value as any)}
-              className="px-2.5 py-1 text-xs rounded border border-slate-350 bg-slate-50 text-slate-800 dark:bg-slate-850 dark:text-slate-200 dark:border-slate-700 font-bold focus:outline-none cursor-pointer"
-            >
-              <option value="Fact 1">Fact 1 Only</option>
-              <option value="Fact 2">Fact 2 Only</option>
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={hvacFilter}
+                onChange={(e) => setHvacFilter(e.target.value as any)}
+                className="px-2.5 py-1 text-xs rounded border border-slate-350 bg-slate-50 text-slate-800 dark:bg-slate-850 dark:text-slate-200 dark:border-slate-700 font-bold focus:outline-none cursor-pointer"
+              >
+                <option value="Fact 1">Fact 1 Only</option>
+                <option value="Fact 2">Fact 2 Only</option>
+              </select>
+              {isSeniorUnitHead && (
+                <button
+                  type="button"
+                  onClick={() => openSeniorConfigModal(hvacFilter === "Fact 1" ? "consumption_fact_1" : "consumption_fact_2", "HVAC")}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 transition cursor-pointer"
+                  title="Kelola Item HVAC (Senior Unit Head Only)"
+                >
+                  <IconSettings />
+                  <span>⚙️ Kelola Item</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
@@ -3616,91 +4237,49 @@ export default function Electricity() {
 
 
       {/* ═══════════ SECTION H: EQUIPMENT MONTHLY CHARTS ═══════════ */}
-      <div className="space-y-8">
-        <div className="flex flex-wrap items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 gap-2">
-          <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
-            Konsumsi Per-Equipment (Bulanan vs Bulan Sebelumnya)
-          </h3>
-          <span className="text-[11px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full">
-            Sub-metering belum terpasang (Belum ada data)
-          </span>
-        </div>
+      {(() => {
+        const equipNow = new Date();
+        const equipCurrentMonthIdx = equipNow.getMonth();
+        const equipCurrentYear = equipNow.getFullYear();
 
-        {/* Cooling Tower Section */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Cooling Tower</h4>
-          <div className="grid gap-6 md:grid-cols-2">
-            <MonthlyComparisonChart title="Cooling Tower WF1" currentData={ct1Series.current} previousData={ct1Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="Cooling Tower WF2" currentData={ct2Series.current} previousData={ct2Series.previous} isDark={isDark} />
-          </div>
-        </div>
-
-        {/* Boiler Section */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Boiler</h4>
-          <div className="grid gap-6 md:grid-cols-3">
-            <MonthlyComparisonChart title="Boiler 3 WF1" currentData={boiler3Series.current} previousData={boiler3Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="Boiler 4" currentData={boiler4Series.current} previousData={boiler4Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="Boiler 5" currentData={boiler5Series.current} previousData={boiler5Series.previous} isDark={isDark} />
-          </div>
-        </div>
-
-        {/* Compressed Air Section */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Compressed Air</h4>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <MonthlyComparisonChart title="Compressed Air WF1 — ALE-30" currentData={compAle30Series.current} previousData={compAle30Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="Compressed Air WF1 — ZT-30.1" currentData={compZt301Series.current} previousData={compZt301Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="Compressed Air WF1 — ZT-30.2" currentData={compZt302Series.current} previousData={compZt302Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="Compressed Air WF1 — ZT-55" currentData={compZt55Series.current} previousData={compZt55Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="Compressed Air WF2 — ALE-250" currentData={compAle250Series.current} previousData={compAle250Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="Compressed Air WF2 — ZT-110" currentData={compZt110Series.current} previousData={compZt110Series.previous} isDark={isDark} />
-          </div>
-        </div>
-
-        {/* Chiller Section */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Chiller</h4>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <MonthlyComparisonChart title="Chiller WF1 — Daikin-1" currentData={chillerDaikin1Series.current} previousData={chillerDaikin1Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="Chiller WF1 — Daikin-2" currentData={chillerDaikin2Series.current} previousData={chillerDaikin2Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="Chiller WF1 — Trane-CGAM40" currentData={chillerTraneCgam40Series.current} previousData={chillerTraneCgam40Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="Chiller WF2 — Trane-100" currentData={chillerTrane100Series.current} previousData={chillerTrane100Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="Chiller WF2 — Trane-275" currentData={chillerTrane275Series.current} previousData={chillerTrane275Series.previous} isDark={isDark} />
-          </div>
-        </div>
-
-        {/* Chiller HVAC & Warehouse Section */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Chiller HVAC & Warehouse</h4>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <MonthlyComparisonChart title="Chiller HVAC WF2 — Trane-250" currentData={chillerTrane250Series.current} previousData={chillerTrane250Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="Chiller HVAC WF2 — Trane-185" currentData={chillerTrane185Series.current} previousData={chillerTrane185Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="HVAC Warehouse — WH-2" currentData={hvacWh2Series.current} previousData={hvacWh2Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="HVAC Warehouse — WH-3" currentData={hvacWh3Series.current} previousData={hvacWh3Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="HVAC Warehouse — WH-4" currentData={hvacWh4Series.current} previousData={hvacWh4Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="HVAC Warehouse — WH-5" currentData={hvacWh5Series.current} previousData={hvacWh5Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="HVAC Warehouse — WH-6" currentData={hvacWh6Series.current} previousData={hvacWh6Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="HVAC Warehouse — WH-7" currentData={hvacWh7Series.current} previousData={hvacWh7Series.previous} isDark={isDark} />
-          </div>
-        </div>
-
-        {/* HVAC QC & Produksi Section */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC QC & Produksi</h4>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <MonthlyComparisonChart title="HVAC QC — Micro" currentData={hvacQcMicroSeries.current} previousData={hvacQcMicroSeries.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="HVAC QC — Retained Sample" currentData={hvacQcRetainedSeries.current} previousData={hvacQcRetainedSeries.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="HVAC QC — Sampling" currentData={hvacQcSamplingSeries.current} previousData={hvacQcSamplingSeries.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="HVAC Produksi — WF1-U3" currentData={hvacWf1U3Series.current} previousData={hvacWf1U3Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="HVAC Produksi — WF2-U1" currentData={hvacWf2U1Series.current} previousData={hvacWf2U1Series.previous} isDark={isDark} />
-            <MonthlyComparisonChart title="HVAC Produksi — WF2-U2" currentData={hvacWf2U2Series.current} previousData={hvacWf2U2Series.previous} isDark={isDark} />
-          </div>
-        </div>
-
-        {/* Dynamic Selection Chart (Sesuai Pilihan) */}
-        <DynamicSelectionChart isDark={isDark} />
-      </div>
+        return (
+          <SectionHEquipment
+            isDark={isDark}
+            currentMonthIdx={equipCurrentMonthIdx}
+            currentYear={equipCurrentYear}
+            ct1Series={ct1Series}
+            ct2Series={ct2Series}
+            boiler3Series={boiler3Series}
+            boiler4Series={boiler4Series}
+            boiler5Series={boiler5Series}
+            compAle30Series={compAle30Series}
+            compZt301Series={compZt301Series}
+            compZt302Series={compZt302Series}
+            compZt55Series={compZt55Series}
+            compAle250Series={compAle250Series}
+            compZt110Series={compZt110Series}
+            chillerDaikin1Series={chillerDaikin1Series}
+            chillerDaikin2Series={chillerDaikin2Series}
+            chillerTraneCgam40Series={chillerTraneCgam40Series}
+            chillerTrane100Series={chillerTrane100Series}
+            chillerTrane275Series={chillerTrane275Series}
+            chillerTrane250Series={chillerTrane250Series}
+            chillerTrane185Series={chillerTrane185Series}
+            hvacWh2Series={hvacWh2Series}
+            hvacWh3Series={hvacWh3Series}
+            hvacWh4Series={hvacWh4Series}
+            hvacWh5Series={hvacWh5Series}
+            hvacWh6Series={hvacWh6Series}
+            hvacWh7Series={hvacWh7Series}
+            hvacQcMicroSeries={hvacQcMicroSeries}
+            hvacQcRetainedSeries={hvacQcRetainedSeries}
+            hvacQcSamplingSeries={hvacQcSamplingSeries}
+            hvacWf1U3Series={hvacWf1U3Series}
+            hvacWf2U1Series={hvacWf2U1Series}
+            hvacWf2U2Series={hvacWf2U2Series}
+          />
+        );
+      })()}
 
       {/* ═══════════ CONFIGURATION PANEL (API Sources) ═══════════ */}
       {canAccessConfig && showConfigPanel && (
@@ -3736,6 +4315,20 @@ export default function Electricity() {
           isDark={isDark}
         />
       </ErrorBoundary>
+
+      {/* Senior Unit Head Item Configuration Modal */}
+      {isSeniorUnitHead && (
+        <SeniorUnitHeadConfigModal
+          isOpen={showSeniorConfigModal}
+          onClose={() => setShowSeniorConfigModal(false)}
+          isDark={isDark}
+          fact1Items={factCategories1}
+          fact2Items={factCategories2}
+          onRefresh={refreshFactCategories}
+          initialFact={seniorModalFact}
+          initialDept={seniorModalDept}
+        />
+      )}
     </div>
   );
 }

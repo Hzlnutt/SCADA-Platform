@@ -32,6 +32,19 @@ export const isUnitHeadOrAdmin = (role?: string | null): boolean => {
   );
 };
 
+export const isSeniorUnitHeadOrAdmin = (role?: string | null): boolean => {
+  if (!role) return false;
+  const normalized = role.toLowerCase().trim().replace(/[\s-]+/g, "_");
+  return (
+    normalized === "admin" ||
+    normalized === "superadmin" ||
+    normalized === "developer" ||
+    normalized === "dev" ||
+    normalized === "senior_unit_head" ||
+    normalized.startsWith("senior_unit_head")
+  );
+};
+
 /**
  * Checks if the given role is allowed to view and access Configuration and Audit Trail pages/tabs/controls.
  * Only Senior Unit Head, Unit Head Utility, Unit Head HVAC, and Admin are allowed.
