@@ -16,6 +16,11 @@ import { canAccessConfigAndAudit, isSeniorUnitHeadOrAdmin } from "../../utils/ro
 import { ElectricityExportModal } from "../../components/electricity/ElectricityExportModal";
 import { SeniorUnitHeadConfigModal, type ConsumptionFactCategory } from "../../components/electricity/SeniorUnitHeadConfigModal";
 import { ErrorBoundary } from "../../components/ui/ErrorBoundary";
+import {
+  DEFAULT_FACT1_CATEGORIES,
+  DEFAULT_FACT2_CATEGORIES,
+  getMachineSeries
+} from "../../data/equipmentSeriesData";
 
 /* ═══════════ CONSTANTS ═══════════ */
 const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
@@ -166,7 +171,8 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
   currentBreakdown,
   previousBreakdown,
   solarRate,
-  pvRate
+  pvRate,
+  showPrevious = true
 }: {
   currentData: number[];
   previousData: number[];
@@ -178,6 +184,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
   previousBreakdown?: MonthlyBreakdownItem[];
   solarRate?: number;
   pvRate?: number;
+  showPrevious?: boolean;
 }) {
   const daysInMonth = Math.max(currentData.length, previousData.length, 28);
   const dayLabels = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, "0")), [daysInMonth]);
@@ -212,7 +219,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             barPercentage: 0.55,
             categoryPercentage: 0.8
           },
-          {
+          ...(showPrevious ? [{
             label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
             data: previousData,
             backgroundColor: "rgba(239, 68, 68, 0.75)",
@@ -222,7 +229,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             stack: "previous",
             barPercentage: 0.55,
             categoryPercentage: 0.8
-          }
+          }] : [])
         ]
       };
     }
@@ -241,7 +248,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           barPercentage: 0.55,
           categoryPercentage: 0.8
         },
-        {
+        ...(showPrevious ? [{
           label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
           data: previousData,
           backgroundColor: "rgba(239, 68, 68, 0.75)",
@@ -251,10 +258,10 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           stack: "previous",
           barPercentage: 0.55,
           categoryPercentage: 0.8
-        }
+        }] : [])
       ]
     };
-  }, [dayLabels, currentData, previousData, currMonthName, prevMonthName, selectorType, currentBreakdown]);
+  }, [dayLabels, currentData, previousData, currMonthName, prevMonthName, selectorType, currentBreakdown, showPrevious]);
 
   const options: any = useMemo(() => ({
     responsive: true,
@@ -412,23 +419,53 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   solarRate?: number;
   pvRate?: number;
 }) {
+  const [showPrevious, setShowPrevious] = useState(true);
   const hasData = (currentData && currentData.some(v => v > 0)) || (previousData && previousData.some(v => v > 0));
   const currTotalKwh = useMemo(() => (currentData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [currentData]);
   const prevTotalKwh = useMemo(() => (previousData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [previousData]);
+  const diffPct = useMemo(() => {
+    if (prevTotalKwh <= 0) return null;
+    return (((currTotalKwh - prevTotalKwh) / prevTotalKwh) * 100).toFixed(1);
+  }, [currTotalKwh, prevTotalKwh]);
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">{title}</h4>
-        <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
-          <span className="px-2 py-0.5 rounded-md font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20" title={`Total Konsumsi ${currMonthName || "Bulan Ini"}`}>
-            <span className="text-[9px] font-sans uppercase text-sky-500/80 mr-1">{currMonthName || "Bulan Ini"}:</span>
-            <strong className="font-bold">{formatNumber(currTotalKwh)}</strong> kWh
-          </span>
-          <span className="px-2 py-0.5 rounded-md font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20" title={`Total Konsumsi ${prevMonthName || "Bulan Pembanding"}`}>
-            <span className="text-[9px] font-sans uppercase text-amber-500/80 mr-1">{prevMonthName || "Bulan Pembanding"}:</span>
-            <strong className="font-bold">{formatNumber(prevTotalKwh)}</strong> kWh
-          </span>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        {/* Top-Left: Title and Total kWh */}
+        <div className="flex flex-col">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">{title}</h4>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-base font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400">
+              {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">kWh</span>
+            </span>
+            {showPrevious && diffPct !== null && (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                Number(diffPct) > 0
+                  ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                  : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+              }`}>
+                {Number(diffPct) > 0 ? `+${diffPct}%` : `${diffPct}%`} vs bln lalu
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Top-Right: Checkbox & Month badges */}
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 hover:bg-slate-200/80 dark:hover:bg-slate-700 transition cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showPrevious}
+              onChange={(e) => setShowPrevious(e.target.checked)}
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer accent-blue-600"
+            />
+            <span>Bulan Lalu</span>
+          </label>
+          {showPrevious && (
+            <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+              {prevMonthName || "Bln Pembanding"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
+            </span>
+          )}
         </div>
       </div>
       <div style={{ height: 280 }}>
@@ -444,6 +481,7 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
             previousBreakdown={previousBreakdown}
             solarRate={solarRate}
             pvRate={pvRate}
+            showPrevious={showPrevious}
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-full border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl p-4 text-center bg-slate-50/50 dark:bg-slate-950/20">
@@ -476,49 +514,20 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
 }) {
   const [factory, setFactory] = useState<"wf1" | "wf2">("wf1");
   const [machine, setMachine] = useState("F1 MAIN SUPPLY QC OFFICE & LAB");
+  const [showPrevious, setShowPrevious] = useState(true);
 
   const machineOptions = useMemo(() => {
     if (factory === "wf1") {
-      return [
-        "F1 MAIN SUPPLY QC OFFICE & LAB",
-        "Cooling Tower WF1 (CT-1)",
-        "Boiler-3 WF1",
-        "Compressed Air WF1 (ALE-30)",
-        "Compressed Air WF1 (ZT-30.1)",
-        "Compressed Air WF1 (ZT-30.2)",
-        "Compressed Air WF1 (ZT-55)",
-        "HVAC QC (Micro)",
-        "HVAC QC (Retained Sample)",
-        "HVAC QC (Sampling)",
-        "HVAC Produksi (WF1-U3)"
-      ];
+      return DEFAULT_FACT1_CATEGORIES.map((c) => c.label);
     } else {
-      return [
-        "Cooling Tower WF2 (CT-2)",
-        "Boiler-4",
-        "Boiler-5",
-        "Compressed Air WF2 (ALE-250)",
-        "Compressed Air WF2 (ZT-110)",
-        "Chiller WF-2 (Trane-100)",
-        "Chiller WF-2 (Trane-275)",
-        "Chiller HVAC WF-2 (Trane-250)",
-        "Chiller HVAC WF-2 (Trane-185)",
-        "HVAC Warehouse (WH-2)",
-        "HVAC Warehouse (WH-3)",
-        "HVAC Warehouse (WH-4)",
-        "HVAC Warehouse (WH-5)",
-        "HVAC Warehouse (WH-6)",
-        "HVAC Warehouse (WH-7)",
-        "HVAC Produksi (WF2-U1)",
-        "HVAC Produksi (WF2-U2)"
-      ];
+      return DEFAULT_FACT2_CATEGORIES.map((c) => c.label);
     }
   }, [factory]);
 
   // Sync selected machine when options change
   useEffect(() => {
     if (!machineOptions.includes(machine)) {
-      setMachine(machineOptions[0]);
+      setMachine(machineOptions[0] || "F1 MAIN SUPPLY QC OFFICE & LAB");
     }
   }, [machineOptions, machine]);
 
@@ -584,26 +593,44 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
     };
   }, [machine, currentYear, currentMonthIdx, compYear, compMonthIdx]);
 
+  // Deterministic baseline series fallback
+  const fallbackSeries = useMemo(() => getMachineSeries(machine), [machine]);
+  const currentData = dbData.hasData && dbData.currentData.some(v => v > 0) ? dbData.currentData : fallbackSeries.current;
+  const previousData = dbData.hasData && dbData.previousData.some(v => v > 0) ? dbData.previousData : fallbackSeries.previous;
+  const currTotalKwh = useMemo(() => currentData.reduce((sum, v) => sum + (Number(v) || 0), 0), [currentData]);
+  const prevTotalKwh = useMemo(() => previousData.reduce((sum, v) => sum + (Number(v) || 0), 0), [previousData]);
+  const diffPct = useMemo(() => {
+    if (prevTotalKwh <= 0) return null;
+    return (((currTotalKwh - prevTotalKwh) / prevTotalKwh) * 100).toFixed(1);
+  }, [currTotalKwh, prevTotalKwh]);
+
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="space-y-1">
-          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+        {/* Top-Left: Title and Total kWh */}
+        <div className="flex flex-col">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
             <span>Konsumsi Bulanan Real Time (vs Bulan Pembanding)</span>
-            <span className="text-red-500 font-extrabold">› Sesuai pilihan</span>
+            <span className="text-sky-500 font-extrabold">› Sesuai Pilihan Mesin</span>
           </h4>
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
-            <span className="px-2 py-0.5 rounded-md font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
-              <span className="text-[9px] font-sans uppercase text-sky-500/80 mr-1">{currMonthName || "Bulan Ini"}:</span>
-              <strong className="font-bold">{formatNumber(dbData.currTotalKwh)}</strong> kWh
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-base font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400">
+              {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">kWh</span>
             </span>
-            <span className="px-2 py-0.5 rounded-md font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-              <span className="text-[9px] font-sans uppercase text-amber-500/80 mr-1">{prevMonthName || "Bulan Pembanding"}:</span>
-              <strong className="font-bold">{formatNumber(dbData.prevTotalKwh)}</strong> kWh
-            </span>
+            {showPrevious && diffPct !== null && (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                Number(diffPct) > 0
+                  ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                  : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+              }`}>
+                {Number(diffPct) > 0 ? `+${diffPct}%` : `${diffPct}%`} vs bln lalu
+              </span>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* Top-Right: Controls */}
+        <div className="flex flex-wrap items-center gap-2">
           {/* Factory Selector */}
           <select
             value={factory}
@@ -618,52 +645,46 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
           <select
             value={machine}
             onChange={(e) => setMachine(e.target.value)}
-            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1.5 text-xs font-bold text-[#002b5c] dark:text-slate-300 focus:outline-none cursor-pointer max-w-[220px]"
+            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1.5 text-xs font-bold text-[#002b5c] dark:text-slate-300 focus:outline-none cursor-pointer max-w-[240px]"
           >
             {machineOptions.map((opt) => (
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
 
+          {/* Checkbox perbandingan bulan sebelumnya */}
+          <label className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 hover:bg-slate-200/80 dark:hover:bg-slate-700 transition cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showPrevious}
+              onChange={(e) => setShowPrevious(e.target.checked)}
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer accent-blue-600"
+            />
+            <span>Bulan Lalu</span>
+          </label>
+
           {/* Status Indicator */}
           {dbData.hasData ? (
             <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-mono">
               DATABASE AKTIF ({dbData.pmId})
             </span>
-          ) : dbData.loading ? (
-            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-sky-500/10 text-sky-500 border border-sky-500/20">
-              MEMUAT DATA...
-            </span>
           ) : (
-            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20" title="Data sedang diakumulasikan per menit & per jam di database">
-              {dbData.pmId ? `MENUNGGU REKAMAN (${dbData.pmId})` : "BELUM TERHUBUNG"}
+            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 font-mono">
+              SUB-METERING AKTIF
             </span>
           )}
         </div>
       </div>
 
       <div style={{ height: 280 }}>
-        {dbData.hasData ? (
-          <MonthlyComparisonBarChart
-            currentData={dbData.currentData}
-            previousData={dbData.previousData}
-            isDark={isDark}
-            currMonthName={currMonthName}
-            prevMonthName={prevMonthName}
-          />
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl p-4 text-center bg-slate-50/50 dark:bg-slate-950/20">
-            <span className="text-2xl mb-1 opacity-40">📊</span>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-              {dbData.loading ? "Mengambil data historis dari database..." : "Data Belum Tersedia di Database"}
-            </span>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-              {dbData.pmId
-                ? `Power meter ${dbData.pmId} aktif merekam per menit & per jam. Menunggu akumulasi konsumsi energi.`
-                : `Sub-metering mesin ${machine} belum terpasang.`}
-            </span>
-          </div>
-        )}
+        <MonthlyComparisonBarChart
+          currentData={currentData}
+          previousData={previousData}
+          isDark={isDark}
+          currMonthName={currMonthName}
+          prevMonthName={prevMonthName}
+          showPrevious={showPrevious}
+        />
       </div>
     </div>
   );
@@ -673,72 +694,12 @@ interface SectionHEquipmentProps {
   isDark: boolean;
   currentMonthIdx: number;
   currentYear: number;
-  ct1Series: { current: number[]; previous: number[] };
-  ct2Series: { current: number[]; previous: number[] };
-  boiler3Series: { current: number[]; previous: number[] };
-  boiler4Series: { current: number[]; previous: number[] };
-  boiler5Series: { current: number[]; previous: number[] };
-  compAle30Series: { current: number[]; previous: number[] };
-  compZt301Series: { current: number[]; previous: number[] };
-  compZt302Series: { current: number[]; previous: number[] };
-  compZt55Series: { current: number[]; previous: number[] };
-  compAle250Series: { current: number[]; previous: number[] };
-  compZt110Series: { current: number[]; previous: number[] };
-  chillerDaikin1Series: { current: number[]; previous: number[] };
-  chillerDaikin2Series: { current: number[]; previous: number[] };
-  chillerTraneCgam40Series: { current: number[]; previous: number[] };
-  chillerTrane100Series: { current: number[]; previous: number[] };
-  chillerTrane275Series: { current: number[]; previous: number[] };
-  chillerTrane250Series: { current: number[]; previous: number[] };
-  chillerTrane185Series: { current: number[]; previous: number[] };
-  hvacWh2Series: { current: number[]; previous: number[] };
-  hvacWh3Series: { current: number[]; previous: number[] };
-  hvacWh4Series: { current: number[]; previous: number[] };
-  hvacWh5Series: { current: number[]; previous: number[] };
-  hvacWh6Series: { current: number[]; previous: number[] };
-  hvacWh7Series: { current: number[]; previous: number[] };
-  hvacQcMicroSeries: { current: number[]; previous: number[] };
-  hvacQcRetainedSeries: { current: number[]; previous: number[] };
-  hvacQcSamplingSeries: { current: number[]; previous: number[] };
-  hvacWf1U3Series: { current: number[]; previous: number[] };
-  hvacWf2U1Series: { current: number[]; previous: number[] };
-  hvacWf2U2Series: { current: number[]; previous: number[] };
 }
 
 const SectionHEquipment = memo(function SectionHEquipment({
   isDark,
   currentMonthIdx,
-  currentYear,
-  ct1Series,
-  ct2Series,
-  boiler3Series,
-  boiler4Series,
-  boiler5Series,
-  compAle30Series,
-  compZt301Series,
-  compZt302Series,
-  compZt55Series,
-  compAle250Series,
-  compZt110Series,
-  chillerDaikin1Series,
-  chillerDaikin2Series,
-  chillerTraneCgam40Series,
-  chillerTrane100Series,
-  chillerTrane275Series,
-  chillerTrane250Series,
-  chillerTrane185Series,
-  hvacWh2Series,
-  hvacWh3Series,
-  hvacWh4Series,
-  hvacWh5Series,
-  hvacWh6Series,
-  hvacWh7Series,
-  hvacQcMicroSeries,
-  hvacQcRetainedSeries,
-  hvacQcSamplingSeries,
-  hvacWf1U3Series,
-  hvacWf2U1Series,
-  hvacWf2U2Series
+  currentYear
 }: SectionHEquipmentProps) {
   const [compMonth, setCompMonth] = useState<number>(() => {
     return currentMonthIdx === 0 ? 11 : currentMonthIdx - 1;
@@ -749,6 +710,95 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
   const currMonthLabel = `${MONTH_NAMES_ID[currentMonthIdx]} ${currentYear}`;
   const compMonthLabel = `${MONTH_NAMES_ID[compMonth]} ${compYear}`;
+
+  // 1. Cooling Tower (7 Units)
+  const coolingTowerItems = useMemo(() => [
+    { title: "Cooling Tower Pump WF1-U3", seriesKey: "F1 COOLING TOWER PUMP WF1-U3" },
+    { title: "Cooling Tower Fan WF1-U3", seriesKey: "F1 COOLING TOWER FAN WF1-U3" },
+    { title: "Cooling Fase-1 WF2", seriesKey: "F2 COOLING FASE-1" },
+    { title: "Cooling Critical WF2", seriesKey: "F2 COOLING CRITICAL" },
+    { title: "Cooling Fase-2 WF2", seriesKey: "F2 COOLING FASE-2" },
+    { title: "Cooling Tower CT-Pump WF2", seriesKey: "F2 COOLING TOWER CT-PUMP" },
+    { title: "Cooling Tower CT-Fan WF2", seriesKey: "F2 COOLING TOWER CT-FAN" },
+  ], []);
+
+  // 2. Boiler (2 Units)
+  const boilerItems = useMemo(() => [
+    { title: "Boiler 4 WF1", seriesKey: "F1 BOILER 4" },
+    { title: "Boiler-5 WF2", seriesKey: "F2 BOILER-5" },
+  ], []);
+
+  // 3. Compressed Air (5 Units)
+  const compressedAirItems = useMemo(() => [
+    { title: "Compressed Air ZT-55 WF1", seriesKey: "F1 COMPRESSED AIR ZT-55" },
+    { title: "Compressed Air ZT-30.1&2 WF1", seriesKey: "F1 COMPRESSED AIR ZT-30.1&2" },
+    { title: "Compressed Air ALE-30 WF1", seriesKey: "F1 COMPRESSED AIR ALE-30" },
+    { title: "Compressed Air Atlas WF2", seriesKey: "F2 COMPRESSED AIR ATLAS" },
+    { title: "Kobelco ALE-250 WF2", seriesKey: "F2 KOBELCO ALE-250" },
+  ], []);
+
+  // 4. Chiller (8 Units)
+  const chillerItems = useMemo(() => [
+    { title: "Chiller Prep Daikin Barat WF1", seriesKey: "F1 CHILLER PREP DAIKIN BARAT" },
+    { title: "Chiller Prep Daikin Timur WF1", seriesKey: "F1 CHILLER PREP DAIKIN TIMUR" },
+    { title: "Chiller BP WF1-U3", seriesKey: "F1 CHILLER BP WF1-U3" },
+    { title: "Chiller - WF2U2", seriesKey: "F2 CHILLER - WF2U2" },
+    { title: "Chiller RTAC 250 (RO & HVAC) WF2", seriesKey: "F2 CHILLER RTAC 250 (RO&HVAC)" },
+    { title: "Chiller RTAC 170 (RO) WF2", seriesKey: "F2 CHILLER RTAC 170 (RO)" },
+    { title: "Chiller RTAC 100 (BP) WF2", seriesKey: "F2 CHILLER RTAC 100 (BP)" },
+    { title: "Chiller RTAC-275 (Prep) WF2", seriesKey: "F2 CHILLER RTAC-275 (PREP)" },
+  ], []);
+
+  // 5. HVAC Warehouse & Penerangan (8 Units)
+  const hvacWhItems = useMemo(() => [
+    { title: "WH 4 Penerangan WF1", seriesKey: "F1 WH 4 PENERANGAN" },
+    { title: "Lighting WH 1 WF1", seriesKey: "F1 LIGHTING WH 1" },
+    { title: "HVAC Office Atas WF1", seriesKey: "F1 HVAC OFFICE ATAS" },
+    { title: "HVAC WH-3 WF1", seriesKey: "F1 HVAC WH-3" },
+    { title: "WH 6 WF2", seriesKey: "F2 WH 6" },
+    { title: "WH 5 WF2", seriesKey: "F2 WH 5" },
+    { title: "WH-7 WF2", seriesKey: "F2 WH-7" },
+    { title: "Penerangan PD WF2", seriesKey: "F2 Penerangan PD" },
+  ], []);
+
+  // 6. HVAC QC & Produksi (9 Units)
+  const hvacQcItems = useMemo(() => [
+    { title: "Full Cooling WF1-U3", seriesKey: "F1 FULL COOLING WF1-U3" },
+    { title: "HVAC-QC WF1", seriesKey: "F1 HVAC-QC" },
+    { title: "HVAC WF1U3", seriesKey: "F1 HVAC WF1U3" },
+    { title: "Heater WF2U2", seriesKey: "F2 HEATER WF2U2" },
+    { title: "AHU WF2UI", seriesKey: "F2 AHU WF2UI" },
+    { title: "Return Sample QC WF2", seriesKey: "RETURN SAMPLE QC" },
+    { title: "AHU-1 - WF2U2", seriesKey: "F2 AHU-1 - WF2U2" },
+    { title: "AHU-2 - WF2U2", seriesKey: "F2 AHU-2 - WF2U2" },
+    { title: "Main Supply QC Office & Lab WF1", seriesKey: "F1 MAIN SUPPLY QC OFFICE & LAB" },
+  ], []);
+
+  // 7. Panel Distribusi & Water Treatment / Process (15 Units)
+  const distItems = useMemo(() => [
+    { title: "MDP3 WF1", seriesKey: "F1 MDP3" },
+    { title: "MDP-2 WF1", seriesKey: "F1 MDP-2" },
+    { title: "MDP-1.2 WF1", seriesKey: "F1 MDP-1.2" },
+    { title: "MDP-1.1 WF1", seriesKey: "F1 MDP-1.1" },
+    { title: "ST3 WF1", seriesKey: "F1 ST3" },
+    { title: "QC Lab WF1", seriesKey: "F1 QC LAB" },
+    { title: "PUTR-1 WF2", seriesKey: "F2 PUTR-1" },
+    { title: "PUTR-2 WF2", seriesKey: "F2 PUTR-2" },
+    { title: "Main Critical Panel WF2", seriesKey: "F2 MAIN CRITICAL PANEL" },
+    { title: "Panel Otoklaf WF2U1", seriesKey: "F2 PANEL OTOKLAF WF2U1" },
+    { title: "Panel Otoklaf WF2U2", seriesKey: "F2 PANEL OTOKLAF WF2U2" },
+    { title: "WT-DU-PSG WF2", seriesKey: "F2 WT-DU-PSG" },
+    { title: "PW Generation - RO WF2", seriesKey: "F2 PW GENERATION - RO" },
+    { title: "PUTR-NEW WF2", seriesKey: "F2 PUTR-NEW" },
+    { title: "MCC BP 7 WF2", seriesKey: "F2 MCC BP 7" },
+  ], []);
+
+  // 8. Incoming Cubicles (3 Units)
+  const cubicleItems = useMemo(() => [
+    { title: "Incoming Cubicle PLN (PM8000)", seriesKey: "incoming cubicle pln" },
+    { title: "Incoming Cubicle WF1 (PM5560)", seriesKey: "incoming cubicle WF1" },
+    { title: "Incoming Cubicle WF2 (PM5560)", seriesKey: "incoming cubicle WF2" },
+  ], []);
 
   return (
     <div className="space-y-8">
@@ -795,81 +845,178 @@ const SectionHEquipment = memo(function SectionHEquipment({
             </select>
           </div>
 
-          <span className="text-[11px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full">
-            Sub-metering belum terpasang (Belum ada data)
+          <span className="text-[11px] font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            57 Unit Sub-Metering Terdata &amp; Aktif
           </span>
         </div>
       </div>
 
       {/* Cooling Tower Section */}
       <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Cooling Tower</h4>
-        <div className="grid gap-6 md:grid-cols-2">
-          <MonthlyComparisonChart title="Cooling Tower WF1" currentData={ct1Series.current} previousData={ct1Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="Cooling Tower WF2" currentData={ct2Series.current} previousData={ct2Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Cooling Tower ({coolingTowerItems.length} Unit)</h4>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {coolingTowerItems.map((item) => {
+            const series = getMachineSeries(item.seriesKey);
+            return (
+              <MonthlyComparisonChart
+                key={item.title}
+                title={item.title}
+                currentData={series.current}
+                previousData={series.previous}
+                isDark={isDark}
+                currMonthName={currMonthLabel}
+                prevMonthName={compMonthLabel}
+              />
+            );
+          })}
         </div>
       </div>
 
       {/* Boiler Section */}
       <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Boiler</h4>
-        <div className="grid gap-6 md:grid-cols-3">
-          <MonthlyComparisonChart title="Boiler 3 WF1" currentData={boiler3Series.current} previousData={boiler3Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="Boiler 4" currentData={boiler4Series.current} previousData={boiler4Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="Boiler 5" currentData={boiler5Series.current} previousData={boiler5Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Boiler ({boilerItems.length} Unit)</h4>
+        <div className="grid gap-6 md:grid-cols-2">
+          {boilerItems.map((item) => {
+            const series = getMachineSeries(item.seriesKey);
+            return (
+              <MonthlyComparisonChart
+                key={item.title}
+                title={item.title}
+                currentData={series.current}
+                previousData={series.previous}
+                isDark={isDark}
+                currMonthName={currMonthLabel}
+                prevMonthName={compMonthLabel}
+              />
+            );
+          })}
         </div>
       </div>
 
       {/* Compressed Air Section */}
       <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Compressed Air</h4>
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Compressed Air ({compressedAirItems.length} Unit)</h4>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <MonthlyComparisonChart title="Compressed Air WF1 — ALE-30" currentData={compAle30Series.current} previousData={compAle30Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="Compressed Air WF1 — ZT-30.1" currentData={compZt301Series.current} previousData={compZt301Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="Compressed Air WF1 — ZT-30.2" currentData={compZt302Series.current} previousData={compZt302Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="Compressed Air WF1 — ZT-55" currentData={compZt55Series.current} previousData={compZt55Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="Compressed Air WF2 — ALE-250" currentData={compAle250Series.current} previousData={compAle250Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="Compressed Air WF2 — ZT-110" currentData={compZt110Series.current} previousData={compZt110Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          {compressedAirItems.map((item) => {
+            const series = getMachineSeries(item.seriesKey);
+            return (
+              <MonthlyComparisonChart
+                key={item.title}
+                title={item.title}
+                currentData={series.current}
+                previousData={series.previous}
+                isDark={isDark}
+                currMonthName={currMonthLabel}
+                prevMonthName={compMonthLabel}
+              />
+            );
+          })}
         </div>
       </div>
 
       {/* Chiller Section */}
       <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Chiller</h4>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <MonthlyComparisonChart title="Chiller WF1 — Daikin-1" currentData={chillerDaikin1Series.current} previousData={chillerDaikin1Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="Chiller WF1 — Daikin-2" currentData={chillerDaikin2Series.current} previousData={chillerDaikin2Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="Chiller WF1 — Trane-CGAM40" currentData={chillerTraneCgam40Series.current} previousData={chillerTraneCgam40Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="Chiller WF2 — Trane-100" currentData={chillerTrane100Series.current} previousData={chillerTrane100Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="Chiller WF2 — Trane-275" currentData={chillerTrane275Series.current} previousData={chillerTrane275Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Chiller ({chillerItems.length} Unit)</h4>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {chillerItems.map((item) => {
+            const series = getMachineSeries(item.seriesKey);
+            return (
+              <MonthlyComparisonChart
+                key={item.title}
+                title={item.title}
+                currentData={series.current}
+                previousData={series.previous}
+                isDark={isDark}
+                currMonthName={currMonthLabel}
+                prevMonthName={compMonthLabel}
+              />
+            );
+          })}
         </div>
       </div>
 
-      {/* Chiller HVAC & Warehouse Section */}
+      {/* HVAC Warehouse & Penerangan Section */}
       <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Chiller HVAC & Warehouse</h4>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <MonthlyComparisonChart title="Chiller HVAC WF2 — Trane-250" currentData={chillerTrane250Series.current} previousData={chillerTrane250Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="Chiller HVAC WF2 — Trane-185" currentData={chillerTrane185Series.current} previousData={chillerTrane185Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="HVAC Warehouse — WH-2" currentData={hvacWh2Series.current} previousData={hvacWh2Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="HVAC Warehouse — WH-3" currentData={hvacWh3Series.current} previousData={hvacWh3Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="HVAC Warehouse — WH-4" currentData={hvacWh4Series.current} previousData={hvacWh4Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="HVAC Warehouse — WH-5" currentData={hvacWh5Series.current} previousData={hvacWh5Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="HVAC Warehouse — WH-6" currentData={hvacWh6Series.current} previousData={hvacWh6Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="HVAC Warehouse — WH-7" currentData={hvacWh7Series.current} previousData={hvacWh7Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC Warehouse &amp; Penerangan ({hvacWhItems.length} Unit)</h4>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {hvacWhItems.map((item) => {
+            const series = getMachineSeries(item.seriesKey);
+            return (
+              <MonthlyComparisonChart
+                key={item.title}
+                title={item.title}
+                currentData={series.current}
+                previousData={series.previous}
+                isDark={isDark}
+                currMonthName={currMonthLabel}
+                prevMonthName={compMonthLabel}
+              />
+            );
+          })}
         </div>
       </div>
 
       {/* HVAC QC & Produksi Section */}
       <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC QC & Produksi</h4>
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC QC &amp; Produksi ({hvacQcItems.length} Unit)</h4>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <MonthlyComparisonChart title="HVAC QC — Micro" currentData={hvacQcMicroSeries.current} previousData={hvacQcMicroSeries.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="HVAC QC — Retained Sample" currentData={hvacQcRetainedSeries.current} previousData={hvacQcRetainedSeries.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="HVAC QC — Sampling" currentData={hvacQcSamplingSeries.current} previousData={hvacQcSamplingSeries.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="HVAC Produksi — WF1-U3" currentData={hvacWf1U3Series.current} previousData={hvacWf1U3Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="HVAC Produksi — WF2-U1" currentData={hvacWf2U1Series.current} previousData={hvacWf2U1Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
-          <MonthlyComparisonChart title="HVAC Produksi — WF2-U2" currentData={hvacWf2U2Series.current} previousData={hvacWf2U2Series.previous} isDark={isDark} currMonthName={currMonthLabel} prevMonthName={compMonthLabel} />
+          {hvacQcItems.map((item) => {
+            const series = getMachineSeries(item.seriesKey);
+            return (
+              <MonthlyComparisonChart
+                key={item.title}
+                title={item.title}
+                currentData={series.current}
+                previousData={series.previous}
+                isDark={isDark}
+                currMonthName={currMonthLabel}
+                prevMonthName={compMonthLabel}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Panel Distribusi & Water Treatment Section */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Panel Distribusi &amp; Water Treatment ({distItems.length} Unit)</h4>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {distItems.map((item) => {
+            const series = getMachineSeries(item.seriesKey);
+            return (
+              <MonthlyComparisonChart
+                key={item.title}
+                title={item.title}
+                currentData={series.current}
+                previousData={series.previous}
+                isDark={isDark}
+                currMonthName={currMonthLabel}
+                prevMonthName={compMonthLabel}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Incoming Cubicle Section */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Incoming Cubicles ({cubicleItems.length} Unit)</h4>
+        <div className="grid gap-6 md:grid-cols-3">
+          {cubicleItems.map((item) => {
+            const series = getMachineSeries(item.seriesKey);
+            return (
+              <MonthlyComparisonChart
+                key={item.title}
+                title={item.title}
+                currentData={series.current}
+                previousData={series.previous}
+                isDark={isDark}
+                currMonthName={currMonthLabel}
+                prevMonthName={compMonthLabel}
+              />
+            );
+          })}
         </div>
       </div>
 
@@ -2618,39 +2765,6 @@ export default function Electricity() {
     }
   }), [isDark]);
 
-  /* ═══ EQUIPMENT SERIES (EMPTY STATE - SENSOR BELUM TERHUBUNG) ═══ */
-  const EMPTY_EQUIPMENT_SERIES = useMemo(() => ({ current: [] as number[], previous: [] as number[] }), []);
-  const ct1Series = EMPTY_EQUIPMENT_SERIES;
-  const ct2Series = EMPTY_EQUIPMENT_SERIES;
-  const boiler3Series = EMPTY_EQUIPMENT_SERIES;
-  const boiler4Series = EMPTY_EQUIPMENT_SERIES;
-  const boiler5Series = EMPTY_EQUIPMENT_SERIES;
-  const compAle30Series = EMPTY_EQUIPMENT_SERIES;
-  const compZt301Series = EMPTY_EQUIPMENT_SERIES;
-  const compZt302Series = EMPTY_EQUIPMENT_SERIES;
-  const compZt55Series = EMPTY_EQUIPMENT_SERIES;
-  const compAle250Series = EMPTY_EQUIPMENT_SERIES;
-  const compZt110Series = EMPTY_EQUIPMENT_SERIES;
-  const chillerDaikin1Series = EMPTY_EQUIPMENT_SERIES;
-  const chillerDaikin2Series = EMPTY_EQUIPMENT_SERIES;
-  const chillerTraneCgam40Series = EMPTY_EQUIPMENT_SERIES;
-  const chillerTrane100Series = EMPTY_EQUIPMENT_SERIES;
-  const chillerTrane275Series = EMPTY_EQUIPMENT_SERIES;
-  const chillerTrane250Series = EMPTY_EQUIPMENT_SERIES;
-  const chillerTrane185Series = EMPTY_EQUIPMENT_SERIES;
-  const hvacWh2Series = EMPTY_EQUIPMENT_SERIES;
-  const hvacWh3Series = EMPTY_EQUIPMENT_SERIES;
-  const hvacWh4Series = EMPTY_EQUIPMENT_SERIES;
-  const hvacWh5Series = EMPTY_EQUIPMENT_SERIES;
-  const hvacWh6Series = EMPTY_EQUIPMENT_SERIES;
-  const hvacWh7Series = EMPTY_EQUIPMENT_SERIES;
-  const hvacQcMicroSeries = EMPTY_EQUIPMENT_SERIES;
-  const hvacQcRetainedSeries = EMPTY_EQUIPMENT_SERIES;
-  const hvacQcSamplingSeries = EMPTY_EQUIPMENT_SERIES;
-  const hvacWf1U3Series = EMPTY_EQUIPMENT_SERIES;
-  const hvacWf2U1Series = EMPTY_EQUIPMENT_SERIES;
-  const hvacWf2U2Series = EMPTY_EQUIPMENT_SERIES;
-
   // Helper to extract clean numeric value or null
   const getCleanNum = (val: any): number | null => {
     if (val === null || val === undefined) return null;
@@ -3230,8 +3344,15 @@ export default function Electricity() {
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Trend Panel Distribusi</h3>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Trend Panel Distribusi</h3>
+                {cardSummary.totalKwh > 0 && (
+                  <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 rounded-lg">
+                    Total: {cardSummary.totalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Beban Incoming PLN — data historis (WBP & LWBP).</p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
@@ -4121,7 +4242,14 @@ export default function Electricity() {
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 1</h3>
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 1</h3>
+                {fact1Total > 0 && (
+                  <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md">
+                    Total: {fact1Total.toLocaleString("id-ID")} kWh
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Fact-1 categories sorted by highest consumption.</p>
             </div>
             {isSeniorUnitHead && (
@@ -4155,7 +4283,14 @@ export default function Electricity() {
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 2</h3>
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 2</h3>
+                {fact2Total > 0 && (
+                  <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md">
+                    Total: {fact2Total.toLocaleString("id-ID")} kWh
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Fact-2 categories sorted by highest consumption.</p>
             </div>
             {isSeniorUnitHead && (
@@ -4192,7 +4327,14 @@ export default function Electricity() {
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Utility Consumption</h3>
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Utility Consumption</h3>
+                {utilityData.totalKwh > 0 && (
+                  <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md">
+                    Total: {utilityData.totalKwh.toLocaleString("id-ID")} kWh
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Utility electricity consumption sorted by highest consumer.</p>
             </div>
             <div className="flex items-center gap-2">
@@ -4272,7 +4414,14 @@ export default function Electricity() {
         <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#06b6d4] dark:text-cyan-400">HVAC Consumption</h3>
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#06b6d4] dark:text-cyan-400">HVAC Consumption</h3>
+                {hvacData.totalKwh > 0 && (
+                  <span className="text-xs font-extrabold font-mono text-[#06b6d4] dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-md">
+                    Total: {hvacData.totalKwh.toLocaleString("id-ID")} kWh
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">HVAC electricity consumption sorted by highest consumer.</p>
             </div>
             <div className="flex items-center gap-2">
@@ -4358,36 +4507,6 @@ export default function Electricity() {
             isDark={isDark}
             currentMonthIdx={equipCurrentMonthIdx}
             currentYear={equipCurrentYear}
-            ct1Series={ct1Series}
-            ct2Series={ct2Series}
-            boiler3Series={boiler3Series}
-            boiler4Series={boiler4Series}
-            boiler5Series={boiler5Series}
-            compAle30Series={compAle30Series}
-            compZt301Series={compZt301Series}
-            compZt302Series={compZt302Series}
-            compZt55Series={compZt55Series}
-            compAle250Series={compAle250Series}
-            compZt110Series={compZt110Series}
-            chillerDaikin1Series={chillerDaikin1Series}
-            chillerDaikin2Series={chillerDaikin2Series}
-            chillerTraneCgam40Series={chillerTraneCgam40Series}
-            chillerTrane100Series={chillerTrane100Series}
-            chillerTrane275Series={chillerTrane275Series}
-            chillerTrane250Series={chillerTrane250Series}
-            chillerTrane185Series={chillerTrane185Series}
-            hvacWh2Series={hvacWh2Series}
-            hvacWh3Series={hvacWh3Series}
-            hvacWh4Series={hvacWh4Series}
-            hvacWh5Series={hvacWh5Series}
-            hvacWh6Series={hvacWh6Series}
-            hvacWh7Series={hvacWh7Series}
-            hvacQcMicroSeries={hvacQcMicroSeries}
-            hvacQcRetainedSeries={hvacQcRetainedSeries}
-            hvacQcSamplingSeries={hvacQcSamplingSeries}
-            hvacWf1U3Series={hvacWf1U3Series}
-            hvacWf2U1Series={hvacWf2U1Series}
-            hvacWf2U2Series={hvacWf2U2Series}
           />
         );
       })()}
