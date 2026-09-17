@@ -436,13 +436,13 @@ export const getElectricityAnalytics = async (
         } catch {}
       }
     } else {
+      const statusCol = tableName === "electric_pln_telemetry" ? "status_pm8000" : "status_pm5500";
       const res = await pool.query(`
         SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
           t_stamp::text AS ts_text, 
-          COALESCE(${energyCol}, 0)::float AS value
+          CASE WHEN ${statusCol} IS FALSE THEN NULL ELSE ${energyCol}::float END AS value
         FROM ${tableName}
         WHERE t_stamp >= $1 AND t_stamp <= $2
-          AND ${energyCol} IS NOT NULL
         ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
       `, [fromQueryVal, toQueryVal]);
       hourlyRecords = res.rows;
@@ -454,9 +454,9 @@ export const getElectricityAnalytics = async (
             : tableName === "electric_wf1_telemetry" ? "electric_wf1_telemetry_minute"
             : "electric_wf2_telemetry_minute";
           const minRes = await pool.query(`
-            SELECT t_stamp::text AS ts_text, ${energyCol}::float AS value
+            SELECT t_stamp::text AS ts_text, 
+              CASE WHEN ${statusCol} IS FALSE THEN NULL ELSE ${energyCol}::float END AS value
             FROM ${minuteTable}
-            WHERE ${energyCol} IS NOT NULL
             ORDER BY t_stamp DESC LIMIT 1
           `);
           if (minRes.rows.length > 0) {
@@ -534,20 +534,6 @@ export const getElectricityAnalytics = async (
   const dailyHourlyWbpMap = new Map<string, number[]>();
   const dailyHourlyLwbpMap = new Map<string, number[]>();
 
-  // 1. Calculate raw hourly diffs
-  interface HourlyDiffItem {
-    currRecord: any;
-    dateStr: string;
-    targetHour: number;
-    monthStr: string;
-    isToday: boolean;
-    isCurrentMonth: boolean;
-    inRange: boolean;
-    diff: number;
-  }
-
-  const diffItems: HourlyDiffItem[] = [];
-
   for (let i = 1; i < hourlyRecords.length; i++) {
     const prevRecord = hourlyRecords[i - 1];
     const currRecord = hourlyRecords[i];
@@ -560,7 +546,7 @@ export const getElectricityAnalytics = async (
 
     let diff = 0;
     // Only calculate diff if consecutive records are consecutive hours (<= 90 minutes)
-    // If there is a gap (power meter was offline / null in between), do not assume consumption -> diff = 0
+    // If there is a gap or power meter was offline (null in between or on reconnect), do not assume consumption -> diff = 0
     if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal)) {
       if (timeDiffMs <= 90 * 60 * 1000) {
         diff = currVal - prevVal;
@@ -585,45 +571,6 @@ export const getElectricityAnalytics = async (
 
     // Check if current interval falls within the requested date range [fromStr, toStr]
     const inRange = (!fromStr || dateStr >= fromStr) && (!toStr || dateStr <= toStr);
-
-    diffItems.push({
-      currRecord,
-      dateStr,
-      targetHour,
-      monthStr,
-      isToday,
-      isCurrentMonth,
-      inRange,
-      diff
-    });
-  }
-
-  // 2. Smooth freeze catch-up spikes:
-  // If sensor / gateway stayed frozen with constant active_energy (diff = 0) for multiple consecutive hours
-  // and then reconnects with a catch-up jump exceeding feeder physical capacity (> 3000 kWh/hour),
-  // distribute the total delta evenly across the frozen hours so daily distribution and peak demand are realistic.
-  const MAX_HOURLY_FEEDER_CAPACITY = 3000;
-  for (let idx = 0; idx < diffItems.length; idx++) {
-    if (diffItems[idx].diff > MAX_HOURLY_FEEDER_CAPACITY) {
-      let zeroCount = 0;
-      let j = idx - 1;
-      while (j >= 0 && diffItems[j].diff === 0) {
-        zeroCount++;
-        j--;
-      }
-      if (zeroCount >= 2) {
-        const span = zeroCount + 1;
-        const avgDiff = diffItems[idx].diff / span;
-        for (let k = j + 1; k <= idx; k++) {
-          diffItems[k].diff = avgDiff;
-        }
-      }
-    }
-  }
-
-  // 3. Accumulate consumption, tariff costs, and peak demand using smoothed diffs
-  for (const item of diffItems) {
-    const { currRecord, dateStr, targetHour, monthStr, isToday, isCurrentMonth, inRange, diff } = item;
 
     // Get matching tariff for this date
     const recordTariff = getTariffForDate(dateStr, tariffs);

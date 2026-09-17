@@ -118,9 +118,13 @@ let latestHvacRetainLiveState: HvacRetainLiveState = {
 export const getHvacRetainLiveState = (): HvacRetainLiveState => latestHvacRetainLiveState;
 
 const parsePlnApi = (data: any, ts: Date) => {
+  const isOnline = data.Status_PM8000 !== undefined ? !!data.Status_PM8000 : null;
+  if (isOnline === false) {
+    return getNullPlnRecord(ts);
+  }
   return {
     t_stamp: ts,
-    status_pm8000: data.Status_PM8000 !== undefined ? !!data.Status_PM8000 : null,
+    status_pm8000: isOnline,
     volt_ab: typeof data.VoltAB === "number" ? data.VoltAB : null,
     volt_bc: typeof data.VoltBC === "number" ? data.VoltBC : null,
     volt_ca: typeof data.VoltCA === "number" ? data.VoltCA : null,
@@ -146,9 +150,13 @@ const parsePlnApi = (data: any, ts: Date) => {
 };
 
 const parseWfApi = (data: any, ts: Date) => {
+  const isOnline = data.Status_PM5500_WF1 !== undefined ? !!data.Status_PM5500_WF1 : null;
+  if (isOnline === false) {
+    return getNullWfRecord(ts);
+  }
   return {
     t_stamp: ts,
-    status_pm5500: data.Status_PM5500_WF1 !== undefined ? !!data.Status_PM5500_WF1 : null,
+    status_pm5500: isOnline,
     volt_ab: typeof data.VoltAB === "number" ? data.VoltAB : null,
     volt_bc: typeof data.VoltBC === "number" ? data.VoltBC : null,
     volt_ca: typeof data.VoltCA === "number" ? data.VoltCA : null,
