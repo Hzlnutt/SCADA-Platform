@@ -1138,7 +1138,7 @@ export default function Electricity() {
 
     let lwbp = isSolar ? 0 : (Number(s.monthlyLwbpKwh ?? s.todayLwbpKwh) || 0);
     let wbp = isSolar ? 0 : (Number(s.monthlyWbpKwh ?? s.todayWbpKwh) || 0);
-    let total = Number(s.monthlyKwh ?? s.totalKwh ?? (lwbp + wbp)) || 0;
+    let total = Number(s.monthlyKwh ?? (s.monthlyMwh ? s.monthlyMwh * 1000 : null) ?? (lwbp + wbp)) || 0;
 
     if (total === 0) {
       if (cubicleSelector === "poi1") total = pltsLive.poi1.total_kwh || (solarData?.summary?.poi1TodayKwh || 0);
@@ -1150,10 +1150,10 @@ export default function Electricity() {
       const currentPvRate = typeof pvRate === "number" ? pvRate : (Number(solarData?.summary?.pvRate) || 0);
       cost = total * currentPvRate;
     } else {
-      cost = Number(s.totalCost ?? (lwbp * lwbpRate + wbp * wbpRate)) || 0;
+      cost = Number(s.monthlyCost ?? (lwbp * lwbpRate + wbp * wbpRate)) || 0;
     }
     if (isAll && (!cost || cost === 0)) {
-      cost = Number(summaryData?.summary?.totalCost || 0);
+      cost = Number(summaryData?.summary?.monthlyCost || (lwbp * lwbpRate + wbp * wbpRate) || 0);
     }
 
     return {

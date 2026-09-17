@@ -534,6 +534,20 @@ export const getElectricityAnalytics = async (
   const dailyHourlyWbpMap = new Map<string, number[]>();
   const dailyHourlyLwbpMap = new Map<string, number[]>();
 
+  // 1. Calculate raw hourly diffs
+  interface HourlyDiffItem {
+    currRecord: any;
+    dateStr: string;
+    targetHour: number;
+    monthStr: string;
+    isToday: boolean;
+    isCurrentMonth: boolean;
+    inRange: boolean;
+    diff: number;
+  }
+
+  const diffItems: HourlyDiffItem[] = [];
+
   for (let i = 1; i < hourlyRecords.length; i++) {
     const prevRecord = hourlyRecords[i - 1];
     const currRecord = hourlyRecords[i];
@@ -563,8 +577,6 @@ export const getElectricityAnalytics = async (
     const prevHour = parseInt(prevTimeStr.split(":")[0], 10);
     const currHour = parseInt(currTimeStr.split(":")[0], 10);
 
-    // For electric_pln_telemetry, row at HH:00 contains the rollup for hour HH.
-    // The consumption difference curr - prev represents hour currHour on currDateStr.
     const dateStr = currDateStr;
     const targetHour = currHour;
     const monthStr = dateStr.substring(0, 7);
@@ -573,6 +585,45 @@ export const getElectricityAnalytics = async (
 
     // Check if current interval falls within the requested date range [fromStr, toStr]
     const inRange = (!fromStr || dateStr >= fromStr) && (!toStr || dateStr <= toStr);
+
+    diffItems.push({
+      currRecord,
+      dateStr,
+      targetHour,
+      monthStr,
+      isToday,
+      isCurrentMonth,
+      inRange,
+      diff
+    });
+  }
+
+  // 2. Smooth freeze catch-up spikes:
+  // If sensor / gateway stayed frozen with constant active_energy (diff = 0) for multiple consecutive hours
+  // and then reconnects with a catch-up jump exceeding feeder physical capacity (> 3000 kWh/hour),
+  // distribute the total delta evenly across the frozen hours so daily distribution and peak demand are realistic.
+  const MAX_HOURLY_FEEDER_CAPACITY = 3000;
+  for (let idx = 0; idx < diffItems.length; idx++) {
+    if (diffItems[idx].diff > MAX_HOURLY_FEEDER_CAPACITY) {
+      let zeroCount = 0;
+      let j = idx - 1;
+      while (j >= 0 && diffItems[j].diff === 0) {
+        zeroCount++;
+        j--;
+      }
+      if (zeroCount >= 2) {
+        const span = zeroCount + 1;
+        const avgDiff = diffItems[idx].diff / span;
+        for (let k = j + 1; k <= idx; k++) {
+          diffItems[k].diff = avgDiff;
+        }
+      }
+    }
+  }
+
+  // 3. Accumulate consumption, tariff costs, and peak demand using smoothed diffs
+  for (const item of diffItems) {
+    const { currRecord, dateStr, targetHour, monthStr, isToday, isCurrentMonth, inRange, diff } = item;
 
     // Get matching tariff for this date
     const recordTariff = getTariffForDate(dateStr, tariffs);
