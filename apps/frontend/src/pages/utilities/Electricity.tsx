@@ -652,16 +652,16 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
     };
   }, [machine, currentYear, currentMonthIdx, compYear, compMonthIdx]);
 
-  // Deterministic baseline series fallback
-  const fallbackSeries = useMemo(() => getMachineSeries(machine), [machine]);
-  const currentData = dbData.hasData && dbData.currentData.some(v => v > 0) ? dbData.currentData : fallbackSeries.current;
-  const previousData = dbData.hasData && dbData.previousData.some(v => v > 0) ? dbData.previousData : fallbackSeries.previous;
+  // Strictly factual data from database (no dummy sinusoidal fallback)
+  const currentData = dbData.currentData || [];
+  const previousData = dbData.previousData || [];
   const currTotalKwh = useMemo(() => currentData.reduce((sum, v) => sum + (Number(v) || 0), 0), [currentData]);
   const prevTotalKwh = useMemo(() => previousData.reduce((sum, v) => sum + (Number(v) || 0), 0), [previousData]);
   const diffPct = useMemo(() => {
     if (prevTotalKwh <= 0) return null;
     return (((currTotalKwh - prevTotalKwh) / prevTotalKwh) * 100).toFixed(1);
   }, [currTotalKwh, prevTotalKwh]);
+  const hasData = (currentData.length > 0 && currentData.some(v => v > 0)) || (previousData.length > 0 && previousData.some(v => v > 0));
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
@@ -723,27 +723,37 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
           </label>
 
           {/* Status Indicator */}
-          {dbData.hasData ? (
+          {hasData ? (
             <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-mono">
-              DATABASE AKTIF ({dbData.pmId})
+              DATABASE AKTIF ({dbData.pmId || "PM"})
             </span>
           ) : (
-            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 font-mono">
-              SUB-METERING AKTIF
+            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-mono">
+              OFFLINE / 0 KWH ({dbData.pmId || "PM"})
             </span>
           )}
         </div>
       </div>
 
       <div style={{ height: 280 }}>
-        <MonthlyComparisonBarChart
-          currentData={currentData}
-          previousData={previousData}
-          isDark={isDark}
-          currMonthName={currMonthName}
-          prevMonthName={prevMonthName}
-          showPrevious={showPrevious}
-        />
+        {hasData ? (
+          <MonthlyComparisonBarChart
+            currentData={currentData}
+            previousData={previousData}
+            isDark={isDark}
+            currMonthName={currMonthName}
+            prevMonthName={prevMonthName}
+            showPrevious={showPrevious}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl p-4 text-center bg-slate-50/50 dark:bg-slate-950/20">
+            <span className="text-2xl mb-1 opacity-40">📊</span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia (0 kWh)</span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+              Tidak ada catatan akumulasi energi di database untuk {machine} ({dbData.pmId || "Offline"})
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -772,92 +782,152 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
   // 1. Cooling Tower (7 Units)
   const coolingTowerItems = useMemo(() => [
-    { title: "Cooling Tower Pump WF1-U3", seriesKey: "F1 COOLING TOWER PUMP WF1-U3" },
-    { title: "Cooling Tower Fan WF1-U3", seriesKey: "F1 COOLING TOWER FAN WF1-U3" },
-    { title: "Cooling Fase-1 WF2", seriesKey: "F2 COOLING FASE-1" },
-    { title: "Cooling Critical WF2", seriesKey: "F2 COOLING CRITICAL" },
-    { title: "Cooling Fase-2 WF2", seriesKey: "F2 COOLING FASE-2" },
-    { title: "Cooling Tower CT-Pump WF2", seriesKey: "F2 COOLING TOWER CT-PUMP" },
-    { title: "Cooling Tower CT-Fan WF2", seriesKey: "F2 COOLING TOWER CT-FAN" },
+    { title: "Cooling Tower Pump WF1-U3", seriesKey: "F1 COOLING TOWER PUMP WF1-U3", pmId: "PM152" },
+    { title: "Cooling Tower Fan WF1-U3", seriesKey: "F1 COOLING TOWER FAN WF1-U3", pmId: "PM181" },
+    { title: "Cooling Fase-1 WF2", seriesKey: "F2 COOLING FASE-1", pmId: "PM206" },
+    { title: "Cooling Critical WF2", seriesKey: "F2 COOLING CRITICAL", pmId: "PM215" },
+    { title: "Cooling Fase-2 WF2", seriesKey: "F2 COOLING FASE-2", pmId: "PM318" },
+    { title: "Cooling Tower CT-Pump WF2", seriesKey: "F2 COOLING TOWER CT-PUMP", pmId: "PM324" },
+    { title: "Cooling Tower CT-Fan WF2", seriesKey: "F2 COOLING TOWER CT-FAN", pmId: "PM325" },
   ], []);
 
   // 2. Boiler (2 Units)
   const boilerItems = useMemo(() => [
-    { title: "Boiler 4 WF1", seriesKey: "F1 BOILER 4" },
-    { title: "Boiler-5 WF2", seriesKey: "F2 BOILER-5" },
+    { title: "Boiler 4 WF1", seriesKey: "F1 BOILER 4", pmId: "PM184" },
+    { title: "Boiler-5 WF2", seriesKey: "F2 BOILER-5", pmId: "PM213" },
   ], []);
 
   // 3. Compressed Air (5 Units)
   const compressedAirItems = useMemo(() => [
-    { title: "Compressed Air ZT-55 WF1", seriesKey: "F1 COMPRESSED AIR ZT-55" },
-    { title: "Compressed Air ZT-30.1&2 WF1", seriesKey: "F1 COMPRESSED AIR ZT-30.1&2" },
-    { title: "Compressed Air ALE-30 WF1", seriesKey: "F1 COMPRESSED AIR ALE-30" },
-    { title: "Compressed Air Atlas WF2", seriesKey: "F2 COMPRESSED AIR ATLAS" },
-    { title: "Kobelco ALE-250 WF2", seriesKey: "F2 KOBELCO ALE-250" },
+    { title: "Compressed Air ZT-55 WF1", seriesKey: "F1 COMPRESSED AIR ZT-55", pmId: "PM140" },
+    { title: "Compressed Air ZT-30.1&2 WF1", seriesKey: "F1 COMPRESSED AIR ZT-30.1&2", pmId: "PM182" },
+    { title: "Compressed Air ALE-30 WF1", seriesKey: "F1 COMPRESSED AIR ALE-30", pmId: "PM183" },
+    { title: "Compressed Air Atlas WF2", seriesKey: "F2 COMPRESSED AIR ATLAS", pmId: "PM214" },
+    { title: "Kobelco ALE-250 WF2", seriesKey: "F2 KOBELCO ALE-250", pmId: "PM229" },
   ], []);
 
   // 4. Chiller (8 Units)
   const chillerItems = useMemo(() => [
-    { title: "Chiller Prep Daikin Barat WF1", seriesKey: "F1 CHILLER PREP DAIKIN BARAT" },
-    { title: "Chiller Prep Daikin Timur WF1", seriesKey: "F1 CHILLER PREP DAIKIN TIMUR" },
-    { title: "Chiller BP WF1-U3", seriesKey: "F1 CHILLER BP WF1-U3" },
-    { title: "Chiller - WF2U2", seriesKey: "F2 CHILLER - WF2U2" },
-    { title: "Chiller RTAC 250 (RO & HVAC) WF2", seriesKey: "F2 CHILLER RTAC 250 (RO&HVAC)" },
-    { title: "Chiller RTAC 170 (RO) WF2", seriesKey: "F2 CHILLER RTAC 170 (RO)" },
-    { title: "Chiller RTAC 100 (BP) WF2", seriesKey: "F2 CHILLER RTAC 100 (BP)" },
-    { title: "Chiller RTAC-275 (Prep) WF2", seriesKey: "F2 CHILLER RTAC-275 (PREP)" },
+    { title: "Chiller Prep Daikin Barat WF1", seriesKey: "F1 CHILLER PREP DAIKIN BARAT", pmId: "PM177" },
+    { title: "Chiller Prep Daikin Timur WF1", seriesKey: "F1 CHILLER PREP DAIKIN TIMUR", pmId: "PM178" },
+    { title: "Chiller BP WF1-U3", seriesKey: "F1 CHILLER BP WF1-U3", pmId: "PM180" },
+    { title: "Chiller - WF2U2", seriesKey: "F2 CHILLER - WF2U2", pmId: "PM209" },
+    { title: "Chiller RTAC 250 (RO & HVAC) WF2", seriesKey: "F2 CHILLER RTAC 250 (RO&HVAC)", pmId: "PM271" },
+    { title: "Chiller RTAC 170 (RO) WF2", seriesKey: "F2 CHILLER RTAC 170 (RO)", pmId: "PM272" },
+    { title: "Chiller RTAC 100 (BP) WF2", seriesKey: "F2 CHILLER RTAC 100 (BP)", pmId: "PM274" },
+    { title: "Chiller RTAC-275 (Prep) WF2", seriesKey: "F2 CHILLER RTAC-275 (PREP)", pmId: "PM319" },
   ], []);
 
   // 5. HVAC Warehouse & Penerangan (8 Units)
   const hvacWhItems = useMemo(() => [
-    { title: "WH 4 Penerangan WF1", seriesKey: "F1 WH 4 PENERANGAN" },
-    { title: "Lighting WH 1 WF1", seriesKey: "F1 LIGHTING WH 1" },
-    { title: "HVAC Office Atas WF1", seriesKey: "F1 HVAC OFFICE ATAS" },
-    { title: "HVAC WH-3 WF1", seriesKey: "F1 HVAC WH-3" },
-    { title: "WH 6 WF2", seriesKey: "F2 WH 6" },
-    { title: "WH 5 WF2", seriesKey: "F2 WH 5" },
-    { title: "WH-7 WF2", seriesKey: "F2 WH-7" },
-    { title: "Penerangan PD WF2", seriesKey: "F2 Penerangan PD" },
+    { title: "WH 4 Penerangan WF1", seriesKey: "F1 WH 4 PENERANGAN", pmId: "PM134" },
+    { title: "Lighting WH 1 WF1", seriesKey: "F1 LIGHTING WH 1", pmId: "PM154" },
+    { title: "HVAC Office Atas WF1", seriesKey: "F1 HVAC OFFICE ATAS", pmId: "PM151" },
+    { title: "HVAC WH-3 WF1", seriesKey: "F1 HVAC WH-3", pmId: "PM179" },
+    { title: "WH 6 WF2", seriesKey: "F2 WH 6", pmId: "PM207" },
+    { title: "WH 5 WF2", seriesKey: "F2 WH 5", pmId: "PM208" },
+    { title: "WH-7 WF2", seriesKey: "F2 WH-7", pmId: "PM226" },
+    { title: "Penerangan PD WF2", seriesKey: "F2 Penerangan PD", pmId: "PM288" },
   ], []);
 
   // 6. HVAC QC & Produksi (9 Units)
   const hvacQcItems = useMemo(() => [
-    { title: "Full Cooling WF1-U3", seriesKey: "F1 FULL COOLING WF1-U3" },
-    { title: "HVAC-QC WF1", seriesKey: "F1 HVAC-QC" },
-    { title: "HVAC WF1U3", seriesKey: "F1 HVAC WF1U3" },
-    { title: "Heater WF2U2", seriesKey: "F2 HEATER WF2U2" },
-    { title: "AHU WF2UI", seriesKey: "F2 AHU WF2UI" },
-    { title: "Return Sample QC WF2", seriesKey: "RETURN SAMPLE QC" },
-    { title: "AHU-1 - WF2U2", seriesKey: "F2 AHU-1 - WF2U2" },
-    { title: "AHU-2 - WF2U2", seriesKey: "F2 AHU-2 - WF2U2" },
-    { title: "Main Supply QC Office & Lab WF1", seriesKey: "F1 MAIN SUPPLY QC OFFICE & LAB" },
+    { title: "Full Cooling WF1-U3", seriesKey: "F1 FULL COOLING WF1-U3", pmId: "PM138" },
+    { title: "HVAC-QC WF1", seriesKey: "F1 HVAC-QC", pmId: "PM153" },
+    { title: "HVAC WF1U3", seriesKey: "F1 HVAC WF1U3", pmId: "PM185" },
+    { title: "Heater WF2U2", seriesKey: "F2 HEATER WF2U2", pmId: "PM203" },
+    { title: "AHU WF2UI", seriesKey: "F2 AHU WF2UI", pmId: "PM205" },
+    { title: "Return Sample QC WF2", seriesKey: "RETURN SAMPLE QC", pmId: "PM273" },
+    { title: "AHU-1 - WF2U2", seriesKey: "F2 AHU-1 - WF2U2", pmId: "PM321" },
+    { title: "AHU-2 - WF2U2", seriesKey: "F2 AHU-2 - WF2U2", pmId: "PM322" },
+    { title: "Main Supply QC Office & Lab WF1", seriesKey: "F1 MAIN SUPPLY QC OFFICE & LAB", pmId: "PM132" },
   ], []);
 
   // 7. Panel Distribusi & Water Treatment / Process (15 Units)
   const distItems = useMemo(() => [
-    { title: "MDP3 WF1", seriesKey: "F1 MDP3" },
-    { title: "MDP-2 WF1", seriesKey: "F1 MDP-2" },
-    { title: "MDP-1.2 WF1", seriesKey: "F1 MDP-1.2" },
-    { title: "MDP-1.1 WF1", seriesKey: "F1 MDP-1.1" },
-    { title: "ST3 WF1", seriesKey: "F1 ST3" },
-    { title: "QC Lab WF1", seriesKey: "F1 QC LAB" },
-    { title: "PUTR-1 WF2", seriesKey: "F2 PUTR-1" },
-    { title: "PUTR-2 WF2", seriesKey: "F2 PUTR-2" },
-    { title: "Main Critical Panel WF2", seriesKey: "F2 MAIN CRITICAL PANEL" },
-    { title: "Panel Otoklaf WF2U1", seriesKey: "F2 PANEL OTOKLAF WF2U1" },
-    { title: "Panel Otoklaf WF2U2", seriesKey: "F2 PANEL OTOKLAF WF2U2" },
-    { title: "WT-DU-PSG WF2", seriesKey: "F2 WT-DU-PSG" },
-    { title: "PW Generation - RO WF2", seriesKey: "F2 PW GENERATION - RO" },
-    { title: "PUTR-NEW WF2", seriesKey: "F2 PUTR-NEW" },
-    { title: "MCC BP 7 WF2", seriesKey: "F2 MCC BP 7" },
+    { title: "MDP3 WF1", seriesKey: "F1 MDP3", pmId: "PM133" },
+    { title: "MDP-2 WF1", seriesKey: "F1 MDP-2", pmId: "PM135" },
+    { title: "MDP-1.2 WF1", seriesKey: "F1 MDP-1.2", pmId: "PM136" },
+    { title: "MDP-1.1 WF1", seriesKey: "F1 MDP-1.1", pmId: "PM139" },
+    { title: "ST3 WF1", seriesKey: "F1 ST3", pmId: "PM175" },
+    { title: "QC Lab WF1", seriesKey: "F1 QC LAB", pmId: "PM176" },
+    { title: "PUTR-1 WF2", seriesKey: "F2 PUTR-1", pmId: "PM201" },
+    { title: "PUTR-2 WF2", seriesKey: "F2 PUTR-2", pmId: "PM202" },
+    { title: "Main Critical Panel WF2", seriesKey: "F2 MAIN CRITICAL PANEL", pmId: "PM210" },
+    { title: "Panel Otoklaf WF2U1", seriesKey: "F2 PANEL OTOKLAF WF2U1", pmId: "PM211" },
+    { title: "Panel Otoklaf WF2U2", seriesKey: "F2 PANEL OTOKLAF WF2U2", pmId: "PM212" },
+    { title: "WT-DU-PSG WF2", seriesKey: "F2 WT-DU-PSG", pmId: "PM320" },
+    { title: "PW Generation - RO WF2", seriesKey: "F2 PW GENERATION - RO", pmId: "PM323" },
+    { title: "PUTR-NEW WF2", seriesKey: "F2 PUTR-NEW", pmId: "PM327" },
+    { title: "MCC BP 7 WF2", seriesKey: "F2 MCC BP 7", pmId: "PM337" },
   ], []);
 
   // 8. Incoming Cubicles (3 Units)
   const cubicleItems = useMemo(() => [
-    { title: "Incoming Cubicle PLN (PM8000)", seriesKey: "incoming cubicle pln" },
-    { title: "Incoming Cubicle WF1 (PM5560)", seriesKey: "incoming cubicle WF1" },
-    { title: "Incoming Cubicle WF2 (PM5560)", seriesKey: "incoming cubicle WF2" },
+    { title: "Incoming Cubicle PLN (PM8000)", seriesKey: "incoming cubicle pln", pmId: "PM410" },
+    { title: "Incoming Cubicle WF1 (PM5560)", seriesKey: "incoming cubicle WF1", pmId: "PM411" },
+    { title: "Incoming Cubicle WF2 (PM5560)", seriesKey: "incoming cubicle WF2", pmId: "PM412" },
   ], []);
+
+  // Dynamic state from database batch endpoint
+  const [batchData, setBatchData] = useState<Record<string, {
+    pmId: string;
+    label: string;
+    current: number[];
+    previous: number[];
+    currTotalKwh: number;
+    prevTotalKwh: number;
+    hasData: boolean;
+  }>>({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const currMonthStr = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, "0")}`;
+    const compMonthStr = `${compYear}-${String(compMonth + 1).padStart(2, "0")}`;
+
+    setLoading(true);
+    getJson<{
+      success: boolean;
+      currentMonth: string;
+      comparisonMonth: string;
+      daysInCurrent: number;
+      daysInComparison: number;
+      data: Record<string, any>;
+    }>(`/analytics/electricity/equipment-monthly-batch?currentMonth=${currMonthStr}&comparisonMonth=${compMonthStr}`)
+      .then((res) => {
+        if (!isCancelled && res?.data) {
+          setBatchData(res.data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load equipment monthly batch data:", err);
+        if (!isCancelled) setLoading(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentYear, currentMonthIdx, compYear, compMonth]);
+
+  const renderCard = (item: { title: string; seriesKey: string; pmId: string }) => {
+    const itemData = batchData[item.pmId] || batchData[item.seriesKey.toLowerCase()] || batchData[item.title.toLowerCase()];
+    const current = itemData?.current || [];
+    const previous = itemData?.previous || [];
+
+    return (
+      <MonthlyComparisonChart
+        key={item.pmId || item.title}
+        title={`${item.title} (${item.pmId})`}
+        currentData={current}
+        previousData={previous}
+        isDark={isDark}
+        currMonthName={currMonthLabel}
+        prevMonthName={compMonthLabel}
+      />
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -905,8 +975,8 @@ const SectionHEquipment = memo(function SectionHEquipment({
           </div>
 
           <span className="text-[11px] font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            57 Unit Sub-Metering Terdata &amp; Aktif
+            <span className={`w-2 h-2 rounded-full ${loading ? "bg-amber-500 animate-ping" : "bg-emerald-500 animate-pulse"}`} />
+            {loading ? "Memuat Data Database..." : "57 Unit Sub-Metering Terdaftar"}
           </span>
         </div>
       </div>
@@ -915,20 +985,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
       <div className="space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Cooling Tower ({coolingTowerItems.length} Unit)</h4>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {coolingTowerItems.map((item) => {
-            const series = getMachineSeries(item.seriesKey);
-            return (
-              <MonthlyComparisonChart
-                key={item.title}
-                title={item.title}
-                currentData={series.current}
-                previousData={series.previous}
-                isDark={isDark}
-                currMonthName={currMonthLabel}
-                prevMonthName={compMonthLabel}
-              />
-            );
-          })}
+          {coolingTowerItems.map(renderCard)}
         </div>
       </div>
 
@@ -936,20 +993,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
       <div className="space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Boiler ({boilerItems.length} Unit)</h4>
         <div className="grid gap-6 md:grid-cols-2">
-          {boilerItems.map((item) => {
-            const series = getMachineSeries(item.seriesKey);
-            return (
-              <MonthlyComparisonChart
-                key={item.title}
-                title={item.title}
-                currentData={series.current}
-                previousData={series.previous}
-                isDark={isDark}
-                currMonthName={currMonthLabel}
-                prevMonthName={compMonthLabel}
-              />
-            );
-          })}
+          {boilerItems.map(renderCard)}
         </div>
       </div>
 
@@ -957,20 +1001,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
       <div className="space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Compressed Air ({compressedAirItems.length} Unit)</h4>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {compressedAirItems.map((item) => {
-            const series = getMachineSeries(item.seriesKey);
-            return (
-              <MonthlyComparisonChart
-                key={item.title}
-                title={item.title}
-                currentData={series.current}
-                previousData={series.previous}
-                isDark={isDark}
-                currMonthName={currMonthLabel}
-                prevMonthName={compMonthLabel}
-              />
-            );
-          })}
+          {compressedAirItems.map(renderCard)}
         </div>
       </div>
 
@@ -978,20 +1009,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
       <div className="space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Chiller ({chillerItems.length} Unit)</h4>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {chillerItems.map((item) => {
-            const series = getMachineSeries(item.seriesKey);
-            return (
-              <MonthlyComparisonChart
-                key={item.title}
-                title={item.title}
-                currentData={series.current}
-                previousData={series.previous}
-                isDark={isDark}
-                currMonthName={currMonthLabel}
-                prevMonthName={compMonthLabel}
-              />
-            );
-          })}
+          {chillerItems.map(renderCard)}
         </div>
       </div>
 
@@ -999,20 +1017,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
       <div className="space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC Warehouse &amp; Penerangan ({hvacWhItems.length} Unit)</h4>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {hvacWhItems.map((item) => {
-            const series = getMachineSeries(item.seriesKey);
-            return (
-              <MonthlyComparisonChart
-                key={item.title}
-                title={item.title}
-                currentData={series.current}
-                previousData={series.previous}
-                isDark={isDark}
-                currMonthName={currMonthLabel}
-                prevMonthName={compMonthLabel}
-              />
-            );
-          })}
+          {hvacWhItems.map(renderCard)}
         </div>
       </div>
 
@@ -1020,20 +1025,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
       <div className="space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC QC &amp; Produksi ({hvacQcItems.length} Unit)</h4>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {hvacQcItems.map((item) => {
-            const series = getMachineSeries(item.seriesKey);
-            return (
-              <MonthlyComparisonChart
-                key={item.title}
-                title={item.title}
-                currentData={series.current}
-                previousData={series.previous}
-                isDark={isDark}
-                currMonthName={currMonthLabel}
-                prevMonthName={compMonthLabel}
-              />
-            );
-          })}
+          {hvacQcItems.map(renderCard)}
         </div>
       </div>
 
@@ -1041,20 +1033,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
       <div className="space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Panel Distribusi &amp; Water Treatment ({distItems.length} Unit)</h4>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {distItems.map((item) => {
-            const series = getMachineSeries(item.seriesKey);
-            return (
-              <MonthlyComparisonChart
-                key={item.title}
-                title={item.title}
-                currentData={series.current}
-                previousData={series.previous}
-                isDark={isDark}
-                currMonthName={currMonthLabel}
-                prevMonthName={compMonthLabel}
-              />
-            );
-          })}
+          {distItems.map(renderCard)}
         </div>
       </div>
 
@@ -1062,22 +1041,10 @@ const SectionHEquipment = memo(function SectionHEquipment({
       <div className="space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Incoming Cubicles ({cubicleItems.length} Unit)</h4>
         <div className="grid gap-6 md:grid-cols-3">
-          {cubicleItems.map((item) => {
-            const series = getMachineSeries(item.seriesKey);
-            return (
-              <MonthlyComparisonChart
-                key={item.title}
-                title={item.title}
-                currentData={series.current}
-                previousData={series.previous}
-                isDark={isDark}
-                currMonthName={currMonthLabel}
-                prevMonthName={compMonthLabel}
-              />
-            );
-          })}
+          {cubicleItems.map(renderCard)}
         </div>
       </div>
+
 
       {/* Dynamic Selection Chart (Sesuai Pilihan) */}
       <DynamicSelectionChart

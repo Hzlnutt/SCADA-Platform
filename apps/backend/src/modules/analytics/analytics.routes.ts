@@ -14,6 +14,7 @@ import {
   getElectricityExportExcelHandler,
   getElectricityExportPreviewHandler,
   getEquipmentMonthlyAnalyticsHandler,
+  getEquipmentMonthlyBatchAnalyticsHandler,
 } from "./analytics.controller";
 
 export const analyticsRouter = Router();
@@ -22,6 +23,7 @@ analyticsRouter.get("/analytics/summary", getAnalyticsSummaryHandler);
 analyticsRouter.get("/analytics/electricity", getElectricityAnalyticsHandler);
 analyticsRouter.get("/analytics/electricity/report", getElectricityReportHandler);
 analyticsRouter.get("/analytics/electricity/equipment-monthly", getEquipmentMonthlyAnalyticsHandler);
+analyticsRouter.get("/analytics/electricity/equipment-monthly-batch", getEquipmentMonthlyBatchAnalyticsHandler);
 analyticsRouter.get("/analytics/electricity/export-data", getElectricityExportDataHandler);
 analyticsRouter.get("/analytics/electricity/export-excel", getElectricityExportExcelHandler);
 analyticsRouter.get("/analytics/electricity/export-preview", getElectricityExportPreviewHandler);

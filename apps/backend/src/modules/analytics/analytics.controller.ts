@@ -1107,6 +1107,483 @@ export const getElectricityExportPreviewHandler = async (
   }
 };
 
+export const EQUIPMENT_NAME_TO_PM: Record<string, string> = {
+  // Cooling Tower (7)
+  "cooling tower pump wf1-u3": "PM152",
+  "f1 cooling tower pump wf1-u3": "PM152",
+  "cooling tower fan wf1-u3": "PM181",
+  "f1 cooling tower fan wf1-u3": "PM181",
+  "cooling fase-1 wf2": "PM206",
+  "f2 cooling fase-1": "PM206",
+  "cooling critical wf2": "PM215",
+  "f2 cooling critical": "PM215",
+  "cooling fase-2 wf2": "PM318",
+  "f2 cooling fase-2": "PM318",
+  "cooling tower ct-pump wf2": "PM324",
+  "f2 cooling tower ct-pump": "PM324",
+  "cooling tower ct-fan wf2": "PM325",
+  "f2 cooling tower ct-fan": "PM325",
+
+  // Boiler (2)
+  "boiler 4 wf1": "PM184",
+  "f1 boiler 4": "PM184",
+  "boiler-5 wf2": "PM213",
+  "f2 boiler-5": "PM213",
+
+  // Compressed Air (5)
+  "compressed air zt-55 wf1": "PM140",
+  "f1 compressed air zt-55": "PM140",
+  "compressed air zt-30.1&2 wf1": "PM182",
+  "f1 compressed air zt-30.1&2": "PM182",
+  "compressed air ale-30 wf1": "PM183",
+  "f1 compressed air ale-30": "PM183",
+  "compressed air atlas wf2": "PM214",
+  "f2 compressed air atlas": "PM214",
+  "kobelco ale-250 wf2": "PM229",
+  "f2 kobelco ale-250": "PM229",
+
+  // Chiller (8)
+  "chiller prep daikin barat wf1": "PM177",
+  "f1 chiller prep daikin barat": "PM177",
+  "chiller prep daikin timur wf1": "PM178",
+  "f1 chiller prep daikin timur": "PM178",
+  "chiller bp wf1-u3": "PM180",
+  "f1 chiller bp wf1-u3": "PM180",
+  "chiller - wf2u2": "PM209",
+  "f2 chiller - wf2u2": "PM209",
+  "chiller rtac 250 (ro & hvac) wf2": "PM271",
+  "f2 chiller rtac 250 (ro&hvac)": "PM271",
+  "f2 chiller rtac 250 (ro & hvac)": "PM271",
+  "chiller rtac 170 (ro) wf2": "PM272",
+  "f2 chiller rtac 170 (ro)": "PM272",
+  "chiller rtac 100 (bp) wf2": "PM274",
+  "f2 chiller rtac 100 (bp)": "PM274",
+  "chiller rtac-275 (prep) wf2": "PM319",
+  "f2 chiller rtac-275 (prep)": "PM319",
+
+  // HVAC Warehouse & Penerangan (8)
+  "wh 4 penerangan wf1": "PM134",
+  "f1 wh 4 penerangan": "PM134",
+  "lighting wh 1 wf1": "PM154",
+  "f1 lighting wh 1": "PM154",
+  "hvac office atas wf1": "PM151",
+  "f1 hvac office atas": "PM151",
+  "hvac wh-3 wf1": "PM179",
+  "f1 hvac wh-3": "PM179",
+  "wh 6 wf2": "PM207",
+  "f2 wh 6": "PM207",
+  "wh 5 wf2": "PM208",
+  "f2 wh 5": "PM208",
+  "wh-7 wf2": "PM226",
+  "f2 wh-7": "PM226",
+  "penerangan pd wf2": "PM288",
+  "f2 penerangan pd": "PM288",
+
+  // HVAC QC & Produksi (9)
+  "full cooling wf1-u3": "PM138",
+  "f1 full cooling wf1-u3": "PM138",
+  "hvac-qc wf1": "PM153",
+  "f1 hvac-qc": "PM153",
+  "hvac wf1u3": "PM185",
+  "f1 hvac wf1u3": "PM185",
+  "heater wf2u2": "PM203",
+  "f2 heater wf2u2": "PM203",
+  "ahu wf2ui": "PM205",
+  "f2 ahu wf2ui": "PM205",
+  "return sample qc wf2": "PM273",
+  "return sample qc": "PM273",
+  "ahu-1 - wf2u2": "PM321",
+  "f2 ahu-1 - wf2u2": "PM321",
+  "ahu-2 - wf2u2": "PM322",
+  "f2 ahu-2 - wf2u2": "PM322",
+  "main supply qc office & lab wf1": "PM132",
+  "f1 main supply qc office & lab": "PM132",
+
+  // Panel Distribusi & Water Treatment / Process (15)
+  "mdp3 wf1": "PM133",
+  "f1 mdp3": "PM133",
+  "mdp-2 wf1": "PM135",
+  "f1 mdp-2": "PM135",
+  "mdp-1.2 wf1": "PM136",
+  "f1 mdp-1.2": "PM136",
+  "mdp-1.1 wf1": "PM139",
+  "f1 mdp-1.1": "PM139",
+  "st3 wf1": "PM175",
+  "f1 st3": "PM175",
+  "qc lab wf1": "PM176",
+  "f1 qc lab": "PM176",
+  "putr-1 wf2": "PM201",
+  "f2 putr-1": "PM201",
+  "putr-2 wf2": "PM202",
+  "f2 putr-2": "PM202",
+  "main critical panel wf2": "PM210",
+  "f2 main critical panel": "PM210",
+  "panel otoklaf wf2u1": "PM211",
+  "f2 panel otoklaf wf2u1": "PM211",
+  "panel otoklaf wf2u2": "PM212",
+  "f2 panel otoklaf wf2u2": "PM212",
+  "wt-du-psg wf2": "PM320",
+  "f2 wt-du-psg": "PM320",
+  "pw generation - ro wf2": "PM323",
+  "f2 pw generation - ro": "PM323",
+  "putr-new wf2": "PM327",
+  "f2 putr-new": "PM327",
+  "mcc bp 7 wf2": "PM337",
+  "f2 mcc bp 7": "PM337",
+
+  // Incoming Cubicles (3)
+  "incoming cubicle pln (pm8000)": "PM410",
+  "incoming cubicle pln": "PM410",
+  "incoming cubicle wf1 (pm5560)": "PM411",
+  "incoming cubicle wf1": "PM411",
+  "incoming cubicle wf2 (pm5560)": "PM412",
+  "incoming cubicle wf2": "PM412"
+};
+
+export const PM_DEFAULT_LABELS: Record<string, string> = {
+  PM132: "Main Supply QC Office & Lab WF1",
+  PM133: "MDP3 WF1",
+  PM134: "WH 4 Penerangan WF1",
+  PM135: "MDP-2 WF1",
+  PM136: "MDP-1.2 WF1",
+  PM138: "Full Cooling WF1-U3",
+  PM139: "MDP-1.1 WF1",
+  PM140: "Compressed Air ZT-55 WF1",
+  PM151: "HVAC Office Atas WF1",
+  PM152: "Cooling Tower Pump WF1-U3",
+  PM153: "HVAC-QC WF1",
+  PM154: "Lighting WH 1 WF1",
+  PM175: "ST3 WF1",
+  PM176: "QC Lab WF1",
+  PM177: "Chiller Prep Daikin Barat WF1",
+  PM178: "Chiller Prep Daikin Timur WF1",
+  PM179: "HVAC WH-3 WF1",
+  PM180: "Chiller BP WF1-U3",
+  PM181: "Cooling Tower Fan WF1-U3",
+  PM182: "Compressed Air ZT-30.1&2 WF1",
+  PM183: "Compressed Air ALE-30 WF1",
+  PM184: "Boiler 4 WF1",
+  PM185: "HVAC WF1U3",
+  PM201: "PUTR-1 WF2",
+  PM202: "PUTR-2 WF2",
+  PM203: "Heater WF2U2",
+  PM205: "AHU WF2UI",
+  PM206: "Cooling Fase-1 WF2",
+  PM207: "WH 6 WF2",
+  PM208: "WH 5 WF2",
+  PM209: "Chiller - WF2U2",
+  PM210: "Main Critical Panel WF2",
+  PM211: "Panel Otoklaf WF2U1",
+  PM212: "Panel Otoklaf WF2U2",
+  PM213: "Boiler-5 WF2",
+  PM214: "Compressed Air Atlas WF2",
+  PM215: "Cooling Critical WF2",
+  PM226: "WH-7 WF2",
+  PM229: "Kobelco ALE-250 WF2",
+  PM271: "Chiller RTAC 250 (RO & HVAC) WF2",
+  PM272: "Chiller RTAC 170 (RO) WF2",
+  PM273: "Return Sample QC WF2",
+  PM274: "Chiller RTAC 100 (BP) WF2",
+  PM288: "Penerangan PD WF2",
+  PM318: "Cooling Fase-2 WF2",
+  PM319: "Chiller RTAC-275 (Prep) WF2",
+  PM320: "WT-DU-PSG WF2",
+  PM321: "AHU-1 - WF2U2",
+  PM322: "AHU-2 - WF2U2",
+  PM323: "PW Generation - RO WF2",
+  PM324: "Cooling Tower CT-Pump WF2",
+  PM325: "Cooling Tower CT-Fan WF2",
+  PM327: "PUTR-NEW WF2",
+  PM337: "MCC BP 7 WF2",
+  PM410: "Incoming Cubicle PLN (PM8000)",
+  PM411: "Incoming Cubicle WF1 (PM5560)",
+  PM412: "Incoming Cubicle WF2 (PM5560)"
+};
+
+/**
+ * Core engine to compute factual monthly daily electricity consumption for all equipment units
+ */
+export async function computeEquipmentMonthlyBatch(
+  currentMonth: string,
+  comparisonMonth: string
+): Promise<{
+  currentMonth: string;
+  comparisonMonth: string;
+  daysInCurrent: number;
+  daysInComparison: number;
+  data: Record<string, {
+    pmId: string;
+    label: string;
+    current: number[];
+    previous: number[];
+    currTotalKwh: number;
+    prevTotalKwh: number;
+    hasData: boolean;
+  }>;
+}> {
+  const pool = getPostgresPool();
+  const months = [currentMonth, comparisonMonth].sort();
+  const earlierMonth = months[0];
+  const laterMonth = months[1];
+
+  const [eYear, eMonth] = earlierMonth.split("-").map(Number);
+  const [lYear, lMonth] = laterMonth.split("-").map(Number);
+  const lDays = new Date(lYear, lMonth, 0).getDate();
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  // Query window: 2 hours before 1st of earlier month to 2 hours after last day of later month
+  const fromDate = new Date(`${earlierMonth}-01T00:00:00`);
+  const baselineDate = new Date(fromDate.getTime() - 2 * 60 * 60 * 1000);
+  const fromQueryVal = `${baselineDate.getFullYear()}-${pad(baselineDate.getMonth() + 1)}-${pad(baselineDate.getDate())} ${pad(baselineDate.getHours())}:${pad(baselineDate.getMinutes())}:${pad(baselineDate.getSeconds())}`;
+
+  const toDate = new Date(`${laterMonth}-${pad(lDays)}T23:59:59`);
+  const toPlusDate = new Date(toDate.getTime() + 2 * 60 * 60 * 1000);
+  const toQueryVal = `${toPlusDate.getFullYear()}-${pad(toPlusDate.getMonth() + 1)}-${pad(toPlusDate.getDate())} ${pad(toPlusDate.getHours())}:${pad(toPlusDate.getMinutes())}:${pad(toPlusDate.getSeconds())}`;
+
+  // 1. Fetch PM telemetry (excluding cubicles which are queried from their dedicated tables)
+  const pmSql = `
+    SELECT DISTINCT ON (UPPER(pm_id), date_trunc('hour', t_stamp))
+      UPPER(pm_id) as pm_id,
+      t_stamp,
+      active_energy::float as value,
+      status
+    FROM electric_pm_telemetry
+    WHERE t_stamp >= $1 AND t_stamp <= $2
+      AND UPPER(pm_id) NOT IN ('PM410', 'PM411', 'PM412')
+    ORDER BY UPPER(pm_id), date_trunc('hour', t_stamp) ASC, t_stamp DESC
+  `;
+
+  // 2. Fetch Cubicle telemetries
+  const [pmRes, plnRes, wf1Res, wf2Res] = await Promise.all([
+    pool.query(pmSql, [fromQueryVal, toQueryVal]),
+    pool.query(`
+      SELECT DISTINCT ON (date_trunc('hour', t_stamp))
+        'PM410' as pm_id,
+        t_stamp,
+        active_energy::float as value,
+        status_pm8000 as status
+      FROM electric_pln_telemetry
+      WHERE t_stamp >= $1 AND t_stamp <= $2
+      ORDER BY date_trunc('hour', t_stamp) ASC, t_stamp DESC
+    `, [fromQueryVal, toQueryVal]),
+    pool.query(`
+      SELECT DISTINCT ON (date_trunc('hour', t_stamp))
+        'PM411' as pm_id,
+        t_stamp,
+        active_energy::float as value,
+        status_pm5500 as status
+      FROM electric_wf1_telemetry
+      WHERE t_stamp >= $1 AND t_stamp <= $2
+      ORDER BY date_trunc('hour', t_stamp) ASC, t_stamp DESC
+    `, [fromQueryVal, toQueryVal]),
+    pool.query(`
+      SELECT DISTINCT ON (date_trunc('hour', t_stamp))
+        'PM412' as pm_id,
+        t_stamp,
+        active_energy::float as value,
+        status_pm5500 as status
+      FROM electric_wf2_telemetry
+      WHERE t_stamp >= $1 AND t_stamp <= $2
+      ORDER BY date_trunc('hour', t_stamp) ASC, t_stamp DESC
+    `, [fromQueryVal, toQueryVal])
+  ]);
+
+  // 3. Fetch latest minutes if currentMonth is active
+  const now = new Date();
+  const currentMonthStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+  let minuteRows: any[] = [];
+  if (currentMonth === currentMonthStr) {
+    try {
+      const pmMinRes = await pool.query(`
+        SELECT DISTINCT ON (UPPER(pm_id))
+          UPPER(pm_id) as pm_id,
+          t_stamp,
+          active_energy::float as value,
+          status
+        FROM electric_pm_telemetry_minute
+        WHERE active_energy IS NOT NULL
+          AND UPPER(pm_id) NOT IN ('PM410', 'PM411', 'PM412')
+        ORDER BY UPPER(pm_id), t_stamp DESC
+      `);
+      minuteRows = pmMinRes.rows;
+
+      const [plnMin, wf1Min, wf2Min] = await Promise.all([
+        pool.query(`SELECT 'PM410' as pm_id, t_stamp, active_energy::float as value, status_pm8000 as status FROM electric_pln_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`),
+        pool.query(`SELECT 'PM411' as pm_id, t_stamp, active_energy::float as value, status_pm5500 as status FROM electric_wf1_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`),
+        pool.query(`SELECT 'PM412' as pm_id, t_stamp, active_energy::float as value, status_pm5500 as status FROM electric_wf2_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`)
+      ]);
+      minuteRows.push(...plnMin.rows, ...wf1Min.rows, ...wf2Min.rows);
+    } catch (e: any) {
+      console.warn("Minute table query fallback warning:", e.message);
+    }
+  }
+
+  // Group records by pm_id
+  const pmRecords = new Map<string, { ts: Date; value: number | null; status?: boolean }[]>();
+  const addRow = (row: any) => {
+    const id = row.pm_id;
+    if (!pmRecords.has(id)) pmRecords.set(id, []);
+    pmRecords.get(id)!.push({
+      ts: new Date(row.t_stamp),
+      value: row.value !== null ? Number(row.value) : null,
+      status: row.status !== false
+    });
+  };
+
+  pmRes.rows.forEach(addRow);
+  plnRes.rows.forEach(addRow);
+  wf1Res.rows.forEach(addRow);
+  wf2Res.rows.forEach(addRow);
+
+  // Append minute rows
+  for (const mRow of minuteRows) {
+    const list = pmRecords.get(mRow.pm_id);
+    if (list && list.length > 0) {
+      const mTs = new Date(mRow.t_stamp);
+      const lastTs = list[list.length - 1].ts;
+      if (mTs.getTime() > lastTs.getTime() + 60000 && Number(mRow.value) > 0) {
+        list.push({
+          ts: mTs,
+          value: Number(mRow.value),
+          status: mRow.status !== false
+        });
+      }
+    }
+  }
+
+  // Calculate daily consumption
+  const [currY, currM] = currentMonth.split("-").map(Number);
+  const [compY, compM] = comparisonMonth.split("-").map(Number);
+  const daysInCurr = new Date(currY, currM, 0).getDate();
+  const daysInComp = new Date(compY, compM, 0).getDate();
+
+  const results: Record<string, {
+    pmId: string;
+    label: string;
+    current: number[];
+    previous: number[];
+    currTotalKwh: number;
+    prevTotalKwh: number;
+    hasData: boolean;
+  }> = {};
+
+  // Ensure all 57 standard PMs exist in output even if no rows in DB
+  const allExpectedPms = Object.keys(PM_DEFAULT_LABELS);
+  for (const pmId of allExpectedPms) {
+    results[pmId] = {
+      pmId,
+      label: PM_DEFAULT_LABELS[pmId] || pmId,
+      current: new Array(daysInCurr).fill(0),
+      previous: new Array(daysInComp).fill(0),
+      currTotalKwh: 0,
+      prevTotalKwh: 0,
+      hasData: false
+    };
+  }
+
+  for (const [pmId, records] of pmRecords.entries()) {
+    // Sort records by timestamp
+    records.sort((a, b) => a.ts.getTime() - b.ts.getTime());
+
+    const currDaily = new Array(daysInCurr).fill(0);
+    const compDaily = new Array(daysInComp).fill(0);
+
+    for (let i = 1; i < records.length; i++) {
+      const prev = records[i - 1];
+      const curr = records[i];
+      const prevVal = prev.status === false ? null : prev.value;
+      const currVal = curr.status === false ? null : curr.value;
+      const timeDiffMs = curr.ts.getTime() - prev.ts.getTime();
+
+      let diff = 0;
+      if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal)) {
+        if (timeDiffMs <= 90 * 60 * 1000) {
+          diff = currVal - prevVal;
+          if (diff < 0) diff = 0;
+        }
+      }
+
+      // Date string in WIB (GMT+7)
+      const wibTime = new Date(curr.ts.getTime() + 7 * 60 * 60 * 1000);
+      const y = wibTime.getUTCFullYear();
+      const m = pad(wibTime.getUTCMonth() + 1);
+      const d = wibTime.getUTCDate();
+      const monthKey = `${y}-${m}`;
+
+      if (monthKey === currentMonth && d >= 1 && d <= daysInCurr) {
+        currDaily[d - 1] += diff;
+      } else if (monthKey === comparisonMonth && d >= 1 && d <= daysInComp) {
+        compDaily[d - 1] += diff;
+      }
+    }
+
+    const currentRounded = currDaily.map(v => Math.round(v * 10) / 10);
+    const compRounded = compDaily.map(v => Math.round(v * 10) / 10);
+    const currTotal = Math.round(currentRounded.reduce((a, b) => a + b, 0) * 10) / 10;
+    const compTotal = Math.round(compRounded.reduce((a, b) => a + b, 0) * 10) / 10;
+
+    const label = PM_DEFAULT_LABELS[pmId] || pmId;
+
+    results[pmId] = {
+      pmId,
+      label,
+      current: currentRounded,
+      previous: compRounded,
+      currTotalKwh: currTotal,
+      prevTotalKwh: compTotal,
+      hasData: currTotal > 0 || compTotal > 0
+    };
+  }
+
+  // Populate alias keys for convenient lookup by name or seriesKey
+  for (const [alias, pmId] of Object.entries(EQUIPMENT_NAME_TO_PM)) {
+    if (results[pmId]) {
+      results[alias] = results[pmId];
+    }
+  }
+
+  return {
+    currentMonth,
+    comparisonMonth,
+    daysInCurrent: daysInCurr,
+    daysInComparison: daysInComp,
+    data: results
+  };
+}
+
+/**
+ * Batch endpoint for all 57 equipment units monthly daily analytics
+ * GET /analytics/electricity/equipment-monthly-batch?currentMonth=YYYY-MM&comparisonMonth=YYYY-MM
+ */
+export const getEquipmentMonthlyBatchAnalyticsHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const currentMonth = (req.query.currentMonth as string) || new Date().toISOString().slice(0, 7); // YYYY-MM
+    let comparisonMonth = req.query.comparisonMonth as string | undefined;
+    if (!comparisonMonth) {
+      const [currY, currM] = currentMonth.split("-").map(Number);
+      const prevDate = new Date(currY, currM - 2, 1);
+      comparisonMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    const batchData = await computeEquipmentMonthlyBatch(currentMonth, comparisonMonth);
+    res.json({
+      success: true,
+      ...batchData
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Single equipment monthly daily analytics endpoint
+ * GET /analytics/electricity/equipment-monthly?pmId=...&machine=...&currentMonth=YYYY-MM&comparisonMonth=YYYY-MM
+ */
 export const getEquipmentMonthlyAnalyticsHandler = async (
   req: Request,
   res: Response,
@@ -1135,7 +1612,23 @@ export const getEquipmentMonthlyAnalyticsHandler = async (
       targetPmId = rawPmId.trim().toUpperCase();
     }
 
-    // 2. Look up configKey if pmId not resolved
+    // 2. Machine lookup
+    if (!targetPmId && machine) {
+      const normMachine = machine.toLowerCase().trim();
+      targetPmId = EQUIPMENT_NAME_TO_PM[normMachine] || null;
+      if (!targetPmId) {
+        try {
+          const cfgRes = await pool.query(`SELECT config_key, label, value FROM electricity_config WHERE LOWER(label) = LOWER($1) LIMIT 1`, [machine.trim()]);
+          if (cfgRes.rows.length > 0) {
+            const val = cfgRes.rows[0].value || {};
+            targetPmId = (val.pm_id || val.json_key || cfgRes.rows[0].config_key).toUpperCase();
+            targetLabel = cfgRes.rows[0].label || targetLabel;
+          }
+        } catch {}
+      }
+    }
+
+    // 3. Look up configKey if pmId not resolved
     if (!targetPmId && configKey) {
       try {
         const cfgRes = await pool.query(`SELECT config_key, label, value FROM electricity_config WHERE config_key = $1 LIMIT 1`, [configKey]);
@@ -1147,140 +1640,47 @@ export const getEquipmentMonthlyAnalyticsHandler = async (
       } catch {}
     }
 
-    // 3. Fallback map from standard machine name
-    const MACHINE_PM_MAP: Record<string, string> = {
-      "f1 main supply qc office & lab": "PM320",
-      "cooling tower wf1": "PM321",
-      "cooling tower wf1 (ct-1)": "PM321",
-      "boiler 3 wf1": "PM321",
-      "boiler-3 wf1": "PM321",
-      "compressed air wf1 (ale-30)": "PM325",
-      "compressed air wf1 (zt-30.1)": "PM325",
-      "compressed air wf1 (zt-30.2)": "PM325",
-      "compressed air wf1 (zt-55)": "PM325",
-      "hvac qc (micro)": "PM327",
-      "hvac qc (retained sample)": "PM327",
-      "hvac qc (sampling)": "PM327",
-      "hvac produksi (wf1-u3)": "PM327",
-      "cooling tower wf2 (ct-2)": "PM206",
-      "boiler-4": "PM211",
-      "boiler-5": "PM211",
-      "compressed air wf2 (ale-250)": "PM210",
-      "compressed air wf2 (zt-110)": "PM210",
-      "chiller wf-2 (trane-100)": "PM208",
-      "chiller wf-2 (trane-275)": "PM208",
-      "chiller hvac wf-2 (trane-250)": "PM207",
-      "chiller hvac wf-2 (trane-185)": "PM207",
-      "hvac warehouse (wh-2)": "PM209",
-      "hvac warehouse (wh-3)": "PM209",
-      "hvac warehouse (wh-4)": "PM209",
-      "hvac warehouse (wh-5)": "PM209",
-      "hvac warehouse (wh-6)": "PM209",
-      "hvac warehouse (wh-7)": "PM209",
-      "hvac produksi (wf2-u1)": "PM205",
-      "hvac produksi (wf2-u2)": "PM205"
-    };
-
-    if (!targetPmId && machine) {
-      targetPmId = MACHINE_PM_MAP[machine.toLowerCase().trim()] || null;
-      if (!targetPmId) {
-        try {
-          const cfgRes = await pool.query(`SELECT config_key, label, value FROM electricity_config WHERE LOWER(label) = LOWER($1) LIMIT 1`, [machine.trim()]);
-          if (cfgRes.rows.length > 0) {
-            const val = cfgRes.rows[0].value || {};
-            targetPmId = (val.pm_id || val.json_key || cfgRes.rows[0].config_key).toUpperCase();
-          }
-        } catch {}
-      }
-    }
-
     if (!targetPmId) {
       targetPmId = (rawPmId || configKey || machine || "UNKNOWN").toUpperCase().replace(/[^A-Z0-9_]/g, "");
     }
 
-    const queryMonthDaily = async (yearMonth: string) => {
-      const [year, month] = yearMonth.split("-").map(Number);
-      const daysInMonth = new Date(year, month, 0).getDate();
-      const startStr = `${yearMonth}-01 00:00:00`;
-      const nextMonthDate = new Date(year, month, 1);
-      const nextMonthStr = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}-01 00:00:00`;
+    if (PM_DEFAULT_LABELS[targetPmId]) {
+      targetLabel = PM_DEFAULT_LABELS[targetPmId];
+    }
 
-      const sql = `
-        WITH hourly_combined AS (
-          SELECT 
-            EXTRACT(DAY FROM t_stamp)::int as day_num,
-            EXTRACT(HOUR FROM t_stamp)::int as hour_num,
-            AVG(active_power_total) as avg_kw,
-            MAX(active_energy) as max_energy,
-            MIN(active_energy) as min_energy
-          FROM electric_pm_telemetry
-          WHERE UPPER(pm_id) = UPPER($1)
-            AND t_stamp >= $2::timestamp
-            AND t_stamp < $3::timestamp
-          GROUP BY EXTRACT(DAY FROM t_stamp), EXTRACT(HOUR FROM t_stamp)
-          
-          UNION ALL
-          
-          SELECT 
-            EXTRACT(DAY FROM t_stamp)::int as day_num,
-            EXTRACT(HOUR FROM t_stamp)::int as hour_num,
-            AVG(active_power_total) as avg_kw,
-            MAX(active_energy) as max_energy,
-            MIN(active_energy) as min_energy
-          FROM electric_pm_telemetry_minute
-          WHERE UPPER(pm_id) = UPPER($1)
-            AND t_stamp >= $2::timestamp
-            AND t_stamp < $3::timestamp
-          GROUP BY EXTRACT(DAY FROM t_stamp), EXTRACT(HOUR FROM t_stamp)
-        )
-        SELECT 
-          day_num,
-          COALESCE(
-            NULLIF(MAX(max_energy) - MIN(min_energy), 0),
-            ROUND(SUM(COALESCE(avg_kw, 0)), 2)
-          )::float as daily_kwh
-        FROM hourly_combined
-        GROUP BY day_num
-        ORDER BY day_num ASC;
-      `;
-
-      const dbRes = await pool.query(sql, [targetPmId, startStr, nextMonthStr]);
-      const dailyMap = new Map<number, number>();
-      for (const row of dbRes.rows) {
-        dailyMap.set(Number(row.day_num), Number(row.daily_kwh) || 0);
-      }
-
-      const daily: number[] = [];
-      let totalKwh = 0;
-      for (let d = 1; d <= daysInMonth; d++) {
-        const val = dailyMap.get(d) ?? 0;
-        daily.push(Math.round(val * 10) / 10);
-        totalKwh += val;
-      }
-
-      return {
-        month: yearMonth,
-        daysInMonth,
-        totalKwh: Math.round(totalKwh * 10) / 10,
-        daily,
-        hasData: totalKwh > 0
-      };
+    const batchData = await computeEquipmentMonthlyBatch(currentMonth, comparisonMonth);
+    const itemData = batchData.data[targetPmId] || {
+      pmId: targetPmId,
+      label: targetLabel,
+      current: new Array(batchData.daysInCurrent).fill(0),
+      previous: new Array(batchData.daysInComparison).fill(0),
+      currTotalKwh: 0,
+      prevTotalKwh: 0,
+      hasData: false
     };
-
-    const [currentRes, comparisonRes] = await Promise.all([
-      queryMonthDaily(currentMonth),
-      queryMonthDaily(comparisonMonth)
-    ]);
 
     res.json({
       pmId: targetPmId,
-      label: targetLabel,
-      currentMonth: currentRes,
-      comparisonMonth: comparisonRes,
-      hasData: currentRes.hasData || comparisonRes.hasData
+      label: itemData.label || targetLabel,
+      currentMonth: {
+        month: currentMonth,
+        daysInMonth: batchData.daysInCurrent,
+        totalKwh: itemData.currTotalKwh,
+        daily: itemData.current,
+        hasData: itemData.currTotalKwh > 0
+      },
+      comparisonMonth: {
+        month: comparisonMonth,
+        daysInMonth: batchData.daysInComparison,
+        totalKwh: itemData.prevTotalKwh,
+        daily: itemData.previous,
+        hasData: itemData.prevTotalKwh > 0
+      },
+      hasData: itemData.hasData
     });
   } catch (err) {
     next(err);
   }
 };
+
 
