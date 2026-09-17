@@ -440,11 +440,17 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
       },
       y: {
         stacked: true,
+        beginAtZero: true,
+        grace: "15%",
         grid: { color: isDark ? "rgba(51, 65, 85, 0.4)" : "rgba(203, 213, 225, 0.5)" },
         ticks: {
           color: isDark ? "rgba(148, 163, 184, 0.7)" : "rgba(71, 85, 105, 0.7)",
           font: { size: 9 },
-          callback: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`
+          callback: (v: number) => {
+            if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
+            if (Number.isInteger(v)) return `${v}`;
+            return `${Number(v.toFixed(2))}`;
+          }
         }
       }
     }
@@ -763,12 +769,14 @@ interface SectionHEquipmentProps {
   isDark: boolean;
   currentMonthIdx: number;
   currentYear: number;
+  onBatchDataLoaded?: (data: Record<string, any>) => void;
 }
 
 const SectionHEquipment = memo(function SectionHEquipment({
   isDark,
   currentMonthIdx,
-  currentYear
+  currentYear,
+  onBatchDataLoaded
 }: SectionHEquipmentProps) {
   const [compMonth, setCompMonth] = useState<number>(() => {
     return currentMonthIdx === 0 ? 11 : currentMonthIdx - 1;
@@ -898,6 +906,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
       .then((res) => {
         if (!isCancelled && res?.data) {
           setBatchData(res.data);
+          onBatchDataLoaded?.(res.data);
           setLoading(false);
         }
       })
@@ -1488,6 +1497,29 @@ export default function Electricity() {
         else setFactCategories2(defaultFact2Categories);
       })
       .catch(() => { setFactCategories2(defaultFact2Categories); });
+  }, []);
+
+  // Synchronize fact categories with equipment monthly batch data from database
+  const handleEquipmentBatchLoaded = useCallback((batch: Record<string, any>) => {
+    if (!batch) return;
+    setFactCategories1(prev => prev.map(item => {
+      const rawPm = String(item.value?.pm_id || item.config_key || item.id || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const normalizedPm = rawPm.startsWith("PM") ? rawPm : `PM${rawPm}`;
+      const bItem = batch[normalizedPm] || batch[rawPm] || batch[item.label?.toLowerCase()];
+      if (bItem && typeof bItem.currTotalKwh === "number") {
+        return { ...item, value: { ...item.value, kWh: bItem.currTotalKwh } };
+      }
+      return item;
+    }));
+    setFactCategories2(prev => prev.map(item => {
+      const rawPm = String(item.value?.pm_id || item.config_key || item.id || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const normalizedPm = rawPm.startsWith("PM") ? rawPm : `PM${rawPm}`;
+      const bItem = batch[normalizedPm] || batch[rawPm] || batch[item.label?.toLowerCase()];
+      if (bItem && typeof bItem.currTotalKwh === "number") {
+        return { ...item, value: { ...item.value, kWh: bItem.currTotalKwh } };
+      }
+      return item;
+    }));
   }, []);
 
   // Live API Data states
@@ -2392,7 +2424,7 @@ export default function Electricity() {
     },
     scales: {
       x: { stacked: true, grid: { display: false }, ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
-      y: { stacked: true, grid: { color: isDark ? "rgba(51,65,85,.4)" : "rgba(203,213,225,.6)" }, ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", callback: (v: number) => `${v}` } }
+      y: { stacked: true, beginAtZero: true, grace: "15%", grid: { color: isDark ? "rgba(51,65,85,.4)" : "rgba(203,213,225,.6)" }, ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", callback: (v: number) => `${v}` } }
     }
   }), [isDark, barWbpValues, barLwbpValues, barUnit, wbpRate, lwbpRate]);
 
@@ -2722,7 +2754,7 @@ export default function Electricity() {
     },
     scales: {
       x: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 8 } } },
-      y: { grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }, ticks: { color: "#64748b", font: { size: 8 } } }
+      y: { beginAtZero: true, grace: "15%", grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }, ticks: { color: "#64748b", font: { size: 8 } } }
     }
   };
 
@@ -2792,7 +2824,7 @@ export default function Electricity() {
       }
     },
     scales: {
-      x: { grid: { color: isDark ? "rgba(51,65,85,.4)" : "rgba(203,213,225,.5)" }, ticks: { color: isDark ? "rgba(148,163,184,.7)" : "rgba(71,85,105,.7)", font: { size: 10 } } },
+      x: { beginAtZero: true, grace: "15%", grid: { color: isDark ? "rgba(51,65,85,.4)" : "rgba(203,213,225,.5)" }, ticks: { color: isDark ? "rgba(148,163,184,.7)" : "rgba(71,85,105,.7)", font: { size: 10 } } },
       y: { grid: { display: false }, ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", font: { size: 10 }, autoSkip: false } }
     }
   }), [isDark]);
@@ -4547,6 +4579,7 @@ export default function Electricity() {
             isDark={isDark}
             currentMonthIdx={equipCurrentMonthIdx}
             currentYear={equipCurrentYear}
+            onBatchDataLoaded={handleEquipmentBatchLoaded}
           />
         );
       })()}

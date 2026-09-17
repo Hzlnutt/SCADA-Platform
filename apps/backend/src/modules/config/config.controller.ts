@@ -1664,6 +1664,34 @@ export const getElectricityConfigHandler = async (req: Request, res: Response, n
       pgRes = await pool.query(queryStr, values);
     }
 
+    // Enrich rows with real monthly factual consumption from batch analytics
+    if (!configType || configType === "consumption_fact_1" || configType === "consumption_fact_2") {
+      try {
+        const { computeEquipmentMonthlyBatch } = require("../analytics/analytics.controller");
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const currMonthStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+        const compMonthStr = now.getMonth() === 0 ? `${now.getFullYear() - 1}-12` : `${now.getFullYear()}-${pad(now.getMonth())}`;
+
+        const batchRes = await computeEquipmentMonthlyBatch(currMonthStr, compMonthStr);
+        if (batchRes && batchRes.data) {
+          for (const row of pgRes.rows) {
+            const val = typeof row.value === "object" && row.value !== null ? row.value : {};
+            const rawPm = String(val.pm_id || val.json_key || row.config_key || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+            const normalizedPm = rawPm.startsWith("PM") ? rawPm : `PM${rawPm}`;
+            const batchItem = batchRes.data[normalizedPm] || batchRes.data[rawPm] || batchRes.data[row.label?.toLowerCase()];
+            const factualKwh = batchItem ? batchItem.currTotalKwh : (Number(val.kWh) || 0);
+            row.value = {
+              ...val,
+              kWh: factualKwh
+            };
+          }
+        }
+      } catch (e: any) {
+        console.warn("Failed to enrich electricity_config with factual consumption:", e.message);
+      }
+    }
+
     res.json({ data: pgRes.rows });
   } catch (err) {
     next(err);
