@@ -1478,45 +1478,70 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
 // ═══════════════════════════════════════════════
 
 const STANDARD_METERS = [
-  // EW21 (Factory 1)
-  { pm_id: "PM318", label: "PM318 — F1 MDP 1.1", endpoint_url: "electric_ew21", json_key: "PM318", group_id: "ew21", department: "Utility", subArea: "Electrical Substation" },
-  { pm_id: "PM319", label: "PM319 — F1 MDP 1.2", endpoint_url: "electric_ew21", json_key: "PM319", group_id: "ew21", department: "Utility", subArea: "Electrical Substation" },
-  { pm_id: "PM320", label: "PM320 — F1 MDP 2", endpoint_url: "electric_ew21", json_key: "PM320", group_id: "ew21", department: "Utility", subArea: "Electrical Substation" },
-  { pm_id: "PM321", label: "PM321 — F1 MDP 3 (CT & Boiler)", endpoint_url: "electric_ew21", json_key: "PM321", group_id: "ew21", department: "Utility", subArea: "Boiler" },
-  { pm_id: "PM322", label: "PM322 — F1 Cap Bank", endpoint_url: "electric_ew21", json_key: "PM322", group_id: "ew21", department: "Utility", subArea: "Electrical Substation" },
-  { pm_id: "PM323", label: "PM323 — F1 MDP Prod 1", endpoint_url: "electric_ew21", json_key: "PM323", group_id: "ew21", department: "Other", subArea: "Production Lines" },
-  { pm_id: "PM324", label: "PM324 — F1 MDP Prod 2", endpoint_url: "electric_ew21", json_key: "PM324", group_id: "ew21", department: "Other", subArea: "Production Lines" },
-  { pm_id: "PM325", label: "PM325 — F1 MDP Utility (Kompresor)", endpoint_url: "electric_ew21", json_key: "PM325", group_id: "ew21", department: "Utility", subArea: "Compressors" },
-  { pm_id: "PM327", label: "PM327 — F1 Chiller / HVAC", endpoint_url: "electric_ew21", json_key: "PM327", group_id: "ew21", department: "HVAC", subArea: "Chillers" },
-  { pm_id: "PM337", label: "PM337 — F1 WTP / Boiler", endpoint_url: "electric_ew21", json_key: "PM337", group_id: "ew21", department: "Utility", subArea: "Water / WTP" },
+  // ─── EW21 (Factory 1 - 23 Units) ───
+  { pm_id: "PM132", label: "PM132 — F1 MAIN SUPPLY QC OFFICE & LAB", endpoint_url: "electric_ew21", json_key: "PM132", group_id: "ew21", department: "Other", subArea: "QC Laboratory" },
+  { pm_id: "PM133", label: "PM133 — F1 MDP3", endpoint_url: "electric_ew21", json_key: "PM133", group_id: "ew21", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM134", label: "PM134 — F1 WH 4 PENERANGAN", endpoint_url: "electric_ew21", json_key: "PM134", group_id: "ew21", department: "Other", subArea: "Warehouse" },
+  { pm_id: "PM135", label: "PM135 — F1 MDP-2", endpoint_url: "electric_ew21", json_key: "PM135", group_id: "ew21", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM136", label: "PM136 — F1 MDP-1.2", endpoint_url: "electric_ew21", json_key: "PM136", group_id: "ew21", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM138", label: "PM138 — F1 FULL COOLING WF1-U3", endpoint_url: "electric_ew21", json_key: "PM138", group_id: "ew21", department: "Utility", subArea: "Cooling Towers" },
+  { pm_id: "PM139", label: "PM139 — F1 MDP-1.1", endpoint_url: "electric_ew21", json_key: "PM139", group_id: "ew21", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM140", label: "PM140 — F1 COMPRESSED AIR ZT-55", endpoint_url: "electric_ew21", json_key: "PM140", group_id: "ew21", department: "Utility", subArea: "Compressors" },
+  { pm_id: "PM151", label: "PM151 — F1 HVAC OFFICE ATAS", endpoint_url: "electric_ew21", json_key: "PM151", group_id: "ew21", department: "HVAC", subArea: "AHUs" },
+  { pm_id: "PM152", label: "PM152 — F1 COOLING TOWER PUMP WF1-U3", endpoint_url: "electric_ew21", json_key: "PM152", group_id: "ew21", department: "Utility", subArea: "Cooling Towers" },
+  { pm_id: "PM153", label: "PM153 — F1 HVAC-QC", endpoint_url: "electric_ew21", json_key: "PM153", group_id: "ew21", department: "HVAC", subArea: "AHUs" },
+  { pm_id: "PM154", label: "PM154 — F1 LIGHTING WH 1", endpoint_url: "electric_ew21", json_key: "PM154", group_id: "ew21", department: "Other", subArea: "Warehouse" },
+  { pm_id: "PM175", label: "PM175 — F1 ST3", endpoint_url: "electric_ew21", json_key: "PM175", group_id: "ew21", department: "Other", subArea: "Production Lines" },
+  { pm_id: "PM176", label: "PM176 — F1 QC LAB", endpoint_url: "electric_ew21", json_key: "PM176", group_id: "ew21", department: "Other", subArea: "QC Laboratory" },
+  { pm_id: "PM177", label: "PM177 — F1 CHILLER PREP DAIKIN BARAT", endpoint_url: "electric_ew21", json_key: "PM177", group_id: "ew21", department: "HVAC", subArea: "Chillers" },
+  { pm_id: "PM178", label: "PM178 — F1 CHILLER PREP DAIKIN TIMUR", endpoint_url: "electric_ew21", json_key: "PM178", group_id: "ew21", department: "HVAC", subArea: "Chillers" },
+  { pm_id: "PM179", label: "PM179 — F1 HVAC WH-3", endpoint_url: "electric_ew21", json_key: "PM179", group_id: "ew21", department: "HVAC", subArea: "Warehouse" },
+  { pm_id: "PM180", label: "PM180 — F1 CHILLER BP WF1-U3", endpoint_url: "electric_ew21", json_key: "PM180", group_id: "ew21", department: "HVAC", subArea: "Chillers" },
+  { pm_id: "PM181", label: "PM181 — F1 COOLING TOWER FAN WF1-U3", endpoint_url: "electric_ew21", json_key: "PM181", group_id: "ew21", department: "Utility", subArea: "Cooling Towers" },
+  { pm_id: "PM182", label: "PM182 — F1 COMPRESSED AIR ZT-30.1&2", endpoint_url: "electric_ew21", json_key: "PM182", group_id: "ew21", department: "Utility", subArea: "Compressors" },
+  { pm_id: "PM183", label: "PM183 — F1 COMPRESSED AIR ALE-30", endpoint_url: "electric_ew21", json_key: "PM183", group_id: "ew21", department: "Utility", subArea: "Compressors" },
+  { pm_id: "PM184", label: "PM184 — F1 BOILER 4", endpoint_url: "electric_ew21", json_key: "PM184", group_id: "ew21", department: "Utility", subArea: "Boiler" },
+  { pm_id: "PM185", label: "PM185 — F1 HVAC WF1U3", endpoint_url: "electric_ew21", json_key: "PM185", group_id: "ew21", department: "HVAC", subArea: "AHUs" },
 
-  // EW22 (Factory 2)
-  { pm_id: "PM201", label: "PM201 — F2 PUTR 1", endpoint_url: "electric_ew22", json_key: "PM201", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
-  { pm_id: "PM202", label: "PM202 — F2 PUTR 2", endpoint_url: "electric_ew22", json_key: "PM202", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
-  { pm_id: "PM203", label: "PM203 — F2 Cap Bank", endpoint_url: "electric_ew22", json_key: "PM203", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
-  { pm_id: "PM205", label: "PM205 — F2 SDP Produksi", endpoint_url: "electric_ew22", json_key: "PM205", group_id: "ew22", department: "Other", subArea: "Production Lines" },
-  { pm_id: "PM206", label: "PM206 — F2 SDP Utility (Cooling Tower)", endpoint_url: "electric_ew22", json_key: "PM206", group_id: "ew22", department: "Utility", subArea: "Cooling Towers" },
-  { pm_id: "PM207", label: "PM207 — F2 SDP HVAC", endpoint_url: "electric_ew22", json_key: "PM207", group_id: "ew22", department: "HVAC", subArea: "AHUs" },
-  { pm_id: "PM208", label: "PM208 — F2 SDP Chiller", endpoint_url: "electric_ew22", json_key: "PM208", group_id: "ew22", department: "HVAC", subArea: "Chillers" },
-  { pm_id: "PM209", label: "PM209 — F2 SDP Warehouse", endpoint_url: "electric_ew22", json_key: "PM209", group_id: "ew22", department: "HVAC", subArea: "AC Split / FCU" },
-  { pm_id: "PM210", label: "PM210 — F2 SDP Kompresor", endpoint_url: "electric_ew22", json_key: "PM210", group_id: "ew22", department: "Utility", subArea: "Compressors" },
-  { pm_id: "PM211", label: "PM211 — F2 SDP Boiler", endpoint_url: "electric_ew22", json_key: "PM211", group_id: "ew22", department: "Utility", subArea: "Boiler" },
-  { pm_id: "PM212", label: "PM212 — F2 SDP WTP", endpoint_url: "electric_ew22", json_key: "PM212", group_id: "ew22", department: "Utility", subArea: "Water / WTP" },
-  { pm_id: "PM213", label: "PM213 — F2 SDP QC Lab", endpoint_url: "electric_ew22", json_key: "PM213", group_id: "ew22", department: "Other", subArea: "QC Laboratory" },
-  { pm_id: "PM214", label: "PM214 — F2 SDP Office", endpoint_url: "electric_ew22", json_key: "PM214", group_id: "ew22", department: "Other", subArea: "Warehouse" },
-  { pm_id: "PM215", label: "PM215 — F2 SDP Workshop", endpoint_url: "electric_ew22", json_key: "PM215", group_id: "ew22", department: "Other", subArea: "Others" },
-  { pm_id: "PM226", label: "PM226 — F2 SDP Spare 1", endpoint_url: "electric_ew22", json_key: "PM226", group_id: "ew22", department: "Other", subArea: "Others" },
-  { pm_id: "PM229", label: "PM229 — F2 SDP Spare 2", endpoint_url: "electric_ew22", json_key: "PM229", group_id: "ew22", department: "Other", subArea: "Others" },
-  { pm_id: "PM271", label: "PM271 — F2 Feeder 1", endpoint_url: "electric_ew22", json_key: "PM271", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
-  { pm_id: "PM272", label: "PM272 — F2 Feeder 2", endpoint_url: "electric_ew22", json_key: "PM272", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
-  { pm_id: "PM273", label: "PM273 — F2 Feeder 3", endpoint_url: "electric_ew22", json_key: "PM273", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
-  { pm_id: "PM274", label: "PM274 — F2 Feeder 4", endpoint_url: "electric_ew22", json_key: "PM274", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
-  { pm_id: "PM288", label: "PM288 — F2 Feeder 5", endpoint_url: "electric_ew22", json_key: "PM288", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
+  // ─── EW22 (Factory 2 - 21 Units) ───
+  { pm_id: "PM206", label: "PM206 — F2 COOLING FASE-1", endpoint_url: "electric_ew22", json_key: "PM206", group_id: "ew22", department: "Utility", subArea: "Cooling Towers" },
+  { pm_id: "PM205", label: "PM205 — F2 AHU WF2UI", endpoint_url: "electric_ew22", json_key: "PM205", group_id: "ew22", department: "HVAC", subArea: "AHUs" },
+  { pm_id: "PM203", label: "PM203 — F2 HEATER WF2U2", endpoint_url: "electric_ew22", json_key: "PM203", group_id: "ew22", department: "HVAC", subArea: "Cleanroom HVAC" },
+  { pm_id: "PM208", label: "PM208 — F2 WH 5", endpoint_url: "electric_ew22", json_key: "PM208", group_id: "ew22", department: "Other", subArea: "Warehouse" },
+  { pm_id: "PM207", label: "PM207 — F2 WH 6", endpoint_url: "electric_ew22", json_key: "PM207", group_id: "ew22", department: "Other", subArea: "Warehouse" },
+  { pm_id: "PM271", label: "PM271 — F2 CHILLER RTAC 250 (RO&HVAC)", endpoint_url: "electric_ew22", json_key: "PM271", group_id: "ew22", department: "HVAC", subArea: "Chillers" },
+  { pm_id: "PM272", label: "PM272 — F2 CHILLER RTAC 170 (RO)", endpoint_url: "electric_ew22", json_key: "PM272", group_id: "ew22", department: "HVAC", subArea: "Chillers" },
+  { pm_id: "PM274", label: "PM274 — F2 CHILLER RTAC 100 (BP)", endpoint_url: "electric_ew22", json_key: "PM274", group_id: "ew22", department: "HVAC", subArea: "Chillers" },
+  { pm_id: "PM273", label: "PM273 — RETURN SAMPLE QC", endpoint_url: "electric_ew22", json_key: "PM273", group_id: "ew22", department: "Other", subArea: "QC Laboratory" },
+  { pm_id: "PM201", label: "PM201 — F2 PUTR-1", endpoint_url: "electric_ew22", json_key: "PM201", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM209", label: "PM209 — F2 CHILLER - WF2U2", endpoint_url: "electric_ew22", json_key: "PM209", group_id: "ew22", department: "HVAC", subArea: "Chillers" },
+  { pm_id: "PM226", label: "PM226 — F2 WH-7", endpoint_url: "electric_ew22", json_key: "PM226", group_id: "ew22", department: "Other", subArea: "Warehouse" },
+  { pm_id: "PM202", label: "PM202 — F2 PUTR-2", endpoint_url: "electric_ew22", json_key: "PM202", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM288", label: "PM288 — F2 Penerangan PD", endpoint_url: "electric_ew22", json_key: "PM288", group_id: "ew22", department: "Other", subArea: "Warehouse" },
+  { pm_id: "PM229", label: "PM229 — F2 KOBELCO ALE-250", endpoint_url: "electric_ew22", json_key: "PM229", group_id: "ew22", department: "Utility", subArea: "Compressors" },
+  { pm_id: "PM210", label: "PM210 — F2 MAIN CRITICAL PANEL", endpoint_url: "electric_ew22", json_key: "PM210", group_id: "ew22", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM215", label: "PM215 — F2 COOLING CRITICAL", endpoint_url: "electric_ew22", json_key: "PM215", group_id: "ew22", department: "Utility", subArea: "Cooling Towers" },
+  { pm_id: "PM213", label: "PM213 — F2 BOILER-5", endpoint_url: "electric_ew22", json_key: "PM213", group_id: "ew22", department: "Utility", subArea: "Boiler" },
+  { pm_id: "PM211", label: "PM211 — F2 PANEL OTOKLAF WF2U1", endpoint_url: "electric_ew22", json_key: "PM211", group_id: "ew22", department: "Other", subArea: "Autoclave" },
+  { pm_id: "PM214", label: "PM214 — F2 COMPRESSED AIR ATLAS", endpoint_url: "electric_ew22", json_key: "PM214", group_id: "ew22", department: "Utility", subArea: "Compressors" },
+  { pm_id: "PM212", label: "PM212 — F2 PANEL OTOKLAF WF2U2", endpoint_url: "electric_ew22", json_key: "PM212", group_id: "ew22", department: "Other", subArea: "Autoclave" },
 
-  // Main Feeders & Cubicles
-  { pm_id: "PM410", label: "PM410 — Cubicle PLN (PM8000)", endpoint_url: "electric_pln", json_key: "PM410", group_id: "ew23", department: "Utility", subArea: "Electrical Substation" },
-  { pm_id: "PM411", label: "PM411 — Feeder WF1 (PM5560)", endpoint_url: "electric_wf1", json_key: "PM411", group_id: "ew23", department: "Utility", subArea: "Electrical Substation" },
-  { pm_id: "PM412", label: "PM412 — Feeder WF2 (PM5500)", endpoint_url: "electric_wf2", json_key: "PM412", group_id: "ew23", department: "Utility", subArea: "Electrical Substation" }
+  // ─── EW23 (Factory 2 - 10 Units) ───
+  { pm_id: "PM319", label: "PM319 — F2 CHILLER RTAC-27S (PREP)", endpoint_url: "electric_ew23", json_key: "PM319", group_id: "ew23", department: "HVAC", subArea: "Chillers" },
+  { pm_id: "PM320", label: "PM320 — F2 WT-DU-PSG", endpoint_url: "electric_ew23", json_key: "PM320", group_id: "ew23", department: "Utility", subArea: "Water / WTP" },
+  { pm_id: "PM321", label: "PM321 — F2 AHU-1 - WF2U2", endpoint_url: "electric_ew23", json_key: "PM321", group_id: "ew23", department: "HVAC", subArea: "AHUs" },
+  { pm_id: "PM322", label: "PM322 — F2 AHU-2 - WF2U2", endpoint_url: "electric_ew23", json_key: "PM322", group_id: "ew23", department: "HVAC", subArea: "AHUs" },
+  { pm_id: "PM323", label: "PM323 — F2 PW GENERATION - RO", endpoint_url: "electric_ew23", json_key: "PM323", group_id: "ew23", department: "Utility", subArea: "Water / WTP" },
+  { pm_id: "PM325", label: "PM325 — F2 COOLING TOWER CT-FAN", endpoint_url: "electric_ew23", json_key: "PM325", group_id: "ew23", department: "Utility", subArea: "Cooling Towers" },
+  { pm_id: "PM324", label: "PM324 — F2 COOLING TOWER CT-PUMP", endpoint_url: "electric_ew23", json_key: "PM324", group_id: "ew23", department: "Utility", subArea: "Cooling Towers" },
+  { pm_id: "PM327", label: "PM327 — F2 PUTR-NEW", endpoint_url: "electric_ew23", json_key: "PM327", group_id: "ew23", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM318", label: "PM318 — F2 COOLING FASE-2", endpoint_url: "electric_ew23", json_key: "PM318", group_id: "ew23", department: "Utility", subArea: "Cooling Towers" },
+  { pm_id: "PM337", label: "PM337 — F2 MCC BP 7", endpoint_url: "electric_ew23", json_key: "PM337", group_id: "ew23", department: "Other", subArea: "Production Lines" },
+
+  // ─── Main Feeders & Cubicles ───
+  { pm_id: "PM410", label: "PM410 — Cubicle PLN (PM8000)", endpoint_url: "electric_pln", json_key: "PM410", group_id: "pln", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM411", label: "PM411 — Feeder WF1 (PM5560)", endpoint_url: "electric_wf1", json_key: "PM411", group_id: "wf1", department: "Utility", subArea: "Electrical Substation" },
+  { pm_id: "PM412", label: "PM412 — Feeder WF2 (PM5500)", endpoint_url: "electric_wf2", json_key: "PM412", group_id: "wf2", department: "Utility", subArea: "Electrical Substation" }
 ];
 
 export const getAvailablePowerMetersHandler = async (req: Request, res: Response, next: NextFunction) => {
@@ -1526,7 +1551,7 @@ export const getAvailablePowerMetersHandler = async (req: Request, res: Response
 
     // 1. Seed standard meters
     for (const m of STANDARD_METERS) {
-      const factory = m.group_id === "ew21" ? "consumption_fact_1" : m.group_id === "ew22" ? "consumption_fact_2" : "all";
+      const factory = m.group_id === "ew21" ? "consumption_fact_1" : (m.group_id === "ew22" || m.group_id === "ew23") ? "consumption_fact_2" : "all";
       pmMap.set(m.pm_id.toUpperCase(), { ...m, factory, is_database: true });
     }
 
@@ -1544,7 +1569,7 @@ export const getAvailablePowerMetersHandler = async (req: Request, res: Response
       for (const row of dbRes.rows) {
         const id = String(row.pm_id).toUpperCase();
         if (!pmMap.has(id)) {
-          const factory = row.group_id === "ew21" ? "consumption_fact_1" : row.group_id === "ew22" ? "consumption_fact_2" : "all";
+          const factory = row.group_id === "ew21" ? "consumption_fact_1" : (row.group_id === "ew22" || row.group_id === "ew23") ? "consumption_fact_2" : "all";
           pmMap.set(id, {
             pm_id: id,
             label: `${id} (${row.group_id || "Sub-distribution"})`,
@@ -1609,7 +1634,36 @@ export const getElectricityConfigHandler = async (req: Request, res: Response, n
       ? `SELECT id, config_type, config_key, label, value, sort_order, enabled, created_at, updated_at FROM electricity_config WHERE config_type = $1 ORDER BY sort_order ASC, id ASC`
       : `SELECT id, config_type, config_key, label, value, sort_order, enabled, created_at, updated_at FROM electricity_config ORDER BY config_type, sort_order ASC, id ASC`;
     const values = configType ? [configType] : [];
-    const pgRes = await pool.query(queryStr, values);
+    let pgRes = await pool.query(queryStr, values);
+
+    // Auto-seed standard meters if table has no items for this factory config type
+    if ((configType === "consumption_fact_1" || configType === "consumption_fact_2") && pgRes.rows.length === 0) {
+      const targetMeters = STANDARD_METERS.filter(m => {
+        const fact = m.group_id === "ew21" ? "consumption_fact_1" : (m.group_id === "ew22" || m.group_id === "ew23") ? "consumption_fact_2" : null;
+        return fact === configType;
+      });
+
+      for (let i = 0; i < targetMeters.length; i++) {
+        const m = targetMeters[i];
+        const val = {
+          endpoint_url: m.endpoint_url,
+          json_key: m.json_key,
+          pm_id: m.pm_id,
+          department: m.department,
+          subArea: m.subArea,
+          factory: configType,
+          kWh: 0
+        };
+        await pool.query(
+          `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
+           VALUES ($1, $2, $3, $4, $5, true, NOW())
+           ON CONFLICT (config_type, config_key) DO NOTHING`,
+          [configType, m.pm_id.toLowerCase(), m.label, JSON.stringify(val), i + 1]
+        );
+      }
+      pgRes = await pool.query(queryStr, values);
+    }
+
     res.json({ data: pgRes.rows });
   } catch (err) {
     next(err);

@@ -100,8 +100,67 @@ const DEFAULT_PLN_JSON_KEYS: Record<string, string> = {
 };
 
 /* ═══════════ DEFAULT FACT CATEGORIES (MODULE LEVEL) ═══════════ */
-const defaultFact1Categories: ConsumptionFactCategory[] = [];
-const defaultFact2Categories: ConsumptionFactCategory[] = [];
+const defaultFact1Categories: ConsumptionFactCategory[] = [
+  { id: 101, config_type: "consumption_fact_1", config_key: "pm132", label: "PM132 — F1 MAIN SUPPLY QC OFFICE & LAB", value: { endpoint_url: "electric_ew21", json_key: "PM132", pm_id: "PM132", department: "Other", subArea: "QC Laboratory", kWh: 0, factory: "consumption_fact_1" }, sort_order: 1, enabled: true },
+  { id: 102, config_type: "consumption_fact_1", config_key: "pm133", label: "PM133 — F1 MDP3", value: { endpoint_url: "electric_ew21", json_key: "PM133", pm_id: "PM133", department: "Utility", subArea: "Electrical Substation", kWh: 0, factory: "consumption_fact_1" }, sort_order: 2, enabled: true },
+  { id: 103, config_type: "consumption_fact_1", config_key: "pm134", label: "PM134 — F1 WH 4 PENERANGAN", value: { endpoint_url: "electric_ew21", json_key: "PM134", pm_id: "PM134", department: "Other", subArea: "Warehouse", kWh: 0, factory: "consumption_fact_1" }, sort_order: 3, enabled: true },
+  { id: 104, config_type: "consumption_fact_1", config_key: "pm135", label: "PM135 — F1 MDP-2", value: { endpoint_url: "electric_ew21", json_key: "PM135", pm_id: "PM135", department: "Utility", subArea: "Electrical Substation", kWh: 0, factory: "consumption_fact_1" }, sort_order: 4, enabled: true },
+  { id: 105, config_type: "consumption_fact_1", config_key: "pm136", label: "PM136 — F1 MDP-1.2", value: { endpoint_url: "electric_ew21", json_key: "PM136", pm_id: "PM136", department: "Utility", subArea: "Electrical Substation", kWh: 0, factory: "consumption_fact_1" }, sort_order: 5, enabled: true },
+  { id: 106, config_type: "consumption_fact_1", config_key: "pm138", label: "PM138 — F1 FULL COOLING WF1-U3", value: { endpoint_url: "electric_ew21", json_key: "PM138", pm_id: "PM138", department: "Utility", subArea: "Cooling Towers", kWh: 0, factory: "consumption_fact_1" }, sort_order: 6, enabled: true },
+  { id: 107, config_type: "consumption_fact_1", config_key: "pm139", label: "PM139 — F1 MDP-1.1", value: { endpoint_url: "electric_ew21", json_key: "PM139", pm_id: "PM139", department: "Utility", subArea: "Electrical Substation", kWh: 0, factory: "consumption_fact_1" }, sort_order: 7, enabled: true },
+  { id: 108, config_type: "consumption_fact_1", config_key: "pm140", label: "PM140 — F1 COMPRESSED AIR ZT-55", value: { endpoint_url: "electric_ew21", json_key: "PM140", pm_id: "PM140", department: "Utility", subArea: "Compressors", kWh: 0, factory: "consumption_fact_1" }, sort_order: 8, enabled: true },
+  { id: 109, config_type: "consumption_fact_1", config_key: "pm151", label: "PM151 — F1 HVAC OFFICE ATAS", value: { endpoint_url: "electric_ew21", json_key: "PM151", pm_id: "PM151", department: "HVAC", subArea: "AHUs", kWh: 0, factory: "consumption_fact_1" }, sort_order: 9, enabled: true },
+  { id: 110, config_type: "consumption_fact_1", config_key: "pm152", label: "PM152 — F1 COOLING TOWER PUMP WF1-U3", value: { endpoint_url: "electric_ew21", json_key: "PM152", pm_id: "PM152", department: "Utility", subArea: "Cooling Towers", kWh: 0, factory: "consumption_fact_1" }, sort_order: 10, enabled: true },
+  { id: 111, config_type: "consumption_fact_1", config_key: "pm153", label: "PM153 — F1 HVAC-QC", value: { endpoint_url: "electric_ew21", json_key: "PM153", pm_id: "PM153", department: "HVAC", subArea: "AHUs", kWh: 0, factory: "consumption_fact_1" }, sort_order: 11, enabled: true },
+  { id: 112, config_type: "consumption_fact_1", config_key: "pm154", label: "PM154 — F1 LIGHTING WH 1", value: { endpoint_url: "electric_ew21", json_key: "PM154", pm_id: "PM154", department: "Other", subArea: "Warehouse", kWh: 0, factory: "consumption_fact_1" }, sort_order: 12, enabled: true },
+  { id: 113, config_type: "consumption_fact_1", config_key: "pm175", label: "PM175 — F1 ST3", value: { endpoint_url: "electric_ew21", json_key: "PM175", pm_id: "PM175", department: "Other", subArea: "Production Lines", kWh: 0, factory: "consumption_fact_1" }, sort_order: 13, enabled: true },
+  { id: 114, config_type: "consumption_fact_1", config_key: "pm176", label: "PM176 — F1 QC LAB", value: { endpoint_url: "electric_ew21", json_key: "PM176", pm_id: "PM176", department: "Other", subArea: "QC Laboratory", kWh: 0, factory: "consumption_fact_1" }, sort_order: 14, enabled: true },
+  { id: 115, config_type: "consumption_fact_1", config_key: "pm177", label: "PM177 — F1 CHILLER PREP DAIKIN BARAT", value: { endpoint_url: "electric_ew21", json_key: "PM177", pm_id: "PM177", department: "HVAC", subArea: "Chillers", kWh: 0, factory: "consumption_fact_1" }, sort_order: 15, enabled: true },
+  { id: 116, config_type: "consumption_fact_1", config_key: "pm178", label: "PM178 — F1 CHILLER PREP DAIKIN TIMUR", value: { endpoint_url: "electric_ew21", json_key: "PM178", pm_id: "PM178", department: "HVAC", subArea: "Chillers", kWh: 0, factory: "consumption_fact_1" }, sort_order: 16, enabled: true },
+  { id: 117, config_type: "consumption_fact_1", config_key: "pm179", label: "PM179 — F1 HVAC WH-3", value: { endpoint_url: "electric_ew21", json_key: "PM179", pm_id: "PM179", department: "HVAC", subArea: "Warehouse", kWh: 0, factory: "consumption_fact_1" }, sort_order: 17, enabled: true },
+  { id: 118, config_type: "consumption_fact_1", config_key: "pm180", label: "PM180 — F1 CHILLER BP WF1-U3", value: { endpoint_url: "electric_ew21", json_key: "PM180", pm_id: "PM180", department: "HVAC", subArea: "Chillers", kWh: 0, factory: "consumption_fact_1" }, sort_order: 18, enabled: true },
+  { id: 119, config_type: "consumption_fact_1", config_key: "pm181", label: "PM181 — F1 COOLING TOWER FAN WF1-U3", value: { endpoint_url: "electric_ew21", json_key: "PM181", pm_id: "PM181", department: "Utility", subArea: "Cooling Towers", kWh: 0, factory: "consumption_fact_1" }, sort_order: 19, enabled: true },
+  { id: 120, config_type: "consumption_fact_1", config_key: "pm182", label: "PM182 — F1 COMPRESSED AIR ZT-30.1&2", value: { endpoint_url: "electric_ew21", json_key: "PM182", pm_id: "PM182", department: "Utility", subArea: "Compressors", kWh: 0, factory: "consumption_fact_1" }, sort_order: 20, enabled: true },
+  { id: 121, config_type: "consumption_fact_1", config_key: "pm183", label: "PM183 — F1 COMPRESSED AIR ALE-30", value: { endpoint_url: "electric_ew21", json_key: "PM183", pm_id: "PM183", department: "Utility", subArea: "Compressors", kWh: 0, factory: "consumption_fact_1" }, sort_order: 21, enabled: true },
+  { id: 122, config_type: "consumption_fact_1", config_key: "pm184", label: "PM184 — F1 BOILER 4", value: { endpoint_url: "electric_ew21", json_key: "PM184", pm_id: "PM184", department: "Utility", subArea: "Boiler", kWh: 0, factory: "consumption_fact_1" }, sort_order: 22, enabled: true },
+  { id: 123, config_type: "consumption_fact_1", config_key: "pm185", label: "PM185 — F1 HVAC WF1U3", value: { endpoint_url: "electric_ew21", json_key: "PM185", pm_id: "PM185", department: "HVAC", subArea: "AHUs", kWh: 0, factory: "consumption_fact_1" }, sort_order: 23, enabled: true }
+];
+
+const defaultFact2Categories: ConsumptionFactCategory[] = [
+  // EW22 (21 Units)
+  { id: 201, config_type: "consumption_fact_2", config_key: "pm206", label: "PM206 — F2 COOLING FASE-1", value: { endpoint_url: "electric_ew22", json_key: "PM206", pm_id: "PM206", department: "Utility", subArea: "Cooling Towers", kWh: 0, factory: "consumption_fact_2" }, sort_order: 1, enabled: true },
+  { id: 202, config_type: "consumption_fact_2", config_key: "pm205", label: "PM205 — F2 AHU WF2UI", value: { endpoint_url: "electric_ew22", json_key: "PM205", pm_id: "PM205", department: "HVAC", subArea: "AHUs", kWh: 0, factory: "consumption_fact_2" }, sort_order: 2, enabled: true },
+  { id: 203, config_type: "consumption_fact_2", config_key: "pm203", label: "PM203 — F2 HEATER WF2U2", value: { endpoint_url: "electric_ew22", json_key: "PM203", pm_id: "PM203", department: "HVAC", subArea: "Cleanroom HVAC", kWh: 0, factory: "consumption_fact_2" }, sort_order: 3, enabled: true },
+  { id: 204, config_type: "consumption_fact_2", config_key: "pm208", label: "PM208 — F2 WH 5", value: { endpoint_url: "electric_ew22", json_key: "PM208", pm_id: "PM208", department: "Other", subArea: "Warehouse", kWh: 0, factory: "consumption_fact_2" }, sort_order: 4, enabled: true },
+  { id: 205, config_type: "consumption_fact_2", config_key: "pm207", label: "PM207 — F2 WH 6", value: { endpoint_url: "electric_ew22", json_key: "PM207", pm_id: "PM207", department: "Other", subArea: "Warehouse", kWh: 0, factory: "consumption_fact_2" }, sort_order: 5, enabled: true },
+  { id: 206, config_type: "consumption_fact_2", config_key: "pm271", label: "PM271 — F2 CHILLER RTAC 250 (RO&HVAC)", value: { endpoint_url: "electric_ew22", json_key: "PM271", pm_id: "PM271", department: "HVAC", subArea: "Chillers", kWh: 0, factory: "consumption_fact_2" }, sort_order: 6, enabled: true },
+  { id: 207, config_type: "consumption_fact_2", config_key: "pm272", label: "PM272 — F2 CHILLER RTAC 170 (RO)", value: { endpoint_url: "electric_ew22", json_key: "PM272", pm_id: "PM272", department: "HVAC", subArea: "Chillers", kWh: 0, factory: "consumption_fact_2" }, sort_order: 7, enabled: true },
+  { id: 208, config_type: "consumption_fact_2", config_key: "pm274", label: "PM274 — F2 CHILLER RTAC 100 (BP)", value: { endpoint_url: "electric_ew22", json_key: "PM274", pm_id: "PM274", department: "HVAC", subArea: "Chillers", kWh: 0, factory: "consumption_fact_2" }, sort_order: 8, enabled: true },
+  { id: 209, config_type: "consumption_fact_2", config_key: "pm273", label: "PM273 — RETURN SAMPLE QC", value: { endpoint_url: "electric_ew22", json_key: "PM273", pm_id: "PM273", department: "Other", subArea: "QC Laboratory", kWh: 0, factory: "consumption_fact_2" }, sort_order: 9, enabled: true },
+  { id: 210, config_type: "consumption_fact_2", config_key: "pm201", label: "PM201 — F2 PUTR-1", value: { endpoint_url: "electric_ew22", json_key: "PM201", pm_id: "PM201", department: "Utility", subArea: "Electrical Substation", kWh: 0, factory: "consumption_fact_2" }, sort_order: 10, enabled: true },
+  { id: 211, config_type: "consumption_fact_2", config_key: "pm209", label: "PM209 — F2 CHILLER - WF2U2", value: { endpoint_url: "electric_ew22", json_key: "PM209", pm_id: "PM209", department: "HVAC", subArea: "Chillers", kWh: 0, factory: "consumption_fact_2" }, sort_order: 11, enabled: true },
+  { id: 212, config_type: "consumption_fact_2", config_key: "pm226", label: "PM226 — F2 WH-7", value: { endpoint_url: "electric_ew22", json_key: "PM226", pm_id: "PM226", department: "Other", subArea: "Warehouse", kWh: 0, factory: "consumption_fact_2" }, sort_order: 12, enabled: true },
+  { id: 213, config_type: "consumption_fact_2", config_key: "pm202", label: "PM202 — F2 PUTR-2", value: { endpoint_url: "electric_ew22", json_key: "PM202", pm_id: "PM202", department: "Utility", subArea: "Electrical Substation", kWh: 0, factory: "consumption_fact_2" }, sort_order: 13, enabled: true },
+  { id: 214, config_type: "consumption_fact_2", config_key: "pm288", label: "PM288 — F2 Penerangan PD", value: { endpoint_url: "electric_ew22", json_key: "PM288", pm_id: "PM288", department: "Other", subArea: "Warehouse", kWh: 0, factory: "consumption_fact_2" }, sort_order: 14, enabled: true },
+  { id: 215, config_type: "consumption_fact_2", config_key: "pm229", label: "PM229 — F2 KOBELCO ALE-250", value: { endpoint_url: "electric_ew22", json_key: "PM229", pm_id: "PM229", department: "Utility", subArea: "Compressors", kWh: 0, factory: "consumption_fact_2" }, sort_order: 15, enabled: true },
+  { id: 216, config_type: "consumption_fact_2", config_key: "pm210", label: "PM210 — F2 MAIN CRITICAL PANEL", value: { endpoint_url: "electric_ew22", json_key: "PM210", pm_id: "PM210", department: "Utility", subArea: "Electrical Substation", kWh: 0, factory: "consumption_fact_2" }, sort_order: 16, enabled: true },
+  { id: 217, config_type: "consumption_fact_2", config_key: "pm215", label: "PM215 — F2 COOLING CRITICAL", value: { endpoint_url: "electric_ew22", json_key: "PM215", pm_id: "PM215", department: "Utility", subArea: "Cooling Towers", kWh: 0, factory: "consumption_fact_2" }, sort_order: 17, enabled: true },
+  { id: 218, config_type: "consumption_fact_2", config_key: "pm213", label: "PM213 — F2 BOILER-5", value: { endpoint_url: "electric_ew22", json_key: "PM213", pm_id: "PM213", department: "Utility", subArea: "Boiler", kWh: 0, factory: "consumption_fact_2" }, sort_order: 18, enabled: true },
+  { id: 219, config_type: "consumption_fact_2", config_key: "pm211", label: "PM211 — F2 PANEL OTOKLAF WF2U1", value: { endpoint_url: "electric_ew22", json_key: "PM211", pm_id: "PM211", department: "Other", subArea: "Autoclave", kWh: 0, factory: "consumption_fact_2" }, sort_order: 19, enabled: true },
+  { id: 220, config_type: "consumption_fact_2", config_key: "pm214", label: "PM214 — F2 COMPRESSED AIR ATLAS", value: { endpoint_url: "electric_ew22", json_key: "PM214", pm_id: "PM214", department: "Utility", subArea: "Compressors", kWh: 0, factory: "consumption_fact_2" }, sort_order: 20, enabled: true },
+  { id: 221, config_type: "consumption_fact_2", config_key: "pm212", label: "PM212 — F2 PANEL OTOKLAF WF2U2", value: { endpoint_url: "electric_ew22", json_key: "PM212", pm_id: "PM212", department: "Other", subArea: "Autoclave", kWh: 0, factory: "consumption_fact_2" }, sort_order: 21, enabled: true },
+  // EW23 (10 Units)
+  { id: 222, config_type: "consumption_fact_2", config_key: "pm319", label: "PM319 — F2 CHILLER RTAC-27S (PREP)", value: { endpoint_url: "electric_ew23", json_key: "PM319", pm_id: "PM319", department: "HVAC", subArea: "Chillers", kWh: 0, factory: "consumption_fact_2" }, sort_order: 22, enabled: true },
+  { id: 223, config_type: "consumption_fact_2", config_key: "pm320", label: "PM320 — F2 WT-DU-PSG", value: { endpoint_url: "electric_ew23", json_key: "PM320", pm_id: "PM320", department: "Utility", subArea: "Water / WTP", kWh: 0, factory: "consumption_fact_2" }, sort_order: 23, enabled: true },
+  { id: 224, config_type: "consumption_fact_2", config_key: "pm321", label: "PM321 — F2 AHU-1 - WF2U2", value: { endpoint_url: "electric_ew23", json_key: "PM321", pm_id: "PM321", department: "HVAC", subArea: "AHUs", kWh: 0, factory: "consumption_fact_2" }, sort_order: 24, enabled: true },
+  { id: 225, config_type: "consumption_fact_2", config_key: "pm322", label: "PM322 — F2 AHU-2 - WF2U2", value: { endpoint_url: "electric_ew23", json_key: "PM322", pm_id: "PM322", department: "HVAC", subArea: "AHUs", kWh: 0, factory: "consumption_fact_2" }, sort_order: 25, enabled: true },
+  { id: 226, config_type: "consumption_fact_2", config_key: "pm323", label: "PM323 — F2 PW GENERATION - RO", value: { endpoint_url: "electric_ew23", json_key: "PM323", pm_id: "PM323", department: "Utility", subArea: "Water / WTP", kWh: 0, factory: "consumption_fact_2" }, sort_order: 26, enabled: true },
+  { id: 227, config_type: "consumption_fact_2", config_key: "pm325", label: "PM325 — F2 COOLING TOWER CT-FAN", value: { endpoint_url: "electric_ew23", json_key: "PM325", pm_id: "PM325", department: "Utility", subArea: "Cooling Towers", kWh: 0, factory: "consumption_fact_2" }, sort_order: 27, enabled: true },
+  { id: 228, config_type: "consumption_fact_2", config_key: "pm324", label: "PM324 — F2 COOLING TOWER CT-PUMP", value: { endpoint_url: "electric_ew23", json_key: "PM324", pm_id: "PM324", department: "Utility", subArea: "Cooling Towers", kWh: 0, factory: "consumption_fact_2" }, sort_order: 28, enabled: true },
+  { id: 229, config_type: "consumption_fact_2", config_key: "pm327", label: "PM327 — F2 PUTR-NEW", value: { endpoint_url: "electric_ew23", json_key: "PM327", pm_id: "PM327", department: "Utility", subArea: "Electrical Substation", kWh: 0, factory: "consumption_fact_2" }, sort_order: 29, enabled: true },
+  { id: 230, config_type: "consumption_fact_2", config_key: "pm318", label: "PM318 — F2 COOLING FASE-2", value: { endpoint_url: "electric_ew23", json_key: "PM318", pm_id: "PM318", department: "Utility", subArea: "Cooling Towers", kWh: 0, factory: "consumption_fact_2" }, sort_order: 30, enabled: true },
+  { id: 231, config_type: "consumption_fact_2", config_key: "pm337", label: "PM337 — F2 MCC BP 7", value: { endpoint_url: "electric_ew23", json_key: "PM337", pm_id: "PM337", department: "Other", subArea: "Production Lines", kWh: 0, factory: "consumption_fact_2" }, sort_order: 31, enabled: true }
+];
 
 /* ═══════════ SMALL ICON COMPONENTS ═══════════ */
 const IconGrid = () => (
@@ -1428,8 +1487,8 @@ export default function Electricity() {
   // Synchronize monthlyMetrics with executiveSummary so all monthly cards show identical numbers
   const monthlyMetrics = executiveSummary;
 
-  const [factCategories1, setFactCategories1] = useState<ConsumptionFactCategory[]>([]);
-  const [factCategories2, setFactCategories2] = useState<ConsumptionFactCategory[]>([]);
+  const [factCategories1, setFactCategories1] = useState<ConsumptionFactCategory[]>(defaultFact1Categories);
+  const [factCategories2, setFactCategories2] = useState<ConsumptionFactCategory[]>(defaultFact2Categories);
 
   // Config panel & access control
   const role = useAuthStore((state) => state.user?.role ?? "user");
@@ -1451,11 +1510,17 @@ export default function Electricity() {
 
   const refreshFactCategories = useCallback(() => {
     getJson<{ data: ConsumptionFactCategory[] }>("/config/electricity?configType=consumption_fact_1")
-      .then((res) => { if (res?.data) setFactCategories1(res.data); })
-      .catch(() => {});
+      .then((res) => {
+        if (res?.data && res.data.length > 0) setFactCategories1(res.data);
+        else setFactCategories1(defaultFact1Categories);
+      })
+      .catch(() => { setFactCategories1(defaultFact1Categories); });
     getJson<{ data: ConsumptionFactCategory[] }>("/config/electricity?configType=consumption_fact_2")
-      .then((res) => { if (res?.data) setFactCategories2(res.data); })
-      .catch(() => {});
+      .then((res) => {
+        if (res?.data && res.data.length > 0) setFactCategories2(res.data);
+        else setFactCategories2(defaultFact2Categories);
+      })
+      .catch(() => { setFactCategories2(defaultFact2Categories); });
   }, []);
 
   // Live API Data states
@@ -4265,17 +4330,19 @@ export default function Electricity() {
             )}
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
-            <div style={{ height: 250 }}>
-              {factCategories1.filter(c => c.enabled).length > 0 ? (
-                <Bar data={makeHorizontalBarData(factCategories1, 1)} options={horizontalBarOptions} />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <span className="text-2xl mb-1 opacity-40">📊</span>
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering Fact-1 belum terhubung</span>
+            {factCategories1.filter(c => c.enabled).length > 0 ? (
+              <div className="overflow-y-auto max-h-[380px] pr-1.5">
+                <div style={{ height: Math.max(250, factCategories1.filter(c => c.enabled).length * 28) }}>
+                  <Bar data={makeHorizontalBarData(factCategories1, 1)} options={horizontalBarOptions} />
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-[250px] text-center">
+                <span className="text-2xl mb-1 opacity-40">📊</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering Fact-1 belum terhubung</span>
+              </div>
+            )}
           </div>
         </section>
 
@@ -4306,17 +4373,19 @@ export default function Electricity() {
             )}
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
-            <div style={{ height: 250 }}>
-              {factCategories2.filter(c => c.enabled).length > 0 ? (
-                <Bar data={makeHorizontalBarData(factCategories2, 2)} options={horizontalBarOptions} />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <span className="text-2xl mb-1 opacity-40">📊</span>
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering Fact-2 belum terhubung</span>
+            {factCategories2.filter(c => c.enabled).length > 0 ? (
+              <div className="overflow-y-auto max-h-[380px] pr-1.5">
+                <div style={{ height: Math.max(250, factCategories2.filter(c => c.enabled).length * 28) }}>
+                  <Bar data={makeHorizontalBarData(factCategories2, 2)} options={horizontalBarOptions} />
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-[250px] text-center">
+                <span className="text-2xl mb-1 opacity-40">📊</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering Fact-2 belum terhubung</span>
+              </div>
+            )}
           </div>
         </section>
       </div>
@@ -4361,17 +4430,19 @@ export default function Electricity() {
           </div>
 
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
-            <div style={{ height: 250 }}>
-              {utilityData.items.length > 0 ? (
-                <Bar data={makeDeptHorizontalBarData(utilityData.items, "Utility")} options={horizontalBarOptions} />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <span className="text-2xl mb-1 opacity-40">📊</span>
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering sistem utility belum terhubung</span>
+            {utilityData.items.length > 0 ? (
+              <div className="overflow-y-auto max-h-[380px] pr-1.5">
+                <div style={{ height: Math.max(250, utilityData.items.length * 28) }}>
+                  <Bar data={makeDeptHorizontalBarData(utilityData.items, "Utility")} options={horizontalBarOptions} />
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-[250px] text-center">
+                <span className="text-2xl mb-1 opacity-40">📊</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering sistem utility belum terhubung</span>
+              </div>
+            )}
           </div>
         </section>
 
@@ -4448,17 +4519,19 @@ export default function Electricity() {
           </div>
 
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
-            <div style={{ height: 250 }}>
-              {hvacData.items.length > 0 ? (
-                <Bar data={makeDeptHorizontalBarData(hvacData.items, "HVAC")} options={horizontalBarOptions} />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <span className="text-2xl mb-1 opacity-40">📊</span>
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering sistem HVAC belum terhubung</span>
+            {hvacData.items.length > 0 ? (
+              <div className="overflow-y-auto max-h-[380px] pr-1.5">
+                <div style={{ height: Math.max(250, hvacData.items.length * 28) }}>
+                  <Bar data={makeDeptHorizontalBarData(hvacData.items, "HVAC")} options={horizontalBarOptions} />
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-[250px] text-center">
+                <span className="text-2xl mb-1 opacity-40">📊</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering sistem HVAC belum terhubung</span>
+              </div>
+            )}
           </div>
         </section>
 

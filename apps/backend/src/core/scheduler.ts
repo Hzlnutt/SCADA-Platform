@@ -206,9 +206,20 @@ const getNullWfRecord = (ts: Date) => ({
 });
 
 const EW_GROUP_PMS: Record<string, string[]> = {
-  ew23: ["PM318", "PM319", "PM320", "PM321", "PM322", "PM323", "PM324", "PM325", "PM327", "PM337", "PM410", "PM411", "PM412"],
-  ew21: ["PM201", "PM202", "PM203", "PM205", "PM206", "PM207", "PM208", "PM209", "PM210", "PM211", "PM212", "PM213", "PM214", "PM215"],
-  ew22: ["PM226", "PM229", "PM271", "PM272", "PM273", "PM274", "PM288"]
+  ew21: [
+    "PM132", "PM133", "PM134", "PM135", "PM136", "PM138", "PM139", "PM140",
+    "PM151", "PM152", "PM153", "PM154", "PM175", "PM176", "PM177", "PM178",
+    "PM179", "PM180", "PM181", "PM182", "PM183", "PM184", "PM185"
+  ],
+  ew22: [
+    "PM201", "PM202", "PM203", "PM205", "PM206", "PM207", "PM208", "PM209",
+    "PM210", "PM211", "PM212", "PM213", "PM214", "PM215", "PM226", "PM229",
+    "PM271", "PM272", "PM273", "PM274", "PM288"
+  ],
+  ew23: [
+    "PM318", "PM319", "PM320", "PM321", "PM322", "PM323", "PM324", "PM325",
+    "PM327", "PM337"
+  ]
 };
 
 const getNullEwRecords = (ts: Date, groupId: string): ElectricPmRecord[] => {
@@ -632,11 +643,21 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
         "Status"
       ];
       for (const sk of statusCandidates) {
-        if (obj[sk] !== undefined && obj[sk] !== null) {
+        if (obj[sk] !== undefined) {
+          if (obj[sk] === null) return false;
           return Boolean(obj[sk]);
         }
       }
-      return true;
+      // If no status flag, check if any numerical electrical reading exists
+      const hasAnyReading = [
+        obj[`ActiveEnergy_${pmId}`],
+        obj[`Active_Power_Total_${pmId}`],
+        obj[`VoltAB_${pmId}`],
+        obj.ActiveEnergy,
+        obj.Active_Power_Total
+      ].some(v => v !== null && v !== undefined);
+
+      return hasAnyReading ? true : false;
     };
 
     return {
@@ -703,13 +724,20 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
   }
 
   const pmOrder: Record<string, number> = {
-    PM318: 10, PM319: 20, PM320: 30, PM321: 40, PM322: 50,
-    PM323: 60, PM324: 70, PM325: 80, PM327: 90, PM337: 100,
+    // EW21 (Factory 1)
+    PM132: 132, PM133: 133, PM134: 134, PM135: 135, PM136: 136, PM138: 138, PM139: 139, PM140: 140,
+    PM151: 151, PM152: 152, PM153: 153, PM154: 154, PM175: 175, PM176: 176, PM177: 177, PM178: 178,
+    PM179: 179, PM180: 180, PM181: 181, PM182: 182, PM183: 183, PM184: 184, PM185: 185,
+    // EW22 (Factory 2)
     PM201: 201, PM202: 202, PM203: 203, PM205: 205, PM206: 206,
     PM207: 207, PM208: 208, PM209: 209, PM210: 210, PM211: 211,
     PM212: 212, PM213: 213, PM214: 214, PM215: 215, PM226: 226,
     PM229: 229, PM271: 271, PM272: 272, PM273: 273, PM274: 274,
     PM288: 288,
+    // EW23 (Factory 2 Sub)
+    PM318: 318, PM319: 319, PM320: 320, PM321: 321, PM322: 322,
+    PM323: 323, PM324: 324, PM325: 325, PM327: 327, PM337: 337,
+    // Incoming Cubicles
     PM410: 410, PM8000: 410, CUBICLE_PLN_PM8000: 410,
     PM411: 411, PM5560: 411, PM5560_WF1: 411, FEEDER_WF1_PM5560: 411,
     PM412: 412, PM5560_WF2: 412, PM5500: 412, FEEDER_WF2_PM5500: 412

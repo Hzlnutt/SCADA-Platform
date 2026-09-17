@@ -16,10 +16,10 @@ export const PM_NAME_MAPPING: Record<string, PowerMeterInfo> = {
   PM138: { name: "F1 FULL COOLING WF1-U3", model: "PM5100", category: "HVAC", location: "Factory 1", diewonName: "FULL COOLING WF1-U3" },
   PM139: { name: "F1 MDP-1.1", model: "PM5100", category: "Distribution", location: "Factory 1", diewonName: "MDP-1.1" },
   PM140: { name: "F1 COMPRESSED AIR ZT-55", model: "PM5100", category: "Compressor", location: "Factory 1", diewonName: "COMPRESSED AIR ZT-55" },
-  PM151: { name: "F1 HVAC OFFICE ATAS", model: "PM5100", category: "HVAC", location: "Factory 1", diewonName: "HVAC OFFICE ATAS" },
-  PM152: { name: "F1 COOLING TOWER PUMP WF1-U3", model: "PM5100", category: "Cooling Water", location: "Factory 1", diewonName: "COOLING TOWER PUMP WF1-U3" },
-  PM153: { name: "F1 HVAC-QC", model: "PM5100", category: "HVAC", location: "Factory 1", diewonName: "HVAC-QC" },
-  PM154: { name: "F1 LIGHTING WH 1", model: "PM5100", category: "Warehouse", location: "Factory 1", diewonName: "LIGHTING WH 1" },
+  PM151: { name: "F1 HVAC OFFICE ATAS", model: "PA330", category: "HVAC", location: "Factory 1", diewonName: "HVAC OFFICE ATAS" },
+  PM152: { name: "F1 COOLING TOWER PUMP WF1-U3", model: "PA330", category: "Cooling Water", location: "Factory 1", diewonName: "COOLING TOWER PUMP WF1-U3" },
+  PM153: { name: "F1 HVAC-QC", model: "PA330", category: "HVAC", location: "Factory 1", diewonName: "HVAC-QC" },
+  PM154: { name: "F1 LIGHTING WH 1", model: "PA330", category: "Warehouse", location: "Factory 1", diewonName: "LIGHTING WH 1" },
   PM175: { name: "F1 ST3", model: "PA330", category: "Distribution", location: "Factory 1", diewonName: "ST3" },
   PM176: { name: "F1 QC LAB", model: "PA330", category: "Quality Control", location: "Factory 1", diewonName: "QC LAB" },
   PM177: { name: "F1 CHILLER PREP DAIKIN BARAT", model: "PA330", category: "Chiller", location: "Factory 1", diewonName: "CHILLER PREP DAIKIN BARAT" },
@@ -57,7 +57,7 @@ export const PM_NAME_MAPPING: Record<string, PowerMeterInfo> = {
 
   // EW23 Sub-Distribution Power Meters (Factory 2 Sub: 10 Units)
   PM318: { name: "F2 COOLING FASE-2", model: "PM5300", category: "Cooling Water", location: "Factory 2", diewonName: "COOLING FASE-2" },
-  PM319: { name: "F2 CHILLER RTAC-275 (PREP)", model: "PA330", category: "Chiller", location: "Factory 2", diewonName: "CHILLER RTAC-275 (PREP)" },
+  PM319: { name: "F2 CHILLER RTAC-27S (PREP)", model: "PA330", category: "Chiller", location: "Factory 2", diewonName: "CHILLER RTAC-27S (PREP)" },
   PM320: { name: "F2 WT-DU-PSG", model: "PM5300", category: "Water Treatment", location: "Factory 2", diewonName: "WT-DU-PSG" },
   PM321: { name: "F2 AHU-1 - WF2U2", model: "PM5100", category: "HVAC", location: "Factory 2", diewonName: "AHU-1 - WF2U2" },
   PM322: { name: "F2 AHU-2 - WF2U2", model: "PM5350", category: "HVAC", location: "Factory 2", diewonName: "AHU-2 - WF2U2" },
