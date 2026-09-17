@@ -1351,6 +1351,7 @@ export async function computeEquipmentMonthlyBatch(
     FROM electric_pm_telemetry
     WHERE t_stamp >= $1 AND t_stamp <= $2
       AND UPPER(pm_id) NOT IN ('PM410', 'PM411', 'PM412')
+      AND (active_energy IS NULL OR active_energy < 50000000)
     ORDER BY UPPER(pm_id), date_trunc('hour', t_stamp) ASC, t_stamp DESC
   `;
 
@@ -1404,6 +1405,7 @@ export async function computeEquipmentMonthlyBatch(
         FROM electric_pm_telemetry_minute
         WHERE active_energy IS NOT NULL
           AND UPPER(pm_id) NOT IN ('PM410', 'PM411', 'PM412')
+          AND active_energy < 50000000
         ORDER BY UPPER(pm_id), t_stamp DESC
       `);
       minuteRows = pmMinRes.rows;
@@ -1500,7 +1502,7 @@ export async function computeEquipmentMonthlyBatch(
       if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal)) {
         if (timeDiffMs <= 90 * 60 * 1000) {
           diff = currVal - prevVal;
-          if (diff < 0) diff = 0;
+          if (diff < 0 || diff > 20000) diff = 0;
         }
       }
 
