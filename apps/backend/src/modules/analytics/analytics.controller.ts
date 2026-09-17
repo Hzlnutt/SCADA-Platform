@@ -1520,10 +1520,10 @@ export async function computeEquipmentMonthlyBatch(
       }
     }
 
-    const currentRounded = currDaily.map(v => Math.round(v * 10) / 10);
-    const compRounded = compDaily.map(v => Math.round(v * 10) / 10);
-    const currTotal = Math.round(currentRounded.reduce((a, b) => a + b, 0) * 10) / 10;
-    const compTotal = Math.round(compRounded.reduce((a, b) => a + b, 0) * 10) / 10;
+    const currentRounded = currDaily.map(v => Math.round(v * 1000) / 1000);
+    const compRounded = compDaily.map(v => Math.round(v * 1000) / 1000);
+    const currTotal = Math.round(currentRounded.reduce((a, b) => a + b, 0) * 1000) / 1000;
+    const compTotal = Math.round(compRounded.reduce((a, b) => a + b, 0) * 1000) / 1000;
 
     const label = PM_DEFAULT_LABELS[pmId] || pmId;
 

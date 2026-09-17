@@ -53,8 +53,13 @@ const ranges = [
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
-const formatNumber = (value: number | undefined | null) =>
-  (value ?? 0).toLocaleString("id-ID", { maximumFractionDigits: 2 });
+const formatNumber = (value: number | undefined | null) => {
+  const val = Number(value ?? 0);
+  if (val > 0 && val < 1) {
+    return val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 });
+  }
+  return val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+};
 
 const getLocalTodayString = () => {
   const d = new Date();
@@ -381,9 +386,9 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
 
             if (selectorType === "all" && ctx.dataset.stack === "current" && curVal > 0) {
               const pct = Math.round((val / curVal) * 100);
-              return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh (${pct}%)`;
+              return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh (${pct}%)`;
             }
-            return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`;
+            return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`;
           },
           afterBody: (items: any[]) => {
             if (!items || items.length === 0) return [];
@@ -395,16 +400,16 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             if (selectorType === "all") {
               const b = currentBreakdown?.[idx];
               if (b && (b.poi1 > 0 || b.poi2 > 0)) {
-                lines.push(`• Rincian PLTS: POI-1 ${b.poi1.toLocaleString("id-ID", { maximumFractionDigits: 1 })} | POI-2 ${b.poi2.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
+                lines.push(`• Rincian PLTS: POI-1 ${b.poi1.toLocaleString("id-ID", { maximumFractionDigits: 2 })} | POI-2 ${b.poi2.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`);
               }
-              lines.push(`Total Konsumsi: ${curVal.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh`);
+              lines.push(`Total Konsumsi: ${curVal.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`);
             }
 
             if (prevVal > 0) {
               const diff = curVal - prevVal;
               const diffSign = diff > 0 ? "+" : "";
               const pct = ((diff / prevVal) * 100).toFixed(1);
-              lines.push(`Selisih vs Bulan Lalu: ${diffSign}${diff.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kWh (${diffSign}${pct}%)`);
+              lines.push(`Selisih vs Bulan Lalu: ${diffSign}${diff.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh (${diffSign}${pct}%)`);
             } else if (prevVal === 0 && selectorType !== "all") {
               lines.push(`Bulan Lalu: 0 kWh`);
             }
