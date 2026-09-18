@@ -88,5 +88,7 @@ export const registerRoutes = (app: Express) => {
   router.use(auditRouter);
 
   app.use("/api/v1", router);
-  app.use(mockScadaRouter);
+  if (process.env.NODE_ENV !== "production" && process.env.ENABLE_MOCK_SCADA === "true") {
+    app.use(mockScadaRouter);
+  }
 };

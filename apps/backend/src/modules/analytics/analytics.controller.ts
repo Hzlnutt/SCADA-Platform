@@ -810,19 +810,87 @@ export const getElectricityReportHandler = async (
     const pool = getPostgresPool();
 
     // Map tag to candidate PM IDs or tables
-    const tagMap: Record<string, { pmId?: string; group?: string; table?: string }> = {
-      "f1-mdp-1.1": { group: "ew21", pmId: "PM318", table: "electric_wf1_telemetry" },
-      "f1-mdp-1.2": { group: "ew21", pmId: "PM319", table: "electric_wf1_telemetry" },
-      "f1-mdp-2": { group: "ew21", pmId: "PM320", table: "electric_wf1_telemetry" },
-      "f1-mdp-3": { group: "ew21", pmId: "PM321", table: "electric_wf1_telemetry" },
-      "f2-putr-1": { group: "ew22", pmId: "PM201", table: "electric_wf2_telemetry" },
-      "f2-putr-2": { group: "ew22", pmId: "PM202", table: "electric_wf2_telemetry" },
-      "f2-putr-new": { group: "ew23", pmId: "PM325", table: "electric_wf2_telemetry" },
+    const tagMap: Record<string, { pmId?: string; group?: string; label?: string; table?: string }> = {
+      // Legacy panel aliases
+      "f1-mdp-1.1": { group: "ew21", pmId: "PM139", label: "F1 MDP-1.1", table: "electric_wf1_telemetry" },
+      "f1-mdp-1.2": { group: "ew21", pmId: "PM136", label: "F1 MDP-1.2", table: "electric_wf1_telemetry" },
+      "f1-mdp-2": { group: "ew21", pmId: "PM135", label: "F1 MDP-2", table: "electric_wf1_telemetry" },
+      "f1-mdp-3": { group: "ew21", pmId: "PM133", label: "F1 MDP3", table: "electric_wf1_telemetry" },
+      "f2-putr-1": { group: "ew22", pmId: "PM201", label: "F2 PUTR-1", table: "electric_wf2_telemetry" },
+      "f2-putr-2": { group: "ew22", pmId: "PM202", label: "F2 PUTR-2", table: "electric_wf2_telemetry" },
+      "f2-putr-new": { group: "ew23", pmId: "PM327", label: "F2 PUTR-NEW", table: "electric_wf2_telemetry" },
+
+      // Factory 1 (ew21)
+      "pm132": { pmId: "PM132", group: "ew21", label: "F1 MAIN SUPPLY QC OFFICE & LAB" },
+      "pm133": { pmId: "PM133", group: "ew21", label: "F1 MDP3" },
+      "pm134": { pmId: "PM134", group: "ew21", label: "F1 WH 4 PENERANGAN" },
+      "pm135": { pmId: "PM135", group: "ew21", label: "F1 MDP-2" },
+      "pm136": { pmId: "PM136", group: "ew21", label: "F1 MDP-1.2" },
+      "pm138": { pmId: "PM138", group: "ew21", label: "F1 FULL COOLING WF1-U3" },
+      "pm139": { pmId: "PM139", group: "ew21", label: "F1 MDP-1.1" },
+      "pm140": { pmId: "PM140", group: "ew21", label: "F1 COMPRESSED AIR ZT-55" },
+      "pm151": { pmId: "PM151", group: "ew21", label: "F1 HVAC OFFICE ATAS" },
+      "pm152": { pmId: "PM152", group: "ew21", label: "F1 COOLING TOWER PUMP WF1-U3" },
+      "pm153": { pmId: "PM153", group: "ew21", label: "F1 HVAC-QC" },
+      "pm154": { pmId: "PM154", group: "ew21", label: "F1 LIGHTING WH 1" },
+      "pm175": { pmId: "PM175", group: "ew21", label: "F1 ST3" },
+      "pm176": { pmId: "PM176", group: "ew21", label: "F1 QC LAB" },
+      "pm177": { pmId: "PM177", group: "ew21", label: "F1 CHILLER PREP DAIKIN BARAT" },
+      "pm178": { pmId: "PM178", group: "ew21", label: "F1 CHILLER PREP DAIKIN TIMUR" },
+      "pm179": { pmId: "PM179", group: "ew21", label: "F1 HVAC WH-3" },
+      "pm180": { pmId: "PM180", group: "ew21", label: "F1 CHILLER BP WF1-U3" },
+      "pm181": { pmId: "PM181", group: "ew21", label: "F1 COOLING TOWER FAN WF1-U3" },
+      "pm182": { pmId: "PM182", group: "ew21", label: "F1 COMPRESSED AIR ZT-30.1&2" },
+      "pm183": { pmId: "PM183", group: "ew21", label: "F1 COMPRESSED AIR ALE-30" },
+      "pm184": { pmId: "PM184", group: "ew21", label: "F1 BOILER 4" },
+      "pm185": { pmId: "PM185", group: "ew21", label: "F1 HVAC WF1U3" },
+
+      // Factory 2 (ew22)
+      "pm201": { pmId: "PM201", group: "ew22", label: "F2 PUTR-1" },
+      "pm202": { pmId: "PM202", group: "ew22", label: "F2 PUTR-2" },
+      "pm203": { pmId: "PM203", group: "ew22", label: "F2 HEATER WF2U2" },
+      "pm205": { pmId: "PM205", group: "ew22", label: "F2 AHU WF2UI" },
+      "pm206": { pmId: "PM206", group: "ew22", label: "F2 COOLING FASE-1" },
+      "pm207": { pmId: "PM207", group: "ew22", label: "F2 WH 6" },
+      "pm208": { pmId: "PM208", group: "ew22", label: "F2 WH 5" },
+      "pm209": { pmId: "PM209", group: "ew22", label: "F2 CHILLER - WF2U2" },
+      "pm210": { pmId: "PM210", group: "ew22", label: "F2 MAIN CRITICAL PANEL" },
+      "pm211": { pmId: "PM211", group: "ew22", label: "F2 PANEL OTOKLAF WF2U1" },
+      "pm212": { pmId: "PM212", group: "ew22", label: "F2 PANEL OTOKLAF WF2U2" },
+      "pm213": { pmId: "PM213", group: "ew22", label: "F2 BOILER-5" },
+      "pm214": { pmId: "PM214", group: "ew22", label: "F2 COMPRESSED AIR ATLAS" },
+      "pm215": { pmId: "PM215", group: "ew22", label: "F2 COOLING CRITICAL" },
+      "pm226": { pmId: "PM226", group: "ew22", label: "F2 WH-7" },
+      "pm229": { pmId: "PM229", group: "ew22", label: "F2 KOBELCO ALE-250" },
+      "pm271": { pmId: "PM271", group: "ew22", label: "F2 CHILLER RTAC 250 (RO&HVAC)" },
+      "pm272": { pmId: "PM272", group: "ew22", label: "F2 CHILLER RTAC 170 (RO)" },
+      "pm273": { pmId: "PM273", group: "ew22", label: "RETURN SAMPLE QC" },
+      "pm274": { pmId: "PM274", group: "ew22", label: "F2 CHILLER RTAC 100 (BP)" },
+      "pm288": { pmId: "PM288", group: "ew22", label: "F2 Penerangan PD" },
+
+      // Factory 2 (ew23)
+      "pm318": { pmId: "PM318", group: "ew23", label: "F2 COOLING FASE-2" },
+      "pm319": { pmId: "PM319", group: "ew23", label: "F2 CHILLER RTAC-27S (PREP)" },
+      "pm320": { pmId: "PM320", group: "ew23", label: "F2 WT-DU-PSG" },
+      "pm321": { pmId: "PM321", group: "ew23", label: "F2 AHU-1 - WF2U2" },
+      "pm322": { pmId: "PM322", group: "ew23", label: "F2 AHU-2 - WF2U2" },
+      "pm323": { pmId: "PM323", group: "ew23", label: "F2 PW GENERATION - RO" },
+      "pm324": { pmId: "PM324", group: "ew23", label: "F2 COOLING TOWER CT-PUMP" },
+      "pm325": { pmId: "PM325", group: "ew23", label: "F2 COOLING TOWER CT-FAN" },
+      "pm327": { pmId: "PM327", group: "ew23", label: "F2 PUTR-NEW" },
+      "pm337": { pmId: "PM337", group: "ew23", label: "F2 MCC BP 7" },
+
+      // Cubicles
+      "pm410": { pmId: "PM410", group: "ew23", label: "incoming cubicle WF2", table: "electric_wf2_telemetry" },
+      "pm411": { pmId: "PM411", group: "ew23", label: "incoming cubicle pln", table: "electric_pln_telemetry" },
+      "pm412": { pmId: "PM412", group: "ew23", label: "incoming cubicle WF1", table: "electric_wf1_telemetry" }
     };
 
     const mapping = tagMap[tag.toLowerCase()] || {};
-    const targetPmId = mapping.pmId || (tag.toUpperCase().startsWith("PM") ? tag.toUpperCase() : null);
-    const targetGroup = mapping.group || null;
+    // If machine param is a PM ID (e.g. "PM181"), target that PM specifically
+    const machinePm = (machine && machine !== "all" && tagMap[machine.toLowerCase()]) ? tagMap[machine.toLowerCase()].pmId : null;
+    const targetPmId = machinePm || mapping.pmId || (tag.toUpperCase().startsWith("PM") ? tag.toUpperCase() : null);
+    const targetGroup = mapping.group || (targetPmId && tagMap[targetPmId.toLowerCase()] ? tagMap[targetPmId.toLowerCase()].group : null);
     const targetTable = mapping.table || (factory === "f2" ? "electric_wf2_telemetry" : "electric_wf1_telemetry");
 
     // Select date trunc granularity: 'hour', 'day', 'month'
@@ -841,8 +909,9 @@ export const getElectricityReportHandler = async (
                  thd_current_a, thd_current_b, thd_current_c,
                  active_energy
           FROM electric_pm_telemetry
-          WHERE (pm_id ILIKE $1 OR group_id ILIKE $2)
+          WHERE (($1 != '%' AND pm_id ILIKE $1) OR ($1 = '%' AND group_id ILIKE $2))
             AND t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
+            AND (volt_ab IS NOT NULL OR volt_ll IS NOT NULL OR current_a IS NOT NULL OR active_power_total IS NOT NULL OR active_energy IS NOT NULL)
           UNION ALL
           SELECT t_stamp, volt_ab, volt_bc, volt_ca, volt_ll,
                  current_a, current_b, current_c, current_unbalance,
@@ -852,8 +921,9 @@ export const getElectricityReportHandler = async (
                  thd_current_a, thd_current_b, thd_current_c,
                  active_energy
           FROM electric_pm_telemetry_minute
-          WHERE (pm_id ILIKE $1 OR group_id ILIKE $2)
+          WHERE (($1 != '%' AND pm_id ILIKE $1) OR ($1 = '%' AND group_id ILIKE $2))
             AND t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
+            AND (volt_ab IS NOT NULL OR volt_ll IS NOT NULL OR current_a IS NOT NULL OR active_power_total IS NOT NULL OR active_energy IS NOT NULL)
         )
         SELECT 
           date_trunc('${truncUnit}', t_stamp) AS bucket,
@@ -882,8 +952,10 @@ export const getElectricityReportHandler = async (
       // Fallback
     }
 
-    // 2. If no PM rows found, query main feeder table
-    if (queryRows.length === 0) {
+    // 2. Query feeder table ONLY if the requested item is explicitly a cubicle / incoming feeder AND no sub-machine was specified.
+    // Strictly NEVER substitute feeder transformer data for missing PM or machine data.
+    const isExplicitCubicle = ["pm410", "pm411", "pm412", "incoming cubicle wf1", "incoming cubicle wf2", "incoming cubicle pln"].includes(tag.toLowerCase());
+    if (queryRows.length === 0 && isExplicitCubicle && (!machine || machine === "all")) {
       try {
         const feederSql = `
           WITH raw_feeder AS (
@@ -936,7 +1008,10 @@ export const getElectricityReportHandler = async (
     }
 
     // Transform query rows into the report row format
-    const tagLabel = machine && machine !== "all" ? `${tag.toUpperCase()} - ${machine}` : tag.toUpperCase();
+    const pmInfo = targetPmId ? tagMap[targetPmId.toLowerCase()] : mapping;
+    const tagLabel = pmInfo?.label 
+      ? (machine && machine !== "all" && machine.toUpperCase() !== targetPmId && !pmInfo.label.includes(machine) ? `${pmInfo.label} - ${machine}` : pmInfo.label)
+      : (machine && machine !== "all" ? `${tag.toUpperCase()} - ${machine}` : tag.toUpperCase());
 
     const result = queryRows.map((r: any) => {
       const bDate = new Date(r.bucket);

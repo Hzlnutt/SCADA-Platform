@@ -18,15 +18,68 @@ const FACTORIES: FactoryOption[] = [
 ];
 
 const TAGS: TagOption[] = [
-  // Factory 1
-  { id: "f1-mdp-1.1", label: "F1 MDP-1.1", factory: "f1" },
-  { id: "f1-mdp-1.2", label: "F1 MDP-1.2", factory: "f1" },
-  { id: "f1-mdp-2", label: "F1 MDP2", factory: "f1" },
-  { id: "f1-mdp-3", label: "F1 MDP3", factory: "f1" },
-  // Factory 2
-  { id: "f2-putr-1", label: "F2 PUTR-1", factory: "f2" },
-  { id: "f2-putr-2", label: "F2 PUTR-2", factory: "f2" },
-  { id: "f2-putr-new", label: "F2 PUTR-New", factory: "f2" },
+  // ─── Factory 1 (WF1 - ew21) ───
+  { id: "f1-mdp-1.1", label: "F1 MDP-1.1 (PM139)", factory: "f1" },
+  { id: "f1-mdp-1.2", label: "F1 MDP-1.2 (PM136)", factory: "f1" },
+  { id: "f1-mdp-2", label: "F1 MDP-2 (PM135)", factory: "f1" },
+  { id: "f1-mdp-3", label: "F1 MDP3 (PM133)", factory: "f1" },
+  { id: "pm132", label: "F1 MAIN SUPPLY QC OFFICE & LAB (PM132)", factory: "f1" },
+  { id: "pm134", label: "F1 WH 4 PENERANGAN (PM134)", factory: "f1" },
+  { id: "pm138", label: "F1 FULL COOLING WF1-U3 (PM138)", factory: "f1" },
+  { id: "pm140", label: "F1 COMPRESSED AIR ZT-55 (PM140)", factory: "f1" },
+  { id: "pm151", label: "F1 HVAC OFFICE ATAS (PM151)", factory: "f1" },
+  { id: "pm152", label: "F1 COOLING TOWER PUMP WF1-U3 (PM152)", factory: "f1" },
+  { id: "pm153", label: "F1 HVAC-QC (PM153)", factory: "f1" },
+  { id: "pm154", label: "F1 LIGHTING WH 1 (PM154)", factory: "f1" },
+  { id: "pm175", label: "F1 ST3 (PM175)", factory: "f1" },
+  { id: "pm176", label: "F1 QC LAB (PM176)", factory: "f1" },
+  { id: "pm177", label: "F1 CHILLER PREP DAIKIN BARAT (PM177)", factory: "f1" },
+  { id: "pm178", label: "F1 CHILLER PREP DAIKIN TIMUR (PM178)", factory: "f1" },
+  { id: "pm179", label: "F1 HVAC WH-3 (PM179)", factory: "f1" },
+  { id: "pm180", label: "F1 CHILLER BP WF1-U3 (PM180)", factory: "f1" },
+  { id: "pm181", label: "F1 COOLING TOWER FAN WF1-U3 (PM181)", factory: "f1" },
+  { id: "pm182", label: "F1 COMPRESSED AIR ZT-30.1&2 (PM182)", factory: "f1" },
+  { id: "pm183", label: "F1 COMPRESSED AIR ALE-30 (PM183)", factory: "f1" },
+  { id: "pm184", label: "F1 BOILER 4 (PM184)", factory: "f1" },
+  { id: "pm185", label: "F1 HVAC WF1U3 (PM185)", factory: "f1" },
+
+  // ─── Factory 2 (WF2 - ew22 & ew23) ───
+  { id: "f2-putr-1", label: "F2 PUTR-1 (PM201)", factory: "f2" },
+  { id: "f2-putr-2", label: "F2 PUTR-2 (PM202)", factory: "f2" },
+  { id: "f2-putr-new", label: "F2 PUTR-NEW (PM327)", factory: "f2" },
+  { id: "pm210", label: "F2 MAIN CRITICAL PANEL (PM210)", factory: "f2" },
+  { id: "pm203", label: "F2 HEATER WF2U2 (PM203)", factory: "f2" },
+  { id: "pm205", label: "F2 AHU WF2UI (PM205)", factory: "f2" },
+  { id: "pm206", label: "F2 COOLING FASE-1 (PM206)", factory: "f2" },
+  { id: "pm207", label: "F2 WH 6 (PM207)", factory: "f2" },
+  { id: "pm208", label: "F2 WH 5 (PM208)", factory: "f2" },
+  { id: "pm209", label: "F2 CHILLER - WF2U2 (PM209)", factory: "f2" },
+  { id: "pm211", label: "F2 PANEL OTOKLAF WF2U1 (PM211)", factory: "f2" },
+  { id: "pm212", label: "F2 PANEL OTOKLAF WF2U2 (PM212)", factory: "f2" },
+  { id: "pm213", label: "F2 BOILER-5 (PM213)", factory: "f2" },
+  { id: "pm214", label: "F2 COMPRESSED AIR ATLAS (PM214)", factory: "f2" },
+  { id: "pm215", label: "F2 COOLING CRITICAL (PM215)", factory: "f2" },
+  { id: "pm226", label: "F2 WH-7 (PM226)", factory: "f2" },
+  { id: "pm229", label: "F2 KOBELCO ALE-250 (PM229)", factory: "f2" },
+  { id: "pm271", label: "F2 CHILLER RTAC 250 (RO&HVAC) (PM271)", factory: "f2" },
+  { id: "pm272", label: "F2 CHILLER RTAC 170 (RO) (PM272)", factory: "f2" },
+  { id: "pm273", label: "RETURN SAMPLE QC (PM273)", factory: "f2" },
+  { id: "pm274", label: "F2 CHILLER RTAC 100 (BP) (PM274)", factory: "f2" },
+  { id: "pm288", label: "F2 Penerangan PD (PM288)", factory: "f2" },
+  { id: "pm318", label: "F2 COOLING FASE-2 (PM318)", factory: "f2" },
+  { id: "pm319", label: "F2 CHILLER RTAC-27S (PREP) (PM319)", factory: "f2" },
+  { id: "pm320", label: "F2 WT-DU-PSG (PM320)", factory: "f2" },
+  { id: "pm321", label: "F2 AHU-1 - WF2U2 (PM321)", factory: "f2" },
+  { id: "pm322", label: "F2 AHU-2 - WF2U2 (PM322)", factory: "f2" },
+  { id: "pm323", label: "F2 PW GENERATION - RO (PM323)", factory: "f2" },
+  { id: "pm324", label: "F2 COOLING TOWER CT-PUMP (PM324)", factory: "f2" },
+  { id: "pm325", label: "F2 COOLING TOWER CT-FAN (PM325)", factory: "f2" },
+  { id: "pm337", label: "F2 MCC BP 7 (PM337)", factory: "f2" },
+
+  // ─── Incoming Cubicles ───
+  { id: "pm411", label: "incoming cubicle pln (PM411)", factory: "all" },
+  { id: "pm412", label: "incoming cubicle WF1 (PM412)", factory: "f1" },
+  { id: "pm410", label: "incoming cubicle WF2 (PM410)", factory: "f2" },
 ];
 
 const GRANULARITY: GranularityOption[] = [
@@ -48,6 +101,7 @@ const COLUMNS: Record<ReportCategory, { key: string; label: string; unit?: strin
     { key: "date", label: "DATE" },
     { key: "tag", label: "TAG DESCRIPTION" },
     { key: "kwh", label: "KWH", unit: "kWh" },
+    { key: "kvar", label: "KVAR", unit: "kVAR" },
   ],
   tegangan: [
     { key: "date", label: "DATE" },
@@ -275,7 +329,11 @@ export default function ElectricityReport() {
       }).toString();
       const res = await getJson<{ data: Record<string, any>[] }>(`/analytics/electricity/report?${q}`);
       if (res && Array.isArray(res.data)) {
-        setData(res.data);
+        const mapped = res.data.map((row) => ({
+          ...row,
+          kvar: row.kvar ?? row.kvarh ?? null,
+        }));
+        setData(mapped);
       } else {
         setData([]);
       }
@@ -380,8 +438,8 @@ export default function ElectricityReport() {
               ))}
             </select>
 
-            {/* Machine Select */}
-            {selectedFactory !== "all" && (
+            {/* Machine Select (shown only if panel has sub-machines) */}
+            {selectedFactory !== "all" && machineOptions.length > 1 && (
               <select
                 value={selectedMachine}
                 onChange={(e) => { setSelectedMachine(e.target.value); setHasFiltered(false); }}

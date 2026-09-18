@@ -206,19 +206,22 @@ const getNullWfRecord = (ts: Date) => ({
 });
 
 const EW_GROUP_PMS: Record<string, string[]> = {
+  // Factory 1 (ew21): PM132 - PM185
   ew21: [
     "PM132", "PM133", "PM134", "PM135", "PM136", "PM138", "PM139", "PM140",
-    "PM151", "PM152", "PM153", "PM154", "PM175", "PM176", "PM177", "PM178",
-    "PM179", "PM180", "PM181", "PM182", "PM183", "PM184", "PM185"
+    "PM151", "PM152", "PM153", "PM154",
+    "PM175", "PM176", "PM177", "PM178", "PM179", "PM180", "PM181", "PM182", "PM183", "PM184", "PM185"
   ],
+  // Factory 2 (ew22): PM201 - PM288
   ew22: [
     "PM201", "PM202", "PM203", "PM205", "PM206", "PM207", "PM208", "PM209",
-    "PM210", "PM211", "PM212", "PM213", "PM214", "PM215", "PM226", "PM229",
-    "PM271", "PM272", "PM273", "PM274", "PM288"
+    "PM210", "PM211", "PM212", "PM213", "PM214", "PM215",
+    "PM226", "PM229", "PM271", "PM272", "PM273", "PM274", "PM288"
   ],
+  // Factory 2 & Incoming (ew23): PM318 - PM337 + Cubicles 410, 411, 412
   ew23: [
-    "PM318", "PM319", "PM320", "PM321", "PM322", "PM323", "PM324", "PM325",
-    "PM327", "PM337"
+    "PM318", "PM319", "PM320", "PM321", "PM322", "PM323", "PM324", "PM325", "PM327", "PM337",
+    "PM410", "PM411", "PM412"
   ]
 };
 
@@ -754,14 +757,23 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
 };
 
 const insertPmMinuteTelemetryBatch = async (records: ElectricPmRecord[], minuteTs: Date) => {
-  if (!records.length) return;
+  // Only persist records that have at least one valid measurement (not all null)
+  const validRecords = records.filter(
+    (r) =>
+      r.volt_ab !== null ||
+      r.volt_ll !== null ||
+      r.current_a !== null ||
+      r.active_power_total !== null ||
+      r.active_energy !== null
+  );
+  if (!validRecords.length) return;
   const pool = getPostgresPool();
   try {
     const valueClauses: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
 
-    for (const r of records) {
+    for (const r of validRecords) {
       valueClauses.push(
         `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`
       );
@@ -1018,8 +1030,7 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
 let cachedWorkingBaseUrl = "http://10.3.164.3:8088";
 const CANDIDATE_BASES = [
   "http://10.3.164.3:8088",
-  "http://10.3.161.3:8088",
-  "https://utility.widatra.com"
+  "http://10.3.161.3:8088"
 ];
 
 const fetchApiData = async (endpoint: string) => {
@@ -2001,6 +2012,7 @@ export const runElectricityRollupAndCleanup = async () => {
             MAX(active_energy) as active_energy
           FROM electric_pm_telemetry_minute
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+            AND (volt_ab IS NOT NULL OR volt_ll IS NOT NULL OR current_a IS NOT NULL OR active_power_total IS NOT NULL OR active_energy IS NOT NULL)
           GROUP BY group_id, pm_id
         `, [hourStartStr]);
 
