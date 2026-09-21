@@ -499,9 +499,23 @@ interface HourlyTrend5sPoint {
         if (res?.data?.charts) {
           const charts = res.data.charts;
           if (charts.hourlyTrend5s && Array.isArray(charts.hourlyTrend5s) && charts.hourlyTrend5s.length > 0) {
-            const currentHour = new Date().getHours();
-            lastTrendHourRef.current = currentHour;
-            setHourlyTrend5s(charts.hourlyTrend5s);
+            // Backend already returns a rolling window — use it directly
+            // Keep max 750 points (1h at 5s interval)
+            const pts = charts.hourlyTrend5s;
+            setHourlyTrend5s((prev) => {
+              if (prev.length === 0) {
+                // Initial load: take backend data directly
+                return pts.length > 750 ? pts.slice(pts.length - 750) : pts;
+              }
+              // Page active: backend may have missed some points since last poll
+              // Only append new points that are newer than current last point
+              const lastTime = prev[prev.length - 1].time;
+              const newPts = pts.filter((p: any) => p.time > lastTime);
+              if (newPts.length === 0) return prev;
+              const merged = [...prev, ...newPts];
+              return merged.length > 750 ? merged.slice(merged.length - 750) : merged;
+            });
+            lastTrendHourRef.current = new Date().getHours();
           }
         }
         setLoading(false);
@@ -605,18 +619,16 @@ interface HourlyTrend5sPoint {
     const handleTrend5s = (payload: any) => {
       if (payload && payload.deviceId === config.deviceId && payload.point) {
         const pt = payload.point;
-        const currentHour = new Date().getHours();
         setHourlyTrend5s((prev) => {
-          if (lastTrendHourRef.current !== currentHour) {
-            lastTrendHourRef.current = currentHour;
-            return [pt];
-          }
+          // Deduplicate: skip if already have this timestamp
           if (prev.length > 0 && prev[prev.length - 1].time === pt.time) {
             return prev;
           }
+          // Strict rolling 1-hour window: 750 points × 5s = 3750s ≈ 1h
           const updated = [...prev, pt];
           return updated.length > 750 ? updated.slice(updated.length - 750) : updated;
         });
+        lastTrendHourRef.current = new Date().getHours();
       }
     };
 
@@ -768,13 +780,14 @@ interface HourlyTrend5sPoint {
     }
   };
 
-  // Local fallback interval for 5-second sampling in case socket is delayed
+  // Local fallback interval — records every 5 seconds, rolling 750 points = 1 hour window
   useEffect(() => {
     if (!isPageActive) return;
     const interval = setInterval(() => {
       const now = new Date();
       const currentHour = now.getHours();
       const currentSec = now.getSeconds();
+      // Sample strictly every 5 seconds (0, 5, 10, ..., 55)
       if (currentSec % 5 === 0) {
         const timeStr = `${String(currentHour).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(currentSec).padStart(2, "0")}`;
         const rawV = liveMetrics.voltage;
@@ -809,16 +822,16 @@ interface HourlyTrend5sPoint {
           };
 
           setHourlyTrend5s((prev) => {
-            if (lastTrendHourRef.current !== currentHour) {
-              lastTrendHourRef.current = currentHour;
-              return [pt];
-            }
+            // Deduplicate: skip if the latest point has the same timestamp
             if (prev.length > 0 && prev[prev.length - 1].time === timeStr) {
               return prev;
             }
+            // Strict rolling 1-hour window: keep max 750 points (750 × 5s = 3750s ≈ 1h)
             const updated = [...prev, pt];
             return updated.length > 750 ? updated.slice(updated.length - 750) : updated;
           });
+          // Track current hour for backend-side reset reference only
+          lastTrendHourRef.current = currentHour;
         }
       }
     }, 1000);

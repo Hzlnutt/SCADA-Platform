@@ -878,12 +878,9 @@ export const getLatestIncomingTelemetry = (deviceId: string) => {
 
 export const getIncomingHourlyTrend = (deviceId: string) => {
   const currentHour = new Date().getHours();
-  if (lastTrendHour[deviceId] !== -1 && lastTrendHour[deviceId] !== currentHour) {
-    incomingHourlyTrends[deviceId] = [];
-    lastTrendHour[deviceId] = currentHour;
-  }
   return {
     hour: currentHour,
+    // Returns latest 750 points (rolling 1-hour window, 5s interval)
     points: incomingHourlyTrends[deviceId] || []
   };
 };
@@ -906,14 +903,9 @@ const recordIncomingTrend5s = (
   const currentHour = now.getHours();
   const currentSec = now.getSeconds();
 
-  // Every 5 seconds (0, 5, 10, 15, ..., 55)
+  // Record strictly every 5 seconds (0, 5, 10, ..., 55)
   if (currentSec % 5 === 0 && lastRecordedSecond[deviceId] !== currentSec) {
     lastRecordedSecond[deviceId] = currentSec;
-
-    // Reset when hour changes
-    if (lastTrendHour[deviceId] !== -1 && lastTrendHour[deviceId] !== currentHour) {
-      incomingHourlyTrends[deviceId] = [];
-    }
     lastTrendHour[deviceId] = currentHour;
 
     const timeStr = `${String(currentHour).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(currentSec).padStart(2, "0")}`;
@@ -932,6 +924,7 @@ const recordIncomingTrend5s = (
 
     incomingHourlyTrends[deviceId].push(point);
 
+    // Strict rolling 1-hour window: max 750 points (750 × 5s = 3750s ≈ 1h)
     if (incomingHourlyTrends[deviceId].length > 750) {
       incomingHourlyTrends[deviceId].shift();
     }
