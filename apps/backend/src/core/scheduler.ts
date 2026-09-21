@@ -839,7 +839,13 @@ export interface IncomingTrend5sPoint {
   time: string;
   hour: number;
   voltage: number;
+  vR: number;
+  vS: number;
+  vT: number;
   activePower: number;
+  pR: number;
+  pS: number;
+  pT: number;
 }
 
 const incomingHourlyTrends: Record<string, IncomingTrend5sPoint[]> = {
@@ -882,7 +888,19 @@ export const getIncomingHourlyTrend = (deviceId: string) => {
   };
 };
 
-const recordIncomingTrend5s = (deviceId: string, data: { voltage: number; activePower: number }) => {
+const recordIncomingTrend5s = (
+  deviceId: string,
+  data: {
+    voltage: number;
+    vR: number;
+    vS: number;
+    vT: number;
+    activePower: number;
+    pR: number;
+    pS: number;
+    pT: number;
+  }
+) => {
   if (!incomingHourlyTrends[deviceId]) return;
   const now = new Date();
   const currentHour = now.getHours();
@@ -903,7 +921,13 @@ const recordIncomingTrend5s = (deviceId: string, data: { voltage: number; active
       time: timeStr,
       hour: currentHour,
       voltage: Number(data.voltage.toFixed(3)),
-      activePower: Number(data.activePower.toFixed(1))
+      vR: Number(data.vR.toFixed(3)),
+      vS: Number(data.vS.toFixed(3)),
+      vT: Number(data.vT.toFixed(3)),
+      activePower: Number(data.activePower.toFixed(1)),
+      pR: Number(data.pR.toFixed(1)),
+      pS: Number(data.pS.toFixed(1)),
+      pT: Number(data.pT.toFixed(1))
     };
 
     incomingHourlyTrends[deviceId].push(point);
@@ -983,9 +1007,20 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
     ts: Date.now()
   };
 
+  const iTotal = currentAVal + currentBVal + currentCVal;
+  const pR = iTotal > 0 ? (activePowerVal * (currentAVal / iTotal)) : (activePowerVal / 3.0);
+  const pS = iTotal > 0 ? (activePowerVal * (currentBVal / iTotal)) : (activePowerVal / 3.0);
+  const pT = iTotal > 0 ? (activePowerVal * (currentCVal / iTotal)) : (activePowerVal / 3.0);
+
   recordIncomingTrend5s(deviceId, {
     voltage: voltLAvg > 0 ? voltLAvg : voltABVal,
-    activePower: activePowerVal
+    vR: voltABVal,
+    vS: voltBCVal,
+    vT: voltCAVal,
+    activePower: activePowerVal,
+    pR,
+    pS,
+    pT
   });
 
   io.emit("electricity:live_update", {

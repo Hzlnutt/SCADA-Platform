@@ -2,7 +2,7 @@ import { getMongoDb } from "../../database/mongo";
 import { getPostgresPool } from "../../database/postgres";
 import { ELECTRICITY_RAW_COLLECTION, ELECTRICITY_1M_COLLECTION, ELECTRICITY_1H_COLLECTION, GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
 import { env } from "../../config/env.config";
-import { getIncomingHourlyTrend, getLatestIncomingTelemetry } from "../../core/scheduler";
+import { getIncomingHourlyTrend, getLatestIncomingTelemetry, IncomingTrend5sPoint } from "../../core/scheduler";
 
 export interface ElectricityTariff {
   validFrom: string; // "YYYY-MM"
@@ -152,7 +152,7 @@ export interface ElectricityAnalyticsResult {
     breakdown: { label: string; value: number; color: string }[];
     voltage24h?: { hour: string; value: number }[];
     activePower24h?: { hour: string; value: number }[];
-    hourlyTrend5s?: { time: string; hour: number; voltage: number; activePower: number }[];
+    hourlyTrend5s?: IncomingTrend5sPoint[];
     currentHour?: number;
   };
   pqData: {

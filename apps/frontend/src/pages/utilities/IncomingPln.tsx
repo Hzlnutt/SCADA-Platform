@@ -357,7 +357,20 @@ export default function IncomingPln() {
     isConnected: true
   });
 
-  const [hourlyTrend5s, setHourlyTrend5s] = useState<{ time: string; hour: number; voltage: number; activePower: number }[]>([]);
+interface HourlyTrend5sPoint {
+  time: string;
+  hour: number;
+  voltage: number;
+  vR?: number;
+  vS?: number;
+  vT?: number;
+  activePower: number;
+  pR?: number;
+  pS?: number;
+  pT?: number;
+}
+
+  const [hourlyTrend5s, setHourlyTrend5s] = useState<HourlyTrend5sPoint[]>([]);
   const lastTrendHourRef = useRef<number>(new Date().getHours());
 
   // Event & alarm logs
@@ -769,43 +782,100 @@ export default function IncomingPln() {
         const v = typeof rawV === "number" && rawV > 0 ? rawV : (typeof liveMetrics.vR === "number" && liveMetrics.vR > 0 ? liveMetrics.vR : 0);
         const p = typeof rawP === "number" && rawP > 0 ? rawP : 0;
 
+        const vR = typeof liveMetrics.vR === "number" && liveMetrics.vR > 0 ? liveMetrics.vR : v;
+        const vS = typeof liveMetrics.vS === "number" && liveMetrics.vS > 0 ? liveMetrics.vS : v;
+        const vT = typeof liveMetrics.vT === "number" && liveMetrics.vT > 0 ? liveMetrics.vT : v;
+
+        const iR = typeof liveMetrics.iR === "number" && liveMetrics.iR > 0 ? liveMetrics.iR : 0;
+        const iS = typeof liveMetrics.iS === "number" && liveMetrics.iS > 0 ? liveMetrics.iS : 0;
+        const iT = typeof liveMetrics.iT === "number" && liveMetrics.iT > 0 ? liveMetrics.iT : 0;
+        const iTotal = iR + iS + iT;
+        const pR = iTotal > 0 ? (p * (iR / iTotal)) : (p / 3.0);
+        const pS = iTotal > 0 ? (p * (iS / iTotal)) : (p / 3.0);
+        const pT = iTotal > 0 ? (p * (iT / iTotal)) : (p / 3.0);
+
         if (v > 0 || p > 0) {
+          const pt: HourlyTrend5sPoint = {
+            time: timeStr,
+            hour: currentHour,
+            voltage: Number(v.toFixed(3)),
+            vR: Number(vR.toFixed(3)),
+            vS: Number(vS.toFixed(3)),
+            vT: Number(vT.toFixed(3)),
+            activePower: Number(p.toFixed(1)),
+            pR: Number(pR.toFixed(1)),
+            pS: Number(pS.toFixed(1)),
+            pT: Number(pT.toFixed(1))
+          };
+
           setHourlyTrend5s((prev) => {
             if (lastTrendHourRef.current !== currentHour) {
               lastTrendHourRef.current = currentHour;
-              return [{ time: timeStr, hour: currentHour, voltage: Number(v.toFixed(3)), activePower: Number(p.toFixed(1)) }];
+              return [pt];
             }
             if (prev.length > 0 && prev[prev.length - 1].time === timeStr) {
               return prev;
             }
-            const updated = [...prev, { time: timeStr, hour: currentHour, voltage: Number(v.toFixed(3)), activePower: Number(p.toFixed(1)) }];
+            const updated = [...prev, pt];
             return updated.length > 750 ? updated.slice(updated.length - 750) : updated;
           });
         }
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [isPageActive, liveMetrics.voltage, liveMetrics.vR, liveMetrics.activePower]);
+  }, [isPageActive, liveMetrics.voltage, liveMetrics.vR, liveMetrics.vS, liveMetrics.vT, liveMetrics.iR, liveMetrics.iS, liveMetrics.iT, liveMetrics.activePower]);
 
-  // 1-Hour Rolling 5-Second Line Trend Data
+  // 1-Hour Rolling 5-Second Line Trend Data - 3 Lines (Fasa R, S, T)
   const voltageTrendData = useMemo(() => {
     const labels = hourlyTrend5s.map((p) => p.time);
-    const dataPoints = hourlyTrend5s.map((p) => p.voltage);
+    const dataR = hourlyTrend5s.map((p) => (p.vR !== undefined ? p.vR : p.voltage));
+    const dataS = hourlyTrend5s.map((p) => (p.vS !== undefined ? p.vS : p.voltage));
+    const dataT = hourlyTrend5s.map((p) => (p.vT !== undefined ? p.vT : p.voltage));
     
     return {
       labels: labels.length > 0 ? labels : ["--:--:--"],
       datasets: [
         {
-          label: "Tegangan",
-          data: dataPoints.length > 0 ? dataPoints : [0],
-          borderColor: "#eab308",
-          backgroundColor: "rgba(234, 179, 8, 0.08)",
-          fill: true,
+          label: "Fasa R (kV)",
+          data: dataR.length > 0 ? dataR : [0],
+          borderColor: "#f43f5e",
+          backgroundColor: "rgba(244, 63, 94, 0.05)",
+          fill: false,
           tension: 0.2,
-          borderWidth: 2,
+          borderWidth: 1.8,
           pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
           pointHoverRadius: 5,
-          pointBackgroundColor: "#eab308",
+          pointBackgroundColor: "#f43f5e",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          spanGaps: true
+        },
+        {
+          label: "Fasa S (kV)",
+          data: dataS.length > 0 ? dataS : [0],
+          borderColor: "#f59e0b",
+          backgroundColor: "rgba(245, 158, 11, 0.05)",
+          fill: false,
+          tension: 0.2,
+          borderWidth: 1.8,
+          pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
+          pointHoverRadius: 5,
+          pointBackgroundColor: "#f59e0b",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          spanGaps: true
+        },
+        {
+          label: "Fasa T (kV)",
+          data: dataT.length > 0 ? dataT : [0],
+          borderColor: "#3b82f6",
+          backgroundColor: "rgba(59, 130, 246, 0.05)",
+          fill: false,
+          tension: 0.2,
+          borderWidth: 1.8,
+          pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
+          pointHoverRadius: 5,
+          pointBackgroundColor: "#3b82f6",
           pointBorderColor: isDark ? "#0f172a" : "#ffffff",
           pointBorderWidth: 1.5,
           spanGaps: true
@@ -816,22 +886,54 @@ export default function IncomingPln() {
 
   const activePowerTrendData = useMemo(() => {
     const labels = hourlyTrend5s.map((p) => p.time);
-    const dataPoints = hourlyTrend5s.map((p) => p.activePower);
+    const dataR = hourlyTrend5s.map((p) => (p.pR !== undefined ? p.pR : Number((p.activePower / 3.0).toFixed(1))));
+    const dataS = hourlyTrend5s.map((p) => (p.pS !== undefined ? p.pS : Number((p.activePower / 3.0).toFixed(1))));
+    const dataT = hourlyTrend5s.map((p) => (p.pT !== undefined ? p.pT : Number((p.activePower / 3.0).toFixed(1))));
     
     return {
       labels: labels.length > 0 ? labels : ["--:--:--"],
       datasets: [
         {
-          label: "Daya Aktif",
-          data: dataPoints.length > 0 ? dataPoints : [0],
-          borderColor: "#10b981",
-          backgroundColor: "rgba(16, 185, 129, 0.08)",
-          fill: true,
+          label: "Fasa R (kW)",
+          data: dataR.length > 0 ? dataR : [0],
+          borderColor: "#f43f5e",
+          backgroundColor: "rgba(244, 63, 94, 0.05)",
+          fill: false,
           tension: 0.2,
-          borderWidth: 2,
+          borderWidth: 1.8,
           pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
           pointHoverRadius: 5,
-          pointBackgroundColor: "#10b981",
+          pointBackgroundColor: "#f43f5e",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          spanGaps: true
+        },
+        {
+          label: "Fasa S (kW)",
+          data: dataS.length > 0 ? dataS : [0],
+          borderColor: "#f59e0b",
+          backgroundColor: "rgba(245, 158, 11, 0.05)",
+          fill: false,
+          tension: 0.2,
+          borderWidth: 1.8,
+          pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
+          pointHoverRadius: 5,
+          pointBackgroundColor: "#f59e0b",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          spanGaps: true
+        },
+        {
+          label: "Fasa T (kW)",
+          data: dataT.length > 0 ? dataT : [0],
+          borderColor: "#3b82f6",
+          backgroundColor: "rgba(59, 130, 246, 0.05)",
+          fill: false,
+          tension: 0.2,
+          borderWidth: 1.8,
+          pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
+          pointHoverRadius: 5,
+          pointBackgroundColor: "#3b82f6",
           pointBorderColor: isDark ? "#0f172a" : "#ffffff",
           pointBorderWidth: 1.5,
           spanGaps: true
@@ -840,7 +942,7 @@ export default function IncomingPln() {
     };
   }, [hourlyTrend5s, isDark]);
 
-  const lineOptions = (title: string, color: string, unit: string) => ({
+  const lineOptions = (unit: "kV" | "kW", isPower: boolean = false) => ({
     responsive: true,
     maintainAspectRatio: false,
     interaction: {
@@ -848,13 +950,22 @@ export default function IncomingPln() {
       intersect: false
     },
     plugins: {
-      legend: { display: false },
-      title: {
+      legend: {
         display: true,
-        text: title,
-        color: isDark ? "#94a3b8" : "#475569",
-        align: "start" as const,
-        font: { size: 11, weight: "bold" as const }
+        position: "top" as const,
+        align: "end" as const,
+        labels: {
+          boxWidth: 8,
+          boxHeight: 8,
+          usePointStyle: true,
+          pointStyle: "circle",
+          color: isDark ? "#94a3b8" : "#475569",
+          font: { size: 9.5, weight: "bold" as const },
+          padding: 8
+        }
+      },
+      title: {
+        display: false
       },
       tooltip: {
         enabled: true,
@@ -864,7 +975,10 @@ export default function IncomingPln() {
         borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.1)",
         borderWidth: 1,
         padding: 8,
-        displayColors: false,
+        displayColors: true,
+        boxWidth: 8,
+        boxHeight: 8,
+        usePointStyle: true,
         callbacks: {
           title: (items: any[]) => {
             if (!items.length) return "";
@@ -872,8 +986,19 @@ export default function IncomingPln() {
           },
           label: (context: any) => {
             const val = context.parsed.y;
-            if (val === null || val === undefined) return "Tidak ada data";
-            return `${context.dataset.label || "Nilai"}: ${val.toFixed(2)} ${unit}`;
+            if (val === null || val === undefined) return ` ${context.dataset.label}: -`;
+            const decimals = unit === "kV" ? 3 : 1;
+            return ` ${context.dataset.label}: ${val.toFixed(decimals)} ${unit}`;
+          },
+          footer: (items: any[]) => {
+            if (!items.length) return "";
+            const total = items.reduce((acc: number, it: any) => acc + (it.parsed.y || 0), 0);
+            if (isPower) {
+              return `Total Daya: ${total.toFixed(1)} kW`;
+            } else {
+              const avg = total / items.length;
+              return `Rata-rata: ${avg.toFixed(3)} kV`;
+            }
           }
         }
       }
@@ -1245,14 +1370,14 @@ export default function IncomingPln() {
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
             <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400 mb-2">Trend Tegangan 1 Jam (kV)</h4>
-            <div style={{ height: 130 }}>
-              <Line data={voltageTrendData} options={lineOptions("Trend Tegangan 1 Jam (kV)", "#eab308", "kV")} />
+            <div style={{ height: 140 }}>
+              <Line data={voltageTrendData} options={lineOptions("kV", false)} />
             </div>
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
             <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400 mb-2">Trend Daya Aktif 1 Jam (kW)</h4>
-            <div style={{ height: 130 }}>
-              <Line data={activePowerTrendData} options={lineOptions("Trend Daya Aktif 1 Jam (kW)", "#10b981", "kW")} />
+            <div style={{ height: 140 }}>
+              <Line data={activePowerTrendData} options={lineOptions("kW", true)} />
             </div>
           </div>
         </div>
