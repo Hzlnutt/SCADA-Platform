@@ -884,56 +884,25 @@ interface HourlyTrend5sPoint {
     };
   }, [hourlyTrend5s, isDark]);
 
+  // Strictly 1 single line for Active Power trend across Incoming PLN, WF1, and WF2
   const activePowerTrendData = useMemo(() => {
     const labels = hourlyTrend5s.map((p) => p.time);
-    const dataR = hourlyTrend5s.map((p) => (p.pR !== undefined ? p.pR : Number((p.activePower / 3.0).toFixed(1))));
-    const dataS = hourlyTrend5s.map((p) => (p.pS !== undefined ? p.pS : Number((p.activePower / 3.0).toFixed(1))));
-    const dataT = hourlyTrend5s.map((p) => (p.pT !== undefined ? p.pT : Number((p.activePower / 3.0).toFixed(1))));
+    const dataPoints = hourlyTrend5s.map((p) => p.activePower);
     
     return {
       labels: labels.length > 0 ? labels : ["--:--:--"],
       datasets: [
         {
-          label: "Fasa R (kW)",
-          data: dataR.length > 0 ? dataR : [0],
-          borderColor: "#f43f5e",
-          backgroundColor: "rgba(244, 63, 94, 0.05)",
-          fill: false,
+          label: "Active Power (kW)",
+          data: dataPoints.length > 0 ? dataPoints : [0],
+          borderColor: "#10b981",
+          backgroundColor: "rgba(16, 185, 129, 0.08)",
+          fill: true,
           tension: 0.2,
-          borderWidth: 1.8,
+          borderWidth: 2,
           pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
           pointHoverRadius: 5,
-          pointBackgroundColor: "#f43f5e",
-          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
-          pointBorderWidth: 1.5,
-          spanGaps: true
-        },
-        {
-          label: "Fasa S (kW)",
-          data: dataS.length > 0 ? dataS : [0],
-          borderColor: "#f59e0b",
-          backgroundColor: "rgba(245, 158, 11, 0.05)",
-          fill: false,
-          tension: 0.2,
-          borderWidth: 1.8,
-          pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
-          pointHoverRadius: 5,
-          pointBackgroundColor: "#f59e0b",
-          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
-          pointBorderWidth: 1.5,
-          spanGaps: true
-        },
-        {
-          label: "Fasa T (kW)",
-          data: dataT.length > 0 ? dataT : [0],
-          borderColor: "#3b82f6",
-          backgroundColor: "rgba(59, 130, 246, 0.05)",
-          fill: false,
-          tension: 0.2,
-          borderWidth: 1.8,
-          pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
-          pointHoverRadius: 5,
-          pointBackgroundColor: "#3b82f6",
+          pointBackgroundColor: "#10b981",
           pointBorderColor: isDark ? "#0f172a" : "#ffffff",
           pointBorderWidth: 1.5,
           spanGaps: true
@@ -991,14 +960,10 @@ interface HourlyTrend5sPoint {
             return ` ${context.dataset.label}: ${val.toFixed(decimals)} ${unit}`;
           },
           footer: (items: any[]) => {
-            if (!items.length) return "";
+            if (!items.length || isPower) return "";
             const total = items.reduce((acc: number, it: any) => acc + (it.parsed.y || 0), 0);
-            if (isPower) {
-              return `Total Daya: ${total.toFixed(1)} kW`;
-            } else {
-              const avg = total / items.length;
-              return `Rata-rata: ${avg.toFixed(3)} kV`;
-            }
+            const avg = total / items.length;
+            return `Rata-rata: ${avg.toFixed(3)} kV`;
           }
         }
       }
@@ -1014,6 +979,7 @@ interface HourlyTrend5sPoint {
         }
       },
       y: {
+        grace: "10%",
         grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
         ticks: { color: "#64748b", font: { size: 8.5 } }
       }
