@@ -44,7 +44,7 @@ export const ingestHistorian = async (points: HistorianPointInput[]) => {
 };
 
 export const getHistorianRangeFromPostgres = async (query: RangeQuery) => {
-  const tagMappings: Record<string, { table: string; column: string; minuteTable?: string }> = {
+  const tagMappings: Record<string, { table: string; column: string; minuteTable?: string; idDevice?: string }> = {
     // Cooling Tower WF1-U3 (Current Configuration Keys)
     "cooling-water/return_temp": { table: "cooling_tower_telemetry", column: "return_temp", minuteTable: "cooling_tower_telemetry_minute" },
     "cooling-water/supply_temp": { table: "cooling_tower_telemetry", column: "supply_temp", minuteTable: "cooling_tower_telemetry_minute" },
@@ -71,7 +71,41 @@ export const getHistorianRangeFromPostgres = async (query: RangeQuery) => {
     "utility/electricity": { table: "electric_pln_telemetry", column: "active_energy", minuteTable: "electric_pln_telemetry_minute" },
     "utility/gas": { table: "gas_telemetry", column: "gas_sm3" },
     "utility/water": { table: "water_telemetry", column: "water_m3" },
-    "utility/solar": { table: "electric_plts_telemetry", column: "total_kwh", minuteTable: "electric_plts_telemetry_minute" }
+    "utility/solar": { table: "electric_plts_telemetry", column: "total_kwh", minuteTable: "electric_plts_telemetry_minute" },
+
+    // HVAC Retained Sample AHU-01
+    "hvac/ahu-01/avg_temp": { table: "hvac_telemetry", column: "avg_temp", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-01" },
+    "hvac/ahu-01/temp_a": { table: "hvac_telemetry", column: "temp_a", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-01" },
+    "hvac/ahu-01/temp_b": { table: "hvac_telemetry", column: "temp_b", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-01" },
+    "hvac/ahu-01/avg_humidity": { table: "hvac_telemetry", column: "avg_humidity", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-01" },
+    "hvac/ahu-01/humidity_a": { table: "hvac_telemetry", column: "humidity_a", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-01" },
+    "hvac/ahu-01/humidity_b": { table: "hvac_telemetry", column: "humidity_b", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-01" },
+    "hvac/ahu-01/return_air_temp": { table: "hvac_telemetry", column: "return_air_temp", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-01" },
+    "hvac/ahu-01/return_air_humidity": { table: "hvac_telemetry", column: "return_air_humidity", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-01" },
+    "hvac/ahu-01/fan_speed": { table: "hvac_telemetry", column: "fan_speed", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-01" },
+    "hvac/ahu-01/fan_capacity": { table: "hvac_telemetry", column: "fan_capacity", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-01" },
+    "hvac/ahu-01/fan_current": { table: "hvac_telemetry", column: "fan_current", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-01" },
+    "hvac/ahu-01/heater_capacity": { table: "hvac_telemetry", column: "heater_capacity", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-01" },
+
+    // HVAC Retained Sample AHU-02
+    "hvac/ahu-02/avg_temp": { table: "hvac_telemetry", column: "avg_temp", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-02" },
+    "hvac/ahu-02/temp_a": { table: "hvac_telemetry", column: "temp_a", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-02" },
+    "hvac/ahu-02/temp_b": { table: "hvac_telemetry", column: "temp_b", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-02" },
+    "hvac/ahu-02/avg_humidity": { table: "hvac_telemetry", column: "avg_humidity", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-02" },
+    "hvac/ahu-02/humidity_a": { table: "hvac_telemetry", column: "humidity_a", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-02" },
+    "hvac/ahu-02/humidity_b": { table: "hvac_telemetry", column: "humidity_b", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-02" },
+    "hvac/ahu-02/return_air_temp": { table: "hvac_telemetry", column: "return_air_temp", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-02" },
+    "hvac/ahu-02/return_air_humidity": { table: "hvac_telemetry", column: "return_air_humidity", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-02" },
+    "hvac/ahu-02/fan_speed_a": { table: "hvac_telemetry", column: "fan_speed", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-02" },
+    "hvac/ahu-02/fan_speed_b": { table: "hvac_telemetry", column: "fan_speed_b", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-02" },
+    "hvac/ahu-02/fan_capacity": { table: "hvac_telemetry", column: "fan_capacity", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-02" },
+    "hvac/ahu-02/fan_current": { table: "hvac_telemetry", column: "fan_current", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-02" },
+    "hvac/ahu-02/heater_capacity": { table: "hvac_telemetry", column: "heater_capacity", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-02" },
+
+    // HVAC Retained Sample AHU-03
+    "hvac/ahu-03/avg_temp": { table: "hvac_telemetry", column: "avg_temp", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-03" },
+    "hvac/ahu-03/temp_a": { table: "hvac_telemetry", column: "temp_a", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-03" },
+    "hvac/ahu-03/temp_b": { table: "hvac_telemetry", column: "temp_b", minuteTable: "hvac_telemetry_minute", idDevice: "ahu-03" }
   };
 
   const mapping = tagMappings[query.tagId];
@@ -84,6 +118,9 @@ export const getHistorianRangeFromPostgres = async (query: RangeQuery) => {
   try {
     const params: any[] = [];
     let queryText = `SELECT t_stamp AS ts, ${mapping.column}::float AS value FROM ${mapping.table} WHERE ${mapping.column} IS NOT NULL`;
+    if (mapping.idDevice) {
+      queryText += ` AND id_device = '${mapping.idDevice}'`;
+    }
     let paramIndex = 1;
 
     let fromStr: string | null = null;
@@ -136,6 +173,9 @@ export const getHistorianRangeFromPostgres = async (query: RangeQuery) => {
           FROM ${mapping.minuteTable}
           WHERE ${mapping.column} IS NOT NULL
         `;
+        if (mapping.idDevice) {
+          minQuery += ` AND id_device = '${mapping.idDevice}'`;
+        }
         let minParamIdx = 1;
         if (fromStr) {
           minQuery += ` AND t_stamp >= $${minParamIdx}`;
@@ -209,7 +249,7 @@ export const getHistorianRange = async (query: RangeQuery) => {
     "cooling-water/makeup_ph"
   ];
 
-  if (pgTags.includes(query.tagId)) {
+  if (pgTags.includes(query.tagId) || query.tagId.startsWith("hvac/")) {
     try {
       return await getHistorianRangeFromPostgres(query);
     } catch (err) {

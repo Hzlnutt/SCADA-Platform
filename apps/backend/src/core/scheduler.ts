@@ -61,6 +61,7 @@ export interface HvacRetainLiveState {
     xIND_RUN_EH02?: boolean;
     xIND_RUN_CU02A?: boolean;
     xIND_RUN_CU02B?: boolean;
+    xIND_RUN_HF02?: boolean;
   };
   PLC2_AHU3: {
     Connected?: boolean;
@@ -1204,6 +1205,139 @@ export const refreshDynamicCustomPmSources = async (): Promise<void> => {
   }
 };
 
+const insertHvacMinuteTelemetry = async (retainLive: HvacRetainLiveState, minuteTs: Date) => {
+  const pool = getPostgresPool();
+
+  const calcAvg = (a: any, b: any): number | null => {
+    const numA = (typeof a === "number" && !isNaN(a)) ? a : (typeof a === "string" && a.trim() !== "" && !isNaN(Number(a)) ? Number(a) : null);
+    const numB = (typeof b === "number" && !isNaN(b)) ? b : (typeof b === "string" && b.trim() !== "" && !isNaN(Number(b)) ? Number(b) : null);
+    if (numA !== null && numB !== null) return Number(((numA + numB) / 2).toFixed(3));
+    if (numA !== null) return Number(numA.toFixed(3));
+    if (numB !== null) return Number(numB.toFixed(3));
+    return null;
+  };
+
+  const toNum = (v: any): number | null => {
+    if (typeof v === "number" && !isNaN(v)) return Number(v.toFixed(3));
+    if (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v))) return Number(Number(v).toFixed(3));
+    return null;
+  };
+
+  const toBool = (v: any): boolean | null => {
+    if (typeof v === "boolean") return v;
+    if (v === 1 || v === "1" || v === "true") return true;
+    if (v === 0 || v === "0" || v === "false") return false;
+    return null;
+  };
+
+  const p1 = retainLive.PLC1_AHU1_Utl || {};
+  const p2 = retainLive.PLC2_AHU2 || {};
+  const p3 = retainLive.PLC2_AHU3 || {};
+
+  const rows = [
+    // AHU-01
+    {
+      id_device: "ahu-01",
+      temp_a: toNum(p1.ACT_RTx_1A),
+      temp_b: toNum(p1.ACT_RTx_1B),
+      avg_temp: calcAvg(p1.ACT_RTx_1A, p1.ACT_RTx_1B),
+      humidity_a: toNum(p1.ACT_RHx_1A),
+      humidity_b: toNum(p1.ACT_RHx_1B),
+      avg_humidity: calcAvg(p1.ACT_RHx_1A, p1.ACT_RHx_1B),
+      return_air_temp: toNum(p1.ACT_RATx_1),
+      return_air_humidity: toNum(p1.ACT_RAHx_1),
+      fan_capacity: toNum(p1.ACT_SF01_CAP),
+      fan_speed: toNum(p1.ACT_SF01_SPD),
+      fan_speed_b: null,
+      fan_current: toNum(p1.ACT_SF01_CUR),
+      heater_capacity: toNum(p1.ACT_EH01_CAP),
+      status_fan: toBool(p1.xIND_RUN_SF01),
+      status_fan_b: null,
+      status_heater: toBool(p1.xIND_RUN_EH01),
+      status_humidifier: toBool(p1.xIND_RUN_HF01),
+      status_heat_pump: toBool(p1.xIND_RUN_HP),
+      status_cu_a: null,
+      status_cu_b: null,
+      connected: p1.Connected ?? false,
+    },
+    // AHU-02
+    {
+      id_device: "ahu-02",
+      temp_a: toNum(p2.ACT_RTx_2A),
+      temp_b: toNum(p2.ACT_RTx_2B),
+      avg_temp: calcAvg(p2.ACT_RTx_2A, p2.ACT_RTx_2B),
+      humidity_a: toNum(p2.ACT_RHx_2A),
+      humidity_b: toNum(p2.ACT_RHx_2B),
+      avg_humidity: calcAvg(p2.ACT_RHx_2A, p2.ACT_RHx_2B),
+      return_air_temp: toNum(p2.ACT_RATx_2),
+      return_air_humidity: toNum(p2.ACT_RAHx_2),
+      fan_capacity: toNum(p2.ACT_SF02_CAP),
+      fan_speed: toNum(p2.ACT_SF02A_SPD),
+      fan_speed_b: toNum(p2.ACT_SF02B_SPD),
+      fan_current: toNum(p2.ACT_SF02B_CUR),
+      heater_capacity: toNum(p2.ACT_EH02_CAP),
+      status_fan: toBool(p2.xIND_RUN_SF02A),
+      status_fan_b: toBool(p2.xIND_RUN_SF02B),
+      status_heater: toBool(p2.xIND_RUN_EH02),
+      status_humidifier: toBool(p2.xIND_RUN_HF02),
+      status_heat_pump: null,
+      status_cu_a: toBool(p2.xIND_RUN_CU02A),
+      status_cu_b: toBool(p2.xIND_RUN_CU02B),
+      connected: p2.Connected ?? false,
+    },
+    // AHU-03
+    {
+      id_device: "ahu-03",
+      temp_a: toNum(p3.ACT_RTx_3A),
+      temp_b: toNum(p3.ACT_RTx_3B),
+      avg_temp: calcAvg(p3.ACT_RTx_3A, p3.ACT_RTx_3B),
+      humidity_a: null,
+      humidity_b: null,
+      avg_humidity: null,
+      return_air_temp: null,
+      return_air_humidity: null,
+      fan_capacity: null,
+      fan_speed: null,
+      fan_speed_b: null,
+      fan_current: null,
+      heater_capacity: null,
+      status_fan: null,
+      status_fan_b: null,
+      status_heater: null,
+      status_humidifier: null,
+      status_heat_pump: null,
+      status_cu_a: null,
+      status_cu_b: null,
+      connected: p3.Connected ?? false,
+    }
+  ];
+
+  for (const r of rows) {
+    try {
+      await pool.query(`
+        INSERT INTO hvac_telemetry_minute (
+          t_stamp, id_device, temp_a, temp_b, avg_temp, humidity_a, humidity_b, avg_humidity,
+          return_air_temp, return_air_humidity, fan_capacity, fan_speed, fan_speed_b, fan_current,
+          heater_capacity, status_fan, status_fan_b, status_heater, status_humidifier,
+          status_heat_pump, status_cu_a, status_cu_b, connected
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8,
+          $9, $10, $11, $12, $13, $14,
+          $15, $16, $17, $18, $19,
+          $20, $21, $22, $23
+        )
+      `, [
+        minuteTs, r.id_device, r.temp_a, r.temp_b, r.avg_temp, r.humidity_a, r.humidity_b, r.avg_humidity,
+        r.return_air_temp, r.return_air_humidity, r.fan_capacity, r.fan_speed, r.fan_speed_b, r.fan_current,
+        r.heater_capacity, r.status_fan, r.status_fan_b, r.status_heater, r.status_humidifier,
+        r.status_heat_pump, r.status_cu_a, r.status_cu_b, r.connected
+      ]);
+    } catch (err: any) {
+      logger.warn(`Failed to insert HVAC minute row for ${r.id_device}: ${err.message}`);
+    }
+  }
+};
+
 export const startIncomingElectricityPolling = () => {
   if (incomingElectricityPollingInterval) return;
 
@@ -1654,6 +1788,14 @@ export const startIncomingElectricityPolling = () => {
       if (io) {
         io.emit("hvac:retain_live", retainLive);
         io.emit("hvac:live_update", retainLive);
+      }
+
+      if (isNewMinute) {
+        await insertHvacMinuteTelemetry(retainLive, minuteTs);
+        if (io) {
+          io.emit("hvac:minute_update", { t_stamp: currentMinuteStr });
+          io.emit("cooling_tower:minute_update", { t_stamp: currentMinuteStr });
+        }
       }
     } catch (err: any) {
       logger.warn(`HVAC Retained Sample polling failed: ${err.message}`);
@@ -2408,6 +2550,132 @@ export const runCoolingTowerRollupAndCleanup = async () => {
   }
 };
 
+export const runHvacRollupAndCleanup = async () => {
+  const pool = getPostgresPool();
+  try {
+    const findRes = await pool.query(`
+      SELECT 
+        to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str,
+        id_device
+      FROM hvac_telemetry_minute
+      WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+      GROUP BY hour_bucket_str, id_device
+      ORDER BY hour_bucket_str ASC;
+    `);
+
+    const buckets = findRes.rows;
+    if (buckets.length > 0) {
+      logger.info(`[HvacRollup] Found ${buckets.length} completed hour device buckets to roll up`);
+
+      for (const b of buckets) {
+        const hourStartStr = b.hour_bucket_str;
+        const deviceId = b.id_device;
+        if (!hourStartStr || !deviceId) continue;
+
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+
+          const avgRes = await client.query(`
+            SELECT 
+              AVG(temp_a) as avg_temp_a,
+              AVG(temp_b) as avg_temp_b,
+              AVG(avg_temp) as avg_avg_temp,
+              AVG(humidity_a) as avg_humidity_a,
+              AVG(humidity_b) as avg_humidity_b,
+              AVG(avg_humidity) as avg_avg_humidity,
+              AVG(return_air_temp) as avg_return_air_temp,
+              AVG(return_air_humidity) as avg_return_air_humidity,
+              AVG(fan_capacity) as avg_fan_capacity,
+              AVG(fan_speed) as avg_fan_speed,
+              AVG(fan_speed_b) as avg_fan_speed_b,
+              AVG(fan_current) as avg_fan_current,
+              AVG(heater_capacity) as avg_heater_capacity,
+              BOOL_OR(status_fan) as status_fan,
+              BOOL_OR(status_fan_b) as status_fan_b,
+              BOOL_OR(status_heater) as status_heater,
+              BOOL_OR(status_humidifier) as status_humidifier,
+              BOOL_OR(status_heat_pump) as status_heat_pump,
+              BOOL_OR(status_cu_a) as status_cu_a,
+              BOOL_OR(status_cu_b) as status_cu_b,
+              BOOL_OR(connected) as connected
+            FROM hvac_telemetry_minute
+            WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour' AND id_device = $2
+          `, [hourStartStr, deviceId]);
+
+          const row = avgRes.rows[0];
+          if (row) {
+            const num = (v: any) => (v !== null && v !== undefined && !isNaN(Number(v))) ? Number(Number(v).toFixed(3)) : null;
+
+            await client.query(`
+              INSERT INTO hvac_telemetry (
+                t_stamp, id_device, temp_a, temp_b, avg_temp, humidity_a, humidity_b, avg_humidity,
+                return_air_temp, return_air_humidity, fan_capacity, fan_speed, fan_speed_b, fan_current,
+                heater_capacity, status_fan, status_fan_b, status_heater, status_humidifier,
+                status_heat_pump, status_cu_a, status_cu_b, connected
+              ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8,
+                $9, $10, $11, $12, $13, $14,
+                $15, $16, $17, $18, $19,
+                $20, $21, $22, $23
+              )
+              ON CONFLICT (id_device, t_stamp) DO UPDATE SET
+                temp_a = EXCLUDED.temp_a,
+                temp_b = EXCLUDED.temp_b,
+                avg_temp = EXCLUDED.avg_temp,
+                humidity_a = EXCLUDED.humidity_a,
+                humidity_b = EXCLUDED.humidity_b,
+                avg_humidity = EXCLUDED.avg_humidity,
+                return_air_temp = EXCLUDED.return_air_temp,
+                return_air_humidity = EXCLUDED.return_air_humidity,
+                fan_capacity = EXCLUDED.fan_capacity,
+                fan_speed = EXCLUDED.fan_speed,
+                fan_speed_b = EXCLUDED.fan_speed_b,
+                fan_current = EXCLUDED.fan_current,
+                heater_capacity = EXCLUDED.heater_capacity,
+                status_fan = EXCLUDED.status_fan,
+                status_fan_b = EXCLUDED.status_fan_b,
+                status_heater = EXCLUDED.status_heater,
+                status_humidifier = EXCLUDED.status_humidifier,
+                status_heat_pump = EXCLUDED.status_heat_pump,
+                status_cu_a = EXCLUDED.status_cu_a,
+                status_cu_b = EXCLUDED.status_cu_b,
+                connected = EXCLUDED.connected
+            `, [
+              hourStartStr, deviceId,
+              num(row.avg_temp_a), num(row.avg_temp_b), num(row.avg_avg_temp),
+              num(row.avg_humidity_a), num(row.avg_humidity_b), num(row.avg_avg_humidity),
+              num(row.avg_return_air_temp), num(row.avg_return_air_humidity),
+              num(row.avg_fan_capacity), num(row.avg_fan_speed), num(row.avg_fan_speed_b), num(row.avg_fan_current),
+              num(row.avg_heater_capacity),
+              row.status_fan ?? false, row.status_fan_b ?? false, row.status_heater ?? false,
+              row.status_humidifier ?? false, row.status_heat_pump ?? false,
+              row.status_cu_a ?? false, row.status_cu_b ?? false,
+              row.connected ?? false
+            ]);
+          }
+
+          // Delete raw minute rows in this completed hour
+          await client.query(`
+            DELETE FROM hvac_telemetry_minute
+            WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour' AND id_device = $2
+          `, [hourStartStr, deviceId]);
+
+          await client.query("COMMIT");
+          logger.info(`[HvacRollup] Processed hour ${hourStartStr} for ${deviceId}`);
+        } catch (err: any) {
+          await client.query("ROLLBACK");
+          logger.error({ err: err.message, hour: hourStartStr, deviceId }, "Failed to roll up HVAC hour");
+        } finally {
+          client.release();
+        }
+      }
+    }
+  } catch (err: any) {
+    logger.error({ err: err.message }, "Error during HVAC rollup check");
+  }
+};
+
 
 export const startPostgresPolling = () => {
   if (pollingInterval) return;
@@ -2953,6 +3221,9 @@ export const startScheduler = () => {
   runCoolingTowerRollupAndCleanup().catch((err) => {
     logger.error({ err }, "Initial cooling tower rollup/cleanup failed");
   });
+  runHvacRollupAndCleanup().catch((err) => {
+    logger.error({ err }, "Initial HVAC rollup/cleanup failed");
+  });
 
   // Periodic cooling tower rollup (runs every 5 minutes to roll up completed hours)
   setInterval(() => {
@@ -2965,6 +3236,13 @@ export const startScheduler = () => {
   setInterval(() => {
     runElectricityRollupAndCleanup().catch((err) => {
       logger.error({ err }, "Periodic electricity rollup/cleanup failed");
+    });
+  }, 5 * 60 * 1000);
+
+  // Periodic HVAC rollup (runs every 5 minutes to roll up completed hours)
+  setInterval(() => {
+    runHvacRollupAndCleanup().catch((err) => {
+      logger.error({ err }, "Periodic HVAC rollup/cleanup failed");
     });
   }, 5 * 60 * 1000);
 

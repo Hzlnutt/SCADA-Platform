@@ -830,6 +830,64 @@ export const ensurePostgresTables = async () => {
 
       DELETE FROM electric_plts_telemetry_minute a USING electric_plts_telemetry_minute b WHERE a.id < b.id AND a.t_stamp = b.t_stamp AND a.poi_id = b.poi_id;
       CREATE UNIQUE INDEX IF NOT EXISTS uq_plts_minute_tstamp ON electric_plts_telemetry_minute (t_stamp, poi_id);
+
+      -- HVAC Retained Sample telemetry tables
+      CREATE TABLE IF NOT EXISTS hvac_telemetry_minute (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        id_device VARCHAR(50) NOT NULL,
+        temp_a NUMERIC(8,3),
+        temp_b NUMERIC(8,3),
+        avg_temp NUMERIC(8,3),
+        humidity_a NUMERIC(8,3),
+        humidity_b NUMERIC(8,3),
+        avg_humidity NUMERIC(8,3),
+        return_air_temp NUMERIC(8,3),
+        return_air_humidity NUMERIC(8,3),
+        fan_capacity NUMERIC(8,3),
+        fan_speed NUMERIC(8,3),
+        fan_speed_b NUMERIC(8,3),
+        fan_current NUMERIC(8,3),
+        heater_capacity NUMERIC(8,3),
+        status_fan BOOLEAN,
+        status_fan_b BOOLEAN,
+        status_heater BOOLEAN,
+        status_humidifier BOOLEAN,
+        status_heat_pump BOOLEAN,
+        status_cu_a BOOLEAN,
+        status_cu_b BOOLEAN,
+        connected BOOLEAN
+      );
+      CREATE INDEX IF NOT EXISTS idx_hvac_minute_device_ts ON hvac_telemetry_minute (id_device, t_stamp DESC);
+
+      CREATE TABLE IF NOT EXISTS hvac_telemetry (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        id_device VARCHAR(50) NOT NULL,
+        temp_a NUMERIC(8,3),
+        temp_b NUMERIC(8,3),
+        avg_temp NUMERIC(8,3),
+        humidity_a NUMERIC(8,3),
+        humidity_b NUMERIC(8,3),
+        avg_humidity NUMERIC(8,3),
+        return_air_temp NUMERIC(8,3),
+        return_air_humidity NUMERIC(8,3),
+        fan_capacity NUMERIC(8,3),
+        fan_speed NUMERIC(8,3),
+        fan_speed_b NUMERIC(8,3),
+        fan_current NUMERIC(8,3),
+        heater_capacity NUMERIC(8,3),
+        status_fan BOOLEAN,
+        status_fan_b BOOLEAN,
+        status_heater BOOLEAN,
+        status_humidifier BOOLEAN,
+        status_heat_pump BOOLEAN,
+        status_cu_a BOOLEAN,
+        status_cu_b BOOLEAN,
+        connected BOOLEAN,
+        CONSTRAINT uq_hvac_device_hour UNIQUE (id_device, t_stamp)
+      );
+      CREATE INDEX IF NOT EXISTS idx_hvac_hourly_device_ts ON hvac_telemetry (id_device, t_stamp DESC);
     `).catch((err) => {
       logger.warn({ err }, "Failed to create minute buffer tables");
     });

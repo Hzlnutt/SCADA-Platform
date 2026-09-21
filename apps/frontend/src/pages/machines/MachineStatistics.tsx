@@ -149,10 +149,20 @@ export default function MachineStatistics() {
     unitId === "cooling-water-1" ? "ST3 Return Temp" : "Supply Water Temp"
   );
 
+  const isCoolingTower = unitId === "cooling-water-1";
+  const isHvacRetain = unitId === "hvac-qc-retained-sample" || unitId.includes("retained-sample");
+  const isHvac = unitId.startsWith("hvac-") || isHvacRetain;
+
   // Synchronize parameter default based on machine type
   useEffect(() => {
-    setActiveParam(unitId === "cooling-water-1" ? "ST3 Return Temp" : "Supply Water Temp");
-  }, [unitId]);
+    if (isCoolingTower) {
+      setActiveParam("ST3 Return Temp");
+    } else if (isHvacRetain || isHvac) {
+      setActiveParam("AHU-01 R. THD-01 Avg Temp");
+    } else {
+      setActiveParam("Supply Water Temp");
+    }
+  }, [unitId, isCoolingTower, isHvacRetain, isHvac]);
 
   const getLocalTodayStr = () => {
     const d = new Date();
@@ -178,6 +188,7 @@ export default function MachineStatistics() {
   const [dbLoading, setDbLoading] = useState(false);
 
   const paramTagIdMap: Record<string, string> = {
+    // Cooling Tower WF1-U3
     "ST3 Return Temp": "cooling-water/st3_return_temp",
     "Supply Water Temp": "cooling-water/supply_temp",
     "Return Water Temp": "cooling-water/return_temp",
@@ -189,7 +200,41 @@ export default function MachineStatistics() {
     "Makeup Water Vol": "cooling-water/makeup_vol",
     "Makeup Water TDS": "cooling-water/makeup_tds",
     "Blowdown Vol": "cooling-water/blowdown_vol",
-    "Makeup Water pH": "cooling-water/makeup_ph"
+    "Makeup Water pH": "cooling-water/makeup_ph",
+
+    // HVAC Retained Sample AHU-01
+    "AHU-01 R. THD-01 Avg Temp": "hvac/ahu-01/avg_temp",
+    "AHU-01 R. THD-01 Avg Humidity": "hvac/ahu-01/avg_humidity",
+    "AHU-01 R. THD-01 A Temp": "hvac/ahu-01/temp_a",
+    "AHU-01 R. THD-01 A Humidity": "hvac/ahu-01/humidity_a",
+    "AHU-01 R. THD-01 B Temp": "hvac/ahu-01/temp_b",
+    "AHU-01 R. THD-01 B Humidity": "hvac/ahu-01/humidity_b",
+    "AHU-01 R.A. THD-01 Return Air Temp": "hvac/ahu-01/return_air_temp",
+    "AHU-01 R.A. THD-01 Return Air Humidity": "hvac/ahu-01/return_air_humidity",
+    "AHU-01 SF-01 Fan Speed": "hvac/ahu-01/fan_speed",
+    "AHU-01 SF-01 Fan Capacity": "hvac/ahu-01/fan_capacity",
+    "AHU-01 SF-01 Fan Current": "hvac/ahu-01/fan_current",
+    "AHU-01 EH-01 Heater Capacity": "hvac/ahu-01/heater_capacity",
+
+    // HVAC Retained Sample AHU-02
+    "AHU-02 R. THD-02 Avg Temp": "hvac/ahu-02/avg_temp",
+    "AHU-02 R. THD-02 Avg Humidity": "hvac/ahu-02/avg_humidity",
+    "AHU-02 R. THD-02 A Temp": "hvac/ahu-02/temp_a",
+    "AHU-02 R. THD-02 A Humidity": "hvac/ahu-02/humidity_a",
+    "AHU-02 R. THD-02 B Temp": "hvac/ahu-02/temp_b",
+    "AHU-02 R. THD-02 B Humidity": "hvac/ahu-02/humidity_b",
+    "AHU-02 R.A. THD-02 Return Air Temp": "hvac/ahu-02/return_air_temp",
+    "AHU-02 R.A. THD-02 Return Air Humidity": "hvac/ahu-02/return_air_humidity",
+    "AHU-02 SF-02A Fan Speed": "hvac/ahu-02/fan_speed_a",
+    "AHU-02 SF-02B Fan Speed": "hvac/ahu-02/fan_speed_b",
+    "AHU-02 SF-02 Fan Capacity": "hvac/ahu-02/fan_capacity",
+    "AHU-02 SF-02B Fan Current": "hvac/ahu-02/fan_current",
+    "AHU-02 EH-02 Heater Capacity": "hvac/ahu-02/heater_capacity",
+
+    // HVAC Retained Sample AHU-03
+    "AHU-03 R. THD-03 Avg Temp": "hvac/ahu-03/avg_temp",
+    "AHU-03 R. THD-03 A Temp": "hvac/ahu-03/temp_a",
+    "AHU-03 R. THD-03 B Temp": "hvac/ahu-03/temp_b",
   };
 
   // Fetch function (extracted so it can be called on interval too)
@@ -245,10 +290,12 @@ export default function MachineStatistics() {
       };
       socket.on("historian:minute_update", handleMinuteUpdate);
       socket.on("cooling_tower:minute_update", handleMinuteUpdate);
+      socket.on("hvac:minute_update", handleMinuteUpdate);
       return () => {
         clearInterval(interval);
         socket.off("historian:minute_update", handleMinuteUpdate);
         socket.off("cooling_tower:minute_update", handleMinuteUpdate);
+        socket.off("hvac:minute_update", handleMinuteUpdate);
       };
     }
 
@@ -358,6 +405,44 @@ export default function MachineStatistics() {
   };
 
   const parametersList = useMemo(() => {
+    if (isHvacRetain || isHvac) {
+      return [
+        // AHU-01
+        "AHU-01 R. THD-01 Avg Temp",
+        "AHU-01 R. THD-01 Avg Humidity",
+        "AHU-01 R. THD-01 A Temp",
+        "AHU-01 R. THD-01 A Humidity",
+        "AHU-01 R. THD-01 B Temp",
+        "AHU-01 R. THD-01 B Humidity",
+        "AHU-01 R.A. THD-01 Return Air Temp",
+        "AHU-01 R.A. THD-01 Return Air Humidity",
+        "AHU-01 SF-01 Fan Speed",
+        "AHU-01 SF-01 Fan Capacity",
+        "AHU-01 SF-01 Fan Current",
+        "AHU-01 EH-01 Heater Capacity",
+
+        // AHU-02
+        "AHU-02 R. THD-02 Avg Temp",
+        "AHU-02 R. THD-02 Avg Humidity",
+        "AHU-02 R. THD-02 A Temp",
+        "AHU-02 R. THD-02 A Humidity",
+        "AHU-02 R. THD-02 B Temp",
+        "AHU-02 R. THD-02 B Humidity",
+        "AHU-02 R.A. THD-02 Return Air Temp",
+        "AHU-02 R.A. THD-02 Return Air Humidity",
+        "AHU-02 SF-02A Fan Speed",
+        "AHU-02 SF-02B Fan Speed",
+        "AHU-02 SF-02 Fan Capacity",
+        "AHU-02 SF-02B Fan Current",
+        "AHU-02 EH-02 Heater Capacity",
+
+        // AHU-03
+        "AHU-03 R. THD-03 Avg Temp",
+        "AHU-03 R. THD-03 A Temp",
+        "AHU-03 R. THD-03 B Temp"
+      ];
+    }
+
     const list = [
       "Supply Water Temp",
       "Supply Water TDS",
@@ -375,9 +460,10 @@ export default function MachineStatistics() {
       return ["ST3 Return Temp", ...list];
     }
     return list;
-  }, [unitId]);
+  }, [unitId, isHvacRetain, isHvac]);
 
   const unitMap: Record<string, string> = {
+    // Cooling Tower
     "ST3 Return Temp": "°C",
     "ST3 Supply Temp": "°C",
     "Supply Water Temp": "°C",
@@ -390,7 +476,41 @@ export default function MachineStatistics() {
     "Ambient Temp": "°C",
     "Ambient Humidity": "%",
     "Blowdown Vol": "m³",
-    "Makeup Water pH": "pH"
+    "Makeup Water pH": "pH",
+
+    // AHU-01 Units
+    "AHU-01 R. THD-01 Avg Temp": "°C",
+    "AHU-01 R. THD-01 Avg Humidity": "%RH",
+    "AHU-01 R. THD-01 A Temp": "°C",
+    "AHU-01 R. THD-01 A Humidity": "%RH",
+    "AHU-01 R. THD-01 B Temp": "°C",
+    "AHU-01 R. THD-01 B Humidity": "%RH",
+    "AHU-01 R.A. THD-01 Return Air Temp": "°C",
+    "AHU-01 R.A. THD-01 Return Air Humidity": "%RH",
+    "AHU-01 SF-01 Fan Speed": "rpm",
+    "AHU-01 SF-01 Fan Capacity": "%",
+    "AHU-01 SF-01 Fan Current": "A",
+    "AHU-01 EH-01 Heater Capacity": "%",
+
+    // AHU-02 Units
+    "AHU-02 R. THD-02 Avg Temp": "°C",
+    "AHU-02 R. THD-02 Avg Humidity": "%RH",
+    "AHU-02 R. THD-02 A Temp": "°C",
+    "AHU-02 R. THD-02 A Humidity": "%RH",
+    "AHU-02 R. THD-02 B Temp": "°C",
+    "AHU-02 R. THD-02 B Humidity": "%RH",
+    "AHU-02 R.A. THD-02 Return Air Temp": "°C",
+    "AHU-02 R.A. THD-02 Return Air Humidity": "%RH",
+    "AHU-02 SF-02A Fan Speed": "rpm",
+    "AHU-02 SF-02B Fan Speed": "rpm",
+    "AHU-02 SF-02 Fan Capacity": "%",
+    "AHU-02 SF-02B Fan Current": "A",
+    "AHU-02 EH-02 Heater Capacity": "%",
+
+    // AHU-03 Units
+    "AHU-03 R. THD-03 Avg Temp": "°C",
+    "AHU-03 R. THD-03 A Temp": "°C",
+    "AHU-03 R. THD-03 B Temp": "°C"
   };
 
   const aggregatedTrendPoints = useMemo(() => {
@@ -637,7 +757,7 @@ export default function MachineStatistics() {
 
         const fileName = targets.length === 1
           ? `${targets[0].toLowerCase().replace(/\s+/g, "-")}-${exportStart}-to-${exportEnd}.xlsx`
-          : `cooling-tower-parameters-${exportStart}-to-${exportEnd}.xlsx`;
+          : `${unitId}-parameters-${exportStart}-to-${exportEnd}.xlsx`;
 
         writeFile(workbook, fileName);
         setShowExportModal(false);
@@ -697,22 +817,24 @@ export default function MachineStatistics() {
         </div>
       </div>
 
-      {/* 1. Grafik CT Effectiveness Chart Card */}
-      <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
-        <div className="mb-4 flex items-center justify-between border-b border-[#acd3ff]/30 pb-2.5">
-          <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
-            Grafik CT Effectiveness
-          </h3>
-          <span className="text-[10px] bg-sky-500/10 text-sky-500 px-2 py-0.5 rounded font-bold uppercase">
-            30 Day Timeline
-          </span>
+      {/* 1. Grafik CT Effectiveness Chart Card (Cooling Tower only) */}
+      {isCoolingTower && (
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
+          <div className="mb-4 flex items-center justify-between border-b border-[#acd3ff]/30 pb-2.5">
+            <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
+              Grafik CT Effectiveness
+            </h3>
+            <span className="text-[10px] bg-sky-500/10 text-sky-500 px-2 py-0.5 rounded font-bold uppercase">
+              30 Day Timeline
+            </span>
+          </div>
+          <div className="h-64 min-h-0">
+            <Line data={ctEffectivenessData} options={ctEffectivenessOptions} />
+          </div>
         </div>
-        <div className="h-64 min-h-0">
-          <Line data={ctEffectivenessData} options={ctEffectivenessOptions} />
-        </div>
-      </div>
+      )}
 
-      {/* 2. Interactive Parameter Selector Grid (Image 4 bottom/right layout) */}
+      {/* 2. Interactive Parameter Selector Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#acd3ff]/30 pb-2.5">
@@ -737,7 +859,7 @@ export default function MachineStatistics() {
               </span>
             </div>
           </div>
-          <div className="h-64 min-h-0">
+          <div className={isCoolingTower ? "h-64 min-h-0" : "h-[440px] min-h-0"}>
             <Line data={parameterTrendData.chartData} options={parameterTrendOptions} />
           </div>
         </div>
@@ -748,18 +870,29 @@ export default function MachineStatistics() {
             <h4 className="text-xs font-bold uppercase tracking-wider text-[#47729f] dark:text-slate-500 mb-3 border-b border-slate-100 dark:border-slate-900 pb-2">
               Select Trend Parameter
             </h4>
-            <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+            <div className={`space-y-1.5 overflow-y-auto pr-1 ${isCoolingTower ? "max-h-[260px]" : "max-h-[440px]"}`}>
               {parametersList.map((param) => (
                 <button
                   key={param}
                   onClick={() => setActiveParam(param)}
-                  className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg transition duration-200 border ${
+                  className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg transition duration-200 border flex items-center justify-between ${
                     activeParam === param
                       ? "bg-[#1f6fb5] text-white border-transparent shadow-md shadow-[#1f6fb5]/20"
                       : "text-[#002b5c] dark:text-slate-300 border-slate-100 dark:border-slate-900 bg-slate-50/50 dark:bg-slate-900/40 hover:bg-[#1f6fb5]/10 dark:hover:bg-[#1f6fb5]/20"
                   }`}
                 >
-                  {param}
+                  <span className="truncate pr-1">{param}</span>
+                  {unitMap[param] && (
+                    <span
+                      className={`text-[10px] ml-1 px-1.5 py-0.5 rounded font-mono font-bold shrink-0 ${
+                        activeParam === param
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-200/60 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                      }`}
+                    >
+                      {unitMap[param]}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -770,74 +903,78 @@ export default function MachineStatistics() {
         </div>
       </div>
 
-      {/* 3. Vibration Waveform Telemetry (Oscilloscope) Card */}
-      <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
-        <div className="mb-4 flex flex-wrap items-center justify-between border-b border-[#acd3ff]/30 pb-3 gap-3">
-          <div className="space-y-1">
-            <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
-              Vibration Telemetry Waveform Analysis
-            </h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500">
-              Live oscilloscope visualization of equipment vibration metrics (velocity & acceleration limits).
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handleExportVibration}
-              className="rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-[#f7fbff]/50 dark:bg-slate-900 px-3 py-1.5 text-xs font-bold text-[#002b5c] dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-800/80"
-            >
-              📥 Export Excel
-            </button>
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-bold text-slate-400">Equipment:</label>
-              <select
-                value={selectedEq}
-                onChange={(e) => setSelectedEq(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-900 text-xs font-bold border border-slate-200 dark:border-slate-800 text-[#002b5c] dark:text-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1f6fb5]"
+      {/* 3. Vibration Waveform Telemetry (Oscilloscope) Card (Cooling Tower only) */}
+      {isCoolingTower && (
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
+          <div className="mb-4 flex flex-wrap items-center justify-between border-b border-[#acd3ff]/30 pb-3 gap-3">
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
+                Vibration Telemetry Waveform Analysis
+              </h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                Live oscilloscope visualization of equipment vibration metrics (velocity & acceleration limits).
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleExportVibration}
+                className="rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-[#f7fbff]/50 dark:bg-slate-900 px-3 py-1.5 text-xs font-bold text-[#002b5c] dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-800/80"
               >
-                {["CT-1 Fan", "CT-1 Motor", "CT-2 Fan", "CT-2 Motor", "CT-3 Fan", "CT-3 Motor", "DU-03 Pump", "BP-03 Pump", "PREP-03 Pump", "ST-03 Motor", "Washing Motor", "Minilab Motor"].map((eq) => (
-                  <option key={eq} value={eq}>
-                    {eq}
-                  </option>
-                ))}
-              </select>
+                📥 Export Excel
+              </button>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-slate-400">Equipment:</label>
+                <select
+                  value={selectedEq}
+                  onChange={(e) => setSelectedEq(e.target.value)}
+                  className="bg-slate-50 dark:bg-slate-900 text-xs font-bold border border-slate-200 dark:border-slate-800 text-[#002b5c] dark:text-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1f6fb5]"
+                >
+                  {["CT-1 Fan", "CT-1 Motor", "CT-2 Fan", "CT-2 Motor", "CT-3 Fan", "CT-3 Motor", "DU-03 Pump", "BP-03 Pump", "PREP-03 Pump", "ST-03 Motor", "Washing Motor", "Minilab Motor"].map((eq) => (
+                    <option key={eq} value={eq}>
+                      {eq}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
+          
+          {/* Oscilloscope Container */}
+          <div className="h-64 rounded-xl overflow-hidden border border-[#acd3ff] dark:border-slate-800">
+            <VibrationOscilloscope equipmentName={selectedEq} />
+          </div>
         </div>
-        
-        {/* Oscilloscope Container */}
-        <div className="h-64 rounded-xl overflow-hidden border border-[#acd3ff] dark:border-slate-800">
-          <VibrationOscilloscope equipmentName={selectedEq} />
-        </div>
-      </div>
+      )}
 
-      {/* 4. Daily Makeup & Blowdown Volume (Image 5 layout) */}
-      <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
-        <div className="mb-4 flex items-center justify-between border-b border-[#acd3ff]/30 pb-2.5">
-          <div className="space-y-0.5">
-            <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
-              Daily Makeup & Blowdown Volume
-            </h3>
-            <p className="text-xs text-slate-400">
-              Comparative review over the past 30 days.
-            </p>
+      {/* 4. Daily Makeup & Blowdown Volume (Cooling Tower only) */}
+      {isCoolingTower && (
+        <div className="bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
+          <div className="mb-4 flex items-center justify-between border-b border-[#acd3ff]/30 pb-2.5">
+            <div className="space-y-0.5">
+              <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
+                Daily Makeup & Blowdown Volume
+              </h3>
+              <p className="text-xs text-slate-400">
+                Comparative review over the past 30 days.
+              </p>
+            </div>
+            <div className="flex gap-4 text-xs font-mono">
+              <div className="flex flex-col text-right">
+                <span className="text-slate-400">Makeup Sum</span>
+                <span className="text-[#38bdf8] font-bold">1,120 m³</span>
+              </div>
+              <div className="flex flex-col text-right">
+                <span className="text-slate-400">Blowdown Sum</span>
+                <span className="text-[#f97316] font-bold">480 m³</span>
+              </div>
+            </div>
           </div>
-          <div className="flex gap-4 text-xs font-mono">
-            <div className="flex flex-col text-right">
-              <span className="text-slate-400">Makeup Sum</span>
-              <span className="text-[#38bdf8] font-bold">1,120 m³</span>
-            </div>
-            <div className="flex flex-col text-right">
-              <span className="text-slate-400">Blowdown Sum</span>
-              <span className="text-[#f97316] font-bold">480 m³</span>
-            </div>
+          <div className="h-64 min-h-0">
+            <Bar data={dailyVolumeData} options={dailyVolumeOptions} />
           </div>
         </div>
-        <div className="h-64 min-h-0">
-          <Bar data={dailyVolumeData} options={dailyVolumeOptions} />
-        </div>
-      </div>
+      )}
 
       {/* 5. Custom range Export Excel Modal (Mounted to body via createPortal for true 100% fullscreen overlay without gaps) */}
       {showExportModal && typeof document !== "undefined" && createPortal(
