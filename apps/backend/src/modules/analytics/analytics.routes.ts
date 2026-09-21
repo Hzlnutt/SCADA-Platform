@@ -15,12 +15,14 @@ import {
   getElectricityExportPreviewHandler,
   getEquipmentMonthlyAnalyticsHandler,
   getEquipmentMonthlyBatchAnalyticsHandler,
+  getIncomingHourlyTrendHandler,
 } from "./analytics.controller";
 
 export const analyticsRouter = Router();
 
 analyticsRouter.get("/analytics/summary", getAnalyticsSummaryHandler);
 analyticsRouter.get("/analytics/electricity", getElectricityAnalyticsHandler);
+analyticsRouter.get("/analytics/electricity/incoming-hourly-trend", getIncomingHourlyTrendHandler);
 analyticsRouter.get("/analytics/electricity/report", getElectricityReportHandler);
 analyticsRouter.get("/analytics/electricity/equipment-monthly", getEquipmentMonthlyAnalyticsHandler);
 analyticsRouter.get("/analytics/electricity/equipment-monthly-batch", getEquipmentMonthlyBatchAnalyticsHandler);

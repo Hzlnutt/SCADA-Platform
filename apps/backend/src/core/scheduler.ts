@@ -150,7 +150,11 @@ const parsePlnApi = (data: any, ts: Date) => {
 };
 
 const parseWfApi = (data: any, ts: Date) => {
-  const isOnline = data.Status_PM5500_WF1 !== undefined ? !!data.Status_PM5500_WF1 : null;
+  const isOnline = data.Status_PM5500_WF1 !== undefined 
+    ? !!data.Status_PM5500_WF1 
+    : (data.Status_PM5500_WF2 !== undefined 
+      ? !!data.Status_PM5500_WF2 
+      : (data.Status_PM5500 !== undefined ? !!data.Status_PM5500 : null));
   if (isOnline === false) {
     return getNullWfRecord(ts);
   }
@@ -830,6 +834,93 @@ const fetchJsonWithTimeout = async (url: string, timeoutMs: number = 800): Promi
   }
 };
 
+export interface IncomingTrend5sPoint {
+  time: string;
+  hour: number;
+  voltage: number;
+  activePower: number;
+}
+
+const incomingHourlyTrends: Record<string, IncomingTrend5sPoint[]> = {
+  Cubicle_PLN_PM8000: [],
+  Feeder_WF1_PM5560: [],
+  Feeder_WF2_PM5500: []
+};
+
+const lastTrendHour: Record<string, number> = {
+  Cubicle_PLN_PM8000: -1,
+  Feeder_WF1_PM5560: -1,
+  Feeder_WF2_PM5500: -1
+};
+
+const lastRecordedSecond: Record<string, number> = {
+  Cubicle_PLN_PM8000: -1,
+  Feeder_WF1_PM5560: -1,
+  Feeder_WF2_PM5500: -1
+};
+
+const latestIncomingTelemetry: Record<string, { data: any; ts: number }> = {};
+
+export const getLatestIncomingTelemetry = (deviceId: string) => {
+  const item = latestIncomingTelemetry[deviceId];
+  if (item && Date.now() - item.ts < 15000) {
+    return item.data;
+  }
+  return null;
+};
+
+export const getIncomingHourlyTrend = (deviceId: string) => {
+  const currentHour = new Date().getHours();
+  if (lastTrendHour[deviceId] !== -1 && lastTrendHour[deviceId] !== currentHour) {
+    incomingHourlyTrends[deviceId] = [];
+    lastTrendHour[deviceId] = currentHour;
+  }
+  return {
+    hour: currentHour,
+    points: incomingHourlyTrends[deviceId] || []
+  };
+};
+
+const recordIncomingTrend5s = (deviceId: string, data: { voltage: number; activePower: number }) => {
+  if (!incomingHourlyTrends[deviceId]) return;
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentSec = now.getSeconds();
+
+  // Every 5 seconds (0, 5, 10, 15, ..., 55)
+  if (currentSec % 5 === 0 && lastRecordedSecond[deviceId] !== currentSec) {
+    lastRecordedSecond[deviceId] = currentSec;
+
+    // Reset when hour changes
+    if (lastTrendHour[deviceId] !== -1 && lastTrendHour[deviceId] !== currentHour) {
+      incomingHourlyTrends[deviceId] = [];
+    }
+    lastTrendHour[deviceId] = currentHour;
+
+    const timeStr = `${String(currentHour).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(currentSec).padStart(2, "0")}`;
+    const point: IncomingTrend5sPoint = {
+      time: timeStr,
+      hour: currentHour,
+      voltage: Number(data.voltage.toFixed(3)),
+      activePower: Number(data.activePower.toFixed(1))
+    };
+
+    incomingHourlyTrends[deviceId].push(point);
+
+    if (incomingHourlyTrends[deviceId].length > 750) {
+      incomingHourlyTrends[deviceId].shift();
+    }
+
+    const io = getSocketServer();
+    if (io) {
+      io.emit("electricity:trend_5s", {
+        deviceId,
+        point
+      });
+    }
+  }
+};
+
 const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   const io = getSocketServer();
   if (!io) return;
@@ -881,9 +972,20 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   const statusVal = isPln ? pgPq.status_pm8000 : pgPq.status_pm5500;
   const isConnected = statusVal !== null ? !!statusVal : true;
 
-  const vln1 = voltABVal / Math.sqrt(3);
-  const vln2 = voltBCVal / Math.sqrt(3);
-  const vln3 = voltCAVal / Math.sqrt(3);
+  // In 20 kV medium voltage system, phase voltages correspond directly to 20 kV line voltage readings
+  const vln1 = voltABVal;
+  const vln2 = voltBCVal;
+  const vln3 = voltCAVal;
+
+  latestIncomingTelemetry[deviceId] = {
+    data: pgPq,
+    ts: Date.now()
+  };
+
+  recordIncomingTrend5s(deviceId, {
+    voltage: voltLAvg > 0 ? voltLAvg : voltABVal,
+    activePower: activePowerVal
+  });
 
   io.emit("electricity:live_update", {
     deviceId,

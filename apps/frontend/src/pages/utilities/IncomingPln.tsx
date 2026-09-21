@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { usePageActive } from "../../hooks/usePageActive";
 import { PageHeader } from "../../components/ui/PageHeader";
@@ -357,8 +357,8 @@ export default function IncomingPln() {
     isConnected: true
   });
 
-  const [voltageTrend, setVoltageTrend] = useState<{ hour: string; value: number }[]>([]);
-  const [activePowerTrend, setActivePowerTrend] = useState<{ hour: string; value: number }[]>([]);
+  const [hourlyTrend5s, setHourlyTrend5s] = useState<{ time: string; hour: number; voltage: number; activePower: number }[]>([]);
+  const lastTrendHourRef = useRef<number>(new Date().getHours());
 
   // Event & alarm logs
   const [events, setEvents] = useState(MOCK_EVENTS);
@@ -377,6 +377,15 @@ export default function IncomingPln() {
       if (val === undefined && rawKey === "voltage") {
         val = apiLiveData[url]["Volt_LL"] ?? apiLiveData[url]["volt_ll"];
       }
+      if (val === undefined && (rawKey === "v_r" || rawKey === "volt_ab")) {
+        val = apiLiveData[url]["VoltAB"] ?? apiLiveData[url]["volt_ab"] ?? apiLiveData[url]["Volt_AB"];
+      }
+      if (val === undefined && (rawKey === "v_s" || rawKey === "volt_bc")) {
+        val = apiLiveData[url]["VoltBC"] ?? apiLiveData[url]["volt_bc"] ?? apiLiveData[url]["Volt_BC"];
+      }
+      if (val === undefined && (rawKey === "v_t" || rawKey === "volt_ca")) {
+        val = apiLiveData[url]["VoltCA"] ?? apiLiveData[url]["volt_ca"] ?? apiLiveData[url]["Volt_CA"];
+      }
       if (val === undefined && rawKey === "unbalance_v") {
         val = apiLiveData[url]["Volatage_Unbalance"] ?? apiLiveData[url]["Voltage_Unbalance"] ?? apiLiveData[url]["voltage_unbalance"] ?? apiLiveData[url]["volatage_unbalance"];
       }
@@ -389,13 +398,9 @@ export default function IncomingPln() {
         if (rawKey === "active_power" || rawKey === "reactive_power" || rawKey === "apparent_power") {
           if (typeof val === "number" && val > 10000) val = val / 1000.0;
         }
-        // Voltage LL (convert Volts to kV)
-        if (rawKey === "voltage" && typeof val === "number" && val > 1000) {
+        // Voltage (convert Volts to kV) - in 20 kV medium voltage system line voltages are used directly
+        if ((rawKey === "voltage" || rawKey === "v_r" || rawKey === "v_s" || rawKey === "v_t") && typeof val === "number" && val > 1000) {
           val = val / 1000.0;
-        }
-        // Voltage L-N (convert Volts to kV L-N)
-        if ((rawKey === "v_r" || rawKey === "v_s" || rawKey === "v_t") && typeof val === "number" && val > 1000) {
-          val = (val / Math.sqrt(3)) / 1000.0;
         }
         // Unbalances & THD (convert decimal 0.0055 to %)
         if ((rawKey.startsWith("unbalance_") || rawKey.startsWith("thd_")) && typeof val === "number" && val < 1.0) {
@@ -480,8 +485,11 @@ export default function IncomingPln() {
         }
         if (res?.data?.charts) {
           const charts = res.data.charts;
-          if (charts.voltage24h) setVoltageTrend(charts.voltage24h);
-          if (charts.activePower24h) setActivePowerTrend(charts.activePower24h);
+          if (charts.hourlyTrend5s && Array.isArray(charts.hourlyTrend5s) && charts.hourlyTrend5s.length > 0) {
+            const currentHour = new Date().getHours();
+            lastTrendHourRef.current = currentHour;
+            setHourlyTrend5s(charts.hourlyTrend5s);
+          }
         }
         setLoading(false);
       })
@@ -493,6 +501,8 @@ export default function IncomingPln() {
 
   // Reset/update metrics when config changes
   useEffect(() => {
+    setHourlyTrend5s([]);
+    lastTrendHourRef.current = new Date().getHours();
     setMetrics({
       voltage: config.voltageBase,
       frequency: 0,
@@ -579,6 +589,24 @@ export default function IncomingPln() {
       }
     };
 
+    const handleTrend5s = (payload: any) => {
+      if (payload && payload.deviceId === config.deviceId && payload.point) {
+        const pt = payload.point;
+        const currentHour = new Date().getHours();
+        setHourlyTrend5s((prev) => {
+          if (lastTrendHourRef.current !== currentHour) {
+            lastTrendHourRef.current = currentHour;
+            return [pt];
+          }
+          if (prev.length > 0 && prev[prev.length - 1].time === pt.time) {
+            return prev;
+          }
+          const updated = [...prev, pt];
+          return updated.length > 750 ? updated.slice(updated.length - 750) : updated;
+        });
+      }
+    };
+
     const handleMinuteUpdate = () => {
       fetchTelemetry();
     };
@@ -586,11 +614,13 @@ export default function IncomingPln() {
     socket.on("electricity:minute_update", handleMinuteUpdate);
     socket.on("historian:minute_update", handleMinuteUpdate);
     socket.on("electricity:live_update", handleLiveUpdate);
+    socket.on("electricity:trend_5s", handleTrend5s);
 
     return () => {
       socket.off("electricity:minute_update", handleMinuteUpdate);
       socket.off("historian:minute_update", handleMinuteUpdate);
       socket.off("electricity:live_update", handleLiveUpdate);
+      socket.off("electricity:trend_5s", handleTrend5s);
     };
   }, [config.deviceId]);
 
@@ -725,66 +755,90 @@ export default function IncomingPln() {
     }
   };
 
-  // 24 Hour Line Trend Data (00:00 to 23:00)
-  const trendLabels = useMemo(() => Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, "0")}:00`), []);
+  // Local fallback interval for 5-second sampling in case socket is delayed
+  useEffect(() => {
+    if (!isPageActive) return;
+    const interval = setInterval(() => {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentSec = now.getSeconds();
+      if (currentSec % 5 === 0) {
+        const timeStr = `${String(currentHour).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(currentSec).padStart(2, "0")}`;
+        const rawV = liveMetrics.voltage;
+        const rawP = liveMetrics.activePower;
+        const v = typeof rawV === "number" && rawV > 0 ? rawV : (typeof liveMetrics.vR === "number" && liveMetrics.vR > 0 ? liveMetrics.vR : 0);
+        const p = typeof rawP === "number" && rawP > 0 ? rawP : 0;
 
+        if (v > 0 || p > 0) {
+          setHourlyTrend5s((prev) => {
+            if (lastTrendHourRef.current !== currentHour) {
+              lastTrendHourRef.current = currentHour;
+              return [{ time: timeStr, hour: currentHour, voltage: Number(v.toFixed(3)), activePower: Number(p.toFixed(1)) }];
+            }
+            if (prev.length > 0 && prev[prev.length - 1].time === timeStr) {
+              return prev;
+            }
+            const updated = [...prev, { time: timeStr, hour: currentHour, voltage: Number(v.toFixed(3)), activePower: Number(p.toFixed(1)) }];
+            return updated.length > 750 ? updated.slice(updated.length - 750) : updated;
+          });
+        }
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isPageActive, liveMetrics.voltage, liveMetrics.vR, liveMetrics.activePower]);
+
+  // 1-Hour Rolling 5-Second Line Trend Data
   const voltageTrendData = useMemo(() => {
-    const dataMap = new Map(voltageTrend.map(item => [item.hour, item.value]));
-    const dataPoints = trendLabels.map(label => dataMap.get(label) ?? null);
+    const labels = hourlyTrend5s.map((p) => p.time);
+    const dataPoints = hourlyTrend5s.map((p) => p.voltage);
     
     return {
-      labels: trendLabels,
+      labels: labels.length > 0 ? labels : ["--:--:--"],
       datasets: [
         {
           label: "Tegangan",
-          data: dataPoints,
+          data: dataPoints.length > 0 ? dataPoints : [0],
           borderColor: "#eab308",
           backgroundColor: "rgba(234, 179, 8, 0.08)",
           fill: true,
-          tension: 0.35,
-          borderWidth: 2.5,
-          pointRadius: 2.5,
+          tension: 0.2,
+          borderWidth: 2,
+          pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
+          pointHoverRadius: 5,
           pointBackgroundColor: "#eab308",
           pointBorderColor: isDark ? "#0f172a" : "#ffffff",
           pointBorderWidth: 1.5,
-          pointHoverRadius: 8,
-          pointHoverBackgroundColor: "#eab308",
-          pointHoverBorderColor: "#ffffff",
-          pointHoverBorderWidth: 3,
-          spanGaps: false
+          spanGaps: true
         }
       ]
     };
-  }, [voltageTrend, trendLabels, isDark]);
+  }, [hourlyTrend5s, isDark]);
 
   const activePowerTrendData = useMemo(() => {
-    const dataMap = new Map(activePowerTrend.map(item => [item.hour, item.value]));
-    const dataPoints = trendLabels.map(label => dataMap.get(label) ?? null);
+    const labels = hourlyTrend5s.map((p) => p.time);
+    const dataPoints = hourlyTrend5s.map((p) => p.activePower);
     
     return {
-      labels: trendLabels,
+      labels: labels.length > 0 ? labels : ["--:--:--"],
       datasets: [
         {
           label: "Daya Aktif",
-          data: dataPoints,
+          data: dataPoints.length > 0 ? dataPoints : [0],
           borderColor: "#10b981",
           backgroundColor: "rgba(16, 185, 129, 0.08)",
           fill: true,
-          tension: 0.35,
-          borderWidth: 2.5,
-          pointRadius: 2.5,
+          tension: 0.2,
+          borderWidth: 2,
+          pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
+          pointHoverRadius: 5,
           pointBackgroundColor: "#10b981",
           pointBorderColor: isDark ? "#0f172a" : "#ffffff",
           pointBorderWidth: 1.5,
-          pointHoverRadius: 8,
-          pointHoverBackgroundColor: "#10b981",
-          pointHoverBorderColor: "#ffffff",
-          pointHoverBorderWidth: 3,
-          spanGaps: false
+          spanGaps: true
         }
       ]
     };
-  }, [activePowerTrend, trendLabels, isDark]);
+  }, [hourlyTrend5s, isDark]);
 
   const lineOptions = (title: string, color: string, unit: string) => ({
     responsive: true,
@@ -814,7 +868,7 @@ export default function IncomingPln() {
         callbacks: {
           title: (items: any[]) => {
             if (!items.length) return "";
-            return `Pukul ${items[0].label}`;
+            return `Waktu: ${items[0].label}`;
           },
           label: (context: any) => {
             const val = context.parsed.y;
@@ -827,7 +881,12 @@ export default function IncomingPln() {
     scales: {
       x: {
         grid: { display: false },
-        ticks: { color: "#64748b", font: { size: 8.5 } }
+        ticks: {
+          color: "#64748b",
+          font: { size: 8.5 },
+          maxTicksLimit: 12,
+          autoSkip: true
+        }
       },
       y: {
         grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
@@ -1007,7 +1066,7 @@ export default function IncomingPln() {
                 <span className="font-mono">{renderMetricVal(liveMetrics.vR, (v) => `${v.toFixed(3)} kV`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vR) && Number(liveMetrics.vR) > 0 ? `${(Number(liveMetrics.vR) / 12) * 100}%` : "0%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vR) && Number(liveMetrics.vR) > 0 ? `${Math.min(100, (Number(liveMetrics.vR) / 24) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
@@ -1017,7 +1076,7 @@ export default function IncomingPln() {
                 <span className="font-mono">{renderMetricVal(liveMetrics.vS, (v) => `${v.toFixed(3)} kV`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vS) && Number(liveMetrics.vS) > 0 ? `${(Number(liveMetrics.vS) / 12) * 100}%` : "0%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vS) && Number(liveMetrics.vS) > 0 ? `${Math.min(100, (Number(liveMetrics.vS) / 24) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
@@ -1027,7 +1086,7 @@ export default function IncomingPln() {
                 <span className="font-mono">{renderMetricVal(liveMetrics.vT, (v) => `${v.toFixed(3)} kV`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vT) && Number(liveMetrics.vT) > 0 ? `${(Number(liveMetrics.vT) / 12) * 100}%` : "0%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vT) && Number(liveMetrics.vT) > 0 ? `${Math.min(100, (Number(liveMetrics.vT) / 24) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
@@ -1185,15 +1244,15 @@ export default function IncomingPln() {
       <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400 mb-2">Trend Tegangan 24 Jam (kV)</h4>
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400 mb-2">Trend Tegangan 1 Jam (kV)</h4>
             <div style={{ height: 130 }}>
-              <Line data={voltageTrendData} options={lineOptions("Trend Tegangan 24 Jam (kV)", "#eab308", "kV")} />
+              <Line data={voltageTrendData} options={lineOptions("Trend Tegangan 1 Jam (kV)", "#eab308", "kV")} />
             </div>
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400 mb-2">Trend Daya Aktif 24 Jam (kW)</h4>
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400 mb-2">Trend Daya Aktif 1 Jam (kW)</h4>
             <div style={{ height: 130 }}>
-              <Line data={activePowerTrendData} options={lineOptions("Trend Daya Aktif 24 Jam (kW)", "#10b981", "kW")} />
+              <Line data={activePowerTrendData} options={lineOptions("Trend Daya Aktif 1 Jam (kW)", "#10b981", "kW")} />
             </div>
           </div>
         </div>

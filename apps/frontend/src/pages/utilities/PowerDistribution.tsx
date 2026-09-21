@@ -1280,17 +1280,15 @@ export default function PowerDistribution() {
             <path d="M 795 134 L 795 150" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
 
             {/* Blue lines from Incoming Feeders down to Yellow Busbars */}
-            <path d="M 285 226 L 285 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
-            <path d="M 795 226 L 795 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <path d="M 285 246 L 285 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <path d="M 795 246 L 795 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
 
             {/* Busbars: Thick Yellow Lines with Ambient Glow (Rendered IN FRONT of auxiliary lines) */}
             {/* Factory 1 Busbar (Centered at X = 285, Width = 430) */}
             <path d="M 70 265 L 500 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
-            <text x="75" y="258" fill="#ca8a04" fontSize="8" fontWeight="800" letterSpacing="0.08em">21 kV BUS (FACTORY 1)</text>
 
             {/* Factory 2 Busbar (Centered at X = 915, Width = 350) */}
             <path d="M 741 265 L 1089 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
-            <text x="746" y="258" fill="#ca8a04" fontSize="8" fontWeight="800" letterSpacing="0.08em">21 kV BUS (FACTORY 2)</text>
 
             {/* Factory 1: 4 Symmetrical Transformer Branches (Centers: 120, 230, 340, 450) */}
             {[120, 230, 340, 450].map((x) => (
@@ -1353,7 +1351,7 @@ export default function PowerDistribution() {
           </div>
 
           {/* 2. Incoming Fact-1 (Center F1) */}
-          <div className="absolute z-10" style={{ left: 215, top: 150 }}>
+          <div className="absolute z-30" style={{ left: 215, top: 150 }}>
             <div className={`p-2.5 w-[140px] text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
             }`}>
@@ -1389,7 +1387,7 @@ export default function PowerDistribution() {
 
           {/* ═══════════ FACTORY 2 SOURCES (Right Wing) ═══════════ */}
           {/* 1. Incoming Fact-2 (Left F2, Center = 795) */}
-          <div className="absolute z-10" style={{ left: 725, top: 150 }}>
+          <div className="absolute z-30" style={{ left: 725, top: 150 }}>
             <div className={`p-2.5 w-[140px] text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
             }`}>
@@ -1567,42 +1565,7 @@ export default function PowerDistribution() {
         </SldScaledCanvas>
       </section>
 
-      {/* ═══════════ SECTION: SUB-DISTRIBUTION POWER METERS ═══════════ */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-extrabold text-sky-500">⚡</span>
-            <h3 className="text-sm font-extrabold text-slate-800 dark:text-white">
-              Sub-Distribution Power Meters Telemetry
-            </h3>
-          </div>
-
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-            {(["ew23", "ew21", "ew22"] as const).map((grp) => (
-              <button
-                key={grp}
-                onClick={() => setSelectedEwGroup(grp)}
-                className={`px-3 py-1 rounded-lg text-xs font-extrabold uppercase transition-all ${
-                  selectedEwGroup === grp
-                    ? "bg-white dark:bg-slate-900 text-sky-500 shadow-sm"
-                    : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
-                }`}
-              >
-                {grp.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <EwPowerMetersGrid
-          powerMeters={ewPowerMeters}
-          isDark={isDark}
-          groupId={selectedEwGroup}
-          title={`Sub-Distribution ${selectedEwGroup.toUpperCase()}`}
-        />
-      </div>
-
-      {/* ═══════════ SECTION B: DETAIL TRANSFORMATOR CARDS ═══════════ */}
+      {/* ═══════════ SECTION B: DETAIL TRANSFORMATOR CARDS (MDP) ═══════════ */}
       <section className="space-y-6">
         <div className="flex items-center gap-2.5">
           <svg style={{ width: 18, height: 18 }} className="text-sky-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -1637,6 +1600,41 @@ export default function PowerDistribution() {
           </div>
         </div>
       </section>
+
+      {/* ═══════════ SECTION: SUB-DISTRIBUTION POWER METERS (SDP) ═══════════ */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-extrabold text-sky-500">⚡</span>
+            <h3 className="text-sm font-extrabold text-slate-800 dark:text-white">
+              Sub-Distribution Power Meters Telemetry
+            </h3>
+          </div>
+
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            {(["ew23", "ew21", "ew22"] as const).map((grp) => (
+              <button
+                key={grp}
+                onClick={() => setSelectedEwGroup(grp)}
+                className={`px-3 py-1 rounded-lg text-xs font-extrabold uppercase transition-all ${
+                  selectedEwGroup === grp
+                    ? "bg-white dark:bg-slate-900 text-sky-500 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                }`}
+              >
+                {grp.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <EwPowerMetersGrid
+          powerMeters={ewPowerMeters}
+          isDark={isDark}
+          groupId={selectedEwGroup}
+          title={`Sub-Distribution ${selectedEwGroup.toUpperCase()}`}
+        />
+      </div>
 
       {/* ═══════════ SECTION C: HISTORICAL TREND BOTTOM CHARTS ═══════════ */}
       <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-5">

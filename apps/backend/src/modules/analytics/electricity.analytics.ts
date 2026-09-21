@@ -2,6 +2,7 @@ import { getMongoDb } from "../../database/mongo";
 import { getPostgresPool } from "../../database/postgres";
 import { ELECTRICITY_RAW_COLLECTION, ELECTRICITY_1M_COLLECTION, ELECTRICITY_1H_COLLECTION, GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
 import { env } from "../../config/env.config";
+import { getIncomingHourlyTrend, getLatestIncomingTelemetry } from "../../core/scheduler";
 
 export interface ElectricityTariff {
   validFrom: string; // "YYYY-MM"
@@ -151,6 +152,8 @@ export interface ElectricityAnalyticsResult {
     breakdown: { label: string; value: number; color: string }[];
     voltage24h?: { hour: string; value: number }[];
     activePower24h?: { hour: string; value: number }[];
+    hourlyTrend5s?: { time: string; hour: number; voltage: number; activePower: number }[];
+    currentHour?: number;
   };
   pqData: {
     activePower: number;
@@ -335,7 +338,9 @@ export const getElectricityAnalytics = async (
           { label: "Solar POI-2", value: poi2.summary.totalKwh, color: "#10b981" }
         ],
         voltage24h: pln.charts.voltage24h,
-        activePower24h: pln.charts.activePower24h
+        activePower24h: pln.charts.activePower24h,
+        hourlyTrend5s: pln.charts.hourlyTrend5s,
+        currentHour: pln.charts.currentHour
       },
       pqData: pln.pqData
     };
@@ -827,21 +832,38 @@ export const getElectricityAnalytics = async (
 
   // Latest Power Quality and Grid Telemetry (pqData)
   // Fetch latest active values from PostgreSQL raw tables if available
-  let pgPq: any = null;
+  let pgPq: any = getLatestIncomingTelemetry(deviceId);
   const pgPool = getPostgresPool();
-  try {
-    if (deviceId === "Cubicle_PLN_PM8000") {
-      const res = await pgPool.query(`SELECT * FROM electric_pln_telemetry ORDER BY t_stamp DESC LIMIT 1`);
-      if (res.rows.length > 0) pgPq = res.rows[0];
-    } else if (deviceId === "Feeder_WF1_PM5560") {
-      const res = await pgPool.query(`SELECT * FROM electric_wf1_telemetry ORDER BY t_stamp DESC LIMIT 1`);
-      if (res.rows.length > 0) pgPq = res.rows[0];
-    } else if (deviceId === "Feeder_WF2_PM5500") {
-      const res = await pgPool.query(`SELECT * FROM electric_wf2_telemetry ORDER BY t_stamp DESC LIMIT 1`);
-      if (res.rows.length > 0) pgPq = res.rows[0];
+  if (!pgPq) {
+    try {
+      if (deviceId === "Cubicle_PLN_PM8000") {
+        const res = await pgPool.query(`SELECT * FROM electric_pln_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`);
+        if (res.rows.length > 0) {
+          pgPq = res.rows[0];
+        } else {
+          const resHourly = await pgPool.query(`SELECT * FROM electric_pln_telemetry ORDER BY t_stamp DESC LIMIT 1`);
+          if (resHourly.rows.length > 0) pgPq = resHourly.rows[0];
+        }
+      } else if (deviceId === "Feeder_WF1_PM5560") {
+        const res = await pgPool.query(`SELECT * FROM electric_wf1_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`);
+        if (res.rows.length > 0) {
+          pgPq = res.rows[0];
+        } else {
+          const resHourly = await pgPool.query(`SELECT * FROM electric_wf1_telemetry ORDER BY t_stamp DESC LIMIT 1`);
+          if (resHourly.rows.length > 0) pgPq = resHourly.rows[0];
+        }
+      } else if (deviceId === "Feeder_WF2_PM5500") {
+        const res = await pgPool.query(`SELECT * FROM electric_wf2_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`);
+        if (res.rows.length > 0) {
+          pgPq = res.rows[0];
+        } else {
+          const resHourly = await pgPool.query(`SELECT * FROM electric_wf2_telemetry ORDER BY t_stamp DESC LIMIT 1`);
+          if (resHourly.rows.length > 0) pgPq = resHourly.rows[0];
+        }
+      }
+    } catch (err) {
+      console.error("Failed to query latest telemetry from Postgres:", err);
     }
-  } catch (err) {
-    console.error("Failed to query latest telemetry from Postgres:", err);
   }
 
   // Fallback default values
@@ -916,9 +938,9 @@ export const getElectricityAnalytics = async (
     isConnected = (statusVal !== null ? !!statusVal : true) && !isStale;
   }
 
-  const vln1 = voltABVal / Math.sqrt(3);
-  const vln2 = voltBCVal / Math.sqrt(3);
-  const vln3 = voltCAVal / Math.sqrt(3);
+  const vln1 = voltABVal;
+  const vln2 = voltBCVal;
+  const vln3 = voltCAVal;
 
   const today = dailyMap.get(todayStr) || 0;
   const monthlyMwh = (monthlyMap.get(currentMonthStr) || 0) / 1000;
@@ -1025,7 +1047,9 @@ export const getElectricityAnalytics = async (
       monthly,
       breakdown,
       voltage24h: voltageTrend,
-      activePower24h: powerTrend
+      activePower24h: powerTrend,
+      hourlyTrend5s: getIncomingHourlyTrend(deviceId).points,
+      currentHour: getIncomingHourlyTrend(deviceId).hour
     },
     pqData: {
       activePower: Number(activePowerVal.toFixed(1)),
