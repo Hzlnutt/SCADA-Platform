@@ -846,6 +846,7 @@ export interface IncomingTrend5sPoint {
   pR: number;
   pS: number;
   pT: number;
+  ts?: number;
 }
 
 const incomingHourlyTrends: Record<string, IncomingTrend5sPoint[]> = {
@@ -919,7 +920,8 @@ const recordIncomingTrend5s = (
       activePower: Number(data.activePower.toFixed(1)),
       pR: Number(data.pR.toFixed(1)),
       pS: Number(data.pS.toFixed(1)),
-      pT: Number(data.pT.toFixed(1))
+      pT: Number(data.pT.toFixed(1)),
+      ts: now.getTime()
     };
 
     incomingHourlyTrends[deviceId].push(point);
@@ -1987,8 +1989,12 @@ export const runElectricityRollupAndCleanup = async () => {
     const plnBuckets = await pool.query(`
       SELECT 
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
-      FROM electric_pln_telemetry_minute
+      FROM electric_pln_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+        AND NOT EXISTS (
+          SELECT 1 FROM electric_pln_telemetry h
+          WHERE h.t_stamp = date_trunc('hour', m.t_stamp)
+        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2054,12 +2060,6 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
-        // Delete minute records from buffer
-        await client.query(`
-          DELETE FROM electric_pln_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
-
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
@@ -2073,8 +2073,12 @@ export const runElectricityRollupAndCleanup = async () => {
     const wf1Buckets = await pool.query(`
       SELECT 
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
-      FROM electric_wf1_telemetry_minute
+      FROM electric_wf1_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+        AND NOT EXISTS (
+          SELECT 1 FROM electric_wf1_telemetry h
+          WHERE h.t_stamp = date_trunc('hour', m.t_stamp)
+        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2140,11 +2144,6 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
-        await client.query(`
-          DELETE FROM electric_wf1_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
-
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
@@ -2158,8 +2157,12 @@ export const runElectricityRollupAndCleanup = async () => {
     const wf2Buckets = await pool.query(`
       SELECT 
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
-      FROM electric_wf2_telemetry_minute
+      FROM electric_wf2_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+        AND NOT EXISTS (
+          SELECT 1 FROM electric_wf2_telemetry h
+          WHERE h.t_stamp = date_trunc('hour', m.t_stamp)
+        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2225,11 +2228,6 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
-        await client.query(`
-          DELETE FROM electric_wf2_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
-
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
@@ -2243,8 +2241,14 @@ export const runElectricityRollupAndCleanup = async () => {
     const pmBuckets = await pool.query(`
       SELECT 
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
-      FROM electric_pm_telemetry_minute
+      FROM electric_pm_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+        AND NOT EXISTS (
+          SELECT 1 FROM electric_pm_telemetry h
+          WHERE h.t_stamp = date_trunc('hour', m.t_stamp)
+            AND h.group_id = m.group_id
+            AND h.pm_id = m.pm_id
+        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2309,11 +2313,6 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
-        await client.query(`
-          DELETE FROM electric_pm_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
-
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
@@ -2327,8 +2326,13 @@ export const runElectricityRollupAndCleanup = async () => {
     const pltsBuckets = await pool.query(`
       SELECT 
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
-      FROM electric_plts_telemetry_minute
+      FROM electric_plts_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+        AND NOT EXISTS (
+          SELECT 1 FROM electric_plts_telemetry h
+          WHERE h.t_stamp = date_trunc('hour', m.t_stamp)
+            AND h.poi_id = m.poi_id
+        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2376,11 +2380,6 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
-        await client.query(`
-          DELETE FROM electric_plts_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
-
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
@@ -2390,7 +2389,16 @@ export const runElectricityRollupAndCleanup = async () => {
       }
     }
 
-    // 6. Monthly Rollup
+    // 6. Keep 3 days of minute records for continuous fixed 1-hour/24-hour trends
+    await pool.query(`
+      DELETE FROM electric_pln_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '3 days';
+      DELETE FROM electric_wf1_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '3 days';
+      DELETE FROM electric_wf2_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '3 days';
+      DELETE FROM electric_pm_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '3 days';
+      DELETE FROM electric_plts_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '3 days';
+    `);
+
+    // 7. Monthly Rollup
     const now = new Date();
     const yearMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}`;
     await rollupMonthlyForMonth(yearMonth);

@@ -368,6 +368,7 @@ interface HourlyTrend5sPoint {
   pR?: number;
   pS?: number;
   pT?: number;
+  ts?: number;
 }
 
   const [hourlyTrend5s, setHourlyTrend5s] = useState<HourlyTrend5sPoint[]>([]);
@@ -499,21 +500,25 @@ interface HourlyTrend5sPoint {
         if (res?.data?.charts) {
           const charts = res.data.charts;
           if (charts.hourlyTrend5s && Array.isArray(charts.hourlyTrend5s) && charts.hourlyTrend5s.length > 0) {
-            // Backend already returns a rolling window — use it directly
-            // Keep max 750 points (1h at 5s interval)
             const pts = charts.hourlyTrend5s;
             setHourlyTrend5s((prev) => {
-              if (prev.length === 0) {
-                // Initial load: take backend data directly
+              // If prev is empty or has fewer points than DB 1h snapshot, load full DB snapshot
+              if (prev.length === 0 || prev.length < pts.length) {
                 return pts.length > 750 ? pts.slice(pts.length - 750) : pts;
               }
-              // Page active: backend may have missed some points since last poll
-              // Only append new points that are newer than current last point
-              const lastTime = prev[prev.length - 1].time;
-              const newPts = pts.filter((p: any) => p.time > lastTime);
+              // If page was already accumulating live 5s points, only append new DB points that are newer
+              const lastPoint = prev[prev.length - 1];
+              const lastTs = lastPoint.ts || 0;
+              const lastTime = lastPoint.time;
+              const newPts = pts.filter((p: any) => {
+                if (p.ts && lastTs > 0) return p.ts > lastTs;
+                return p.time > lastTime;
+              });
               if (newPts.length === 0) return prev;
               const merged = [...prev, ...newPts];
-              return merged.length > 750 ? merged.slice(merged.length - 750) : merged;
+              const oneHourAgo = (merged[merged.length - 1].ts || Date.now()) - 60 * 60 * 1000;
+              const filtered = merged.filter((p) => (p.ts ? p.ts >= oneHourAgo : true));
+              return filtered.length > 750 ? filtered.slice(filtered.length - 750) : filtered;
             });
             lastTrendHourRef.current = new Date().getHours();
           }
@@ -624,8 +629,13 @@ interface HourlyTrend5sPoint {
           if (prev.length > 0 && prev[prev.length - 1].time === pt.time) {
             return prev;
           }
-          // Strict rolling 1-hour window: 750 points × 5s = 3750s ≈ 1h
-          const updated = [...prev, pt];
+          const ptWithTs: HourlyTrend5sPoint = {
+            ...pt,
+            ts: pt.ts || Date.now()
+          };
+          const oneHourAgo = ptWithTs.ts! - 60 * 60 * 1000;
+          // Strict rolling 1-hour window: keep only points within the last 1 hour
+          const updated = [...prev, ptWithTs].filter((p) => (p.ts ? p.ts >= oneHourAgo : true));
           return updated.length > 750 ? updated.slice(updated.length - 750) : updated;
         });
         lastTrendHourRef.current = new Date().getHours();
@@ -818,7 +828,8 @@ interface HourlyTrend5sPoint {
             activePower: Number(p.toFixed(1)),
             pR: Number(pR.toFixed(1)),
             pS: Number(pS.toFixed(1)),
-            pT: Number(pT.toFixed(1))
+            pT: Number(pT.toFixed(1)),
+            ts: now.getTime()
           };
 
           setHourlyTrend5s((prev) => {
@@ -826,11 +837,11 @@ interface HourlyTrend5sPoint {
             if (prev.length > 0 && prev[prev.length - 1].time === timeStr) {
               return prev;
             }
-            // Strict rolling 1-hour window: keep max 750 points (750 × 5s = 3750s ≈ 1h)
-            const updated = [...prev, pt];
+            const oneHourAgo = pt.ts! - 60 * 60 * 1000;
+            // Strict rolling 1-hour window: keep only points within the last 1 hour
+            const updated = [...prev, pt].filter((p) => (p.ts ? p.ts >= oneHourAgo : true));
             return updated.length > 750 ? updated.slice(updated.length - 750) : updated;
           });
-          // Track current hour for backend-side reset reference only
           lastTrendHourRef.current = currentHour;
         }
       }

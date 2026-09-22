@@ -109,6 +109,126 @@ export async function fetchPowerFactor(): Promise<number | null> {
   return null;
 }
 
+// Table mapping for 1-hour incoming trend from PostgreSQL
+const INCOMING_DEVICE_TABLES: Record<string, { minute: string; main: string; activeCol: string }> = {
+  "Cubicle_PLN_PM8000": {
+    minute: "electric_pln_telemetry_minute",
+    main: "electric_pln_telemetry",
+    activeCol: "active_power"
+  },
+  "Feeder_WF1_PM5560": {
+    minute: "electric_wf1_telemetry_minute",
+    main: "electric_wf1_telemetry",
+    activeCol: "active_power_total"
+  },
+  "Feeder_WF2_PM5500": {
+    minute: "electric_wf2_telemetry_minute",
+    main: "electric_wf2_telemetry",
+    activeCol: "active_power_total"
+  }
+};
+
+export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<IncomingTrend5sPoint[]> => {
+  const cfg = INCOMING_DEVICE_TABLES[deviceId];
+  if (!cfg) return [];
+
+  const pool = getPostgresPool();
+  try {
+    const minuteRes = await pool.query(`
+      SELECT
+        t_stamp,
+        volt_ab, volt_bc, volt_ca, volt_ll,
+        current_a, current_b, current_c,
+        ${cfg.activeCol} AS active_power_val
+      FROM ${cfg.minute}
+      WHERE t_stamp >= NOW() - INTERVAL '60 minutes'
+      ORDER BY t_stamp ASC
+    `);
+
+    const mapRow = (row: any, overrideDate?: Date): IncomingTrend5sPoint => {
+      const d = overrideDate || new Date(row.t_stamp);
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      const ss = String(d.getSeconds()).padStart(2, "0");
+      const timeStr = `${hh}:${mm}:${ss}`;
+
+      const voltAB = Number(row.volt_ab) > 1000 ? Number(row.volt_ab) / 1000.0 : Number(row.volt_ab) || 0;
+      const voltBC = Number(row.volt_bc) > 1000 ? Number(row.volt_bc) / 1000.0 : Number(row.volt_bc) || 0;
+      const voltCA = Number(row.volt_ca) > 1000 ? Number(row.volt_ca) / 1000.0 : Number(row.volt_ca) || 0;
+      const voltLL = Number(row.volt_ll) > 1000 ? Number(row.volt_ll) / 1000.0 : Number(row.volt_ll) || 0;
+
+      const vR = voltAB > 0 ? Number(voltAB.toFixed(3)) : Number(voltLL.toFixed(3));
+      const vS = voltBC > 0 ? Number(voltBC.toFixed(3)) : Number(voltLL.toFixed(3));
+      const vT = voltCA > 0 ? Number(voltCA.toFixed(3)) : Number(voltLL.toFixed(3));
+      const voltage = voltLL > 0 ? Number(voltLL.toFixed(3)) : Number(((vR + vS + vT) / 3).toFixed(3));
+
+      const rawP = Number(row.active_power_val) || 0;
+      const activePower = rawP > 10000 ? Number((rawP / 1000.0).toFixed(1)) : Number(rawP.toFixed(1));
+
+      const iR = Number(row.current_a) || 0;
+      const iS = Number(row.current_b) || 0;
+      const iT = Number(row.current_c) || 0;
+      const iTotal = iR + iS + iT;
+      const pR = iTotal > 0 ? Number((activePower * (iR / iTotal)).toFixed(1)) : Number((activePower / 3.0).toFixed(1));
+      const pS = iTotal > 0 ? Number((activePower * (iS / iTotal)).toFixed(1)) : Number((activePower / 3.0).toFixed(1));
+      const pT = iTotal > 0 ? Number((activePower * (iT / iTotal)).toFixed(1)) : Number((activePower / 3.0).toFixed(1));
+
+      return {
+        time: timeStr,
+        hour: d.getHours(),
+        voltage,
+        vR,
+        vS,
+        vT,
+        activePower,
+        pR,
+        pS,
+        pT,
+        ts: d.getTime()
+      };
+    };
+
+    const minutePoints: IncomingTrend5sPoint[] = minuteRes.rows.map((r: any) => mapRow(r));
+
+    // Ensure we always have a full 60-minute span so the range is fix 1 jam
+    if (minutePoints.length < 60) {
+      const now = Date.now();
+      const oldestPointTs = minutePoints.length > 0 && minutePoints[0].ts ? minutePoints[0].ts : now;
+      const targetStartTs = now - 60 * 60 * 1000;
+      const missingMinutes = Math.floor((oldestPointTs - targetStartTs) / 60000);
+
+      if (missingMinutes > 0) {
+        const prevHourlyRes = await pool.query(`
+          SELECT
+            t_stamp,
+            volt_ab, volt_bc, volt_ca, volt_ll,
+            current_a, current_b, current_c,
+            ${cfg.activeCol} AS active_power_val
+          FROM ${cfg.main}
+          WHERE t_stamp >= NOW() - INTERVAL '3 hours'
+          ORDER BY t_stamp DESC
+          LIMIT 2
+        `);
+
+        const baselineRow = prevHourlyRes.rows[0] || (minuteRes.rows.length > 0 ? minuteRes.rows[0] : null);
+        if (baselineRow) {
+          const prepended: IncomingTrend5sPoint[] = [];
+          for (let i = missingMinutes; i >= 1; i--) {
+            const fillDate = new Date(oldestPointTs - i * 60000);
+            prepended.push(mapRow(baselineRow, fillDate));
+          }
+          return [...prepended, ...minutePoints];
+        }
+      }
+    }
+
+    return minutePoints;
+  } catch (err: any) {
+    console.warn(`[getIncomingTrend1hFromDb] Error fetching 1h trend for ${deviceId}:`, err.message);
+    return [];
+  }
+};
+
 export interface ElectricityAnalyticsResult {
   summary: {
     todayKwh: number;
@@ -1048,8 +1168,8 @@ export const getElectricityAnalytics = async (
       breakdown,
       voltage24h: voltageTrend,
       activePower24h: powerTrend,
-      hourlyTrend5s: getIncomingHourlyTrend(deviceId).points,
-      currentHour: getIncomingHourlyTrend(deviceId).hour
+      hourlyTrend5s: await getIncomingTrend1hFromDb(deviceId),
+      currentHour: new Date().getHours()
     },
     pqData: {
       activePower: Number(activePowerVal.toFixed(1)),
