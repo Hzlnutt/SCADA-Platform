@@ -499,28 +499,11 @@ interface HourlyTrend5sPoint {
         }
         if (res?.data?.charts) {
           const charts = res.data.charts;
-          if (charts.hourlyTrend5s && Array.isArray(charts.hourlyTrend5s) && charts.hourlyTrend5s.length > 0) {
+          if (charts.hourlyTrend5s && Array.isArray(charts.hourlyTrend5s)) {
             const pts = charts.hourlyTrend5s;
-            setHourlyTrend5s((prev) => {
-              // If prev is empty or has fewer points than DB 1h snapshot, load full DB snapshot
-              if (prev.length === 0 || prev.length < pts.length) {
-                return pts.length > 750 ? pts.slice(pts.length - 750) : pts;
-              }
-              // If page was already accumulating live 5s points, only append new DB points that are newer
-              const lastPoint = prev[prev.length - 1];
-              const lastTs = lastPoint.ts || 0;
-              const lastTime = lastPoint.time;
-              const newPts = pts.filter((p: any) => {
-                if (p.ts && lastTs > 0) return p.ts > lastTs;
-                return p.time > lastTime;
-              });
-              if (newPts.length === 0) return prev;
-              const merged = [...prev, ...newPts];
-              const oneHourAgo = (merged[merged.length - 1].ts || Date.now()) - 60 * 60 * 1000;
-              const filtered = merged.filter((p) => (p.ts ? p.ts >= oneHourAgo : true));
-              return filtered.length > 750 ? filtered.slice(filtered.length - 750) : filtered;
-            });
-            lastTrendHourRef.current = new Date().getHours();
+            const currentHour = typeof charts.currentHour === "number" ? charts.currentHour : new Date().getHours();
+            lastTrendHourRef.current = currentHour;
+            setHourlyTrend5s(pts);
           }
         }
         setLoading(false);
@@ -624,21 +607,21 @@ interface HourlyTrend5sPoint {
     const handleTrend5s = (payload: any) => {
       if (payload && payload.deviceId === config.deviceId && payload.point) {
         const pt = payload.point;
+        const currentHour = typeof payload.hour === "number" ? payload.hour : new Date().getHours();
         setHourlyTrend5s((prev) => {
+          // Reset when hour rolls over (e.g. from 7:00-7:59 to 8:00-8:59)
+          if (payload.isHourChange || (lastTrendHourRef.current !== -1 && lastTrendHourRef.current !== currentHour)) {
+            lastTrendHourRef.current = currentHour;
+            return [pt];
+          }
           // Deduplicate: skip if already have this timestamp
           if (prev.length > 0 && prev[prev.length - 1].time === pt.time) {
             return prev;
           }
-          const ptWithTs: HourlyTrend5sPoint = {
-            ...pt,
-            ts: pt.ts || Date.now()
-          };
-          const oneHourAgo = ptWithTs.ts! - 60 * 60 * 1000;
-          // Strict rolling 1-hour window: keep only points within the last 1 hour
-          const updated = [...prev, ptWithTs].filter((p) => (p.ts ? p.ts >= oneHourAgo : true));
-          return updated.length > 750 ? updated.slice(updated.length - 750) : updated;
+          const updated = [...prev, pt];
+          return updated.length > 720 ? updated.slice(updated.length - 720) : updated;
         });
-        lastTrendHourRef.current = new Date().getHours();
+        lastTrendHourRef.current = currentHour;
       }
     };
 
@@ -833,14 +816,17 @@ interface HourlyTrend5sPoint {
           };
 
           setHourlyTrend5s((prev) => {
+            // If hour changed, reset to start new hour
+            if (lastTrendHourRef.current !== -1 && lastTrendHourRef.current !== currentHour) {
+              lastTrendHourRef.current = currentHour;
+              return [pt];
+            }
             // Deduplicate: skip if the latest point has the same timestamp
             if (prev.length > 0 && prev[prev.length - 1].time === timeStr) {
               return prev;
             }
-            const oneHourAgo = pt.ts! - 60 * 60 * 1000;
-            // Strict rolling 1-hour window: keep only points within the last 1 hour
-            const updated = [...prev, pt].filter((p) => (p.ts ? p.ts >= oneHourAgo : true));
-            return updated.length > 750 ? updated.slice(updated.length - 750) : updated;
+            const updated = [...prev, pt];
+            return updated.length > 720 ? updated.slice(updated.length - 720) : updated;
           });
           lastTrendHourRef.current = currentHour;
         }

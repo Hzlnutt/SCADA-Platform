@@ -751,6 +751,24 @@ export const ensurePostgresTables = async () => {
       );
       CREATE INDEX IF NOT EXISTS idx_electric_wf2_minute_tstamp ON electric_wf2_telemetry_minute (t_stamp DESC);
 
+      -- 5-SECOND INCOMING TREND TABLE (PLN, WF1, WF2) FOR CURRENT 1-HOUR WINDOW
+      CREATE TABLE IF NOT EXISTS electric_incoming_trend_5s (
+        id BIGSERIAL PRIMARY KEY,
+        device_id VARCHAR(50) NOT NULL,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        hour INT NOT NULL,
+        volt_ll NUMERIC,
+        volt_ab NUMERIC,
+        volt_bc NUMERIC,
+        volt_ca NUMERIC,
+        active_power NUMERIC,
+        current_a NUMERIC,
+        current_b NUMERIC,
+        current_c NUMERIC
+      );
+      CREATE INDEX IF NOT EXISTS idx_incoming_trend_5s_dev_hour ON electric_incoming_trend_5s (device_id, hour);
+      CREATE INDEX IF NOT EXISTS idx_incoming_trend_5s_tstamp ON electric_incoming_trend_5s (t_stamp ASC);
+
       CREATE TABLE IF NOT EXISTS electric_pm_telemetry_minute (
         id SERIAL PRIMARY KEY,
         t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,

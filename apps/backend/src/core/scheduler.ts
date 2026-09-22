@@ -886,7 +886,7 @@ export const getIncomingHourlyTrend = (deviceId: string) => {
   };
 };
 
-const recordIncomingTrend5s = (
+const recordIncomingTrend5s = async (
   deviceId: string,
   data: {
     voltage: number;
@@ -897,6 +897,9 @@ const recordIncomingTrend5s = (
     pR: number;
     pS: number;
     pT: number;
+    currentA?: number;
+    currentB?: number;
+    currentC?: number;
   }
 ) => {
   if (!incomingHourlyTrends[deviceId]) return;
@@ -904,9 +907,12 @@ const recordIncomingTrend5s = (
   const currentHour = now.getHours();
   const currentSec = now.getSeconds();
 
-  // Record strictly every 5 seconds (0, 5, 10, ..., 55)
+  // Record strictly every 5 seconds (0, 5, 10, 15, ..., 55)
   if (currentSec % 5 === 0 && lastRecordedSecond[deviceId] !== currentSec) {
     lastRecordedSecond[deviceId] = currentSec;
+
+    // Detect when hour changes (e.g. from 7 to 8)
+    const isHourChange = lastTrendHour[deviceId] !== -1 && lastTrendHour[deviceId] !== currentHour;
     lastTrendHour[deviceId] = currentHour;
 
     const timeStr = `${String(currentHour).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(currentSec).padStart(2, "0")}`;
@@ -924,18 +930,62 @@ const recordIncomingTrend5s = (
       ts: now.getTime()
     };
 
-    incomingHourlyTrends[deviceId].push(point);
+    if (isHourChange) {
+      // Hour changed: reset in-memory points for the new hour
+      incomingHourlyTrends[deviceId] = [];
+      // Delete previous hour's data from electric_incoming_trend_5s database table
+      try {
+        const pool = getPostgresPool();
+        await pool.query(
+          `DELETE FROM electric_incoming_trend_5s WHERE device_id = $1 AND hour != $2`,
+          [deviceId, currentHour]
+        );
+      } catch (err: any) {
+        logger.warn(`Failed to cleanup previous hour trend 5s for ${deviceId}: ${err.message}`);
+      }
+    }
 
-    // Strict rolling 1-hour window: max 750 points (750 × 5s = 3750s ≈ 1h)
-    if (incomingHourlyTrends[deviceId].length > 750) {
+    incomingHourlyTrends[deviceId].push(point);
+    // In a 1-hour slot (e.g. 7:00 to 8:00), 12 points/min * 60 min = max 720 points
+    if (incomingHourlyTrends[deviceId].length > 720) {
       incomingHourlyTrends[deviceId].shift();
+    }
+
+    // Save every 5 seconds to the new electric_incoming_trend_5s table
+    try {
+      const pool = getPostgresPool();
+      const tStampStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${timeStr}`;
+      await pool.query(`
+        INSERT INTO electric_incoming_trend_5s (
+          device_id, t_stamp, hour, volt_ll, volt_ab, volt_bc, volt_ca,
+          active_power, current_a, current_b, current_c
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+        )
+      `, [
+        deviceId,
+        tStampStr,
+        currentHour,
+        point.voltage,
+        point.vR,
+        point.vS,
+        point.vT,
+        point.activePower,
+        data.currentA ?? null,
+        data.currentB ?? null,
+        data.currentC ?? null
+      ]);
+    } catch (err: any) {
+      logger.warn(`Failed to insert 5s trend to electric_incoming_trend_5s for ${deviceId}: ${err.message}`);
     }
 
     const io = getSocketServer();
     if (io) {
       io.emit("electricity:trend_5s", {
         deviceId,
-        point
+        point,
+        hour: currentHour,
+        isHourChange
       });
     }
   }
@@ -1015,7 +1065,10 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
     activePower: activePowerVal,
     pR,
     pS,
-    pT
+    pT,
+    currentA: currentAVal,
+    currentB: currentBVal,
+    currentC: currentCVal
   });
 
   io.emit("electricity:live_update", {
