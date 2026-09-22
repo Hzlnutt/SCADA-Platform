@@ -160,7 +160,7 @@ const TRAFO_PM_MAP: Record<string, { pmId: string; group: string; name: string; 
 function mapPmToTransformer(
   initialTx: TransformerData,
   pm?: ElectricPmItem,
-  incomingKv: number = 20.8
+  incomingKv: number | null = null
 ): TransformerData {
   if (!pm) return initialTx;
 
@@ -179,7 +179,7 @@ function mapPmToTransformer(
 
   const frequencyHz = pm.frequency !== null && pm.frequency !== undefined
     ? Number(Number(pm.frequency).toFixed(2))
-    : 50.0;
+    : null;
 
   const vAb = pm.volt_ab !== null && pm.volt_ab !== undefined ? Number(pm.volt_ab) : null;
   const vBc = pm.volt_bc !== null && pm.volt_bc !== undefined ? Number(pm.volt_bc) : null;
@@ -208,8 +208,6 @@ function mapPmToTransformer(
   const validThdVs = [thdVa, thdVb, thdVc].filter((v): v is number => v !== null && v >= 0 && v < 50);
   if (validThdVs.length > 0) {
     thdVoltage = Number((validThdVs.reduce((a, b) => a + b, 0) / validThdVs.length).toFixed(2));
-  } else {
-    thdVoltage = 1.85;
   }
 
   const thdIa = pm.thd_current_a !== null && pm.thd_current_a !== undefined ? Number(pm.thd_current_a) : null;
@@ -220,8 +218,6 @@ function mapPmToTransformer(
   const validThdIs = [thdIa, thdIb, thdIc].filter((v): v is number => v !== null && v >= 0 && v < 50);
   if (validThdIs.length > 0) {
     thdCurrent = Number((validThdIs.reduce((a, b) => a + b, 0) / validThdIs.length).toFixed(2));
-  } else {
-    thdCurrent = 5.25;
   }
 
   let vUnb = pm.voltage_unbalance !== null && pm.voltage_unbalance !== undefined ? Number(pm.voltage_unbalance) : null;
@@ -238,9 +234,6 @@ function mapPmToTransformer(
       iUnb = Number(((maxDevI / avgI) * 100).toFixed(2));
     }
   }
-
-  const loadPct = activePowerKw ? (activePowerKw / initialTx.capacityKva) * 100 : 25;
-  const tempCc = Number((38 + (loadPct / 100) * 18).toFixed(1));
 
   const kwh = pm.active_energy !== null && pm.active_energy !== undefined ? Number(Number(pm.active_energy).toFixed(0)) : null;
   const isOnline = pm.status !== false && activePowerKw !== null;
@@ -269,9 +262,9 @@ function mapPmToTransformer(
     thdCurrentA: thdIa && thdIa < 50 ? thdIa : thdCurrent,
     thdCurrentB: thdIb && thdIb < 50 ? thdIb : thdCurrent,
     thdCurrentC: thdIc && thdIc < 50 ? thdIc : thdCurrent,
-    voltageUnbalance: vUnb !== null ? vUnb : 0.45,
-    currentUnbalance: iUnb !== null ? iUnb : 2.50,
-    tempCc,
+    voltageUnbalance: vUnb,
+    currentUnbalance: iUnb,
+    tempCc: null, // No physical temperature sensors installed on transformers
     kwh,
     status: isOnline ? "online" : "offline",
   };
@@ -1177,10 +1170,10 @@ export default function PowerDistribution() {
     plnPf: null,
     wf1Kw: null,
     wf1Pf: null,
-    wf1Volt: 20.8,
+    wf1Volt: null,
     wf2Kw: null,
     wf2Pf: null,
-    wf2Volt: 20.8,
+    wf2Volt: null,
   });
 
   // Fetch incoming telemetries for PLN, Fact-1, Fact-2
@@ -1198,10 +1191,10 @@ export default function PowerDistribution() {
           plnPf: plnRes?.data?.pqData?.pf !== undefined ? plnRes.data.pqData.pf : null,
           wf1Kw: wf1Res?.data?.pqData?.activePower !== undefined ? wf1Res.data.pqData.activePower : null,
           wf1Pf: wf1Res?.data?.pqData?.pf !== undefined ? wf1Res.data.pqData.pf : null,
-          wf1Volt: wf1Res?.data?.pqData?.vll1 ? Number((wf1Res.data.pqData.vll1 / 1000).toFixed(2)) : 20.8,
+          wf1Volt: wf1Res?.data?.pqData?.vll1 ? Number((wf1Res.data.pqData.vll1 / 1000).toFixed(2)) : null,
           wf2Kw: wf2Res?.data?.pqData?.activePower !== undefined ? wf2Res.data.pqData.activePower : null,
           wf2Pf: wf2Res?.data?.pqData?.pf !== undefined ? wf2Res.data.pqData.pf : null,
-          wf2Volt: wf2Res?.data?.pqData?.vll1 ? Number((wf2Res.data.pqData.vll1 / 1000).toFixed(2)) : 20.8,
+          wf2Volt: wf2Res?.data?.pqData?.vll1 ? Number((wf2Res.data.pqData.vll1 / 1000).toFixed(2)) : null,
         });
       } catch (err) {
         console.error("Failed to load incoming telemetries for SLD:", err);
@@ -1320,7 +1313,7 @@ export default function PowerDistribution() {
               const mapping = TRAFO_PM_MAP[tx.id];
               if (!mapping) return tx;
               const pmRecord = pmMap.get(mapping.pmId.toUpperCase());
-              const incomingKv = tx.factory === 1 ? (incomingData.wf1Volt || 20.8) : (incomingData.wf2Volt || 20.8);
+              const incomingKv = tx.factory === 1 ? incomingData.wf1Volt : incomingData.wf2Volt;
               return mapPmToTransformer(tx, pmRecord, incomingKv);
             })
           );
@@ -1349,7 +1342,7 @@ export default function PowerDistribution() {
           if (!mapping) return tx;
           const pmRecord = pmMap.get(mapping.pmId.toUpperCase());
           if (!pmRecord) return tx;
-          const incomingKv = tx.factory === 1 ? (incomingData.wf1Volt || 20.8) : (incomingData.wf2Volt || 20.8);
+          const incomingKv = tx.factory === 1 ? incomingData.wf1Volt : incomingData.wf2Volt;
           return mapPmToTransformer(tx, pmRecord, incomingKv);
         })
       );
