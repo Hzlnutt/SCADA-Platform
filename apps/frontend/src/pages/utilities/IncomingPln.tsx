@@ -371,8 +371,16 @@ interface HourlyTrend5sPoint {
   ts?: number;
 }
 
+  const [trendHour, setTrendHour] = useState<number>(() => {
+    try {
+      const wibHourStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", hour: "2-digit", hour12: false }).format(new Date());
+      return parseInt(wibHourStr, 10) % 24;
+    } catch {
+      return new Date().getHours();
+    }
+  });
   const [hourlyTrend5s, setHourlyTrend5s] = useState<HourlyTrend5sPoint[]>([]);
-  const lastTrendHourRef = useRef<number>(new Date().getHours());
+  const lastTrendHourRef = useRef<number>(-1);
 
   // Event & alarm logs
   const [events, setEvents] = useState(MOCK_EVENTS);
@@ -501,7 +509,8 @@ interface HourlyTrend5sPoint {
           const charts = res.data.charts;
           if (charts.hourlyTrend5s && Array.isArray(charts.hourlyTrend5s)) {
             const pts = charts.hourlyTrend5s;
-            const currentHour = typeof charts.currentHour === "number" ? charts.currentHour : new Date().getHours();
+            const currentHour = typeof charts.currentHour === "number" ? charts.currentHour : trendHour;
+            setTrendHour(currentHour);
             lastTrendHourRef.current = currentHour;
             setHourlyTrend5s(pts);
           }
@@ -607,21 +616,25 @@ interface HourlyTrend5sPoint {
     const handleTrend5s = (payload: any) => {
       if (payload && payload.deviceId === config.deviceId && payload.point) {
         const pt = payload.point;
-        const currentHour = typeof payload.hour === "number" ? payload.hour : new Date().getHours();
+        const currentHour = typeof payload.hour === "number" ? payload.hour : trendHour;
+
+        if (payload.isHourChange || (lastTrendHourRef.current !== -1 && lastTrendHourRef.current !== currentHour)) {
+          lastTrendHourRef.current = currentHour;
+          setTrendHour(currentHour);
+          setHourlyTrend5s([pt]);
+          return;
+        }
+
+        lastTrendHourRef.current = currentHour;
+        setTrendHour(currentHour);
         setHourlyTrend5s((prev) => {
-          // Reset when hour rolls over (e.g. from 7:00-7:59 to 8:00-8:59)
-          if (payload.isHourChange || (lastTrendHourRef.current !== -1 && lastTrendHourRef.current !== currentHour)) {
-            lastTrendHourRef.current = currentHour;
-            return [pt];
-          }
           // Deduplicate: skip if already have this timestamp
           if (prev.length > 0 && prev[prev.length - 1].time === pt.time) {
             return prev;
           }
           const updated = [...prev, pt];
-          return updated.length > 720 ? updated.slice(updated.length - 720) : updated;
+          return updated.length > 721 ? updated.slice(updated.length - 721) : updated;
         });
-        lastTrendHourRef.current = currentHour;
       }
     };
 
@@ -773,88 +786,69 @@ interface HourlyTrend5sPoint {
     }
   };
 
-  // Local fallback interval — records every 5 seconds, rolling 750 points = 1 hour window
-  useEffect(() => {
-    if (!isPageActive) return;
-    const interval = setInterval(() => {
-      const now = new Date();
-      const currentHour = now.getHours();
-      const currentSec = now.getSeconds();
-      // Sample strictly every 5 seconds (0, 5, 10, ..., 55)
-      if (currentSec % 5 === 0) {
-        const timeStr = `${String(currentHour).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(currentSec).padStart(2, "0")}`;
-        const rawV = liveMetrics.voltage;
-        const rawP = liveMetrics.activePower;
-        const v = typeof rawV === "number" && rawV > 0 ? rawV : (typeof liveMetrics.vR === "number" && liveMetrics.vR > 0 ? liveMetrics.vR : 0);
-        const p = typeof rawP === "number" && rawP > 0 ? rawP : 0;
+  // Fixed 1-Hour Window Slot Generation (e.g. 08:00:00 to 09:00:00 every 5 seconds)
+  // Exact same logic as MachineStatistics / Historical Parameter analysis
+  const fixedHourSlots = useMemo(() => {
+    const slots: string[] = [];
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const hStr = pad(trendHour);
 
-        const vR = typeof liveMetrics.vR === "number" && liveMetrics.vR > 0 ? liveMetrics.vR : v;
-        const vS = typeof liveMetrics.vS === "number" && liveMetrics.vS > 0 ? liveMetrics.vS : v;
-        const vT = typeof liveMetrics.vT === "number" && liveMetrics.vT > 0 ? liveMetrics.vT : v;
+    for (let m = 0; m < 60; m++) {
+      const mStr = pad(m);
+      for (let s = 0; s < 60; s += 5) {
+        slots.push(`${hStr}:${mStr}:${pad(s)}`);
+      }
+    }
+    const nextHStr = pad((trendHour + 1) % 24);
+    slots.push(`${nextHStr}:00:00`);
+    return slots;
+  }, [trendHour]);
 
-        const iR = typeof liveMetrics.iR === "number" && liveMetrics.iR > 0 ? liveMetrics.iR : 0;
-        const iS = typeof liveMetrics.iS === "number" && liveMetrics.iS > 0 ? liveMetrics.iS : 0;
-        const iT = typeof liveMetrics.iT === "number" && liveMetrics.iT > 0 ? liveMetrics.iT : 0;
-        const iTotal = iR + iS + iT;
-        const pR = iTotal > 0 ? (p * (iR / iTotal)) : (p / 3.0);
-        const pS = iTotal > 0 ? (p * (iS / iTotal)) : (p / 3.0);
-        const pT = iTotal > 0 ? (p * (iT / iTotal)) : (p / 3.0);
+  // 1-Hour Fixed 5-Second Line Trend Data - 3 Lines (Fasa R, S, T)
+  const voltageTrendData = useMemo(() => {
+    const pointsMap = new Map<string, HourlyTrend5sPoint>();
+    for (const p of hourlyTrend5s) {
+      pointsMap.set(p.time, p);
+    }
+    const sorted = [...hourlyTrend5s].sort((a, b) => a.time.localeCompare(b.time));
+    const latestTime = sorted.length > 0 ? sorted[sorted.length - 1].time : null;
 
-        if (v > 0 || p > 0) {
-          const pt: HourlyTrend5sPoint = {
-            time: timeStr,
-            hour: currentHour,
-            voltage: Number(v.toFixed(3)),
-            vR: Number(vR.toFixed(3)),
-            vS: Number(vS.toFixed(3)),
-            vT: Number(vT.toFixed(3)),
-            activePower: Number(p.toFixed(1)),
-            pR: Number(pR.toFixed(1)),
-            pS: Number(pS.toFixed(1)),
-            pT: Number(pT.toFixed(1)),
-            ts: now.getTime()
-          };
+    const dataR: (number | null)[] = [];
+    const dataS: (number | null)[] = [];
+    const dataT: (number | null)[] = [];
 
-          setHourlyTrend5s((prev) => {
-            // If hour changed, reset to start new hour
-            if (lastTrendHourRef.current !== -1 && lastTrendHourRef.current !== currentHour) {
-              lastTrendHourRef.current = currentHour;
-              return [pt];
-            }
-            // Deduplicate: skip if the latest point has the same timestamp
-            if (prev.length > 0 && prev[prev.length - 1].time === timeStr) {
-              return prev;
-            }
-            const updated = [...prev, pt];
-            return updated.length > 720 ? updated.slice(updated.length - 720) : updated;
-          });
-          lastTrendHourRef.current = currentHour;
+    for (const slot of fixedHourSlots) {
+      if (latestTime !== null && slot > latestTime) {
+        dataR.push(null);
+        dataS.push(null);
+        dataT.push(null);
+      } else {
+        const pt = pointsMap.get(slot);
+        if (pt) {
+          dataR.push(pt.vR !== undefined ? pt.vR : pt.voltage);
+          dataS.push(pt.vS !== undefined ? pt.vS : pt.voltage);
+          dataT.push(pt.vT !== undefined ? pt.vT : pt.voltage);
+        } else {
+          dataR.push(null);
+          dataS.push(null);
+          dataT.push(null);
         }
       }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isPageActive, liveMetrics.voltage, liveMetrics.vR, liveMetrics.vS, liveMetrics.vT, liveMetrics.iR, liveMetrics.iS, liveMetrics.iT, liveMetrics.activePower]);
+    }
 
-  // 1-Hour Rolling 5-Second Line Trend Data - 3 Lines (Fasa R, S, T)
-  const voltageTrendData = useMemo(() => {
-    const labels = hourlyTrend5s.map((p) => p.time);
-    const dataR = hourlyTrend5s.map((p) => (p.vR !== undefined ? p.vR : p.voltage));
-    const dataS = hourlyTrend5s.map((p) => (p.vS !== undefined ? p.vS : p.voltage));
-    const dataT = hourlyTrend5s.map((p) => (p.vT !== undefined ? p.vT : p.voltage));
-    
     return {
-      labels: labels.length > 0 ? labels : ["--:--:--"],
+      labels: fixedHourSlots,
       datasets: [
         {
           label: "Fasa R (kV)",
-          data: dataR.length > 0 ? dataR : [0],
+          data: dataR,
           borderColor: "#f43f5e",
           backgroundColor: "rgba(244, 63, 94, 0.05)",
           fill: false,
           tension: 0.2,
           borderWidth: 1.8,
-          pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
-          pointHoverRadius: 5,
+          pointRadius: 0,
+          pointHoverRadius: 4,
           pointBackgroundColor: "#f43f5e",
           pointBorderColor: isDark ? "#0f172a" : "#ffffff",
           pointBorderWidth: 1.5,
@@ -862,14 +856,14 @@ interface HourlyTrend5sPoint {
         },
         {
           label: "Fasa S (kV)",
-          data: dataS.length > 0 ? dataS : [0],
+          data: dataS,
           borderColor: "#f59e0b",
           backgroundColor: "rgba(245, 158, 11, 0.05)",
           fill: false,
           tension: 0.2,
           borderWidth: 1.8,
-          pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
-          pointHoverRadius: 5,
+          pointRadius: 0,
+          pointHoverRadius: 4,
           pointBackgroundColor: "#f59e0b",
           pointBorderColor: isDark ? "#0f172a" : "#ffffff",
           pointBorderWidth: 1.5,
@@ -877,14 +871,14 @@ interface HourlyTrend5sPoint {
         },
         {
           label: "Fasa T (kV)",
-          data: dataT.length > 0 ? dataT : [0],
+          data: dataT,
           borderColor: "#3b82f6",
           backgroundColor: "rgba(59, 130, 246, 0.05)",
           fill: false,
           tension: 0.2,
           borderWidth: 1.8,
-          pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
-          pointHoverRadius: 5,
+          pointRadius: 0,
+          pointHoverRadius: 4,
           pointBackgroundColor: "#3b82f6",
           pointBorderColor: isDark ? "#0f172a" : "#ffffff",
           pointBorderWidth: 1.5,
@@ -892,26 +886,45 @@ interface HourlyTrend5sPoint {
         }
       ]
     };
-  }, [hourlyTrend5s, isDark]);
+  }, [fixedHourSlots, hourlyTrend5s, isDark]);
 
   // Strictly 1 single line for Active Power trend across Incoming PLN, WF1, and WF2
   const activePowerTrendData = useMemo(() => {
-    const labels = hourlyTrend5s.map((p) => p.time);
-    const dataPoints = hourlyTrend5s.map((p) => p.activePower);
-    
+    const pointsMap = new Map<string, HourlyTrend5sPoint>();
+    for (const p of hourlyTrend5s) {
+      pointsMap.set(p.time, p);
+    }
+    const sorted = [...hourlyTrend5s].sort((a, b) => a.time.localeCompare(b.time));
+    const latestTime = sorted.length > 0 ? sorted[sorted.length - 1].time : null;
+
+    const dataPoints: (number | null)[] = [];
+
+    for (const slot of fixedHourSlots) {
+      if (latestTime !== null && slot > latestTime) {
+        dataPoints.push(null);
+      } else {
+        const pt = pointsMap.get(slot);
+        if (pt) {
+          dataPoints.push(pt.activePower);
+        } else {
+          dataPoints.push(null);
+        }
+      }
+    }
+
     return {
-      labels: labels.length > 0 ? labels : ["--:--:--"],
+      labels: fixedHourSlots,
       datasets: [
         {
           label: "Active Power (kW)",
-          data: dataPoints.length > 0 ? dataPoints : [0],
+          data: dataPoints,
           borderColor: "#10b981",
           backgroundColor: "rgba(16, 185, 129, 0.08)",
           fill: true,
           tension: 0.2,
           borderWidth: 2,
-          pointRadius: hourlyTrend5s.length > 60 ? 0 : 2,
-          pointHoverRadius: 5,
+          pointRadius: 0,
+          pointHoverRadius: 4,
           pointBackgroundColor: "#10b981",
           pointBorderColor: isDark ? "#0f172a" : "#ffffff",
           pointBorderWidth: 1.5,
@@ -919,7 +932,7 @@ interface HourlyTrend5sPoint {
         }
       ]
     };
-  }, [hourlyTrend5s, isDark]);
+  }, [fixedHourSlots, hourlyTrend5s, isDark]);
 
   const lineOptions = (unit: "kV" | "kW", isPower: boolean = false) => ({
     responsive: true,
@@ -971,8 +984,10 @@ interface HourlyTrend5sPoint {
           },
           footer: (items: any[]) => {
             if (!items.length || isPower) return "";
-            const total = items.reduce((acc: number, it: any) => acc + (it.parsed.y || 0), 0);
-            const avg = total / items.length;
+            const valid = items.filter((it: any) => typeof it.parsed?.y === "number" && !isNaN(it.parsed.y));
+            if (!valid.length) return "";
+            const total = valid.reduce((acc: number, it: any) => acc + it.parsed.y, 0);
+            const avg = total / valid.length;
             return `Rata-rata: ${avg.toFixed(3)} kV`;
           }
         }
@@ -984,8 +999,15 @@ interface HourlyTrend5sPoint {
         ticks: {
           color: "#64748b",
           font: { size: 8.5 },
-          maxTicksLimit: 12,
-          autoSkip: true
+          maxTicksLimit: 13,
+          autoSkip: true,
+          callback: (_val: any, index: number): string => {
+            const raw = fixedHourSlots[index];
+            if (typeof raw === "string" && raw.length >= 5) {
+              return raw.substring(0, 5);
+            }
+            return String(raw || "");
+          }
         }
       },
       y: {
@@ -1345,13 +1367,23 @@ interface HourlyTrend5sPoint {
       <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400 mb-2">Trend Tegangan 1 Jam (kV)</h4>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400">Trend Tegangan 1 Jam (kV)</h4>
+              <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                {String(trendHour).padStart(2, "0")}:00 - {String((trendHour + 1) % 24).padStart(2, "0")}:00 WIB
+              </span>
+            </div>
             <div style={{ height: 140 }}>
               <Line data={voltageTrendData} options={lineOptions("kV", false)} />
             </div>
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400 mb-2">Trend Daya Aktif 1 Jam (kW)</h4>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400">Trend Daya Aktif 1 Jam (kW)</h4>
+              <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                {String(trendHour).padStart(2, "0")}:00 - {String((trendHour + 1) % 24).padStart(2, "0")}:00 WIB
+              </span>
+            </div>
             <div style={{ height: 140 }}>
               <Line data={activePowerTrendData} options={lineOptions("kW", true)} />
             </div>

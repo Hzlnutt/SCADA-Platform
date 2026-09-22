@@ -2,7 +2,7 @@ import { getMongoDb } from "../../database/mongo";
 import { getPostgresPool } from "../../database/postgres";
 import { ELECTRICITY_RAW_COLLECTION, ELECTRICITY_1M_COLLECTION, ELECTRICITY_1H_COLLECTION, GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
 import { env } from "../../config/env.config";
-import { getIncomingHourlyTrend, getLatestIncomingTelemetry, IncomingTrend5sPoint } from "../../core/scheduler";
+import { getIncomingHourlyTrend, getLatestIncomingTelemetry, getWibDateTime, IncomingTrend5sPoint } from "../../core/scheduler";
 
 export interface ElectricityTariff {
   validFrom: string; // "YYYY-MM"
@@ -111,12 +111,14 @@ export async function fetchPowerFactor(): Promise<number | null> {
 
 export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<IncomingTrend5sPoint[]> => {
   const pool = getPostgresPool();
-  const currentHour = new Date().getHours();
+  const wib = getWibDateTime(new Date());
+  const currentHour = wib.hour;
 
   try {
     const res = await pool.query(`
       SELECT
-        t_stamp,
+        to_char(t_stamp, 'HH24:MI:SS') AS time_str,
+        extract(epoch from t_stamp) * 1000 AS ts_ms,
         hour,
         volt_ll,
         volt_ab,
@@ -132,12 +134,7 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
     `, [deviceId, currentHour]);
 
     return res.rows.map((row: any) => {
-      const d = new Date(row.t_stamp);
-      const hh = String(d.getHours()).padStart(2, "0");
-      const mm = String(d.getMinutes()).padStart(2, "0");
-      const ss = String(d.getSeconds()).padStart(2, "0");
-      const timeStr = `${hh}:${mm}:${ss}`;
-
+      const timeStr = row.time_str;
       const vR = Number(row.volt_ab) || 0;
       const vS = Number(row.volt_bc) || 0;
       const vT = Number(row.volt_ca) || 0;
@@ -164,7 +161,7 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
         pR,
         pS,
         pT,
-        ts: d.getTime()
+        ts: Number(row.ts_ms) || Date.now()
       };
     });
   } catch (err: any) {
@@ -1113,7 +1110,7 @@ export const getElectricityAnalytics = async (
       voltage24h: voltageTrend,
       activePower24h: powerTrend,
       hourlyTrend5s: await getIncomingTrend1hFromDb(deviceId),
-      currentHour: new Date().getHours()
+      currentHour: getWibDateTime(new Date()).hour
     },
     pqData: {
       activePower: Number(activePowerVal.toFixed(1)),

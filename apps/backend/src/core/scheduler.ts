@@ -268,6 +268,44 @@ export const formatMinuteString = (d: Date = new Date()): string => {
   return `${yr}-${mo}-${dy} ${hr}:${mi}:00`;
 };
 
+export const getWibDateTime = (d: Date = new Date()) => {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+  const parts = formatter.formatToParts(d);
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || "00";
+  const yr = getPart("year");
+  const mo = getPart("month");
+  const dy = getPart("day");
+  const hr = parseInt(getPart("hour"), 10) % 24;
+  const mi = parseInt(getPart("minute"), 10);
+  const sc = parseInt(getPart("second"), 10);
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  const timeStr = `${pad(hr)}:${pad(mi)}:${pad(sc)}`;
+  const dateStr = `${yr}-${mo}-${dy}`;
+  const tStampStr = `${yr}-${mo}-${dy} ${timeStr}`;
+
+  return {
+    year: parseInt(yr, 10),
+    month: parseInt(mo, 10),
+    day: parseInt(dy, 10),
+    hour: hr,
+    minute: mi,
+    second: sc,
+    timeStr,
+    dateStr,
+    tStampStr
+  };
+};
+
 const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>, minuteTs: Date) => {
   const pool = getPostgresPool();
   const isExactHour = minuteTs.getMinutes() === 0;
@@ -878,10 +916,9 @@ export const getLatestIncomingTelemetry = (deviceId: string) => {
 };
 
 export const getIncomingHourlyTrend = (deviceId: string) => {
-  const currentHour = new Date().getHours();
+  const currentHour = getWibDateTime(new Date()).hour;
   return {
     hour: currentHour,
-    // Returns latest 750 points (rolling 1-hour window, 5s interval)
     points: incomingHourlyTrends[deviceId] || []
   };
 };
@@ -904,18 +941,19 @@ const recordIncomingTrend5s = async (
 ) => {
   if (!incomingHourlyTrends[deviceId]) return;
   const now = new Date();
-  const currentHour = now.getHours();
-  const currentSec = now.getSeconds();
+  const wib = getWibDateTime(now);
+  const currentHour = wib.hour;
+  const currentSec = wib.second;
 
   // Record strictly every 5 seconds (0, 5, 10, 15, ..., 55)
   if (currentSec % 5 === 0 && lastRecordedSecond[deviceId] !== currentSec) {
     lastRecordedSecond[deviceId] = currentSec;
 
-    // Detect when hour changes (e.g. from 7 to 8)
+    // Detect when WIB hour changes (e.g. from 7 to 8, or 8 to 9)
     const isHourChange = lastTrendHour[deviceId] !== -1 && lastTrendHour[deviceId] !== currentHour;
     lastTrendHour[deviceId] = currentHour;
 
-    const timeStr = `${String(currentHour).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(currentSec).padStart(2, "0")}`;
+    const timeStr = wib.timeStr;
     const point: IncomingTrend5sPoint = {
       time: timeStr,
       hour: currentHour,
@@ -930,12 +968,15 @@ const recordIncomingTrend5s = async (
       ts: now.getTime()
     };
 
-    if (isHourChange) {
-      // Hour changed: reset in-memory points for the new hour
-      incomingHourlyTrends[deviceId] = [];
-      // Delete previous hour's data from electric_incoming_trend_5s database table
+    const pool = getPostgresPool();
+
+    if (isHourChange || lastTrendHour[deviceId] === -1) {
+      if (isHourChange) {
+        // Hour changed: reset in-memory points for the new hour
+        incomingHourlyTrends[deviceId] = [];
+      }
+      // Delete previous hour's data from electric_incoming_trend_5s so ONLY current hour remains
       try {
-        const pool = getPostgresPool();
         await pool.query(
           `DELETE FROM electric_incoming_trend_5s WHERE device_id = $1 AND hour != $2`,
           [deviceId, currentHour]
@@ -946,15 +987,13 @@ const recordIncomingTrend5s = async (
     }
 
     incomingHourlyTrends[deviceId].push(point);
-    // In a 1-hour slot (e.g. 7:00 to 8:00), 12 points/min * 60 min = max 720 points
-    if (incomingHourlyTrends[deviceId].length > 720) {
+    // In a 1-hour slot (e.g. 8:00 to 9:00), 12 points/min * 60 min = max 720 points
+    if (incomingHourlyTrends[deviceId].length > 721) {
       incomingHourlyTrends[deviceId].shift();
     }
 
-    // Save every 5 seconds to the new electric_incoming_trend_5s table
+    // Save every 5 seconds to electric_incoming_trend_5s with WIB timestamp
     try {
-      const pool = getPostgresPool();
-      const tStampStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${timeStr}`;
       await pool.query(`
         INSERT INTO electric_incoming_trend_5s (
           device_id, t_stamp, hour, volt_ll, volt_ab, volt_bc, volt_ca,
@@ -964,7 +1003,7 @@ const recordIncomingTrend5s = async (
         )
       `, [
         deviceId,
-        tStampStr,
+        wib.tStampStr,
         currentHour,
         point.voltage,
         point.vR,

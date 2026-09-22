@@ -10,7 +10,7 @@ import { getPostgresPool } from "../../database/postgres";
 import { defaultWaterConfig } from "../config/config.controller";
 import { calculateWaterCost } from "../../utils/water";
 import { getElectricityExportData, generateElectricityExcelWorkbook } from "./electricity.export";
-import { getIncomingHourlyTrend } from "../../core/scheduler";
+import { getIncomingHourlyTrend, getWibDateTime } from "../../core/scheduler";
 import { getIncomingTrend1hFromDb } from "./electricity.analytics";
 
 export const getAnalyticsSummaryHandler = async (
@@ -1767,7 +1767,8 @@ export const getIncomingHourlyTrendHandler = async (req: Request, res: Response,
     const { deviceId } = req.query;
     const dev = typeof deviceId === "string" ? deviceId : "Cubicle_PLN_PM8000";
     const points = await getIncomingTrend1hFromDb(dev);
-    res.json({ success: true, data: { hour: new Date().getHours(), points } });
+    const wib = getWibDateTime(new Date());
+    res.json({ success: true, data: { hour: wib.hour, points } });
   } catch (err) {
     next(err);
   }
