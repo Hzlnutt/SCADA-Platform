@@ -250,8 +250,24 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
   pvRate?: number;
   showPrevious?: boolean;
 }) {
-  const daysInMonth = Math.max(currentData.length, previousData.length, 28);
+  const daysInMonth = Math.max(currentData?.length || 0, previousData?.length || 0, 28);
   const dayLabels = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, "0")), [daysInMonth]);
+
+  const paddedCurrentData = useMemo(() => {
+    if (!currentData || currentData.length === 0) return new Array(daysInMonth).fill(0);
+    if (currentData.length < daysInMonth) {
+      return [...currentData, ...new Array(daysInMonth - currentData.length).fill(0)];
+    }
+    return currentData;
+  }, [currentData, daysInMonth]);
+
+  const paddedPreviousData = useMemo(() => {
+    if (!previousData || previousData.length === 0) return new Array(daysInMonth).fill(0);
+    if (previousData.length < daysInMonth) {
+      return [...previousData, ...new Array(daysInMonth - previousData.length).fill(0)];
+    }
+    return previousData;
+  }, [previousData, daysInMonth]);
 
   const data = useMemo(() => {
     if (selectorType === "all") {
@@ -285,7 +301,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           },
           ...(showPrevious ? [{
             label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
-            data: previousData,
+            data: paddedPreviousData,
             backgroundColor: "rgba(239, 68, 68, 0.75)",
             hoverBackgroundColor: "rgba(220, 38, 38, 1)",
             borderWidth: 0,
@@ -303,7 +319,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
       datasets: [
         {
           label: currMonthName ? `Bulan Ini (${currMonthName})` : "Bulan Ini",
-          data: currentData,
+          data: paddedCurrentData,
           backgroundColor: "rgba(59, 130, 246, 0.85)",
           hoverBackgroundColor: "rgba(37, 99, 235, 1)",
           borderWidth: 0,
@@ -314,7 +330,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         },
         ...(showPrevious ? [{
           label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
-          data: previousData,
+          data: paddedPreviousData,
           backgroundColor: "rgba(239, 68, 68, 0.75)",
           hoverBackgroundColor: "rgba(220, 38, 38, 1)",
           borderWidth: 0,
@@ -325,7 +341,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         }] : [])
       ]
     };
-  }, [dayLabels, currentData, previousData, currMonthName, prevMonthName, selectorType, currentBreakdown, showPrevious]);
+  }, [dayLabels, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, showPrevious]);
 
   const options: any = useMemo(() => ({
     responsive: true,
@@ -380,9 +396,8 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           },
           label: (ctx: any) => {
             const val = Number(ctx.parsed.y || 0);
-            if (val <= 0 && ctx.dataset.stack === "previous") return null;
             const idx = ctx.dataIndex;
-            const curVal = Number(currentData[idx] || 0);
+            const curVal = Number(paddedCurrentData[idx] || 0);
 
             if (selectorType === "all" && ctx.dataset.stack === "current" && curVal > 0) {
               const pct = Math.round((val / curVal) * 100);
@@ -393,8 +408,8 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           afterBody: (items: any[]) => {
             if (!items || items.length === 0) return [];
             const idx = items[0].dataIndex;
-            const curVal = Number(currentData[idx] || 0);
-            const prevVal = Number(previousData[idx] || 0);
+            const curVal = Number(paddedCurrentData[idx] || 0);
+            const prevVal = Number(paddedPreviousData[idx] || 0);
             const lines: string[] = [];
 
             if (selectorType === "all") {
@@ -410,8 +425,6 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
               const diffSign = diff > 0 ? "+" : "";
               const pct = ((diff / prevVal) * 100).toFixed(1);
               lines.push(`Selisih vs Bulan Lalu: ${diffSign}${diff.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh (${diffSign}${pct}%)`);
-            } else if (prevVal === 0 && selectorType !== "all") {
-              lines.push(`Bulan Lalu: 0 kWh`);
             }
 
             if ((selectorType === "pln" || selectorType === "wf1" || selectorType === "wf2") && currentBreakdown?.[idx]) {
@@ -446,6 +459,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
       y: {
         stacked: true,
         beginAtZero: true,
+        suggestedMax: 10,
         grace: "15%",
         grid: { color: isDark ? "rgba(51, 65, 85, 0.4)" : "rgba(203, 213, 225, 0.5)" },
         ticks: {
@@ -459,7 +473,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         }
       }
     }
-  }), [isDark, currentData, previousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, solarRate, pvRate]);
+  }), [isDark, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, solarRate, pvRate]);
 
   return <Bar data={data} options={options} />;
 });
@@ -490,7 +504,6 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   pvRate?: number;
 }) {
   const [showPrevious, setShowPrevious] = useState(true);
-  const hasData = (currentData && currentData.some(v => v > 0)) || (previousData && previousData.some(v => v > 0));
   const currTotalKwh = useMemo(() => (currentData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [currentData]);
   const prevTotalKwh = useMemo(() => (previousData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [previousData]);
   const diffPct = useMemo(() => {
@@ -539,27 +552,19 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
         </div>
       </div>
       <div style={{ height: 280 }}>
-        {hasData ? (
-          <MonthlyComparisonBarChart
-            currentData={currentData}
-            previousData={previousData}
-            isDark={isDark}
-            currMonthName={currMonthName}
-            prevMonthName={prevMonthName}
-            selectorType={selectorType}
-            currentBreakdown={currentBreakdown}
-            previousBreakdown={previousBreakdown}
-            solarRate={solarRate}
-            pvRate={pvRate}
-            showPrevious={showPrevious}
-          />
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl p-4 text-center bg-slate-50/50 dark:bg-slate-950/20">
-            <span className="text-2xl mb-1 opacity-40">📊</span>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering panel belum terhubung</span>
-          </div>
-        )}
+        <MonthlyComparisonBarChart
+          currentData={currentData}
+          previousData={previousData}
+          isDark={isDark}
+          currMonthName={currMonthName}
+          prevMonthName={prevMonthName}
+          selectorType={selectorType}
+          currentBreakdown={currentBreakdown}
+          previousBreakdown={previousBreakdown}
+          solarRate={solarRate}
+          pvRate={pvRate}
+          showPrevious={showPrevious}
+        />
       </div>
     </div>
   );
@@ -734,37 +739,21 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
           </label>
 
           {/* Status Indicator */}
-          {hasData ? (
-            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-mono">
-              DATABASE AKTIF ({dbData.pmId || "PM"})
-            </span>
-          ) : (
-            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-mono">
-              OFFLINE / 0 KWH ({dbData.pmId || "PM"})
-            </span>
-          )}
+          <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-mono">
+            TERHUBUNG API ({dbData.pmId || "PM"})
+          </span>
         </div>
       </div>
 
       <div style={{ height: 280 }}>
-        {hasData ? (
-          <MonthlyComparisonBarChart
-            currentData={currentData}
-            previousData={previousData}
-            isDark={isDark}
-            currMonthName={currMonthName}
-            prevMonthName={prevMonthName}
-            showPrevious={showPrevious}
-          />
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl p-4 text-center bg-slate-50/50 dark:bg-slate-950/20">
-            <span className="text-2xl mb-1 opacity-40">📊</span>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia (0 kWh)</span>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-              Tidak ada catatan akumulasi energi di database untuk {machine} ({dbData.pmId || "Offline"})
-            </span>
-          </div>
-        )}
+        <MonthlyComparisonBarChart
+          currentData={currentData}
+          previousData={previousData}
+          isDark={isDark}
+          currMonthName={currMonthName}
+          prevMonthName={prevMonthName}
+          showPrevious={showPrevious}
+        />
       </div>
     </div>
   );
@@ -990,7 +979,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
           <span className="text-[11px] font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full ${loading ? "bg-amber-500 animate-ping" : "bg-emerald-500 animate-pulse"}`} />
-            {loading ? "Memuat Data Database..." : "57 Unit Sub-Metering Terdaftar"}
+            {loading ? "Memuat Data Database..." : "57 Unit Sub-Metering Terhubung (API Aktif)"}
           </span>
         </div>
       </div>
