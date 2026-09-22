@@ -83,6 +83,20 @@ const formatPeakTs = (tsStr: string) => {
 const DEFAULT_PLN_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln";
 const DEFAULT_WF1_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1";
 const DEFAULT_WF2_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2";
+const DEFAULT_PLTS_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_plts";
+const DEFAULT_EW21_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew21";
+const DEFAULT_EW22_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew22";
+const DEFAULT_EW23_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew23";
+
+const ENDPOINT_MAP: Record<string, string> = {
+  "electric_pln": DEFAULT_PLN_API_URL,
+  "electric_wf1": DEFAULT_WF1_API_URL,
+  "electric_wf2": DEFAULT_WF2_API_URL,
+  "electric_plts": DEFAULT_PLTS_API_URL,
+  "electric_ew21": DEFAULT_EW21_API_URL,
+  "electric_ew22": DEFAULT_EW22_API_URL,
+  "electric_ew23": DEFAULT_EW23_API_URL,
+};
 
 const DEFAULT_PLN_JSON_KEYS: Record<string, string> = {
   "pln/active_power": "Active_Power",
@@ -1767,24 +1781,29 @@ export default function Electricity() {
       });
   }, []);
 
-  const DEFAULT_PLTS_API_URL = "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_plts";
-
-  // Poll active URLs (PLN, PLTS, WF1, WF2, etc.)
+  // Poll active URLs (PLN, PLTS, WF1, WF2, EW21, EW22, EW23, etc.)
   useEffect(() => {
     let isMounted = true;
     const fetchActiveApiData = async () => {
       if (!isPageActive) return;
       const factConfigUrls = [...factCategories1, ...factCategories2]
-        .map(c => c.value?.endpoint_url)
+        .map(c => {
+          const u = c.value?.endpoint_url;
+          if (!u) return "";
+          return ENDPOINT_MAP[u] || u;
+        })
         .filter((u): u is string => typeof u === "string" && u.trim().length > 0);
 
       const uniqueUrls = Array.from(new Set([
-        ...Object.values(apiSourceUrls),
+        ...Object.values(apiSourceUrls).map(u => ENDPOINT_MAP[u] || u),
         ...factConfigUrls,
         DEFAULT_PLN_API_URL,
         DEFAULT_WF1_API_URL,
         DEFAULT_WF2_API_URL,
-        DEFAULT_PLTS_API_URL
+        DEFAULT_PLTS_API_URL,
+        DEFAULT_EW21_API_URL,
+        DEFAULT_EW22_API_URL,
+        DEFAULT_EW23_API_URL
       ].filter((u) => u && u.trim())));
       if (uniqueUrls.length === 0) {
         if (isMounted) setApiLiveData({});
@@ -1801,6 +1820,11 @@ export default function Electricity() {
             });
             if (res && res.success && res.data) {
               aggregatedData[url] = res.data;
+              for (const [shortKey, fullUrl] of Object.entries(ENDPOINT_MAP)) {
+                if (url === fullUrl || url.includes(shortKey)) {
+                  aggregatedData[shortKey] = res.data;
+                }
+              }
               // Extract PLN
               if (url.includes("electric_pln")) {
                 if (res.data.Active_Power !== undefined) {
@@ -1869,35 +1893,52 @@ export default function Electricity() {
         setApiLiveData(aggregatedData);
         setIsLiveLoading(false);
 
-        // Dynamically update factCategories with live data from configured endpoints
+        // Dynamically update factCategories with live kW without overwriting monthly kWh
         const updateWithLive = (list: ConsumptionFactCategory[]) => {
           let changed = false;
           const nextList = list.map(item => {
-            const u = item.value?.endpoint_url;
+            const rawUrl = item.value?.endpoint_url;
+            const fullUrl = (rawUrl && ENDPOINT_MAP[rawUrl]) ? ENDPOINT_MAP[rawUrl] : rawUrl;
+            const dataPayload = (fullUrl && aggregatedData[fullUrl]) || (rawUrl && aggregatedData[rawUrl]);
             const pmId = (item.value?.pm_id || item.value?.json_key || item.config_key || "").toUpperCase();
-            if (u && aggregatedData[u]) {
-              const dataPayload = aggregatedData[u];
+            const cleanNum = pmId.replace(/\D/g, "");
+
+            if (dataPayload) {
               let foundVal: number | null = null;
               if (Array.isArray(dataPayload)) {
-                const entry = dataPayload.find((p: any) => String(p.PM || p.pm_id || p.PM_ID || "").toUpperCase() === pmId);
+                const entry = dataPayload.find((p: any) => {
+                  const pId = String(p.PM || p.pm_id || p.PM_ID || "").toUpperCase();
+                  return pId === pmId || (cleanNum && pId.replace(/\D/g, "") === cleanNum);
+                });
                 if (entry) {
-                  const candidate = entry.ActiveEnergy ?? entry.Active_Energy ?? entry.ActivePower ?? entry.Active_Power_Total ?? entry.kWh;
+                  const candidate = entry[`Active_Power_Total_${pmId}`] ?? entry[`Active_Power_Total_PM${cleanNum}`] ?? entry.ActivePower ?? entry.Active_Power_Total ?? entry.kW;
                   if (candidate !== undefined && candidate !== null) foundVal = Number(candidate);
                 }
               } else if (typeof dataPayload === "object") {
-                if (item.value?.json_key && dataPayload[item.value.json_key] !== undefined) {
-                  foundVal = Number(dataPayload[item.value.json_key]);
-                } else if (dataPayload[pmId] !== undefined) {
-                  const sub = dataPayload[pmId];
-                  foundVal = typeof sub === "object" ? Number(sub.ActiveEnergy ?? sub.Active_Energy ?? sub.ActivePower ?? sub.Active_Power_Total ?? sub.kWh) : Number(sub);
-                } else {
-                  const candidate = dataPayload.ActiveEnergy ?? dataPayload.Active_Energy ?? dataPayload.ActivePower ?? dataPayload.Active_Power_Total ?? dataPayload.kWh;
-                  if (candidate !== undefined && candidate !== null) foundVal = Number(candidate);
+                const sub = (item.value?.json_key && dataPayload[item.value.json_key])
+                  || dataPayload[pmId]
+                  || (cleanNum ? dataPayload[`PM${cleanNum}`] : undefined);
+
+                if (sub !== undefined && sub !== null) {
+                  if (typeof sub === "object") {
+                    const candidateKeys = [
+                      `Active_Power_Total_${pmId}`, `Active_Power_Total_PM${cleanNum}`,
+                      "Active_Power_Total", "ActivePower", "kW"
+                    ];
+                    for (const ck of candidateKeys) {
+                      if (sub[ck] !== undefined && sub[ck] !== null) {
+                        foundVal = Number(sub[ck]);
+                        break;
+                      }
+                    }
+                  } else {
+                    foundVal = Number(sub);
+                  }
                 }
               }
-              if (foundVal !== null && !isNaN(foundVal) && item.value?.kWh !== foundVal) {
+              if (foundVal !== null && !isNaN(foundVal) && (item.value as any)?.liveKw !== foundVal) {
                 changed = true;
-                return { ...item, value: { ...item.value, kWh: foundVal } };
+                return { ...item, value: { ...item.value, liveKw: foundVal } };
               }
             }
             return item;

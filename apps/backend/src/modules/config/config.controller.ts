@@ -1398,11 +1398,28 @@ const apiProxyCache = new Map<string, { data: any; status: number; success: bool
 
 export const testApiSourceHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { url, method, headers: customHeaders } = req.body;
+    let { url, method, headers: customHeaders } = req.body;
 
     if (!url) {
       res.status(400).json({ error: "url is required" });
       return;
+    }
+
+    const CORE_ENDPOINT_URLS: Record<string, string> = {
+      "electric_pln": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln",
+      "electric_wf1": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1",
+      "electric_wf2": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2",
+      "electric_plts": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_plts",
+      "electric_ew21": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew21",
+      "electric_ew22": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew22",
+      "electric_ew23": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew23",
+      "hvac_retain_plc1": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/hvac_retain_plc1",
+      "hvac_retain_plc2_2": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/hvac_retain_plc2_2",
+      "hvac_retain_plc2_3": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/hvac_retain_plc2_3"
+    };
+
+    if (typeof url === "string" && CORE_ENDPOINT_URLS[url.trim()]) {
+      url = CORE_ENDPOINT_URLS[url.trim()];
     }
 
     const reqMethod = (method || "GET").toUpperCase();
