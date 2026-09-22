@@ -786,7 +786,7 @@ interface HourlyTrend5sPoint {
     }
   };
 
-  // Fixed 1-Hour Window Slot Generation (e.g. 08:00:00 to 09:00:00 every 5 seconds)
+  // Fixed 1-Hour Window Slot Generation (strictly HH:00:00 to HH:59:55, every 5 seconds = 720 points)
   // Exact same logic as MachineStatistics / Historical Parameter analysis
   const fixedHourSlots = useMemo(() => {
     const slots: string[] = [];
@@ -799,8 +799,6 @@ interface HourlyTrend5sPoint {
         slots.push(`${hStr}:${mStr}:${pad(s)}`);
       }
     }
-    const nextHStr = pad((trendHour + 1) % 24);
-    slots.push(`${nextHStr}:00:00`);
     return slots;
   }, [trendHour]);
 
@@ -1370,7 +1368,7 @@ interface HourlyTrend5sPoint {
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400">Trend Tegangan 1 Jam (kV)</h4>
               <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                {String(trendHour).padStart(2, "0")}:00 - {String((trendHour + 1) % 24).padStart(2, "0")}:00 WIB
+                {String(trendHour).padStart(2, "0")}:00:00 - {String(trendHour).padStart(2, "0")}:59:55 WIB
               </span>
             </div>
             <div style={{ height: 140 }}>
@@ -1381,7 +1379,7 @@ interface HourlyTrend5sPoint {
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400">Trend Daya Aktif 1 Jam (kW)</h4>
               <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                {String(trendHour).padStart(2, "0")}:00 - {String((trendHour + 1) % 24).padStart(2, "0")}:00 WIB
+                {String(trendHour).padStart(2, "0")}:00:00 - {String(trendHour).padStart(2, "0")}:59:55 WIB
               </span>
             </div>
             <div style={{ height: 140 }}>
