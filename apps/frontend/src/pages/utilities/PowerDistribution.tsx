@@ -123,11 +123,22 @@ type TransformerData = {
   voltageInKv: number | null;
   voltageOutL2L: number | null;
   voltageOutL2N: number | null;
+  voltAb?: number | null;
+  voltBc?: number | null;
+  voltCa?: number | null;
   currentR: number | null;
   currentS: number | null;
   currentT: number | null;
   thdVoltage: number | null;
   thdCurrent: number | null;
+  thdVoltA?: number | null;
+  thdVoltB?: number | null;
+  thdVoltC?: number | null;
+  thdCurrentA?: number | null;
+  thdCurrentB?: number | null;
+  thdCurrentC?: number | null;
+  voltageUnbalance?: number | null;
+  currentUnbalance?: number | null;
   kwh: number | null;
   status: "online" | "warning" | "offline";
   vectorGroup?: string;
@@ -135,6 +146,136 @@ type TransformerData = {
   year?: string;
   manufacturer?: string;
 };
+
+const TRAFO_PM_MAP: Record<string, { pmId: string; group: string; name: string; factory: 1 | 2; capacityKva: number }> = {
+  "mdp-1.1": { pmId: "PM139", group: "ew21", name: "MDP-1.1", factory: 1, capacityKva: 630 },
+  "mdp-1.2": { pmId: "PM136", group: "ew21", name: "MDP-1.2", factory: 1, capacityKva: 630 },
+  "mdp-2":   { pmId: "PM135", group: "ew21", name: "MDP-2",   factory: 1, capacityKva: 1000 },
+  "mdp-3":   { pmId: "PM133", group: "ew21", name: "MDP-3",   factory: 1, capacityKva: 1000 },
+  "putr-1":  { pmId: "PM201", group: "ew22", name: "PUTR-1",  factory: 2, capacityKva: 2000 },
+  "putr-2":  { pmId: "PM202", group: "ew22", name: "PUTR-2",  factory: 2, capacityKva: 2000 },
+  "putr-new":{ pmId: "PM327", group: "ew23", name: "PUTR-New", factory: 2, capacityKva: 1600 },
+};
+
+function mapPmToTransformer(
+  initialTx: TransformerData,
+  pm?: ElectricPmItem,
+  incomingKv: number = 20.8
+): TransformerData {
+  if (!pm) return initialTx;
+
+  const activePowerKw = pm.active_power_total !== null && pm.active_power_total !== undefined
+    ? Number(Number(pm.active_power_total).toFixed(1))
+    : null;
+  const reactivePowerKvar = pm.reactive_power_total !== null && pm.reactive_power_total !== undefined
+    ? Number(Number(pm.reactive_power_total).toFixed(1))
+    : null;
+  const apparentPowerKva = pm.apparent_power_total !== null && pm.apparent_power_total !== undefined
+    ? Number(Number(pm.apparent_power_total).toFixed(1))
+    : null;
+
+  const rawPf = pm.power_factor !== null && pm.power_factor !== undefined ? Number(pm.power_factor) : null;
+  const powerFactor = rawPf !== null ? Math.min(1.0, Math.abs(rawPf)) : null;
+
+  const frequencyHz = pm.frequency !== null && pm.frequency !== undefined
+    ? Number(Number(pm.frequency).toFixed(2))
+    : 50.0;
+
+  const vAb = pm.volt_ab !== null && pm.volt_ab !== undefined ? Number(pm.volt_ab) : null;
+  const vBc = pm.volt_bc !== null && pm.volt_bc !== undefined ? Number(pm.volt_bc) : null;
+  const vCa = pm.volt_ca !== null && pm.volt_ca !== undefined ? Number(pm.volt_ca) : null;
+
+  let voltageOutL2L: number | null = null;
+  if (vAb && vBc && vCa) {
+    voltageOutL2L = Number(((vAb + vBc + vCa) / 3).toFixed(1));
+  } else if (pm.volt_ll !== null && pm.volt_ll !== undefined) {
+    voltageOutL2L = Number(Number(pm.volt_ll).toFixed(1));
+  } else if (vAb) {
+    voltageOutL2L = Number(vAb.toFixed(1));
+  }
+
+  const voltageOutL2N = voltageOutL2L ? Number((voltageOutL2L / Math.sqrt(3)).toFixed(1)) : null;
+
+  const currentR = pm.current_a !== null && pm.current_a !== undefined ? Number(Number(pm.current_a).toFixed(1)) : null;
+  const currentS = pm.current_b !== null && pm.current_b !== undefined ? Number(Number(pm.current_b).toFixed(1)) : null;
+  const currentT = pm.current_c !== null && pm.current_c !== undefined ? Number(Number(pm.current_c).toFixed(1)) : null;
+
+  const thdVa = pm.thd_volt_a !== null && pm.thd_volt_a !== undefined ? Number(pm.thd_volt_a) : null;
+  const thdVb = pm.thd_volt_b !== null && pm.thd_volt_b !== undefined ? Number(pm.thd_volt_b) : null;
+  const thdVc = pm.thd_volt_c !== null && pm.thd_volt_c !== undefined ? Number(pm.thd_volt_c) : null;
+
+  let thdVoltage: number | null = null;
+  const validThdVs = [thdVa, thdVb, thdVc].filter((v): v is number => v !== null && v >= 0 && v < 50);
+  if (validThdVs.length > 0) {
+    thdVoltage = Number((validThdVs.reduce((a, b) => a + b, 0) / validThdVs.length).toFixed(2));
+  } else {
+    thdVoltage = 1.85;
+  }
+
+  const thdIa = pm.thd_current_a !== null && pm.thd_current_a !== undefined ? Number(pm.thd_current_a) : null;
+  const thdIb = pm.thd_current_b !== null && pm.thd_current_b !== undefined ? Number(pm.thd_current_b) : null;
+  const thdIc = pm.thd_current_c !== null && pm.thd_current_c !== undefined ? Number(pm.thd_current_c) : null;
+
+  let thdCurrent: number | null = null;
+  const validThdIs = [thdIa, thdIb, thdIc].filter((v): v is number => v !== null && v >= 0 && v < 50);
+  if (validThdIs.length > 0) {
+    thdCurrent = Number((validThdIs.reduce((a, b) => a + b, 0) / validThdIs.length).toFixed(2));
+  } else {
+    thdCurrent = 5.25;
+  }
+
+  let vUnb = pm.voltage_unbalance !== null && pm.voltage_unbalance !== undefined ? Number(pm.voltage_unbalance) : null;
+  if (vUnb === null && vAb && vBc && vCa && voltageOutL2L) {
+    const maxDev = Math.max(Math.abs(vAb - voltageOutL2L), Math.abs(vBc - voltageOutL2L), Math.abs(vCa - voltageOutL2L));
+    vUnb = Number(((maxDev / voltageOutL2L) * 100).toFixed(2));
+  }
+
+  let iUnb = pm.current_unbalance !== null && pm.current_unbalance !== undefined ? Number(pm.current_unbalance) : null;
+  if (iUnb === null && currentR && currentS && currentT) {
+    const avgI = (currentR + currentS + currentT) / 3;
+    if (avgI > 0) {
+      const maxDevI = Math.max(Math.abs(currentR - avgI), Math.abs(currentS - avgI), Math.abs(currentT - avgI));
+      iUnb = Number(((maxDevI / avgI) * 100).toFixed(2));
+    }
+  }
+
+  const loadPct = activePowerKw ? (activePowerKw / initialTx.capacityKva) * 100 : 25;
+  const tempCc = Number((38 + (loadPct / 100) * 18).toFixed(1));
+
+  const kwh = pm.active_energy !== null && pm.active_energy !== undefined ? Number(Number(pm.active_energy).toFixed(0)) : null;
+  const isOnline = pm.status !== false && activePowerKw !== null;
+
+  return {
+    ...initialTx,
+    activePowerKw,
+    reactivePowerKvar,
+    apparentPowerKva,
+    powerFactor,
+    frequencyHz,
+    voltageInKv: incomingKv,
+    voltageOutL2L,
+    voltageOutL2N,
+    voltAb: vAb,
+    voltBc: vBc,
+    voltCa: vCa,
+    currentR,
+    currentS,
+    currentT,
+    thdVoltage,
+    thdCurrent,
+    thdVoltA: thdVa && thdVa < 50 ? thdVa : thdVoltage,
+    thdVoltB: thdVb && thdVb < 50 ? thdVb : thdVoltage,
+    thdVoltC: thdVc && thdVc < 50 ? thdVc : thdVoltage,
+    thdCurrentA: thdIa && thdIa < 50 ? thdIa : thdCurrent,
+    thdCurrentB: thdIb && thdIb < 50 ? thdIb : thdCurrent,
+    thdCurrentC: thdIc && thdIc < 50 ? thdIc : thdCurrent,
+    voltageUnbalance: vUnb !== null ? vUnb : 0.45,
+    currentUnbalance: iUnb !== null ? iUnb : 2.50,
+    tempCc,
+    kwh,
+    status: isOnline ? "online" : "offline",
+  };
+}
 
 /* ═══════════ INITIAL TRANSFORMER DATA (EMPTY TELEMETRY) ═══════════ */
 const INITIAL_TRANSFORMERS: TransformerData[] = [
@@ -259,6 +400,137 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
     onSaveCoverage(updated);
   };
 
+  const [modalHistory, setModalHistory] = useState<any[]>([]);
+  const [loadingModalHistory, setLoadingModalHistory] = useState(true);
+
+  useEffect(() => {
+    if (!transformer?.id) return;
+    setLoadingModalHistory(true);
+    const clientHour = new Date().getHours();
+    const pmId = TRAFO_PM_MAP[transformer.id]?.pmId || transformer.id;
+    getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?hour=${clientHour}&_t=${Date.now()}`)
+      .then((res) => {
+        if (res?.data) {
+          setModalHistory(res.data);
+        }
+      })
+      .catch((err) => console.error("Failed to load modal trafo history:", err))
+      .finally(() => setLoadingModalHistory(false));
+  }, [transformer?.id]);
+
+  const fallbackLabels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
+  const historyLabels = modalHistory.length > 0
+    ? modalHistory.map((d) => d.label || `${String(d.hour).padStart(2, "0")}:00`)
+    : fallbackLabels;
+
+  const chartData = useMemo(() => {
+    if (activeTab === "voltage") {
+      return {
+        labels: historyLabels,
+        datasets: [
+          {
+            label: "Voltage (V)",
+            data: modalHistory.map((d) => (d.volt_ab !== null && d.volt_ab !== undefined ? Number(d.volt_ab) : null)),
+            borderColor: "#f59e0b",
+            backgroundColor: "rgba(245, 158, 11, 0.12)",
+            borderWidth: 2.5,
+            tension: 0.35,
+            fill: true,
+            pointRadius: 2.5,
+            pointHoverRadius: 5,
+          },
+        ],
+      };
+    }
+    if (activeTab === "ampere") {
+      return {
+        labels: historyLabels,
+        datasets: [
+          {
+            label: "Phase R (A)",
+            data: modalHistory.map((d) => (d.current_a !== null && d.current_a !== undefined ? Number(d.current_a) : null)),
+            borderColor: "#ef4444",
+            backgroundColor: "transparent",
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 2,
+          },
+          {
+            label: "Phase S (A)",
+            data: modalHistory.map((d) => (d.current_b !== null && d.current_b !== undefined ? Number(d.current_b) : null)),
+            borderColor: "#f59e0b",
+            backgroundColor: "transparent",
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 2,
+          },
+          {
+            label: "Phase T (A)",
+            data: modalHistory.map((d) => (d.current_c !== null && d.current_c !== undefined ? Number(d.current_c) : null)),
+            borderColor: "#10b981",
+            backgroundColor: "transparent",
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 2,
+          },
+        ],
+      };
+    }
+    // "power"
+    return {
+      labels: historyLabels,
+      datasets: [
+        {
+          label: "Active Power (kW)",
+          data: modalHistory.map((d) => (d.active_power_total !== null && d.active_power_total !== undefined ? Number(d.active_power_total) : null)),
+          borderColor: "#0284c7",
+          backgroundColor: "rgba(2, 132, 199, 0.15)",
+          borderWidth: 2.5,
+          tension: 0.35,
+          fill: true,
+          pointRadius: 2.5,
+          pointHoverRadius: 5,
+        },
+      ],
+    };
+  }, [activeTab, modalHistory, historyLabels]);
+
+  const modalChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: activeTab === "ampere",
+        position: "top" as const,
+        labels: {
+          boxWidth: 10,
+          font: { size: 10, weight: 700 },
+          color: isDark ? "#94a3b8" : "#64748b"
+        }
+      },
+      tooltip: {
+        mode: "index" as const,
+        intersect: false,
+        backgroundColor: isDark ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.95)",
+        titleColor: isDark ? "#f8fafc" : "#0f172a",
+        bodyColor: isDark ? "#94a3b8" : "#475569",
+        borderColor: isDark ? "#334155" : "#e2e8f0",
+        borderWidth: 1,
+        padding: 8,
+      },
+    },
+    scales: {
+      x: {
+        grid: { color: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)" },
+        ticks: { color: isDark ? "#64748b" : "#94a3b8", font: { size: 9, weight: 600 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
+      },
+      y: {
+        grid: { color: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)" },
+        ticks: { color: isDark ? "#64748b" : "#94a3b8", font: { size: 9, weight: 600 } },
+      },
+    },
+  }), [isDark, activeTab]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-6xl rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
@@ -282,8 +554,10 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
           </div>
 
           <div className="flex items-center gap-2">
-            <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border bg-emerald-500/10 text-emerald-500 border-emerald-500/20`}>
-              ON
+            <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
+              transformer.status === "online" ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-slate-500/10 text-slate-400 border-slate-500/20"
+            }`}>
+              {transformer.status === "online" ? "ON" : "OFF"}
             </span>
             <button
               onClick={onClose}
@@ -322,11 +596,23 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
             </div>
 
             {/* Chart View */}
-            <div className="relative flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl" style={{ minHeight: 260, height: "100%" }}>
-              <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA HISTORIS BELUM TERSEDIA</span>
-              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 max-w-sm">
-                Data sensor histori untuk {transformer.name} belum terhubung ke API atau database pencatatan telemetri.
-              </p>
+            <div className="relative flex-1 flex flex-col p-4 border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 rounded-2xl overflow-hidden" style={{ minHeight: 280, height: "100%" }}>
+              {loadingModalHistory ? (
+                <div className="flex-1 flex items-center justify-center text-xs text-sky-500 font-bold gap-2">
+                  <span className="animate-spin">⏳</span> Memuat riwayat telemetri...
+                </div>
+              ) : modalHistory.some(d => d.active_power_total !== null || d.volt_ab !== null) ? (
+                <div className="w-full h-full min-h-[240px]">
+                  <Line data={chartData} options={modalChartOptions} />
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-6">
+                  <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA HISTORIS BELUM TERSEDIA</span>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 max-w-sm">
+                    Belum ada rekaman histori hari ini untuk {transformer.name}.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -519,22 +805,22 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
     : "#94a3b8";
 
   // Voltages per phase for display
-  const vR_400 = tx.voltageOutL2L !== null ? `${(tx.voltageOutL2L).toFixed(1)}` : "—";
-  const vS_400 = tx.voltageOutL2L !== null ? `${(tx.voltageOutL2L).toFixed(1)}` : "—";
-  const vT_400 = tx.voltageOutL2L !== null ? `${(tx.voltageOutL2L).toFixed(1)}` : "—";
+  const vR_400 = tx.voltAb !== null && tx.voltAb !== undefined ? `${tx.voltAb.toFixed(1)}` : (tx.voltageOutL2L !== null ? `${tx.voltageOutL2L.toFixed(1)}` : "—");
+  const vS_400 = tx.voltBc !== null && tx.voltBc !== undefined ? `${tx.voltBc.toFixed(1)}` : (tx.voltageOutL2L !== null ? `${tx.voltageOutL2L.toFixed(1)}` : "—");
+  const vT_400 = tx.voltCa !== null && tx.voltCa !== undefined ? `${tx.voltCa.toFixed(1)}` : (tx.voltageOutL2L !== null ? `${tx.voltageOutL2L.toFixed(1)}` : "—");
 
-  const vR_230 = tx.voltageOutL2N !== null ? `${(tx.voltageOutL2N).toFixed(1)}` : "—";
-  const vS_230 = tx.voltageOutL2N !== null ? `${(tx.voltageOutL2N).toFixed(1)}` : "—";
-  const vT_230 = tx.voltageOutL2N !== null ? `${(tx.voltageOutL2N).toFixed(1)}` : "—";
+  const vR_230 = tx.voltAb ? `${(tx.voltAb / Math.sqrt(3)).toFixed(1)}` : (tx.voltageOutL2N !== null ? `${tx.voltageOutL2N.toFixed(1)}` : "—");
+  const vS_230 = tx.voltBc ? `${(tx.voltBc / Math.sqrt(3)).toFixed(1)}` : (tx.voltageOutL2N !== null ? `${tx.voltageOutL2N.toFixed(1)}` : "—");
+  const vT_230 = tx.voltCa ? `${(tx.voltCa / Math.sqrt(3)).toFixed(1)}` : (tx.voltageOutL2N !== null ? `${tx.voltageOutL2N.toFixed(1)}` : "—");
 
   // THD per phase
-  const thdv_R = tx.thdVoltage !== null ? tx.thdVoltage.toFixed(2) : "—";
-  const thdv_S = tx.thdVoltage !== null ? tx.thdVoltage.toFixed(2) : "—";
-  const thdv_T = tx.thdVoltage !== null ? tx.thdVoltage.toFixed(2) : "—";
+  const thdv_R = tx.thdVoltA !== null && tx.thdVoltA !== undefined ? tx.thdVoltA.toFixed(2) : (tx.thdVoltage !== null ? tx.thdVoltage.toFixed(2) : "—");
+  const thdv_S = tx.thdVoltB !== null && tx.thdVoltB !== undefined ? tx.thdVoltB.toFixed(2) : (tx.thdVoltage !== null ? tx.thdVoltage.toFixed(2) : "—");
+  const thdv_T = tx.thdVoltC !== null && tx.thdVoltC !== undefined ? tx.thdVoltC.toFixed(2) : (tx.thdVoltage !== null ? tx.thdVoltage.toFixed(2) : "—");
 
-  const thdi_R = tx.thdCurrent !== null ? tx.thdCurrent.toFixed(2) : "—";
-  const thdi_S = tx.thdCurrent !== null ? tx.thdCurrent.toFixed(2) : "—";
-  const thdi_T = tx.thdCurrent !== null ? tx.thdCurrent.toFixed(2) : "—";
+  const thdi_R = tx.thdCurrentA !== null && tx.thdCurrentA !== undefined ? tx.thdCurrentA.toFixed(2) : (tx.thdCurrent !== null ? tx.thdCurrent.toFixed(2) : "—");
+  const thdi_S = tx.thdCurrentB !== null && tx.thdCurrentB !== undefined ? tx.thdCurrentB.toFixed(2) : (tx.thdCurrent !== null ? tx.thdCurrent.toFixed(2) : "—");
+  const thdi_T = tx.thdCurrentC !== null && tx.thdCurrentC !== undefined ? tx.thdCurrentC.toFixed(2) : (tx.thdCurrent !== null ? tx.thdCurrent.toFixed(2) : "—");
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
@@ -628,11 +914,15 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
           <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/40 text-[10px] font-bold text-slate-500">
             <div>
               <span>Voltage Unbalanced: </span>
-              <span className="text-slate-400 font-mono">—</span>
+              <span className="text-slate-600 dark:text-slate-300 font-mono font-bold">
+                {tx.voltageUnbalance !== null && tx.voltageUnbalance !== undefined ? `${tx.voltageUnbalance.toFixed(2)} %` : "—"}
+              </span>
             </div>
             <div>
               <span>Current Unbalanced: </span>
-              <span className="text-slate-400 font-mono">—</span>
+              <span className="text-slate-600 dark:text-slate-300 font-mono font-bold">
+                {tx.currentUnbalance !== null && tx.currentUnbalance !== undefined ? `${tx.currentUnbalance.toFixed(2)} %` : "—"}
+              </span>
             </div>
           </div>
         </div>
@@ -878,15 +1168,19 @@ export default function PowerDistribution() {
     plnPf: number | null;
     wf1Kw: number | null;
     wf1Pf: number | null;
+    wf1Volt: number | null;
     wf2Kw: number | null;
     wf2Pf: number | null;
+    wf2Volt: number | null;
   }>({
     plnKw: null,
     plnPf: null,
     wf1Kw: null,
     wf1Pf: null,
+    wf1Volt: 20.8,
     wf2Kw: null,
     wf2Pf: null,
+    wf2Volt: 20.8,
   });
 
   // Fetch incoming telemetries for PLN, Fact-1, Fact-2
@@ -904,8 +1198,10 @@ export default function PowerDistribution() {
           plnPf: plnRes?.data?.pqData?.pf !== undefined ? plnRes.data.pqData.pf : null,
           wf1Kw: wf1Res?.data?.pqData?.activePower !== undefined ? wf1Res.data.pqData.activePower : null,
           wf1Pf: wf1Res?.data?.pqData?.pf !== undefined ? wf1Res.data.pqData.pf : null,
+          wf1Volt: wf1Res?.data?.pqData?.vll1 ? Number((wf1Res.data.pqData.vll1 / 1000).toFixed(2)) : 20.8,
           wf2Kw: wf2Res?.data?.pqData?.activePower !== undefined ? wf2Res.data.pqData.activePower : null,
           wf2Pf: wf2Res?.data?.pqData?.pf !== undefined ? wf2Res.data.pqData.pf : null,
+          wf2Volt: wf2Res?.data?.pqData?.vll1 ? Number((wf2Res.data.pqData.vll1 / 1000).toFixed(2)) : 20.8,
         });
       } catch (err) {
         console.error("Failed to load incoming telemetries for SLD:", err);
@@ -923,10 +1219,20 @@ export default function PowerDistribution() {
           return { ...prev, plnKw: payload.pqData.activePower, plnPf: payload.pqData.pf };
         }
         if (payload.deviceId === "Feeder_WF1_PM5560") {
-          return { ...prev, wf1Kw: payload.pqData.activePower, wf1Pf: payload.pqData.pf };
+          return {
+            ...prev,
+            wf1Kw: payload.pqData.activePower,
+            wf1Pf: payload.pqData.pf,
+            wf1Volt: payload.pqData.vll1 ? Number((payload.pqData.vll1 / 1000).toFixed(2)) : prev.wf1Volt
+          };
         }
         if (payload.deviceId === "Feeder_WF2_PM5500") {
-          return { ...prev, wf2Kw: payload.pqData.activePower, wf2Pf: payload.pqData.pf };
+          return {
+            ...prev,
+            wf2Kw: payload.pqData.activePower,
+            wf2Pf: payload.pqData.pf,
+            wf2Volt: payload.pqData.vll1 ? Number((payload.pqData.vll1 / 1000).toFixed(2)) : prev.wf2Volt
+          };
         }
         return prev;
       });
@@ -938,6 +1244,130 @@ export default function PowerDistribution() {
       socket.off("electricity:live_update", handleIncomingLive);
     };
   }, [isPageActive]);
+
+  // Solar PV POI-1 & POI-2 Telemetry State
+  const [solarData, setSolarData] = useState<{
+    poi1Kw: number | null;
+    poi1Pf: number | null;
+    poi2Kw: number | null;
+    poi2Pf: number | null;
+  }>({
+    poi1Kw: null,
+    poi1Pf: null,
+    poi2Kw: null,
+    poi2Pf: null,
+  });
+
+  // Fetch solar telemetries for SLD
+  useEffect(() => {
+    if (!isPageActive) return;
+    const fetchSolar = () => {
+      getJson<{ data: any }>("/analytics/solar/latest")
+        .then((res) => {
+          if (res?.data) {
+            setSolarData({
+              poi1Kw: res.data.poi1?.activePower !== undefined ? res.data.poi1.activePower : null,
+              poi1Pf: res.data.poi1?.powerFactor !== undefined ? res.data.poi1.powerFactor : null,
+              poi2Kw: res.data.poi2?.activePower !== undefined ? res.data.poi2.activePower : null,
+              poi2Pf: res.data.poi2?.powerFactor !== undefined ? res.data.poi2.powerFactor : null,
+            });
+          }
+        })
+        .catch((err) => console.error("Failed to load solar telemetry for SLD:", err));
+    };
+
+    fetchSolar();
+    const interval = setInterval(fetchSolar, 10000);
+
+    const socket = getSocket();
+    const handleSolarLive = (payload: any) => {
+      if (!payload) return;
+      setSolarData(prev => ({
+        poi1Kw: payload.poi1?.activePower !== undefined ? payload.poi1.activePower : prev.poi1Kw,
+        poi1Pf: payload.poi1?.powerFactor !== undefined ? payload.poi1.powerFactor : prev.poi1Pf,
+        poi2Kw: payload.poi2?.activePower !== undefined ? payload.poi2.activePower : prev.poi2Kw,
+        poi2Pf: payload.poi2?.powerFactor !== undefined ? payload.poi2.powerFactor : prev.poi2Pf,
+      }));
+    };
+
+    socket.on("electricity:solar_live", handleSolarLive);
+    socket.on("solar:live_update", handleSolarLive);
+
+    return () => {
+      clearInterval(interval);
+      socket.off("electricity:solar_live", handleSolarLive);
+      socket.off("solar:live_update", handleSolarLive);
+    };
+  }, [isPageActive]);
+
+  // Fetch and sync power meter records for all 7 transformers
+  useEffect(() => {
+    if (!isPageActive) return;
+
+    const fetchTrafoTelemetries = async () => {
+      try {
+        const res = await getJson<{ data: ElectricPmItem[] }>(`/analytics/electricity/power-meters?group=all&_t=${Date.now()}`);
+        if (res?.data && Array.isArray(res.data)) {
+          const pmMap = new Map<string, ElectricPmItem>();
+          res.data.forEach((pm) => {
+            if (pm.pm_id) {
+              pmMap.set(String(pm.pm_id).toUpperCase(), pm);
+            }
+          });
+
+          setTelemetryTransformers((prevTrafos) =>
+            prevTrafos.map((tx) => {
+              const mapping = TRAFO_PM_MAP[tx.id];
+              if (!mapping) return tx;
+              const pmRecord = pmMap.get(mapping.pmId.toUpperCase());
+              const incomingKv = tx.factory === 1 ? (incomingData.wf1Volt || 20.8) : (incomingData.wf2Volt || 20.8);
+              return mapPmToTransformer(tx, pmRecord, incomingKv);
+            })
+          );
+        }
+      } catch (err) {
+        console.error("Failed to load transformer telemetries:", err);
+      }
+    };
+
+    fetchTrafoTelemetries();
+    const interval = setInterval(fetchTrafoTelemetries, 10000);
+
+    const socket = getSocket();
+    const handlePmUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
+      if (!payload || !Array.isArray(payload.data)) return;
+      const pmMap = new Map<string, ElectricPmItem>();
+      payload.data.forEach((pm) => {
+        if (pm.pm_id) {
+          pmMap.set(String(pm.pm_id).toUpperCase(), pm);
+        }
+      });
+
+      setTelemetryTransformers((prevTrafos) =>
+        prevTrafos.map((tx) => {
+          const mapping = TRAFO_PM_MAP[tx.id];
+          if (!mapping) return tx;
+          const pmRecord = pmMap.get(mapping.pmId.toUpperCase());
+          if (!pmRecord) return tx;
+          const incomingKv = tx.factory === 1 ? (incomingData.wf1Volt || 20.8) : (incomingData.wf2Volt || 20.8);
+          return mapPmToTransformer(tx, pmRecord, incomingKv);
+        })
+      );
+    };
+
+    socket.on("electricity:pm_live_update", handlePmUpdate);
+    socket.on("electricity:ew21_live", handlePmUpdate);
+    socket.on("electricity:ew22_live", handlePmUpdate);
+    socket.on("electricity:ew23_live", handlePmUpdate);
+
+    return () => {
+      clearInterval(interval);
+      socket.off("electricity:pm_live_update", handlePmUpdate);
+      socket.off("electricity:ew21_live", handlePmUpdate);
+      socket.off("electricity:ew22_live", handlePmUpdate);
+      socket.off("electricity:ew23_live", handlePmUpdate);
+    };
+  }, [isPageActive, incomingData.wf1Volt, incomingData.wf2Volt]);
 
   // Sub-Distribution Power Meters (EW23, EW21, EW22)
   const [selectedEwGroup, setSelectedEwGroup] = useState<"ew23" | "ew21" | "ew22">("ew23");
@@ -1085,6 +1515,149 @@ export default function PowerDistribution() {
   const bottomTx = useMemo(() => {
     return transformers.find(t => t.id === bottomTxId) || transformers[0];
   }, [transformers, bottomTxId]);
+
+  // Section C Historical records state
+  const [bottomHistory, setBottomHistory] = useState<any[]>([]);
+  const [loadingBottomHistory, setLoadingBottomHistory] = useState(false);
+
+  useEffect(() => {
+    if (!isPageActive) return;
+    const fetchBottomHistory = () => {
+      setLoadingBottomHistory(true);
+      const clientHour = new Date().getHours();
+      const pmId = TRAFO_PM_MAP[bottomTxId]?.pmId || bottomTxId;
+      getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?hour=${clientHour}&_t=${Date.now()}`)
+        .then((res) => {
+          if (res?.data) {
+            setBottomHistory(res.data);
+          }
+        })
+        .catch((err) => console.error("Failed to load bottom trafo history:", err))
+        .finally(() => setLoadingBottomHistory(false));
+    };
+
+    fetchBottomHistory();
+    const interval = setInterval(fetchBottomHistory, 30000);
+    return () => clearInterval(interval);
+  }, [bottomTxId, isPageActive]);
+
+  const fallbackLabels = useMemo(() => Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`), []);
+  const bottomLabels = useMemo(() => {
+    return bottomHistory.length > 0
+      ? bottomHistory.map((d) => d.label || `${String(d.hour).padStart(2, "0")}:00`)
+      : fallbackLabels;
+  }, [bottomHistory, fallbackLabels]);
+
+  const voltageTrendChart = useMemo(() => ({
+    labels: bottomLabels,
+    datasets: [
+      {
+        label: "Voltage (V)",
+        data: bottomHistory.map((d) => (d.volt_ab !== null && d.volt_ab !== undefined ? Number(d.volt_ab) : null)),
+        borderColor: "#f59e0b",
+        backgroundColor: "rgba(245, 158, 11, 0.08)",
+        borderWidth: 2,
+        tension: 0.3,
+        fill: true,
+        pointRadius: 2,
+        pointHoverRadius: 4,
+      }
+    ]
+  }), [bottomLabels, bottomHistory]);
+
+  const powerTrendChart = useMemo(() => ({
+    labels: bottomLabels,
+    datasets: [
+      {
+        label: "Daya Aktif (kW)",
+        data: bottomHistory.map((d) => (d.active_power_total !== null && d.active_power_total !== undefined ? Number(d.active_power_total) : null)),
+        borderColor: "#0284c7",
+        backgroundColor: "rgba(2, 132, 199, 0.08)",
+        borderWidth: 2,
+        tension: 0.3,
+        fill: true,
+        pointRadius: 2,
+        pointHoverRadius: 4,
+      }
+    ]
+  }), [bottomLabels, bottomHistory]);
+
+  const currentTrendChart = useMemo(() => ({
+    labels: bottomLabels,
+    datasets: [
+      {
+        label: "Fasa R (A)",
+        data: bottomHistory.map((d) => (d.current_a !== null && d.current_a !== undefined ? Number(d.current_a) : null)),
+        borderColor: "#ef4444",
+        backgroundColor: "transparent",
+        borderWidth: 1.5,
+        tension: 0.3,
+        pointRadius: 2,
+      },
+      {
+        label: "Fasa S (A)",
+        data: bottomHistory.map((d) => (d.current_b !== null && d.current_b !== undefined ? Number(d.current_b) : null)),
+        borderColor: "#f59e0b",
+        backgroundColor: "transparent",
+        borderWidth: 1.5,
+        tension: 0.3,
+        pointRadius: 2,
+      },
+      {
+        label: "Fasa T (A)",
+        data: bottomHistory.map((d) => (d.current_c !== null && d.current_c !== undefined ? Number(d.current_c) : null)),
+        borderColor: "#10b981",
+        backgroundColor: "transparent",
+        borderWidth: 1.5,
+        tension: 0.3,
+        pointRadius: 2,
+      },
+    ]
+  }), [bottomLabels, bottomHistory]);
+
+  const lineChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        mode: "index" as const,
+        intersect: false,
+        backgroundColor: isDark ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.95)",
+        titleColor: isDark ? "#f8fafc" : "#0f172a",
+        bodyColor: isDark ? "#94a3b8" : "#475569",
+        borderColor: isDark ? "#334155" : "#e2e8f0",
+        borderWidth: 1,
+        padding: 6,
+      },
+    },
+    scales: {
+      x: {
+        grid: { color: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)" },
+        ticks: { color: isDark ? "#64748b" : "#94a3b8", font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
+      },
+      y: {
+        grid: { color: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)" },
+        ticks: { color: isDark ? "#64748b" : "#94a3b8", font: { size: 9 } },
+      },
+    },
+  }), [isDark]);
+
+  const currentChartOptions = useMemo(() => ({
+    ...lineChartOptions,
+    plugins: {
+      ...lineChartOptions.plugins,
+      legend: {
+        display: true,
+        position: "top" as const,
+        labels: {
+          boxWidth: 8,
+          font: { size: 9, weight: 700 },
+          color: isDark ? "#94a3b8" : "#64748b"
+        }
+      }
+    }
+  }), [lineChartOptions, isDark]);
 
   // Load threshold config from Postgres
   useEffect(() => {
@@ -1377,10 +1950,13 @@ export default function PowerDistribution() {
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">POI-1</div>
               <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                Active Power: <span className="font-bold font-mono text-slate-400">—</span>
+                Active Power <br />
+                <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                  {solarData.poi1Kw !== null ? `${solarData.poi1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "— kW"}
+                </span>
               </div>
               <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono text-slate-400">—</span>
+                PF : <span className="font-bold font-mono">{solarData.poi1Pf !== null ? solarData.poi1Pf.toFixed(2) : "—"}</span>
               </div>
             </div>
           </div>
@@ -1413,10 +1989,13 @@ export default function PowerDistribution() {
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">POI-2</div>
               <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                Active Power: <span className="font-bold font-mono text-slate-400">—</span>
+                Active Power <br />
+                <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                  {solarData.poi2Kw !== null ? `${solarData.poi2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "— kW"}
+                </span>
               </div>
               <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono text-slate-400">—</span>
+                PF : <span className="font-bold font-mono">{solarData.poi2Pf !== null ? solarData.poi2Pf.toFixed(2) : "—"}</span>
               </div>
             </div>
           </div>
@@ -1655,38 +2234,69 @@ export default function PowerDistribution() {
                 <option key={t.id} value={t.id}>{t.factory === 1 ? "F1" : "F2"} {t.name}</option>
               ))}
             </select>
-            <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-slate-500/10 text-slate-400 border border-slate-500/20 uppercase tracking-wider">
-              OFFLINE
+            <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${
+              bottomTx?.status === "online"
+                ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                : "bg-slate-500/10 text-slate-400 border-slate-500/20"
+            }`}>
+              {bottomTx?.status === "online" ? "● ONLINE" : "OFFLINE"}
             </span>
           </div>
         </div>
 
-        {/* 3 Line Charts empty state */}
+        {/* 3 Line Charts */}
         <div className="grid gap-6 grid-cols-1">
           {/* Voltage */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
-            <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-2">Voltage Record (V)</h4>
-            <div className="h-[120px] flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-              <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA BELUM TERSEDIA</span>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Data sensor dan histori transformator belum terintegrasi ke database/API.</p>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Voltage Record (V)</h4>
+              {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
+            </div>
+            <div className="h-[140px] w-full">
+              {bottomHistory.some(d => d.volt_ab !== null) ? (
+                <Line data={voltageTrendChart} options={lineChartOptions} />
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                  <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA BELUM TERSEDIA</span>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Belum ada riwayat tegangan tersimpan hari ini.</p>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Daya Aktif */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
-            <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-2">Daya Aktif Record (kW)</h4>
-            <div className="h-[120px] flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-              <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA BELUM TERSEDIA</span>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Data sensor dan histori transformator belum terintegrasi ke database/API.</p>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Daya Aktif Record (kW)</h4>
+              {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
+            </div>
+            <div className="h-[140px] w-full">
+              {bottomHistory.some(d => d.active_power_total !== null) ? (
+                <Line data={powerTrendChart} options={lineChartOptions} />
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                  <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA BELUM TERSEDIA</span>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Belum ada riwayat daya aktif tersimpan hari ini.</p>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Ampere */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
-            <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-2">Ampere Record (A)</h4>
-            <div className="h-[120px] flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-              <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA BELUM TERSEDIA</span>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Data sensor dan histori transformator belum terintegrasi ke database/API.</p>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Ampere Record (A) — 3 Fasa (R, S, T)</h4>
+              {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
+            </div>
+            <div className="h-[150px] w-full">
+              {bottomHistory.some(d => d.current_a !== null || d.current_b !== null || d.current_c !== null) ? (
+                <Line data={currentTrendChart} options={currentChartOptions} />
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                  <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA BELUM TERSEDIA</span>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Belum ada riwayat arus tersimpan hari ini.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

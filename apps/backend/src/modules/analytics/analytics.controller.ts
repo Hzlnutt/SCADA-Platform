@@ -3,7 +3,7 @@ import { getAnalyticsSummary } from "./analytics.service";
 import { getElectricityAnalytics } from "./electricity.analytics";
 import { getWaterAnalytics } from "./water.analytics";
 import { getGasAnalytics } from "./gas.analytics";
-import { getSolarAnalytics } from "./solar.analytics";
+import { getSolarAnalytics, getLatestSolarLiveState } from "./solar.analytics";
 import { getMongoDb } from "../../database/mongo";
 import { GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
 import { getPostgresPool } from "../../database/postgres";
@@ -97,6 +97,48 @@ export const getSolarAnalyticsHandler = async (
 
     const data = await getSolarAnalytics(from, to, year);
     res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getSolarLatestHandler = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const live = getLatestSolarLiveState();
+    if (live && live.poi1 && live.poi2) {
+      return res.json({ data: live });
+    }
+    const pool = getPostgresPool();
+    const dbRes = await pool.query(`
+      SELECT DISTINCT ON (poi_id) poi_id, t_stamp, active_power, power_factor, volt_ab, total_kwh, status
+      FROM electric_plts_telemetry
+      ORDER BY poi_id, t_stamp DESC
+    `);
+    const p1 = dbRes.rows.find((r: any) => r.poi_id === "POI_1");
+    const p2 = dbRes.rows.find((r: any) => r.poi_id === "POI_2");
+    const fallbackLive = {
+      t_stamp: dbRes.rows[0]?.t_stamp || new Date(),
+      poi1: {
+        status: Boolean(p1?.status),
+        activePower: p1?.active_power !== null && p1?.active_power !== undefined ? Number(p1.active_power) : null,
+        powerFactor: p1?.power_factor !== null && p1?.power_factor !== undefined ? Number(p1.power_factor) : null,
+        voltAb: p1?.volt_ab !== null && p1?.volt_ab !== undefined ? Number(p1.volt_ab) : null,
+        totalKwh: p1?.total_kwh !== null && p1?.total_kwh !== undefined ? Number(p1.total_kwh) : null,
+      },
+      poi2: {
+        status: Boolean(p2?.status),
+        activePower: p2?.active_power !== null && p2?.active_power !== undefined ? Number(p2.active_power) : null,
+        powerFactor: p2?.power_factor !== null && p2?.power_factor !== undefined ? Number(p2.power_factor) : null,
+        voltAb: p2?.volt_ab !== null && p2?.volt_ab !== undefined ? Number(p2.volt_ab) : null,
+        totalKwh: p2?.total_kwh !== null && p2?.total_kwh !== undefined ? Number(p2.total_kwh) : null,
+      },
+      online: Boolean(p1?.status || p2?.status)
+    };
+    res.json({ data: fallbackLive });
   } catch (err) {
     next(err);
   }
@@ -266,9 +308,9 @@ export const getPowerMetersLatestHandler = async (
 
     const dbRes = await pool.query(`
       WITH combined AS (
-        SELECT * FROM electric_pm_telemetry_minute WHERE LOWER(group_id) = $1
+        SELECT * FROM electric_pm_telemetry_minute WHERE ($1 = 'all' OR LOWER(group_id) = $1)
         UNION ALL
-        SELECT * FROM electric_pm_telemetry WHERE LOWER(group_id) = $1
+        SELECT * FROM electric_pm_telemetry WHERE ($1 = 'all' OR LOWER(group_id) = $1)
       )
       SELECT DISTINCT ON (pm_id) *
       FROM combined
@@ -277,8 +319,8 @@ export const getPowerMetersLatestHandler = async (
 
     let data = dbRes.rows;
 
-    // For ew23, ensure the 3 incoming cubicles (PLN, WF1, WF2) are included if not present in the PM array
-    if (group === "ew23") {
+    // For ew23 or all, ensure the 3 incoming cubicles (PLN, WF1, WF2) are included if not present in the PM array
+    if (group === "ew23" || group === "all") {
       const existingPmIds = new Set(data.map((r: any) => String(r.pm_id).toUpperCase()));
 
       // 1. Incoming Cubicle PLN
@@ -448,7 +490,31 @@ export const getPowerMeterHistoryHandler = async (
   next: NextFunction
 ) => {
   try {
-    const pmId = (req.params.pmId || "").toUpperCase().trim();
+    let rawPmId = (req.params.pmId || "").toUpperCase().trim();
+    const trafoAliasMap: Record<string, string> = {
+      "MDP-1.1": "PM139",
+      "F1-MDP-1.1": "PM139",
+      "F1_MDP11": "PM139",
+      "MDP-1.2": "PM136",
+      "F1-MDP-1.2": "PM136",
+      "F1_MDP12": "PM136",
+      "MDP-2": "PM135",
+      "F1-MDP-2": "PM135",
+      "F1_MDP2": "PM135",
+      "MDP-3": "PM133",
+      "F1-MDP-3": "PM133",
+      "F1_MDP3": "PM133",
+      "PUTR-1": "PM201",
+      "F2-PUTR-1": "PM201",
+      "F2_PUTR1": "PM201",
+      "PUTR-2": "PM202",
+      "F2-PUTR-2": "PM202",
+      "F2_PUTR2": "PM202",
+      "PUTR-NEW": "PM327",
+      "F2-PUTR-NEW": "PM327",
+      "F2_PUTRNEW": "PM327",
+    };
+    const pmId = trafoAliasMap[rawPmId] || rawPmId;
     const nowWib = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
     const todayWibStr = nowWib.toISOString().slice(0, 10);
     const targetDate = (req.query.date as string) || todayWibStr;
