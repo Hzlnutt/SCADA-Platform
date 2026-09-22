@@ -381,6 +381,54 @@ interface HourlyTrend5sPoint {
   });
   const [hourlyTrend5s, setHourlyTrend5s] = useState<HourlyTrend5sPoint[]>([]);
   const lastTrendHourRef = useRef<number>(-1);
+  const [zoomTrend, setZoomTrend] = useState<"voltage" | "power" | null>(null);
+
+  useEffect(() => {
+    if (!zoomTrend) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setZoomTrend(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [zoomTrend]);
+
+  const voltageStats = useMemo(() => {
+    const pts = hourlyTrend5s.filter(p => (p.voltage !== undefined && p.voltage > 0) || (p.vR !== undefined && p.vR > 0));
+    if (pts.length === 0) return null;
+    const latest = pts[pts.length - 1];
+    const allV = pts.map(p => p.vR !== undefined ? (p.vR + (p.vS || 0) + (p.vT || 0)) / 3 : p.voltage).filter(v => typeof v === "number" && v > 0) as number[];
+    const avg = allV.length > 0 ? allV.reduce((a, b) => a + b, 0) / allV.length : 0;
+    const min = allV.length > 0 ? Math.min(...allV) : 0;
+    const max = allV.length > 0 ? Math.max(...allV) : 0;
+    return {
+      latestR: latest.vR ?? latest.voltage ?? 0,
+      latestS: latest.vS ?? latest.voltage ?? 0,
+      latestT: latest.vT ?? latest.voltage ?? 0,
+      avg,
+      min,
+      max,
+      count: pts.length
+    };
+  }, [hourlyTrend5s]);
+
+  const powerStats = useMemo(() => {
+    const pts = hourlyTrend5s.filter(p => typeof p.activePower === "number");
+    if (pts.length === 0) return null;
+    const latest = pts[pts.length - 1];
+    const allP = pts.map(p => p.activePower).filter(v => typeof v === "number") as number[];
+    const avg = allP.length > 0 ? allP.reduce((a, b) => a + b, 0) / allP.length : 0;
+    const min = allP.length > 0 ? Math.min(...allP) : 0;
+    const max = allP.length > 0 ? Math.max(...allP) : 0;
+    return {
+      latest: latest.activePower ?? 0,
+      avg,
+      min,
+      max,
+      count: pts.length
+    };
+  }, [hourlyTrend5s]);
 
   // Event & alarm logs
   const [events, setEvents] = useState(MOCK_EVENTS);
@@ -932,7 +980,7 @@ interface HourlyTrend5sPoint {
     };
   }, [fixedHourSlots, hourlyTrend5s, isDark]);
 
-  const lineOptions = (unit: "kV" | "kW", isPower: boolean = false) => ({
+  const lineOptions = (unit: "kV" | "kW", isPower: boolean = false, isModal: boolean = false) => ({
     responsive: true,
     maintainAspectRatio: false,
     interaction: {
@@ -945,13 +993,13 @@ interface HourlyTrend5sPoint {
         position: "top" as const,
         align: "end" as const,
         labels: {
-          boxWidth: 8,
-          boxHeight: 8,
+          boxWidth: isModal ? 10 : 8,
+          boxHeight: isModal ? 10 : 8,
           usePointStyle: true,
           pointStyle: "circle",
           color: isDark ? "#94a3b8" : "#475569",
-          font: { size: 9.5, weight: "bold" as const },
-          padding: 8
+          font: { size: isModal ? 11 : 9.5, weight: "bold" as const },
+          padding: isModal ? 12 : 8
         }
       },
       title: {
@@ -964,7 +1012,7 @@ interface HourlyTrend5sPoint {
         bodyColor: isDark ? "#cbd5e1" : "#334155",
         borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.1)",
         borderWidth: 1,
-        padding: 8,
+        padding: isModal ? 10 : 8,
         displayColors: true,
         boxWidth: 8,
         boxHeight: 8,
@@ -996,13 +1044,13 @@ interface HourlyTrend5sPoint {
         grid: { display: false },
         ticks: {
           color: "#64748b",
-          font: { size: 8.5 },
-          maxTicksLimit: 13,
+          font: { size: isModal ? 10 : 8.5 },
+          maxTicksLimit: isModal ? 25 : 13,
           autoSkip: true,
           callback: (_val: any, index: number): string => {
             const raw = fixedHourSlots[index];
             if (typeof raw === "string" && raw.length >= 5) {
-              return raw.substring(0, 5);
+              return isModal && raw.length >= 8 ? raw : raw.substring(0, 5);
             }
             return String(raw || "");
           }
@@ -1011,7 +1059,7 @@ interface HourlyTrend5sPoint {
       y: {
         grace: "10%",
         grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
-        ticks: { color: "#64748b", font: { size: 8.5 } }
+        ticks: { color: "#64748b", font: { size: isModal ? 10 : 8.5 } }
       }
     }
   });
@@ -1367,9 +1415,22 @@ interface HourlyTrend5sPoint {
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400">Trend Tegangan 1 Jam (kV)</h4>
-              <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                {String(trendHour).padStart(2, "0")}:00:00 - {String(trendHour).padStart(2, "0")}:59:55 WIB
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                  {String(trendHour).padStart(2, "0")}:00:00 - {String(trendHour).padStart(2, "0")}:59:55 WIB
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setZoomTrend("voltage")}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 transition cursor-pointer"
+                  title="Perbesar Chart Trend Tegangan"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                  </svg>
+                  <span>Perbesar</span>
+                </button>
+              </div>
             </div>
             <div style={{ height: 140 }}>
               <Line data={voltageTrendData} options={lineOptions("kV", false)} />
@@ -1378,9 +1439,22 @@ interface HourlyTrend5sPoint {
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400">Trend Daya Aktif 1 Jam (kW)</h4>
-              <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                {String(trendHour).padStart(2, "0")}:00:00 - {String(trendHour).padStart(2, "0")}:59:55 WIB
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                  {String(trendHour).padStart(2, "0")}:00:00 - {String(trendHour).padStart(2, "0")}:59:55 WIB
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setZoomTrend("power")}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition cursor-pointer"
+                  title="Perbesar Chart Trend Daya Aktif"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                  </svg>
+                  <span>Perbesar</span>
+                </button>
+              </div>
             </div>
             <div style={{ height: 140 }}>
               <Line data={activePowerTrendData} options={lineOptions("kW", true)} />
@@ -1404,6 +1478,87 @@ interface HourlyTrend5sPoint {
           </div>
         </div>
       </section>
+
+      {/* Zoom Popup Modal for Trend Charts */}
+      {zoomTrend && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setZoomTrend(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-6xl p-6 flex flex-col space-y-4 max-h-[92vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className={`text-base font-bold uppercase tracking-wider ${
+                    zoomTrend === "voltage" ? "text-amber-500 dark:text-amber-400" : "text-emerald-500 dark:text-emerald-400"
+                  }`}>
+                    {zoomTrend === "voltage" ? "Trend Tegangan 1 Jam (kV)" : "Trend Daya Aktif 1 Jam (kW)"}
+                  </h3>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
+                    {config.title}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
+                    Rentang: {String(trendHour).padStart(2, "0")}:00:00 - {String(trendHour).padStart(2, "0")}:59:55 WIB
+                  </span>
+                  <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                    • Resolusi 5 Detik (Database Historikal)
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setZoomTrend(null)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer"
+                  title="Tutup Modal"
+                >
+                  <span>Tutup</span>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body: Large Chart Height (480px) */}
+            <div className="w-full" style={{ height: 480 }}>
+              {zoomTrend === "voltage" ? (
+                <Line data={voltageTrendData} options={lineOptions("kV", false, true)} />
+              ) : (
+                <Line data={activePowerTrendData} options={lineOptions("kW", true, true)} />
+              )}
+            </div>
+
+            {/* Modal Footer: Quick Stats */}
+            <div className="flex flex-wrap items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-3 text-xs">
+              {zoomTrend === "voltage" && voltageStats ? (
+                <div className="flex flex-wrap items-center gap-4 text-slate-600 dark:text-slate-300">
+                  <span>Terkini: <strong className="text-rose-500">R: {voltageStats.latestR.toFixed(3)} kV</strong> | <strong className="text-amber-500">S: {voltageStats.latestS.toFixed(3)} kV</strong> | <strong className="text-blue-500">T: {voltageStats.latestT.toFixed(3)} kV</strong></span>
+                  <span>• Rata-rata 1 Jam: <strong className="font-mono text-slate-800 dark:text-white">{voltageStats.avg.toFixed(3)} kV</strong></span>
+                  <span>• Min: <strong className="font-mono">{voltageStats.min.toFixed(3)} kV</strong> | Max: <strong className="font-mono">{voltageStats.max.toFixed(3)} kV</strong></span>
+                </div>
+              ) : zoomTrend === "power" && powerStats ? (
+                <div className="flex flex-wrap items-center gap-4 text-slate-600 dark:text-slate-300">
+                  <span>Terkini: <strong className="text-emerald-500 font-mono font-bold">{powerStats.latest.toFixed(1)} kW</strong></span>
+                  <span>• Rata-rata 1 Jam: <strong className="font-mono text-slate-800 dark:text-white">{powerStats.avg.toFixed(1)} kW</strong></span>
+                  <span>• Peak (Beban Puncak): <strong className="font-mono text-amber-500">{powerStats.max.toFixed(1)} kW</strong></span>
+                  <span>• Min: <strong className="font-mono">{powerStats.min.toFixed(1)} kW</strong></span>
+                </div>
+              ) : (
+                <span className="text-slate-400">Data telemetri tersinkronisasi per 5 detik.</span>
+              )}
+              <span className="text-[11px] text-slate-400">Tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] border border-slate-200 dark:border-slate-700">ESC</kbd> untuk menutup</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══════════ SECTION E: PARAMETER RINGKASAN TABLE ═══════════ */}
       <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">

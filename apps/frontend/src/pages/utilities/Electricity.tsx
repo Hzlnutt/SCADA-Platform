@@ -504,6 +504,19 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   pvRate?: number;
 }) {
   const [showPrevious, setShowPrevious] = useState(true);
+  const [isZoomOpen, setIsZoomOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isZoomOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsZoomOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isZoomOpen]);
+
   const currTotalKwh = useMemo(() => (currentData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [currentData]);
   const prevTotalKwh = useMemo(() => (previousData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [previousData]);
   const diffPct = useMemo(() => {
@@ -533,7 +546,7 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
           </div>
         </div>
 
-        {/* Top-Right: Checkbox & Month badges */}
+        {/* Top-Right: Checkbox, Month badges & Zoom In Button */}
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 hover:bg-slate-200/80 dark:hover:bg-slate-700 transition cursor-pointer select-none">
             <input
@@ -549,6 +562,17 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
               {prevMonthName || "Bln Pembanding"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
             </span>
           )}
+          <button
+            type="button"
+            onClick={() => setIsZoomOpen(true)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-sky-600 dark:text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 transition cursor-pointer"
+            title="Perbesar Tampilan Chart"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+            </svg>
+            <span>Perbesar</span>
+          </button>
         </div>
       </div>
       <div style={{ height: 280 }}>
@@ -566,6 +590,90 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
           showPrevious={showPrevious}
         />
       </div>
+
+      {/* Zoom Popup Modal */}
+      {isZoomOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setIsZoomOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl p-6 flex flex-col space-y-4 max-h-[92vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-800 dark:text-white uppercase tracking-wide">{title}</h3>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 font-bold">
+                    Perbesar Chart
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mt-2">
+                  <span className="text-xl font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400">
+                    {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">kWh</span>
+                  </span>
+                  {showPrevious && diffPct !== null && (
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      Number(diffPct) > 0
+                        ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                        : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                    }`}>
+                      {Number(diffPct) > 0 ? `+${diffPct}%` : `${diffPct}%`} vs bln lalu
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showPrevious}
+                    onChange={(e) => setShowPrevious(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer accent-blue-600"
+                  />
+                  <span>Bulan Lalu</span>
+                </label>
+                {showPrevious && (
+                  <span className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                    {prevMonthName || "Bln Pembanding"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsZoomOpen(false)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer"
+                  title="Tutup Modal"
+                >
+                  <span>Tutup</span>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body: Large Chart (480px) */}
+            <div className="w-full" style={{ height: 480 }}>
+              <MonthlyComparisonBarChart
+                currentData={currentData}
+                previousData={previousData}
+                isDark={isDark}
+                currMonthName={currMonthName}
+                prevMonthName={prevMonthName}
+                selectorType={selectorType}
+                currentBreakdown={currentBreakdown}
+                previousBreakdown={previousBreakdown}
+                solarRate={solarRate}
+                pvRate={pvRate}
+                showPrevious={showPrevious}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
@@ -590,6 +698,18 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
   const [factory, setFactory] = useState<"wf1" | "wf2">("wf1");
   const [machine, setMachine] = useState("F1 MAIN SUPPLY QC OFFICE & LAB");
   const [showPrevious, setShowPrevious] = useState(true);
+  const [isZoomOpen, setIsZoomOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isZoomOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsZoomOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isZoomOpen]);
 
   const machineOptions = useMemo(() => {
     if (factory === "wf1") {
@@ -742,6 +862,19 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
           <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-mono">
             TERHUBUNG API ({dbData.pmId || "PM"})
           </span>
+
+          {/* Zoom In Button */}
+          <button
+            type="button"
+            onClick={() => setIsZoomOpen(true)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-sky-600 dark:text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 transition cursor-pointer"
+            title="Perbesar Tampilan Chart"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+            </svg>
+            <span>Perbesar</span>
+          </button>
         </div>
       </div>
 
@@ -755,6 +888,87 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
           showPrevious={showPrevious}
         />
       </div>
+
+      {/* Zoom Popup Modal */}
+      {isZoomOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setIsZoomOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl p-6 flex flex-col space-y-4 max-h-[92vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-800 dark:text-white uppercase tracking-wide">
+                    {machine} ({dbData.pmId || "PM"})
+                  </h3>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 font-bold">
+                    Perbesar Chart
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mt-2">
+                  <span className="text-xl font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400">
+                    {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">kWh</span>
+                  </span>
+                  {showPrevious && diffPct !== null && (
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      Number(diffPct) > 0
+                        ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                        : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                    }`}>
+                      {Number(diffPct) > 0 ? `+${diffPct}%` : `${diffPct}%`} vs bln lalu
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showPrevious}
+                    onChange={(e) => setShowPrevious(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer accent-blue-600"
+                  />
+                  <span>Bulan Lalu</span>
+                </label>
+                {showPrevious && (
+                  <span className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                    {prevMonthName || "Bln Pembanding"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsZoomOpen(false)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer"
+                  title="Tutup Modal"
+                >
+                  <span>Tutup</span>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body: Large Chart (480px) */}
+            <div className="w-full" style={{ height: 480 }}>
+              <MonthlyComparisonBarChart
+                currentData={currentData}
+                previousData={previousData}
+                isDark={isDark}
+                currMonthName={currMonthName}
+                prevMonthName={prevMonthName}
+                showPrevious={showPrevious}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
