@@ -666,13 +666,6 @@ interface HourlyTrend5sPoint {
         const pt = payload.point;
         const currentHour = typeof payload.hour === "number" ? payload.hour : trendHour;
 
-        if (payload.isHourChange || (lastTrendHourRef.current !== -1 && lastTrendHourRef.current !== currentHour)) {
-          lastTrendHourRef.current = currentHour;
-          setTrendHour(currentHour);
-          setHourlyTrend5s([pt]);
-          return;
-        }
-
         lastTrendHourRef.current = currentHour;
         setTrendHour(currentHour);
         setHourlyTrend5s((prev) => {
@@ -681,7 +674,8 @@ interface HourlyTrend5sPoint {
             return prev;
           }
           const updated = [...prev, pt];
-          return updated.length > 721 ? updated.slice(updated.length - 721) : updated;
+          // Continuous 24-hour rolling sliding window: 17,280 points max (hilang berjalan FIFO)
+          return updated.length > 17280 ? updated.slice(updated.length - 17280) : updated;
         });
       }
     };
@@ -1414,10 +1408,10 @@ interface HourlyTrend5sPoint {
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400">Trend Tegangan 1 Jam (kV)</h4>
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400">Trend Tegangan 24 Jam (kV) — Rolling 5s</h4>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  {String(trendHour).padStart(2, "0")}:00:00 - {String(trendHour).padStart(2, "0")}:59:55 WIB
+                  24 Jam Terakhir (Rolling 5s)
                 </span>
                 <button
                   type="button"
@@ -1438,10 +1432,10 @@ interface HourlyTrend5sPoint {
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400">Trend Daya Aktif 1 Jam (kW)</h4>
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400">Trend Daya Aktif 24 Jam (kW) — Rolling 5s</h4>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  {String(trendHour).padStart(2, "0")}:00:00 - {String(trendHour).padStart(2, "0")}:59:55 WIB
+                  24 Jam Terakhir (Rolling 5s)
                 </span>
                 <button
                   type="button"
@@ -1496,7 +1490,7 @@ interface HourlyTrend5sPoint {
                   <h3 className={`text-base font-bold uppercase tracking-wider ${
                     zoomTrend === "voltage" ? "text-amber-500 dark:text-amber-400" : "text-emerald-500 dark:text-emerald-400"
                   }`}>
-                    {zoomTrend === "voltage" ? "Trend Tegangan 1 Jam (kV)" : "Trend Daya Aktif 1 Jam (kW)"}
+                    {zoomTrend === "voltage" ? "Trend Tegangan 24 Jam (kV) — Rolling 5s" : "Trend Daya Aktif 24 Jam (kW) — Rolling 5s"}
                   </h3>
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
                     {config.title}
@@ -1504,10 +1498,10 @@ interface HourlyTrend5sPoint {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-2">
                   <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
-                    Rentang: {String(trendHour).padStart(2, "0")}:00:00 - {String(trendHour).padStart(2, "0")}:59:55 WIB
+                    Rentang: 24 Jam Terakhir (Rolling Sliding Window)
                   </span>
                   <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                    • Resolusi 5 Detik (Database Historikal)
+                    • Resolusi 5 Detik (Database Historikal Real-Time)
                   </span>
                 </div>
               </div>

@@ -129,9 +129,10 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
         current_b,
         current_c
       FROM electric_incoming_trend_5s
-      WHERE device_id = $1 AND hour = $2
+      WHERE device_id = $1 AND t_stamp >= NOW() - INTERVAL '24 hours'
       ORDER BY t_stamp ASC
-    `, [deviceId, currentHour]);
+      LIMIT 17280
+    `, [deviceId]);
 
     return res.rows.map((row: any) => {
       const timeStr = row.time_str;

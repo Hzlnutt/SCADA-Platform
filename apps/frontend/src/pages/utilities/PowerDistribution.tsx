@@ -357,8 +357,8 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
 
   const tabs = [
     { key: "voltage" as const, label: "Voltage Record" },
-    { key: "ampere" as const, label: "Ampere Record" },
-    { key: "power" as const, label: "Daya Aktif Record" },
+    { key: "ampere" as const, label: "Ampere Record (Total & 3 Fasa)" },
+    { key: "power" as const, label: "kW Total (Daya Aktif)" },
   ];
 
   const handleSaveSpecsClick = () => {
@@ -395,6 +395,7 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
 
   const [modalHistory, setModalHistory] = useState<any[]>([]);
   const [loadingModalHistory, setLoadingModalHistory] = useState(true);
+  const [modalVoltageType, setModalVoltageType] = useState<"380v" | "230v">("380v");
 
   useEffect(() => {
     if (!transformer?.id) return;
@@ -418,17 +419,73 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
 
   const chartData = useMemo(() => {
     if (activeTab === "voltage") {
+      if (modalVoltageType === "380v") {
+        return {
+          labels: historyLabels,
+          datasets: [
+            {
+              label: "Fasa R-S (380V)",
+              data: modalHistory.map((d) => (d.volt_ab !== null && d.volt_ab !== undefined ? Number(d.volt_ab) : null)),
+              borderColor: "#f59e0b",
+              backgroundColor: "transparent",
+              borderWidth: 2,
+              tension: 0.35,
+              pointRadius: 2.5,
+              pointHoverRadius: 5,
+            },
+            {
+              label: "Fasa S-T (380V)",
+              data: modalHistory.map((d) => (d.volt_bc !== null && d.volt_bc !== undefined ? Number(d.volt_bc) : null)),
+              borderColor: "#06b6d4",
+              backgroundColor: "transparent",
+              borderWidth: 2,
+              tension: 0.35,
+              pointRadius: 2.5,
+              pointHoverRadius: 5,
+            },
+            {
+              label: "Fasa T-R (380V)",
+              data: modalHistory.map((d) => (d.volt_ca !== null && d.volt_ca !== undefined ? Number(d.volt_ca) : null)),
+              borderColor: "#8b5cf6",
+              backgroundColor: "transparent",
+              borderWidth: 2,
+              tension: 0.35,
+              pointRadius: 2.5,
+              pointHoverRadius: 5,
+            },
+          ],
+        };
+      }
       return {
         labels: historyLabels,
         datasets: [
           {
-            label: "Voltage (V)",
-            data: modalHistory.map((d) => (d.volt_ab !== null && d.volt_ab !== undefined ? Number(d.volt_ab) : null)),
+            label: "Fasa R-N (230V)",
+            data: modalHistory.map((d) => (d.volt_rn !== null && d.volt_rn !== undefined ? Number(d.volt_rn) : null)),
             borderColor: "#f59e0b",
-            backgroundColor: "rgba(245, 158, 11, 0.12)",
-            borderWidth: 2.5,
+            backgroundColor: "transparent",
+            borderWidth: 2,
             tension: 0.35,
-            fill: true,
+            pointRadius: 2.5,
+            pointHoverRadius: 5,
+          },
+          {
+            label: "Fasa S-N (230V)",
+            data: modalHistory.map((d) => (d.volt_sn !== null && d.volt_sn !== undefined ? Number(d.volt_sn) : null)),
+            borderColor: "#06b6d4",
+            backgroundColor: "transparent",
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 2.5,
+            pointHoverRadius: 5,
+          },
+          {
+            label: "Fasa T-N (230V)",
+            data: modalHistory.map((d) => (d.volt_tn !== null && d.volt_tn !== undefined ? Number(d.volt_tn) : null)),
+            borderColor: "#8b5cf6",
+            backgroundColor: "transparent",
+            borderWidth: 2,
+            tension: 0.35,
             pointRadius: 2.5,
             pointHoverRadius: 5,
           },
@@ -439,6 +496,16 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
       return {
         labels: historyLabels,
         datasets: [
+          {
+            label: "Ampere Total (A)",
+            data: modalHistory.map((d) => (d.current_total !== null && d.current_total !== undefined ? Number(d.current_total) : (d.current_a !== null ? Number(d.current_a) + Number(d.current_b || 0) + Number(d.current_c || 0) : null))),
+            borderColor: "#8b5cf6",
+            backgroundColor: "transparent",
+            borderWidth: 2,
+            borderDash: [5, 5],
+            tension: 0.35,
+            pointRadius: 2.5,
+          },
           {
             label: "Phase R (A)",
             data: modalHistory.map((d) => (d.current_a !== null && d.current_a !== undefined ? Number(d.current_a) : null)),
@@ -474,7 +541,7 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
       labels: historyLabels,
       datasets: [
         {
-          label: "Active Power (kW)",
+          label: "kW Total (Daya Aktif)",
           data: modalHistory.map((d) => (d.active_power_total !== null && d.active_power_total !== undefined ? Number(d.active_power_total) : null)),
           borderColor: "#0284c7",
           backgroundColor: "rgba(2, 132, 199, 0.15)",
@@ -486,14 +553,14 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
         },
       ],
     };
-  }, [activeTab, modalHistory, historyLabels]);
+  }, [activeTab, modalVoltageType, modalHistory, historyLabels]);
 
   const modalChartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        display: activeTab === "ampere",
+        display: activeTab === "ampere" || activeTab === "voltage",
         position: "top" as const,
         labels: {
           boxWidth: 10,
@@ -572,20 +639,49 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
               📈 Historical Trend (24 Jam)
             </h4>
             {/* Tab Buttons */}
-            <div className="flex gap-2 bg-slate-100/80 dark:bg-slate-800/40 p-1 rounded-xl self-start flex-shrink-0">
-              {tabs.map(t => (
-                <button
-                  key={t.key}
-                  onClick={() => setActiveTab(t.key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    activeTab === t.key
-                      ? "bg-white dark:bg-slate-800 shadow-sm text-[#002b5c] dark:text-sky-400"
-                      : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex gap-2 bg-slate-100/80 dark:bg-slate-800/40 p-1 rounded-xl self-start flex-shrink-0">
+                {tabs.map(t => (
+                  <button
+                    key={t.key}
+                    onClick={() => setActiveTab(t.key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      activeTab === t.key
+                        ? "bg-white dark:bg-slate-800 shadow-sm text-[#002b5c] dark:text-sky-400"
+                        : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {activeTab === "voltage" && (
+                <div className="flex items-center gap-1 bg-slate-100/80 dark:bg-slate-800/40 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setModalVoltageType("380v")}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                      modalVoltageType === "380v"
+                        ? "bg-white dark:bg-slate-700 text-amber-500 shadow-sm"
+                        : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    }`}
+                  >
+                    380V (L-L)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalVoltageType("230v")}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                      modalVoltageType === "230v"
+                        ? "bg-white dark:bg-slate-700 text-cyan-500 shadow-sm"
+                        : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    }`}
+                  >
+                    230V (L-N)
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Chart View */}
@@ -1512,6 +1608,7 @@ export default function PowerDistribution() {
   // Section C Historical records state
   const [bottomHistory, setBottomHistory] = useState<any[]>([]);
   const [loadingBottomHistory, setLoadingBottomHistory] = useState(false);
+  const [bottomVoltageMode, setBottomVoltageMode] = useState<"380v" | "230v">("380v");
 
   useEffect(() => {
     if (!isPageActive) return;
@@ -1541,28 +1638,86 @@ export default function PowerDistribution() {
       : fallbackLabels;
   }, [bottomHistory, fallbackLabels]);
 
-  const voltageTrendChart = useMemo(() => ({
-    labels: bottomLabels,
-    datasets: [
-      {
-        label: "Voltage (V)",
-        data: bottomHistory.map((d) => (d.volt_ab !== null && d.volt_ab !== undefined ? Number(d.volt_ab) : null)),
-        borderColor: "#f59e0b",
-        backgroundColor: "rgba(245, 158, 11, 0.08)",
-        borderWidth: 2,
-        tension: 0.3,
-        fill: true,
-        pointRadius: 2,
-        pointHoverRadius: 4,
-      }
-    ]
-  }), [bottomLabels, bottomHistory]);
+  const voltageTrendChart = useMemo(() => {
+    if (bottomVoltageMode === "380v") {
+      return {
+        labels: bottomLabels,
+        datasets: [
+          {
+            label: "Fasa R-S (380V)",
+            data: bottomHistory.map((d) => (d.volt_ab !== null && d.volt_ab !== undefined ? Number(d.volt_ab) : null)),
+            borderColor: "#f59e0b",
+            backgroundColor: "transparent",
+            borderWidth: 2,
+            tension: 0.3,
+            pointRadius: 2,
+            pointHoverRadius: 4,
+          },
+          {
+            label: "Fasa S-T (380V)",
+            data: bottomHistory.map((d) => (d.volt_bc !== null && d.volt_bc !== undefined ? Number(d.volt_bc) : null)),
+            borderColor: "#06b6d4",
+            backgroundColor: "transparent",
+            borderWidth: 2,
+            tension: 0.3,
+            pointRadius: 2,
+            pointHoverRadius: 4,
+          },
+          {
+            label: "Fasa T-R (380V)",
+            data: bottomHistory.map((d) => (d.volt_ca !== null && d.volt_ca !== undefined ? Number(d.volt_ca) : null)),
+            borderColor: "#8b5cf6",
+            backgroundColor: "transparent",
+            borderWidth: 2,
+            tension: 0.3,
+            pointRadius: 2,
+            pointHoverRadius: 4,
+          },
+        ]
+      };
+    }
+    return {
+      labels: bottomLabels,
+      datasets: [
+        {
+          label: "Fasa R-N (230V)",
+          data: bottomHistory.map((d) => (d.volt_rn !== null && d.volt_rn !== undefined ? Number(d.volt_rn) : null)),
+          borderColor: "#f59e0b",
+          backgroundColor: "transparent",
+          borderWidth: 2,
+          tension: 0.3,
+          pointRadius: 2,
+          pointHoverRadius: 4,
+        },
+        {
+          label: "Fasa S-N (230V)",
+          data: bottomHistory.map((d) => (d.volt_sn !== null && d.volt_sn !== undefined ? Number(d.volt_sn) : null)),
+          borderColor: "#06b6d4",
+          backgroundColor: "transparent",
+          borderWidth: 2,
+          tension: 0.3,
+          pointRadius: 2,
+          pointHoverRadius: 4,
+        },
+        {
+          label: "Fasa T-N (230V)",
+          data: bottomHistory.map((d) => (d.volt_tn !== null && d.volt_tn !== undefined ? Number(d.volt_tn) : null)),
+          borderColor: "#8b5cf6",
+          backgroundColor: "transparent",
+          borderWidth: 2,
+          tension: 0.3,
+          pointRadius: 2,
+          pointHoverRadius: 4,
+        },
+      ]
+    };
+  }, [bottomLabels, bottomHistory, bottomVoltageMode]);
 
   const powerTrendChart = useMemo(() => ({
     labels: bottomLabels,
     datasets: [
       {
-        label: "Daya Aktif (kW)",
+        label: "kW Total (Daya Aktif)",
         data: bottomHistory.map((d) => (d.active_power_total !== null && d.active_power_total !== undefined ? Number(d.active_power_total) : null)),
         borderColor: "#0284c7",
         backgroundColor: "rgba(2, 132, 199, 0.08)",
@@ -1578,6 +1733,16 @@ export default function PowerDistribution() {
   const currentTrendChart = useMemo(() => ({
     labels: bottomLabels,
     datasets: [
+      {
+        label: "Ampere Total (A)",
+        data: bottomHistory.map((d) => (d.current_total !== null && d.current_total !== undefined ? Number(d.current_total) : (d.current_a !== null ? Number(d.current_a) + Number(d.current_b || 0) + Number(d.current_c || 0) : null))),
+        borderColor: "#8b5cf6",
+        backgroundColor: "transparent",
+        borderWidth: 2,
+        borderDash: [5, 5],
+        tension: 0.3,
+        pointRadius: 2,
+      },
       {
         label: "Fasa R (A)",
         data: bottomHistory.map((d) => (d.current_a !== null && d.current_a !== undefined ? Number(d.current_a) : null)),
@@ -1636,7 +1801,7 @@ export default function PowerDistribution() {
     },
   }), [isDark]);
 
-  const currentChartOptions = useMemo(() => ({
+  const multiLineChartOptions = useMemo(() => ({
     ...lineChartOptions,
     plugins: {
       ...lineChartOptions.plugins,
@@ -1651,6 +1816,8 @@ export default function PowerDistribution() {
       }
     }
   }), [lineChartOptions, isDark]);
+
+  const currentChartOptions = multiLineChartOptions;
 
   // Load threshold config from Postgres
   useEffect(() => {
@@ -2242,12 +2409,40 @@ export default function PowerDistribution() {
           {/* Voltage */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Voltage Record (V)</h4>
-              {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
+              <div className="flex items-center gap-2">
+                <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                  Voltage Record (V) — {bottomVoltageMode === "380v" ? "380V Line-to-Line (R-S-T)" : "230V Line-to-Neutral (L-N)"}
+                </h4>
+                {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
+              </div>
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setBottomVoltageMode("380v")}
+                  className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                    bottomVoltageMode === "380v"
+                      ? "bg-white dark:bg-slate-700 text-amber-500 shadow-sm"
+                      : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  }`}
+                >
+                  380V (L-L)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBottomVoltageMode("230v")}
+                  className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                    bottomVoltageMode === "230v"
+                      ? "bg-white dark:bg-slate-700 text-cyan-500 shadow-sm"
+                      : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  }`}
+                >
+                  230V (L-N)
+                </button>
+              </div>
             </div>
             <div className="h-[140px] w-full">
-              {bottomHistory.some(d => d.volt_ab !== null) ? (
-                <Line data={voltageTrendChart} options={lineChartOptions} />
+              {bottomHistory.some(d => d.volt_ab !== null || d.volt_rn !== null) ? (
+                <Line data={voltageTrendChart} options={multiLineChartOptions} />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
                   <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA BELUM TERSEDIA</span>
@@ -2260,7 +2455,7 @@ export default function PowerDistribution() {
           {/* Daya Aktif */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Daya Aktif Record (kW)</h4>
+              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Daya Aktif Record — kW Total (kW)</h4>
               {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
             </div>
             <div className="h-[140px] w-full">
@@ -2278,11 +2473,11 @@ export default function PowerDistribution() {
           {/* Ampere */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Ampere Record (A) — 3 Fasa (R, S, T)</h4>
+              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Ampere Record (A) — Total & 3 Fasa (R, S, T)</h4>
               {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
             </div>
             <div className="h-[150px] w-full">
-              {bottomHistory.some(d => d.current_a !== null || d.current_b !== null || d.current_c !== null) ? (
+              {bottomHistory.some(d => d.current_a !== null || d.current_b !== null || d.current_c !== null || d.current_total !== null) ? (
                 <Line data={currentTrendChart} options={currentChartOptions} />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">

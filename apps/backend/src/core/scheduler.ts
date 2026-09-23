@@ -970,25 +970,21 @@ const recordIncomingTrend5s = async (
 
     const pool = getPostgresPool();
 
-    if (isHourChange || lastTrendHour[deviceId] === -1) {
-      if (isHourChange) {
-        // Hour changed: reset in-memory points for the new hour
-        incomingHourlyTrends[deviceId] = [];
-      }
-      // Delete previous hour's data from electric_incoming_trend_5s so ONLY current hour remains
+    if (isHourChange) {
+      // Clean up records older than 24 hours so we maintain a continuous 24-hour rolling sliding window (hilang berjalan)
       try {
         await pool.query(
-          `DELETE FROM electric_incoming_trend_5s WHERE device_id = $1 AND hour != $2`,
-          [deviceId, currentHour]
+          `DELETE FROM electric_incoming_trend_5s WHERE device_id = $1 AND t_stamp < NOW() - INTERVAL '24 hours'`,
+          [deviceId]
         );
       } catch (err: any) {
-        logger.warn(`Failed to cleanup previous hour trend 5s for ${deviceId}: ${err.message}`);
+        logger.warn(`Failed to cleanup >24h trend 5s for ${deviceId}: ${err.message}`);
       }
     }
 
     incomingHourlyTrends[deviceId].push(point);
-    // In a 1-hour slot (e.g. 8:00 to 9:00), 12 points/min * 60 min = max 720 points
-    if (incomingHourlyTrends[deviceId].length > 721) {
+    // Continuous 24-hour rolling window: 12 points/min * 60 min * 24 h = 17,280 points (hilang berjalan FIFO)
+    if (incomingHourlyTrends[deviceId].length > 17280) {
       incomingHourlyTrends[deviceId].shift();
     }
 
@@ -1024,7 +1020,7 @@ const recordIncomingTrend5s = async (
         deviceId,
         point,
         hour: currentHour,
-        isHourChange
+        isHourChange: false // Maintain continuous rolling FIFO stream without abrupt resets
       });
     }
   }

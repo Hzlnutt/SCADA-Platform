@@ -243,10 +243,10 @@ const COVERED_MACHINES: Record<string, string[]> = {
 };
 
 /* ═══════════ EXPORT TO EXCEL HELPER ═══════════ */
-async function exportToExcel(data: Record<string, any>[], columns: { key: string; label: string }[], filename: string) {
+async function exportToExcel(data: Record<string, any>[], columns: { key: string; label: string; unit?: string }[], filename: string) {
   try {
     const { utils, writeFile } = await import("xlsx");
-    const headerRow = columns.map(c => c.label);
+    const headerRow = columns.map(c => c.unit ? `${c.label} (${c.unit})` : c.label);
     const dataRows = data.map(row => columns.map(c => row[c.key] ?? ""));
     const ws = utils.aoa_to_sheet([headerRow, ...dataRows]);
 
@@ -547,7 +547,7 @@ export default function ElectricityReport() {
                           borderBottom: "2px solid rgba(56,189,248,0.25)",
                         }}
                       >
-                        {col.label}
+                        {col.unit ? `${col.label} (${col.unit})` : col.label}
                       </th>
                     ))}
                   </tr>
