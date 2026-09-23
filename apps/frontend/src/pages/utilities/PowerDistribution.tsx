@@ -1945,10 +1945,10 @@ export default function PowerDistribution() {
               </marker>
             </defs>
 
-            {/* --- AUXILIARY POWER ROUTING (Rendered behind busbars so yellow busbar covers crossing lines) --- */}
-            {/* 1. Genset Natural Gas (95, 242) -> Feeds MDP-1.2 (183, 415) and branches to MDP-2 (293, 415) */}
+            {/* --- AUXILIARY POWER ROUTING --- */}
+            {/* 1. Genset Natural Gas (Center 95, 242) -> Channels down X=175 between MDP-1.1 & MDP-1.2, feeds MDP-1.2 (183, 415) and bridges over MDP-1.2 feeder to MDP-2 (293, 415) */}
             <path
-              d="M 95 242 L 95 345 L 282 345 M 172 345 L 172 415 L 183 415 M 282 345 L 282 415 L 293 415"
+              d="M 95 242 L 95 252 L 175 252 L 175 415"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
@@ -1956,50 +1956,76 @@ export default function PowerDistribution() {
             />
             {/* Arrowhead into left side of MDP-1.2 */}
             <path
-              d="M 172 415 L 183 415"
+              d="M 175 415 L 183 415"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
               markerEnd="url(#arrow-green)"
             />
+            {/* Branch from X=175 to MDP-2 at X=285 with jumper bridge arc over MDP-1.2 feeder (X=230) */}
+            <path
+              d="M 175 345 L 223 345 A 7 7 0 0 1 237 345 L 285 345 L 285 415"
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="2"
+              strokeDasharray="4 3"
+            />
             {/* Arrowhead on second branch into left side of MDP-2 */}
             <path
-              d="M 282 415 L 293 415"
+              d="M 285 415 L 293 415"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
               markerEnd="url(#arrow-green)"
             />
             {/* Branch junction circle */}
-            <circle cx="172" cy="345" r="2.5" fill="#10b981" />
+            <circle cx="175" cy="345" r="3" fill="#10b981" />
 
-            {/* 2. Solar PV POI-1 (475, 242) -> Feeds right side of MDP-3 (497, 415) */}
+            {/* 2. Solar PV POI-1 (Center 475, 242) -> Steps to X=517, feeds right side of MDP-3 (497, 415) */}
             <path
-              d="M 475 242 L 475 252 L 525 252 L 525 415 L 497 415"
+              d="M 475 242 L 475 252 L 517 252 L 517 415"
               fill="none"
               stroke="#ef4444"
               strokeWidth="2"
               strokeDasharray="3 3"
+            />
+            <path
+              d="M 517 415 L 497 415"
+              fill="none"
+              stroke="#ef4444"
+              strokeWidth="2"
               markerEnd="url(#arrow-red)"
             />
 
-            {/* 3. Solar PV POI-2 (978, 242) -> Starts flush at bottom edge, passes BEHIND yellow busbar, turns left at 415 into PUTR-2 (965, 415) */}
+            {/* 3. Solar PV POI-2 (Center 950, 242) -> Centered departure, steps to channel X=975 between PUTR-2 & PUTR-NEW, feeds right side of PUTR-2 (965, 415) */}
             <path
-              d="M 978 242 L 978 415 L 965 415"
+              d="M 950 242 L 950 252 L 975 252 L 975 415"
               fill="none"
               stroke="#ef4444"
               strokeWidth="2"
               strokeDasharray="3 3"
+            />
+            <path
+              d="M 975 415 L 965 415"
+              fill="none"
+              stroke="#ef4444"
+              strokeWidth="2"
               markerEnd="url(#arrow-red)"
             />
 
-            {/* 4. Genset Diesel Fuel (1105, 242) -> Straight down along right side, turns left at 415 into right side of PUTR-NEW (1085, 415) */}
+            {/* 4. Genset Diesel Fuel (Center 1105, 242) -> Straight down along right side, feeds right side of PUTR-NEW (1085, 415) */}
             <path
-              d="M 1105 242 L 1105 415 L 1085 415"
+              d="M 1105 242 L 1105 415"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
               strokeDasharray="4 3"
+            />
+            <path
+              d="M 1105 415 L 1085 415"
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="2"
               markerEnd="url(#arrow-green)"
             />
 
