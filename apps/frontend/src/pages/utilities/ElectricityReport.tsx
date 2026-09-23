@@ -4,7 +4,7 @@ import { useSystemStore } from "../../store/system.store";
 import { getJson } from "../../services/api.client";
 
 /* ═══════════ TYPES ═══════════ */
-type ReportCategory = "energy" | "tegangan" | "ampere" | "thd" | "daya";
+type ReportCategory = "energy" | "tegangan_380" | "tegangan_230" | "tegangan" | "ampere" | "thd" | "daya";
 
 type FactoryOption = { id: string; label: string };
 type TagOption = { id: string; label: string; factory: string };
@@ -90,7 +90,8 @@ const GRANULARITY: GranularityOption[] = [
 
 const REPORT_TABS: { key: ReportCategory; label: string; icon: string }[] = [
   { key: "energy", label: "Energy", icon: "⚡" },
-  { key: "tegangan", label: "Tegangan", icon: "🔌" },
+  { key: "tegangan_380", label: "Tegangan 380V (R-S-T)", icon: "🔌" },
+  { key: "tegangan_230", label: "Tegangan 230V (L-N)", icon: "🔌" },
   { key: "ampere", label: "Ampere", icon: "🔋" },
   { key: "thd", label: "THD", icon: "📊" },
   { key: "daya", label: "Daya", icon: "💡" },
@@ -103,15 +104,32 @@ const COLUMNS: Record<ReportCategory, { key: string; label: string; unit?: strin
     { key: "kwh", label: "KWH", unit: "kWh" },
     { key: "kvar", label: "KVAR", unit: "kVAR" },
   ],
+  tegangan_380: [
+    { key: "date", label: "DATE" },
+    { key: "tag", label: "TAG DESCRIPTION" },
+    { key: "vrs", label: "V R (380V)", unit: "V" },
+    { key: "vst", label: "V S (380V)", unit: "V" },
+    { key: "vtr", label: "V T (380V)", unit: "V" },
+    { key: "vll_avg", label: "V L-L AVG (380V)", unit: "V" },
+  ],
+  tegangan_230: [
+    { key: "date", label: "DATE" },
+    { key: "tag", label: "TAG DESCRIPTION" },
+    { key: "vr", label: "V R-N (230V)", unit: "V" },
+    { key: "vs", label: "V S-N (230V)", unit: "V" },
+    { key: "vt", label: "V T-N (230V)", unit: "V" },
+    { key: "vln_avg", label: "V L-N AVG (230V)", unit: "V" },
+  ],
   tegangan: [
     { key: "date", label: "DATE" },
     { key: "tag", label: "TAG DESCRIPTION" },
-    { key: "vr", label: "V R-N", unit: "V" },
-    { key: "vs", label: "V S-N", unit: "V" },
-    { key: "vt", label: "V T-N", unit: "V" },
-    { key: "vrs", label: "V R-S", unit: "V" },
-    { key: "vst", label: "V S-T", unit: "V" },
-    { key: "vtr", label: "V T-R", unit: "V" },
+    { key: "vrs", label: "V R (380V)", unit: "V" },
+    { key: "vst", label: "V S (380V)", unit: "V" },
+    { key: "vtr", label: "V T (380V)", unit: "V" },
+    { key: "vr", label: "V R-N (230V)", unit: "V" },
+    { key: "vs", label: "V S-N (230V)", unit: "V" },
+    { key: "vt", label: "V T-N (230V)", unit: "V" },
+    { key: "vln_avg", label: "V L-N (230V)", unit: "V" },
   ],
   ampere: [
     { key: "date", label: "DATE" },
@@ -319,7 +337,7 @@ export default function ElectricityReport() {
     setIsLoading(true);
     try {
       const q = new URLSearchParams({
-        category: activeCategory,
+        category: activeCategory.startsWith("tegangan") ? "tegangan" : activeCategory,
         factory: selectedFactory,
         tag: effectiveTag.id,
         machine: selectedMachine,
@@ -329,10 +347,20 @@ export default function ElectricityReport() {
       }).toString();
       const res = await getJson<{ data: Record<string, any>[] }>(`/analytics/electricity/report?${q}`);
       if (res && Array.isArray(res.data)) {
-        const mapped = res.data.map((row) => ({
-          ...row,
-          kvar: row.kvar ?? row.kvarh ?? null,
-        }));
+        const mapped = res.data.map((row) => {
+          const vll = (row.vrs !== null && row.vst !== null && row.vtr !== null)
+            ? +((Number(row.vrs) + Number(row.vst) + Number(row.vtr)) / 3).toFixed(1)
+            : (row.vrs !== null ? +Number(row.vrs).toFixed(1) : null);
+          const vln = (row.vr !== null && row.vs !== null && row.vt !== null)
+            ? +((Number(row.vr) + Number(row.vs) + Number(row.vt)) / 3).toFixed(1)
+            : (row.vr !== null ? +Number(row.vr).toFixed(1) : null);
+          return {
+            ...row,
+            kvar: row.kvar ?? row.kvarh ?? null,
+            vll_avg: row.vll_avg ?? vll,
+            vln_avg: row.vln_avg ?? vln,
+          };
+        });
         setData(mapped);
       } else {
         setData([]);
@@ -375,7 +403,7 @@ export default function ElectricityReport() {
         {/* ── Left Sidebar ── */}
         <div
           className="flex-shrink-0 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
-          style={{ width: 200 }}
+          style={{ width: 220 }}
         >
           {/* Sidebar Header */}
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/20 flex items-center gap-2">
@@ -392,9 +420,13 @@ export default function ElectricityReport() {
                 key={tab.key}
                 className={sidebarItemClass(activeCategory === tab.key)}
                 onClick={() => {
+                  const wasTegangan = activeCategory.startsWith("tegangan");
+                  const isNowTegangan = tab.key.startsWith("tegangan");
                   setActiveCategory(tab.key);
-                  setHasFiltered(false);
-                  setData([]);
+                  if (!(wasTegangan && isNowTegangan && data.length > 0)) {
+                    setHasFiltered(false);
+                    setData([]);
+                  }
                 }}
               >
                 <span style={{ fontSize: 14 }}>{tab.icon}</span>
@@ -415,6 +447,45 @@ export default function ElectricityReport() {
             <h3 className="text-sm font-extrabold text-slate-800 dark:text-white mr-2 flex-shrink-0">
               {REPORT_TABS.find(t => t.key === activeCategory)?.label ?? "Report"}
             </h3>
+
+            {/* Quick Toggle for Voltage 380V vs 230V */}
+            {activeCategory.startsWith("tegangan") && (
+              <div className="flex items-center gap-1 bg-slate-200/60 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 mr-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("tegangan_380")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all ${
+                    activeCategory === "tegangan_380"
+                      ? "bg-sky-500 text-white shadow-sm"
+                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  ⚡ 380V (R-S-T)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("tegangan_230")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all ${
+                    activeCategory === "tegangan_230"
+                      ? "bg-sky-500 text-white shadow-sm"
+                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  🔌 230V (L-N)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("tegangan")}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all ${
+                    activeCategory === "tegangan"
+                      ? "bg-sky-500 text-white shadow-sm"
+                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  📊 Semua
+                </button>
+              </div>
+            )}
 
             {/* Factory Select */}
             <select

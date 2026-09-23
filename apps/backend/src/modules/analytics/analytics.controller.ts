@@ -1132,12 +1132,8 @@ export const getElectricityReportHandler = async (
     // Select date trunc granularity: 'hour', 'day', 'month'
     const truncUnit = granularity === "month" ? "month" : granularity === "day" ? "day" : "hour";
     const toCharFmt = truncUnit === "month" ? "YYYY-MM" : truncUnit === "day" ? "YYYY-MM-DD" : "YYYY-MM-DD HH24:MI:SS";
-    const orderClausePm = truncUnit === "hour"
-      ? `ORDER BY DATE(date_trunc('${truncUnit}', p.t_stamp)) ASC, CASE WHEN EXTRACT(HOUR FROM date_trunc('${truncUnit}', p.t_stamp)) = 0 THEN 24 ELSE EXTRACT(HOUR FROM date_trunc('${truncUnit}', p.t_stamp)) END ASC`
-      : `ORDER BY date_trunc('${truncUnit}', p.t_stamp) ASC`;
-    const orderClauseFeeder = truncUnit === "hour"
-      ? `ORDER BY DATE(date_trunc('${truncUnit}', t_stamp)) ASC, CASE WHEN EXTRACT(HOUR FROM date_trunc('${truncUnit}', t_stamp)) = 0 THEN 24 ELSE EXTRACT(HOUR FROM date_trunc('${truncUnit}', t_stamp)) END ASC`
-      : `ORDER BY date_trunc('${truncUnit}', t_stamp) ASC`;
+    const orderClausePm = `ORDER BY date_trunc('${truncUnit}', p.t_stamp) ASC`;
+    const orderClauseFeeder = `ORDER BY date_trunc('${truncUnit}', t_stamp) ASC`;
 
     const normalizeThd = (val: any): number | null => {
       if (val === null || val === undefined || isNaN(Number(val))) return null;
@@ -1348,13 +1344,19 @@ export const getElectricityReportHandler = async (
         kwh: kwhVal !== null ? +kwhVal.toFixed(2) : null,
         kvarh: kvarhVal !== null ? +kvarhVal.toFixed(2) : null,
         kvah: kvahVal !== null ? +kvahVal.toFixed(2) : null,
-        // Tegangan tab: L-N ~230V, L-L ~380V
+        // Tegangan tab: 380V (R-S-T / L-L) and 230V (L-N)
         vr: r.vr !== null ? +Number(r.vr).toFixed(1) : null,
         vs: r.vs !== null ? +Number(r.vs).toFixed(1) : null,
         vt: r.vt !== null ? +Number(r.vt).toFixed(1) : null,
         vrs: r.vrs !== null ? +Number(r.vrs).toFixed(1) : null,
         vst: r.vst !== null ? +Number(r.vst).toFixed(1) : null,
         vtr: r.vtr !== null ? +Number(r.vtr).toFixed(1) : null,
+        vll_avg: (r.vrs !== null && r.vst !== null && r.vtr !== null)
+          ? +((Number(r.vrs) + Number(r.vst) + Number(r.vtr)) / 3).toFixed(1)
+          : (r.vrs !== null ? +Number(r.vrs).toFixed(1) : null),
+        vln_avg: (r.vr !== null && r.vs !== null && r.vt !== null)
+          ? +((Number(r.vr) + Number(r.vs) + Number(r.vt)) / 3).toFixed(1)
+          : (r.vr !== null ? +Number(r.vr).toFixed(1) : null),
         // Ampere tab
         ir: r.ir !== null ? +Number(r.ir).toFixed(1) : null,
         is: r.is_val !== null ? +Number(r.is_val).toFixed(1) : null,
