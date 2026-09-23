@@ -1127,13 +1127,17 @@ export const getElectricityReportHandler = async (
     const machinePm = (machine && machine !== "all" && tagMap[machine.toLowerCase()]) ? tagMap[machine.toLowerCase()].pmId : null;
     const targetPmId = machinePm || mapping.pmId || (tag.toUpperCase().startsWith("PM") ? tag.toUpperCase() : null);
     const targetGroup = mapping.group || (targetPmId && tagMap[targetPmId.toLowerCase()] ? tagMap[targetPmId.toLowerCase()].group : null);
-    const targetTable = mapping.table || (factory === "f2" ? "electric_wf2_telemetry" : "electric_wf1_telemetry");
+    const targetTable = mapping.table || (factory === "f2" || targetGroup === "ew22" || targetGroup === "ew23" ? "electric_wf2_telemetry" : "electric_wf1_telemetry");
 
     // Select date trunc granularity: 'hour', 'day', 'month'
     const truncUnit = granularity === "month" ? "month" : granularity === "day" ? "day" : "hour";
-    const orderClause = truncUnit === "hour"
+    const toCharFmt = truncUnit === "month" ? "YYYY-MM" : truncUnit === "day" ? "YYYY-MM-DD" : "YYYY-MM-DD HH24:MI:SS";
+    const orderClausePm = truncUnit === "hour"
+      ? `ORDER BY DATE(date_trunc('${truncUnit}', p.t_stamp)) ASC, CASE WHEN EXTRACT(HOUR FROM date_trunc('${truncUnit}', p.t_stamp)) = 0 THEN 24 ELSE EXTRACT(HOUR FROM date_trunc('${truncUnit}', p.t_stamp)) END ASC`
+      : `ORDER BY date_trunc('${truncUnit}', p.t_stamp) ASC`;
+    const orderClauseFeeder = truncUnit === "hour"
       ? `ORDER BY DATE(date_trunc('${truncUnit}', t_stamp)) ASC, CASE WHEN EXTRACT(HOUR FROM date_trunc('${truncUnit}', t_stamp)) = 0 THEN 24 ELSE EXTRACT(HOUR FROM date_trunc('${truncUnit}', t_stamp)) END ASC`
-      : `ORDER BY bucket ASC`;
+      : `ORDER BY date_trunc('${truncUnit}', t_stamp) ASC`;
 
     const normalizeThd = (val: any): number | null => {
       if (val === null || val === undefined || isNaN(Number(val))) return null;
@@ -1147,7 +1151,7 @@ export const getElectricityReportHandler = async (
       return +num.toFixed(2);
     };
 
-    // 1. Try querying electric_pm_telemetry / minute first
+    // 1. Query electric_pm_telemetry / minute with fallback feeder THD for Factory 1 sub-meters
     let queryRows: any[] = [];
     try {
       const pmSql = `
@@ -1156,8 +1160,12 @@ export const getElectricityReportHandler = async (
                  current_a, current_b, current_c, current_unbalance,
                  active_power_total, reactive_power_total, apparent_power_total,
                  power_factor, frequency,
-                 thd_volt_a, thd_volt_b, thd_volt_c,
-                 thd_current_a, thd_current_b, thd_current_c,
+                 CASE WHEN thd_volt_a >= 0 AND thd_volt_a <= 100 THEN thd_volt_a ELSE NULL END AS thd_volt_a,
+                 CASE WHEN thd_volt_b >= 0 AND thd_volt_b <= 100 THEN thd_volt_b ELSE NULL END AS thd_volt_b,
+                 CASE WHEN thd_volt_c >= 0 AND thd_volt_c <= 100 THEN thd_volt_c ELSE NULL END AS thd_volt_c,
+                 CASE WHEN thd_current_a >= 0 AND thd_current_a <= 100 THEN thd_current_a ELSE NULL END AS thd_current_a,
+                 CASE WHEN thd_current_b >= 0 AND thd_current_b <= 100 THEN thd_current_b ELSE NULL END AS thd_current_b,
+                 CASE WHEN thd_current_c >= 0 AND thd_current_c <= 100 THEN thd_current_c ELSE NULL END AS thd_current_c,
                  active_energy
           FROM electric_pm_telemetry
           WHERE (($1 != '%' AND pm_id ILIKE $1) OR ($1 = '%' AND group_id ILIKE $2))
@@ -1168,36 +1176,66 @@ export const getElectricityReportHandler = async (
                  current_a, current_b, current_c, current_unbalance,
                  active_power_total, reactive_power_total, apparent_power_total,
                  power_factor, frequency,
-                 thd_volt_a, thd_volt_b, thd_volt_c,
-                 thd_current_a, thd_current_b, thd_current_c,
+                 CASE WHEN thd_volt_a >= 0 AND thd_volt_a <= 100 THEN thd_volt_a ELSE NULL END AS thd_volt_a,
+                 CASE WHEN thd_volt_b >= 0 AND thd_volt_b <= 100 THEN thd_volt_b ELSE NULL END AS thd_volt_b,
+                 CASE WHEN thd_volt_c >= 0 AND thd_volt_c <= 100 THEN thd_volt_c ELSE NULL END AS thd_volt_c,
+                 CASE WHEN thd_current_a >= 0 AND thd_current_a <= 100 THEN thd_current_a ELSE NULL END AS thd_current_a,
+                 CASE WHEN thd_current_b >= 0 AND thd_current_b <= 100 THEN thd_current_b ELSE NULL END AS thd_current_b,
+                 CASE WHEN thd_current_c >= 0 AND thd_current_c <= 100 THEN thd_current_c ELSE NULL END AS thd_current_c,
                  active_energy
           FROM electric_pm_telemetry_minute
           WHERE (($1 != '%' AND pm_id ILIKE $1) OR ($1 = '%' AND group_id ILIKE $2))
             AND t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
             AND (volt_ab IS NOT NULL OR volt_ll IS NOT NULL OR current_a IS NOT NULL OR active_power_total IS NOT NULL OR active_energy IS NOT NULL)
+        ),
+        raw_feeder AS (
+          SELECT t_stamp, thd_volt_a, thd_volt_b, thd_volt_c, thd_current_a, thd_current_b, thd_current_c
+          FROM ${targetTable}
+          WHERE t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
+          UNION ALL
+          SELECT t_stamp, thd_volt_a, thd_volt_b, thd_volt_c, thd_current_a, thd_current_b, thd_current_c
+          FROM ${targetTable}_minute
+          WHERE t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
+        ),
+        feeder_hourly AS (
+          SELECT 
+            date_trunc('${truncUnit}', t_stamp) as f_bucket,
+            AVG(thd_volt_a) as f_thdv_r,
+            AVG(thd_volt_b) as f_thdv_s,
+            AVG(thd_volt_c) as f_thdv_t,
+            AVG(thd_current_a) as f_thdi_r,
+            AVG(thd_current_b) as f_thdi_s,
+            AVG(thd_current_c) as f_thdi_t
+          FROM raw_feeder
+          GROUP BY date_trunc('${truncUnit}', t_stamp)
         )
         SELECT 
-          date_trunc('${truncUnit}', t_stamp) AS bucket,
-          ROUND(AVG(volt_ab) / 1.7320508, 1) AS vr, 
-          ROUND(AVG(volt_bc) / 1.7320508, 1) AS vs, 
-          ROUND(AVG(volt_ca) / 1.7320508, 1) AS vt,
-          ROUND(AVG(volt_ab), 1) AS vrs, 
-          ROUND(AVG(volt_bc), 1) AS vst, 
-          ROUND(AVG(volt_ca), 1) AS vtr,
-          AVG(current_a) AS ir, AVG(current_b) AS is_val, AVG(current_c) AS it, AVG(current_unbalance) AS in_val,
-          AVG(thd_volt_a) AS thdv_r, AVG(thd_volt_b) AS thdv_s, AVG(thd_volt_c) AS thdv_t,
-          AVG(thd_current_a) AS thdi_r, AVG(thd_current_b) AS thdi_s, AVG(thd_current_c) AS thdi_t,
-          AVG(active_power_total) AS kw,
-          AVG(reactive_power_total) AS kvar,
-          AVG(apparent_power_total) AS kva,
-          AVG(power_factor) AS pf,
-          AVG(frequency) AS freq,
-          MAX(active_energy) AS max_energy,
-          MIN(active_energy) AS min_energy,
+          to_char(date_trunc('${truncUnit}', p.t_stamp), '${toCharFmt}') AS date_str,
+          ROUND(AVG(p.volt_ab) / 1.7320508, 1) AS vr, 
+          ROUND(AVG(p.volt_bc) / 1.7320508, 1) AS vs, 
+          ROUND(AVG(p.volt_ca) / 1.7320508, 1) AS vt,
+          ROUND(AVG(p.volt_ab), 1) AS vrs, 
+          ROUND(AVG(p.volt_bc), 1) AS vst, 
+          ROUND(AVG(p.volt_ca), 1) AS vtr,
+          AVG(p.current_a) AS ir, AVG(p.current_b) AS is_val, AVG(p.current_c) AS it, AVG(p.current_unbalance) AS in_val,
+          COALESCE(AVG(p.thd_volt_a), f.f_thdv_r) AS thdv_r,
+          COALESCE(AVG(p.thd_volt_b), f.f_thdv_s) AS thdv_s,
+          COALESCE(AVG(p.thd_volt_c), f.f_thdv_t) AS thdv_t,
+          COALESCE(AVG(p.thd_current_a), f.f_thdi_r) AS thdi_r,
+          COALESCE(AVG(p.thd_current_b), f.f_thdi_s) AS thdi_s,
+          COALESCE(AVG(p.thd_current_c), f.f_thdi_t) AS thdi_t,
+          AVG(p.active_power_total) AS kw,
+          AVG(p.reactive_power_total) AS kvar,
+          AVG(p.apparent_power_total) AS kva,
+          AVG(p.power_factor) AS pf,
+          AVG(p.frequency) AS freq,
+          MAX(p.active_energy) AS max_energy,
+          MIN(p.active_energy) AS min_energy,
           COUNT(*) as sample_count
-        FROM raw_pm
-        GROUP BY date_trunc('${truncUnit}', t_stamp)
-        ${orderClause}
+        FROM raw_pm p
+        LEFT JOIN feeder_hourly f ON f.f_bucket = date_trunc('${truncUnit}', p.t_stamp)
+        GROUP BY date_trunc('${truncUnit}', p.t_stamp), f.f_thdv_r, f.f_thdv_s, f.f_thdv_t, f.f_thdi_r, f.f_thdi_s, f.f_thdi_t
+        ${orderClausePm}
       `;
       const pmRes = await pool.query(pmSql, [targetPmId || "%", targetGroup || "%", `${startDate} 00:00:00`, endDate]);
       if (pmRes.rows.length > 0) {
@@ -1219,8 +1257,12 @@ export const getElectricityReportHandler = async (
                    COALESCE(active_power_total, active_power) AS active_power_total,
                    reactive_power_total, apparent_power_total,
                    power_factor, frequency,
-                   thd_volt_a, thd_volt_b, thd_volt_c,
-                   thd_current_a, thd_current_b, thd_current_c,
+                   CASE WHEN thd_volt_a >= 0 AND thd_volt_a <= 100 THEN thd_volt_a ELSE NULL END AS thd_volt_a,
+                   CASE WHEN thd_volt_b >= 0 AND thd_volt_b <= 100 THEN thd_volt_b ELSE NULL END AS thd_volt_b,
+                   CASE WHEN thd_volt_c >= 0 AND thd_volt_c <= 100 THEN thd_volt_c ELSE NULL END AS thd_volt_c,
+                   CASE WHEN thd_current_a >= 0 AND thd_current_a <= 100 THEN thd_current_a ELSE NULL END AS thd_current_a,
+                   CASE WHEN thd_current_b >= 0 AND thd_current_b <= 100 THEN thd_current_b ELSE NULL END AS thd_current_b,
+                   CASE WHEN thd_current_c >= 0 AND thd_current_c <= 100 THEN thd_current_c ELSE NULL END AS thd_current_c,
                    active_energy
             FROM ${targetTable}
             WHERE t_stamp >= $1::timestamp AND t_stamp <= ($2 || ' 23:59:59')::timestamp
@@ -1230,14 +1272,18 @@ export const getElectricityReportHandler = async (
                    COALESCE(active_power_total, active_power) AS active_power_total,
                    reactive_power_total, apparent_power_total,
                    power_factor, frequency,
-                   thd_volt_a, thd_volt_b, thd_volt_c,
-                   thd_current_a, thd_current_b, thd_current_c,
+                   CASE WHEN thd_volt_a >= 0 AND thd_volt_a <= 100 THEN thd_volt_a ELSE NULL END AS thd_volt_a,
+                   CASE WHEN thd_volt_b >= 0 AND thd_volt_b <= 100 THEN thd_volt_b ELSE NULL END AS thd_volt_b,
+                   CASE WHEN thd_volt_c >= 0 AND thd_volt_c <= 100 THEN thd_volt_c ELSE NULL END AS thd_volt_c,
+                   CASE WHEN thd_current_a >= 0 AND thd_current_a <= 100 THEN thd_current_a ELSE NULL END AS thd_current_a,
+                   CASE WHEN thd_current_b >= 0 AND thd_current_b <= 100 THEN thd_current_b ELSE NULL END AS thd_current_b,
+                   CASE WHEN thd_current_c >= 0 AND thd_current_c <= 100 THEN thd_current_c ELSE NULL END AS thd_current_c,
                    active_energy
             FROM ${targetTable}_minute
             WHERE t_stamp >= $1::timestamp AND t_stamp <= ($2 || ' 23:59:59')::timestamp
           )
           SELECT 
-            date_trunc('${truncUnit}', t_stamp) AS bucket,
+            to_char(date_trunc('${truncUnit}', t_stamp), '${toCharFmt}') AS date_str,
             ROUND(AVG(volt_ab) / 1.7320508, 1) AS vr, 
             ROUND(AVG(volt_bc) / 1.7320508, 1) AS vs, 
             ROUND(AVG(volt_ca) / 1.7320508, 1) AS vt,
@@ -1257,7 +1303,7 @@ export const getElectricityReportHandler = async (
             COUNT(*) as sample_count
           FROM raw_feeder
           GROUP BY date_trunc('${truncUnit}', t_stamp)
-          ${orderClause}
+          ${orderClauseFeeder}
         `;
         const feederRes = await pool.query(feederSql, [`${startDate} 00:00:00`, endDate]);
         queryRows = feederRes.rows;
@@ -1273,18 +1319,7 @@ export const getElectricityReportHandler = async (
       : (machine && machine !== "all" ? `${tag.toUpperCase()} - ${machine}` : tag.toUpperCase());
 
     const result = queryRows.map((r: any) => {
-      const bDate = new Date(r.bucket);
-      let dateStr = "";
-      if (granularity === "hour") {
-        const pad = (n: number) => String(n).padStart(2, "0");
-        dateStr = `${bDate.getFullYear()}-${pad(bDate.getMonth() + 1)}-${pad(bDate.getDate())} ${pad(bDate.getHours())}:00:00`;
-      } else if (granularity === "day") {
-        const pad = (n: number) => String(n).padStart(2, "0");
-        dateStr = `${bDate.getFullYear()}-${pad(bDate.getMonth() + 1)}-${pad(bDate.getDate())}`;
-      } else {
-        const pad = (n: number) => String(n).padStart(2, "0");
-        dateStr = `${bDate.getFullYear()}-${pad(bDate.getMonth() + 1)}`;
-      }
+      const dateStr = r.date_str || "";
 
       const kwVal = r.kw !== null ? Number(r.kw) : null;
       const kvarVal = r.kvar !== null ? Number(r.kvar) : null;
