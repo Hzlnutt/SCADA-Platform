@@ -1351,6 +1351,14 @@ export default function Electricity() {
   const [liveWf2Status, setLiveWf2Status] = useState<boolean>(true);
   const [isLiveLoading, setIsLiveLoading] = useState<boolean>(true);
 
+  // Safety timeout so cards never get stuck indefinitely in "POLLING..." skeleton state
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLiveLoading(false);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Incoming Cubicle selector (All, PLN, WF1, WF2, POI1, POI2)
   const [cubicleSelector, setCubicleSelector] = useState<"all" | "pln" | "wf1" | "wf2" | "poi1" | "poi2">("all");
   const [cubiclePoiView, setCubiclePoiView] = useState(false);
@@ -1786,27 +1794,26 @@ export default function Electricity() {
     let isMounted = true;
     const fetchActiveApiData = async () => {
       if (!isPageActive) return;
-      const factConfigUrls = [...factCategories1, ...factCategories2]
-        .map(c => {
-          const u = c.value?.endpoint_url;
-          if (!u) return "";
-          return ENDPOINT_MAP[u] || u;
-        })
-        .filter((u): u is string => typeof u === "string" && u.trim().length > 0);
-
-      const uniqueUrls = Array.from(new Set([
-        ...Object.values(apiSourceUrls).map(u => ENDPOINT_MAP[u] || u),
-        ...factConfigUrls,
+      // Only query valid absolute HTTP/HTTPS URLs to eliminate socket stalls and proxy timeouts
+      const candidateUrls = [
         DEFAULT_PLN_API_URL,
         DEFAULT_WF1_API_URL,
         DEFAULT_WF2_API_URL,
         DEFAULT_PLTS_API_URL,
         DEFAULT_EW21_API_URL,
         DEFAULT_EW22_API_URL,
-        DEFAULT_EW23_API_URL
-      ].filter((u) => u && u.trim())));
+        DEFAULT_EW23_API_URL,
+        ...Object.values(apiSourceUrls).map(u => ENDPOINT_MAP[u] || u)
+      ];
+
+      const uniqueUrls = Array.from(new Set(
+        candidateUrls.filter((u): u is string => typeof u === "string" && (u.startsWith("http://") || u.startsWith("https://")))
+      ));
       if (uniqueUrls.length === 0) {
-        if (isMounted) setApiLiveData({});
+        if (isMounted) {
+          setApiLiveData({});
+          setIsLiveLoading(false);
+        }
         return;
       }
 
@@ -1951,7 +1958,7 @@ export default function Electricity() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 2000); // 2s fallback polling (WebSocket handles 1s real-time)
+    const interval = setInterval(fetchActiveApiData, 5000); // 5s fallback polling (WebSocket handles 1s real-time)
 
     const socket = getSocket();
     const handlePltsLive = (payload: any) => {
@@ -2148,6 +2155,9 @@ export default function Electricity() {
         if (res?.data) {
           setSummaryData(res.data);
           setChartData(res.data);
+          if (range === "month" && selectedYear === new Date().getFullYear()) {
+            setFixedMonthlyPln(res.data);
+          }
         }
         setSummaryLoading(false);
         setChartLoading(false);
@@ -2182,6 +2192,9 @@ export default function Electricity() {
       .then((res) => {
         if (res?.data) {
           setSolarData(res.data);
+          if (solarRange === "month" && solarSelectedYear === new Date().getFullYear()) {
+            setFixedMonthlySolar(res.data);
+          }
           if (res.data.live) {
             setSolarLive(res.data.live);
           }
@@ -2195,18 +2208,27 @@ export default function Electricity() {
   // Dedicated fetcher for fixed monthly executive recap (Bulan Ini)
   const fetchFixedMonthlyData = useCallback(() => {
     const curYear = new Date().getFullYear();
-    Promise.all([
-      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${curYear}&_t=${Date.now()}`),
-      getJson<{ data: any }>(`/analytics/solar?year=${curYear}&_t=${Date.now()}`)
-    ])
-      .then(([resPln, resSolar]) => {
-        if (resPln?.data) setFixedMonthlyPln(resPln.data);
-        if (resSolar?.data) setFixedMonthlySolar(resSolar.data);
-      })
-      .catch((err) => {
-        console.warn("Failed to load fixed monthly executive data:", err);
-      });
-  }, []);
+    const needsPln = range !== "month" || selectedYear !== curYear;
+    const needsSolar = solarRange !== "month" || solarSelectedYear !== curYear;
+    if (!needsPln && !needsSolar) return;
+
+    const promises: Promise<any>[] = [];
+    if (needsPln) {
+      promises.push(
+        getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${curYear}&_t=${Date.now()}`)
+          .then((res) => { if (res?.data) setFixedMonthlyPln(res.data); })
+      );
+    }
+    if (needsSolar) {
+      promises.push(
+        getJson<{ data: any }>(`/analytics/solar?year=${curYear}&_t=${Date.now()}`)
+          .then((res) => { if (res?.data) setFixedMonthlySolar(res.data); })
+      );
+    }
+    Promise.all(promises).catch((err) => {
+      console.warn("Failed to load fixed monthly executive data:", err);
+    });
+  }, [range, selectedYear, solarRange, solarSelectedYear]);
 
   useEffect(() => {
     fetchFixedMonthlyData();
@@ -2230,7 +2252,7 @@ export default function Electricity() {
         fetchCubicleAnalytics();
         fetchFixedMonthlyData();
       }
-    }, 10000);
+    }, 30000);
     const socket = getSocket();
     const handleElectricityUpdate = () => {
       if (active) {

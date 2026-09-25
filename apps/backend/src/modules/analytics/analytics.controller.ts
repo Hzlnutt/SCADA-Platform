@@ -1671,6 +1671,10 @@ export const PM_DEFAULT_LABELS: Record<string, string> = {
   PM412: "Incoming Cubicle WF2 (PM5560)"
 };
 
+// In-memory cache & promise deduplicator for equipment monthly batch computation (30s TTL)
+const equipmentBatchCache = new Map<string, { data: any; expiresAt: number }>();
+const equipmentBatchInflight = new Map<string, Promise<any>>();
+
 /**
  * Core engine to compute factual monthly daily electricity consumption for all equipment units
  */
@@ -1692,6 +1696,35 @@ export async function computeEquipmentMonthlyBatch(
     hasData: boolean;
   }>;
 }> {
+  const cacheKey = `${currentMonth}_${comparisonMonth}`;
+  const now = Date.now();
+  const cached = equipmentBatchCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
+  if (equipmentBatchInflight.has(cacheKey)) {
+    return equipmentBatchInflight.get(cacheKey)!;
+  }
+
+  const queryPromise = (async () => {
+    try {
+      const result = await doComputeEquipmentMonthlyBatch(currentMonth, comparisonMonth);
+      equipmentBatchCache.set(cacheKey, { data: result, expiresAt: Date.now() + 30000 });
+      return result;
+    } finally {
+      equipmentBatchInflight.delete(cacheKey);
+    }
+  })();
+
+  equipmentBatchInflight.set(cacheKey, queryPromise);
+  return queryPromise;
+}
+
+async function doComputeEquipmentMonthlyBatch(
+  currentMonth: string,
+  comparisonMonth: string
+) {
   const pool = getPostgresPool();
   const months = [currentMonth, comparisonMonth].sort();
   const earlierMonth = months[0];

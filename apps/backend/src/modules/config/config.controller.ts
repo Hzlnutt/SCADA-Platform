@@ -1422,6 +1422,11 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
       url = CORE_ENDPOINT_URLS[url.trim()];
     }
 
+    if (typeof url !== "string" || (!url.startsWith("http://") && !url.startsWith("https://"))) {
+      res.status(400).json({ success: false, error: "Invalid URL protocol: Must start with http:// or https://" });
+      return;
+    }
+
     const reqMethod = (method || "GET").toUpperCase();
     const now = Date.now();
 
