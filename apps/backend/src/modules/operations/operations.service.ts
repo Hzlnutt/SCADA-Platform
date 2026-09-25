@@ -496,19 +496,25 @@ export const getHvacStates = async () => {
   const defaults: Record<string, { temp: number; humid: number; mode: string; status: string }> = {
     "hvac_state_ahu-01": { temp: 46.8, humid: 75.0, mode: "Auto", status: "Running" },
     "hvac_state_ahu-02": { temp: 22.4, humid: 55.0, mode: "Auto", status: "Running" },
-    "hvac_state_ahu-03": { temp: 20.5, humid: 55.0, mode: "Manual", status: "Running" },
+    "hvac_state_ahu-03": { temp: 20.5, humid: 55.0, mode: "Auto", status: "Running" },
     "hvac_state_utility": { temp: 22.0, humid: 60.0, mode: "Auto", status: "Running" }
   };
 
   const result: Record<string, any> = {};
   for (const [key, defValue] of Object.entries(defaults)) {
     const doc = stateMap.get(key) as any;
-    result[key] = doc ? {
-      temp: doc.temp !== undefined ? doc.temp : defValue.temp,
-      humid: doc.humid !== undefined ? doc.humid : defValue.humid,
-      mode: doc.mode !== undefined ? doc.mode : defValue.mode,
-      status: doc.status !== undefined ? doc.status : defValue.status,
-    } : defValue;
+    const status = doc?.status !== undefined ? doc.status : defValue.status;
+    let mode = doc?.mode !== undefined ? doc.mode : defValue.mode;
+    // Auto-normalize legacy Manual default for AHU-03 when it is Running
+    if (status === "Running" && key === "hvac_state_ahu-03" && mode === "Manual") {
+      mode = "Auto";
+    }
+    result[key] = {
+      temp: doc?.temp !== undefined ? doc.temp : defValue.temp,
+      humid: doc?.humid !== undefined ? doc.humid : defValue.humid,
+      mode,
+      status,
+    };
   }
 
   return result;
@@ -531,7 +537,7 @@ export const updateHvacState = async (
   const defaults: Record<string, { temp: number; humid: number; mode: string; status: string }> = {
     "ahu-01": { temp: 46.8, humid: 75.0, mode: "Auto", status: "Running" },
     "ahu-02": { temp: 22.4, humid: 55.0, mode: "Auto", status: "Running" },
-    "ahu-03": { temp: 20.5, humid: 55.0, mode: "Manual", status: "Running" },
+    "ahu-03": { temp: 20.5, humid: 55.0, mode: "Auto", status: "Running" },
     "utility": { temp: 22.0, humid: 60.0, mode: "Auto", status: "Running" }
   };
   const def = defaults[unitId] || { temp: 20, humid: 50, mode: "Auto", status: "Running" };

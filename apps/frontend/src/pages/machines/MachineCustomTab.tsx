@@ -120,7 +120,7 @@ const MachineCustomTab = () => {
   // State untuk AHU-03
   const [ahu03Temp, setAhu03Temp] = useState(20.5);
   const [ahu03Humid, setAhu03Humid] = useState(55.0);
-  const [ahu03Mode, setAhu03Mode] = useState("Manual");
+  const [ahu03Mode, setAhu03Mode] = useState("Auto");
   const [ahu03Status, setAhu03Status] = useState("Running");
 
   // State untuk Utility
@@ -163,8 +163,8 @@ const MachineCustomTab = () => {
           const s = states["hvac_state_ahu-03"];
           setAhu03Temp(s.temp);
           setAhu03Humid(s.humid);
-          setAhu03Mode(s.mode);
-          setAhu03Status(s.status);
+          setAhu03Mode(s.status === "Running" && s.mode === "Manual" ? "Auto" : (s.mode || "Auto"));
+          setAhu03Status(s.status || "Running");
         }
         if (states["hvac_state_utility"]) {
           const s = states["hvac_state_utility"];
@@ -194,7 +194,7 @@ const MachineCustomTab = () => {
           const fetchDirect = async (ep: string) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), 1500);
-            const res = await fetch(`http://10.3.161.3:8088/system/webdev/Utility_Dashboard/${ep}`, { signal: controller.signal });
+            const res = await fetch(`http://10.3.164.3:8088/system/webdev/Utility_Dashboard/${ep}`, { signal: controller.signal });
             clearTimeout(id);
             return await res.json();
           };
@@ -545,10 +545,10 @@ const MachineCustomTab = () => {
     if (tabId === "ahu-03") {
       const plc3 = hvacRetainLive.PLC2_AHU3 || {};
       const isConnected = plc3.Connected !== undefined ? Boolean(plc3.Connected) : true;
-      const isRunning = isConnected && (ahu03Status === "Running");
+      const isRunning = isConnected && (ahu03Status !== "Stopped" && ahu03Status !== "Maintenance");
 
-      const headerMode = isConnected ? ahu03Mode : "Manual";
-      const headerStatus = isConnected ? ahu03Status : "Stopped";
+      const headerMode = isConnected ? (ahu03Status === "Running" && ahu03Mode === "Manual" ? "Auto" : (ahu03Mode || "Auto")) : "Manual";
+      const headerStatus = isConnected ? (ahu03Status || "Running") : "Stopped";
 
       // Status AHU: 3 status: ON / OFF / IDLE
       const ahuStatus03: "ON" | "OFF" | "IDLE" = !isConnected

@@ -1721,7 +1721,7 @@ function HvacOverview({
         const directFetch = async (ep: string) => {
           const controller = new AbortController();
           const id = setTimeout(() => controller.abort(), 1500);
-          const res = await fetch(`http://10.3.161.3:8088/system/webdev/Utility_Dashboard/${ep}`, { signal: controller.signal });
+          const res = await fetch(`http://10.3.164.3:8088/system/webdev/Utility_Dashboard/${ep}`, { signal: controller.signal });
           clearTimeout(id);
           return await res.json();
         };
@@ -2148,9 +2148,9 @@ function HvacOverview({
                 <td className="py-2.5 px-3 font-bold">AHU-03</td>
                 <td className="py-2.5 px-3">Ref. Retention Room</td>
                 <td className="py-2.5 px-3">
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${ahu03.temp1 !== null ? "bg-emerald-500/15 text-emerald-500" : "bg-slate-500/15 text-slate-500"}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${ahu03.temp1 !== null ? "bg-emerald-500 animate-pulse" : "bg-slate-500"}`} />
-                    {ahu03.temp1 !== null ? "MONITORING" : "STANDBY"}
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${(ahu03.connected && ahu03.temp1 !== null) ? "bg-emerald-500/15 text-emerald-500" : "bg-slate-500/15 text-slate-500"}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${(ahu03.connected && ahu03.temp1 !== null) ? "bg-emerald-500 animate-pulse" : "bg-slate-500"}`} />
+                    {(ahu03.connected && ahu03.temp1 !== null) ? "RUNNING" : "STOPPED"}
                   </span>
                 </td>
                 <td className="py-2.5 px-3 text-right font-mono text-slate-400">—</td>
