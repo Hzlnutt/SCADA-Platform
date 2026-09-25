@@ -523,7 +523,7 @@ interface HourlyTrend5sPoint {
 
   // Load database analytics fallback
   const fetchTelemetry = () => {
-    getJson<{ data: any }>(`/analytics/electricity?deviceId=${config.deviceId}`)
+    getJson<{ data: any }>(`/analytics/electricity?deviceId=${config.deviceId}&includeTrends=true`)
       .then((res) => {
         if (res?.data?.pqData) {
           const pq = res.data.pqData;

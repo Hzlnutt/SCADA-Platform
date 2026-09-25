@@ -44,13 +44,14 @@ export const getElectricityAnalyticsHandler = async (
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
     const year = req.query.year ? Number(req.query.year) : undefined;
+    const includeTrends = req.query.includeTrends === "true" || (!from && !to && !year && deviceId !== "all");
 
     const db = getMongoDb();
     const config = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
     const wbpRate = config ? config.wbpRate : 1600;
     const lwbpRate = config ? config.lwbpRate : 1112;
 
-    const cacheKey = `${deviceId}_${from || ""}_${to || ""}_${year || ""}_${lwbpRate}_${wbpRate}`;
+    const cacheKey = `${deviceId}_${from || ""}_${to || ""}_${year || ""}_${lwbpRate}_${wbpRate}_${includeTrends ? 1 : 0}`;
     const now = Date.now();
     const cached = electricityAnalyticsCache.get(cacheKey);
     if (cached && cached.expiresAt > now) {
@@ -64,7 +65,7 @@ export const getElectricityAnalyticsHandler = async (
 
     const queryPromise = (async () => {
       try {
-        const data = await getElectricityAnalytics(deviceId, from, to, lwbpRate, wbpRate, year);
+        const data = await getElectricityAnalytics(deviceId, from, to, lwbpRate, wbpRate, year, includeTrends);
         const todayStr = getWibDateTime(new Date()).dateStr;
         const isHistorical = Boolean((to && to < todayStr) || (year && year < new Date().getFullYear()));
         const ttl = isHistorical ? 300000 : 30000;

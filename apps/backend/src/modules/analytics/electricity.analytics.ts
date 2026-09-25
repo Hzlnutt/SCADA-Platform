@@ -109,7 +109,14 @@ export async function fetchPowerFactor(): Promise<number | null> {
   return null;
 }
 
+const incomingTrendCache = new Map<string, { points: IncomingTrend5sPoint[]; expiresAt: number }>();
+
 export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<IncomingTrend5sPoint[]> => {
+  const cached = incomingTrendCache.get(deviceId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.points;
+  }
+
   const pool = getPostgresPool();
   const wib = getWibDateTime(new Date());
   const currentHour = wib.hour;
@@ -134,7 +141,7 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
       LIMIT 17280
     `, [deviceId]);
 
-    return res.rows.map((row: any) => {
+    const points = res.rows.map((row: any) => {
       const timeStr = row.time_str;
       const vR = Number(row.volt_ab) || 0;
       const vS = Number(row.volt_bc) || 0;
@@ -165,6 +172,9 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
         ts: Number(row.ts_ms) || Date.now()
       };
     });
+
+    incomingTrendCache.set(deviceId, { points, expiresAt: Date.now() + 15000 });
+    return points;
   } catch (err: any) {
     console.warn(`[getIncomingTrend1hFromDb] Error fetching 5s trend for ${deviceId}:`, err.message);
     return [];
@@ -279,13 +289,14 @@ export const getElectricityAnalytics = async (
   toStr?: string,
   lwbpRate: number = 1112,
   wbpRate: number = 1600,
-  year?: number
+  year?: number,
+  includeTrends: boolean = false
 ): Promise<ElectricityAnalyticsResult> => {
   if ((deviceId || "").toLowerCase() === "all") {
     const [pln, poi1, poi2] = await Promise.all([
-      getElectricityAnalytics("Cubicle_PLN_PM8000", fromStr, toStr, lwbpRate, wbpRate, year),
-      getElectricityAnalytics("Solar_POI1", fromStr, toStr, lwbpRate, wbpRate, year),
-      getElectricityAnalytics("Solar_POI2", fromStr, toStr, lwbpRate, wbpRate, year)
+      getElectricityAnalytics("Cubicle_PLN_PM8000", fromStr, toStr, lwbpRate, wbpRate, year, includeTrends),
+      getElectricityAnalytics("Solar_POI1", fromStr, toStr, lwbpRate, wbpRate, year, includeTrends),
+      getElectricityAnalytics("Solar_POI2", fromStr, toStr, lwbpRate, wbpRate, year, includeTrends)
     ]);
 
     // Merge daily records
@@ -1043,7 +1054,7 @@ export const getElectricityAnalytics = async (
       breakdown,
       voltage24h: voltageTrend,
       activePower24h: powerTrend,
-      hourlyTrend5s: [],
+      hourlyTrend5s: includeTrends ? await getIncomingTrend1hFromDb(deviceId) : [],
       currentHour: getWibDateTime(new Date()).hour
     },
     pqData: {
