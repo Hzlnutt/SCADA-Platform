@@ -971,20 +971,21 @@ const recordIncomingTrend5s = async (
     const pool = getPostgresPool();
 
     if (isHourChange) {
-      // Clean up records older than 24 hours so we maintain a continuous 24-hour rolling sliding window (hilang berjalan)
+      // Clean up records from previous hour when hour changes, retaining only the current hour
       try {
         await pool.query(
-          `DELETE FROM electric_incoming_trend_5s WHERE device_id = $1 AND t_stamp < NOW() - INTERVAL '24 hours'`,
-          [deviceId]
+          `DELETE FROM electric_incoming_trend_5s WHERE device_id = $1 AND hour != $2`,
+          [deviceId, currentHour]
         );
       } catch (err: any) {
-        logger.warn(`Failed to cleanup >24h trend 5s for ${deviceId}: ${err.message}`);
+        logger.warn(`Failed to cleanup previous hour trend 5s for ${deviceId}: ${err.message}`);
       }
+      incomingHourlyTrends[deviceId] = [];
     }
 
     incomingHourlyTrends[deviceId].push(point);
-    // Continuous 24-hour rolling window: 12 points/min * 60 min * 24 h = 17,280 points (hilang berjalan FIFO)
-    if (incomingHourlyTrends[deviceId].length > 17280) {
+    // 1-hour window: 12 points/min * 60 min = 720 points (strictly current hour)
+    if (incomingHourlyTrends[deviceId].length > 720) {
       incomingHourlyTrends[deviceId].shift();
     }
 
@@ -1082,8 +1083,48 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   const vln2 = voltBCVal;
   const vln3 = voltCAVal;
 
+  const telemetryPqData = {
+    activePower: Number(activePowerVal.toFixed(1)),
+    reactivePower: Number(reactivePowerVal.toFixed(1)),
+    apparentPower: Number(apparentPowerVal.toFixed(1)),
+    pf: pfVal !== null ? Number(pfVal.toFixed(3)) : null,
+    pfStatus: isConnected ? "connected" : "offline",
+    freq: Number(freqVal.toFixed(2)),
+    vUnb: Number(vUnbVal.toFixed(2)),
+    iUnb: Number(iUnbVal.toFixed(2)),
+    thdV: Number(thdVVVal.toFixed(2)),
+    thdI: Number(thdIIVal.toFixed(2)),
+    vll1: Number(voltABVal.toFixed(2)),
+    vll2: Number(voltBCVal.toFixed(2)),
+    vll3: Number(voltCAVal.toFixed(2)),
+    vln1: Number(vln1.toFixed(2)),
+    vln2: Number(vln2.toFixed(2)),
+    vln3: Number(vln3.toFixed(2)),
+    current1: Number(currentAVal.toFixed(1)),
+    current2: Number(currentBVal.toFixed(1)),
+    current3: Number(currentCVal.toFixed(1)),
+    vR: Number(vln1.toFixed(3)),
+    vS: Number(vln2.toFixed(3)),
+    vT: Number(vln3.toFixed(3)),
+    iR: Number(currentAVal.toFixed(1)),
+    iS: Number(currentBVal.toFixed(1)),
+    iT: Number(currentCVal.toFixed(1)),
+    thdV_R: Number(thdVR.toFixed(2)),
+    thdV_S: Number(thdVS.toFixed(2)),
+    thdV_T: Number(thdVT.toFixed(2)),
+    thdI_R: Number(thdIR.toFixed(2)),
+    thdI_S: Number(thdIS.toFixed(2)),
+    thdI_T: Number(thdIT.toFixed(2)),
+    voltage: Number(voltLAvg.toFixed(2)),
+    status: isConnected
+  };
+
   latestIncomingTelemetry[deviceId] = {
-    data: pgPq,
+    data: {
+      ...pgPq,
+      ...telemetryPqData,
+      pqData: telemetryPqData
+    },
     ts: Date.now()
   };
 
@@ -1110,44 +1151,27 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
     deviceId,
     status: isConnected,
     online: isConnected,
-    pqData: {
-      activePower: Number(activePowerVal.toFixed(1)),
-      reactivePower: Number(reactivePowerVal.toFixed(1)),
-      apparentPower: Number(apparentPowerVal.toFixed(1)),
-      pf: pfVal !== null ? Number(pfVal.toFixed(3)) : null,
-      pfStatus: isConnected ? "connected" : "offline",
-      freq: Number(freqVal.toFixed(2)),
-      vUnb: Number(vUnbVal.toFixed(2)),
-      iUnb: Number(iUnbVal.toFixed(2)),
-      thdV: Number(thdVVVal.toFixed(2)),
-      thdI: Number(thdIIVal.toFixed(2)),
-      vll1: Number(voltABVal.toFixed(2)),
-      vll2: Number(voltBCVal.toFixed(2)),
-      vll3: Number(voltCAVal.toFixed(2)),
-      vln1: Number(vln1.toFixed(2)),
-      vln2: Number(vln2.toFixed(2)),
-      vln3: Number(vln3.toFixed(2)),
-      current1: Number(currentAVal.toFixed(1)),
-      current2: Number(currentBVal.toFixed(1)),
-      current3: Number(currentCVal.toFixed(1)),
-      vR: Number(vln1.toFixed(3)),
-      vS: Number(vln2.toFixed(3)),
-      vT: Number(vln3.toFixed(3)),
-      iR: Number(currentAVal.toFixed(1)),
-      iS: Number(currentBVal.toFixed(1)),
-      iT: Number(currentCVal.toFixed(1)),
-      thdV_R: Number(thdVR.toFixed(2)),
-      thdV_S: Number(thdVS.toFixed(2)),
-      thdV_T: Number(thdVT.toFixed(2)),
-      thdI_R: Number(thdIR.toFixed(2)),
-      thdI_S: Number(thdIS.toFixed(2)),
-      thdI_T: Number(thdIT.toFixed(2)),
-      voltage: Number(voltLAvg.toFixed(2)),
-      status: isConnected
-    }
+    pqData: telemetryPqData
   });
 };
 const broadcastLiveTelemetryOffline = (deviceId: string) => {
+  latestIncomingTelemetry[deviceId] = {
+    data: {
+      status: false,
+      online: false,
+      pqData: {
+        activePower: 0,
+        reactivePower: 0,
+        apparentPower: 0,
+        pf: null,
+        pfStatus: "offline",
+        freq: 0,
+        voltage: 0,
+        status: false
+      }
+    },
+    ts: Date.now()
+  };
   const io = getSocketServer();
   if (!io) return;
   io.emit("electricity:live_update", {

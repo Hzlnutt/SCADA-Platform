@@ -10,7 +10,7 @@ import { getPostgresPool } from "../../database/postgres";
 import { defaultWaterConfig } from "../config/config.controller";
 import { calculateWaterCost } from "../../utils/water";
 import { getElectricityExportData, generateElectricityExcelWorkbook } from "./electricity.export";
-import { getIncomingHourlyTrend, getWibDateTime } from "../../core/scheduler";
+import { getIncomingHourlyTrend, getLatestIncomingTelemetry, getWibDateTime } from "../../core/scheduler";
 import { getIncomingTrend1hFromDb } from "./electricity.analytics";
 
 export const getAnalyticsSummaryHandler = async (
@@ -44,14 +44,13 @@ export const getElectricityAnalyticsHandler = async (
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
     const year = req.query.year ? Number(req.query.year) : undefined;
-    const includeTrends = req.query.includeTrends === "true" || (!from && !to && !year && deviceId !== "all");
 
     const db = getMongoDb();
     const config = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
     const wbpRate = config ? config.wbpRate : 1600;
     const lwbpRate = config ? config.lwbpRate : 1112;
 
-    const cacheKey = `${deviceId}_${from || ""}_${to || ""}_${year || ""}_${lwbpRate}_${wbpRate}_${includeTrends ? 1 : 0}`;
+    const cacheKey = `${deviceId}_${from || ""}_${to || ""}_${year || ""}_${lwbpRate}_${wbpRate}`;
     const now = Date.now();
     const cached = electricityAnalyticsCache.get(cacheKey);
     if (cached && cached.expiresAt > now) {
@@ -65,7 +64,7 @@ export const getElectricityAnalyticsHandler = async (
 
     const queryPromise = (async () => {
       try {
-        const data = await getElectricityAnalytics(deviceId, from, to, lwbpRate, wbpRate, year, includeTrends);
+        const data = await getElectricityAnalytics(deviceId, from, to, lwbpRate, wbpRate, year);
         const todayStr = getWibDateTime(new Date()).dateStr;
         const isHistorical = Boolean((to && to < todayStr) || (year && year < new Date().getFullYear()));
         const ttl = isHistorical ? 300000 : 30000;
@@ -2156,7 +2155,8 @@ export const getIncomingHourlyTrendHandler = async (req: Request, res: Response,
     const dev = typeof deviceId === "string" ? deviceId : "Cubicle_PLN_PM8000";
     const points = await getIncomingTrend1hFromDb(dev);
     const wib = getWibDateTime(new Date());
-    res.json({ success: true, data: { hour: wib.hour, points } });
+    const telemetry = getLatestIncomingTelemetry(dev);
+    res.json({ success: true, data: { hour: wib.hour, points, telemetry } });
   } catch (err) {
     next(err);
   }

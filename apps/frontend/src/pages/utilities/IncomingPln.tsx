@@ -521,13 +521,16 @@ interface HourlyTrend5sPoint {
     return val === null || val === undefined || val === "BELUM ADA API" || val === "API TIDAK TERKIRIM" || val === "Gagal Polling API" || val === "GAGAL POLLING API" || val === "xx";
   }, []);
 
-  // Load database analytics fallback
+  // Load database analytics fallback via dedicated endpoint
   const fetchTelemetry = () => {
-    getJson<{ data: any }>(`/analytics/electricity?deviceId=${config.deviceId}&includeTrends=true`)
+    getJson<{ success?: boolean; data?: { hour?: number; points?: any[]; telemetry?: any; pqData?: any } }>(
+      `/analytics/electricity/incoming-hourly-trend?deviceId=${config.deviceId}`
+    )
       .then((res) => {
-        if (res?.data?.pqData) {
-          const pq = res.data.pqData;
-          const isOffline = pq.pfStatus === "offline" || pq.pfStatus === "disconnected" || res.data.online === false || res.data.status === false;
+        const payload = res?.data;
+        const pq = payload?.telemetry?.pqData || payload?.pqData || payload?.telemetry;
+        if (pq) {
+          const isOffline = pq.pfStatus === "offline" || pq.pfStatus === "disconnected" || pq.status === false;
           setMetrics((prev) => ({
             ...prev,
             voltage: !isOffline && pq.voltage !== undefined && pq.voltage !== null ? pq.voltage : (isOffline ? 0 : prev.voltage),
@@ -553,15 +556,12 @@ interface HourlyTrend5sPoint {
             isConnected: !isOffline && pq.pfStatus === "connected"
           }));
         }
-        if (res?.data?.charts) {
-          const charts = res.data.charts;
-          if (charts.hourlyTrend5s && Array.isArray(charts.hourlyTrend5s)) {
-            const pts = charts.hourlyTrend5s;
-            const currentHour = typeof charts.currentHour === "number" ? charts.currentHour : trendHour;
-            setTrendHour(currentHour);
-            lastTrendHourRef.current = currentHour;
-            setHourlyTrend5s(pts);
-          }
+        if (payload?.points && Array.isArray(payload.points)) {
+          const pts = payload.points;
+          const currentHour = typeof payload.hour === "number" ? payload.hour : trendHour;
+          setTrendHour(currentHour);
+          lastTrendHourRef.current = currentHour;
+          setHourlyTrend5s(pts);
         }
         setLoading(false);
       })
@@ -599,9 +599,10 @@ interface HourlyTrend5sPoint {
   useEffect(() => {
     if (!isPageActive) return;
     fetchTelemetry();
+    // Light fallback every 60 seconds (real-time stream arrives via WebSocket every 1-5 seconds)
     const interval = setInterval(() => {
       if (isPageActive) fetchTelemetry();
-    }, 1000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [config, isPageActive]);
 
@@ -666,16 +667,21 @@ interface HourlyTrend5sPoint {
         const pt = payload.point;
         const currentHour = typeof payload.hour === "number" ? payload.hour : trendHour;
 
-        lastTrendHourRef.current = currentHour;
-        setTrendHour(currentHour);
+        if (currentHour !== lastTrendHourRef.current) {
+          lastTrendHourRef.current = currentHour;
+          setTrendHour(currentHour);
+          setHourlyTrend5s([pt]);
+          return;
+        }
+
         setHourlyTrend5s((prev) => {
           // Deduplicate: skip if already have this timestamp
           if (prev.length > 0 && prev[prev.length - 1].time === pt.time) {
             return prev;
           }
           const updated = [...prev, pt];
-          // Continuous 24-hour rolling sliding window: 17,280 points max (hilang berjalan FIFO)
-          return updated.length > 17280 ? updated.slice(updated.length - 17280) : updated;
+          // 1-Hour window: max 720 points (12 points/minute * 60 minutes)
+          return updated.length > 720 ? updated.slice(updated.length - 720) : updated;
         });
       }
     };
@@ -1408,10 +1414,10 @@ interface HourlyTrend5sPoint {
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400">Trend Tegangan 24 Jam (kV) — Rolling 5s</h4>
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400">Trend Tegangan 1 Jam (kV) — Rolling 5s</h4>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  24 Jam Terakhir (Rolling 5s)
+                  1 Jam Berjalan (Rolling 5s)
                 </span>
                 <button
                   type="button"
@@ -1432,10 +1438,10 @@ interface HourlyTrend5sPoint {
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400">Trend Daya Aktif 24 Jam (kW) — Rolling 5s</h4>
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400">Trend Daya Aktif 1 Jam (kW) — Rolling 5s</h4>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  24 Jam Terakhir (Rolling 5s)
+                  1 Jam Berjalan (Rolling 5s)
                 </span>
                 <button
                   type="button"
@@ -1490,7 +1496,7 @@ interface HourlyTrend5sPoint {
                   <h3 className={`text-base font-bold uppercase tracking-wider ${
                     zoomTrend === "voltage" ? "text-amber-500 dark:text-amber-400" : "text-emerald-500 dark:text-emerald-400"
                   }`}>
-                    {zoomTrend === "voltage" ? "Trend Tegangan 24 Jam (kV) — Rolling 5s" : "Trend Daya Aktif 24 Jam (kW) — Rolling 5s"}
+                    {zoomTrend === "voltage" ? "Trend Tegangan 1 Jam (kV) — Rolling 5s" : "Trend Daya Aktif 1 Jam (kW) — Rolling 5s"}
                   </h3>
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
                     {config.title}
@@ -1498,7 +1504,7 @@ interface HourlyTrend5sPoint {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-2">
                   <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
-                    Rentang: 24 Jam Terakhir (Rolling Sliding Window)
+                    Rentang: 1 Jam Berjalan (Rolling 5s Window)
                   </span>
                   <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
                     • Resolusi 5 Detik (Database Historikal Real-Time)
