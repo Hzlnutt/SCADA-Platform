@@ -117,7 +117,10 @@ export const getHistorianRangeFromPostgres = async (query: RangeQuery) => {
   const client = await pool.connect();
   try {
     const params: any[] = [];
-    let queryText = `SELECT t_stamp AS ts, ${mapping.column}::float AS value FROM ${mapping.table} WHERE ${mapping.column} IS NOT NULL`;
+    const isMinute = query.resolution === "1m" && !!mapping.minuteTable;
+    const targetTable = isMinute ? mapping.minuteTable : mapping.table;
+
+    let queryText = `SELECT t_stamp AS ts, ${mapping.column}::float AS value FROM ${targetTable} WHERE ${mapping.column} IS NOT NULL`;
     if (mapping.idDevice) {
       queryText += ` AND id_device = '${mapping.idDevice}'`;
     }
@@ -162,8 +165,8 @@ export const getHistorianRangeFromPostgres = async (query: RangeQuery) => {
       value: Number(row.value)
     }));
 
-    // Progressive real-time aggregation from minute table if available
-    if (mapping.minuteTable) {
+    // Progressive real-time aggregation from minute table if available and in hourly resolution
+    if (!isMinute && mapping.minuteTable) {
       try {
         const minParams: any[] = [];
         let minQuery = `

@@ -133,6 +133,192 @@ function VibrationOscilloscope({ equipmentName }: { equipmentName: string }) {
   );
 }
 
+const AVAILABLE_YEARS = [2024, 2025, 2026];
+const MONTH_NAMES_ID = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+];
+const MONTH_NAMES_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+  "Jul", "Agt", "Sep", "Okt", "Nov", "Des"
+];
+
+const timelineRanges = [
+  { id: "1h", label: "1 Jam" },
+  { id: "hour", label: "Per Jam" },
+  { id: "day", label: "Per Hari" },
+  { id: "month", label: "Per Bulan" },
+  { id: "ytd", label: "YTD" },
+  { id: "custom", label: "Kustom" }
+] as const;
+
+function computeIntervals(
+  range: "1h" | "hour" | "day" | "month" | "ytd" | "custom",
+  dateStr: string,
+  hour: number,
+  month: number,
+  year: number,
+  customStart: string,
+  customEnd: string
+) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  if (range === "1h") {
+    const curFrom = `${dateStr}T${pad(hour)}:00:00.000Z`;
+    const curTo = `${dateStr}T${pad(hour)}:59:59.999Z`;
+
+    const curHourDate = new Date(`${dateStr}T${pad(hour)}:00:00Z`);
+    const prevHourDate = new Date(curHourDate.getTime() - 3600000);
+    const prevDateStr = prevHourDate.toISOString().split("T")[0];
+    const prevHour = prevHourDate.getUTCHours();
+
+    const prevFrom = `${prevDateStr}T${pad(prevHour)}:00:00.000Z`;
+    const prevTo = `${prevDateStr}T${pad(prevHour)}:59:59.999Z`;
+
+    return {
+      current: {
+        fromStr: curFrom,
+        toStr: curTo,
+        resolution: "1m" as const,
+        label: `${dateStr} ${pad(hour)}:00 (Saat Ini)`
+      },
+      previous: {
+        fromStr: prevFrom,
+        toStr: prevTo,
+        resolution: "1m" as const,
+        label: `${prevDateStr} ${pad(prevHour)}:00 (1 Jam Sebelumnya)`
+      }
+    };
+  }
+
+  if (range === "hour") {
+    const curFrom = `${dateStr}T00:00:00.000Z`;
+    const curTo = `${dateStr}T23:59:59.999Z`;
+
+    const curDate = new Date(`${dateStr}T00:00:00Z`);
+    const prevDate = new Date(curDate.getTime() - 86400000);
+    const prevDateStr = prevDate.toISOString().split("T")[0];
+
+    const prevFrom = `${prevDateStr}T00:00:00.000Z`;
+    const prevTo = `${prevDateStr}T23:59:59.999Z`;
+
+    return {
+      current: {
+        fromStr: curFrom,
+        toStr: curTo,
+        resolution: "1h" as const,
+        label: `${dateStr} (Hari Terpilih)`
+      },
+      previous: {
+        fromStr: prevFrom,
+        toStr: prevTo,
+        resolution: "1h" as const,
+        label: `${prevDateStr} (1 Hari Sebelumnya)`
+      }
+    };
+  }
+
+  if (range === "day") {
+    const daysInCurMonth = new Date(year, month + 1, 0).getDate();
+    const curFrom = `${year}-${pad(month + 1)}-01T00:00:00.000Z`;
+    const curTo = `${year}-${pad(month + 1)}-${pad(daysInCurMonth)}T23:59:59.999Z`;
+
+    const prevM = month === 0 ? 11 : month - 1;
+    const prevY = month === 0 ? year - 1 : year;
+    const daysInPrevMonth = new Date(prevY, prevM + 1, 0).getDate();
+
+    const prevFrom = `${prevY}-${pad(prevM + 1)}-01T00:00:00.000Z`;
+    const prevTo = `${prevY}-${pad(prevM + 1)}-${pad(daysInPrevMonth)}T23:59:59.999Z`;
+
+    return {
+      current: {
+        fromStr: curFrom,
+        toStr: curTo,
+        resolution: "1h" as const,
+        label: `${MONTH_NAMES_SHORT[month]} ${year} (Bulan Terpilih)`
+      },
+      previous: {
+        fromStr: prevFrom,
+        toStr: prevTo,
+        resolution: "1h" as const,
+        label: `${MONTH_NAMES_SHORT[prevM]} ${prevY} (1 Bulan Sebelumnya)`
+      }
+    };
+  }
+
+  if (range === "month") {
+    const curFrom = `${year}-01-01T00:00:00.000Z`;
+    const curTo = `${year}-12-31T23:59:59.999Z`;
+
+    const prevFrom = `${year - 1}-01-01T00:00:00.000Z`;
+    const prevTo = `${year - 1}-12-31T23:59:59.999Z`;
+
+    return {
+      current: {
+        fromStr: curFrom,
+        toStr: curTo,
+        resolution: "1h" as const,
+        label: `Tahun ${year} (Tahun Terpilih)`
+      },
+      previous: {
+        fromStr: prevFrom,
+        toStr: prevTo,
+        resolution: "1h" as const,
+        label: `Tahun ${year - 1} (1 Tahun Sebelumnya)`
+      }
+    };
+  }
+
+  if (range === "ytd") {
+    const curFrom = `${year}-01-01T00:00:00.000Z`;
+    const curTo = `${dateStr}T23:59:59.999Z`;
+
+    const parts = dateStr.split("-");
+    const prevDateStr = `${year - 1}-${parts[1]}-${parts[2]}`;
+    const prevFrom = `${year - 1}-01-01T00:00:00.000Z`;
+    const prevTo = `${prevDateStr}T23:59:59.999Z`;
+
+    return {
+      current: {
+        fromStr: curFrom,
+        toStr: curTo,
+        resolution: "1h" as const,
+        label: `YTD ${year}`
+      },
+      previous: {
+        fromStr: prevFrom,
+        toStr: prevTo,
+        resolution: "1h" as const,
+        label: `YTD ${year - 1} (Periode Sebelumnya)`
+      }
+    };
+  }
+
+  // Custom
+  const cStart = new Date(`${customStart}T00:00:00Z`);
+  const cEnd = new Date(`${customEnd}T00:00:00Z`);
+  const spanDays = Math.max(1, Math.round((cEnd.getTime() - cStart.getTime()) / 86400000) + 1);
+  const pEnd = new Date(cStart.getTime() - 86400000);
+  const pStart = new Date(pEnd.getTime() - (spanDays - 1) * 86400000);
+  const pStartStr = pStart.toISOString().split("T")[0];
+  const pEndStr = pEnd.toISOString().split("T")[0];
+
+  return {
+    current: {
+      fromStr: `${customStart}T00:00:00.000Z`,
+      toStr: `${customEnd}T23:59:59.999Z`,
+      resolution: "1h" as const,
+      label: `${customStart} s/d ${customEnd}`
+    },
+    previous: {
+      fromStr: `${pStartStr}T00:00:00.000Z`,
+      toStr: `${pEndStr}T23:59:59.999Z`,
+      resolution: "1h" as const,
+      label: `${pStartStr} s/d ${pEndStr} (Periode Sebelumnya)`
+    }
+  };
+}
+
 export default function MachineStatistics() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
@@ -178,13 +364,23 @@ export default function MachineStatistics() {
   const [exportScope, setExportScope] = useState<"single" | "multiple">("single");
   const [selectedExportParams, setSelectedExportParams] = useState<string[]>([]);
 
-  // Hardcoded to exactly today's 24 hours
-  const resolution = "Hourly";
-  const startDate = getLocalTodayStr();
-  const endDate = getLocalTodayStr();
+  // Timeline ranges & comparison state
+  const [timelineRange, setTimelineRange] = useState<"1h" | "hour" | "day" | "month" | "ytd" | "custom">("hour");
+  const [selectedDate, setSelectedDate] = useState<string>(getLocalTodayStr);
+  const [selectedHour, setSelectedHour] = useState<number>(() => new Date().getHours());
+  const [selectedMonth, setSelectedMonth] = useState<number>(() => new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
+  const [customStartDate, setCustomStartDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [customEndDate, setCustomEndDate] = useState<string>(getLocalTodayStr);
+  const [showComparison, setShowComparison] = useState<boolean>(true);
 
   // Database-fetched Parameter Data states
-  const [rawPoints, setRawPoints] = useState<{ ts: string; value: number }[]>([]);
+  const [currentPoints, setCurrentPoints] = useState<{ ts: string; value: number }[]>([]);
+  const [previousPoints, setPreviousPoints] = useState<{ ts: string; value: number }[]>([]);
   const [dbLoading, setDbLoading] = useState(false);
 
   const paramTagIdMap: Record<string, string> = {
@@ -241,41 +437,79 @@ export default function MachineStatistics() {
   const fetchTrendData = useCallback(() => {
     const tagId = paramTagIdMap[activeParam];
     if (!tagId) {
-      setRawPoints([]);
+      setCurrentPoints([]);
+      setPreviousPoints([]);
       return;
     }
 
-    setDbLoading(true);
-    const fromStr = `${startDate}T00:00:00.000Z`;
-    const toStr = `${endDate}T23:59:59.999Z`;
+    const intervals = computeIntervals(
+      timelineRange,
+      selectedDate,
+      selectedHour,
+      selectedMonth,
+      selectedYear,
+      customStartDate,
+      customEndDate
+    );
 
-    const params = new URLSearchParams({
+    setDbLoading(true);
+
+    const curParams = new URLSearchParams({
       tagId,
-      from: fromStr,
-      to: toStr,
-      resolution: "1h",
+      from: intervals.current.fromStr,
+      to: intervals.current.toStr,
+      resolution: intervals.current.resolution,
       limit: "15000"
     });
 
-    getJson<{ data: any[] }>(`/historian/range?${params.toString()}`)
-      .then((res) => {
-        const points = res.data || [];
-        const mapped = points
+    const prevParams = new URLSearchParams({
+      tagId,
+      from: intervals.previous.fromStr,
+      to: intervals.previous.toStr,
+      resolution: intervals.previous.resolution,
+      limit: "15000"
+    });
+
+    Promise.all([
+      getJson<{ data: any[] }>(`/historian/range?${curParams.toString()}`),
+      getJson<{ data: any[] }>(`/historian/range?${prevParams.toString()}`)
+    ])
+      .then(([curRes, prevRes]) => {
+        const curMapped = (curRes.data || [])
           .map((pt: any) => ({
             ts: pt.ts,
             value: typeof pt.value === "number" ? pt.value : Number(pt.value)
           }))
           .filter((pt: any) => !isNaN(pt.value));
-        setRawPoints(mapped);
+
+        const prevMapped = (prevRes.data || [])
+          .map((pt: any) => ({
+            ts: pt.ts,
+            value: typeof pt.value === "number" ? pt.value : Number(pt.value)
+          }))
+          .filter((pt: any) => !isNaN(pt.value));
+
+        setCurrentPoints(curMapped);
+        setPreviousPoints(prevMapped);
       })
       .catch((err) => {
         console.error(`Error fetching historical range for ${activeParam}:`, err);
-        setRawPoints([]);
+        setCurrentPoints([]);
+        setPreviousPoints([]);
       })
       .finally(() => {
         setDbLoading(false);
       });
-  }, [activeParam, startDate, endDate]);
+  }, [
+    activeParam,
+    timelineRange,
+    selectedDate,
+    selectedHour,
+    selectedMonth,
+    selectedYear,
+    customStartDate,
+    customEndDate
+  ]);
 
   // Auto-refresh immediately when new minute data arrives in database (data-driven) + fallback polling
   useEffect(() => {
@@ -513,116 +747,317 @@ export default function MachineStatistics() {
     "AHU-03 R. THD-03 B Temp": "°C"
   };
 
-  const aggregatedTrendPoints = useMemo(() => {
-    if (rawPoints.length === 0) return [];
+  const aggregatedComparison = useMemo(() => {
+    const intervals = computeIntervals(
+      timelineRange,
+      selectedDate,
+      selectedHour,
+      selectedMonth,
+      selectedYear,
+      customStartDate,
+      customEndDate
+    );
 
-    // Parse the selected startDate to anchor the year and month
-    const anchorDate = startDate ? new Date(startDate) : new Date();
-    const anchorYr = anchorDate.getFullYear();
-    const anchorMo = anchorDate.getMonth();
+    if (timelineRange === "1h") {
+      // 60 minutes: 00 to 59
+      const labels: string[] = [];
+      const curData: (number | null)[] = [];
+      const prevData: (number | null)[] = [];
 
-    if (resolution === "Hourly") {
+      for (let m = 0; m < 60; m++) {
+        const label = `:${String(m).padStart(2, "0")}`;
+        labels.push(label);
+
+        const curMatches = currentPoints.filter(p => new Date(p.ts).getMinutes() === m);
+        if (curMatches.length > 0) {
+          curData.push(Number((curMatches.reduce((s, p) => s + p.value, 0) / curMatches.length).toFixed(2)));
+        } else {
+          curData.push(null);
+        }
+
+        const prevMatches = previousPoints.filter(p => new Date(p.ts).getMinutes() === m);
+        if (prevMatches.length > 0) {
+          prevData.push(Number((prevMatches.reduce((s, p) => s + p.value, 0) / prevMatches.length).toFixed(2)));
+        } else {
+          prevData.push(null);
+        }
+      }
+
+      return {
+        labels,
+        current: curData,
+        previous: prevData,
+        currentLabel: intervals.current.label,
+        previousLabel: intervals.previous.label
+      };
+    }
+
+    if (timelineRange === "hour") {
       // Fixed 24 Hours: 00:00 to 23:00
-      const result = [];
+      const labels: string[] = [];
+      const curData: (number | null)[] = [];
+      const prevData: (number | null)[] = [];
+
       for (let h = 0; h < 24; h++) {
         const label = `${String(h).padStart(2, "0")}:00`;
-        const matched = rawPoints.filter((pt) => {
-          const date = new Date(pt.ts);
-          return date.getHours() === h;
-        });
+        labels.push(label);
 
-        if (matched.length > 0) {
-          const sum = matched.reduce((s, pt) => s + pt.value, 0);
-          result.push({
-            label,
-            value: Number((sum / matched.length).toFixed(2))
-          });
+        const curMatches = currentPoints.filter(p => new Date(p.ts).getHours() === h);
+        if (curMatches.length > 0) {
+          curData.push(Number((curMatches.reduce((s, p) => s + p.value, 0) / curMatches.length).toFixed(2)));
         } else {
-          result.push({ label, value: null });
+          curData.push(null);
+        }
+
+        const prevMatches = previousPoints.filter(p => new Date(p.ts).getHours() === h);
+        if (prevMatches.length > 0) {
+          prevData.push(Number((prevMatches.reduce((s, p) => s + p.value, 0) / prevMatches.length).toFixed(2)));
+        } else {
+          prevData.push(null);
         }
       }
-      return result;
+
+      return {
+        labels,
+        current: curData,
+        previous: prevData,
+        currentLabel: intervals.current.label,
+        previousLabel: intervals.previous.label
+      };
     }
 
-    if (resolution === "Daily") {
-      // Fixed Days: 1 to end of month for the anchor date
-      const numDays = new Date(anchorYr, anchorMo + 1, 0).getDate();
-      const result = [];
-      for (let d = 1; d <= numDays; d++) {
-        const label = `${String(d).padStart(2, "0")}/${String(anchorMo + 1).padStart(2, "0")}`;
-        const matched = rawPoints.filter((pt) => {
-          const date = new Date(pt.ts);
-          return date.getDate() === d && date.getMonth() === anchorMo && date.getFullYear() === anchorYr;
-        });
+    if (timelineRange === "day") {
+      const numDaysCur = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+      const prevM = selectedMonth === 0 ? 11 : selectedMonth - 1;
+      const prevY = selectedMonth === 0 ? selectedYear - 1 : selectedYear;
+      const numDaysPrev = new Date(prevY, prevM + 1, 0).getDate();
+      const maxDays = Math.max(numDaysCur, numDaysPrev);
 
-        if (matched.length > 0) {
-          const sum = matched.reduce((s, pt) => s + pt.value, 0);
-          result.push({
-            label,
-            value: Number((sum / matched.length).toFixed(2))
-          });
+      const labels: string[] = [];
+      const curData: (number | null)[] = [];
+      const prevData: (number | null)[] = [];
+
+      for (let d = 1; d <= maxDays; d++) {
+        labels.push(`Tgl ${String(d).padStart(2, "0")}`);
+
+        const curMatches = currentPoints.filter(p => {
+          const dt = new Date(p.ts);
+          return dt.getDate() === d && dt.getMonth() === selectedMonth && dt.getFullYear() === selectedYear;
+        });
+        if (curMatches.length > 0) {
+          curData.push(Number((curMatches.reduce((s, p) => s + p.value, 0) / curMatches.length).toFixed(2)));
         } else {
-          result.push({ label, value: null });
+          curData.push(null);
+        }
+
+        const prevMatches = previousPoints.filter(p => {
+          const dt = new Date(p.ts);
+          return dt.getDate() === d && dt.getMonth() === prevM && dt.getFullYear() === prevY;
+        });
+        if (prevMatches.length > 0) {
+          prevData.push(Number((prevMatches.reduce((s, p) => s + p.value, 0) / prevMatches.length).toFixed(2)));
+        } else {
+          prevData.push(null);
         }
       }
-      return result;
+
+      return {
+        labels,
+        current: curData,
+        previous: prevData,
+        currentLabel: intervals.current.label,
+        previousLabel: intervals.previous.label
+      };
     }
 
-    // Monthly: Jan to Des
-    const monthLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
-    const result = [];
-    for (let m = 0; m < 12; m++) {
-      const label = monthLabels[m];
-      const matched = rawPoints.filter((pt) => {
-        const date = new Date(pt.ts);
-        return date.getMonth() === m && date.getFullYear() === anchorYr;
-      });
+    if (timelineRange === "month" || timelineRange === "ytd") {
+      const maxM = timelineRange === "ytd" ? (selectedYear === new Date().getFullYear() ? new Date().getMonth() + 1 : 12) : 12;
+      const labels: string[] = [];
+      const curData: (number | null)[] = [];
+      const prevData: (number | null)[] = [];
 
-      if (matched.length > 0) {
-        const sum = matched.reduce((s, pt) => s + pt.value, 0);
-        result.push({
-          label,
-          value: Number((sum / matched.length).toFixed(2))
+      for (let m = 0; m < maxM; m++) {
+        labels.push(MONTH_NAMES_SHORT[m]);
+
+        const curMatches = currentPoints.filter(p => {
+          const dt = new Date(p.ts);
+          return dt.getMonth() === m && dt.getFullYear() === selectedYear;
         });
-      } else {
-        result.push({ label, value: null });
-      }
-    }
-    return result;
-  }, [rawPoints, resolution, startDate]);
+        if (curMatches.length > 0) {
+          curData.push(Number((curMatches.reduce((s, p) => s + p.value, 0) / curMatches.length).toFixed(2)));
+        } else {
+          curData.push(null);
+        }
 
-  // 3. Left/Right parameter selector data (using brand blue #1f6fb5)
+        const prevMatches = previousPoints.filter(p => {
+          const dt = new Date(p.ts);
+          return dt.getMonth() === m && dt.getFullYear() === selectedYear - 1;
+        });
+        if (prevMatches.length > 0) {
+          prevData.push(Number((prevMatches.reduce((s, p) => s + p.value, 0) / prevMatches.length).toFixed(2)));
+        } else {
+          prevData.push(null);
+        }
+      }
+
+      return {
+        labels,
+        current: curData,
+        previous: prevData,
+        currentLabel: intervals.current.label,
+        previousLabel: intervals.previous.label
+      };
+    }
+
+    // Custom
+    const cStart = new Date(`${customStartDate}T00:00:00Z`);
+    const cEnd = new Date(`${customEndDate}T00:00:00Z`);
+    const count = Math.max(1, Math.round((cEnd.getTime() - cStart.getTime()) / 86400000) + 1);
+
+    if (count <= 2) {
+      const totalHours = count * 24;
+      const labels: string[] = [];
+      const curData: (number | null)[] = [];
+      const prevData: (number | null)[] = [];
+
+      for (let i = 0; i < totalHours; i++) {
+        const curHourTime = new Date(cStart.getTime() + i * 3600000);
+        labels.push(`${String(curHourTime.getHours()).padStart(2, "0")}:00`);
+
+        const curMatches = currentPoints.filter(p => {
+          const dt = new Date(p.ts);
+          return Math.abs(dt.getTime() - curHourTime.getTime()) < 1800000;
+        });
+        curData.push(curMatches.length > 0 ? Number((curMatches.reduce((s, p) => s + p.value, 0) / curMatches.length).toFixed(2)) : null);
+
+        const prevHourTime = new Date(curHourTime.getTime() - count * 86400000);
+        const prevMatches = previousPoints.filter(p => {
+          const dt = new Date(p.ts);
+          return Math.abs(dt.getTime() - prevHourTime.getTime()) < 1800000;
+        });
+        prevData.push(prevMatches.length > 0 ? Number((prevMatches.reduce((s, p) => s + p.value, 0) / prevMatches.length).toFixed(2)) : null);
+      }
+
+      return {
+        labels,
+        current: curData,
+        previous: prevData,
+        currentLabel: intervals.current.label,
+        previousLabel: intervals.previous.label
+      };
+    } else {
+      const labels: string[] = [];
+      const curData: (number | null)[] = [];
+      const prevData: (number | null)[] = [];
+
+      for (let i = 0; i < count; i++) {
+        const curDayTime = new Date(cStart.getTime() + i * 86400000);
+        const curDayStr = `${curDayTime.getDate()}/${curDayTime.getMonth() + 1}`;
+        labels.push(count <= 14 ? `Hari ${i + 1} (${curDayStr})` : `H-${i + 1}`);
+
+        const curMatches = currentPoints.filter(p => {
+          const dt = new Date(p.ts);
+          return dt.getDate() === curDayTime.getDate() && dt.getMonth() === curDayTime.getMonth() && dt.getFullYear() === curDayTime.getFullYear();
+        });
+        curData.push(curMatches.length > 0 ? Number((curMatches.reduce((s, p) => s + p.value, 0) / curMatches.length).toFixed(2)) : null);
+
+        const prevDayTime = new Date(curDayTime.getTime() - count * 86400000);
+        const prevMatches = previousPoints.filter(p => {
+          const dt = new Date(p.ts);
+          return dt.getDate() === prevDayTime.getDate() && dt.getMonth() === prevDayTime.getMonth() && dt.getFullYear() === prevDayTime.getFullYear();
+        });
+        prevData.push(prevMatches.length > 0 ? Number((prevMatches.reduce((s, p) => s + p.value, 0) / prevMatches.length).toFixed(2)) : null);
+      }
+
+      return {
+        labels,
+        current: curData,
+        previous: prevData,
+        currentLabel: intervals.current.label,
+        previousLabel: intervals.previous.label
+      };
+    }
+  }, [
+    timelineRange,
+    selectedDate,
+    selectedHour,
+    selectedMonth,
+    selectedYear,
+    customStartDate,
+    customEndDate,
+    currentPoints,
+    previousPoints
+  ]);
+
+  const stats = useMemo(() => {
+    const curValid = aggregatedComparison.current.filter((v): v is number => typeof v === "number");
+    const prevValid = aggregatedComparison.previous.filter((v): v is number => typeof v === "number");
+
+    const curAvg = curValid.length > 0 ? Number((curValid.reduce((a, b) => a + b, 0) / curValid.length).toFixed(2)) : null;
+    const prevAvg = prevValid.length > 0 ? Number((prevValid.reduce((a, b) => a + b, 0) / prevValid.length).toFixed(2)) : null;
+
+    const diff = (curAvg !== null && prevAvg !== null) ? Number((curAvg - prevAvg).toFixed(2)) : null;
+    const diffPct = (curAvg !== null && prevAvg !== null && prevAvg !== 0) ? Number(((diff! / prevAvg) * 100).toFixed(1)) : null;
+
+    return { curAvg, prevAvg, diff, diffPct };
+  }, [aggregatedComparison]);
+
+  // 3. Comparison Line Chart datasets
   const parameterTrendData = useMemo(() => {
-    const labels = aggregatedTrendPoints.map(pt => pt.label);
-    const dataVals = aggregatedTrendPoints.map(pt => pt.value);
+    const unit = unitMap[activeParam] ?? "";
+    const datasets: any[] = [
+      {
+        label: `${aggregatedComparison.currentLabel} (${unit})`,
+        data: aggregatedComparison.current,
+        borderColor: "#1f6fb5", // Brand Blue
+        backgroundColor: "rgba(31, 111, 181, 0.12)",
+        borderWidth: 2.5,
+        tension: 0.3,
+        fill: true,
+        spanGaps: true,
+        pointRadius: 2.5,
+        pointBackgroundColor: "#1f6fb5",
+        pointBorderColor: "#ffffff",
+        pointBorderWidth: 1.5,
+        pointHoverRadius: 7,
+        pointHoverBackgroundColor: "#1f6fb5",
+        pointHoverBorderColor: "#ffffff",
+        pointHoverBorderWidth: 2,
+        pointHitRadius: 15
+      }
+    ];
+
+    if (showComparison) {
+      datasets.push({
+        label: `${aggregatedComparison.previousLabel} (${unit})`,
+        data: aggregatedComparison.previous,
+        borderColor: "#f59e0b", // Amber/Orange for previous period
+        backgroundColor: "rgba(245, 158, 11, 0.05)",
+        borderWidth: 2,
+        borderDash: [5, 4], // Dashed line to separate from current line
+        tension: 0.3,
+        fill: false,
+        spanGaps: true,
+        pointRadius: 2,
+        pointBackgroundColor: "#f59e0b",
+        pointBorderColor: "#ffffff",
+        pointBorderWidth: 1.5,
+        pointHoverRadius: 7,
+        pointHoverBackgroundColor: "#f59e0b",
+        pointHoverBorderColor: "#ffffff",
+        pointHoverBorderWidth: 2,
+        pointHitRadius: 15
+      });
+    }
 
     return {
       chartData: {
-        labels,
-        datasets: [
-          {
-            label: `${activeParam} (${unitMap[activeParam] ?? ""})`,
-            data: dataVals,
-            borderColor: "#1f6fb5", // Brand Blue
-            backgroundColor: "rgba(31, 111, 181, 0.1)",
-            borderWidth: 2.5,
-            tension: 0.3,
-            fill: true,
-            pointRadius: 2.5,
-            pointBackgroundColor: "#1f6fb5",
-            pointBorderColor: "#ffffff",
-            pointBorderWidth: 1.5,
-            pointHoverRadius: 8,
-            pointHoverBackgroundColor: "#1f6fb5",
-            pointHoverBorderColor: "#ffffff",
-            pointHoverBorderWidth: 3,
-            pointHitRadius: 15
-          }
-        ]
+        labels: aggregatedComparison.labels,
+        datasets
       },
-      unit: unitMap[activeParam] ?? ""
+      unit
     };
-  }, [activeParam, aggregatedTrendPoints]);
+  }, [activeParam, aggregatedComparison, showComparison, unitMap]);
 
   const parameterTrendOptions = {
     responsive: true,
@@ -632,12 +1067,46 @@ export default function MachineStatistics() {
       intersect: false
     },
     plugins: {
-      legend: { display: false }
+      legend: {
+        display: true,
+        position: "top" as const,
+        align: "end" as const,
+        labels: {
+          color: isDark ? "#cbd5e1" : "#47729f",
+          font: { family: "Plus Jakarta Sans", size: 10, weight: "bold" as const },
+          usePointStyle: true,
+          boxWidth: 7,
+          boxHeight: 7
+        }
+      },
+      tooltip: {
+        callbacks: {
+          label: (ctx: any) => {
+            const val = ctx.parsed.y;
+            const unit = unitMap[activeParam] ? ` ${unitMap[activeParam]}` : "";
+            if (val === null || val === undefined) return ` ${ctx.dataset.label}: —`;
+            return ` ${ctx.dataset.label}: ${val}${unit}`;
+          },
+          afterBody: (items: any[]) => {
+            if (items.length >= 2) {
+              const cur = items[0]?.parsed?.y;
+              const prev = items[1]?.parsed?.y;
+              if (typeof cur === "number" && typeof prev === "number") {
+                const diff = Number((cur - prev).toFixed(2));
+                const sign = diff > 0 ? "+" : "";
+                const unit = unitMap[activeParam] ? ` ${unitMap[activeParam]}` : "";
+                return `\nSelisih: ${sign}${diff}${unit}`;
+              }
+            }
+            return "";
+          }
+        }
+      }
     },
     scales: {
       x: {
         grid: { display: false },
-        ticks: { color: isDark ? "#64748b" : "#47729f", font: { size: 9 }, maxTicksLimit: 12 }
+        ticks: { color: isDark ? "#64748b" : "#47729f", font: { size: 9 }, maxTicksLimit: 14 }
       },
       y: {
         grid: { color: isDark ? "rgba(51, 65, 85, 0.3)" : "rgba(203, 213, 225, 0.4)" },
@@ -647,11 +1116,23 @@ export default function MachineStatistics() {
   };
 
   const handleExportParameters = () => {
+    const intervals = computeIntervals(
+      timelineRange,
+      selectedDate,
+      selectedHour,
+      selectedMonth,
+      selectedYear,
+      customStartDate,
+      customEndDate
+    );
+    const startStr = intervals.current.fromStr.split("T")[0];
+    const endStr = intervals.current.toStr.split("T")[0];
+
     setExportType("parameter");
     setExportScope("single");
     setSelectedExportParams([...parametersList]);
-    setExportStart(getLocalTodayStr());
-    setExportEnd(getLocalTodayStr());
+    setExportStart(startStr);
+    setExportEnd(endStr);
     setShowExportModal(true);
   };
 
@@ -837,16 +1318,134 @@ export default function MachineStatistics() {
       {/* 2. Interactive Parameter Selector Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 bg-white dark:bg-slate-950 border border-[#acd3ff] dark:border-slate-800 rounded-xl p-5 shadow-sm transition-colors duration-300">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#acd3ff]/30 pb-2.5">
-            <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
-              Historical Parameters Detail
-            </h3>
-            <div className="flex flex-wrap items-center gap-2">
-              {dbLoading && (
-                <span className="text-xs text-[#1f6fb5] font-bold animate-pulse mr-1">
-                  ⏳
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#acd3ff]/30 pb-3">
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
+                  Historical Parameters Detail
+                </h3>
+                <span className="text-xs text-[#1f6fb5] font-bold bg-[#1f6fb5]/10 px-2.5 py-0.5 rounded-full">
+                  {activeParam}
                 </span>
+                {dbLoading && (
+                  <span className="text-xs text-[#1f6fb5] font-bold animate-pulse" title="Memuat data historis...">
+                    ⏳
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                Perbandingan tren parameter dengan periode sebelumnya ({timelineRanges.find(r => r.id === timelineRange)?.label}).
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
+              {/* Dynamic Range Selectors matching Electricity */}
+              {timelineRange === "1h" && (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5] cursor-pointer transition"
+                  />
+                  <select
+                    value={selectedHour}
+                    onChange={(e) => setSelectedHour(Number(e.target.value))}
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-2 py-1 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5] cursor-pointer transition"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={i}>
+                        {String(i).padStart(2, "0")}:00
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
+
+              {timelineRange === "hour" && (
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5] cursor-pointer transition"
+                />
+              )}
+
+              {(timelineRange === "day" || timelineRange === "month" || timelineRange === "ytd") && (
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5] cursor-pointer transition"
+                >
+                  {AVAILABLE_YEARS.map((yr) => (
+                    <option key={yr} value={yr}>{yr}</option>
+                  ))}
+                </select>
+              )}
+
+              {timelineRange === "day" && (
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5] cursor-pointer transition"
+                >
+                  {MONTH_NAMES_ID.map((name, idx) => (
+                    <option key={idx} value={idx}>{name}</option>
+                  ))}
+                </select>
+              )}
+
+              {timelineRange === "custom" && (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-2 py-1 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5] cursor-pointer transition"
+                  />
+                  <span className="text-xs font-bold text-slate-400">s/d</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-2 py-1 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5] cursor-pointer transition"
+                  />
+                </div>
+              )}
+
+              {/* Timeline selector pills */}
+              <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-0.5 text-xs">
+                {timelineRanges.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setTimelineRange(item.id)}
+                    className={`rounded-md px-2.5 py-1 font-bold transition-all ${
+                      timelineRange === item.id
+                        ? "bg-[#1f6fb5] text-white shadow-sm"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Toggle comparison button */}
+              <button
+                type="button"
+                onClick={() => setShowComparison(prev => !prev)}
+                title="Bandingkan dengan periode sebelumnya"
+                className={`rounded-lg border px-2.5 py-1 text-xs font-bold transition flex items-center gap-1.5 ${
+                  showComparison
+                    ? "border-amber-400/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 shadow-sm"
+                    : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-400"
+                }`}
+              >
+                <span>{showComparison ? "✓" : "○"}</span>
+                <span>Periode Sebelumnya</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handleExportParameters}
@@ -854,12 +1453,50 @@ export default function MachineStatistics() {
               >
                 📥 Export Excel
               </button>
-              <span className="text-xs text-[#1f6fb5] font-bold bg-[#1f6fb5]/10 px-2.5 py-0.5 rounded-full">
-                {activeParam}
-              </span>
             </div>
           </div>
-          <div className={isCoolingTower ? "h-64 min-h-0" : "h-[440px] min-h-0"}>
+
+          {/* Quick comparison metric stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3 p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/60 text-xs">
+            <div>
+              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">
+                Rata-rata Terpilih
+              </div>
+              <div className="text-sm font-extrabold text-[#1f6fb5] mt-0.5">
+                {stats.curAvg !== null ? `${stats.curAvg} ${unitMap[activeParam] || ""}` : "—"}
+              </div>
+            </div>
+            {showComparison && (
+              <>
+                <div>
+                  <div className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">
+                    Periode Sebelumnya
+                  </div>
+                  <div className="text-sm font-extrabold text-amber-500 mt-0.5">
+                    {stats.prevAvg !== null ? `${stats.prevAvg} ${unitMap[activeParam] || ""}` : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">
+                    Selisih Rata-rata
+                  </div>
+                  <div className={`text-sm font-extrabold mt-0.5 ${stats.diff === null ? "text-slate-400" : stats.diff > 0 ? "text-rose-500" : stats.diff < 0 ? "text-emerald-500" : "text-slate-500"}`}>
+                    {stats.diff !== null ? `${stats.diff > 0 ? "+" : ""}${stats.diff} ${unitMap[activeParam] || ""}` : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">
+                    Perubahan
+                  </div>
+                  <div className={`text-sm font-extrabold mt-0.5 ${stats.diffPct === null ? "text-slate-400" : stats.diffPct > 0 ? "text-rose-500" : stats.diffPct < 0 ? "text-emerald-500" : "text-slate-500"}`}>
+                    {stats.diffPct !== null ? `${stats.diffPct > 0 ? "+" : ""}${stats.diffPct}%` : "—"}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className={isCoolingTower ? "h-64 min-h-0" : "h-[420px] min-h-0"}>
             <Line data={parameterTrendData.chartData} options={parameterTrendOptions} />
           </div>
         </div>
