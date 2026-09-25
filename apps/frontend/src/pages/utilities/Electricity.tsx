@@ -2130,6 +2130,7 @@ export default function Electricity() {
   }, []);
 
   const reqIdRef = useRef(0);
+  const solarReqIdRef = useRef(0);
 
   /* ═══ DATA FETCHING (PLN) ═══ */
   const fetchData = useCallback((showLoading = false) => {
@@ -2142,8 +2143,13 @@ export default function Electricity() {
     if (range === "custom") {
       url += `&from=${chartStartDate}&to=${chartEndDate}`;
     } else if (range === "hour") {
-      const todayStr = getLocalTodayString();
-      url += `&from=${todayStr}&to=${todayStr}`;
+      const targetDate = chartStartDate || getLocalTodayString();
+      url += `&from=${targetDate}&to=${targetDate}`;
+    } else if (range === "day") {
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const monthNum = selectedMonth + 1;
+      const lastDay = new Date(selectedYear, monthNum, 0).getDate();
+      url += `&from=${selectedYear}-${pad(monthNum)}-01&to=${selectedYear}-${pad(monthNum)}-${pad(lastDay)}`;
     } else {
       url += `&year=${selectedYear}`;
     }
@@ -2168,16 +2174,17 @@ export default function Electricity() {
         setSummaryLoading(false);
         setChartLoading(false);
       });
-  }, [range, selectedYear, chartStartDate, chartEndDate, summaryData]);
+  }, [range, selectedYear, selectedMonth, chartStartDate, chartEndDate, summaryData]);
 
   /* ═══ DATA FETCHING (SOLAR) ═══ */
   const fetchSolarData = useCallback(() => {
+    const currentReqId = ++solarReqIdRef.current;
     let solarUrl = `/analytics/solar?`;
     if (solarRange === "custom") {
       solarUrl += `from=${solarStartDate}&to=${solarEndDate}`;
     } else if (solarRange === "hour") {
-      const todayStr = getLocalTodayString();
-      solarUrl += `from=${todayStr}&to=${todayStr}`;
+      const targetDate = solarStartDate || getLocalTodayString();
+      solarUrl += `from=${targetDate}&to=${targetDate}`;
     } else if (solarRange === "day") {
       const pad = (n: number) => String(n).padStart(2, "0");
       const monthNum = solarSelectedMonth + 1;
@@ -2190,6 +2197,7 @@ export default function Electricity() {
 
     getJson<{ data: any }>(solarUrl)
       .then((res) => {
+        if (currentReqId !== solarReqIdRef.current) return;
         if (res?.data) {
           setSolarData(res.data);
           if (solarRange === "month" && solarSelectedYear === new Date().getFullYear()) {
@@ -2201,6 +2209,7 @@ export default function Electricity() {
         }
       })
       .catch((err) => {
+        if (currentReqId !== solarReqIdRef.current) return;
         console.warn("Failed to load solar data", err);
       });
   }, [solarRange, solarSelectedYear, solarSelectedMonth, solarStartDate, solarEndDate]);
@@ -2242,30 +2251,37 @@ export default function Electricity() {
     fetchSolarData();
   }, [fetchSolarData]);
 
-  // Database historical auto-refresh in background (polling + websocket live updates)
+  // Database historical auto-refresh only when new telemetry enters via websocket
   useEffect(() => {
     let active = true;
-    const interval = setInterval(() => {
-      if (active) {
-        fetchData(false);
-        fetchSolarData();
-        fetchCubicleAnalytics();
-        fetchFixedMonthlyData();
-      }
-    }, 30000);
     const socket = getSocket();
+
+    const isCurrentActivePeriod = () => {
+      const todayStr = getLocalTodayString();
+      const curYear = new Date().getFullYear();
+      const curMonth = new Date().getMonth();
+      if (range === "hour") return (chartStartDate || todayStr) === todayStr;
+      if (range === "day") return selectedYear === curYear && selectedMonth === curMonth;
+      if (range === "month" || range === "ytd") return selectedYear === curYear;
+      if (range === "custom") return chartEndDate >= todayStr;
+      return true;
+    };
+
     const handleElectricityUpdate = () => {
-      if (active) {
+      if (!active) return;
+      fetchFixedMonthlyData();
+      if (isCurrentActivePeriod()) {
         fetchData(false);
         fetchSolarData();
         fetchCubicleAnalytics();
-        fetchFixedMonthlyData();
       }
     };
+
     const handleSolarUpdate = () => {
-      if (active) {
+      if (!active) return;
+      fetchFixedMonthlyData();
+      if (isCurrentActivePeriod()) {
         fetchSolarData();
-        fetchFixedMonthlyData();
       }
     };
     const handleLiveUpdate = (payload: any) => {
@@ -2337,7 +2353,6 @@ export default function Electricity() {
     socket.on("power_factor:status", handlePfStatus);
     return () => {
       active = false;
-      clearInterval(interval);
       socket.off("electricity:update", handleElectricityUpdate);
       socket.off("electricity:live_update", handleLiveUpdate);
       socket.off("electricity:pm_live_update", handleElectricityUpdate);
@@ -2347,7 +2362,7 @@ export default function Electricity() {
       socket.off("config:update", handleConfigUpdate);
       socket.off("power_factor:status", handlePfStatus);
     };
-  }, [fetchData, fetchSolarData, fetchCubicleAnalytics, fetchFixedMonthlyData]);
+  }, [fetchData, fetchSolarData, fetchCubicleAnalytics, fetchFixedMonthlyData, range, selectedYear, selectedMonth, chartStartDate, chartEndDate]);
 
   // Load consumption fact categories
   useEffect(() => {
@@ -2519,12 +2534,13 @@ export default function Electricity() {
       return { totalCost: 0, totalKwh: 0, peakDemand: 0, peakDemandTs: null, loadFactor: 0, wbpKwh: 0, lwbpKwh: 0, wbpCost: 0, lwbpCost: 0 };
     }
     if (range === "hour") {
-      const todayKwh = (summaryData.summary?.todayWbpKwh ?? 0) + (summaryData.summary?.todayLwbpKwh ?? 0) || (summaryData.summary?.todayKwh ?? 0);
-      const todayWbpKwh = summaryData.summary?.todayWbpKwh ?? 0;
-      const todayLwbpKwh = summaryData.summary?.todayLwbpKwh ?? 0;
-      const todayWbpCost = summaryData.summary?.todayWbpCost ?? (todayWbpKwh * wbpRate);
-      const todayLwbpCost = summaryData.summary?.todayLwbpCost ?? (todayLwbpKwh * lwbpRate);
-      const todayCost = (todayWbpCost + todayLwbpCost) || (summaryData.summary?.todayCost ?? 0);
+      const isToday = (chartStartDate || getLocalTodayString()) === getLocalTodayString();
+      const todayKwh = isToday ? ((summaryData.summary?.todayWbpKwh ?? 0) + (summaryData.summary?.todayLwbpKwh ?? 0) || (summaryData.summary?.todayKwh ?? 0)) : (summaryData.summary?.totalKwh ?? 0);
+      const todayWbpKwh = isToday ? (summaryData.summary?.todayWbpKwh ?? 0) : (summaryData.summary?.wbpKwh ?? 0);
+      const todayLwbpKwh = isToday ? (summaryData.summary?.todayLwbpKwh ?? 0) : (summaryData.summary?.lwbpKwh ?? 0);
+      const todayWbpCost = isToday ? (summaryData.summary?.todayWbpCost ?? (todayWbpKwh * wbpRate)) : (summaryData.summary?.wbpCost ?? (todayWbpKwh * wbpRate));
+      const todayLwbpCost = isToday ? (summaryData.summary?.todayLwbpCost ?? (todayLwbpKwh * lwbpRate)) : (summaryData.summary?.lwbpCost ?? (todayLwbpKwh * lwbpRate));
+      const todayCost = (todayWbpCost + todayLwbpCost) || (summaryData.summary?.totalCost ?? 0);
       return {
         totalCost: todayCost || (summaryData.summary?.totalCost ?? 0),
         totalKwh: todayKwh || (summaryData.summary?.totalKwh ?? 0),
@@ -2537,8 +2553,9 @@ export default function Electricity() {
         lwbpCost: todayLwbpCost || (summaryData.summary?.lwbpCost ?? 0)
       };
     }
-    if (range === "day" && summaryData.summary?.perMonthSummary) {
-      const monthData = summaryData.summary.perMonthSummary[selectedMonth];
+    if (range === "day") {
+      const targetMonthKey = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+      const monthData = summaryData.summary?.perMonthSummary?.find((pm: any) => pm.month === targetMonthKey) || summaryData.summary?.perMonthSummary?.[selectedMonth];
       if (monthData) {
         return {
           totalCost: monthData.totalCost,
@@ -2564,7 +2581,7 @@ export default function Electricity() {
       wbpCost: summaryData.summary?.wbpCost ?? 0,
       lwbpCost: summaryData.summary?.lwbpCost ?? 0
     };
-  }, [hasSummaryData, summaryData, range, selectedMonth, wbpRate, lwbpRate]);
+  }, [hasSummaryData, summaryData, range, selectedYear, selectedMonth, chartStartDate, wbpRate, lwbpRate]);
 
   /* ═══ COMPUTED: CHART DATA ═══ */
   const barLabels = useMemo(() => {
@@ -2606,13 +2623,37 @@ export default function Electricity() {
 
   const donutSegments = useMemo(() => {
     if (hasChartData) {
-      let wbp = chartData.summary.wbpKwh;
-      let total = chartData.summary.totalKwh;
-      if (range === "hour") { wbp = chartData.summary.todayWbpKwh ?? 0; total = (chartData.summary.todayWbpKwh ?? 0) + (chartData.summary.todayLwbpKwh ?? 0); }
-      else if (range === "day") { wbp = chartData.summary.monthlyWbpKwh ?? 0; total = (chartData.summary.monthlyWbpKwh ?? 0) + (chartData.summary.monthlyLwbpKwh ?? 0); }
-      else if (range === "custom") {
-        if (chartStartDate === chartEndDate) { const hW = chartData.charts.hourlyWbp || []; const hL = chartData.charts.hourlyLwbp || []; wbp = hW.reduce((a: number, c: number) => a + c, 0); total = wbp + hL.reduce((a: number, c: number) => a + c, 0); }
-        else { wbp = customDailyRecords.reduce((a: number, c: any) => a + (c.wbp || 0), 0); total = wbp + customDailyRecords.reduce((a: number, c: any) => a + (c.lwbp || 0), 0); }
+      let wbp = chartData.summary.wbpKwh ?? 0;
+      let total = chartData.summary.totalKwh ?? 0;
+      if (range === "hour") {
+        const isToday = (chartStartDate || getLocalTodayString()) === getLocalTodayString();
+        if (isToday && (chartData.summary.todayWbpKwh || chartData.summary.todayLwbpKwh)) {
+          wbp = chartData.summary.todayWbpKwh ?? 0;
+          total = (chartData.summary.todayWbpKwh ?? 0) + (chartData.summary.todayLwbpKwh ?? 0);
+        } else {
+          wbp = chartData.summary.wbpKwh ?? 0;
+          total = chartData.summary.totalKwh ?? 0;
+        }
+      } else if (range === "day") {
+        const targetMonthKey = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+        const monthData = chartData.summary?.perMonthSummary?.find((pm: any) => pm.month === targetMonthKey);
+        if (monthData) {
+          wbp = monthData.wbpKwh ?? 0;
+          total = monthData.totalKwh ?? 0;
+        } else {
+          wbp = chartData.summary.wbpKwh ?? 0;
+          total = chartData.summary.totalKwh ?? 0;
+        }
+      } else if (range === "custom") {
+        if (chartStartDate === chartEndDate) {
+          const hW = chartData.charts.hourlyWbp || [];
+          const hL = chartData.charts.hourlyLwbp || [];
+          wbp = hW.reduce((a: number, c: number) => a + c, 0);
+          total = wbp + hL.reduce((a: number, c: number) => a + c, 0);
+        } else {
+          wbp = customDailyRecords.reduce((a: number, c: any) => a + (c.wbp || 0), 0);
+          total = wbp + customDailyRecords.reduce((a: number, c: any) => a + (c.lwbp || 0), 0);
+        }
       }
       if (total > 0) {
         const wbpPct = Math.round((wbp / total) * 100);
@@ -2620,7 +2661,7 @@ export default function Electricity() {
       }
     }
     return [{ label: "Beban WBP (17-22)", value: 0, color: "#ef4444" }, { label: "Beban LWBP", value: 0, color: "#3b82f6" }];
-  }, [hasChartData, chartData, range, customDailyRecords, chartStartDate, chartEndDate]);
+  }, [hasChartData, chartData, range, selectedYear, selectedMonth, customDailyRecords, chartStartDate, chartEndDate]);
 
   /* ═══ PLN STACKED BAR ═══ */
   const stackedBarData = useMemo(() => ({
@@ -3704,6 +3745,19 @@ export default function Electricity() {
                   {AVAILABLE_YEARS.map((yr) => <option key={yr} value={yr}>{yr}</option>)}
                 </select>
               )}
+              {range === "hour" && (
+                <input
+                  type="date"
+                  value={chartStartDate}
+                  onChange={(e) => {
+                    setChartStartDate(e.target.value);
+                    setSolarStartDate(e.target.value);
+                    setChartEndDate(e.target.value);
+                    setSolarEndDate(e.target.value);
+                  }}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                />
+              )}
               {range === "day" && (
                 <select
                   value={selectedMonth}
@@ -3974,6 +4028,19 @@ export default function Electricity() {
                 >
                   {AVAILABLE_YEARS.map((yr) => <option key={yr} value={yr}>{yr}</option>)}
                 </select>
+              )}
+              {solarRange === "hour" && (
+                <input
+                  type="date"
+                  value={solarStartDate}
+                  onChange={(e) => {
+                    setSolarStartDate(e.target.value);
+                    setChartStartDate(e.target.value);
+                    setSolarEndDate(e.target.value);
+                    setChartEndDate(e.target.value);
+                  }}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer transition"
+                />
               )}
               {solarRange === "day" && (
                 <select

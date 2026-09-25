@@ -26,6 +26,14 @@ export const getAnalyticsSummaryHandler = async (
   }
 };
 
+// In-memory cache & promise deduplicator for electricity analytics (30s TTL)
+const electricityAnalyticsCache = new Map<string, { data: any; expiresAt: number }>();
+const electricityAnalyticsInflight = new Map<string, Promise<any>>();
+
+// In-memory cache & promise deduplicator for solar analytics (30s TTL)
+const solarAnalyticsCache = new Map<string, { data: any; expiresAt: number }>();
+const solarAnalyticsInflight = new Map<string, Promise<any>>();
+
 export const getElectricityAnalyticsHandler = async (
   req: Request,
   res: Response,
@@ -42,7 +50,30 @@ export const getElectricityAnalyticsHandler = async (
     const wbpRate = config ? config.wbpRate : 1600;
     const lwbpRate = config ? config.lwbpRate : 1112;
 
-    const data = await getElectricityAnalytics(deviceId, from, to, lwbpRate, wbpRate, year);
+    const cacheKey = `${deviceId}_${from || ""}_${to || ""}_${year || ""}_${lwbpRate}_${wbpRate}`;
+    const now = Date.now();
+    const cached = electricityAnalyticsCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return res.json({ data: cached.data });
+    }
+
+    if (electricityAnalyticsInflight.has(cacheKey)) {
+      const data = await electricityAnalyticsInflight.get(cacheKey);
+      return res.json({ data });
+    }
+
+    const queryPromise = (async () => {
+      try {
+        const data = await getElectricityAnalytics(deviceId, from, to, lwbpRate, wbpRate, year);
+        electricityAnalyticsCache.set(cacheKey, { data, expiresAt: Date.now() + 30000 });
+        return data;
+      } finally {
+        electricityAnalyticsInflight.delete(cacheKey);
+      }
+    })();
+
+    electricityAnalyticsInflight.set(cacheKey, queryPromise);
+    const data = await queryPromise;
     res.json({ data });
   } catch (err) {
     next(err);
@@ -95,7 +126,30 @@ export const getSolarAnalyticsHandler = async (
     const to = req.query.to as string | undefined;
     const year = req.query.year ? Number(req.query.year) : undefined;
 
-    const data = await getSolarAnalytics(from, to, year);
+    const cacheKey = `${from || ""}_${to || ""}_${year || ""}`;
+    const now = Date.now();
+    const cached = solarAnalyticsCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return res.json({ data: cached.data });
+    }
+
+    if (solarAnalyticsInflight.has(cacheKey)) {
+      const data = await solarAnalyticsInflight.get(cacheKey);
+      return res.json({ data });
+    }
+
+    const queryPromise = (async () => {
+      try {
+        const data = await getSolarAnalytics(from, to, year);
+        solarAnalyticsCache.set(cacheKey, { data, expiresAt: Date.now() + 30000 });
+        return data;
+      } finally {
+        solarAnalyticsInflight.delete(cacheKey);
+      }
+    })();
+
+    solarAnalyticsInflight.set(cacheKey, queryPromise);
+    const data = await queryPromise;
     res.json({ data });
   } catch (err) {
     next(err);
