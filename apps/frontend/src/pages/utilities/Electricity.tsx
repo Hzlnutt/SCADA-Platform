@@ -1308,6 +1308,9 @@ export default function Electricity() {
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [chartData, setChartData] = useState<any>(null);
   const [chartLoading, setChartLoading] = useState(true);
+  const [isFilterPending, setIsFilterPending] = useState(false);
+  const plnCacheRef = useRef<Map<string, { data: any; ts: number }>>(new Map());
+  const solarCacheRef = useRef<Map<string, { data: any; ts: number }>>(new Map());
 
   const [livePf, setLivePf] = useState<number | null>(null);
   const [pfStatus, setPfStatus] = useState<"connected" | "offline">("offline");
@@ -2135,30 +2138,56 @@ export default function Electricity() {
   /* ═══ DATA FETCHING (PLN) ═══ */
   const fetchData = useCallback((showLoading = false) => {
     const currentReqId = ++reqIdRef.current;
-    if (showLoading && !summaryData) {
-      setSummaryLoading(true);
-      setChartLoading(true);
-    }
     let url = `/analytics/electricity?deviceId=Cubicle_PLN_PM8000`;
+    let cacheKey = "";
     if (range === "custom") {
       url += `&from=${chartStartDate}&to=${chartEndDate}`;
+      cacheKey = `custom_${chartStartDate}_${chartEndDate}`;
     } else if (range === "hour") {
       const targetDate = chartStartDate || getLocalTodayString();
       url += `&from=${targetDate}&to=${targetDate}`;
+      cacheKey = `hour_${targetDate}`;
     } else if (range === "day") {
       const pad = (n: number) => String(n).padStart(2, "0");
       const monthNum = selectedMonth + 1;
       const lastDay = new Date(selectedYear, monthNum, 0).getDate();
       url += `&from=${selectedYear}-${pad(monthNum)}-01&to=${selectedYear}-${pad(monthNum)}-${pad(lastDay)}`;
+      cacheKey = `day_${selectedYear}_${monthNum}`;
     } else {
       url += `&year=${selectedYear}`;
+      cacheKey = `${range}_${selectedYear}`;
     }
-    url += `&_t=${Date.now()}`;
+
+    const todayStr = getLocalTodayString();
+    const isTodayQuery = (range === "hour" && (chartStartDate || todayStr) === todayStr) ||
+      (range === "day" && selectedYear === new Date().getFullYear() && selectedMonth === new Date().getMonth()) ||
+      ((range === "month" || range === "ytd") && selectedYear === new Date().getFullYear());
+
+    // Instant local memory cache lookup
+    const cached = plnCacheRef.current.get(cacheKey);
+    const now = Date.now();
+    const isFresh = cached && (now - cached.ts < (isTodayQuery ? 30000 : 300000));
+
+    if (cached) {
+      setSummaryData(cached.data);
+      setChartData(cached.data);
+      setSummaryLoading(false);
+      setChartLoading(false);
+      setIsFilterPending(false);
+      if (isFresh) return; // 0ms instant display!
+    } else {
+      setIsFilterPending(true);
+      if (showLoading && !summaryData) {
+        setSummaryLoading(true);
+        setChartLoading(true);
+      }
+    }
 
     getJson<{ data: any }>(url)
       .then((res) => {
         if (currentReqId !== reqIdRef.current) return;
         if (res?.data) {
+          plnCacheRef.current.set(cacheKey, { data: res.data, ts: Date.now() });
           setSummaryData(res.data);
           setChartData(res.data);
           if (range === "month" && selectedYear === new Date().getFullYear()) {
@@ -2167,12 +2196,14 @@ export default function Electricity() {
         }
         setSummaryLoading(false);
         setChartLoading(false);
+        setIsFilterPending(false);
       })
       .catch((err) => {
         if (currentReqId !== reqIdRef.current) return;
         console.error("Failed to load electricity data", err);
         setSummaryLoading(false);
         setChartLoading(false);
+        setIsFilterPending(false);
       });
   }, [range, selectedYear, selectedMonth, chartStartDate, chartEndDate, summaryData]);
 
@@ -2180,25 +2211,48 @@ export default function Electricity() {
   const fetchSolarData = useCallback(() => {
     const currentReqId = ++solarReqIdRef.current;
     let solarUrl = `/analytics/solar?`;
+    let cacheKey = "";
     if (solarRange === "custom") {
       solarUrl += `from=${solarStartDate}&to=${solarEndDate}`;
+      cacheKey = `custom_${solarStartDate}_${solarEndDate}`;
     } else if (solarRange === "hour") {
       const targetDate = solarStartDate || getLocalTodayString();
       solarUrl += `from=${targetDate}&to=${targetDate}`;
+      cacheKey = `hour_${targetDate}`;
     } else if (solarRange === "day") {
       const pad = (n: number) => String(n).padStart(2, "0");
       const monthNum = solarSelectedMonth + 1;
       const lastDay = new Date(solarSelectedYear, monthNum, 0).getDate();
       solarUrl += `from=${solarSelectedYear}-${pad(monthNum)}-01&to=${solarSelectedYear}-${pad(monthNum)}-${pad(lastDay)}`;
+      cacheKey = `day_${solarSelectedYear}_${monthNum}`;
     } else {
       solarUrl += `year=${solarSelectedYear}`;
+      cacheKey = `${solarRange}_${solarSelectedYear}`;
     }
-    solarUrl += `&_t=${Date.now()}`;
+
+    const todayStr = getLocalTodayString();
+    const isTodayQuery = (solarRange === "hour" && (solarStartDate || todayStr) === todayStr) ||
+      (solarRange === "day" && solarSelectedYear === new Date().getFullYear() && solarSelectedMonth === new Date().getMonth()) ||
+      ((solarRange === "month" || solarRange === "ytd") && solarSelectedYear === new Date().getFullYear());
+
+    // Instant local memory cache lookup
+    const cached = solarCacheRef.current.get(cacheKey);
+    const now = Date.now();
+    const isFresh = cached && (now - cached.ts < (isTodayQuery ? 30000 : 300000));
+
+    if (cached) {
+      setSolarData(cached.data);
+      if (cached.data.live) {
+        setSolarLive(cached.data.live);
+      }
+      if (isFresh) return; // 0ms instant display!
+    }
 
     getJson<{ data: any }>(solarUrl)
       .then((res) => {
         if (currentReqId !== solarReqIdRef.current) return;
         if (res?.data) {
+          solarCacheRef.current.set(cacheKey, { data: res.data, ts: Date.now() });
           setSolarData(res.data);
           if (solarRange === "month" && solarSelectedYear === new Date().getFullYear()) {
             setFixedMonthlySolar(res.data);
@@ -2215,29 +2269,27 @@ export default function Electricity() {
   }, [solarRange, solarSelectedYear, solarSelectedMonth, solarStartDate, solarEndDate]);
 
   // Dedicated fetcher for fixed monthly executive recap (Bulan Ini)
-  const fetchFixedMonthlyData = useCallback(() => {
+  const fetchFixedMonthlyData = useCallback((force = false) => {
     const curYear = new Date().getFullYear();
-    const needsPln = range !== "month" || selectedYear !== curYear;
-    const needsSolar = solarRange !== "month" || solarSelectedYear !== curYear;
-    if (!needsPln && !needsSolar) return;
+    if (!force && fixedMonthlyPln && fixedMonthlySolar) return;
 
     const promises: Promise<any>[] = [];
-    if (needsPln) {
+    if (force || !fixedMonthlyPln) {
       promises.push(
-        getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${curYear}&_t=${Date.now()}`)
+        getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${curYear}`)
           .then((res) => { if (res?.data) setFixedMonthlyPln(res.data); })
       );
     }
-    if (needsSolar) {
+    if (force || !fixedMonthlySolar) {
       promises.push(
-        getJson<{ data: any }>(`/analytics/solar?year=${curYear}&_t=${Date.now()}`)
+        getJson<{ data: any }>(`/analytics/solar?year=${curYear}`)
           .then((res) => { if (res?.data) setFixedMonthlySolar(res.data); })
       );
     }
     Promise.all(promises).catch((err) => {
       console.warn("Failed to load fixed monthly executive data:", err);
     });
-  }, [range, selectedYear, solarRange, solarSelectedYear]);
+  }, [fixedMonthlyPln, fixedMonthlySolar]);
 
   useEffect(() => {
     fetchFixedMonthlyData();
@@ -2269,8 +2321,9 @@ export default function Electricity() {
 
     const handleElectricityUpdate = () => {
       if (!active) return;
-      fetchFixedMonthlyData();
+      fetchFixedMonthlyData(true);
       if (isCurrentActivePeriod()) {
+        plnCacheRef.current.clear();
         fetchData(false);
         fetchSolarData();
         fetchCubicleAnalytics();
@@ -2279,8 +2332,9 @@ export default function Electricity() {
 
     const handleSolarUpdate = () => {
       if (!active) return;
-      fetchFixedMonthlyData();
+      fetchFixedMonthlyData(true);
       if (isCurrentActivePeriod()) {
+        solarCacheRef.current.clear();
         fetchSolarData();
       }
     };
@@ -3718,7 +3772,7 @@ export default function Electricity() {
 
       {/* ═══════════ SECTION C: PLN TREND + DONUT ═══════════ */}
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <section className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition-opacity duration-150 ${isFilterPending ? "opacity-75" : "opacity-100"}`}>
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div className="flex flex-col">
               <div className="flex items-center gap-3">
@@ -3726,6 +3780,12 @@ export default function Electricity() {
                 {cardSummary.totalKwh > 0 && (
                   <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 rounded-lg">
                     Total: {cardSummary.totalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh
+                  </span>
+                )}
+                {isFilterPending && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-0.5 rounded-lg animate-pulse">
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-ping" />
+                    Memuat...
                   </span>
                 )}
               </div>
@@ -3972,11 +4032,19 @@ export default function Electricity() {
 
       {/* ═══════════ SECTION E: SOLAR PANEL CHART + DONUT ═══════════ */}
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
+        <section className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between transition-opacity duration-150 ${isFilterPending ? "opacity-75" : "opacity-100"}`}>
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div className="flex flex-wrap items-center gap-3">
               <div>
-                <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Trend Produksi Solar Panel (PLTS)</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Trend Produksi Solar Panel (PLTS)</h3>
+                  {isFilterPending && (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-lg animate-pulse">
+                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-ping" />
+                      Memuat...
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Produksi energi POI-1 & POI-2 — data historis per jam.</p>
               </div>
               {/* Checklist options: POI-1, POI-2 */}

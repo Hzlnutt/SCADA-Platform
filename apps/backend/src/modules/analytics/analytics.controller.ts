@@ -65,7 +65,10 @@ export const getElectricityAnalyticsHandler = async (
     const queryPromise = (async () => {
       try {
         const data = await getElectricityAnalytics(deviceId, from, to, lwbpRate, wbpRate, year);
-        electricityAnalyticsCache.set(cacheKey, { data, expiresAt: Date.now() + 30000 });
+        const todayStr = getWibDateTime(new Date()).dateStr;
+        const isHistorical = Boolean((to && to < todayStr) || (year && year < new Date().getFullYear()));
+        const ttl = isHistorical ? 300000 : 30000;
+        electricityAnalyticsCache.set(cacheKey, { data, expiresAt: Date.now() + ttl });
         return data;
       } finally {
         electricityAnalyticsInflight.delete(cacheKey);
@@ -141,7 +144,10 @@ export const getSolarAnalyticsHandler = async (
     const queryPromise = (async () => {
       try {
         const data = await getSolarAnalytics(from, to, year);
-        solarAnalyticsCache.set(cacheKey, { data, expiresAt: Date.now() + 30000 });
+        const todayStr = getWibDateTime(new Date()).dateStr;
+        const isHistorical = Boolean((to && to < todayStr) || (year && year < new Date().getFullYear()));
+        const ttl = isHistorical ? 300000 : 30000;
+        solarAnalyticsCache.set(cacheKey, { data, expiresAt: Date.now() + ttl });
         return data;
       } finally {
         solarAnalyticsInflight.delete(cacheKey);
