@@ -1309,6 +1309,7 @@ export default function Electricity() {
   const [chartData, setChartData] = useState<any>(null);
   const [chartLoading, setChartLoading] = useState(true);
   const [isFilterPending, setIsFilterPending] = useState(false);
+  const [isSolarFilterPending, setIsSolarFilterPending] = useState(false);
   const plnCacheRef = useRef<Map<string, { data: any; ts: number }>>(new Map());
   const solarCacheRef = useRef<Map<string, { data: any; ts: number }>>(new Map());
 
@@ -1961,7 +1962,7 @@ export default function Electricity() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 5000); // 5s fallback polling (WebSocket handles 1s real-time)
+    const interval = setInterval(fetchActiveApiData, 60000); // 60s fallback polling (WebSocket handles real-time updates)
 
     const socket = getSocket();
     const handlePltsLive = (payload: any) => {
@@ -2175,9 +2176,9 @@ export default function Electricity() {
       setChartLoading(false);
       setIsFilterPending(false);
       if (isFresh) return; // 0ms instant display!
-    } else {
+    } else if (showLoading) {
       setIsFilterPending(true);
-      if (showLoading && !summaryData) {
+      if (!summaryData) {
         setSummaryLoading(true);
         setChartLoading(true);
       }
@@ -2208,7 +2209,7 @@ export default function Electricity() {
   }, [range, selectedYear, selectedMonth, chartStartDate, chartEndDate, summaryData]);
 
   /* ═══ DATA FETCHING (SOLAR) ═══ */
-  const fetchSolarData = useCallback(() => {
+  const fetchSolarData = useCallback((showLoading = false) => {
     const currentReqId = ++solarReqIdRef.current;
     let solarUrl = `/analytics/solar?`;
     let cacheKey = "";
@@ -2242,10 +2243,13 @@ export default function Electricity() {
 
     if (cached) {
       setSolarData(cached.data);
-      if (cached.data.live) {
+      if (cached.data.live && isTodayQuery) {
         setSolarLive(cached.data.live);
       }
+      setIsSolarFilterPending(false);
       if (isFresh) return; // 0ms instant display!
+    } else if (showLoading) {
+      setIsSolarFilterPending(true);
     }
 
     getJson<{ data: any }>(solarUrl)
@@ -2257,14 +2261,16 @@ export default function Electricity() {
           if (solarRange === "month" && solarSelectedYear === new Date().getFullYear()) {
             setFixedMonthlySolar(res.data);
           }
-          if (res.data.live) {
+          if (res.data.live && isTodayQuery) {
             setSolarLive(res.data.live);
           }
         }
+        setIsSolarFilterPending(false);
       })
       .catch((err) => {
         if (currentReqId !== solarReqIdRef.current) return;
         console.warn("Failed to load solar data", err);
+        setIsSolarFilterPending(false);
       });
   }, [solarRange, solarSelectedYear, solarSelectedMonth, solarStartDate, solarEndDate]);
 
@@ -2300,7 +2306,7 @@ export default function Electricity() {
   }, [fetchData]);
 
   useEffect(() => {
-    fetchSolarData();
+    fetchSolarData(true);
   }, [fetchSolarData]);
 
   // Database historical auto-refresh only when new telemetry enters via websocket
@@ -2325,7 +2331,7 @@ export default function Electricity() {
       if (isCurrentActivePeriod()) {
         plnCacheRef.current.clear();
         fetchData(false);
-        fetchSolarData();
+        fetchSolarData(false);
         fetchCubicleAnalytics();
       }
     };
@@ -2335,7 +2341,7 @@ export default function Electricity() {
       fetchFixedMonthlyData(true);
       if (isCurrentActivePeriod()) {
         solarCacheRef.current.clear();
-        fetchSolarData();
+        fetchSolarData(false);
       }
     };
     const handleLiveUpdate = (payload: any) => {
@@ -2382,11 +2388,37 @@ export default function Electricity() {
       }
       setSolarLive(payload);
     };
+    const handlePmLiveUpdate = (payload: any) => {
+      if (!active || !payload?.data || !Array.isArray(payload.data)) return;
+      const records = payload.data;
+      const updateList = (list: ConsumptionFactCategory[]) => {
+        let changed = false;
+        const next = list.map(item => {
+          const pmId = (item.value?.pm_id || item.value?.json_key || item.config_key || "").toUpperCase();
+          const cleanNum = pmId.replace(/\D/g, "");
+          const match = records.find((r: any) => {
+            const rId = String(r.pm_id || r.pm || "").toUpperCase();
+            return rId === pmId || (cleanNum && rId.replace(/\D/g, "") === cleanNum);
+          });
+          if (match && typeof match.active_power_total === "number") {
+            const kw = Math.max(0, match.active_power_total);
+            if ((item.value as any)?.liveKw !== kw) {
+              changed = true;
+              return { ...item, value: { ...item.value, liveKw: kw } };
+            }
+          }
+          return item;
+        });
+        return changed ? next : list;
+      };
+      setFactCategories1(prev => updateList(prev));
+      setFactCategories2(prev => updateList(prev));
+    };
     const handleConfigUpdate = () => {
       useConfigStore.getState().fetchRates().then(() => {
         if (active) {
           fetchData(false);
-          fetchSolarData();
+          fetchSolarData(false);
         }
       });
     };
@@ -2399,7 +2431,7 @@ export default function Electricity() {
 
     socket.on("electricity:update", handleElectricityUpdate);
     socket.on("electricity:live_update", handleLiveUpdate);
-    socket.on("electricity:pm_live_update", handleElectricityUpdate);
+    socket.on("electricity:pm_live_update", handlePmLiveUpdate);
     socket.on("electricity:solar_live", handleSolarLive);
     socket.on("solar:live_update", handleSolarLive);
     socket.on("solar:update", handleSolarUpdate);
@@ -2409,7 +2441,7 @@ export default function Electricity() {
       active = false;
       socket.off("electricity:update", handleElectricityUpdate);
       socket.off("electricity:live_update", handleLiveUpdate);
-      socket.off("electricity:pm_live_update", handleElectricityUpdate);
+      socket.off("electricity:pm_live_update", handlePmLiveUpdate);
       socket.off("electricity:solar_live", handleSolarLive);
       socket.off("solar:live_update", handleSolarLive);
       socket.off("solar:update", handleSolarUpdate);
@@ -4032,13 +4064,13 @@ export default function Electricity() {
 
       {/* ═══════════ SECTION E: SOLAR PANEL CHART + DONUT ═══════════ */}
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <section className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between transition-opacity duration-150 ${isFilterPending ? "opacity-75" : "opacity-100"}`}>
+        <section className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between transition-opacity duration-150 ${isSolarFilterPending ? "opacity-75" : "opacity-100"}`}>
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div className="flex flex-wrap items-center gap-3">
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Trend Produksi Solar Panel (PLTS)</h3>
-                  {isFilterPending && (
+                  {isSolarFilterPending && (
                     <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-lg animate-pulse">
                       <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-ping" />
                       Memuat...
