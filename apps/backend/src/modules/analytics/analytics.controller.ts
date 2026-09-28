@@ -615,6 +615,138 @@ export const getPowerMeterHistoryHandler = async (
       : 23;
 
     const pool = getPostgresPool();
+    const isRolling = req.query.rolling === "true";
+    if (isRolling) {
+      let rollingDbRes;
+      if (pmId === "PM410" || pmId === "PM8000" || pmId === "CUBICLE_PLN_PM8000") {
+        rollingDbRes = await pool.query(`
+          WITH combined AS (
+            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power as active_power_total, current_a, current_b, current_c, power_factor
+            FROM electric_pln_telemetry WHERE t_stamp >= NOW() - INTERVAL '24 hours'
+            UNION ALL
+            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power as active_power_total, current_a, current_b, current_c, power_factor
+            FROM electric_pln_telemetry_minute WHERE t_stamp >= NOW() - INTERVAL '24 hours'
+          )
+          SELECT
+            to_char(t_stamp, 'HH24:MI:SS') as time,
+            to_char(t_stamp, 'HH24:MI') as label,
+            extract(epoch from t_stamp) * 1000 as ts,
+            extract(hour from t_stamp)::int as hour,
+            volt_ab::numeric(12,2) as volt_ab,
+            volt_bc::numeric(12,2) as volt_bc,
+            volt_ca::numeric(12,2) as volt_ca,
+            ROUND(volt_ab / 1.7320508, 2)::numeric(12,2) as volt_rn,
+            ROUND(volt_bc / 1.7320508, 2)::numeric(12,2) as volt_sn,
+            ROUND(volt_ca / 1.7320508, 2)::numeric(12,2) as volt_tn,
+            active_power_total::numeric(12,2) as active_power_total,
+            current_a::numeric(12,2) as current_a,
+            current_b::numeric(12,2) as current_b,
+            current_c::numeric(12,2) as current_c,
+            (COALESCE(current_a, 0) + COALESCE(current_b, 0) + COALESCE(current_c, 0))::numeric(12,2) as current_total,
+            power_factor::numeric(12,3) as power_factor,
+            t_stamp
+          FROM combined
+          ORDER BY t_stamp ASC
+        `);
+      } else if (pmId === "PM411" || pmId === "PM5560" || pmId === "PM5560_WF1" || pmId === "FEEDER_WF1_PM5560") {
+        rollingDbRes = await pool.query(`
+          WITH combined AS (
+            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power_total, current_a, current_b, current_c, power_factor
+            FROM electric_wf1_telemetry WHERE t_stamp >= NOW() - INTERVAL '24 hours'
+            UNION ALL
+            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power_total, current_a, current_b, current_c, power_factor
+            FROM electric_wf1_telemetry_minute WHERE t_stamp >= NOW() - INTERVAL '24 hours'
+          )
+          SELECT
+            to_char(t_stamp, 'HH24:MI:SS') as time,
+            to_char(t_stamp, 'HH24:MI') as label,
+            extract(epoch from t_stamp) * 1000 as ts,
+            extract(hour from t_stamp)::int as hour,
+            volt_ab::numeric(12,2) as volt_ab,
+            volt_bc::numeric(12,2) as volt_bc,
+            volt_ca::numeric(12,2) as volt_ca,
+            ROUND(volt_ab / 1.7320508, 2)::numeric(12,2) as volt_rn,
+            ROUND(volt_bc / 1.7320508, 2)::numeric(12,2) as volt_sn,
+            ROUND(volt_ca / 1.7320508, 2)::numeric(12,2) as volt_tn,
+            active_power_total::numeric(12,2) as active_power_total,
+            current_a::numeric(12,2) as current_a,
+            current_b::numeric(12,2) as current_b,
+            current_c::numeric(12,2) as current_c,
+            (COALESCE(current_a, 0) + COALESCE(current_b, 0) + COALESCE(current_c, 0))::numeric(12,2) as current_total,
+            power_factor::numeric(12,3) as power_factor,
+            t_stamp
+          FROM combined
+          ORDER BY t_stamp ASC
+        `);
+      } else if (pmId === "PM412" || pmId === "PM5560_WF2" || pmId === "PM5500" || pmId === "FEEDER_WF2_PM5500") {
+        rollingDbRes = await pool.query(`
+          WITH combined AS (
+            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power_total, current_a, current_b, current_c, power_factor
+            FROM electric_wf2_telemetry WHERE t_stamp >= NOW() - INTERVAL '24 hours'
+            UNION ALL
+            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power_total, current_a, current_b, current_c, power_factor
+            FROM electric_wf2_telemetry_minute WHERE t_stamp >= NOW() - INTERVAL '24 hours'
+          )
+          SELECT
+            to_char(t_stamp, 'HH24:MI:SS') as time,
+            to_char(t_stamp, 'HH24:MI') as label,
+            extract(epoch from t_stamp) * 1000 as ts,
+            extract(hour from t_stamp)::int as hour,
+            volt_ab::numeric(12,2) as volt_ab,
+            volt_bc::numeric(12,2) as volt_bc,
+            volt_ca::numeric(12,2) as volt_ca,
+            ROUND(volt_ab / 1.7320508, 2)::numeric(12,2) as volt_rn,
+            ROUND(volt_bc / 1.7320508, 2)::numeric(12,2) as volt_sn,
+            ROUND(volt_ca / 1.7320508, 2)::numeric(12,2) as volt_tn,
+            active_power_total::numeric(12,2) as active_power_total,
+            current_a::numeric(12,2) as current_a,
+            current_b::numeric(12,2) as current_b,
+            current_c::numeric(12,2) as current_c,
+            (COALESCE(current_a, 0) + COALESCE(current_b, 0) + COALESCE(current_c, 0))::numeric(12,2) as current_total,
+            power_factor::numeric(12,3) as power_factor,
+            t_stamp
+          FROM combined
+          ORDER BY t_stamp ASC
+        `);
+      } else {
+        rollingDbRes = await pool.query(`
+          WITH combined AS (
+            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power_total, current_a, current_b, current_c, power_factor
+            FROM electric_pm_telemetry WHERE UPPER(pm_id) = $1 AND t_stamp >= NOW() - INTERVAL '24 hours'
+            UNION ALL
+            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power_total, current_a, current_b, current_c, power_factor
+            FROM electric_pm_telemetry_minute WHERE UPPER(pm_id) = $1 AND t_stamp >= NOW() - INTERVAL '24 hours'
+          )
+          SELECT
+            to_char(t_stamp, 'HH24:MI:SS') as time,
+            to_char(t_stamp, 'HH24:MI') as label,
+            extract(epoch from t_stamp) * 1000 as ts,
+            extract(hour from t_stamp)::int as hour,
+            volt_ab::numeric(12,2) as volt_ab,
+            volt_bc::numeric(12,2) as volt_bc,
+            volt_ca::numeric(12,2) as volt_ca,
+            ROUND(volt_ab / 1.7320508, 2)::numeric(12,2) as volt_rn,
+            ROUND(volt_bc / 1.7320508, 2)::numeric(12,2) as volt_sn,
+            ROUND(volt_ca / 1.7320508, 2)::numeric(12,2) as volt_tn,
+            active_power_total::numeric(12,2) as active_power_total,
+            current_a::numeric(12,2) as current_a,
+            current_b::numeric(12,2) as current_b,
+            current_c::numeric(12,2) as current_c,
+            (COALESCE(current_a, 0) + COALESCE(current_b, 0) + COALESCE(current_c, 0))::numeric(12,2) as current_total,
+            power_factor::numeric(12,3) as power_factor,
+            t_stamp
+          FROM combined
+          ORDER BY t_stamp ASC
+        `, [pmId]);
+      }
+      return res.json({
+        targetDate,
+        currentHour,
+        rolling: true,
+        data: rollingDbRes.rows
+      });
+    }
+
     let dbRes;
 
     // Handle Incoming Cubicles (PLN, WF1, WF2)

@@ -613,7 +613,7 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
           onClick={() => setIsZoomOpen(false)}
         >
           <div
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl p-6 flex flex-col space-y-4 max-h-[92vh] overflow-hidden"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-[94vw] max-w-[96vw] h-[92vh] max-h-[94vh] p-6 flex flex-col space-y-4 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -670,8 +670,8 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
               </div>
             </div>
 
-            {/* Modal Body: Large Chart (480px) */}
-            <div className="w-full" style={{ height: 480 }}>
+            {/* Modal Body: Large Chart filling 90% view */}
+            <div className="w-full flex-1 min-h-0">
               <MonthlyComparisonBarChart
                 currentData={currentData}
                 previousData={previousData}
@@ -911,7 +911,7 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
           onClick={() => setIsZoomOpen(false)}
         >
           <div
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl p-6 flex flex-col space-y-4 max-h-[92vh] overflow-hidden"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-[94vw] max-w-[96vw] h-[92vh] max-h-[94vh] p-6 flex flex-col space-y-4 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -970,8 +970,8 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
               </div>
             </div>
 
-            {/* Modal Body: Large Chart (480px) */}
-            <div className="w-full" style={{ height: 480 }}>
+            {/* Modal Body: Large Chart filling 90% view */}
+            <div className="w-full flex-1 min-h-0">
               <MonthlyComparisonBarChart
                 currentData={currentData}
                 previousData={previousData}

@@ -123,23 +123,27 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
 
   try {
     const res = await pool.query(`
-      SELECT
-        to_char(t_stamp, 'HH24:MI:SS') AS time_str,
-        extract(epoch from t_stamp) * 1000 AS ts_ms,
-        hour,
-        volt_ll,
-        volt_ab,
-        volt_bc,
-        volt_ca,
-        active_power,
-        current_a,
-        current_b,
-        current_c
-      FROM electric_incoming_trend_5s
-      WHERE device_id = $1 AND hour = $2
-      ORDER BY t_stamp ASC
-      LIMIT 720
-    `, [deviceId, currentHour]);
+      SELECT * FROM (
+        SELECT
+          to_char(t_stamp, 'HH24:MI:SS') AS time_str,
+          extract(epoch from t_stamp) * 1000 AS ts_ms,
+          hour,
+          volt_ll,
+          volt_ab,
+          volt_bc,
+          volt_ca,
+          active_power,
+          current_a,
+          current_b,
+          current_c,
+          t_stamp
+        FROM electric_incoming_trend_5s
+        WHERE device_id = $1
+        ORDER BY t_stamp DESC
+        LIMIT 720
+      ) sub
+      ORDER BY sub.t_stamp ASC
+    `, [deviceId]);
 
     const points = res.rows.map((row: any) => {
       const timeStr = row.time_str;

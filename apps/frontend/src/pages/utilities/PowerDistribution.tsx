@@ -1606,20 +1606,74 @@ export default function PowerDistribution() {
   }, [transformers, bottomTxId]);
 
   // Section C Historical records state
-  const [bottomHistory, setBottomHistory] = useState<any[]>([]);
+  const [bottomHistory, setBottomHistory] = useState<any[]>(() => {
+    try {
+      const cached = localStorage.getItem(`trafo_rolling_3s_${bottomTxId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const dayAgo = Date.now() - 25 * 3600 * 1000;
+          const fresh = parsed.filter((p: any) => !p.ts || Number(p.ts) >= dayAgo);
+          if (fresh.length > 0) return fresh;
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
   const [loadingBottomHistory, setLoadingBottomHistory] = useState(false);
   const [bottomVoltageMode, setBottomVoltageMode] = useState<"380v" | "230v">("380v");
+  const [bottomZoomChart, setBottomZoomChart] = useState<"voltage" | "power" | "current" | null>(null);
+  const lastBottomRecordTsRef = useRef<number>(0);
 
   useEffect(() => {
+    if (!bottomZoomChart) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setBottomZoomChart(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [bottomZoomChart]);
+
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(`trafo_rolling_3s_${bottomTxId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const dayAgo = Date.now() - 25 * 3600 * 1000;
+          const fresh = parsed.filter((p: any) => !p.ts || Number(p.ts) >= dayAgo);
+          setBottomHistory(fresh);
+        }
+      }
+    } catch (e) {}
+
     if (!isPageActive) return;
     const fetchBottomHistory = () => {
       setLoadingBottomHistory(true);
-      const clientHour = new Date().getHours();
       const pmId = TRAFO_PM_MAP[bottomTxId]?.pmId || bottomTxId;
-      getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?hour=${clientHour}&_t=${Date.now()}`)
+      getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?rolling=true&_t=${Date.now()}`)
         .then((res) => {
-          if (res?.data) {
-            setBottomHistory(res.data);
+          if (res?.data && Array.isArray(res.data)) {
+            setBottomHistory((prev) => {
+              const dayAgo = Date.now() - 25 * 3600 * 1000;
+              const map = new Map<string, any>();
+              for (const p of prev) {
+                if (!p.ts || Number(p.ts) >= dayAgo) {
+                  const key = p.time || p.label || String(p.ts);
+                  map.set(key, p);
+                }
+              }
+              for (const p of res.data) {
+                const key = p.time || p.label || String(p.ts);
+                map.set(key, p);
+              }
+              const merged = Array.from(map.values()).sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
+              const trimmed = merged.length > 4000 ? merged.slice(merged.length - 4000) : merged;
+              try {
+                localStorage.setItem(`trafo_rolling_3s_${bottomTxId}`, JSON.stringify(trimmed.slice(-1500)));
+              } catch (e) {}
+              return trimmed;
+            });
           }
         })
         .catch((err) => console.error("Failed to load bottom trafo history:", err))
@@ -1628,13 +1682,85 @@ export default function PowerDistribution() {
 
     fetchBottomHistory();
     const interval = setInterval(fetchBottomHistory, 30000);
-    return () => clearInterval(interval);
+
+    // Live 3-second rolling stream listener via socket
+    const socket = getSocket();
+    const targetPmId = (TRAFO_PM_MAP[bottomTxId]?.pmId || bottomTxId).toUpperCase();
+
+    const handleTrafoLive = (payload: any) => {
+      if (!payload || !Array.isArray(payload.data)) return;
+      const pm = payload.data.find((item: any) => String(item.pm_id).toUpperCase() === targetPmId);
+      if (!pm) return;
+
+      const now = Date.now();
+      // Throttle recording to ~3 seconds cadence
+      if (now - lastBottomRecordTsRef.current < 2800) return;
+      lastBottomRecordTsRef.current = now;
+
+      const d = new Date(now);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      const labelStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+
+      const v_ab = pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : null;
+      const v_bc = pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : null;
+      const v_ca = pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : null;
+      const v_rn = pm.volt_rn !== undefined && pm.volt_rn !== null ? Number(Number(pm.volt_rn).toFixed(1)) : (v_ab ? Number((v_ab / 1.732).toFixed(1)) : null);
+      const v_sn = pm.volt_sn !== undefined && pm.volt_sn !== null ? Number(Number(pm.volt_sn).toFixed(1)) : (v_bc ? Number((v_bc / 1.732).toFixed(1)) : null);
+      const v_tn = pm.volt_tn !== undefined && pm.volt_tn !== null ? Number(Number(pm.volt_tn).toFixed(1)) : (v_ca ? Number((v_ca / 1.732).toFixed(1)) : null);
+      const active_power = pm.active_power_total !== undefined && pm.active_power_total !== null ? Number(Number(pm.active_power_total).toFixed(1)) : null;
+      const cur_a = pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : null;
+      const cur_b = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : null;
+      const cur_c = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : null;
+      const cur_tot = pm.current_total !== undefined && pm.current_total !== null ? Number(Number(pm.current_total).toFixed(1)) : ((cur_a || 0) + (cur_b || 0) + (cur_c || 0));
+
+      const newPoint = {
+        label: labelStr,
+        time: timeStr,
+        hour: d.getHours(),
+        ts: now,
+        volt_ab: v_ab,
+        volt_bc: v_bc,
+        volt_ca: v_ca,
+        volt_rn: v_rn,
+        volt_sn: v_sn,
+        volt_tn: v_tn,
+        active_power_total: active_power,
+        current_a: cur_a,
+        current_b: cur_b,
+        current_c: cur_c,
+        current_total: cur_tot
+      };
+
+      setBottomHistory((prev) => {
+        const updated = [...prev, newPoint];
+        // 24-hour continuous rolling FIFO buffer
+        const trimmed = updated.length > 4000 ? updated.slice(updated.length - 4000) : updated;
+        try {
+          localStorage.setItem(`trafo_rolling_3s_${bottomTxId}`, JSON.stringify(trimmed.slice(-1500)));
+        } catch (e) {}
+        return trimmed;
+      });
+    };
+
+    socket.on("electricity:pm_live_update", handleTrafoLive);
+    socket.on("electricity:ew21_live", handleTrafoLive);
+    socket.on("electricity:ew22_live", handleTrafoLive);
+    socket.on("electricity:ew23_live", handleTrafoLive);
+
+    return () => {
+      clearInterval(interval);
+      socket.off("electricity:pm_live_update", handleTrafoLive);
+      socket.off("electricity:ew21_live", handleTrafoLive);
+      socket.off("electricity:ew22_live", handleTrafoLive);
+      socket.off("electricity:ew23_live", handleTrafoLive);
+    };
   }, [bottomTxId, isPageActive]);
 
   const fallbackLabels = useMemo(() => Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`), []);
   const bottomLabels = useMemo(() => {
     return bottomHistory.length > 0
-      ? bottomHistory.map((d) => d.label || `${String(d.hour).padStart(2, "0")}:00`)
+      ? bottomHistory.map((d) => d.time || d.label || `${String(d.hour).padStart(2, "0")}:00`)
       : fallbackLabels;
   }, [bottomHistory, fallbackLabels]);
 
@@ -1648,9 +1774,9 @@ export default function PowerDistribution() {
             data: bottomHistory.map((d) => (d.volt_ab !== null && d.volt_ab !== undefined ? Number(d.volt_ab) : null)),
             borderColor: "#f59e0b",
             backgroundColor: "transparent",
-            borderWidth: 2,
-            tension: 0.3,
-            pointRadius: 2,
+            borderWidth: 1.8,
+            tension: 0.2,
+            pointRadius: 0,
             pointHoverRadius: 4,
           },
           {
@@ -1658,9 +1784,9 @@ export default function PowerDistribution() {
             data: bottomHistory.map((d) => (d.volt_bc !== null && d.volt_bc !== undefined ? Number(d.volt_bc) : null)),
             borderColor: "#06b6d4",
             backgroundColor: "transparent",
-            borderWidth: 2,
-            tension: 0.3,
-            pointRadius: 2,
+            borderWidth: 1.8,
+            tension: 0.2,
+            pointRadius: 0,
             pointHoverRadius: 4,
           },
           {
@@ -1668,9 +1794,9 @@ export default function PowerDistribution() {
             data: bottomHistory.map((d) => (d.volt_ca !== null && d.volt_ca !== undefined ? Number(d.volt_ca) : null)),
             borderColor: "#8b5cf6",
             backgroundColor: "transparent",
-            borderWidth: 2,
-            tension: 0.3,
-            pointRadius: 2,
+            borderWidth: 1.8,
+            tension: 0.2,
+            pointRadius: 0,
             pointHoverRadius: 4,
           },
         ]
@@ -1684,9 +1810,9 @@ export default function PowerDistribution() {
           data: bottomHistory.map((d) => (d.volt_rn !== null && d.volt_rn !== undefined ? Number(d.volt_rn) : null)),
           borderColor: "#f59e0b",
           backgroundColor: "transparent",
-          borderWidth: 2,
-          tension: 0.3,
-          pointRadius: 2,
+          borderWidth: 1.8,
+          tension: 0.2,
+          pointRadius: 0,
           pointHoverRadius: 4,
         },
         {
@@ -1694,9 +1820,9 @@ export default function PowerDistribution() {
           data: bottomHistory.map((d) => (d.volt_sn !== null && d.volt_sn !== undefined ? Number(d.volt_sn) : null)),
           borderColor: "#06b6d4",
           backgroundColor: "transparent",
-          borderWidth: 2,
-          tension: 0.3,
-          pointRadius: 2,
+          borderWidth: 1.8,
+          tension: 0.2,
+          pointRadius: 0,
           pointHoverRadius: 4,
         },
         {
@@ -1704,9 +1830,9 @@ export default function PowerDistribution() {
           data: bottomHistory.map((d) => (d.volt_tn !== null && d.volt_tn !== undefined ? Number(d.volt_tn) : null)),
           borderColor: "#8b5cf6",
           backgroundColor: "transparent",
-          borderWidth: 2,
-          tension: 0.3,
-          pointRadius: 2,
+          borderWidth: 1.8,
+          tension: 0.2,
+          pointRadius: 0,
           pointHoverRadius: 4,
         },
       ]
@@ -1721,10 +1847,10 @@ export default function PowerDistribution() {
         data: bottomHistory.map((d) => (d.active_power_total !== null && d.active_power_total !== undefined ? Number(d.active_power_total) : null)),
         borderColor: "#0284c7",
         backgroundColor: "rgba(2, 132, 199, 0.08)",
-        borderWidth: 2,
-        tension: 0.3,
+        borderWidth: 1.8,
+        tension: 0.2,
         fill: true,
-        pointRadius: 2,
+        pointRadius: 0,
         pointHoverRadius: 4,
       }
     ]
@@ -1738,10 +1864,11 @@ export default function PowerDistribution() {
         data: bottomHistory.map((d) => (d.current_total !== null && d.current_total !== undefined ? Number(d.current_total) : (d.current_a !== null ? Number(d.current_a) + Number(d.current_b || 0) + Number(d.current_c || 0) : null))),
         borderColor: "#8b5cf6",
         backgroundColor: "transparent",
-        borderWidth: 2,
+        borderWidth: 1.8,
         borderDash: [5, 5],
-        tension: 0.3,
-        pointRadius: 2,
+        tension: 0.2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
       },
       {
         label: "Fasa R (A)",
@@ -1749,8 +1876,9 @@ export default function PowerDistribution() {
         borderColor: "#ef4444",
         backgroundColor: "transparent",
         borderWidth: 1.5,
-        tension: 0.3,
-        pointRadius: 2,
+        tension: 0.2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
       },
       {
         label: "Fasa S (A)",
@@ -1758,8 +1886,9 @@ export default function PowerDistribution() {
         borderColor: "#f59e0b",
         backgroundColor: "transparent",
         borderWidth: 1.5,
-        tension: 0.3,
-        pointRadius: 2,
+        tension: 0.2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
       },
       {
         label: "Fasa T (A)",
@@ -1767,8 +1896,9 @@ export default function PowerDistribution() {
         borderColor: "#10b981",
         backgroundColor: "transparent",
         borderWidth: 1.5,
-        tension: 0.3,
-        pointRadius: 2,
+        tension: 0.2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
       },
     ]
   }), [bottomLabels, bottomHistory]);
@@ -1776,6 +1906,7 @@ export default function PowerDistribution() {
   const lineChartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
+    animation: false as const,
     plugins: {
       legend: { display: false },
       tooltip: {
@@ -2441,28 +2572,41 @@ export default function PowerDistribution() {
                 </h4>
                 {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
               </div>
-              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setBottomVoltageMode("380v")}
+                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                      bottomVoltageMode === "380v"
+                        ? "bg-white dark:bg-slate-700 text-amber-500 shadow-sm"
+                        : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    }`}
+                  >
+                    380V (L-L)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBottomVoltageMode("230v")}
+                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                      bottomVoltageMode === "230v"
+                        ? "bg-white dark:bg-slate-700 text-cyan-500 shadow-sm"
+                        : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    }`}
+                  >
+                    230V (L-N)
+                  </button>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setBottomVoltageMode("380v")}
-                  className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
-                    bottomVoltageMode === "380v"
-                      ? "bg-white dark:bg-slate-700 text-amber-500 shadow-sm"
-                      : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                  }`}
+                  onClick={() => setBottomZoomChart("voltage")}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 transition cursor-pointer"
+                  title="Perbesar Chart Voltage"
                 >
-                  380V (L-L)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBottomVoltageMode("230v")}
-                  className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
-                    bottomVoltageMode === "230v"
-                      ? "bg-white dark:bg-slate-700 text-cyan-500 shadow-sm"
-                      : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                  }`}
-                >
-                  230V (L-N)
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                  </svg>
+                  <span>Perbesar</span>
                 </button>
               </div>
             </div>
@@ -2482,7 +2626,20 @@ export default function PowerDistribution() {
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Daya Aktif Record — kW Total (kW)</h4>
-              {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
+              <div className="flex items-center gap-2">
+                {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
+                <button
+                  type="button"
+                  onClick={() => setBottomZoomChart("power")}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold text-sky-600 dark:text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 transition cursor-pointer"
+                  title="Perbesar Chart Daya Aktif"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                  </svg>
+                  <span>Perbesar</span>
+                </button>
+              </div>
             </div>
             <div className="h-[140px] w-full">
               {bottomHistory.some(d => d.active_power_total !== null) ? (
@@ -2500,7 +2657,20 @@ export default function PowerDistribution() {
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Ampere Record (A) — Total & 3 Fasa (R, S, T)</h4>
-              {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
+              <div className="flex items-center gap-2">
+                {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
+                <button
+                  type="button"
+                  onClick={() => setBottomZoomChart("current")}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 transition cursor-pointer"
+                  title="Perbesar Chart Ampere"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                  </svg>
+                  <span>Perbesar</span>
+                </button>
+              </div>
             </div>
             <div className="h-[150px] w-full">
               {bottomHistory.some(d => d.current_a !== null || d.current_b !== null || d.current_c !== null || d.current_total !== null) ? (
@@ -2515,6 +2685,101 @@ export default function PowerDistribution() {
           </div>
         </div>
       </section>
+
+      {/* ZOOM MODAL FOR SECTION C */}
+      {bottomZoomChart && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setBottomZoomChart(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-[94vw] max-w-[96vw] h-[92vh] max-h-[94vh] p-6 flex flex-col space-y-4 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-800 dark:text-white uppercase tracking-wide">
+                    {bottomZoomChart === "voltage"
+                      ? `Voltage Record (V) — ${bottomVoltageMode === "380v" ? "380V (L-L)" : "230V (L-N)"}`
+                      : bottomZoomChart === "power"
+                      ? "Daya Aktif Record — kW Total (kW)"
+                      : "Ampere Record (A) — Total & 3 Fasa (R, S, T)"}
+                  </h3>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 font-bold">
+                    {bottomTx?.factory === 1 ? "F1" : "F2"} {bottomTx?.name}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
+                    Rentang: 24 Jam Terakhir (Rolling Sliding Window)
+                  </span>
+                  <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                    • Resolusi 3 Detik (Real-Time Buffer & Historikal)
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {bottomZoomChart === "voltage" && (
+                  <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => setBottomVoltageMode("380v")}
+                      className={`px-2.5 py-1 text-xs font-bold rounded transition-all ${
+                        bottomVoltageMode === "380v"
+                          ? "bg-white dark:bg-slate-700 text-amber-500 shadow-sm"
+                          : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                      }`}
+                    >
+                      380V (L-L)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBottomVoltageMode("230v")}
+                      className={`px-2.5 py-1 text-xs font-bold rounded transition-all ${
+                        bottomVoltageMode === "230v"
+                          ? "bg-white dark:bg-slate-700 text-cyan-500 shadow-sm"
+                          : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                      }`}
+                    >
+                      230V (L-N)
+                    </button>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setBottomZoomChart(null)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer"
+                  title="Tutup Modal"
+                >
+                  <span>Tutup</span>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body: Large Chart filling 90% view */}
+            <div className="w-full flex-1 min-h-0">
+              {bottomZoomChart === "voltage" ? (
+                <Line data={voltageTrendChart} options={multiLineChartOptions} />
+              ) : bottomZoomChart === "power" ? (
+                <Line data={powerTrendChart} options={lineChartOptions} />
+              ) : (
+                <Line data={currentTrendChart} options={currentChartOptions} />
+              )}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-3 text-xs text-slate-400">
+              <span>Data telemetri transformator tersinkronisasi per 3 detik secara rolling kontinu.</span>
+              <span className="text-[11px]">Tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] border border-slate-200 dark:border-slate-700">ESC</kbd> untuk menutup</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* DETAIL MODAL IF OPENED */}
       {selectedTx && (

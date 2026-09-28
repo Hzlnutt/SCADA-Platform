@@ -379,7 +379,20 @@ interface HourlyTrend5sPoint {
       return new Date().getHours();
     }
   });
-  const [hourlyTrend5s, setHourlyTrend5s] = useState<HourlyTrend5sPoint[]>([]);
+  const [hourlyTrend5s, setHourlyTrend5s] = useState<HourlyTrend5sPoint[]>(() => {
+    try {
+      const cached = localStorage.getItem(`incoming_trend_1h_${config.deviceId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const oneHourAgo = Date.now() - 3700 * 1000;
+          const fresh = parsed.filter((p: any) => !p.ts || Number(p.ts) >= oneHourAgo);
+          if (fresh.length > 0) return fresh;
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
   const lastTrendHourRef = useRef<number>(-1);
   const [zoomTrend, setZoomTrend] = useState<"voltage" | "power" | null>(null);
 
@@ -556,12 +569,25 @@ interface HourlyTrend5sPoint {
             isConnected: !isOffline && pq.pfStatus === "connected"
           }));
         }
-        if (payload?.points && Array.isArray(payload.points)) {
-          const pts = payload.points;
-          const currentHour = typeof payload.hour === "number" ? payload.hour : trendHour;
+        const pts = payload?.points || (payload as any)?.charts?.hourlyTrend5s;
+        if (Array.isArray(pts)) {
+          const currentHour = typeof payload?.hour === "number" ? payload.hour : trendHour;
           setTrendHour(currentHour);
           lastTrendHourRef.current = currentHour;
-          setHourlyTrend5s(pts);
+          setHourlyTrend5s((prev) => {
+            const oneHourAgo = Date.now() - 3700 * 1000;
+            const map = new Map<string, any>();
+            for (const p of prev) {
+              if (!p.ts || Number(p.ts) >= oneHourAgo) map.set(p.time, p);
+            }
+            for (const p of pts) map.set(p.time, p);
+            const merged = Array.from(map.values()).sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
+            const trimmed = merged.length > 720 ? merged.slice(merged.length - 720) : merged;
+            try {
+              localStorage.setItem(`incoming_trend_1h_${config.deviceId}`, JSON.stringify(trimmed));
+            } catch (e) {}
+            return trimmed;
+          });
         }
         setLoading(false);
       })
@@ -573,7 +599,23 @@ interface HourlyTrend5sPoint {
 
   // Reset/update metrics when config changes
   useEffect(() => {
-    setHourlyTrend5s([]);
+    try {
+      const cached = localStorage.getItem(`incoming_trend_1h_${config.deviceId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const oneHourAgo = Date.now() - 3700 * 1000;
+          const fresh = parsed.filter((p: any) => !p.ts || Number(p.ts) >= oneHourAgo);
+          setHourlyTrend5s(fresh);
+        } else {
+          setHourlyTrend5s([]);
+        }
+      } else {
+        setHourlyTrend5s([]);
+      }
+    } catch (e) {
+      setHourlyTrend5s([]);
+    }
     lastTrendHourRef.current = new Date().getHours();
     setMetrics({
       voltage: config.voltageBase,
@@ -680,8 +722,12 @@ interface HourlyTrend5sPoint {
             return prev;
           }
           const updated = [...prev, pt];
-          // 1-Hour window: max 720 points (12 points/minute * 60 minutes)
-          return updated.length > 720 ? updated.slice(updated.length - 720) : updated;
+          // Continuous 1-hour rolling sliding window: 720 points max (720 * 5s = 3600s = 1 hour FIFO)
+          const trimmed = updated.length > 720 ? updated.slice(updated.length - 720) : updated;
+          try {
+            localStorage.setItem(`incoming_trend_1h_${config.deviceId}`, JSON.stringify(trimmed));
+          } catch (e) {}
+          return trimmed;
         });
       }
     };
@@ -834,60 +880,29 @@ interface HourlyTrend5sPoint {
     }
   };
 
-  // Fixed 1-Hour Window Slot Generation (strictly HH:00:00 to HH:59:55, every 5 seconds = 720 points)
-  // Exact same logic as MachineStatistics / Historical Parameter analysis
-  const fixedHourSlots = useMemo(() => {
-    const slots: string[] = [];
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const hStr = pad(trendHour);
-
-    for (let m = 0; m < 60; m++) {
-      const mStr = pad(m);
-      for (let s = 0; s < 60; s += 5) {
-        slots.push(`${hStr}:${mStr}:${pad(s)}`);
+  // Continuous 1-Hour Rolling 5-Second Window (sliding FIFO window, max 720 points = 1 hour)
+  const rollingTrendLabels = useMemo(() => {
+    if (hourlyTrend5s.length === 0) {
+      const slots: string[] = [];
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      for (let i = 719; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 5000);
+        slots.push(`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`);
       }
+      return slots;
     }
-    return slots;
-  }, [trendHour]);
+    return hourlyTrend5s.map((p) => p.time);
+  }, [hourlyTrend5s]);
 
-  // 1-Hour Fixed 5-Second Line Trend Data - 3 Lines (Fasa R, S, T)
+  // 1-Hour Rolling 5-Second Line Trend Data - 3 Lines (Fasa R, S, T)
   const voltageTrendData = useMemo(() => {
-    const pointsMap = new Map<string, HourlyTrend5sPoint>();
-    for (const p of hourlyTrend5s) {
-      pointsMap.set(p.time, p);
-    }
-    const sorted = [...hourlyTrend5s].sort((a, b) => a.time.localeCompare(b.time));
-    const latestTime = sorted.length > 0 ? sorted[sorted.length - 1].time : null;
-
-    const dataR: (number | null)[] = [];
-    const dataS: (number | null)[] = [];
-    const dataT: (number | null)[] = [];
-
-    for (const slot of fixedHourSlots) {
-      if (latestTime !== null && slot > latestTime) {
-        dataR.push(null);
-        dataS.push(null);
-        dataT.push(null);
-      } else {
-        const pt = pointsMap.get(slot);
-        if (pt) {
-          dataR.push(pt.vR !== undefined ? pt.vR : pt.voltage);
-          dataS.push(pt.vS !== undefined ? pt.vS : pt.voltage);
-          dataT.push(pt.vT !== undefined ? pt.vT : pt.voltage);
-        } else {
-          dataR.push(null);
-          dataS.push(null);
-          dataT.push(null);
-        }
-      }
-    }
-
     return {
-      labels: fixedHourSlots,
+      labels: rollingTrendLabels,
       datasets: [
         {
           label: "Fasa R (kV)",
-          data: dataR,
+          data: hourlyTrend5s.map((p) => (p.vR !== undefined ? p.vR : p.voltage)),
           borderColor: "#f43f5e",
           backgroundColor: "rgba(244, 63, 94, 0.05)",
           fill: false,
@@ -902,7 +917,7 @@ interface HourlyTrend5sPoint {
         },
         {
           label: "Fasa S (kV)",
-          data: dataS,
+          data: hourlyTrend5s.map((p) => (p.vS !== undefined ? p.vS : p.voltage)),
           borderColor: "#f59e0b",
           backgroundColor: "rgba(245, 158, 11, 0.05)",
           fill: false,
@@ -917,7 +932,7 @@ interface HourlyTrend5sPoint {
         },
         {
           label: "Fasa T (kV)",
-          data: dataT,
+          data: hourlyTrend5s.map((p) => (p.vT !== undefined ? p.vT : p.voltage)),
           borderColor: "#3b82f6",
           backgroundColor: "rgba(59, 130, 246, 0.05)",
           fill: false,
@@ -932,38 +947,16 @@ interface HourlyTrend5sPoint {
         }
       ]
     };
-  }, [fixedHourSlots, hourlyTrend5s, isDark]);
+  }, [rollingTrendLabels, hourlyTrend5s, isDark]);
 
   // Strictly 1 single line for Active Power trend across Incoming PLN, WF1, and WF2
   const activePowerTrendData = useMemo(() => {
-    const pointsMap = new Map<string, HourlyTrend5sPoint>();
-    for (const p of hourlyTrend5s) {
-      pointsMap.set(p.time, p);
-    }
-    const sorted = [...hourlyTrend5s].sort((a, b) => a.time.localeCompare(b.time));
-    const latestTime = sorted.length > 0 ? sorted[sorted.length - 1].time : null;
-
-    const dataPoints: (number | null)[] = [];
-
-    for (const slot of fixedHourSlots) {
-      if (latestTime !== null && slot > latestTime) {
-        dataPoints.push(null);
-      } else {
-        const pt = pointsMap.get(slot);
-        if (pt) {
-          dataPoints.push(pt.activePower);
-        } else {
-          dataPoints.push(null);
-        }
-      }
-    }
-
     return {
-      labels: fixedHourSlots,
+      labels: rollingTrendLabels,
       datasets: [
         {
           label: "Active Power (kW)",
-          data: dataPoints,
+          data: hourlyTrend5s.map((p) => p.activePower),
           borderColor: "#10b981",
           backgroundColor: "rgba(16, 185, 129, 0.08)",
           fill: true,
@@ -978,11 +971,12 @@ interface HourlyTrend5sPoint {
         }
       ]
     };
-  }, [fixedHourSlots, hourlyTrend5s, isDark]);
+  }, [rollingTrendLabels, hourlyTrend5s, isDark]);
 
   const lineOptions = (unit: "kV" | "kW", isPower: boolean = false, isModal: boolean = false) => ({
     responsive: true,
     maintainAspectRatio: false,
+    animation: false as const,
     interaction: {
       mode: "index" as const,
       intersect: false
@@ -1047,8 +1041,8 @@ interface HourlyTrend5sPoint {
           font: { size: isModal ? 10 : 8.5 },
           maxTicksLimit: isModal ? 25 : 13,
           autoSkip: true,
-          callback: (_val: any, index: number): string => {
-            const raw = fixedHourSlots[index];
+          callback: function (val: any, index: number): string {
+            const raw = (this as any)?.getLabelForValue ? (this as any).getLabelForValue(val) : rollingTrendLabels[index];
             if (typeof raw === "string" && raw.length >= 5) {
               return isModal && raw.length >= 8 ? raw : raw.substring(0, 5);
             }
@@ -1486,7 +1480,7 @@ interface HourlyTrend5sPoint {
           onClick={() => setZoomTrend(null)}
         >
           <div
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-6xl p-6 flex flex-col space-y-4 max-h-[92vh] overflow-hidden"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-[94vw] max-w-[96vw] h-[92vh] max-h-[94vh] p-6 flex flex-col space-y-4 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -1527,8 +1521,8 @@ interface HourlyTrend5sPoint {
               </div>
             </div>
 
-            {/* Modal Body: Large Chart Height (480px) */}
-            <div className="w-full" style={{ height: 480 }}>
+            {/* Modal Body: Large Chart Height filling 90% */}
+            <div className="w-full flex-1 min-h-0">
               {zoomTrend === "voltage" ? (
                 <Line data={voltageTrendData} options={lineOptions("kV", false, true)} />
               ) : (
