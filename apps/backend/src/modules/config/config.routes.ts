@@ -32,7 +32,12 @@ import {
   batchToggleElectricityPmHandler,
   deleteElectricityConfigHandler,
   upsertApiSourcesMapHandler,
-  getApiSourcesMapHandler
+  getApiSourcesMapHandler,
+  getEquipmentItemsHandler,
+  upsertEquipmentItemHandler,
+  toggleEquipmentItemHandler,
+  deleteEquipmentItemHandler,
+  verifyAndRegisterNewPmHandler
 } from "./config.controller";
 
 export const configRouter = Router();
@@ -89,3 +94,9 @@ configRouter.post("/config/electricity/toggle", authenticate, authorize(seniorUn
 configRouter.post("/config/electricity/batch-toggle", authenticate, authorize(seniorUnitHeadOnlyRoles), batchToggleElectricityPmHandler);
 configRouter.delete("/config/electricity/:id", authenticate, authorize(seniorUnitHeadOnlyRoles), deleteElectricityConfigHandler);
 
+// Equipment Display Items (Konsumsi Per-Equipment) management
+configRouter.get("/config/electricity/equipment-items", authenticate, getEquipmentItemsHandler);
+configRouter.post("/config/electricity/equipment-items", authenticate, authorize(seniorUnitHeadOnlyRoles), upsertEquipmentItemHandler);
+configRouter.post("/config/electricity/equipment-items/toggle", authenticate, authorize(seniorUnitHeadOnlyRoles), toggleEquipmentItemHandler);
+configRouter.delete("/config/electricity/equipment-items/:configKey", authenticate, authorize(seniorUnitHeadOnlyRoles), deleteEquipmentItemHandler);
+configRouter.post("/config/electricity/verify-and-register-pm", authenticate, authorize(seniorUnitHeadOnlyRoles), verifyAndRegisterNewPmHandler);

@@ -2025,3 +2025,408 @@ export const getApiSourcesMapHandler = async (
     next(err);
   }
 };
+
+// ═════════════════════════════════════════════════════════════════
+// ─── EQUIPMENT DISPLAY & NEW PM VERIFICATION HANDLERS ────────────
+// ═════════════════════════════════════════════════════════════════
+
+export const DEFAULT_EQUIPMENT_DISPLAY_ITEMS = [
+  // 1. Cooling Tower (7 Units)
+  { pm_id: "PM152", label: "Cooling Tower Pump WF1-U3", seriesKey: "F1 COOLING TOWER PUMP WF1-U3", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew21", factory: "wf1", department: "Utility", sort_order: 1 },
+  { pm_id: "PM181", label: "Cooling Tower Fan WF1-U3", seriesKey: "F1 COOLING TOWER FAN WF1-U3", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew21", factory: "wf1", department: "Utility", sort_order: 2 },
+  { pm_id: "PM206", label: "Cooling Fase-1 WF2", seriesKey: "F2 COOLING FASE-1", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew22", factory: "wf2", department: "Utility", sort_order: 3 },
+  { pm_id: "PM215", label: "Cooling Critical WF2", seriesKey: "F2 COOLING CRITICAL", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew22", factory: "wf2", department: "Utility", sort_order: 4 },
+  { pm_id: "PM318", label: "Cooling Fase-2 WF2", seriesKey: "F2 COOLING FASE-2", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew23", factory: "wf2", department: "Utility", sort_order: 5 },
+  { pm_id: "PM324", label: "Cooling Tower CT-Pump WF2", seriesKey: "F2 COOLING TOWER CT-PUMP", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew23", factory: "wf2", department: "Utility", sort_order: 6 },
+  { pm_id: "PM325", label: "Cooling Tower CT-Fan WF2", seriesKey: "F2 COOLING TOWER CT-FAN", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew23", factory: "wf2", department: "Utility", sort_order: 7 },
+
+  // 2. Boiler (2 Units)
+  { pm_id: "PM184", label: "Boiler 4 WF1", seriesKey: "F1 BOILER 4", category: "boiler", categoryLabel: "Boiler", endpoint_url: "electric_ew21", factory: "wf1", department: "Utility", sort_order: 8 },
+  { pm_id: "PM213", label: "Boiler-5 WF2", seriesKey: "F2 BOILER-5", category: "boiler", categoryLabel: "Boiler", endpoint_url: "electric_ew22", factory: "wf2", department: "Utility", sort_order: 9 },
+
+  // 3. Compressed Air (5 Units)
+  { pm_id: "PM140", label: "Compressed Air ZT-55 WF1", seriesKey: "F1 COMPRESSED AIR ZT-55", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew21", factory: "wf1", department: "Utility", sort_order: 10 },
+  { pm_id: "PM182", label: "Compressed Air ZT-30.1&2 WF1", seriesKey: "F1 COMPRESSED AIR ZT-30.1&2", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew21", factory: "wf1", department: "Utility", sort_order: 11 },
+  { pm_id: "PM183", label: "Compressed Air ALE-30 WF1", seriesKey: "F1 COMPRESSED AIR ALE-30", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew21", factory: "wf1", department: "Utility", sort_order: 12 },
+  { pm_id: "PM214", label: "Compressed Air Atlas WF2", seriesKey: "F2 COMPRESSED AIR ATLAS", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew22", factory: "wf2", department: "Utility", sort_order: 13 },
+  { pm_id: "PM229", label: "Kobelco ALE-250 WF2", seriesKey: "F2 KOBELCO ALE-250", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew22", factory: "wf2", department: "Utility", sort_order: 14 },
+
+  // 4. Chiller (8 Units)
+  { pm_id: "PM177", label: "Chiller Prep Daikin Barat WF1", seriesKey: "F1 CHILLER PREP DAIKIN BARAT", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew21", factory: "wf1", department: "HVAC", sort_order: 15 },
+  { pm_id: "PM178", label: "Chiller Prep Daikin Timur WF1", seriesKey: "F1 CHILLER PREP DAIKIN TIMUR", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew21", factory: "wf1", department: "HVAC", sort_order: 16 },
+  { pm_id: "PM180", label: "Chiller BP WF1-U3", seriesKey: "F1 CHILLER BP WF1-U3", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew21", factory: "wf1", department: "HVAC", sort_order: 17 },
+  { pm_id: "PM209", label: "Chiller - WF2U2", seriesKey: "F2 CHILLER - WF2U2", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22", factory: "wf2", department: "HVAC", sort_order: 18 },
+  { pm_id: "PM271", label: "Chiller RTAC 250 (RO & HVAC) WF2", seriesKey: "F2 CHILLER RTAC 250 (RO&HVAC)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22", factory: "wf2", department: "HVAC", sort_order: 19 },
+  { pm_id: "PM272", label: "Chiller RTAC 170 (RO) WF2", seriesKey: "F2 CHILLER RTAC 170 (RO)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22", factory: "wf2", department: "HVAC", sort_order: 20 },
+  { pm_id: "PM274", label: "Chiller RTAC 100 (BP) WF2", seriesKey: "F2 CHILLER RTAC 100 (BP)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22", factory: "wf2", department: "HVAC", sort_order: 21 },
+  { pm_id: "PM319", label: "Chiller RTAC-275 (Prep) WF2", seriesKey: "F2 CHILLER RTAC-275 (PREP)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew23", factory: "wf2", department: "HVAC", sort_order: 22 },
+
+  // 5. HVAC Warehouse & Penerangan (8 Units)
+  { pm_id: "PM134", label: "WH 4 Penerangan WF1", seriesKey: "F1 WH 4 PENERANGAN", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21", factory: "wf1", department: "Other", sort_order: 23 },
+  { pm_id: "PM154", label: "Lighting WH 1 WF1", seriesKey: "F1 LIGHTING WH 1", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21", factory: "wf1", department: "Other", sort_order: 24 },
+  { pm_id: "PM151", label: "HVAC Office Atas WF1", seriesKey: "F1 HVAC OFFICE ATAS", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21", factory: "wf1", department: "HVAC", sort_order: 25 },
+  { pm_id: "PM179", label: "HVAC WH-3 WF1", seriesKey: "F1 HVAC WH-3", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21", factory: "wf1", department: "HVAC", sort_order: 26 },
+  { pm_id: "PM207", label: "WH 6 WF2", seriesKey: "F2 WH 6", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22", factory: "wf2", department: "Other", sort_order: 27 },
+  { pm_id: "PM208", label: "WH 5 WF2", seriesKey: "F2 WH 5", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22", factory: "wf2", department: "Other", sort_order: 28 },
+  { pm_id: "PM226", label: "WH-7 WF2", seriesKey: "F2 WH-7", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22", factory: "wf2", department: "Other", sort_order: 29 },
+  { pm_id: "PM288", label: "Penerangan PD WF2", seriesKey: "F2 Penerangan PD", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22", factory: "wf2", department: "Other", sort_order: 30 },
+
+  // 6. HVAC QC & Produksi (9 Units)
+  { pm_id: "PM138", label: "Full Cooling WF1-U3", seriesKey: "F1 FULL COOLING WF1-U3", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21", factory: "wf1", department: "Utility", sort_order: 31 },
+  { pm_id: "PM153", label: "HVAC-QC WF1", seriesKey: "F1 HVAC-QC", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21", factory: "wf1", department: "HVAC", sort_order: 32 },
+  { pm_id: "PM185", label: "HVAC WF1U3", seriesKey: "F1 HVAC WF1U3", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21", factory: "wf1", department: "HVAC", sort_order: 33 },
+  { pm_id: "PM203", label: "Heater WF2U2", seriesKey: "F2 HEATER WF2U2", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew22", factory: "wf2", department: "Utility", sort_order: 34 },
+  { pm_id: "PM205", label: "AHU WF2UI", seriesKey: "F2 AHU WF2UI", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew22", factory: "wf2", department: "HVAC", sort_order: 35 },
+  { pm_id: "PM273", label: "Return Sample QC WF2", seriesKey: "RETURN SAMPLE QC", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew22", factory: "wf2", department: "Other", sort_order: 36 },
+  { pm_id: "PM321", label: "AHU-1 - WF2U2", seriesKey: "F2 AHU-1 - WF2U2", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew23", factory: "wf2", department: "HVAC", sort_order: 37 },
+  { pm_id: "PM322", label: "AHU-2 - WF2U2", seriesKey: "F2 AHU-2 - WF2U2", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew23", factory: "wf2", department: "HVAC", sort_order: 38 },
+  { pm_id: "PM132", label: "Main Supply QC Office & Lab WF1", seriesKey: "F1 MAIN SUPPLY QC OFFICE & LAB", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21", factory: "wf1", department: "Other", sort_order: 39 },
+
+  // 7. Panel Distribusi & Water Treatment / Process (15 Units)
+  { pm_id: "PM133", label: "MDP3 WF1", seriesKey: "F1 MDP3", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21", factory: "wf1", department: "Utility", sort_order: 40 },
+  { pm_id: "PM135", label: "MDP-2 WF1", seriesKey: "F1 MDP-2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21", factory: "wf1", department: "Utility", sort_order: 41 },
+  { pm_id: "PM136", label: "MDP-1.2 WF1", seriesKey: "F1 MDP-1.2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21", factory: "wf1", department: "Utility", sort_order: 42 },
+  { pm_id: "PM139", label: "MDP-1.1 WF1", seriesKey: "F1 MDP-1.1", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21", factory: "wf1", department: "Utility", sort_order: 43 },
+  { pm_id: "PM175", label: "ST3 WF1", seriesKey: "F1 ST3", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21", factory: "wf1", department: "Utility", sort_order: 44 },
+  { pm_id: "PM176", label: "QC Lab WF1", seriesKey: "F1 QC LAB", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21", factory: "wf1", department: "Other", sort_order: 45 },
+  { pm_id: "PM201", label: "PUTR-1 WF2", seriesKey: "F2 PUTR-1", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22", factory: "wf2", department: "Utility", sort_order: 46 },
+  { pm_id: "PM202", label: "PUTR-2 WF2", seriesKey: "F2 PUTR-2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22", factory: "wf2", department: "Utility", sort_order: 47 },
+  { pm_id: "PM210", label: "Main Critical Panel WF2", seriesKey: "F2 MAIN CRITICAL PANEL", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22", factory: "wf2", department: "Utility", sort_order: 48 },
+  { pm_id: "PM211", label: "Panel Otoklaf WF2U1", seriesKey: "F2 PANEL OTOKLAF WF2U1", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22", factory: "wf2", department: "Other", sort_order: 49 },
+  { pm_id: "PM212", label: "Panel Otoklaf WF2U2", seriesKey: "F2 PANEL OTOKLAF WF2U2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22", factory: "wf2", department: "Other", sort_order: 50 },
+  { pm_id: "PM320", label: "WT-DU-PSG WF2", seriesKey: "F2 WT-DU-PSG", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23", factory: "wf2", department: "Utility", sort_order: 51 },
+  { pm_id: "PM323", label: "PW Generation - RO WF2", seriesKey: "F2 PW GENERATION - RO", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23", factory: "wf2", department: "Utility", sort_order: 52 },
+  { pm_id: "PM327", label: "PUTR-NEW WF2", seriesKey: "F2 PUTR-NEW", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23", factory: "wf2", department: "Utility", sort_order: 53 },
+  { pm_id: "PM337", label: "MCC BP 7 WF2", seriesKey: "F2 MCC BP 7", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23", factory: "wf2", department: "Other", sort_order: 54 },
+
+  // 8. Incoming Cubicles (3 Units)
+  { pm_id: "PM410", label: "Incoming Cubicle PLN (PM8000)", seriesKey: "incoming cubicle pln", category: "cubicles", categoryLabel: "Incoming Cubicles", endpoint_url: "electric_pln", factory: "wf2", department: "Utility", sort_order: 55 },
+  { pm_id: "PM411", label: "Incoming Cubicle WF1 (PM5560)", seriesKey: "incoming cubicle WF1", category: "cubicles", categoryLabel: "Incoming Cubicles", endpoint_url: "electric_wf1", factory: "wf1", department: "Utility", sort_order: 56 },
+  { pm_id: "PM412", label: "Incoming Cubicle WF2 (PM5560)", seriesKey: "incoming cubicle WF2", category: "cubicles", categoryLabel: "Incoming Cubicles", endpoint_url: "electric_wf2", factory: "wf2", department: "Utility", sort_order: 57 }
+];
+
+export const getEquipmentItemsHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pool = getPostgresPool();
+    let pgRes = await pool.query(
+      `SELECT id, config_type, config_key, label, value, sort_order, enabled, created_at, updated_at 
+       FROM electricity_config 
+       WHERE config_type = 'equipment_display' 
+       ORDER BY sort_order ASC, id ASC`
+    );
+
+    // Auto-seed default 57 items if table is empty
+    if (pgRes.rows.length === 0) {
+      for (const item of DEFAULT_EQUIPMENT_DISPLAY_ITEMS) {
+        const cleanKey = item.pm_id.toLowerCase();
+        const itemVal = {
+          pm_id: item.pm_id,
+          seriesKey: item.seriesKey,
+          category: item.category,
+          categoryLabel: item.categoryLabel,
+          endpoint_url: item.endpoint_url,
+          factory: item.factory,
+          department: item.department,
+          is_new_pm: false
+        };
+        await pool.query(
+          `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
+           VALUES ('equipment_display', $1, $2, $3, $4, true, NOW())
+           ON CONFLICT (config_type, config_key) DO NOTHING`,
+          [cleanKey, item.label, JSON.stringify(itemVal), item.sort_order]
+        );
+      }
+      pgRes = await pool.query(
+        `SELECT id, config_type, config_key, label, value, sort_order, enabled, created_at, updated_at 
+         FROM electricity_config 
+         WHERE config_type = 'equipment_display' 
+         ORDER BY sort_order ASC, id ASC`
+      );
+    }
+
+    res.json({ success: true, data: pgRes.rows });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const upsertEquipmentItemHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { config_key, label, value, sort_order, enabled } = req.body;
+    if (!label) {
+      res.status(400).json({ error: "label is required" });
+      return;
+    }
+    const pool = getPostgresPool();
+    const rawPmId = String(value?.pm_id || config_key || label).toUpperCase().replace(/[^A-Z0-9_]/g, "");
+    const resolvedPmId = rawPmId.startsWith("PM") ? rawPmId : `PM_${rawPmId}`;
+    const cleanKey = (config_key || resolvedPmId).toLowerCase().replace(/[^a-z0-9_]/g, "");
+
+    const pgRes = await pool.query(
+      `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
+       VALUES ('equipment_display', $1, $2, $3, $4, $5, NOW())
+       ON CONFLICT (config_type, config_key)
+       DO UPDATE SET label = EXCLUDED.label, value = EXCLUDED.value, sort_order = EXCLUDED.sort_order, enabled = EXCLUDED.enabled, updated_at = NOW()
+       RETURNING id, config_type, config_key, label, value, sort_order, enabled`,
+      [cleanKey, label, JSON.stringify(value || {}), sort_order ?? 0, enabled !== false]
+    );
+
+    res.json({ success: true, data: pgRes.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const toggleEquipmentItemHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { config_key, enabled } = req.body;
+    if (!config_key) {
+      res.status(400).json({ error: "config_key is required" });
+      return;
+    }
+    const pool = getPostgresPool();
+    const pgRes = await pool.query(
+      `UPDATE electricity_config 
+       SET enabled = $1, updated_at = NOW() 
+       WHERE config_type = 'equipment_display' AND config_key = $2
+       RETURNING id, config_key, label, enabled`,
+      [Boolean(enabled), String(config_key).toLowerCase()]
+    );
+
+    res.json({ success: true, data: pgRes.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteEquipmentItemHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { configKey } = req.params;
+    if (!configKey) {
+      res.status(400).json({ error: "configKey is required" });
+      return;
+    }
+    const pool = getPostgresPool();
+    await pool.query(
+      `DELETE FROM electricity_config WHERE config_type = 'equipment_display' AND config_key = $1`,
+      [String(configKey).toLowerCase()]
+    );
+
+    res.json({ success: true, message: `Item '${configKey}' berhasil dihapus dari tampilan` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const verifyAndRegisterNewPmHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { pm_id, label, endpoint_url, category, categoryLabel, department, factory, subArea } = req.body;
+    if (!pm_id || !label || !endpoint_url) {
+      res.status(400).json({ success: false, error: "pm_id, label, and endpoint_url are required" });
+      return;
+    }
+
+    const pool = getPostgresPool();
+    const rawPmId = String(pm_id).toUpperCase().replace(/[^A-Z0-9_]/g, "");
+    const resolvedPmId = rawPmId.startsWith("PM") ? rawPmId : `PM_${rawPmId}`;
+    const cleanKey = resolvedPmId.toLowerCase();
+    const cleanEndpoint = String(endpoint_url).trim();
+
+    // 1. Verifikasi agar tidak ada data redundan atau duplikat
+    let isDuplicate = false;
+    try {
+      const checkRes = await pool.query(`
+        SELECT 1 FROM electric_pm_telemetry WHERE UPPER(pm_id) = $1
+        UNION
+        SELECT 1 FROM electric_pm_telemetry_minute WHERE UPPER(pm_id) = $1
+        UNION
+        SELECT 1 FROM electricity_config WHERE (UPPER(value->>'pm_id') = $1 OR UPPER(config_key) = $1)
+        LIMIT 1
+      `, [resolvedPmId]);
+      isDuplicate = (checkRes.rowCount ?? 0) > 0;
+    } catch {}
+
+    if (!isDuplicate) {
+      isDuplicate = STANDARD_METERS.some(m => m.pm_id.toUpperCase() === resolvedPmId);
+    }
+
+    if (isDuplicate) {
+      res.status(409).json({
+        success: false,
+        duplicate: true,
+        message: `Power Meter '${resolvedPmId}' sudah ada di database/sistem. Tidak dapat menambahkan duplikat. Anda dapat langsung mengaktifkannya dari daftar item yang ada.`
+      });
+      return;
+    }
+
+    // 2. Verifikasi endpoint URL dan deteksi isinya secara otomatis
+    let fullUrl = cleanEndpoint;
+    const CORE_URLS: Record<string, string> = {
+      "electric_pln": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln",
+      "electric_wf1": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1",
+      "electric_wf2": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2",
+      "electric_plts": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_plts",
+      "electric_ew21": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew21",
+      "electric_ew22": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew22",
+      "electric_ew23": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew23"
+    };
+    if (CORE_URLS[fullUrl]) fullUrl = CORE_URLS[fullUrl];
+
+    let apiData: any = null;
+    let detectedFields: string[] = [];
+    let initialActivePower: number | null = null;
+    let initialActiveEnergy: number | null = null;
+
+    if (fullUrl.startsWith("http://") || fullUrl.startsWith("https://")) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      try {
+        const fetchRes = await fetch(fullUrl, {
+          method: "GET",
+          headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" },
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!fetchRes.ok) {
+          res.status(400).json({
+            success: false,
+            message: `Endpoint mengembalikan status HTTP ${fetchRes.status}: ${fetchRes.statusText}`
+          });
+          return;
+        }
+
+        apiData = await fetchRes.json();
+      } catch (fErr: any) {
+        clearTimeout(timeoutId);
+        res.status(400).json({
+          success: false,
+          message: `Gagal menghubungi endpoint: ${fErr.message}`
+        });
+        return;
+      }
+    }
+
+    // Ekstraksi otomatis parameter dari isi endpoint
+    if (apiData && typeof apiData === "object") {
+      const inspectObj = Array.isArray(apiData)
+        ? (apiData.find((p: any) => String(p.pm_id || p.pm || "").toUpperCase() === resolvedPmId) || apiData[0] || {})
+        : (apiData[resolvedPmId] && typeof apiData[resolvedPmId] === "object" ? apiData[resolvedPmId] : apiData);
+
+      detectedFields = Object.keys(inspectObj).slice(0, 20);
+
+      // Cari Active Power
+      const powerCandidates = ["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower", "Scale_Total_KW"];
+      for (const k of powerCandidates) {
+        if (inspectObj[k] !== undefined && inspectObj[k] !== null && !isNaN(Number(inspectObj[k]))) {
+          initialActivePower = Number(inspectObj[k]);
+          break;
+        }
+      }
+
+      // Cari Active Energy
+      const energyCandidates = ["ActiveEnergy", "Active_Energy", "Energy", "total_kwh", "Total_KWH", "kWh", "Total_kWh"];
+      for (const k of energyCandidates) {
+        if (inspectObj[k] !== undefined && inspectObj[k] !== null && !isNaN(Number(inspectObj[k]))) {
+          initialActiveEnergy = Number(inspectObj[k]);
+          break;
+        }
+      }
+    }
+
+    // 3. Simpan konfigurasi item baru ke database
+    const resolvedCat = category || "custom";
+    const resolvedCatLabel = categoryLabel || (resolvedCat === "cooling_tower" ? "Cooling Tower" : resolvedCat === "chiller" ? "Chiller" : resolvedCat === "boiler" ? "Boiler" : resolvedCat === "compressed_air" ? "Compressed Air" : resolvedCat === "hvac_wh" ? "HVAC Warehouse" : resolvedCat === "hvac_qc" ? "HVAC QC & Produksi" : resolvedCat === "distribution" ? "Panel Distribusi" : "Kustom");
+    const resolvedDept = department || "Utility";
+    const resolvedFact = factory || "wf1";
+
+    const itemValue = {
+      pm_id: resolvedPmId,
+      seriesKey: label.toUpperCase(),
+      category: resolvedCat,
+      categoryLabel: resolvedCatLabel,
+      endpoint_url: cleanEndpoint,
+      department: resolvedDept,
+      factory: resolvedFact,
+      subArea: subArea || "General",
+      is_new_pm: true,
+      registered_at: new Date().toISOString()
+    };
+
+    // A. Simpan ke electricity_config (equipment_display)
+    const eqRes = await pool.query(
+      `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
+       VALUES ('equipment_display', $1, $2, $3, 999, true, NOW())
+       ON CONFLICT (config_type, config_key)
+       DO UPDATE SET label = EXCLUDED.label, value = EXCLUDED.value, enabled = true, updated_at = NOW()
+       RETURNING id, config_type, config_key, label, value, sort_order, enabled`,
+      [cleanKey, label, JSON.stringify(itemValue)]
+    );
+
+    // B. Simpan ke sub-metering fact list
+    const factType = resolvedFact === "wf1" ? "consumption_fact_1" : "consumption_fact_2";
+    await pool.query(
+      `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
+       VALUES ($1, $2, $3, $4, 999, true, NOW())
+       ON CONFLICT (config_type, config_key)
+       DO UPDATE SET label = EXCLUDED.label, value = EXCLUDED.value, enabled = true, updated_at = NOW()`,
+      [factType, cleanKey, label, JSON.stringify(itemValue)]
+    );
+
+    // C. Daftarkan ke api_sources
+    if (cleanEndpoint.startsWith("http://") || cleanEndpoint.startsWith("https://")) {
+      try {
+        await pool.query(
+          `INSERT INTO api_sources (unit_id, name, url, method, enabled, polling_interval_ms)
+           VALUES ('electric_pm', $1, $2, 'GET', true, 2000)`,
+          [label, cleanEndpoint]
+        );
+      } catch {}
+    }
+
+    // D. Simpan baris telemetri perdana jika pembacaan nilai terdeteksi
+    if (initialActiveEnergy !== null || initialActivePower !== null) {
+      try {
+        const now = new Date();
+        await pool.query(`
+          INSERT INTO electric_pm_telemetry_minute (
+            t_stamp, group_id, pm_id, status, active_power_total, active_energy, frequency
+          ) VALUES ($1, $2, $3, true, $4, $5, 50.0)
+          ON CONFLICT (t_stamp, pm_id) DO UPDATE SET
+            active_power_total = EXCLUDED.active_power_total,
+            active_energy = EXCLUDED.active_energy
+        `, [now, (resolvedDept || "utility").toLowerCase(), resolvedPmId, initialActivePower, initialActiveEnergy]);
+
+        await pool.query(`
+          INSERT INTO electric_pm_telemetry (
+            t_stamp, group_id, pm_id, status, active_power_total, active_energy, frequency
+          ) VALUES (date_trunc('hour', $1::timestamp), $2, $3, true, $4, $5, 50.0)
+          ON CONFLICT (t_stamp, pm_id) DO UPDATE SET
+            active_power_total = EXCLUDED.active_power_total,
+            active_energy = EXCLUDED.active_energy
+        `, [now, (resolvedDept || "utility").toLowerCase(), resolvedPmId, initialActivePower, initialActiveEnergy]);
+      } catch (err: any) {
+        console.warn("Initial telemetry insertion warning:", err.message);
+      }
+    }
+
+    // E. Segarkan scheduler agar continuous polling segera aktif
+    try {
+      await refreshDynamicCustomPmSources();
+    } catch {}
+
+    res.json({
+      success: true,
+      message: `Power Meter baru '${resolvedPmId}' (${label}) berhasil diverifikasi, disimpan ke database, dan siap ditampilkan ke web.`,
+      item: eqRes.rows[0],
+      detectedFields,
+      initialValues: {
+        activePower: initialActivePower,
+        activeEnergy: initialActiveEnergy
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

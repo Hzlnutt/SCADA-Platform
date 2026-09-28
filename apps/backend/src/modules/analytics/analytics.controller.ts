@@ -1966,7 +1966,7 @@ async function doComputeEquipmentMonthlyBatch(
     hasData: boolean;
   }> = {};
 
-  // Ensure all 57 standard PMs exist in output even if no rows in DB
+  // Ensure all standard PMs exist in output even if no rows in DB
   const allExpectedPms = Object.keys(PM_DEFAULT_LABELS);
   for (const pmId of allExpectedPms) {
     results[pmId] = {
@@ -1979,6 +1979,28 @@ async function doComputeEquipmentMonthlyBatch(
       hasData: false
     };
   }
+
+  // Also include any custom PMs configured in electricity_config
+  try {
+    const customConfigRes = await pool.query(`
+      SELECT config_key, label, value FROM electricity_config WHERE config_type = 'equipment_display'
+    `);
+    for (const row of customConfigRes.rows) {
+      const val = row.value || {};
+      const pmId = String(val.pm_id || row.config_key).toUpperCase();
+      if (!results[pmId]) {
+        results[pmId] = {
+          pmId,
+          label: row.label || pmId,
+          current: new Array(daysInCurr).fill(0),
+          previous: new Array(daysInComp).fill(0),
+          currTotalKwh: 0,
+          prevTotalKwh: 0,
+          hasData: false
+        };
+      }
+    }
+  } catch {}
 
   for (const [pmId, records] of pmRecords.entries()) {
     // Sort records by timestamp
@@ -2040,6 +2062,21 @@ async function doComputeEquipmentMonthlyBatch(
       results[alias] = results[pmId];
     }
   }
+
+  // Also map custom equipment alias keys
+  try {
+    const customConfigRes = await pool.query(`
+      SELECT config_key, label, value FROM electricity_config WHERE config_type = 'equipment_display'
+    `);
+    for (const row of customConfigRes.rows) {
+      const val = row.value || {};
+      const pmId = String(val.pm_id || row.config_key).toUpperCase();
+      if (results[pmId]) {
+        if (row.label) results[row.label.toLowerCase()] = results[pmId];
+        if (val.seriesKey) results[String(val.seriesKey).toLowerCase()] = results[pmId];
+      }
+    }
+  } catch {}
 
   return {
     currentMonth,

@@ -15,6 +15,7 @@ import { useAuthStore } from "../../store/auth.store";
 import { canAccessConfigAndAudit, isSeniorUnitHeadOrAdmin } from "../../utils/roles";
 import { ElectricityExportModal } from "../../components/electricity/ElectricityExportModal";
 import { SeniorUnitHeadConfigModal, type ConsumptionFactCategory } from "../../components/electricity/SeniorUnitHeadConfigModal";
+import { EquipmentConfigModal, type EquipmentDisplayItem } from "../../components/electricity/EquipmentConfigModal";
 import { ErrorBoundary } from "../../components/ui/ErrorBoundary";
 import {
   DEFAULT_FACT1_CATEGORIES,
@@ -1010,8 +1011,15 @@ const SectionHEquipment = memo(function SectionHEquipment({
   const currMonthLabel = `${MONTH_NAMES_ID[currentMonthIdx]} ${currentYear}`;
   const compMonthLabel = `${MONTH_NAMES_ID[compMonth]} ${compYear}`;
 
-  // 1. Cooling Tower (7 Units)
-  const coolingTowerItems = useMemo(() => [
+  // Role check for Senior Unit Head
+  const role = useAuthStore((state) => state.user?.role);
+  const isSeniorUnitHead = isSeniorUnitHeadOrAdmin(role);
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [configuredItems, setConfiguredItems] = useState<EquipmentDisplayItem[]>([]);
+  const [hasLoadedConfig, setHasLoadedConfig] = useState(false);
+
+  // Default Fallback Equipment Items (57 Standard Units)
+  const DEFAULT_COOLING_TOWER = useMemo(() => [
     { title: "Cooling Tower Pump WF1-U3", seriesKey: "F1 COOLING TOWER PUMP WF1-U3", pmId: "PM152" },
     { title: "Cooling Tower Fan WF1-U3", seriesKey: "F1 COOLING TOWER FAN WF1-U3", pmId: "PM181" },
     { title: "Cooling Fase-1 WF2", seriesKey: "F2 COOLING FASE-1", pmId: "PM206" },
@@ -1021,14 +1029,12 @@ const SectionHEquipment = memo(function SectionHEquipment({
     { title: "Cooling Tower CT-Fan WF2", seriesKey: "F2 COOLING TOWER CT-FAN", pmId: "PM325" },
   ], []);
 
-  // 2. Boiler (2 Units)
-  const boilerItems = useMemo(() => [
+  const DEFAULT_BOILER = useMemo(() => [
     { title: "Boiler 4 WF1", seriesKey: "F1 BOILER 4", pmId: "PM184" },
     { title: "Boiler-5 WF2", seriesKey: "F2 BOILER-5", pmId: "PM213" },
   ], []);
 
-  // 3. Compressed Air (5 Units)
-  const compressedAirItems = useMemo(() => [
+  const DEFAULT_COMPRESSED_AIR = useMemo(() => [
     { title: "Compressed Air ZT-55 WF1", seriesKey: "F1 COMPRESSED AIR ZT-55", pmId: "PM140" },
     { title: "Compressed Air ZT-30.1&2 WF1", seriesKey: "F1 COMPRESSED AIR ZT-30.1&2", pmId: "PM182" },
     { title: "Compressed Air ALE-30 WF1", seriesKey: "F1 COMPRESSED AIR ALE-30", pmId: "PM183" },
@@ -1036,8 +1042,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
     { title: "Kobelco ALE-250 WF2", seriesKey: "F2 KOBELCO ALE-250", pmId: "PM229" },
   ], []);
 
-  // 4. Chiller (8 Units)
-  const chillerItems = useMemo(() => [
+  const DEFAULT_CHILLER = useMemo(() => [
     { title: "Chiller Prep Daikin Barat WF1", seriesKey: "F1 CHILLER PREP DAIKIN BARAT", pmId: "PM177" },
     { title: "Chiller Prep Daikin Timur WF1", seriesKey: "F1 CHILLER PREP DAIKIN TIMUR", pmId: "PM178" },
     { title: "Chiller BP WF1-U3", seriesKey: "F1 CHILLER BP WF1-U3", pmId: "PM180" },
@@ -1048,8 +1053,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
     { title: "Chiller RTAC-275 (Prep) WF2", seriesKey: "F2 CHILLER RTAC-275 (PREP)", pmId: "PM319" },
   ], []);
 
-  // 5. HVAC Warehouse & Penerangan (8 Units)
-  const hvacWhItems = useMemo(() => [
+  const DEFAULT_HVAC_WH = useMemo(() => [
     { title: "WH 4 Penerangan WF1", seriesKey: "F1 WH 4 PENERANGAN", pmId: "PM134" },
     { title: "Lighting WH 1 WF1", seriesKey: "F1 LIGHTING WH 1", pmId: "PM154" },
     { title: "HVAC Office Atas WF1", seriesKey: "F1 HVAC OFFICE ATAS", pmId: "PM151" },
@@ -1060,8 +1064,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
     { title: "Penerangan PD WF2", seriesKey: "F2 Penerangan PD", pmId: "PM288" },
   ], []);
 
-  // 6. HVAC QC & Produksi (9 Units)
-  const hvacQcItems = useMemo(() => [
+  const DEFAULT_HVAC_QC = useMemo(() => [
     { title: "Full Cooling WF1-U3", seriesKey: "F1 FULL COOLING WF1-U3", pmId: "PM138" },
     { title: "HVAC-QC WF1", seriesKey: "F1 HVAC-QC", pmId: "PM153" },
     { title: "HVAC WF1U3", seriesKey: "F1 HVAC WF1U3", pmId: "PM185" },
@@ -1073,8 +1076,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
     { title: "Main Supply QC Office & Lab WF1", seriesKey: "F1 MAIN SUPPLY QC OFFICE & LAB", pmId: "PM132" },
   ], []);
 
-  // 7. Panel Distribusi & Water Treatment / Process (15 Units)
-  const distItems = useMemo(() => [
+  const DEFAULT_DIST = useMemo(() => [
     { title: "MDP3 WF1", seriesKey: "F1 MDP3", pmId: "PM133" },
     { title: "MDP-2 WF1", seriesKey: "F1 MDP-2", pmId: "PM135" },
     { title: "MDP-1.2 WF1", seriesKey: "F1 MDP-1.2", pmId: "PM136" },
@@ -1092,12 +1094,110 @@ const SectionHEquipment = memo(function SectionHEquipment({
     { title: "MCC BP 7 WF2", seriesKey: "F2 MCC BP 7", pmId: "PM337" },
   ], []);
 
-  // 8. Incoming Cubicles (3 Units)
-  const cubicleItems = useMemo(() => [
+  const DEFAULT_CUBICLE = useMemo(() => [
     { title: "Incoming Cubicle PLN (PM8000)", seriesKey: "incoming cubicle pln", pmId: "PM410" },
     { title: "Incoming Cubicle WF1 (PM5560)", seriesKey: "incoming cubicle WF1", pmId: "PM411" },
     { title: "Incoming Cubicle WF2 (PM5560)", seriesKey: "incoming cubicle WF2", pmId: "PM412" },
   ], []);
+
+  // Fetch configured equipment items from database
+  const loadConfiguredItems = useCallback(async () => {
+    try {
+      const res = await getJson<{ success: boolean; data: EquipmentDisplayItem[] }>(
+        "/config/electricity/equipment-items"
+      );
+      if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
+        setConfiguredItems(res.data);
+        setHasLoadedConfig(true);
+      }
+    } catch (e) {
+      console.warn("Could not load equipment display config:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadConfiguredItems();
+  }, [loadConfiguredItems]);
+
+  // Map database item to card render format
+  const mapItem = (item: EquipmentDisplayItem) => {
+    const val = item.value || {};
+    const rawPm = (val.pm_id || item.config_key).toUpperCase();
+    const resolvedPm = rawPm.startsWith("PM") ? rawPm : `PM_${rawPm}`;
+    return {
+      title: item.label,
+      seriesKey: val.seriesKey || item.label.toUpperCase(),
+      pmId: resolvedPm
+    };
+  };
+
+  // Group active enabled items by category
+  const activeItems = useMemo(() => {
+    if (!hasLoadedConfig || configuredItems.length === 0) return null;
+    return configuredItems.filter((i) => i.enabled !== false);
+  }, [hasLoadedConfig, configuredItems]);
+
+  const coolingTowerItems = useMemo(() => {
+    if (!activeItems) return DEFAULT_COOLING_TOWER;
+    return activeItems.filter((i) => (i.value?.category || "") === "cooling_tower").map(mapItem);
+  }, [activeItems, DEFAULT_COOLING_TOWER]);
+
+  const boilerItems = useMemo(() => {
+    if (!activeItems) return DEFAULT_BOILER;
+    return activeItems.filter((i) => (i.value?.category || "") === "boiler").map(mapItem);
+  }, [activeItems, DEFAULT_BOILER]);
+
+  const compressedAirItems = useMemo(() => {
+    if (!activeItems) return DEFAULT_COMPRESSED_AIR;
+    return activeItems.filter((i) => (i.value?.category || "") === "compressed_air").map(mapItem);
+  }, [activeItems, DEFAULT_COMPRESSED_AIR]);
+
+  const chillerItems = useMemo(() => {
+    if (!activeItems) return DEFAULT_CHILLER;
+    return activeItems.filter((i) => (i.value?.category || "") === "chiller").map(mapItem);
+  }, [activeItems, DEFAULT_CHILLER]);
+
+  const hvacWhItems = useMemo(() => {
+    if (!activeItems) return DEFAULT_HVAC_WH;
+    return activeItems.filter((i) => (i.value?.category || "") === "hvac_wh").map(mapItem);
+  }, [activeItems, DEFAULT_HVAC_WH]);
+
+  const hvacQcItems = useMemo(() => {
+    if (!activeItems) return DEFAULT_HVAC_QC;
+    return activeItems.filter((i) => (i.value?.category || "") === "hvac_qc").map(mapItem);
+  }, [activeItems, DEFAULT_HVAC_QC]);
+
+  const distItems = useMemo(() => {
+    if (!activeItems) return DEFAULT_DIST;
+    return activeItems.filter((i) => (i.value?.category || "") === "distribution").map(mapItem);
+  }, [activeItems, DEFAULT_DIST]);
+
+  const cubicleItems = useMemo(() => {
+    if (!activeItems) return DEFAULT_CUBICLE;
+    return activeItems.filter((i) => (i.value?.category || "") === "cubicles").map(mapItem);
+  }, [activeItems, DEFAULT_CUBICLE]);
+
+  const customItems = useMemo(() => {
+    if (!activeItems) return [];
+    const standardCategories = new Set([
+      "cooling_tower",
+      "boiler",
+      "compressed_air",
+      "chiller",
+      "hvac_wh",
+      "hvac_qc",
+      "distribution",
+      "cubicles"
+    ]);
+    return activeItems
+      .filter((i) => !standardCategories.has(i.value?.category || ""))
+      .map(mapItem);
+  }, [activeItems]);
+
+  const totalActiveCount = useMemo(() => {
+    if (!activeItems) return 57;
+    return activeItems.length;
+  }, [activeItems]);
 
   // Dynamic state from database batch endpoint
   const [batchData, setBatchData] = useState<Record<string, {
@@ -1111,35 +1211,34 @@ const SectionHEquipment = memo(function SectionHEquipment({
   }>>({});
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    let isCancelled = false;
+  const fetchEquipmentBatch = useCallback((force = false) => {
+    if (!force) setLoading(true);
     const currMonthStr = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, "0")}`;
     const compMonthStr = `${compYear}-${String(compMonth + 1).padStart(2, "0")}`;
+    const forceQuery = force ? "&force=true" : "";
+    getJson<{
+      success: boolean;
+      currentMonth: string;
+      comparisonMonth: string;
+      daysInCurrent: number;
+      daysInComparison: number;
+      data: Record<string, any>;
+    }>(`/analytics/electricity/equipment-monthly-batch?currentMonth=${currMonthStr}&comparisonMonth=${compMonthStr}${forceQuery}`)
+      .then((res) => {
+        if (res?.data) {
+          setBatchData(res.data);
+          onBatchDataLoaded?.(res.data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load equipment monthly batch data:", err);
+        setLoading(false);
+      });
+  }, [currentYear, currentMonthIdx, compYear, compMonth, onBatchDataLoaded]);
 
-    const fetchEquipmentBatch = (force = false) => {
-      if (!force) setLoading(true);
-      const forceQuery = force ? "&force=true" : "";
-      getJson<{
-        success: boolean;
-        currentMonth: string;
-        comparisonMonth: string;
-        daysInCurrent: number;
-        daysInComparison: number;
-        data: Record<string, any>;
-      }>(`/analytics/electricity/equipment-monthly-batch?currentMonth=${currMonthStr}&comparisonMonth=${compMonthStr}${forceQuery}`)
-        .then((res) => {
-          if (!isCancelled && res?.data) {
-            setBatchData(res.data);
-            onBatchDataLoaded?.(res.data);
-            setLoading(false);
-          }
-        })
-        .catch((err) => {
-          console.error("Failed to load equipment monthly batch data:", err);
-          if (!isCancelled) setLoading(false);
-        });
-    };
-
+  useEffect(() => {
+    let isCancelled = false;
     fetchEquipmentBatch(false);
 
     // Auto-refresh when new minute telemetry arrives via websocket
@@ -1157,7 +1256,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
       isCancelled = true;
       socket.off("electricity:update", handleUpdate);
     };
-  }, [currentYear, currentMonthIdx, compYear, compMonth, onBatchDataLoaded]);
+  }, [fetchEquipmentBatch, currentYear, currentMonthIdx]);
 
   const renderCard = (item: { title: string; seriesKey: string; pmId: string }) => {
     const itemData = batchData[item.pmId] || batchData[item.seriesKey.toLowerCase()] || batchData[item.title.toLowerCase()];
@@ -1179,12 +1278,24 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
   return (
     <div className="space-y-8">
-      {/* Header with Comparison Filter */}
+      {/* Header with Comparison Filter & Senior Unit Head Edit Button */}
       <div className="flex flex-wrap items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 gap-3">
         <div>
-          <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-700 dark:text-slate-300">
-            Konsumsi Per-Equipment (Bulanan vs Bulan Pembanding)
-          </h3>
+          <div className="flex items-center gap-2.5">
+            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-700 dark:text-slate-300">
+              Konsumsi Per-Equipment (Bulanan vs Bulan Pembanding)
+            </h3>
+            {isSeniorUnitHead && (
+              <button
+                type="button"
+                onClick={() => setIsConfigModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 transition cursor-pointer"
+                title="Kelola Tampilan Equipment & Daftarkan PM Baru (Senior Unit Head Only)"
+              >
+                <span>⚙️ Kelola Equipment</span>
+              </button>
+            )}
+          </div>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
             Perbandingan konsumsi listrik per-equipment antara Bulan Ini dan Bulan Pembanding yang dipilih.
           </p>
@@ -1224,75 +1335,102 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
           <span className="text-[11px] font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full ${loading ? "bg-amber-500 animate-ping" : "bg-emerald-500 animate-pulse"}`} />
-            {loading ? "Memuat Data Database..." : "57 Unit Sub-Metering Terhubung (API Aktif)"}
+            {loading ? "Memuat Data Database..." : `${totalActiveCount} Unit Sub-Metering Terhubung (API Aktif)`}
           </span>
         </div>
       </div>
 
       {/* Cooling Tower Section */}
-      <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Cooling Tower ({coolingTowerItems.length} Unit)</h4>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {coolingTowerItems.map(renderCard)}
+      {coolingTowerItems.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Cooling Tower ({coolingTowerItems.length} Unit)</h4>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {coolingTowerItems.map(renderCard)}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Boiler Section */}
-      <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Boiler ({boilerItems.length} Unit)</h4>
-        <div className="grid gap-6 md:grid-cols-2">
-          {boilerItems.map(renderCard)}
+      {boilerItems.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Boiler ({boilerItems.length} Unit)</h4>
+          <div className="grid gap-6 md:grid-cols-2">
+            {boilerItems.map(renderCard)}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Compressed Air Section */}
-      <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Compressed Air ({compressedAirItems.length} Unit)</h4>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {compressedAirItems.map(renderCard)}
+      {compressedAirItems.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Compressed Air ({compressedAirItems.length} Unit)</h4>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {compressedAirItems.map(renderCard)}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Chiller Section */}
-      <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Chiller ({chillerItems.length} Unit)</h4>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {chillerItems.map(renderCard)}
+      {chillerItems.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Chiller ({chillerItems.length} Unit)</h4>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {chillerItems.map(renderCard)}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* HVAC Warehouse & Penerangan Section */}
-      <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC Warehouse &amp; Penerangan ({hvacWhItems.length} Unit)</h4>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {hvacWhItems.map(renderCard)}
+      {hvacWhItems.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC Warehouse &amp; Penerangan ({hvacWhItems.length} Unit)</h4>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {hvacWhItems.map(renderCard)}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* HVAC QC & Produksi Section */}
-      <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC QC &amp; Produksi ({hvacQcItems.length} Unit)</h4>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {hvacQcItems.map(renderCard)}
+      {hvacQcItems.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC QC &amp; Produksi ({hvacQcItems.length} Unit)</h4>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {hvacQcItems.map(renderCard)}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Panel Distribusi & Water Treatment Section */}
-      <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Panel Distribusi &amp; Water Treatment ({distItems.length} Unit)</h4>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {distItems.map(renderCard)}
+      {distItems.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Panel Distribusi &amp; Water Treatment ({distItems.length} Unit)</h4>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {distItems.map(renderCard)}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Incoming Cubicle Section */}
-      <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Incoming Cubicles ({cubicleItems.length} Unit)</h4>
-        <div className="grid gap-6 md:grid-cols-3">
-          {cubicleItems.map(renderCard)}
+      {cubicleItems.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Incoming Cubicles ({cubicleItems.length} Unit)</h4>
+          <div className="grid gap-6 md:grid-cols-3">
+            {cubicleItems.map(renderCard)}
+          </div>
         </div>
-      </div>
+      )}
 
+      {/* Custom / Additional Equipment Section */}
+      {customItems.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-purple-500">
+            ● Equipment Kustom / Tambahan ({customItems.length} Unit)
+          </h4>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {customItems.map(renderCard)}
+          </div>
+        </div>
+      )}
 
       {/* Dynamic Selection Chart (Sesuai Pilihan) */}
       <DynamicSelectionChart
@@ -1304,6 +1442,19 @@ const SectionHEquipment = memo(function SectionHEquipment({
         compYear={compYear}
         compMonthIdx={compMonth}
       />
+
+      {/* Senior Unit Head Equipment Config Modal */}
+      {isSeniorUnitHead && (
+        <EquipmentConfigModal
+          isOpen={isConfigModalOpen}
+          onClose={() => setIsConfigModalOpen(false)}
+          isDark={isDark}
+          onItemsUpdated={() => {
+            loadConfiguredItems();
+            fetchEquipmentBatch(true);
+          }}
+        />
+      )}
     </div>
   );
 });
