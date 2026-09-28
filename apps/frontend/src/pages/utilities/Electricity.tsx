@@ -1736,42 +1736,45 @@ export default function Electricity() {
     setShowSeniorConfigModal(true);
   };
 
+  const latestBatchRef = useRef<Record<string, any> | null>(null);
+
+  const applyBatchToCategories = (list: ConsumptionFactCategory[], batch: Record<string, any>) => {
+    return list.map(item => {
+      const rawPm = String(item.value?.pm_id || item.config_key || item.id || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const normalizedPm = rawPm.startsWith("PM") ? rawPm : `PM${rawPm}`;
+      const bItem = batch[normalizedPm] || batch[rawPm] || batch[item.label?.toLowerCase()];
+      if (bItem && typeof bItem.currTotalKwh === "number") {
+        return { ...item, value: { ...item.value, kWh: bItem.currTotalKwh } };
+      }
+      return item;
+    });
+  };
+
   const refreshFactCategories = useCallback(() => {
     getJson<{ data: ConsumptionFactCategory[] }>("/config/electricity?configType=consumption_fact_1")
       .then((res) => {
-        if (res?.data && res.data.length > 0) setFactCategories1(res.data);
-        else setFactCategories1(defaultFact1Categories);
+        const raw = (res?.data && res.data.length > 0) ? res.data : defaultFact1Categories;
+        setFactCategories1(latestBatchRef.current ? applyBatchToCategories(raw, latestBatchRef.current) : raw);
       })
-      .catch(() => { setFactCategories1(defaultFact1Categories); });
+      .catch(() => {
+        setFactCategories1(latestBatchRef.current ? applyBatchToCategories(defaultFact1Categories, latestBatchRef.current) : defaultFact1Categories);
+      });
     getJson<{ data: ConsumptionFactCategory[] }>("/config/electricity?configType=consumption_fact_2")
       .then((res) => {
-        if (res?.data && res.data.length > 0) setFactCategories2(res.data);
-        else setFactCategories2(defaultFact2Categories);
+        const raw = (res?.data && res.data.length > 0) ? res.data : defaultFact2Categories;
+        setFactCategories2(latestBatchRef.current ? applyBatchToCategories(raw, latestBatchRef.current) : raw);
       })
-      .catch(() => { setFactCategories2(defaultFact2Categories); });
+      .catch(() => {
+        setFactCategories2(latestBatchRef.current ? applyBatchToCategories(defaultFact2Categories, latestBatchRef.current) : defaultFact2Categories);
+      });
   }, []);
 
   // Synchronize fact categories with equipment monthly batch data from database
   const handleEquipmentBatchLoaded = useCallback((batch: Record<string, any>) => {
     if (!batch) return;
-    setFactCategories1(prev => prev.map(item => {
-      const rawPm = String(item.value?.pm_id || item.config_key || item.id || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-      const normalizedPm = rawPm.startsWith("PM") ? rawPm : `PM${rawPm}`;
-      const bItem = batch[normalizedPm] || batch[rawPm] || batch[item.label?.toLowerCase()];
-      if (bItem && typeof bItem.currTotalKwh === "number") {
-        return { ...item, value: { ...item.value, kWh: bItem.currTotalKwh } };
-      }
-      return item;
-    }));
-    setFactCategories2(prev => prev.map(item => {
-      const rawPm = String(item.value?.pm_id || item.config_key || item.id || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-      const normalizedPm = rawPm.startsWith("PM") ? rawPm : `PM${rawPm}`;
-      const bItem = batch[normalizedPm] || batch[rawPm] || batch[item.label?.toLowerCase()];
-      if (bItem && typeof bItem.currTotalKwh === "number") {
-        return { ...item, value: { ...item.value, kWh: bItem.currTotalKwh } };
-      }
-      return item;
-    }));
+    latestBatchRef.current = batch;
+    setFactCategories1(prev => applyBatchToCategories(prev, batch));
+    setFactCategories2(prev => applyBatchToCategories(prev, batch));
   }, []);
 
   // Live API Data states
