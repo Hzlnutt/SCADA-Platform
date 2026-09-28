@@ -124,6 +124,11 @@ const parsePlnApi = (data: any, ts: Date) => {
   if (isOnline === false) {
     return getNullPlnRecord(ts);
   }
+  const rawPeak = data.Peak_Demand_W ?? data.Peak_Demand_w ?? data.PeakDemand_W ?? data.peak_demand_w ?? data.Peak_Demand ?? data.peak_demand;
+  const peakDemand = (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)))
+    ? Number(rawPeak) / 1000.0 // Konversi Watt ke kW
+    : null;
+
   return {
     t_stamp: ts,
     status_pm8000: isOnline,
@@ -148,6 +153,7 @@ const parsePlnApi = (data: any, ts: Date) => {
     thd_current_b: typeof data.THD_Current_B === "number" ? data.THD_Current_B : null,
     thd_current_c: typeof data.THD_Current_C === "number" ? data.THD_Current_C : null,
     active_energy: typeof data.ActiveEnergy === "number" ? data.ActiveEnergy : null,
+    peak_demand: peakDemand,
   };
 };
 
@@ -196,7 +202,7 @@ const getNullPlnRecord = (ts: Date) => ({
   apparent_power_total: null, power_factor: null, voltage_unbalance: null,
   current_unbalance: null, thd_volt_a: null, thd_volt_b: null,
   thd_volt_c: null, thd_current_a: null, thd_current_b: null,
-  thd_current_c: null, active_energy: null
+  thd_current_c: null, active_energy: null, peak_demand: null
 });
 
 const getNullWfRecord = (ts: Date) => ({
@@ -366,16 +372,18 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
           current_a, current_b, current_c, frequency, active_power,
           reactive_power_total, apparent_power_total, power_factor,
           voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
-          thd_current_a, thd_current_b, thd_current_c, active_energy
+          thd_current_a, thd_current_b, thd_current_c, active_energy,
+          peak_demand
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
         )
       `, [
         minuteTs, payload.status_pm8000, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
         payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power,
         payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
         payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
-        payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy
+        payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy,
+        payload.peak_demand
       ]);
     } catch (err: any) {
       logger.warn(`Failed to save hourly PLN telemetry to main table: ${err.message}`);
@@ -1117,7 +1125,8 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
     thdI_S: Number(thdIS.toFixed(2)),
     thdI_T: Number(thdIT.toFixed(2)),
     voltage: Number(voltLAvg.toFixed(2)),
-    status: isConnected
+    status: isConnected,
+    peakDemand: (pgPq.peak_demand !== undefined && pgPq.peak_demand !== null) ? Number(Number(pgPq.peak_demand).toFixed(2)) : null
   };
 
   latestIncomingTelemetry[deviceId] = {
@@ -1168,7 +1177,8 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
         pfStatus: "offline",
         freq: 0,
         voltage: 0,
-        status: false
+        status: false,
+        peakDemand: null
       }
     },
     ts: Date.now()
@@ -1213,7 +1223,8 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
       thdI_S: null,
       thdI_T: null,
       voltage: null,
-      status: false
+      status: false,
+      peakDemand: null
     }
   });
 };
@@ -2162,13 +2173,15 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(thd_current_b) as thd_current_b,
             AVG(thd_current_c) as thd_current_c,
             MAX(active_energy) as active_energy,
-            bool_or(status_pm8000) as status_pm8000
+            bool_or(status_pm8000) as status_pm8000,
+            (SELECT peak_demand FROM electric_pln_telemetry WHERE t_stamp = $1::timestamp) as peak_demand
           FROM electric_pln_telemetry_minute
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
         `, [hourStartStr]);
 
         const r = aggRes.rows[0];
         if (r && (r.volt_ab !== null || r.active_power !== null || r.active_energy !== null)) {
+          const preservedPeakDemand = r.peak_demand !== undefined && r.peak_demand !== null ? r.peak_demand : null;
           await client.query(`DELETE FROM electric_pln_telemetry WHERE t_stamp = $1`, [hourStartStr]);
           await client.query(`
             INSERT INTO electric_pln_telemetry (
@@ -2176,16 +2189,18 @@ export const runElectricityRollupAndCleanup = async () => {
               current_a, current_b, current_c, frequency, active_power,
               reactive_power_total, apparent_power_total, power_factor,
               voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
-              thd_current_a, thd_current_b, thd_current_c, active_energy
+              thd_current_a, thd_current_b, thd_current_c, active_energy,
+              peak_demand
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
             )
           `, [
             hourStartStr, r.status_pm8000 ?? false, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
             r.current_a, r.current_b, r.current_c, r.frequency, r.active_power,
             r.reactive_power_total, r.apparent_power_total, r.power_factor,
             r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
-            r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy
+            r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy,
+            preservedPeakDemand
           ]);
         }
 

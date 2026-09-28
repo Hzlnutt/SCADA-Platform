@@ -418,14 +418,10 @@ export const getPowerMetersLatestHandler = async (
       // 1. Incoming Cubicle PLN
       if (!existingPmIds.has("PM410") && !existingPmIds.has("PM8000") && !existingPmIds.has("CUBICLE_PLN_PM8000")) {
         try {
-          const plnRes = await pool.query(`
-            SELECT * FROM (
-              SELECT * FROM electric_pln_telemetry_minute
-              UNION ALL
-              SELECT * FROM electric_pln_telemetry
-            ) combined
-            ORDER BY t_stamp DESC LIMIT 1
-          `);
+          let plnRes = await pool.query(`SELECT * FROM electric_pln_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`);
+          if (plnRes.rows.length === 0) {
+            plnRes = await pool.query(`SELECT * FROM electric_pln_telemetry ORDER BY t_stamp DESC LIMIT 1`);
+          }
           if (plnRes.rows.length > 0) {
             const pln = plnRes.rows[0];
             data.push({

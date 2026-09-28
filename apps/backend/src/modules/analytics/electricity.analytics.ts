@@ -230,6 +230,7 @@ export interface ElectricityAnalyticsResult {
   pqData: {
     activePower: number;
     activePowerTs: string | null;
+    peakDemand?: number | null;
     reactivePower: number;
     apparentPower: number;
     pf: number | null;
@@ -974,8 +975,14 @@ export const getElectricityAnalytics = async (
   let thdVR = 0, thdVS = 0, thdVT = 0;
   let thdIR = 0, thdIS = 0, thdIT = 0;
   let isConnected = false;
+  let peakDemandVal: number | null = null;
 
   if (pgPq) {
+    if (pgPq.peak_demand !== undefined && pgPq.peak_demand !== null) {
+      peakDemandVal = Number(pgPq.peak_demand);
+    } else if (pgPq.pqData?.peakDemand !== undefined && pgPq.pqData?.peakDemand !== null) {
+      peakDemandVal = Number(pgPq.pqData.peakDemand);
+    }
     const rawActive = pgPq.active_power !== undefined ? pgPq.active_power : pgPq.active_power_total;
     activePowerVal = rawActive !== null ? Number(rawActive) / 1000.0 : 0;
     reactivePowerVal = pgPq.reactive_power_total !== null ? Number(pgPq.reactive_power_total) / 1000.0 : 0;
@@ -1052,7 +1059,7 @@ export const getElectricityAnalytics = async (
       todayLwbpKwh: Number(todayLwbpKwh.toFixed(0)),
       monthlyWbpKwh: Number(monthlyWbpKwh.toFixed(0)),
       monthlyLwbpKwh: Number(monthlyLwbpKwh.toFixed(0)),
-      peakDemand: Number(maxDiff.toFixed(1)),
+      peakDemand: (peakDemandVal !== null && peakDemandVal > 0) ? Number(peakDemandVal.toFixed(1)) : Number(maxDiff.toFixed(1)),
       peakDemandTs: maxDiff > 0 && peakDemandTs ? peakDemandTs.toISOString() : null,
       perMonthSummary
     },
@@ -1072,6 +1079,7 @@ export const getElectricityAnalytics = async (
     pqData: {
       activePower: Number(activePowerVal.toFixed(1)),
       activePowerTs: maxDiff > 0 && peakDemandTs ? peakDemandTs.toISOString() : null,
+      peakDemand: peakDemandVal !== null ? Number(peakDemandVal.toFixed(2)) : null,
       reactivePower: Number(reactivePowerVal.toFixed(1)),
       apparentPower: Number(apparentPowerVal.toFixed(1)),
       pf: pfVal !== null ? Number(pfVal.toFixed(3)) : null,

@@ -492,7 +492,8 @@ export const ensurePostgresTables = async () => {
         thd_current_a NUMERIC,
         thd_current_b NUMERIC,
         thd_current_c NUMERIC,
-        active_energy NUMERIC(15,3)
+        active_energy NUMERIC(15,3),
+        peak_demand NUMERIC
       );
     `);
 
@@ -622,6 +623,9 @@ export const ensurePostgresTables = async () => {
       await pool.query(`ALTER TABLE ${table} ALTER COLUMN power_factor_avg TYPE NUMERIC;`);
       await pool.query(`ALTER TABLE ${table} ALTER COLUMN power_factor_min TYPE NUMERIC;`);
     }
+
+    // Ensure peak_demand column exists on electric_pln_telemetry
+    await pool.query(`ALTER TABLE electric_pln_telemetry ADD COLUMN IF NOT EXISTS peak_demand NUMERIC;`);
 
     // Ensure timestamp indexes for fast telemetry queries
     await pool.query(`

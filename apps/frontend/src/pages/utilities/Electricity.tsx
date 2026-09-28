@@ -1366,6 +1366,7 @@ export default function Electricity() {
 
   // Live socket & API telemetry states for real-time streaming
   const [livePGridKw, setLivePGridKw] = useState<number | null>(null);
+  const [livePeakDemandKw, setLivePeakDemandKw] = useState<number | null>(null);
   const [liveWf1Kw, setLiveWf1Kw] = useState<number | null>(null);
   const [liveWf2Kw, setLiveWf2Kw] = useState<number | null>(null);
   const [liveWf1Status, setLiveWf1Status] = useState<boolean>(true);
@@ -1419,7 +1420,8 @@ export default function Electricity() {
     if (peak === 0) {
       if (cubicleSelector === "poi1") peak = solarLive?.poi1?.peakDemand || pltsLive.poi1.peak_demand || pltsLive.poi1.active_power || 0;
       else if (cubicleSelector === "poi2") peak = solarLive?.poi2?.peakDemand || pltsLive.poi2.peak_demand || pltsLive.poi2.active_power || 0;
-      else if (cubicleSelector === "all") peak = Number(summaryData?.pqData?.activePower || 0) + (solarLive?.poi1?.peakDemand || 0) + (solarLive?.poi2?.peakDemand || 0);
+      else if (cubicleSelector === "pln") peak = livePeakDemandKw || Number(summaryData?.pqData?.peakDemand || 0) || Number(summaryData?.pqData?.activePower || 0);
+      else if (cubicleSelector === "all") peak = (livePeakDemandKw || Number(summaryData?.pqData?.peakDemand || 0) || Number(summaryData?.pqData?.activePower || 0)) + (solarLive?.poi1?.peakDemand || 0) + (solarLive?.poi2?.peakDemand || 0);
       else peak = Number(summaryData?.pqData?.activePower || 0);
     }
 
@@ -1871,6 +1873,10 @@ export default function Electricity() {
                     setPfStatus(res.data.Status_PM8000 !== false ? "connected" : "offline");
                   }
                 }
+                const rawPeak = res.data.Peak_Demand_W ?? res.data.Peak_Demand_w ?? res.data.PeakDemand_W ?? res.data.peak_demand_w ?? res.data.Peak_Demand ?? res.data.peak_demand;
+                if (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak))) {
+                  setLivePeakDemandKw(Number(rawPeak) / 1000.0);
+                }
               }
               // Extract WF1
               if (url.includes("electric_wf1") && res.data.Active_Power_Total !== undefined) {
@@ -1910,12 +1916,14 @@ export default function Electricity() {
             } else if (url.includes("electric_pln")) {
               setLivePf(null);
               setPfStatus("offline");
+              setLivePeakDemandKw(null);
             }
           } catch (err) {
             console.error(`Live API poll error on Electricity for URL ${url}:`, err);
             if (url.includes("electric_pln")) {
               setLivePf(null);
               setPfStatus("offline");
+              setLivePeakDemandKw(null);
             }
           }
         })
@@ -2399,6 +2407,7 @@ export default function Electricity() {
         if (isOffline) {
           setLivePGridKw(null);
           setPfStatus("offline");
+          setLivePeakDemandKw(null);
         } else if (payload.pqData) {
           if (payload.pqData.pf !== undefined && payload.pqData.pf !== null) {
             setLivePf(payload.pqData.pf);
@@ -2407,6 +2416,9 @@ export default function Electricity() {
           if (typeof payload.pqData.activePower === "number") {
             setLivePGridKw(payload.pqData.activePower);
             setIsLiveLoading(false);
+          }
+          if (payload.pqData.peakDemand !== undefined) {
+            setLivePeakDemandKw(payload.pqData.peakDemand !== null ? Number(payload.pqData.peakDemand) : null);
           }
         }
       } else if (payload.deviceId === "Feeder_WF1_PM5560") {
@@ -3839,11 +3851,31 @@ export default function Electricity() {
 
           {/* Peak Demand */}
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Peak Demand</span>
-            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              - kW
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">Peak Demand</span>
+              <span 
+                className={`h-2 w-2 rounded-full ${pfStatus === "connected" && (livePeakDemandKw !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== null)) ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} 
+                title={pfStatus === "connected" ? "Live Real-Time Polling API" : "Gagal Polling API"} 
+              />
             </div>
-            <div className="mt-1 text-[10px] text-slate-400">Estimasi beban puncak</div>
+            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+              {(() => {
+                const liveVal = (livePeakDemandKw !== null && livePeakDemandKw !== undefined && !isNaN(Number(livePeakDemandKw)))
+                  ? Number(livePeakDemandKw)
+                  : (apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== null)
+                    ? Number(apiLiveData[DEFAULT_PLN_API_URL].Peak_Demand_W) / 1000.0
+                    : (cardSummary?.peakDemand ? Number(cardSummary.peakDemand) : null);
+                return renderMetricVal(liveVal, (v) => `${v.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`);
+              })()}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
+              <span>Estimasi beban puncak</span>
+              {pfStatus === "connected" && (livePeakDemandKw !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== null)) ? (
+                <span className="text-[9px] font-semibold text-emerald-500 font-mono">1s Live</span>
+              ) : (
+                <span className="text-[9px] font-semibold text-amber-500 font-mono">Gagal Polling API</span>
+              )}
+            </div>
           </div>
         </div>
 
