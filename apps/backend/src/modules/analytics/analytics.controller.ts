@@ -34,6 +34,15 @@ const electricityAnalyticsInflight = new Map<string, Promise<any>>();
 const solarAnalyticsCache = new Map<string, { data: any; expiresAt: number }>();
 const solarAnalyticsInflight = new Map<string, Promise<any>>();
 
+export const clearElectricityAnalyticsCache = () => {
+  electricityAnalyticsCache.clear();
+  equipmentBatchCache.clear();
+};
+
+export const clearSolarAnalyticsCache = () => {
+  solarAnalyticsCache.clear();
+};
+
 export const getElectricityAnalyticsHandler = async (
   req: Request,
   res: Response,
@@ -44,16 +53,28 @@ export const getElectricityAnalyticsHandler = async (
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
     const year = req.query.year ? Number(req.query.year) : undefined;
+    const force = req.query.force === "true";
 
-    const db = getMongoDb();
-    const config = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
-    const wbpRate = config ? config.wbpRate : 1600;
-    const lwbpRate = config ? config.lwbpRate : 1112;
+    let wbpRate = 1600;
+    let lwbpRate = 1112;
+    try {
+      const db = getMongoDb();
+      if (db && typeof db.collection === "function") {
+        const config = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
+        if (config) {
+          if (config.wbpRate) wbpRate = config.wbpRate;
+          if (config.lwbpRate) lwbpRate = config.lwbpRate;
+        }
+      }
+    } catch {}
 
     const cacheKey = `${deviceId}_${from || ""}_${to || ""}_${year || ""}_${lwbpRate}_${wbpRate}`;
     const now = Date.now();
+    if (force) {
+      electricityAnalyticsCache.delete(cacheKey);
+    }
     const cached = electricityAnalyticsCache.get(cacheKey);
-    if (cached && cached.expiresAt > now) {
+    if (!force && cached && cached.expiresAt > now) {
       return res.json({ data: cached.data });
     }
 
@@ -128,11 +149,15 @@ export const getSolarAnalyticsHandler = async (
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
     const year = req.query.year ? Number(req.query.year) : undefined;
+    const force = req.query.force === "true";
 
     const cacheKey = `${from || ""}_${to || ""}_${year || ""}`;
     const now = Date.now();
+    if (force) {
+      solarAnalyticsCache.delete(cacheKey);
+    }
     const cached = solarAnalyticsCache.get(cacheKey);
-    if (cached && cached.expiresAt > now) {
+    if (!force && cached && cached.expiresAt > now) {
       return res.json({ data: cached.data });
     }
 
@@ -232,9 +257,16 @@ export const getBillingAnalyticsHandler = async (req: Request, res: Response, ne
       return res.status(400).json({ error: "Parameters 'from' and 'to' in YYYY-MM format are required." });
     }
 
-    const db = getMongoDb();
-    const config = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
-    const waterConfig = config?.waterConfig || defaultWaterConfig;
+    let waterConfig = defaultWaterConfig;
+    try {
+      const db = getMongoDb();
+      if (db && typeof db.collection === "function") {
+        const config = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
+        if (config?.waterConfig) {
+          waterConfig = config.waterConfig;
+        }
+      }
+    } catch {}
 
     // Convert fromMonth and toMonth to full dates (in WIB context, represented as UTC/naive strings for query)
     const fromStr = `${fromMonth}-01 00:00:00.000`;
@@ -1740,7 +1772,8 @@ const equipmentBatchInflight = new Map<string, Promise<any>>();
  */
 export async function computeEquipmentMonthlyBatch(
   currentMonth: string,
-  comparisonMonth: string
+  comparisonMonth: string,
+  force: boolean = false
 ): Promise<{
   currentMonth: string;
   comparisonMonth: string;
@@ -1758,8 +1791,11 @@ export async function computeEquipmentMonthlyBatch(
 }> {
   const cacheKey = `${currentMonth}_${comparisonMonth}`;
   const now = Date.now();
+  if (force) {
+    equipmentBatchCache.delete(cacheKey);
+  }
   const cached = equipmentBatchCache.get(cacheKey);
-  if (cached && cached.expiresAt > now) {
+  if (!force && cached && cached.expiresAt > now) {
     return cached.data;
   }
 
@@ -2029,6 +2065,7 @@ export const getEquipmentMonthlyBatchAnalyticsHandler = async (
 ) => {
   try {
     const currentMonth = (req.query.currentMonth as string) || new Date().toISOString().slice(0, 7); // YYYY-MM
+    const force = req.query.force === "true";
     let comparisonMonth = req.query.comparisonMonth as string | undefined;
     if (!comparisonMonth) {
       const [currY, currM] = currentMonth.split("-").map(Number);
@@ -2036,7 +2073,7 @@ export const getEquipmentMonthlyBatchAnalyticsHandler = async (
       comparisonMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
     }
 
-    const batchData = await computeEquipmentMonthlyBatch(currentMonth, comparisonMonth);
+    const batchData = await computeEquipmentMonthlyBatch(currentMonth, comparisonMonth, force);
     res.json({
       success: true,
       ...batchData
@@ -2114,7 +2151,8 @@ export const getEquipmentMonthlyAnalyticsHandler = async (
       targetLabel = PM_DEFAULT_LABELS[targetPmId];
     }
 
-    const batchData = await computeEquipmentMonthlyBatch(currentMonth, comparisonMonth);
+    const force = req.query.force === "true";
+    const batchData = await computeEquipmentMonthlyBatch(currentMonth, comparisonMonth, force);
     const itemData = batchData.data[targetPmId] || {
       pmId: targetPmId,
       label: targetLabel,

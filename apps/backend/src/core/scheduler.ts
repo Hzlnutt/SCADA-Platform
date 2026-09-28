@@ -11,6 +11,7 @@ import {
   setLatestPowerFactor
 } from "../modules/analytics/electricity.analytics";
 import { setLatestSolarLiveState, SolarLiveState } from "../modules/analytics/solar.analytics";
+import { clearElectricityAnalyticsCache, clearSolarAnalyticsCache } from "../modules/analytics/analytics.controller";
 
 
 import { updateRunningHours } from "../modules/telemetry/running-hours.service";
@@ -1944,6 +1945,8 @@ export const startIncomingElectricityPolling = () => {
     }
 
     if (isNewMinute) {
+      clearElectricityAnalyticsCache();
+      clearSolarAnalyticsCache();
       if (io) {
         io.emit("historian:minute_update", {
           unitId: "electricity",
@@ -2833,8 +2836,8 @@ export const startPostgresPolling = () => {
       const pool = getPostgresPool();
       const res = await pool.query(`
         SELECT GREATEST(
-          (SELECT MAX(t_stamp) FROM electric_pln_telemetry),
-          (SELECT MAX(t_stamp) FROM electric_plts_telemetry)
+          (SELECT MAX(t_stamp) FROM electric_pln_telemetry_minute),
+          (SELECT MAX(t_stamp) FROM electric_plts_telemetry_minute)
         ) AS max_ts;
       `);
       const maxTs = res.rows[0]?.max_ts;
@@ -2845,6 +2848,8 @@ export const startPostgresPolling = () => {
           lastElectricityTs = currentDateObj;
         } else if (currentDateObj.getTime() !== lastElectricityTs.getTime()) {
           lastElectricityTs = currentDateObj;
+          clearElectricityAnalyticsCache();
+          clearSolarAnalyticsCache();
           const io = getSocketServer();
           if (io) {
             io.emit("electricity:update");
@@ -2855,6 +2860,8 @@ export const startPostgresPolling = () => {
       } else if (lastElectricityTs !== null) {
         // Handle database cleared
         lastElectricityTs = null;
+        clearElectricityAnalyticsCache();
+        clearSolarAnalyticsCache();
         const io = getSocketServer();
         if (io) {
           io.emit("electricity:update");

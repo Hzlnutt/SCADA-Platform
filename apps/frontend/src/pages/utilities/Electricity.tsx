@@ -1116,31 +1116,48 @@ const SectionHEquipment = memo(function SectionHEquipment({
     const currMonthStr = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, "0")}`;
     const compMonthStr = `${compYear}-${String(compMonth + 1).padStart(2, "0")}`;
 
-    setLoading(true);
-    getJson<{
-      success: boolean;
-      currentMonth: string;
-      comparisonMonth: string;
-      daysInCurrent: number;
-      daysInComparison: number;
-      data: Record<string, any>;
-    }>(`/analytics/electricity/equipment-monthly-batch?currentMonth=${currMonthStr}&comparisonMonth=${compMonthStr}`)
-      .then((res) => {
-        if (!isCancelled && res?.data) {
-          setBatchData(res.data);
-          onBatchDataLoaded?.(res.data);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to load equipment monthly batch data:", err);
-        if (!isCancelled) setLoading(false);
-      });
+    const fetchEquipmentBatch = (force = false) => {
+      if (!force) setLoading(true);
+      const forceQuery = force ? "&force=true" : "";
+      getJson<{
+        success: boolean;
+        currentMonth: string;
+        comparisonMonth: string;
+        daysInCurrent: number;
+        daysInComparison: number;
+        data: Record<string, any>;
+      }>(`/analytics/electricity/equipment-monthly-batch?currentMonth=${currMonthStr}&comparisonMonth=${compMonthStr}${forceQuery}`)
+        .then((res) => {
+          if (!isCancelled && res?.data) {
+            setBatchData(res.data);
+            onBatchDataLoaded?.(res.data);
+            setLoading(false);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load equipment monthly batch data:", err);
+          if (!isCancelled) setLoading(false);
+        });
+    };
+
+    fetchEquipmentBatch(false);
+
+    // Auto-refresh when new minute telemetry arrives via websocket
+    const socket = getSocket();
+    const handleUpdate = () => {
+      if (isCancelled) return;
+      const now = new Date();
+      if (currentYear === now.getFullYear() && currentMonthIdx === now.getMonth()) {
+        fetchEquipmentBatch(true);
+      }
+    };
+    socket.on("electricity:update", handleUpdate);
 
     return () => {
       isCancelled = true;
+      socket.off("electricity:update", handleUpdate);
     };
-  }, [currentYear, currentMonthIdx, compYear, compMonth]);
+  }, [currentYear, currentMonthIdx, compYear, compMonth, onBatchDataLoaded]);
 
   const renderCard = (item: { title: string; seriesKey: string; pmId: string }) => {
     const itemData = batchData[item.pmId] || batchData[item.seriesKey.toLowerCase()] || batchData[item.title.toLowerCase()];
@@ -1369,7 +1386,7 @@ export default function Electricity() {
   const [cubicleAnalytics, setCubicleAnalytics] = useState<any>(null);
 
   // Fetch device-specific analytics when cubicle selector changes or on interval
-  const fetchCubicleAnalytics = useCallback(() => {
+  const fetchCubicleAnalytics = useCallback((force = false) => {
     let devId = "all";
     if (cubicleSelector === "pln") devId = "Cubicle_PLN_PM8000";
     if (cubicleSelector === "wf1") devId = "Feeder_WF1_PM5560";
@@ -1377,7 +1394,8 @@ export default function Electricity() {
     if (cubicleSelector === "poi1") devId = "Solar_POI1";
     if (cubicleSelector === "poi2") devId = "Solar_POI2";
 
-    getJson<{ data: any }>(`/analytics/electricity?deviceId=${devId}&year=${selectedYear}&_t=${Date.now()}`)
+    const forceQuery = force ? "&force=true" : "";
+    getJson<{ data: any }>(`/analytics/electricity?deviceId=${devId}&year=${selectedYear}&_t=${Date.now()}${forceQuery}`)
       .then((res) => {
         if (res?.data) setCubicleAnalytics(res.data);
       })
@@ -2137,7 +2155,7 @@ export default function Electricity() {
   const solarReqIdRef = useRef(0);
 
   /* ═══ DATA FETCHING (PLN) ═══ */
-  const fetchData = useCallback((showLoading = false) => {
+  const fetchData = useCallback((showLoading = false, force = false) => {
     const currentReqId = ++reqIdRef.current;
     let url = `/analytics/electricity?deviceId=Cubicle_PLN_PM8000`;
     let cacheKey = "";
@@ -2159,6 +2177,11 @@ export default function Electricity() {
       cacheKey = `${range}_${selectedYear}`;
     }
 
+    if (force) {
+      url += `&force=true`;
+      plnCacheRef.current.delete(cacheKey);
+    }
+
     const todayStr = getLocalTodayString();
     const isTodayQuery = (range === "hour" && (chartStartDate || todayStr) === todayStr) ||
       (range === "day" && selectedYear === new Date().getFullYear() && selectedMonth === new Date().getMonth()) ||
@@ -2169,7 +2192,7 @@ export default function Electricity() {
     const now = Date.now();
     const isFresh = cached && (now - cached.ts < (isTodayQuery ? 30000 : 300000));
 
-    if (cached) {
+    if (!force && cached) {
       setSummaryData(cached.data);
       setChartData(cached.data);
       setSummaryLoading(false);
@@ -2209,7 +2232,7 @@ export default function Electricity() {
   }, [range, selectedYear, selectedMonth, chartStartDate, chartEndDate, summaryData]);
 
   /* ═══ DATA FETCHING (SOLAR) ═══ */
-  const fetchSolarData = useCallback((showLoading = false) => {
+  const fetchSolarData = useCallback((showLoading = false, force = false) => {
     const currentReqId = ++solarReqIdRef.current;
     let solarUrl = `/analytics/solar?`;
     let cacheKey = "";
@@ -2231,6 +2254,11 @@ export default function Electricity() {
       cacheKey = `${solarRange}_${solarSelectedYear}`;
     }
 
+    if (force) {
+      solarUrl += `&force=true`;
+      solarCacheRef.current.delete(cacheKey);
+    }
+
     const todayStr = getLocalTodayString();
     const isTodayQuery = (solarRange === "hour" && (solarStartDate || todayStr) === todayStr) ||
       (solarRange === "day" && solarSelectedYear === new Date().getFullYear() && solarSelectedMonth === new Date().getMonth()) ||
@@ -2241,7 +2269,7 @@ export default function Electricity() {
     const now = Date.now();
     const isFresh = cached && (now - cached.ts < (isTodayQuery ? 30000 : 300000));
 
-    if (cached) {
+    if (!force && cached) {
       setSolarData(cached.data);
       if (cached.data.live && isTodayQuery) {
         setSolarLive(cached.data.live);
@@ -2279,16 +2307,17 @@ export default function Electricity() {
     const curYear = new Date().getFullYear();
     if (!force && fixedMonthlyPln && fixedMonthlySolar) return;
 
+    const forceQuery = force ? "&force=true" : "";
     const promises: Promise<any>[] = [];
     if (force || !fixedMonthlyPln) {
       promises.push(
-        getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${curYear}`)
+        getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${curYear}${forceQuery}`)
           .then((res) => { if (res?.data) setFixedMonthlyPln(res.data); })
       );
     }
     if (force || !fixedMonthlySolar) {
       promises.push(
-        getJson<{ data: any }>(`/analytics/solar?year=${curYear}`)
+        getJson<{ data: any }>(`/analytics/solar?year=${curYear}${forceQuery}`)
           .then((res) => { if (res?.data) setFixedMonthlySolar(res.data); })
       );
     }
@@ -2314,7 +2343,7 @@ export default function Electricity() {
     let active = true;
     const socket = getSocket();
 
-    const isCurrentActivePeriod = () => {
+    const isPlnCurrentActivePeriod = () => {
       const todayStr = getLocalTodayString();
       const curYear = new Date().getFullYear();
       const curMonth = new Date().getMonth();
@@ -2325,23 +2354,38 @@ export default function Electricity() {
       return true;
     };
 
+    const isSolarCurrentActivePeriod = () => {
+      const todayStr = getLocalTodayString();
+      const curYear = new Date().getFullYear();
+      const curMonth = new Date().getMonth();
+      if (solarRange === "hour") return (solarStartDate || todayStr) === todayStr;
+      if (solarRange === "day") return solarSelectedYear === curYear && solarSelectedMonth === curMonth;
+      if (solarRange === "month" || solarRange === "ytd") return solarSelectedYear === curYear;
+      if (solarRange === "custom") return solarEndDate >= todayStr;
+      return true;
+    };
+
     const handleElectricityUpdate = () => {
       if (!active) return;
       fetchFixedMonthlyData(true);
-      if (isCurrentActivePeriod()) {
+      fetchCubicleAnalytics(true);
+      refreshFactCategories();
+      if (isPlnCurrentActivePeriod()) {
         plnCacheRef.current.clear();
-        fetchData(false);
-        fetchSolarData(false);
-        fetchCubicleAnalytics();
+        fetchData(false, true);
+      }
+      if (isSolarCurrentActivePeriod()) {
+        solarCacheRef.current.clear();
+        fetchSolarData(false, true);
       }
     };
 
     const handleSolarUpdate = () => {
       if (!active) return;
       fetchFixedMonthlyData(true);
-      if (isCurrentActivePeriod()) {
+      if (isSolarCurrentActivePeriod()) {
         solarCacheRef.current.clear();
-        fetchSolarData(false);
+        fetchSolarData(false, true);
       }
     };
     const handleLiveUpdate = (payload: any) => {
@@ -2448,7 +2492,7 @@ export default function Electricity() {
       socket.off("config:update", handleConfigUpdate);
       socket.off("power_factor:status", handlePfStatus);
     };
-  }, [fetchData, fetchSolarData, fetchCubicleAnalytics, fetchFixedMonthlyData, range, selectedYear, selectedMonth, chartStartDate, chartEndDate]);
+  }, [fetchData, fetchSolarData, fetchCubicleAnalytics, fetchFixedMonthlyData, refreshFactCategories, range, selectedYear, selectedMonth, chartStartDate, chartEndDate, solarRange, solarSelectedYear, solarSelectedMonth, solarStartDate, solarEndDate]);
 
   // Load consumption fact categories
   useEffect(() => {

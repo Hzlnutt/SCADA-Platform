@@ -419,9 +419,15 @@ export const getElectricityAnalytics = async (
     };
   }
 
-  const db = getMongoDb();
-  const hourlyCollection = db.collection(ELECTRICITY_1H_COLLECTION);
-  const telemetryCollection = db.collection(ELECTRICITY_RAW_COLLECTION);
+  let hourlyCollection: any = null;
+  let telemetryCollection: any = null;
+  try {
+    const db = getMongoDb();
+    if (db && typeof db.collection === "function") {
+      hourlyCollection = db.collection(ELECTRICITY_1H_COLLECTION);
+      telemetryCollection = db.collection(ELECTRICITY_RAW_COLLECTION);
+    }
+  } catch {}
 
   // If year is provided, use full year range; otherwise use from/to or default to current year
   const selectedYear = year || (fromStr ? parseInt(fromStr.split("-")[0]) : new Date().getFullYear());
@@ -554,7 +560,7 @@ export const getElectricityAnalytics = async (
   }
 
   // If still no records found in Postgres, fall back to MongoDB
-  if (hourlyRecords.length === 0) {
+  if (hourlyRecords.length === 0 && hourlyCollection) {
     const mongoRecords = await hourlyCollection
       .find({
         "meta.tagId": activeEnergyTag,
@@ -574,7 +580,13 @@ export const getElectricityAnalytics = async (
   const currentMonthStr = todayStr.substring(0, 7);
 
   // Fetch electricity tariffs from config
-  const configDoc = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
+  let configDoc: any = null;
+  try {
+    const db = getMongoDb();
+    if (db && typeof db.collection === "function") {
+      configDoc = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
+    }
+  } catch {}
   const tariffs: ElectricityTariff[] = configDoc?.electricityTariffs || [
     { validFrom: "2024-01", wbpRate: wbpRate, lwbpRate: lwbpRate }
   ];
