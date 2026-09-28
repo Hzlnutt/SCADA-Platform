@@ -1219,6 +1219,7 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
 };
 
 let lastElectricityMinuteStr = "";
+let lastElectricityHour = -1;
 
 const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   const p1 = data?.POI_1 || {};
@@ -1493,6 +1494,23 @@ export const startIncomingElectricityPolling = () => {
       lastElectricityMinuteStr = currentMinuteStr;
     }
     const minuteTs = new Date(currentMinuteStr);
+
+    const currentHour = getWibDateTime(ts).hour;
+    const isHourChange = lastElectricityHour !== -1 && lastElectricityHour !== currentHour;
+    if (isHourChange) {
+      lastElectricityHour = currentHour;
+      runElectricityRollupAndCleanup().catch((err) => {
+        logger.error({ err: err.message }, "Hourly electricity rollup failed on hour change");
+      });
+      runCoolingTowerRollupAndCleanup().catch((err) => {
+        logger.error({ err: err.message }, "Hourly cooling tower rollup failed on hour change");
+      });
+      runHvacRollupAndCleanup().catch((err) => {
+        logger.error({ err: err.message }, "Hourly HVAC rollup failed on hour change");
+      });
+    } else if (lastElectricityHour === -1) {
+      lastElectricityHour = currentHour;
+    }
 
     let lastPlnRec: ElectricPmRecord | null = null;
     let lastWf1Rec: ElectricPmRecord | null = null;
@@ -2106,10 +2124,6 @@ export const runElectricityRollupAndCleanup = async () => {
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_pln_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-        AND NOT EXISTS (
-          SELECT 1 FROM electric_pln_telemetry h
-          WHERE h.t_stamp = date_trunc('hour', m.t_stamp)
-        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2154,7 +2168,7 @@ export const runElectricityRollupAndCleanup = async () => {
         `, [hourStartStr]);
 
         const r = aggRes.rows[0];
-        if (r) {
+        if (r && (r.volt_ab !== null || r.active_power !== null || r.active_energy !== null)) {
           await client.query(`DELETE FROM electric_pln_telemetry WHERE t_stamp = $1`, [hourStartStr]);
           await client.query(`
             INSERT INTO electric_pln_telemetry (
@@ -2175,6 +2189,12 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
+        // Delete raw minute rows in this completed hour
+        await client.query(`
+          DELETE FROM electric_pln_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
@@ -2190,10 +2210,6 @@ export const runElectricityRollupAndCleanup = async () => {
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_wf1_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-        AND NOT EXISTS (
-          SELECT 1 FROM electric_wf1_telemetry h
-          WHERE h.t_stamp = date_trunc('hour', m.t_stamp)
-        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2238,7 +2254,7 @@ export const runElectricityRollupAndCleanup = async () => {
         `, [hourStartStr]);
 
         const r = aggRes.rows[0];
-        if (r) {
+        if (r && (r.volt_ab !== null || r.active_power_total !== null || r.active_energy !== null)) {
           await client.query(`DELETE FROM electric_wf1_telemetry WHERE t_stamp = $1`, [hourStartStr]);
           await client.query(`
             INSERT INTO electric_wf1_telemetry (
@@ -2259,6 +2275,12 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
+        // Delete raw minute rows in this completed hour
+        await client.query(`
+          DELETE FROM electric_wf1_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
@@ -2274,10 +2296,6 @@ export const runElectricityRollupAndCleanup = async () => {
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_wf2_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-        AND NOT EXISTS (
-          SELECT 1 FROM electric_wf2_telemetry h
-          WHERE h.t_stamp = date_trunc('hour', m.t_stamp)
-        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2322,7 +2340,7 @@ export const runElectricityRollupAndCleanup = async () => {
         `, [hourStartStr]);
 
         const r = aggRes.rows[0];
-        if (r) {
+        if (r && (r.volt_ab !== null || r.active_power_total !== null || r.active_energy !== null)) {
           await client.query(`DELETE FROM electric_wf2_telemetry WHERE t_stamp = $1`, [hourStartStr]);
           await client.query(`
             INSERT INTO electric_wf2_telemetry (
@@ -2343,6 +2361,12 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
+        // Delete raw minute rows in this completed hour
+        await client.query(`
+          DELETE FROM electric_wf2_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
@@ -2358,12 +2382,6 @@ export const runElectricityRollupAndCleanup = async () => {
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_pm_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-        AND NOT EXISTS (
-          SELECT 1 FROM electric_pm_telemetry h
-          WHERE h.t_stamp = date_trunc('hour', m.t_stamp)
-            AND h.group_id = m.group_id
-            AND h.pm_id = m.pm_id
-        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2428,6 +2446,12 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
+        // Delete raw minute rows in this completed hour
+        await client.query(`
+          DELETE FROM electric_pm_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
@@ -2443,11 +2467,6 @@ export const runElectricityRollupAndCleanup = async () => {
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_plts_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-        AND NOT EXISTS (
-          SELECT 1 FROM electric_plts_telemetry h
-          WHERE h.t_stamp = date_trunc('hour', m.t_stamp)
-            AND h.poi_id = m.poi_id
-        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2495,6 +2514,12 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
+        // Delete raw minute rows in this completed hour
+        await client.query(`
+          DELETE FROM electric_plts_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+        `, [hourStartStr]);
+
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
@@ -2504,13 +2529,13 @@ export const runElectricityRollupAndCleanup = async () => {
       }
     }
 
-    // 6. Keep 3 days of minute records for continuous fixed 1-hour/24-hour trends
+    // 6. Delete all completed hours from minute tables (strictly keeping only the current running hour, matching cooling tower behavior)
     await pool.query(`
-      DELETE FROM electric_pln_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '3 days';
-      DELETE FROM electric_wf1_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '3 days';
-      DELETE FROM electric_wf2_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '3 days';
-      DELETE FROM electric_pm_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '3 days';
-      DELETE FROM electric_plts_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '3 days';
+      DELETE FROM electric_pln_telemetry_minute WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta');
+      DELETE FROM electric_wf1_telemetry_minute WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta');
+      DELETE FROM electric_wf2_telemetry_minute WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta');
+      DELETE FROM electric_pm_telemetry_minute WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta');
+      DELETE FROM electric_plts_telemetry_minute WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta');
     `);
 
     // 7. Monthly Rollup
@@ -2522,7 +2547,7 @@ export const runElectricityRollupAndCleanup = async () => {
     const prevYearMonth = `${prevMonthDate.getFullYear()}-${(prevMonthDate.getMonth() + 1).toString().padStart(2, "0")}`;
     await rollupMonthlyForMonth(prevYearMonth);
 
-    logger.info("Electricity hourly rollup and monthly rollup completed successfully");
+    logger.info("Electricity hourly rollup and minute cleanup completed successfully");
   } catch (err: any) {
     logger.error({ err: err.message }, "Electricity hourly rollup job failed");
   }
