@@ -2171,6 +2171,11 @@ export const upsertEquipmentItemHandler = async (req: Request, res: Response, ne
       [cleanKey, label, JSON.stringify(value || {}), sort_order ?? 0, enabled !== false]
     );
 
+    const io = getSocketServer();
+    if (io) {
+      io.emit("electricity:equipment_config_updated", { action: "upsert", item: pgRes.rows[0] });
+    }
+
     res.json({ success: true, data: pgRes.rows[0] });
   } catch (err) {
     next(err);
@@ -2193,6 +2198,11 @@ export const toggleEquipmentItemHandler = async (req: Request, res: Response, ne
       [Boolean(enabled), String(config_key).toLowerCase()]
     );
 
+    const io = getSocketServer();
+    if (io) {
+      io.emit("electricity:equipment_config_updated", { action: "toggle", config_key, enabled });
+    }
+
     res.json({ success: true, data: pgRes.rows[0] });
   } catch (err) {
     next(err);
@@ -2211,6 +2221,11 @@ export const deleteEquipmentItemHandler = async (req: Request, res: Response, ne
       `DELETE FROM electricity_config WHERE config_type = 'equipment_display' AND config_key = $1`,
       [String(configKey).toLowerCase()]
     );
+
+    const io = getSocketServer();
+    if (io) {
+      io.emit("electricity:equipment_config_updated", { action: "delete", configKey });
+    }
 
     res.json({ success: true, message: `Item '${configKey}' berhasil dihapus dari tampilan` });
   } catch (err) {
@@ -2256,9 +2271,29 @@ export const reorderEquipmentItemsHandler = async (req: Request, res: Response, 
              WHERE config_type = 'equipment_display' AND config_key = $3`,
             [item.sort_order ?? 0, JSON.stringify(updatedVal), cleanKey]
           );
+        } else {
+          const newVal = {
+            pm_id: String(item.pm_id || cleanKey).toUpperCase(),
+            category: item.category || "custom",
+            categoryLabel: item.categoryLabel || "Kustom",
+            sort_order: item.sort_order ?? 0
+          };
+          await client.query(
+            `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
+             VALUES ('equipment_display', $1, $2, $3, $4, true, NOW())
+             ON CONFLICT (config_type, config_key) DO UPDATE
+             SET sort_order = EXCLUDED.sort_order, value = EXCLUDED.value, updated_at = NOW()`,
+            [cleanKey, item.label || cleanKey, JSON.stringify(newVal), item.sort_order ?? 0]
+          );
         }
       }
       await client.query("COMMIT");
+
+      const io = getSocketServer();
+      if (io) {
+        io.emit("electricity:equipment_config_updated", { action: "reorder", count: items.length });
+      }
+
       res.json({ success: true, count: items.length });
     } catch (e) {
       await client.query("ROLLBACK");
@@ -2306,6 +2341,12 @@ export const renameEquipmentCategoryHandler = async (req: Request, res: Response
       }
 
       await client.query("COMMIT");
+
+      const io = getSocketServer();
+      if (io) {
+        io.emit("electricity:equipment_config_updated", { action: "rename_category", category: cleanCat, newCategoryLabel: cleanLabel });
+      }
+
       res.json({ success: true, updatedCount: rowsRes.rows.length, newCategoryLabel: cleanLabel });
     } catch (e) {
       await client.query("ROLLBACK");
@@ -2514,6 +2555,11 @@ export const verifyAndRegisterNewPmHandler = async (req: Request, res: Response,
     try {
       await refreshDynamicCustomPmSources();
     } catch {}
+
+    const io = getSocketServer();
+    if (io) {
+      io.emit("electricity:equipment_config_updated", { action: "register_pm", item: eqRes.rows[0] });
+    }
 
     res.json({
       success: true,
