@@ -672,16 +672,16 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
       {/* Zoom Popup Modal - Balanced Large Modal (Not Covering Entire Screen) */}
       {isZoomOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6 md:p-8 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 md:p-6 animate-in fade-in duration-200"
           onClick={() => setIsZoomOpen(false)}
         >
           <div
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl flex flex-col overflow-hidden transition-all duration-150"
             style={{
-              width: "84vw",
-              maxWidth: "1260px",
-              height: "78vh",
-              maxHeight: "80vh",
+              width: "90vw",
+              maxWidth: "1480px",
+              height: "85vh",
+              maxHeight: "86vh",
               padding: "1.25rem 1.5rem"
             }}
             onClick={(e) => e.stopPropagation()}
@@ -764,7 +764,7 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
             </div>
 
             {/* Modal Body: Large Chart with comfortable height */}
-            <div className="relative w-full flex-1 min-h-[360px] sm:min-h-[400px] pt-2">
+            <div className="relative w-full flex-1 min-h-[420px] sm:min-h-[460px] pt-2">
               <MonthlyComparisonBarChart
                 currentData={currentData}
                 previousData={previousData}
@@ -1020,16 +1020,16 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
       {/* Zoom Popup Modal - Balanced Large Modal (Not Covering Entire Screen) */}
       {isZoomOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6 md:p-8 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 md:p-6 animate-in fade-in duration-200"
           onClick={() => setIsZoomOpen(false)}
         >
           <div
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl flex flex-col overflow-hidden transition-all duration-150"
             style={{
-              width: "84vw",
-              maxWidth: "1260px",
-              height: "78vh",
-              maxHeight: "80vh",
+              width: "90vw",
+              maxWidth: "1480px",
+              height: "85vh",
+              maxHeight: "86vh",
               padding: "1.25rem 1.5rem"
             }}
             onClick={(e) => e.stopPropagation()}
@@ -1112,7 +1112,7 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
             </div>
 
             {/* Modal Body: Large Chart with comfortable height */}
-            <div className="relative w-full flex-1 min-h-[360px] sm:min-h-[400px] pt-2">
+            <div className="relative w-full flex-1 min-h-[420px] sm:min-h-[460px] pt-2">
               <MonthlyComparisonBarChart
                 currentData={currentData}
                 previousData={previousData}
