@@ -1157,8 +1157,29 @@ const SectionHEquipment = memo(function SectionHEquipment({
   const role = useAuthStore((state) => state.user?.role);
   const isSeniorUnitHead = isSeniorUnitHeadOrAdmin(role);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-  const [configuredItems, setConfiguredItems] = useState<EquipmentDisplayItem[]>([]);
-  const [hasLoadedConfig, setHasLoadedConfig] = useState(false);
+
+  // Synchronous cache retrieval from localStorage to guarantee instant load of saved order on refresh (zero flash/layout shift)
+  const [configuredItems, setConfiguredItems] = useState<EquipmentDisplayItem[]>(() => {
+    try {
+      const raw = localStorage.getItem("scada_equipment_display_items_v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  const [hasLoadedConfig, setHasLoadedConfig] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem("scada_equipment_display_items_v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) && parsed.length > 0;
+      }
+    } catch {}
+    return false;
+  });
 
   // Default Fallback Equipment Items (57 Standard Units)
   const ALL_DEFAULT_ITEMS: EquipmentDisplayItem[] = useMemo(() => [
@@ -1284,6 +1305,9 @@ const SectionHEquipment = memo(function SectionHEquipment({
       if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
         setConfiguredItems(res.data);
         setHasLoadedConfig(true);
+        try {
+          localStorage.setItem("scada_equipment_display_items_v1", JSON.stringify(res.data));
+        } catch {}
       }
     } catch (e) {
       console.warn("Could not load equipment display config:", e);
@@ -1296,6 +1320,11 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
   // Compute category groups dynamically (with live unit count and dynamic labels)
   const categoryGroups = useMemo(() => {
+    // If not loaded and no items configured in cache, return empty array to prevent flashing default items
+    if (!hasLoadedConfig && configuredItems.length === 0) {
+      return [];
+    }
+
     const sourceItems = (isEditPositionMode && draftConfiguredItems.length > 0)
       ? draftConfiguredItems
       : (hasLoadedConfig && configuredItems.length > 0 ? configuredItems : ALL_DEFAULT_ITEMS);
@@ -1407,6 +1436,9 @@ const SectionHEquipment = memo(function SectionHEquipment({
       if (res?.success) {
         setConfiguredItems([...itemsToSave]);
         setHasLoadedConfig(true);
+        try {
+          localStorage.setItem("scada_equipment_display_items_v1", JSON.stringify(itemsToSave));
+        } catch {}
         setIsEditPositionMode(false);
         setHasUnsavedChanges(false);
         setDraftConfiguredItems([]);
@@ -2221,107 +2253,129 @@ const SectionHEquipment = memo(function SectionHEquipment({
         </form>
       )}
 
-      {/* Dynamic Category Sections with Drag & Drop */}
-      {categoryGroups.map((cat) => {
-        const isCatActiveDrop = activeDropCategory === cat.key && !activeDropConfigKey;
+      {/* Loading Skeleton when no cached config exists yet */}
+      {!hasLoadedConfig && configuredItems.length === 0 ? (
+        <div className="space-y-6 animate-pulse">
+          <div className="h-5 w-52 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3, 4, 5, 6].map((idx) => (
+              <div
+                key={idx}
+                className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 p-5 space-y-4 shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="h-4 w-40 bg-slate-200 dark:bg-slate-700 rounded-md" />
+                  <div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded-md" />
+                </div>
+                <div className="h-7 w-28 bg-slate-200 dark:bg-slate-700 rounded-lg" />
+                <div className="h-44 w-full bg-slate-100 dark:bg-slate-800/80 rounded-xl" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* Dynamic Category Sections with Drag & Drop */
+        categoryGroups.map((cat) => {
+          const isCatActiveDrop = activeDropCategory === cat.key && !activeDropConfigKey;
 
-        return (
-          <div
-            key={cat.key}
-            onDragOver={(e) => handleDragOverCategory(e, cat.key)}
-            onDragLeave={handleDragLeaveCategory}
-            onDrop={(e) => handleDropOnCategory(e, cat.key)}
-            className={`space-y-3 transition-all duration-200 rounded-2xl p-2.5 ${
-              isCatActiveDrop
-                ? "bg-sky-500/5 ring-2 ring-dashed ring-sky-400 p-4 shadow-inner"
-                : ""
-            }`}
-          >
-            {/* Category Header with Auto-Adjusting Unit Count & Inline Rename */}
-            <div className="flex items-center justify-between group pb-0.5">
-              <div className="flex items-center gap-2">
-                {editingCategoryKey === cat.key ? (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleSaveCategoryRename(cat.key);
-                    }}
-                    className="flex items-center gap-2"
-                  >
-                    <span className="text-sky-500 text-xs">●</span>
-                    <input
-                      type="text"
-                      autoFocus
-                      value={editingCategoryLabel}
-                      onChange={(e) => setEditingCategoryLabel(e.target.value)}
-                      className="px-2.5 py-1 text-xs font-bold uppercase rounded-lg border border-sky-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none shadow-sm"
-                    />
-                    <button
-                      type="submit"
-                      className="px-2.5 py-1 text-[11px] font-bold bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition cursor-pointer"
+          return (
+            <div
+              key={cat.key}
+              onDragOver={(e) => handleDragOverCategory(e, cat.key)}
+              onDragLeave={handleDragLeaveCategory}
+              onDrop={(e) => handleDropOnCategory(e, cat.key)}
+              className={`space-y-3 transition-all duration-200 rounded-2xl p-2.5 ${
+                isCatActiveDrop
+                  ? "bg-sky-500/5 ring-2 ring-dashed ring-sky-400 p-4 shadow-inner"
+                  : ""
+              }`}
+            >
+              {/* Category Header with Auto-Adjusting Unit Count & Inline Rename */}
+              <div className="flex items-center justify-between group pb-0.5">
+                <div className="flex items-center gap-2">
+                  {editingCategoryKey === cat.key ? (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleSaveCategoryRename(cat.key);
+                      }}
+                      className="flex items-center gap-2"
                     >
-                      Simpan
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingCategoryKey(null)}
-                      className="px-2 py-1 text-[11px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
-                    >
-                      Batal
-                    </button>
-                  </form>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500 dark:text-sky-400">
-                      ● {cat.label.toUpperCase()} ({cat.items.length} UNIT)
-                    </h4>
-                    {isSeniorUnitHead && (
+                      <span className="text-sky-500 text-xs">●</span>
+                      <input
+                        type="text"
+                        autoFocus
+                        value={editingCategoryLabel}
+                        onChange={(e) => setEditingCategoryLabel(e.target.value)}
+                        className="px-2.5 py-1 text-xs font-bold uppercase rounded-lg border border-sky-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none shadow-sm"
+                      />
+                      <button
+                        type="submit"
+                        className="px-2.5 py-1 text-[11px] font-bold bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition cursor-pointer"
+                      >
+                        Simpan
+                      </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          setEditingCategoryKey(cat.key);
-                          setEditingCategoryLabel(cat.label);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 transition p-1 text-[11px] text-slate-400 hover:text-sky-500 rounded hover:bg-sky-500/10 cursor-pointer"
-                        title="Klik untuk mengubah nama kategori ini"
+                        onClick={() => setEditingCategoryKey(null)}
+                        className="px-2 py-1 text-[11px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
                       >
-                        ✏️
+                        Batal
                       </button>
-                    )}
-                  </div>
+                    </form>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500 dark:text-sky-400">
+                        ● {cat.label.toUpperCase()} ({cat.items.length} UNIT)
+                      </h4>
+                      {isSeniorUnitHead && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCategoryKey(cat.key);
+                            setEditingCategoryLabel(cat.label);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition p-1 text-[11px] text-slate-400 hover:text-sky-500 rounded hover:bg-sky-500/10 cursor-pointer"
+                          title="Klik untuk mengubah nama kategori ini"
+                        >
+                          ✏️
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {isSeniorUnitHead && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400/80 opacity-0 group-hover:opacity-100 transition hidden sm:inline">
+                    Tarik kartu ke kategori ini
+                  </span>
                 )}
               </div>
 
-              {isSeniorUnitHead && (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400/80 opacity-0 group-hover:opacity-100 transition hidden sm:inline">
-                  Tarik kartu ke kategori ini
-                </span>
+              {/* Cards Grid or Empty Dropzone */}
+              {cat.items.length > 0 ? (
+                <div className={getCategoryGridClass(cat.key, cat.items.length)}>
+                  {cat.items.map((item, idx) => renderCard(item, cat.key, idx))}
+                </div>
+              ) : (
+                <div
+                  className={`border-2 border-dashed rounded-2xl p-6 text-center transition flex flex-col items-center justify-center gap-1.5 ${
+                    isCatActiveDrop
+                      ? "border-sky-500 bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                      : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-slate-400"
+                  }`}
+                >
+                  <span className="text-xl">📥</span>
+                  <span className="text-xs font-bold">Kategori Kosong (0 Unit)</span>
+                  <span className="text-[10px] text-slate-400">
+                    Tarik kartu chart dari kategori lain ke sini untuk memindahkan ke {cat.label}.
+                  </span>
+                </div>
               )}
             </div>
-
-            {/* Cards Grid or Empty Dropzone */}
-            {cat.items.length > 0 ? (
-              <div className={getCategoryGridClass(cat.key, cat.items.length)}>
-                {cat.items.map((item, idx) => renderCard(item, cat.key, idx))}
-              </div>
-            ) : (
-              <div
-                className={`border-2 border-dashed rounded-2xl p-6 text-center transition flex flex-col items-center justify-center gap-1.5 ${
-                  isCatActiveDrop
-                    ? "border-sky-500 bg-sky-500/10 text-sky-600 dark:text-sky-400"
-                    : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-slate-400"
-                }`}
-              >
-                <span className="text-xl">📥</span>
-                <span className="text-xs font-bold">Kategori Kosong (0 Unit)</span>
-                <span className="text-[10px] text-slate-400">
-                  Tarik kartu chart dari kategori lain ke sini untuk memindahkan ke {cat.label}.
-                </span>
-              </div>
-            )}
-          </div>
-        );
-      })}
+          );
+        })
+      )}
 
       {/* Dynamic Selection Chart (Sesuai Pilihan) */}
       <DynamicSelectionChart
