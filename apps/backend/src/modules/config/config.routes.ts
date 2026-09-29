@@ -37,6 +37,8 @@ import {
   upsertEquipmentItemHandler,
   toggleEquipmentItemHandler,
   deleteEquipmentItemHandler,
+  reorderEquipmentItemsHandler,
+  renameEquipmentCategoryHandler,
   verifyAndRegisterNewPmHandler
 } from "./config.controller";
 
@@ -98,5 +100,7 @@ configRouter.delete("/config/electricity/:id", authenticate, authorize(seniorUni
 configRouter.get("/config/electricity/equipment-items", authenticate, getEquipmentItemsHandler);
 configRouter.post("/config/electricity/equipment-items", authenticate, authorize(seniorUnitHeadOnlyRoles), upsertEquipmentItemHandler);
 configRouter.post("/config/electricity/equipment-items/toggle", authenticate, authorize(seniorUnitHeadOnlyRoles), toggleEquipmentItemHandler);
+configRouter.post("/config/electricity/equipment-items/reorder", authenticate, authorize(seniorUnitHeadOnlyRoles), reorderEquipmentItemsHandler);
+configRouter.post("/config/electricity/equipment-items/rename-category", authenticate, authorize(seniorUnitHeadOnlyRoles), renameEquipmentCategoryHandler);
 configRouter.delete("/config/electricity/equipment-items/:configKey", authenticate, authorize(seniorUnitHeadOnlyRoles), deleteEquipmentItemHandler);
 configRouter.post("/config/electricity/verify-and-register-pm", authenticate, authorize(seniorUnitHeadOnlyRoles), verifyAndRegisterNewPmHandler);

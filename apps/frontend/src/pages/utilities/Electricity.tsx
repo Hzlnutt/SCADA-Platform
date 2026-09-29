@@ -1019,86 +1019,112 @@ const SectionHEquipment = memo(function SectionHEquipment({
   const [hasLoadedConfig, setHasLoadedConfig] = useState(false);
 
   // Default Fallback Equipment Items (57 Standard Units)
-  const DEFAULT_COOLING_TOWER = useMemo(() => [
-    { title: "Cooling Tower Pump WF1-U3", seriesKey: "F1 COOLING TOWER PUMP WF1-U3", pmId: "PM152" },
-    { title: "Cooling Tower Fan WF1-U3", seriesKey: "F1 COOLING TOWER FAN WF1-U3", pmId: "PM181" },
-    { title: "Cooling Fase-1 WF2", seriesKey: "F2 COOLING FASE-1", pmId: "PM206" },
-    { title: "Cooling Critical WF2", seriesKey: "F2 COOLING CRITICAL", pmId: "PM215" },
-    { title: "Cooling Fase-2 WF2", seriesKey: "F2 COOLING FASE-2", pmId: "PM318" },
-    { title: "Cooling Tower CT-Pump WF2", seriesKey: "F2 COOLING TOWER CT-PUMP", pmId: "PM324" },
-    { title: "Cooling Tower CT-Fan WF2", seriesKey: "F2 COOLING TOWER CT-FAN", pmId: "PM325" },
+  const ALL_DEFAULT_ITEMS: EquipmentDisplayItem[] = useMemo(() => [
+    // 1. Cooling Tower (7 Units)
+    { id: 1, config_type: "equipment_display", config_key: "pm152", label: "Cooling Tower Pump WF1-U3", sort_order: 1, enabled: true, value: { pm_id: "PM152", seriesKey: "F1 COOLING TOWER PUMP WF1-U3", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew21" } },
+    { id: 2, config_type: "equipment_display", config_key: "pm181", label: "Cooling Tower Fan WF1-U3", sort_order: 2, enabled: true, value: { pm_id: "PM181", seriesKey: "F1 COOLING TOWER FAN WF1-U3", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew21" } },
+    { id: 3, config_type: "equipment_display", config_key: "pm206", label: "Cooling Fase-1 WF2", sort_order: 3, enabled: true, value: { pm_id: "PM206", seriesKey: "F2 COOLING FASE-1", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew22" } },
+    { id: 4, config_type: "equipment_display", config_key: "pm215", label: "Cooling Critical WF2", sort_order: 4, enabled: true, value: { pm_id: "PM215", seriesKey: "F2 COOLING CRITICAL", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew22" } },
+    { id: 5, config_type: "equipment_display", config_key: "pm318", label: "Cooling Fase-2 WF2", sort_order: 5, enabled: true, value: { pm_id: "PM318", seriesKey: "F2 COOLING FASE-2", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew23" } },
+    { id: 6, config_type: "equipment_display", config_key: "pm324", label: "Cooling Tower CT-Pump WF2", sort_order: 6, enabled: true, value: { pm_id: "PM324", seriesKey: "F2 COOLING TOWER CT-PUMP", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew23" } },
+    { id: 7, config_type: "equipment_display", config_key: "pm325", label: "Cooling Tower CT-Fan WF2", sort_order: 7, enabled: true, value: { pm_id: "PM325", seriesKey: "F2 COOLING TOWER CT-FAN", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew23" } },
+
+    // 2. Boiler (2 Units)
+    { id: 8, config_type: "equipment_display", config_key: "pm184", label: "Boiler 4 WF1", sort_order: 8, enabled: true, value: { pm_id: "PM184", seriesKey: "F1 BOILER 4", category: "boiler", categoryLabel: "Boiler", endpoint_url: "electric_ew21" } },
+    { id: 9, config_type: "equipment_display", config_key: "pm213", label: "Boiler-5 WF2", sort_order: 9, enabled: true, value: { pm_id: "PM213", seriesKey: "F2 BOILER-5", category: "boiler", categoryLabel: "Boiler", endpoint_url: "electric_ew22" } },
+
+    // 3. Compressed Air (5 Units)
+    { id: 10, config_type: "equipment_display", config_key: "pm140", label: "Compressed Air ZT-55 WF1", sort_order: 10, enabled: true, value: { pm_id: "PM140", seriesKey: "F1 COMPRESSED AIR ZT-55", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew21" } },
+    { id: 11, config_type: "equipment_display", config_key: "pm182", label: "Compressed Air ZT-30.1&2 WF1", sort_order: 11, enabled: true, value: { pm_id: "PM182", seriesKey: "F1 COMPRESSED AIR ZT-30.1&2", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew21" } },
+    { id: 12, config_type: "equipment_display", config_key: "pm183", label: "Compressed Air ALE-30 WF1", sort_order: 12, enabled: true, value: { pm_id: "PM183", seriesKey: "F1 COMPRESSED AIR ALE-30", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew21" } },
+    { id: 13, config_type: "equipment_display", config_key: "pm214", label: "Compressed Air Atlas WF2", sort_order: 13, enabled: true, value: { pm_id: "PM214", seriesKey: "F2 COMPRESSED AIR ATLAS", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew22" } },
+    { id: 14, config_type: "equipment_display", config_key: "pm229", label: "Kobelco ALE-250 WF2", sort_order: 14, enabled: true, value: { pm_id: "PM229", seriesKey: "F2 KOBELCO ALE-250", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew22" } },
+
+    // 4. Chiller (8 Units)
+    { id: 15, config_type: "equipment_display", config_key: "pm177", label: "Chiller Prep Daikin Barat WF1", sort_order: 15, enabled: true, value: { pm_id: "PM177", seriesKey: "F1 CHILLER PREP DAIKIN BARAT", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew21" } },
+    { id: 16, config_type: "equipment_display", config_key: "pm178", label: "Chiller Prep Daikin Timur WF1", sort_order: 16, enabled: true, value: { pm_id: "PM178", seriesKey: "F1 CHILLER PREP DAIKIN TIMUR", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew21" } },
+    { id: 17, config_type: "equipment_display", config_key: "pm180", label: "Chiller BP WF1-U3", sort_order: 17, enabled: true, value: { pm_id: "PM180", seriesKey: "F1 CHILLER BP WF1-U3", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew21" } },
+    { id: 18, config_type: "equipment_display", config_key: "pm209", label: "Chiller - WF2U2", sort_order: 18, enabled: true, value: { pm_id: "PM209", seriesKey: "F2 CHILLER - WF2U2", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22" } },
+    { id: 19, config_type: "equipment_display", config_key: "pm271", label: "Chiller RTAC 250 (RO & HVAC) WF2", sort_order: 19, enabled: true, value: { pm_id: "PM271", seriesKey: "F2 CHILLER RTAC 250 (RO&HVAC)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22" } },
+    { id: 20, config_type: "equipment_display", config_key: "pm272", label: "Chiller RTAC 170 (RO) WF2", sort_order: 20, enabled: true, value: { pm_id: "PM272", seriesKey: "F2 CHILLER RTAC 170 (RO)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22" } },
+    { id: 21, config_type: "equipment_display", config_key: "pm274", label: "Chiller RTAC 100 (BP) WF2", sort_order: 21, enabled: true, value: { pm_id: "PM274", seriesKey: "F2 CHILLER RTAC 100 (BP)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22" } },
+    { id: 22, config_type: "equipment_display", config_key: "pm319", label: "Chiller RTAC-275 (Prep) WF2", sort_order: 22, enabled: true, value: { pm_id: "PM319", seriesKey: "F2 CHILLER RTAC-275 (PREP)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew23" } },
+
+    // 5. HVAC Warehouse & Penerangan (8 Units)
+    { id: 23, config_type: "equipment_display", config_key: "pm134", label: "WH 4 Penerangan WF1", sort_order: 23, enabled: true, value: { pm_id: "PM134", seriesKey: "F1 WH 4 PENERANGAN", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21" } },
+    { id: 24, config_type: "equipment_display", config_key: "pm154", label: "Lighting WH 1 WF1", sort_order: 24, enabled: true, value: { pm_id: "PM154", seriesKey: "F1 LIGHTING WH 1", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21" } },
+    { id: 25, config_type: "equipment_display", config_key: "pm151", label: "HVAC Office Atas WF1", sort_order: 25, enabled: true, value: { pm_id: "PM151", seriesKey: "F1 HVAC OFFICE ATAS", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21" } },
+    { id: 26, config_type: "equipment_display", config_key: "pm179", label: "HVAC WH-3 WF1", sort_order: 26, enabled: true, value: { pm_id: "PM179", seriesKey: "F1 HVAC WH-3", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21" } },
+    { id: 27, config_type: "equipment_display", config_key: "pm207", label: "WH 6 WF2", sort_order: 27, enabled: true, value: { pm_id: "PM207", seriesKey: "F2 WH 6", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22" } },
+    { id: 28, config_type: "equipment_display", config_key: "pm208", label: "WH 5 WF2", sort_order: 28, enabled: true, value: { pm_id: "PM208", seriesKey: "F2 WH 5", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22" } },
+    { id: 29, config_type: "equipment_display", config_key: "pm226", label: "WH-7 WF2", sort_order: 29, enabled: true, value: { pm_id: "PM226", seriesKey: "F2 WH-7", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22" } },
+    { id: 30, config_type: "equipment_display", config_key: "pm288", label: "Penerangan PD WF2", sort_order: 30, enabled: true, value: { pm_id: "PM288", seriesKey: "F2 Penerangan PD", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22" } },
+
+    // 6. HVAC QC & Produksi (9 Units)
+    { id: 31, config_type: "equipment_display", config_key: "pm138", label: "Full Cooling WF1-U3", sort_order: 31, enabled: true, value: { pm_id: "PM138", seriesKey: "F1 FULL COOLING WF1-U3", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21" } },
+    { id: 32, config_type: "equipment_display", config_key: "pm153", label: "HVAC-QC WF1", sort_order: 32, enabled: true, value: { pm_id: "PM153", seriesKey: "F1 HVAC-QC", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21" } },
+    { id: 33, config_type: "equipment_display", config_key: "pm185", label: "HVAC WF1U3", sort_order: 33, enabled: true, value: { pm_id: "PM185", seriesKey: "F1 HVAC WF1U3", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21" } },
+    { id: 34, config_type: "equipment_display", config_key: "pm203", label: "Heater WF2U2", sort_order: 34, enabled: true, value: { pm_id: "PM203", seriesKey: "F2 HEATER WF2U2", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew22" } },
+    { id: 35, config_type: "equipment_display", config_key: "pm205", label: "AHU WF2UI", sort_order: 35, enabled: true, value: { pm_id: "PM205", seriesKey: "F2 AHU WF2UI", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew22" } },
+    { id: 36, config_type: "equipment_display", config_key: "pm273", label: "Return Sample QC WF2", sort_order: 36, enabled: true, value: { pm_id: "PM273", seriesKey: "RETURN SAMPLE QC", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew22" } },
+    { id: 37, config_type: "equipment_display", config_key: "pm321", label: "AHU-1 - WF2U2", sort_order: 37, enabled: true, value: { pm_id: "PM321", seriesKey: "F2 AHU-1 - WF2U2", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew23" } },
+    { id: 38, config_type: "equipment_display", config_key: "pm322", label: "AHU-2 - WF2U2", sort_order: 38, enabled: true, value: { pm_id: "PM322", seriesKey: "F2 AHU-2 - WF2U2", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew23" } },
+    { id: 39, config_type: "equipment_display", config_key: "pm132", label: "Main Supply QC Office & Lab WF1", sort_order: 39, enabled: true, value: { pm_id: "PM132", seriesKey: "F1 MAIN SUPPLY QC OFFICE & LAB", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21" } },
+
+    // 7. Panel Distribusi & Water Treatment (15 Units)
+    { id: 40, config_type: "equipment_display", config_key: "pm133", label: "MDP3 WF1", sort_order: 40, enabled: true, value: { pm_id: "PM133", seriesKey: "F1 MDP3", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21" } },
+    { id: 41, config_type: "equipment_display", config_key: "pm135", label: "MDP-2 WF1", sort_order: 41, enabled: true, value: { pm_id: "PM135", seriesKey: "F1 MDP-2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21" } },
+    { id: 42, config_type: "equipment_display", config_key: "pm136", label: "MDP-1.2 WF1", sort_order: 42, enabled: true, value: { pm_id: "PM136", seriesKey: "F1 MDP-1.2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21" } },
+    { id: 43, config_type: "equipment_display", config_key: "pm139", label: "MDP-1.1 WF1", sort_order: 43, enabled: true, value: { pm_id: "PM139", seriesKey: "F1 MDP-1.1", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21" } },
+    { id: 44, config_type: "equipment_display", config_key: "pm175", label: "ST3 WF1", sort_order: 44, enabled: true, value: { pm_id: "PM175", seriesKey: "F1 ST3", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21" } },
+    { id: 45, config_type: "equipment_display", config_key: "pm176", label: "QC Lab WF1", sort_order: 45, enabled: true, value: { pm_id: "PM176", seriesKey: "F1 QC LAB", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21" } },
+    { id: 46, config_type: "equipment_display", config_key: "pm201", label: "PUTR-1 WF2", sort_order: 46, enabled: true, value: { pm_id: "PM201", seriesKey: "F2 PUTR-1", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22" } },
+    { id: 47, config_type: "equipment_display", config_key: "pm202", label: "PUTR-2 WF2", sort_order: 47, enabled: true, value: { pm_id: "PM202", seriesKey: "F2 PUTR-2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22" } },
+    { id: 48, config_type: "equipment_display", config_key: "pm210", label: "Main Critical Panel WF2", sort_order: 48, enabled: true, value: { pm_id: "PM210", seriesKey: "F2 MAIN CRITICAL PANEL", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22" } },
+    { id: 49, config_type: "equipment_display", config_key: "pm211", label: "Panel Otoklaf WF2U1", sort_order: 49, enabled: true, value: { pm_id: "PM211", seriesKey: "F2 PANEL OTOKLAF WF2U1", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22" } },
+    { id: 50, config_type: "equipment_display", config_key: "pm212", label: "Panel Otoklaf WF2U2", sort_order: 50, enabled: true, value: { pm_id: "PM212", seriesKey: "F2 PANEL OTOKLAF WF2U2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22" } },
+    { id: 51, config_type: "equipment_display", config_key: "pm320", label: "WT-DU-PSG WF2", sort_order: 51, enabled: true, value: { pm_id: "PM320", seriesKey: "F2 WT-DU-PSG", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23" } },
+    { id: 52, config_type: "equipment_display", config_key: "pm323", label: "PW Generation - RO WF2", sort_order: 52, enabled: true, value: { pm_id: "PM323", seriesKey: "F2 PW GENERATION - RO", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23" } },
+    { id: 53, config_type: "equipment_display", config_key: "pm327", label: "PUTR-NEW WF2", sort_order: 53, enabled: true, value: { pm_id: "PM327", seriesKey: "F2 PUTR-NEW", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23" } },
+    { id: 54, config_type: "equipment_display", config_key: "pm337", label: "MCC BP 7 WF2", sort_order: 54, enabled: true, value: { pm_id: "PM337", seriesKey: "F2 MCC BP 7", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23" } },
+
+    // 8. Incoming Cubicles (3 Units)
+    { id: 55, config_type: "equipment_display", config_key: "pm410", label: "Incoming Cubicle PLN (PM8000)", sort_order: 55, enabled: true, value: { pm_id: "PM410", seriesKey: "incoming cubicle pln", category: "cubicles", categoryLabel: "Incoming Cubicles", endpoint_url: "electric_pln" } },
+    { id: 56, config_type: "equipment_display", config_key: "pm411", label: "Incoming Cubicle WF1 (PM5560)", sort_order: 56, enabled: true, value: { pm_id: "PM411", seriesKey: "incoming cubicle WF1", category: "cubicles", categoryLabel: "Incoming Cubicles", endpoint_url: "electric_wf1" } },
+    { id: 57, config_type: "equipment_display", config_key: "pm412", label: "Incoming Cubicle WF2 (PM5560)", sort_order: 57, enabled: true, value: { pm_id: "PM412", seriesKey: "incoming cubicle WF2", category: "cubicles", categoryLabel: "Incoming Cubicles", endpoint_url: "electric_wf2" } }
   ], []);
 
-  const DEFAULT_BOILER = useMemo(() => [
-    { title: "Boiler 4 WF1", seriesKey: "F1 BOILER 4", pmId: "PM184" },
-    { title: "Boiler-5 WF2", seriesKey: "F2 BOILER-5", pmId: "PM213" },
+  // Standard categories in default order
+  const STANDARD_CATEGORIES = useMemo(() => [
+    { key: "cooling_tower", defaultLabel: "Cooling Tower" },
+    { key: "boiler", defaultLabel: "Boiler" },
+    { key: "compressed_air", defaultLabel: "Compressed Air" },
+    { key: "chiller", defaultLabel: "Chiller" },
+    { key: "hvac_wh", defaultLabel: "HVAC Warehouse & Penerangan" },
+    { key: "hvac_qc", defaultLabel: "HVAC QC & Produksi" },
+    { key: "distribution", defaultLabel: "Panel Distribusi & Water Treatment" },
+    { key: "cubicles", defaultLabel: "Incoming Cubicles" }
   ], []);
 
-  const DEFAULT_COMPRESSED_AIR = useMemo(() => [
-    { title: "Compressed Air ZT-55 WF1", seriesKey: "F1 COMPRESSED AIR ZT-55", pmId: "PM140" },
-    { title: "Compressed Air ZT-30.1&2 WF1", seriesKey: "F1 COMPRESSED AIR ZT-30.1&2", pmId: "PM182" },
-    { title: "Compressed Air ALE-30 WF1", seriesKey: "F1 COMPRESSED AIR ALE-30", pmId: "PM183" },
-    { title: "Compressed Air Atlas WF2", seriesKey: "F2 COMPRESSED AIR ATLAS", pmId: "PM214" },
-    { title: "Kobelco ALE-250 WF2", seriesKey: "F2 KOBELCO ALE-250", pmId: "PM229" },
-  ], []);
+  // Drag and Drop state
+  const [draggedItem, setDraggedItem] = useState<{
+    configKey: string;
+    pmId: string;
+    sourceCategory: string;
+    title: string;
+  } | null>(null);
+  const [activeDropCategory, setActiveDropCategory] = useState<string | null>(null);
+  const [activeDropConfigKey, setActiveDropConfigKey] = useState<string | null>(null);
+  const [dragToast, setDragToast] = useState<string | null>(null);
 
-  const DEFAULT_CHILLER = useMemo(() => [
-    { title: "Chiller Prep Daikin Barat WF1", seriesKey: "F1 CHILLER PREP DAIKIN BARAT", pmId: "PM177" },
-    { title: "Chiller Prep Daikin Timur WF1", seriesKey: "F1 CHILLER PREP DAIKIN TIMUR", pmId: "PM178" },
-    { title: "Chiller BP WF1-U3", seriesKey: "F1 CHILLER BP WF1-U3", pmId: "PM180" },
-    { title: "Chiller - WF2U2", seriesKey: "F2 CHILLER - WF2U2", pmId: "PM209" },
-    { title: "Chiller RTAC 250 (RO & HVAC) WF2", seriesKey: "F2 CHILLER RTAC 250 (RO&HVAC)", pmId: "PM271" },
-    { title: "Chiller RTAC 170 (RO) WF2", seriesKey: "F2 CHILLER RTAC 170 (RO)", pmId: "PM272" },
-    { title: "Chiller RTAC 100 (BP) WF2", seriesKey: "F2 CHILLER RTAC 100 (BP)", pmId: "PM274" },
-    { title: "Chiller RTAC-275 (Prep) WF2", seriesKey: "F2 CHILLER RTAC-275 (PREP)", pmId: "PM319" },
-  ], []);
+  // Category inline rename state
+  const [editingCategoryKey, setEditingCategoryKey] = useState<string | null>(null);
+  const [editingCategoryLabel, setEditingCategoryLabel] = useState<string>("");
 
-  const DEFAULT_HVAC_WH = useMemo(() => [
-    { title: "WH 4 Penerangan WF1", seriesKey: "F1 WH 4 PENERANGAN", pmId: "PM134" },
-    { title: "Lighting WH 1 WF1", seriesKey: "F1 LIGHTING WH 1", pmId: "PM154" },
-    { title: "HVAC Office Atas WF1", seriesKey: "F1 HVAC OFFICE ATAS", pmId: "PM151" },
-    { title: "HVAC WH-3 WF1", seriesKey: "F1 HVAC WH-3", pmId: "PM179" },
-    { title: "WH 6 WF2", seriesKey: "F2 WH 6", pmId: "PM207" },
-    { title: "WH 5 WF2", seriesKey: "F2 WH 5", pmId: "PM208" },
-    { title: "WH-7 WF2", seriesKey: "F2 WH-7", pmId: "PM226" },
-    { title: "Penerangan PD WF2", seriesKey: "F2 Penerangan PD", pmId: "PM288" },
-  ], []);
-
-  const DEFAULT_HVAC_QC = useMemo(() => [
-    { title: "Full Cooling WF1-U3", seriesKey: "F1 FULL COOLING WF1-U3", pmId: "PM138" },
-    { title: "HVAC-QC WF1", seriesKey: "F1 HVAC-QC", pmId: "PM153" },
-    { title: "HVAC WF1U3", seriesKey: "F1 HVAC WF1U3", pmId: "PM185" },
-    { title: "Heater WF2U2", seriesKey: "F2 HEATER WF2U2", pmId: "PM203" },
-    { title: "AHU WF2UI", seriesKey: "F2 AHU WF2UI", pmId: "PM205" },
-    { title: "Return Sample QC WF2", seriesKey: "RETURN SAMPLE QC", pmId: "PM273" },
-    { title: "AHU-1 - WF2U2", seriesKey: "F2 AHU-1 - WF2U2", pmId: "PM321" },
-    { title: "AHU-2 - WF2U2", seriesKey: "F2 AHU-2 - WF2U2", pmId: "PM322" },
-    { title: "Main Supply QC Office & Lab WF1", seriesKey: "F1 MAIN SUPPLY QC OFFICE & LAB", pmId: "PM132" },
-  ], []);
-
-  const DEFAULT_DIST = useMemo(() => [
-    { title: "MDP3 WF1", seriesKey: "F1 MDP3", pmId: "PM133" },
-    { title: "MDP-2 WF1", seriesKey: "F1 MDP-2", pmId: "PM135" },
-    { title: "MDP-1.2 WF1", seriesKey: "F1 MDP-1.2", pmId: "PM136" },
-    { title: "MDP-1.1 WF1", seriesKey: "F1 MDP-1.1", pmId: "PM139" },
-    { title: "ST3 WF1", seriesKey: "F1 ST3", pmId: "PM175" },
-    { title: "QC Lab WF1", seriesKey: "F1 QC LAB", pmId: "PM176" },
-    { title: "PUTR-1 WF2", seriesKey: "F2 PUTR-1", pmId: "PM201" },
-    { title: "PUTR-2 WF2", seriesKey: "F2 PUTR-2", pmId: "PM202" },
-    { title: "Main Critical Panel WF2", seriesKey: "F2 MAIN CRITICAL PANEL", pmId: "PM210" },
-    { title: "Panel Otoklaf WF2U1", seriesKey: "F2 PANEL OTOKLAF WF2U1", pmId: "PM211" },
-    { title: "Panel Otoklaf WF2U2", seriesKey: "F2 PANEL OTOKLAF WF2U2", pmId: "PM212" },
-    { title: "WT-DU-PSG WF2", seriesKey: "F2 WT-DU-PSG", pmId: "PM320" },
-    { title: "PW Generation - RO WF2", seriesKey: "F2 PW GENERATION - RO", pmId: "PM323" },
-    { title: "PUTR-NEW WF2", seriesKey: "F2 PUTR-NEW", pmId: "PM327" },
-    { title: "MCC BP 7 WF2", seriesKey: "F2 MCC BP 7", pmId: "PM337" },
-  ], []);
-
-  const DEFAULT_CUBICLE = useMemo(() => [
-    { title: "Incoming Cubicle PLN (PM8000)", seriesKey: "incoming cubicle pln", pmId: "PM410" },
-    { title: "Incoming Cubicle WF1 (PM5560)", seriesKey: "incoming cubicle WF1", pmId: "PM411" },
-    { title: "Incoming Cubicle WF2 (PM5560)", seriesKey: "incoming cubicle WF2", pmId: "PM412" },
-  ], []);
+  // Adding new custom category
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [customCategoryKeys, setCustomCategoryKeys] = useState<Array<{ key: string; label: string }>>([]);
 
   // Fetch configured equipment items from database
   const loadConfiguredItems = useCallback(async () => {
@@ -1119,85 +1145,257 @@ const SectionHEquipment = memo(function SectionHEquipment({
     loadConfiguredItems();
   }, [loadConfiguredItems]);
 
-  // Map database item to card render format
-  const mapItem = (item: EquipmentDisplayItem) => {
-    const val = item.value || {};
-    const rawPm = (val.pm_id || item.config_key).toUpperCase();
-    const resolvedPm = rawPm.startsWith("PM") ? rawPm : `PM_${rawPm}`;
-    return {
-      title: item.label,
-      seriesKey: val.seriesKey || item.label.toUpperCase(),
-      pmId: resolvedPm
-    };
-  };
+  // Compute category groups dynamically (with live unit count and dynamic labels)
+  const categoryGroups = useMemo(() => {
+    const sourceItems = hasLoadedConfig && configuredItems.length > 0 ? configuredItems : ALL_DEFAULT_ITEMS;
+    const activeList = sourceItems.filter((i) => i.enabled !== false);
 
-  // Group active enabled items by category
-  const activeItems = useMemo(() => {
-    if (!hasLoadedConfig || configuredItems.length === 0) return null;
-    return configuredItems.filter((i) => i.enabled !== false);
-  }, [hasLoadedConfig, configuredItems]);
+    const catMap = new Map<string, { label: string; items: any[] }>();
 
-  const coolingTowerItems = useMemo(() => {
-    if (!activeItems) return DEFAULT_COOLING_TOWER;
-    return activeItems.filter((i) => (i.value?.category || "") === "cooling_tower").map(mapItem);
-  }, [activeItems, DEFAULT_COOLING_TOWER]);
+    // Seed standard categories first
+    for (const sc of STANDARD_CATEGORIES) {
+      catMap.set(sc.key, { label: sc.defaultLabel, items: [] });
+    }
 
-  const boilerItems = useMemo(() => {
-    if (!activeItems) return DEFAULT_BOILER;
-    return activeItems.filter((i) => (i.value?.category || "") === "boiler").map(mapItem);
-  }, [activeItems, DEFAULT_BOILER]);
+    // Seed custom categories added by user
+    for (const cc of customCategoryKeys) {
+      if (!catMap.has(cc.key)) {
+        catMap.set(cc.key, { label: cc.label, items: [] });
+      }
+    }
 
-  const compressedAirItems = useMemo(() => {
-    if (!activeItems) return DEFAULT_COMPRESSED_AIR;
-    return activeItems.filter((i) => (i.value?.category || "") === "compressed_air").map(mapItem);
-  }, [activeItems, DEFAULT_COMPRESSED_AIR]);
+    // Distribute items into categories
+    for (const item of activeList) {
+      const val = item.value || {};
+      const catKey = val.category || "custom";
+      const catLabel = val.categoryLabel || catMap.get(catKey)?.label || (catKey === "custom" ? "Equipment Kustom / Tambahan" : catKey);
 
-  const chillerItems = useMemo(() => {
-    if (!activeItems) return DEFAULT_CHILLER;
-    return activeItems.filter((i) => (i.value?.category || "") === "chiller").map(mapItem);
-  }, [activeItems, DEFAULT_CHILLER]);
+      if (!catMap.has(catKey)) {
+        catMap.set(catKey, { label: catLabel, items: [] });
+      }
 
-  const hvacWhItems = useMemo(() => {
-    if (!activeItems) return DEFAULT_HVAC_WH;
-    return activeItems.filter((i) => (i.value?.category || "") === "hvac_wh").map(mapItem);
-  }, [activeItems, DEFAULT_HVAC_WH]);
+      const rawPm = (val.pm_id || item.config_key).toUpperCase();
+      const resolvedPm = rawPm.startsWith("PM") ? rawPm : `PM_${rawPm}`;
 
-  const hvacQcItems = useMemo(() => {
-    if (!activeItems) return DEFAULT_HVAC_QC;
-    return activeItems.filter((i) => (i.value?.category || "") === "hvac_qc").map(mapItem);
-  }, [activeItems, DEFAULT_HVAC_QC]);
+      const catEntry = catMap.get(catKey)!;
+      if (val.categoryLabel) catEntry.label = val.categoryLabel;
 
-  const distItems = useMemo(() => {
-    if (!activeItems) return DEFAULT_DIST;
-    return activeItems.filter((i) => (i.value?.category || "") === "distribution").map(mapItem);
-  }, [activeItems, DEFAULT_DIST]);
+      catEntry.items.push({
+        title: item.label,
+        seriesKey: val.seriesKey || item.label.toUpperCase(),
+        pmId: resolvedPm,
+        configKey: item.config_key,
+        sortOrder: item.sort_order ?? 0,
+        category: catKey,
+        categoryLabel: catEntry.label
+      });
+    }
 
-  const cubicleItems = useMemo(() => {
-    if (!activeItems) return DEFAULT_CUBICLE;
-    return activeItems.filter((i) => (i.value?.category || "") === "cubicles").map(mapItem);
-  }, [activeItems, DEFAULT_CUBICLE]);
+    // Sort items within each category by sortOrder
+    const groups: Array<{ key: string; label: string; items: any[] }> = [];
+    for (const [key, val] of catMap.entries()) {
+      val.items.sort((a, b) => a.sortOrder - b.sortOrder);
+      if (STANDARD_CATEGORIES.some((sc) => sc.key === key) || val.items.length > 0 || customCategoryKeys.some((cc) => cc.key === key)) {
+        groups.push({
+          key,
+          label: val.label,
+          items: val.items
+        });
+      }
+    }
 
-  const customItems = useMemo(() => {
-    if (!activeItems) return [];
-    const standardCategories = new Set([
-      "cooling_tower",
-      "boiler",
-      "compressed_air",
-      "chiller",
-      "hvac_wh",
-      "hvac_qc",
-      "distribution",
-      "cubicles"
-    ]);
-    return activeItems
-      .filter((i) => !standardCategories.has(i.value?.category || ""))
-      .map(mapItem);
-  }, [activeItems]);
+    return groups;
+  }, [hasLoadedConfig, configuredItems, ALL_DEFAULT_ITEMS, STANDARD_CATEGORIES, customCategoryKeys]);
 
   const totalActiveCount = useMemo(() => {
-    if (!activeItems) return 57;
-    return activeItems.length;
-  }, [activeItems]);
+    return categoryGroups.reduce((acc, cat) => acc + cat.items.length, 0);
+  }, [categoryGroups]);
+
+  // Drag and Drop event handlers
+  const handleDragStart = (e: React.DragEvent, item: any, categoryKey: string) => {
+    if (!isSeniorUnitHead) return;
+    setDraggedItem({
+      configKey: item.configKey,
+      pmId: item.pmId,
+      sourceCategory: categoryKey,
+      title: item.title
+    });
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", item.configKey);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+    setActiveDropCategory(null);
+    setActiveDropConfigKey(null);
+  };
+
+  const handleDragOverCategory = (e: React.DragEvent, categoryKey: string) => {
+    if (!draggedItem) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (activeDropCategory !== categoryKey) {
+      setActiveDropCategory(categoryKey);
+    }
+  };
+
+  const handleDragLeaveCategory = () => {
+    // will be reset on drag end or when entering another area
+  };
+
+  const handleDragOverCard = (e: React.DragEvent, categoryKey: string, targetConfigKey: string) => {
+    if (!draggedItem) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    if (activeDropCategory !== categoryKey) setActiveDropCategory(categoryKey);
+    if (activeDropConfigKey !== targetConfigKey) setActiveDropConfigKey(targetConfigKey);
+  };
+
+  const handleDrop = async (targetCategoryKey: string, targetConfigKey?: string) => {
+    if (!draggedItem) return;
+    const { configKey, title } = draggedItem;
+
+    const targetGroup = categoryGroups.find((g) => g.key === targetCategoryKey);
+    const targetCategoryLabel = targetGroup ? targetGroup.label : targetCategoryKey;
+
+    const prevItems = (hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS];
+    const itemIndex = prevItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
+    if (itemIndex === -1) {
+      handleDragEnd();
+      return;
+    }
+
+    const itemToMove = { ...prevItems[itemIndex] };
+    itemToMove.value = {
+      ...(itemToMove.value || {}),
+      category: targetCategoryKey,
+      categoryLabel: targetCategoryLabel
+    };
+
+    // Remove from previous position
+    const remaining = prevItems.filter((i) => i.config_key.toLowerCase() !== configKey.toLowerCase());
+
+    // Determine insertion index
+    let insertIndex = remaining.length;
+    if (targetConfigKey) {
+      const targetIdx = remaining.findIndex((i) => i.config_key.toLowerCase() === targetConfigKey.toLowerCase());
+      if (targetIdx !== -1) {
+        insertIndex = targetIdx;
+      }
+    } else {
+      const lastInTargetCat = remaining
+        .map((it, idx) => ({ it, idx }))
+        .filter(({ it }) => (it.value?.category || "custom") === targetCategoryKey);
+      if (lastInTargetCat.length > 0) {
+        insertIndex = lastInTargetCat[lastInTargetCat.length - 1].idx + 1;
+      }
+    }
+
+    remaining.splice(insertIndex, 0, itemToMove);
+
+    // Re-index sort order
+    const reindexed = remaining.map((it, idx) => ({
+      ...it,
+      sort_order: idx + 1
+    }));
+
+    // Optimistic UI update
+    setConfiguredItems(reindexed);
+    setHasLoadedConfig(true);
+    handleDragEnd();
+
+    setDragToast(`✓ '${title}' berhasil dipindahkan ke kategori ${targetCategoryLabel.toUpperCase()}`);
+    setTimeout(() => setDragToast(null), 3500);
+
+    // Persist to backend database
+    try {
+      const payload = reindexed.map((it) => ({
+        config_key: it.config_key,
+        category: it.value?.category || targetCategoryKey,
+        categoryLabel: it.value?.categoryLabel || targetCategoryLabel,
+        sort_order: it.sort_order
+      }));
+
+      await postJson("/config/electricity/equipment-items/reorder", { items: payload });
+    } catch (err: any) {
+      console.warn("Failed to persist reordered equipment items:", err);
+    }
+  };
+
+  const handleDropOnCategory = (e: React.DragEvent, categoryKey: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleDrop(categoryKey);
+  };
+
+  // Inline Category Rename
+  const handleSaveCategoryRename = async (categoryKey: string) => {
+    const trimmed = editingCategoryLabel.trim();
+    if (!trimmed) {
+      setEditingCategoryKey(null);
+      return;
+    }
+
+    try {
+      await postJson("/config/electricity/equipment-items/rename-category", {
+        category: categoryKey,
+        newCategoryLabel: trimmed
+      });
+
+      setConfiguredItems((prev) =>
+        prev.map((item) => {
+          if ((item.value?.category || "") === categoryKey) {
+            return {
+              ...item,
+              value: {
+                ...item.value,
+                categoryLabel: trimmed
+              }
+            };
+          }
+          return item;
+        })
+      );
+
+      setCustomCategoryKeys((prev) =>
+        prev.map((c) => (c.key === categoryKey ? { ...c, label: trimmed } : c))
+      );
+
+      setDragToast(`✓ Nama kategori berhasil diubah menjadi '${trimmed.toUpperCase()}'`);
+      setTimeout(() => setDragToast(null), 3500);
+    } catch (err: any) {
+      console.error("Gagal mengubah nama kategori:", err);
+    } finally {
+      setEditingCategoryKey(null);
+    }
+  };
+
+  // Add new category
+  const handleCreateNewCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) {
+      setIsAddingCategory(false);
+      return;
+    }
+
+    const newKey = `cat_${Date.now()}`;
+    setCustomCategoryKeys((prev) => [...prev, { key: newKey, label: trimmed }]);
+    setNewCategoryName("");
+    setIsAddingCategory(false);
+
+    setDragToast(`✓ Kategori baru '${trimmed.toUpperCase()}' berhasil ditambahkan. Silakan tarik kartu ke kategori ini.`);
+    setTimeout(() => setDragToast(null), 3500);
+  };
+
+  // Helper for responsive grid column count per category
+  const getCategoryGridClass = (catKey: string, itemCount: number) => {
+    if (catKey === "boiler" && itemCount <= 2) return "grid gap-6 md:grid-cols-2";
+    if (catKey === "chiller" || catKey === "hvac_wh") return "grid gap-6 md:grid-cols-2 lg:grid-cols-4";
+    if (catKey === "cubicles") return "grid gap-6 md:grid-cols-3";
+    return "grid gap-6 md:grid-cols-2 lg:grid-cols-3";
+  };
 
   // Dynamic state from database batch endpoint
   const [batchData, setBatchData] = useState<Record<string, {
@@ -1258,46 +1456,104 @@ const SectionHEquipment = memo(function SectionHEquipment({
     };
   }, [fetchEquipmentBatch, currentYear, currentMonthIdx]);
 
-  const renderCard = (item: { title: string; seriesKey: string; pmId: string }) => {
+  const renderCard = (
+    item: { title: string; seriesKey: string; pmId: string; configKey: string },
+    categoryKey: string
+  ) => {
     const itemData = batchData[item.pmId] || batchData[item.seriesKey.toLowerCase()] || batchData[item.title.toLowerCase()];
     const current = itemData?.current || [];
     const previous = itemData?.previous || [];
 
+    const isBeingDragged = draggedItem?.configKey.toLowerCase() === item.configKey.toLowerCase();
+    const isDropTarget = activeDropConfigKey?.toLowerCase() === item.configKey.toLowerCase();
+
     return (
-      <MonthlyComparisonChart
+      <div
         key={item.pmId || item.title}
-        title={`${item.title} (${item.pmId})`}
-        currentData={current}
-        previousData={previous}
-        isDark={isDark}
-        currMonthName={currMonthLabel}
-        prevMonthName={compMonthLabel}
-      />
+        draggable={isSeniorUnitHead}
+        onDragStart={(e) => handleDragStart(e, item, categoryKey)}
+        onDragEnd={handleDragEnd}
+        onDragOver={(e) => handleDragOverCard(e, categoryKey, item.configKey)}
+        onDrop={(e) => {
+          e.stopPropagation();
+          handleDrop(categoryKey, item.configKey);
+        }}
+        className={`relative group transition-all duration-200 ${
+          isBeingDragged
+            ? "opacity-30 scale-95 ring-2 ring-sky-500 rounded-2xl cursor-grabbing"
+            : isDropTarget
+            ? "ring-2 ring-sky-400 ring-offset-2 scale-[1.01] rounded-2xl"
+            : ""
+        }`}
+      >
+        {isSeniorUnitHead && (
+          <div
+            className="absolute top-3 right-3 z-20 flex items-center gap-1.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-700/80 px-2 py-0.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-sky-500 hover:border-sky-500/50 hover:bg-sky-50 dark:hover:bg-sky-950/40 cursor-grab active:cursor-grabbing shadow-sm select-none transition"
+            title="Tahan dan tarik (Drag & Drop) kartu ini untuk memindahkan posisi atau kategori"
+          >
+            <span className="text-xs">⋮⋮</span>
+            <span className="text-[9px] uppercase tracking-wider font-extrabold hidden sm:inline">Pindahkan</span>
+          </div>
+        )}
+
+        <MonthlyComparisonChart
+          title={`${item.title} (${item.pmId})`}
+          currentData={current}
+          previousData={previous}
+          isDark={isDark}
+          currMonthName={currMonthLabel}
+          prevMonthName={compMonthLabel}
+        />
+      </div>
     );
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 relative">
+      {/* Floating Drag & Drop Toast Notification */}
+      {dragToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white dark:bg-white dark:text-slate-900 px-4 py-2.5 rounded-xl shadow-2xl border border-sky-500/40 flex items-center gap-2.5 text-xs font-bold animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <span className="text-emerald-400 dark:text-emerald-600 text-sm">✓</span>
+          <span>{dragToast}</span>
+        </div>
+      )}
+
       {/* Header with Comparison Filter & Senior Unit Head Edit Button */}
       <div className="flex flex-wrap items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 gap-3">
         <div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-700 dark:text-slate-300">
               Konsumsi Per-Equipment (Bulanan vs Bulan Pembanding)
             </h3>
             {isSeniorUnitHead && (
-              <button
-                type="button"
-                onClick={() => setIsConfigModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 transition cursor-pointer"
-                title="Kelola Tampilan Equipment & Daftarkan PM Baru (Senior Unit Head Only)"
-              >
-                <span>⚙️ Kelola Equipment</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsConfigModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 transition cursor-pointer"
+                  title="Kelola Tampilan Equipment & Daftarkan PM Baru (Senior Unit Head Only)"
+                >
+                  <span>⚙️ Kelola Equipment</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAddingCategory(true)}
+                  className="flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 transition cursor-pointer"
+                  title="Tambah Kategori Dropzone Baru"
+                >
+                  <span>+ Kategori Baru</span>
+                </button>
+              </div>
             )}
           </div>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
             Perbandingan konsumsi listrik per-equipment antara Bulan Ini dan Bulan Pembanding yang dipilih.
+            {isSeniorUnitHead && (
+              <span className="ml-1 text-sky-500 font-medium">
+                (Tarik kartu chart dengan tombol ⋮⋮ untuk mengatur posisi atau memindahkan kategori bebas).
+              </span>
+            )}
           </p>
         </div>
 
@@ -1340,97 +1596,141 @@ const SectionHEquipment = memo(function SectionHEquipment({
         </div>
       </div>
 
-      {/* Cooling Tower Section */}
-      {coolingTowerItems.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Cooling Tower ({coolingTowerItems.length} Unit)</h4>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {coolingTowerItems.map(renderCard)}
-          </div>
-        </div>
+      {/* Inline Form to Add New Category */}
+      {isAddingCategory && (
+        <form
+          onSubmit={handleCreateNewCategory}
+          className="p-4 rounded-xl border border-purple-500/30 bg-purple-500/5 dark:bg-purple-950/20 flex flex-wrap items-center gap-3 animate-in fade-in duration-200"
+        >
+          <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
+            Nama Kategori Baru:
+          </span>
+          <input
+            type="text"
+            required
+            autoFocus
+            placeholder="Contoh: Air Compressor Tambahan, Ruang Produksi 3..."
+            value={newCategoryName}
+            onChange={(e) => setNewCategoryName(e.target.value)}
+            className="flex-1 min-w-[200px] px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold focus:outline-none focus:ring-1 focus:ring-purple-500"
+          />
+          <button
+            type="submit"
+            className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition cursor-pointer"
+          >
+            Buat Kategori
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsAddingCategory(false)}
+            className="px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+          >
+            Batal
+          </button>
+        </form>
       )}
 
-      {/* Boiler Section */}
-      {boilerItems.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Boiler ({boilerItems.length} Unit)</h4>
-          <div className="grid gap-6 md:grid-cols-2">
-            {boilerItems.map(renderCard)}
-          </div>
-        </div>
-      )}
+      {/* Dynamic Category Sections with Drag & Drop */}
+      {categoryGroups.map((cat) => {
+        const isCatActiveDrop = activeDropCategory === cat.key && !activeDropConfigKey;
 
-      {/* Compressed Air Section */}
-      {compressedAirItems.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Compressed Air ({compressedAirItems.length} Unit)</h4>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {compressedAirItems.map(renderCard)}
-          </div>
-        </div>
-      )}
+        return (
+          <div
+            key={cat.key}
+            onDragOver={(e) => handleDragOverCategory(e, cat.key)}
+            onDragLeave={handleDragLeaveCategory}
+            onDrop={(e) => handleDropOnCategory(e, cat.key)}
+            className={`space-y-3 transition-all duration-200 rounded-2xl p-2.5 ${
+              isCatActiveDrop
+                ? "bg-sky-500/5 ring-2 ring-dashed ring-sky-400 p-4 shadow-inner"
+                : ""
+            }`}
+          >
+            {/* Category Header with Auto-Adjusting Unit Count & Inline Rename */}
+            <div className="flex items-center justify-between group pb-0.5">
+              <div className="flex items-center gap-2">
+                {editingCategoryKey === cat.key ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSaveCategoryRename(cat.key);
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <span className="text-sky-500 text-xs">●</span>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={editingCategoryLabel}
+                      onChange={(e) => setEditingCategoryLabel(e.target.value)}
+                      className="px-2.5 py-1 text-xs font-bold uppercase rounded-lg border border-sky-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none shadow-sm"
+                    />
+                    <button
+                      type="submit"
+                      className="px-2.5 py-1 text-[11px] font-bold bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition cursor-pointer"
+                    >
+                      Simpan
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingCategoryKey(null)}
+                      className="px-2 py-1 text-[11px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                  </form>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500 dark:text-sky-400">
+                      ● {cat.label.toUpperCase()} ({cat.items.length} UNIT)
+                    </h4>
+                    {isSeniorUnitHead && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingCategoryKey(cat.key);
+                          setEditingCategoryLabel(cat.label);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 transition p-1 text-[11px] text-slate-400 hover:text-sky-500 rounded hover:bg-sky-500/10 cursor-pointer"
+                        title="Klik untuk mengubah nama kategori ini"
+                      >
+                        ✏️
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
 
-      {/* Chiller Section */}
-      {chillerItems.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Chiller ({chillerItems.length} Unit)</h4>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {chillerItems.map(renderCard)}
-          </div>
-        </div>
-      )}
+              {isSeniorUnitHead && (
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400/80 opacity-0 group-hover:opacity-100 transition hidden sm:inline">
+                  Tarik kartu ke kategori ini
+                </span>
+              )}
+            </div>
 
-      {/* HVAC Warehouse & Penerangan Section */}
-      {hvacWhItems.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC Warehouse &amp; Penerangan ({hvacWhItems.length} Unit)</h4>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {hvacWhItems.map(renderCard)}
+            {/* Cards Grid or Empty Dropzone */}
+            {cat.items.length > 0 ? (
+              <div className={getCategoryGridClass(cat.key, cat.items.length)}>
+                {cat.items.map((item) => renderCard(item, cat.key))}
+              </div>
+            ) : (
+              <div
+                className={`border-2 border-dashed rounded-2xl p-6 text-center transition flex flex-col items-center justify-center gap-1.5 ${
+                  isCatActiveDrop
+                    ? "border-sky-500 bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                    : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-slate-400"
+                }`}
+              >
+                <span className="text-xl">📥</span>
+                <span className="text-xs font-bold">Kategori Kosong (0 Unit)</span>
+                <span className="text-[10px] text-slate-400">
+                  Tarik kartu chart dari kategori lain ke sini untuk memindahkan ke {cat.label}.
+                </span>
+              </div>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* HVAC QC & Produksi Section */}
-      {hvacQcItems.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● HVAC QC &amp; Produksi ({hvacQcItems.length} Unit)</h4>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {hvacQcItems.map(renderCard)}
-          </div>
-        </div>
-      )}
-
-      {/* Panel Distribusi & Water Treatment Section */}
-      {distItems.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Panel Distribusi &amp; Water Treatment ({distItems.length} Unit)</h4>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {distItems.map(renderCard)}
-          </div>
-        </div>
-      )}
-
-      {/* Incoming Cubicle Section */}
-      {cubicleItems.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-sky-500">● Incoming Cubicles ({cubicleItems.length} Unit)</h4>
-          <div className="grid gap-6 md:grid-cols-3">
-            {cubicleItems.map(renderCard)}
-          </div>
-        </div>
-      )}
-
-      {/* Custom / Additional Equipment Section */}
-      {customItems.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-purple-500">
-            ● Equipment Kustom / Tambahan ({customItems.length} Unit)
-          </h4>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {customItems.map(renderCard)}
-          </div>
-        </div>
-      )}
+        );
+      })}
 
       {/* Dynamic Selection Chart (Sesuai Pilihan) */}
       <DynamicSelectionChart

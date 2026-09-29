@@ -2218,6 +2218,106 @@ export const deleteEquipmentItemHandler = async (req: Request, res: Response, ne
   }
 };
 
+export const reorderEquipmentItemsHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items)) {
+      res.status(400).json({ error: "items array is required" });
+      return;
+    }
+
+    const pool = getPostgresPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const item of items) {
+        const cleanKey = String(item.config_key || item.pm_id).toLowerCase().replace(/[^a-z0-9_]/g, "");
+        if (!cleanKey) continue;
+
+        const curRes = await client.query(
+          `SELECT value FROM electricity_config WHERE config_type = 'equipment_display' AND config_key = $1`,
+          [cleanKey]
+        );
+        if (curRes.rows.length > 0) {
+          const curVal = typeof curRes.rows[0].value === "object" && curRes.rows[0].value !== null
+            ? curRes.rows[0].value
+            : JSON.parse(curRes.rows[0].value || "{}");
+
+          const updatedVal = {
+            ...curVal,
+            category: item.category || curVal.category,
+            categoryLabel: item.categoryLabel || curVal.categoryLabel,
+            sort_order: item.sort_order !== undefined ? item.sort_order : curVal.sort_order
+          };
+
+          await client.query(
+            `UPDATE electricity_config 
+             SET sort_order = $1, value = $2, updated_at = NOW() 
+             WHERE config_type = 'equipment_display' AND config_key = $3`,
+            [item.sort_order ?? 0, JSON.stringify(updatedVal), cleanKey]
+          );
+        }
+      }
+      await client.query("COMMIT");
+      res.json({ success: true, count: items.length });
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const renameEquipmentCategoryHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { category, newCategoryLabel } = req.body;
+    if (!category || !newCategoryLabel) {
+      res.status(400).json({ error: "category and newCategoryLabel are required" });
+      return;
+    }
+
+    const pool = getPostgresPool();
+    const cleanCat = String(category).trim();
+    const cleanLabel = String(newCategoryLabel).trim();
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const rowsRes = await client.query(
+        `SELECT id, value FROM electricity_config 
+         WHERE config_type = 'equipment_display' AND value->>'category' = $1`,
+        [cleanCat]
+      );
+
+      for (const row of rowsRes.rows) {
+        const curVal = typeof row.value === "object" && row.value !== null
+          ? row.value
+          : JSON.parse(row.value || "{}");
+
+        curVal.categoryLabel = cleanLabel;
+
+        await client.query(
+          `UPDATE electricity_config SET value = $1, updated_at = NOW() WHERE id = $2`,
+          [JSON.stringify(curVal), row.id]
+        );
+      }
+
+      await client.query("COMMIT");
+      res.json({ success: true, updatedCount: rowsRes.rows.length, newCategoryLabel: cleanLabel });
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const verifyAndRegisterNewPmHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { pm_id, label, endpoint_url, category, categoryLabel, department, factory, subArea } = req.body;
