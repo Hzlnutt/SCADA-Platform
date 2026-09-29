@@ -2689,12 +2689,12 @@ export default function PowerDistribution() {
       {/* ZOOM MODAL FOR SECTION C */}
       {bottomZoomChart && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6 md:p-8 animate-in fade-in duration-200"
           onClick={() => setBottomZoomChart(null)}
         >
           <div
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col space-y-4 overflow-hidden"
-            style={{ width: "98vw", maxWidth: "98vw", height: "95vh", maxHeight: "96vh", padding: "1.25rem 1.5rem" }}
+            style={{ width: "84vw", maxWidth: "1260px", height: "78vh", maxHeight: "80vh", padding: "1.25rem 1.5rem" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -2763,8 +2763,8 @@ export default function PowerDistribution() {
               </div>
             </div>
 
-            {/* Modal Body: Large Chart filling 90% view */}
-            <div className="relative w-full flex-1 min-h-[500px]">
+            {/* Modal Body: Large Chart */}
+            <div className="relative w-full flex-1 min-h-[360px] sm:min-h-[400px]">
               {bottomZoomChart === "voltage" ? (
                 <Line data={voltageTrendChart} options={multiLineChartOptions} />
               ) : bottomZoomChart === "power" ? (

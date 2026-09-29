@@ -1476,12 +1476,12 @@ interface HourlyTrend5sPoint {
       {/* Zoom Popup Modal for Trend Charts */}
       {zoomTrend && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6 md:p-8 animate-in fade-in duration-200"
           onClick={() => setZoomTrend(null)}
         >
           <div
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col space-y-4 overflow-hidden"
-            style={{ width: "98vw", maxWidth: "98vw", height: "95vh", maxHeight: "96vh", padding: "1.25rem 1.5rem" }}
+            style={{ width: "84vw", maxWidth: "1260px", height: "78vh", maxHeight: "80vh", padding: "1.25rem 1.5rem" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -1511,8 +1511,8 @@ interface HourlyTrend5sPoint {
                 <button
                   type="button"
                   onClick={() => setZoomTrend(null)}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer"
-                  title="Tutup Modal"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition cursor-pointer"
+                  title="Tutup Modal (ESC)"
                 >
                   <span>Tutup</span>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -1522,8 +1522,8 @@ interface HourlyTrend5sPoint {
               </div>
             </div>
 
-            {/* Modal Body: Large Chart Height filling 90% */}
-            <div className="relative w-full flex-1 min-h-[500px]">
+            {/* Modal Body: Large Chart Height */}
+            <div className="relative w-full flex-1 min-h-[360px] sm:min-h-[400px]">
               {zoomTrend === "voltage" ? (
                 <Line data={voltageTrendData} options={lineOptions("kV", false, true)} />
               ) : (

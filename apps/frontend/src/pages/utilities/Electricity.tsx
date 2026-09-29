@@ -563,39 +563,17 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
 }) {
   const [showPrevious, setShowPrevious] = useState(true);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const modalContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isZoomOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (document.fullscreenElement) {
-          document.exitFullscreen?.().catch(() => {});
-        } else {
-          setIsZoomOpen(false);
-        }
+        setIsZoomOpen(false);
       }
     };
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-
     window.addEventListener("keydown", handleKeyDown);
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-    };
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isZoomOpen]);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      modalContainerRef.current?.requestFullscreen?.().catch(() => {});
-    } else {
-      document.exitFullscreen?.().catch(() => {});
-    }
-  };
 
   const currTotalKwh = useMemo(() => (currentData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [currentData]);
   const prevTotalKwh = useMemo(() => (previousData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [previousData]);
@@ -691,27 +669,20 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
         />
       </div>
 
-      {/* Zoom Popup Modal - Extra-Large Viewport Filling (98vw x 96vh) */}
+      {/* Zoom Popup Modal - Balanced Large Modal (Not Covering Entire Screen) */}
       {isZoomOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-1 sm:p-2 md:p-3 animate-in fade-in duration-200"
-          onClick={() => {
-            if (document.fullscreenElement) {
-              document.exitFullscreen?.().catch(() => {});
-            }
-            setIsZoomOpen(false);
-          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6 md:p-8 animate-in fade-in duration-200"
+          onClick={() => setIsZoomOpen(false)}
         >
           <div
-            ref={modalContainerRef}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden transition-all duration-150"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl flex flex-col overflow-hidden transition-all duration-150"
             style={{
-              width: isFullscreen ? "100vw" : "98vw",
-              maxWidth: isFullscreen ? "100vw" : "98vw",
-              height: isFullscreen ? "100vh" : "96vh",
-              maxHeight: isFullscreen ? "100vh" : "96vh",
-              borderRadius: isFullscreen ? "0px" : "1.25rem",
-              padding: isFullscreen ? "1.5rem" : "1.25rem 1.5rem"
+              width: "84vw",
+              maxWidth: "1260px",
+              height: "78vh",
+              maxHeight: "80vh",
+              padding: "1.25rem 1.5rem"
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -777,32 +748,10 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
                   <span>Bulan Lalu</span>
                 </label>
 
-                {/* Fullscreen Toggle */}
-                <button
-                  type="button"
-                  onClick={toggleFullscreen}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-sky-600 dark:text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-xl transition cursor-pointer"
-                  title="Toggle Fullscreen Layar Penuh"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
-                    {isFullscreen ? (
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0l5 0m-5 0l0 5M15 9l5-5m0 0l-5 0m5 0l0 5M9 15l-5 5m0 0l5 0m-5 0l0-5M15 15l5 5m0 0l-5 0m5 0l0-5" />
-                    ) : (
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                    )}
-                  </svg>
-                  <span className="hidden sm:inline">{isFullscreen ? "Keluar Layar Penuh" : "Layar Penuh"}</span>
-                </button>
-
                 {/* Close Button */}
                 <button
                   type="button"
-                  onClick={() => {
-                    if (document.fullscreenElement) {
-                      document.exitFullscreen?.().catch(() => {});
-                    }
-                    setIsZoomOpen(false);
-                  }}
+                  onClick={() => setIsZoomOpen(false)}
                   className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition cursor-pointer"
                   title="Tutup Modal (ESC)"
                 >
@@ -814,8 +763,8 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
               </div>
             </div>
 
-            {/* Modal Body: Extra-Large Chart filling full available height */}
-            <div className="relative w-full flex-1 min-h-[480px] sm:min-h-[560px] md:min-h-[620px] pt-2">
+            {/* Modal Body: Large Chart with comfortable height */}
+            <div className="relative w-full flex-1 min-h-[360px] sm:min-h-[400px] pt-2">
               <MonthlyComparisonBarChart
                 currentData={currentData}
                 previousData={previousData}
@@ -859,39 +808,17 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
   const [machine, setMachine] = useState("F1 MAIN SUPPLY QC OFFICE & LAB");
   const [showPrevious, setShowPrevious] = useState(true);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const modalContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isZoomOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (document.fullscreenElement) {
-          document.exitFullscreen?.().catch(() => {});
-        } else {
-          setIsZoomOpen(false);
-        }
+        setIsZoomOpen(false);
       }
     };
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-
     window.addEventListener("keydown", handleKeyDown);
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-    };
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isZoomOpen]);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      modalContainerRef.current?.requestFullscreen?.().catch(() => {});
-    } else {
-      document.exitFullscreen?.().catch(() => {});
-    }
-  };
 
   const machineOptions = useMemo(() => {
     if (factory === "wf1") {
@@ -1090,27 +1017,20 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
         />
       </div>
 
-      {/* Zoom Popup Modal - Extra-Large Viewport Filling (98vw x 96vh) */}
+      {/* Zoom Popup Modal - Balanced Large Modal (Not Covering Entire Screen) */}
       {isZoomOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-1 sm:p-2 md:p-3 animate-in fade-in duration-200"
-          onClick={() => {
-            if (document.fullscreenElement) {
-              document.exitFullscreen?.().catch(() => {});
-            }
-            setIsZoomOpen(false);
-          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6 md:p-8 animate-in fade-in duration-200"
+          onClick={() => setIsZoomOpen(false)}
         >
           <div
-            ref={modalContainerRef}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden transition-all duration-150"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl flex flex-col overflow-hidden transition-all duration-150"
             style={{
-              width: isFullscreen ? "100vw" : "98vw",
-              maxWidth: isFullscreen ? "100vw" : "98vw",
-              height: isFullscreen ? "100vh" : "96vh",
-              maxHeight: isFullscreen ? "100vh" : "96vh",
-              borderRadius: isFullscreen ? "0px" : "1.25rem",
-              padding: isFullscreen ? "1.5rem" : "1.25rem 1.5rem"
+              width: "84vw",
+              maxWidth: "1260px",
+              height: "78vh",
+              maxHeight: "80vh",
+              padding: "1.25rem 1.5rem"
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1176,32 +1096,10 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
                   <span>Bulan Lalu</span>
                 </label>
 
-                {/* Fullscreen Toggle */}
-                <button
-                  type="button"
-                  onClick={toggleFullscreen}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-sky-600 dark:text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-xl transition cursor-pointer"
-                  title="Toggle Fullscreen Layar Penuh"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
-                    {isFullscreen ? (
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0l5 0m-5 0l0 5M15 9l5-5m0 0l-5 0m5 0l0 5M9 15l-5 5m0 0l5 0m-5 0l0-5M15 15l5 5m0 0l-5 0m5 0l0-5" />
-                    ) : (
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                    )}
-                  </svg>
-                  <span className="hidden sm:inline">{isFullscreen ? "Keluar Layar Penuh" : "Layar Penuh"}</span>
-                </button>
-
                 {/* Close Button */}
                 <button
                   type="button"
-                  onClick={() => {
-                    if (document.fullscreenElement) {
-                      document.exitFullscreen?.().catch(() => {});
-                    }
-                    setIsZoomOpen(false);
-                  }}
+                  onClick={() => setIsZoomOpen(false)}
                   className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition cursor-pointer"
                   title="Tutup Modal (ESC)"
                 >
@@ -1213,8 +1111,8 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
               </div>
             </div>
 
-            {/* Modal Body: Extra-Large Chart filling full available height */}
-            <div className="relative w-full flex-1 min-h-[480px] sm:min-h-[560px] md:min-h-[620px] pt-2">
+            {/* Modal Body: Large Chart with comfortable height */}
+            <div className="relative w-full flex-1 min-h-[360px] sm:min-h-[400px] pt-2">
               <MonthlyComparisonBarChart
                 currentData={currentData}
                 previousData={previousData}
