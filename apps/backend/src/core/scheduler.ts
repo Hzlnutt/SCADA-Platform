@@ -970,32 +970,35 @@ const recordIncomingTrend5s = async (
       vR: Number(data.vR.toFixed(3)),
       vS: Number(data.vS.toFixed(3)),
       vT: Number(data.vT.toFixed(3)),
-      activePower: Number(data.activePower.toFixed(1)),
-      pR: Number(data.pR.toFixed(1)),
-      pS: Number(data.pS.toFixed(1)),
-      pT: Number(data.pT.toFixed(1)),
+      activePower: Math.abs(Number(data.activePower.toFixed(1))),
+      pR: Math.abs(Number(data.pR.toFixed(1))),
+      pS: Math.abs(Number(data.pS.toFixed(1))),
+      pT: Math.abs(Number(data.pT.toFixed(1))),
       ts: now.getTime()
     };
 
     const pool = getPostgresPool();
 
-    if (isHourChange) {
-      // Clean up records from previous hour when hour changes, retaining only the current hour
-      try {
-        await pool.query(
-          `DELETE FROM electric_incoming_trend_5s WHERE device_id = $1 AND hour != $2`,
-          [deviceId, currentHour]
-        );
-      } catch (err: any) {
-        logger.warn(`Failed to cleanup previous hour trend 5s for ${deviceId}: ${err.message}`);
-      }
-      incomingHourlyTrends[deviceId] = [];
-    }
-
+    // Maintain continuous 1-hour rolling window in memory: discard points older than 3600 seconds
+    const oneHourAgoMs = now.getTime() - 3600 * 1000;
+    incomingHourlyTrends[deviceId] = (incomingHourlyTrends[deviceId] || []).filter(
+      (p) => (p.ts || 0) >= oneHourAgoMs
+    );
     incomingHourlyTrends[deviceId].push(point);
-    // 1-hour window: 12 points/min * 60 min = 720 points (strictly current hour)
     if (incomingHourlyTrends[deviceId].length > 720) {
       incomingHourlyTrends[deviceId].shift();
+    }
+
+    // Periodically clean up records older than 70 minutes from postgres so database stays rolling 1-hour
+    if (currentSec === 0) {
+      const purgeDate = new Date(now.getTime() - 70 * 60 * 1000);
+      const purgeWib = getWibDateTime(purgeDate);
+      pool.query(
+        `DELETE FROM electric_incoming_trend_5s WHERE t_stamp < $1`,
+        [purgeWib.tStampStr]
+      ).catch((err: any) => {
+        logger.warn(`Failed to cleanup old electric_incoming_trend_5s: ${err.message}`);
+      });
     }
 
     // Save every 5 seconds to electric_incoming_trend_5s with WIB timestamp
@@ -1042,7 +1045,7 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
 
   const isPln = deviceId === "Cubicle_PLN_PM8000";
   const rawActive = pgPq.active_power !== undefined ? pgPq.active_power : pgPq.active_power_total;
-  const activePowerVal = rawActive !== null ? (Number(rawActive) > 10000 ? Number(rawActive) / 1000.0 : Number(rawActive)) : 0;
+  const activePowerVal = rawActive !== null ? Math.abs(Number(rawActive) > 10000 ? Number(rawActive) / 1000.0 : Number(rawActive)) : 0;
   const reactivePowerVal = pgPq.reactive_power_total !== null ? (Number(pgPq.reactive_power_total) > 10000 ? Number(pgPq.reactive_power_total) / 1000.0 : Number(pgPq.reactive_power_total)) : 0;
   const apparentPowerVal = pgPq.apparent_power_total !== null ? (Number(pgPq.apparent_power_total) > 10000 ? Number(pgPq.apparent_power_total) / 1000.0 : Number(pgPq.apparent_power_total)) : 0;
   const pfVal = pgPq.power_factor !== null && pgPq.power_factor !== undefined ? Math.abs(Number(pgPq.power_factor)) : null;

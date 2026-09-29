@@ -385,14 +385,24 @@ interface HourlyTrend5sPoint {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const oneHourAgo = Date.now() - 3700 * 1000;
-          const fresh = parsed.filter((p: any) => !p.ts || Number(p.ts) >= oneHourAgo);
+          const oneHourAgo = Date.now() - 3600 * 1000;
+          const fresh = parsed.filter((p: any) => p.ts && Number(p.ts) >= oneHourAgo);
           if (fresh.length > 0) return fresh;
         }
       }
     } catch (e) {}
     return [];
   });
+  const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
+
+  // 5-second clock ticker to keep rolling sliding window advancing smoothly in real time
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
   const lastTrendHourRef = useRef<number>(-1);
   const [zoomTrend, setZoomTrend] = useState<"voltage" | "power" | null>(null);
 
@@ -408,7 +418,8 @@ interface HourlyTrend5sPoint {
   }, [zoomTrend]);
 
   const voltageStats = useMemo(() => {
-    const pts = hourlyTrend5s.filter(p => (p.voltage !== undefined && p.voltage > 0) || (p.vR !== undefined && p.vR > 0));
+    const oneHourAgo = Date.now() - 3600 * 1000;
+    const pts = hourlyTrend5s.filter(p => p.ts && Number(p.ts) >= oneHourAgo && ((p.voltage !== undefined && p.voltage > 0) || (p.vR !== undefined && p.vR > 0)));
     if (pts.length === 0) return null;
     const latest = pts[pts.length - 1];
     const allV = pts.map(p => p.vR !== undefined ? (p.vR + (p.vS || 0) + (p.vT || 0)) / 3 : p.voltage).filter(v => typeof v === "number" && v > 0) as number[];
@@ -427,15 +438,16 @@ interface HourlyTrend5sPoint {
   }, [hourlyTrend5s]);
 
   const powerStats = useMemo(() => {
-    const pts = hourlyTrend5s.filter(p => typeof p.activePower === "number");
+    const oneHourAgo = Date.now() - 3600 * 1000;
+    const pts = hourlyTrend5s.filter(p => p.ts && Number(p.ts) >= oneHourAgo && typeof p.activePower === "number");
     if (pts.length === 0) return null;
     const latest = pts[pts.length - 1];
-    const allP = pts.map(p => p.activePower).filter(v => typeof v === "number") as number[];
+    const allP = pts.map(p => Math.abs(p.activePower!)).filter(v => typeof v === "number") as number[];
     const avg = allP.length > 0 ? allP.reduce((a, b) => a + b, 0) / allP.length : 0;
     const min = allP.length > 0 ? Math.min(...allP) : 0;
     const max = allP.length > 0 ? Math.max(...allP) : 0;
     return {
-      latest: latest.activePower ?? 0,
+      latest: Math.abs(latest.activePower ?? 0),
       avg,
       min,
       max,
@@ -575,12 +587,20 @@ interface HourlyTrend5sPoint {
           setTrendHour(currentHour);
           lastTrendHourRef.current = currentHour;
           setHourlyTrend5s((prev) => {
-            const oneHourAgo = Date.now() - 3700 * 1000;
-            const map = new Map<string, any>();
+            const oneHourAgo = Date.now() - 3600 * 1000;
+            const map = new Map<number, any>();
             for (const p of prev) {
-              if (!p.ts || Number(p.ts) >= oneHourAgo) map.set(p.time, p);
+              if (p.ts && Number(p.ts) >= oneHourAgo) {
+                const bucket = Math.round(Number(p.ts) / 5000) * 5000;
+                map.set(bucket, p);
+              }
             }
-            for (const p of pts) map.set(p.time, p);
+            for (const p of pts) {
+              if (p.ts && Number(p.ts) >= oneHourAgo) {
+                const bucket = Math.round(Number(p.ts) / 5000) * 5000;
+                map.set(bucket, p);
+              }
+            }
             const merged = Array.from(map.values()).sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
             const trimmed = merged.length > 720 ? merged.slice(merged.length - 720) : merged;
             try {
@@ -604,8 +624,8 @@ interface HourlyTrend5sPoint {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const oneHourAgo = Date.now() - 3700 * 1000;
-          const fresh = parsed.filter((p: any) => !p.ts || Number(p.ts) >= oneHourAgo);
+          const oneHourAgo = Date.now() - 3600 * 1000;
+          const fresh = parsed.filter((p: any) => p.ts && Number(p.ts) >= oneHourAgo);
           setHourlyTrend5s(fresh);
         } else {
           setHourlyTrend5s([]);
@@ -707,22 +727,26 @@ interface HourlyTrend5sPoint {
     const handleTrend5s = (payload: any) => {
       if (payload && payload.deviceId === config.deviceId && payload.point) {
         const pt = payload.point;
-        const currentHour = typeof payload.hour === "number" ? payload.hour : trendHour;
-
-        if (currentHour !== lastTrendHourRef.current) {
-          lastTrendHourRef.current = currentHour;
-          setTrendHour(currentHour);
-          setHourlyTrend5s([pt]);
-          return;
+        if (pt.ts) {
+          setCurrentTime(pt.ts);
         }
+        const currentHour = typeof payload.hour === "number" ? payload.hour : trendHour;
+        setTrendHour(currentHour);
+        lastTrendHourRef.current = currentHour;
 
         setHourlyTrend5s((prev) => {
-          // Deduplicate: skip if already have this timestamp
-          if (prev.length > 0 && prev[prev.length - 1].time === pt.time) {
-            return prev;
+          const nowMs = pt.ts || Date.now();
+          const oneHourAgo = nowMs - 3600 * 1000;
+          // Strictly discard points older than 1 hour (rolling FIFO window)
+          const filtered = prev.filter((p) => p.ts && Number(p.ts) >= oneHourAgo);
+          // Deduplicate if within same 5s bucket
+          const ptBucket = Math.round((pt.ts || nowMs) / 5000) * 5000;
+          const lastP = filtered[filtered.length - 1];
+          if (lastP && lastP.ts && Math.round(lastP.ts / 5000) * 5000 === ptBucket) {
+            filtered[filtered.length - 1] = pt;
+            return [...filtered];
           }
-          const updated = [...prev, pt];
-          // Continuous 1-hour rolling sliding window: 720 points max (720 * 5s = 3600s = 1 hour FIFO)
+          const updated = [...filtered, pt];
           const trimmed = updated.length > 720 ? updated.slice(updated.length - 720) : updated;
           try {
             localStorage.setItem(`incoming_trend_1h_${config.deviceId}`, JSON.stringify(trimmed));
@@ -880,29 +904,92 @@ interface HourlyTrend5sPoint {
     }
   };
 
-  // Continuous 1-Hour Rolling 5-Second Window (sliding FIFO window, max 720 points = 1 hour)
-  const rollingTrendLabels = useMemo(() => {
-    if (hourlyTrend5s.length === 0) {
-      const slots: string[] = [];
-      const now = new Date();
-      const pad = (n: number) => String(n).padStart(2, "0");
-      for (let i = 719; i >= 0; i--) {
-        const d = new Date(now.getTime() - i * 5000);
-        slots.push(`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`);
+  // Continuous 1-Hour Rolling 5-Second Window (Strictly Fixed 1-Hour Window: 720 slots * 5s = 3600s = 60 min)
+  const SLOTS_COUNT = 720;
+  const STEP_MS = 5000;
+
+  const rollingTrendData = useMemo(() => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const now = currentTime;
+    const currentSlotTs = Math.floor(now / STEP_MS) * STEP_MS;
+    const oneHourAgoTs = currentSlotTs - (SLOTS_COUNT - 1) * STEP_MS;
+
+    const map = new Map<number, HourlyTrend5sPoint>();
+    for (const p of hourlyTrend5s) {
+      if (p.ts && p.ts >= oneHourAgoTs - 5000 && p.ts <= currentSlotTs + 5000) {
+        const bucket = Math.round(p.ts / STEP_MS) * STEP_MS;
+        map.set(bucket, p);
       }
-      return slots;
     }
-    return hourlyTrend5s.map((p) => p.time);
-  }, [hourlyTrend5s]);
+
+    const labels: string[] = [];
+    const vRData: (number | null)[] = [];
+    const vSData: (number | null)[] = [];
+    const vTData: (number | null)[] = [];
+    const activePowerData: (number | null)[] = [];
+
+    for (let i = 0; i < SLOTS_COUNT; i++) {
+      const slotTs = oneHourAgoTs + i * STEP_MS;
+      const d = new Date(slotTs);
+
+      let timeStr = "";
+      try {
+        const parts = new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Jakarta",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false
+        }).formatToParts(d);
+        const hr = parts.find(p => p.type === "hour")?.value || "00";
+        const mi = parts.find(p => p.type === "minute")?.value || "00";
+        const sc = parts.find(p => p.type === "second")?.value || "00";
+        timeStr = `${hr}:${mi}:${sc}`;
+      } catch {
+        timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      }
+      labels.push(timeStr);
+
+      const pt = map.get(slotTs);
+      if (pt) {
+        const vr = pt.vR !== undefined && pt.vR > 0 ? pt.vR : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
+        const vs = pt.vS !== undefined && pt.vS > 0 ? pt.vS : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
+        const vt = pt.vT !== undefined && pt.vT > 0 ? pt.vT : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
+        vRData.push(vr !== null ? Number(vr.toFixed(3)) : null);
+        vSData.push(vs !== null ? Number(vs.toFixed(3)) : null);
+        vTData.push(vt !== null ? Number(vt.toFixed(3)) : null);
+        const ap = typeof pt.activePower === "number" ? Math.abs(Number(pt.activePower.toFixed(1))) : null;
+        activePowerData.push(ap);
+      } else {
+        vRData.push(null);
+        vSData.push(null);
+        vTData.push(null);
+        activePowerData.push(null);
+      }
+    }
+
+    const startLabel = labels[0]?.substring(0, 5) || "--:--";
+    const endLabel = labels[labels.length - 1]?.substring(0, 5) || "--:--";
+    const rangeLabel = `${startLabel} - ${endLabel}`;
+
+    return {
+      labels,
+      vRData,
+      vSData,
+      vTData,
+      activePowerData,
+      rangeLabel
+    };
+  }, [hourlyTrend5s, currentTime]);
 
   // 1-Hour Rolling 5-Second Line Trend Data - 3 Lines (Fasa R, S, T)
   const voltageTrendData = useMemo(() => {
     return {
-      labels: rollingTrendLabels,
+      labels: rollingTrendData.labels,
       datasets: [
         {
           label: "Fasa R (kV)",
-          data: hourlyTrend5s.map((p) => (p.vR !== undefined ? p.vR : p.voltage)),
+          data: rollingTrendData.vRData,
           borderColor: "#f43f5e",
           backgroundColor: "rgba(244, 63, 94, 0.05)",
           fill: false,
@@ -917,7 +1004,7 @@ interface HourlyTrend5sPoint {
         },
         {
           label: "Fasa S (kV)",
-          data: hourlyTrend5s.map((p) => (p.vS !== undefined ? p.vS : p.voltage)),
+          data: rollingTrendData.vSData,
           borderColor: "#f59e0b",
           backgroundColor: "rgba(245, 158, 11, 0.05)",
           fill: false,
@@ -932,7 +1019,7 @@ interface HourlyTrend5sPoint {
         },
         {
           label: "Fasa T (kV)",
-          data: hourlyTrend5s.map((p) => (p.vT !== undefined ? p.vT : p.voltage)),
+          data: rollingTrendData.vTData,
           borderColor: "#3b82f6",
           backgroundColor: "rgba(59, 130, 246, 0.05)",
           fill: false,
@@ -947,16 +1034,16 @@ interface HourlyTrend5sPoint {
         }
       ]
     };
-  }, [rollingTrendLabels, hourlyTrend5s, isDark]);
+  }, [rollingTrendData, isDark]);
 
   // Strictly 1 single line for Active Power trend across Incoming PLN, WF1, and WF2
   const activePowerTrendData = useMemo(() => {
     return {
-      labels: rollingTrendLabels,
+      labels: rollingTrendData.labels,
       datasets: [
         {
           label: "Active Power (kW)",
-          data: hourlyTrend5s.map((p) => p.activePower),
+          data: rollingTrendData.activePowerData,
           borderColor: "#10b981",
           backgroundColor: "rgba(16, 185, 129, 0.08)",
           fill: true,
@@ -971,7 +1058,7 @@ interface HourlyTrend5sPoint {
         }
       ]
     };
-  }, [rollingTrendLabels, hourlyTrend5s, isDark]);
+  }, [rollingTrendData, isDark]);
 
   const lineOptions = (unit: "kV" | "kW", isPower: boolean = false, isModal: boolean = false) => ({
     responsive: true,
@@ -1042,7 +1129,7 @@ interface HourlyTrend5sPoint {
           maxTicksLimit: isModal ? 25 : 13,
           autoSkip: true,
           callback: function (val: any, index: number): string {
-            const raw = (this as any)?.getLabelForValue ? (this as any).getLabelForValue(val) : rollingTrendLabels[index];
+            const raw = (this as any)?.getLabelForValue ? (this as any).getLabelForValue(val) : rollingTrendData.labels[index];
             if (typeof raw === "string" && raw.length >= 5) {
               return isModal && raw.length >= 8 ? raw : raw.substring(0, 5);
             }
@@ -1051,9 +1138,20 @@ interface HourlyTrend5sPoint {
         }
       },
       y: {
-        grace: "10%",
+        beginAtZero: false,
+        grace: isPower ? "10%" : "5%",
         grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
-        ticks: { color: "#64748b", font: { size: isModal ? 10 : 8.5 } }
+        ticks: {
+          color: "#64748b",
+          font: { size: isModal ? 10 : 8.5 },
+          callback: function (val: any) {
+            if (typeof val === "number") {
+              const formatted = isPower ? Math.round(val).toLocaleString() : val.toFixed(2);
+              return `${formatted} ${unit}`;
+            }
+            return val;
+          }
+        }
       }
     }
   });
@@ -1411,7 +1509,7 @@ interface HourlyTrend5sPoint {
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400">Trend Tegangan 1 Jam (kV) — Rolling 5s</h4>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  1 Jam Berjalan (Rolling 5s)
+                  {rollingTrendData.rangeLabel} (Rolling 5s)
                 </span>
                 <button
                   type="button"
@@ -1435,7 +1533,7 @@ interface HourlyTrend5sPoint {
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400">Trend Daya Aktif 1 Jam (kW) — Rolling 5s</h4>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  1 Jam Berjalan (Rolling 5s)
+                  {rollingTrendData.rangeLabel} (Rolling 5s)
                 </span>
                 <button
                   type="button"
@@ -1499,7 +1597,7 @@ interface HourlyTrend5sPoint {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-2">
                   <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
-                    Rentang: 1 Jam Berjalan (Rolling 5s Window)
+                    Rentang: {rollingTrendData.rangeLabel} (Rolling 5s Window)
                   </span>
                   <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
                     • Resolusi 5 Detik (Database Historikal Real-Time)

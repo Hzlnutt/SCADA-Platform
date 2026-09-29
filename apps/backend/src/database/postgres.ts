@@ -772,6 +772,7 @@ export const ensurePostgresTables = async () => {
       );
       CREATE INDEX IF NOT EXISTS idx_incoming_trend_5s_dev_hour ON electric_incoming_trend_5s (device_id, hour);
       CREATE INDEX IF NOT EXISTS idx_incoming_trend_5s_tstamp ON electric_incoming_trend_5s (t_stamp ASC);
+      CREATE INDEX IF NOT EXISTS idx_incoming_trend_5s_dev_ts ON electric_incoming_trend_5s (device_id, t_stamp DESC);
 
       CREATE TABLE IF NOT EXISTS electric_pm_telemetry_minute (
         id SERIAL PRIMARY KEY,

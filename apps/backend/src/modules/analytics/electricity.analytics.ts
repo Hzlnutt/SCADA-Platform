@@ -118,15 +118,15 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
   }
 
   const pool = getPostgresPool();
-  const wib = getWibDateTime(new Date());
-  const currentHour = wib.hour;
+  const now = new Date();
+  const oneHourAgoDate = new Date(now.getTime() - 3600 * 1000);
+  const oneHourAgoWib = getWibDateTime(oneHourAgoDate);
 
   try {
     const res = await pool.query(`
       SELECT * FROM (
         SELECT
           to_char(t_stamp, 'HH24:MI:SS') AS time_str,
-          extract(epoch from t_stamp) * 1000 AS ts_ms,
           hour,
           volt_ll,
           volt_ab,
@@ -139,11 +139,12 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
           t_stamp
         FROM electric_incoming_trend_5s
         WHERE device_id = $1
+          AND t_stamp >= $2
         ORDER BY t_stamp DESC
         LIMIT 720
       ) sub
       ORDER BY sub.t_stamp ASC
-    `, [deviceId]);
+    `, [deviceId, oneHourAgoWib.tStampStr]);
 
     const points = res.rows.map((row: any) => {
       const timeStr = row.time_str;
@@ -152,7 +153,7 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
       const vT = Number(row.volt_ca) || 0;
       const voltLL = Number(row.volt_ll) || 0;
       const voltage = voltLL > 0 ? voltLL : Number(((vR + vS + vT) / 3).toFixed(3));
-      const activePower = Number(row.active_power) || 0;
+      const activePower = Math.abs(Number(row.active_power) || 0);
 
       const iR = Number(row.current_a) || 0;
       const iS = Number(row.current_b) || 0;
@@ -162,6 +163,8 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
       const pS = iTotal > 0 ? Number((activePower * (iS / iTotal)).toFixed(1)) : Number((activePower / 3.0).toFixed(1));
       const pT = iTotal > 0 ? Number((activePower * (iT / iTotal)).toFixed(1)) : Number((activePower / 3.0).toFixed(1));
 
+      const tsVal = row.t_stamp instanceof Date ? row.t_stamp.getTime() : new Date(row.t_stamp).getTime();
+
       return {
         time: timeStr,
         hour: Number(row.hour),
@@ -170,14 +173,14 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
         vS: Number(vS.toFixed(3)),
         vT: Number(vT.toFixed(3)),
         activePower: Number(activePower.toFixed(1)),
-        pR,
-        pS,
-        pT,
-        ts: Number(row.ts_ms) || Date.now()
+        pR: Math.abs(pR),
+        pS: Math.abs(pS),
+        pT: Math.abs(pT),
+        ts: tsVal
       };
     });
 
-    incomingTrendCache.set(deviceId, { points, expiresAt: Date.now() + 15000 });
+    incomingTrendCache.set(deviceId, { points, expiresAt: Date.now() + 2000 });
     return points;
   } catch (err: any) {
     console.warn(`[getIncomingTrend1hFromDb] Error fetching 5s trend for ${deviceId}:`, err.message);
