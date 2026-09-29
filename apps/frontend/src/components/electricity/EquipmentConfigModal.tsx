@@ -179,29 +179,41 @@ export const EquipmentConfigModal: React.FC<Props> = ({
     }
   };
 
-  // Delete item
-  const handleDelete = async (item: EquipmentDisplayItem) => {
-    if (
-      !window.confirm(
-        `Hapus item '${item.label}' (${item.value?.pm_id || item.config_key}) dari daftar tampilan konsumsi per-equipment?`
-      )
-    ) {
-      return;
-    }
-
+  // Bulk toggle for current filtered view (Tampilkan / Sembunyikan Semua)
+  const handleBulkToggle = async (enable: boolean) => {
+    if (filteredItems.length === 0) return;
     try {
-      await deleteJson(`/config/electricity/equipment-items/${encodeURIComponent(item.config_key)}`);
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
+      setIsSubmitting(true);
+      await Promise.all(
+        filteredItems
+          .filter((i) => i.enabled !== enable)
+          .map((i) =>
+            postJson("/config/electricity/equipment-items/toggle", {
+              config_key: i.config_key,
+              enabled: enable
+            })
+          )
+      );
+      setItems((prev) =>
+        prev.map((i) => {
+          const match = filteredItems.find((f) => f.id === i.id);
+          return match ? { ...i, enabled: enable } : i;
+        })
+      );
       setStatusMsg({
         type: "success",
-        text: `✓ Item '${item.label}' berhasil dihapus dari tampilan.`
+        text: `✓ ${filteredItems.length} item berhasil ${
+          enable ? "ditampilkan di dashboard" : "disembunyikan dari dashboard"
+        }.`
       });
       onItemsUpdated();
     } catch (err: any) {
       setStatusMsg({
         type: "error",
-        text: err?.message || "Gagal menghapus item equipment"
+        text: err?.message || "Gagal mengubah status tampilan massal"
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -451,7 +463,7 @@ export const EquipmentConfigModal: React.FC<Props> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Atur item yang ditampilkan, sembunyikan/hapus equipment, atau daftarkan PM baru dari API endpoint.
+                Atur item mana saja yang ingin ditampilkan atau disembunyikan di dashboard, atau daftarkan PM baru dari API endpoint.
               </p>
             </div>
           </div>
@@ -552,14 +564,38 @@ export const EquipmentConfigModal: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* Quick Add Existing PM Button */}
-                <button
-                  type="button"
-                  onClick={() => setIsAddExistingOpen(!isAddExistingOpen)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400 text-xs font-bold hover:bg-sky-500/20 transition cursor-pointer"
-                >
-                  <span>{isAddExistingOpen ? "✕ Batal" : "+ Tambah dari Database PM"}</span>
-                </button>
+                {/* Quick Actions Bar: Bulk Toggle & Add Existing PM */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => handleBulkToggle(true)}
+                      disabled={isSubmitting || filteredItems.length === 0}
+                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50 transition cursor-pointer"
+                      title="Tampilkan semua equipment dalam daftar filter ini"
+                    >
+                      ✓ Tampilkan Semua
+                    </button>
+                    <span className="text-slate-300 dark:text-slate-600">|</span>
+                    <button
+                      type="button"
+                      onClick={() => handleBulkToggle(false)}
+                      disabled={isSubmitting || filteredItems.length === 0}
+                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition cursor-pointer"
+                      title="Sembunyikan semua equipment dalam daftar filter ini"
+                    >
+                      ✕ Sembunyikan Semua
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAddExistingOpen(!isAddExistingOpen)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400 text-xs font-bold hover:bg-sky-500/20 transition cursor-pointer"
+                  >
+                    <span>{isAddExistingOpen ? "✕ Batal" : "+ Tambah dari Database PM"}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Collapsible: Add Existing PM Panel */}
@@ -635,29 +671,28 @@ export const EquipmentConfigModal: React.FC<Props> = ({
               )}
 
               {/* Items List / Table */}
-              <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+              <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm">
                 <div className="max-h-[460px] overflow-y-auto">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead className="sticky top-0 bg-slate-50 dark:bg-slate-950/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-extrabold text-slate-400 tracking-wider">
                       <tr>
-                        <th className="px-4 py-2.5">Equipment / Title</th>
-                        <th className="px-3 py-2.5">PM ID</th>
-                        <th className="px-3 py-2.5">Kategori</th>
-                        <th className="px-3 py-2.5">Endpoint</th>
-                        <th className="px-3 py-2.5 text-center">Tampilkan</th>
-                        <th className="px-3 py-2.5 text-right">Aksi</th>
+                        <th className="px-4 py-3">Equipment / Title</th>
+                        <th className="px-3 py-3">PM ID</th>
+                        <th className="px-3 py-3">Kategori</th>
+                        <th className="px-3 py-3">Endpoint API</th>
+                        <th className="px-4 py-3 text-center">Status Tampilan di Dashboard</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                       {isLoading ? (
                         <tr>
-                          <td colSpan={6} className="text-center py-10 text-slate-400">
+                          <td colSpan={5} className="text-center py-10 text-slate-400">
                             Memuat daftar equipment...
                           </td>
                         </tr>
                       ) : filteredItems.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="text-center py-10 text-slate-400">
+                          <td colSpan={5} className="text-center py-10 text-slate-400">
                             Tidak ada equipment yang cocok dengan filter atau pencarian.
                           </td>
                         </tr>
@@ -672,57 +707,59 @@ export const EquipmentConfigModal: React.FC<Props> = ({
                             <tr
                               key={item.id}
                               className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition ${
-                                !item.enabled ? "opacity-50 bg-slate-50/30 dark:bg-slate-950/20" : ""
+                                !item.enabled ? "opacity-60 bg-slate-50/40 dark:bg-slate-950/20" : ""
                               }`}
                             >
-                              <td className="px-4 py-2.5 font-bold text-slate-800 dark:text-slate-100">
-                                {item.label}
-                                {val.is_new_pm && (
-                                  <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                                    NEW PM
-                                  </span>
-                                )}
+                              <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">
+                                <div className="flex items-center gap-2">
+                                  <span>{item.label}</span>
+                                  {val.is_new_pm && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                                      NEW PM
+                                    </span>
+                                  )}
+                                </div>
                               </td>
-                              <td className="px-3 py-2.5">
+                              <td className="px-3 py-3">
                                 <span className="px-2 py-0.5 rounded-md font-mono text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                                   {val.pm_id || item.config_key.toUpperCase()}
                                 </span>
                               </td>
-                              <td className="px-3 py-2.5">
+                              <td className="px-3 py-3">
                                 <span
                                   className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${catBadge}`}
                                 >
                                   {val.categoryLabel || val.category || "General"}
                                 </span>
                               </td>
-                              <td className="px-3 py-2.5 font-mono text-[10px] text-slate-400 truncate max-w-[140px]" title={val.endpoint_url || ""}>
+                              <td className="px-3 py-3 font-mono text-[10px] text-slate-400 truncate max-w-[150px]" title={val.endpoint_url || ""}>
                                 {val.endpoint_url || "-"}
                               </td>
-                              <td className="px-3 py-2.5 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggle(item)}
-                                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                    item.enabled ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700"
-                                  }`}
-                                  title={item.enabled ? "Klik untuk sembunyikan" : "Klik untuk tampilkan"}
-                                >
-                                  <span
-                                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-                                      item.enabled ? "translate-x-4" : "translate-x-0"
+                              <td className="px-4 py-3 text-center">
+                                <div className="flex items-center justify-center gap-2.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggle(item)}
+                                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                      item.enabled ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700"
                                     }`}
-                                  />
-                                </button>
-                              </td>
-                              <td className="px-3 py-2.5 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => handleDelete(item)}
-                                  className="px-2 py-1 text-rose-500 hover:text-rose-700 hover:bg-rose-500/10 rounded-lg transition font-bold text-xs"
-                                  title="Hapus dari daftar tampilan"
-                                >
-                                  🗑️ Hapus
-                                </button>
+                                    title={item.enabled ? "Klik untuk menyembunyikan dari dashboard" : "Klik untuk menampilkan di dashboard"}
+                                  >
+                                    <span
+                                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                                        item.enabled ? "translate-x-4" : "translate-x-0"
+                                      }`}
+                                    />
+                                  </button>
+                                  <span
+                                    className={`text-[11px] font-bold min-w-[85px] text-left cursor-pointer ${
+                                      item.enabled ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                                    }`}
+                                    onClick={() => handleToggle(item)}
+                                  >
+                                    {item.enabled ? "Ditampilkan" : "Disembunyikan"}
+                                  </span>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -732,12 +769,14 @@ export const EquipmentConfigModal: React.FC<Props> = ({
                   </table>
                 </div>
 
-                <div className="px-4 py-2 bg-slate-50/50 dark:bg-slate-950/40 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                  <span>
-                    Menampilkan {filteredItems.length} dari {items.length} total equipment
-                  </span>
-                  <span>
-                    Aktif di web: {items.filter((i) => i.enabled).length} unit
+                <div className="px-4 py-2.5 bg-slate-50/50 dark:bg-slate-950/40 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <span>
+                      Total: <strong>{items.length}</strong> equipment &bull; Ditampilkan: <strong className="text-emerald-500">{items.filter((i) => i.enabled).length}</strong> &bull; Disembunyikan: <strong>{items.filter((i) => !i.enabled).length}</strong>
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400/80 italic">
+                    ℹ️ Item yang disembunyikan tetap tersimpan di database dan dapat ditampilkan kembali sewaktu-waktu.
                   </span>
                 </div>
               </div>
