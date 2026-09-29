@@ -2454,23 +2454,46 @@ export const verifyAndRegisterNewPmHandler = async (req: Request, res: Response,
         ? (apiData.find((p: any) => String(p.pm_id || p.pm || "").toUpperCase() === resolvedPmId) || apiData[0] || {})
         : (apiData[resolvedPmId] && typeof apiData[resolvedPmId] === "object" ? apiData[resolvedPmId] : apiData);
 
-      detectedFields = Object.keys(inspectObj).slice(0, 20);
+      const allKeys = Object.keys(inspectObj);
+      detectedFields = allKeys.slice(0, 20);
 
-      // Cari Active Power
+      // Cari Active Power (exact, suffixed like _PM181, or substring)
       const powerCandidates = ["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower", "Scale_Total_KW"];
       for (const k of powerCandidates) {
         if (inspectObj[k] !== undefined && inspectObj[k] !== null && !isNaN(Number(inspectObj[k]))) {
           initialActivePower = Number(inspectObj[k]);
           break;
         }
+        const suffixed = `${k}_${resolvedPmId}`;
+        if (inspectObj[suffixed] !== undefined && inspectObj[suffixed] !== null && !isNaN(Number(inspectObj[suffixed]))) {
+          initialActivePower = Number(inspectObj[suffixed]);
+          break;
+        }
+      }
+      if (initialActivePower === null) {
+        const pKey = allKeys.find((k) => k.toLowerCase().includes("active_power") || k.toLowerCase().includes("power"));
+        if (pKey && inspectObj[pKey] !== undefined && !isNaN(Number(inspectObj[pKey]))) {
+          initialActivePower = Number(inspectObj[pKey]);
+        }
       }
 
-      // Cari Active Energy
+      // Cari Active Energy (exact, suffixed like _PM181, or substring)
       const energyCandidates = ["ActiveEnergy", "Active_Energy", "Energy", "total_kwh", "Total_KWH", "kWh", "Total_kWh"];
       for (const k of energyCandidates) {
         if (inspectObj[k] !== undefined && inspectObj[k] !== null && !isNaN(Number(inspectObj[k]))) {
           initialActiveEnergy = Number(inspectObj[k]);
           break;
+        }
+        const suffixed = `${k}_${resolvedPmId}`;
+        if (inspectObj[suffixed] !== undefined && inspectObj[suffixed] !== null && !isNaN(Number(inspectObj[suffixed]))) {
+          initialActiveEnergy = Number(inspectObj[suffixed]);
+          break;
+        }
+      }
+      if (initialActiveEnergy === null) {
+        const eKey = allKeys.find((k) => k.toLowerCase().includes("activeenergy") || k.toLowerCase().includes("energy") || k.toLowerCase().includes("kwh"));
+        if (eKey && inspectObj[eKey] !== undefined && !isNaN(Number(inspectObj[eKey]))) {
+          initialActiveEnergy = Number(inspectObj[eKey]);
         }
       }
     }

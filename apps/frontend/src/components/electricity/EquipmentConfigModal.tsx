@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { getJson, postJson, deleteJson } from "../../services/api.client";
+import { getJson, postJson } from "../../services/api.client";
 
 export interface EquipmentDisplayItem {
   id: number;
@@ -21,18 +21,6 @@ export interface EquipmentDisplayItem {
   };
   sort_order: number;
   enabled: boolean;
-}
-
-export interface AvailablePowerMeter {
-  pm_id: string;
-  label: string;
-  endpoint_url: string;
-  json_key?: string;
-  group_id?: string;
-  factory?: string;
-  department?: string;
-  subArea?: string;
-  is_database?: boolean;
 }
 
 export const EQUIPMENT_CATEGORIES = [
@@ -66,13 +54,6 @@ export const EquipmentConfigModal: React.FC<Props> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-
-  // Available PMs from DB for adding existing
-  const [availablePms, setAvailablePms] = useState<AvailablePowerMeter[]>([]);
-  const [isAddExistingOpen, setIsAddExistingOpen] = useState(false);
-  const [selectedExistingPm, setSelectedExistingPm] = useState("");
-  const [existingCustomLabel, setExistingCustomLabel] = useState("");
-  const [existingCategory, setExistingCategory] = useState("cooling_tower");
 
   // Register New PM form
   const [newPmId, setNewPmId] = useState("");
@@ -113,26 +94,14 @@ export const EquipmentConfigModal: React.FC<Props> = ({
     }
   }, []);
 
-  // Load available PMs for dropdown
-  const loadAvailablePms = useCallback(async () => {
-    try {
-      const res = await getJson<{ data: AvailablePowerMeter[] }>("/config/electricity/available-pms");
-      if (res?.data) {
-        setAvailablePms(res.data);
-      }
-    } catch {}
-  }, []);
-
   useEffect(() => {
     if (isOpen) {
       loadEquipmentItems();
-      loadAvailablePms();
       setStatusMsg(null);
       setVerifyResult(null);
       setSearchQuery("");
-      setIsAddExistingOpen(false);
     }
-  }, [isOpen, loadEquipmentItems, loadAvailablePms]);
+  }, [isOpen, loadEquipmentItems]);
 
   // Filtered items
   const filteredItems = useMemo(() => {
@@ -218,55 +187,6 @@ export const EquipmentConfigModal: React.FC<Props> = ({
   };
 
   // Add existing PM to display
-  const handleAddExisting = async () => {
-    if (!selectedExistingPm) {
-      setStatusMsg({ type: "error", text: "Pilih Power Meter terlebih dahulu." });
-      return;
-    }
-
-    const pm = availablePms.find((p) => p.pm_id === selectedExistingPm);
-    const resolvedLabel = existingCustomLabel.trim() || pm?.label || selectedExistingPm;
-    const catObj = EQUIPMENT_CATEGORIES.find((c) => c.key === existingCategory);
-
-    try {
-      setIsSubmitting(true);
-      const cleanKey = selectedExistingPm.toLowerCase();
-      const val = {
-        pm_id: selectedExistingPm,
-        seriesKey: resolvedLabel.toUpperCase(),
-        category: existingCategory,
-        categoryLabel: catObj?.label || existingCategory,
-        endpoint_url: pm?.endpoint_url || "",
-        factory: pm?.factory === "consumption_fact_1" ? "wf1" : "wf2",
-        department: pm?.department || "Utility",
-        is_new_pm: false
-      };
-
-      await postJson("/config/electricity/equipment-items", {
-        config_key: cleanKey,
-        label: resolvedLabel,
-        value: val,
-        sort_order: 99,
-        enabled: true
-      });
-
-      setStatusMsg({
-        type: "success",
-        text: `✓ Power Meter '${selectedExistingPm}' (${resolvedLabel}) berhasil ditambahkan ke kategori ${catObj?.label}.`
-      });
-
-      setSelectedExistingPm("");
-      setExistingCustomLabel("");
-      setIsAddExistingOpen(false);
-      await loadEquipmentItems();
-      onItemsUpdated();
-    } catch (err: any) {
-      setStatusMsg({ type: "error", text: err?.message || "Gagal menambahkan item" });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   // Test & Verify API endpoint
   const handleTestEndpoint = async () => {
     if (!newPmEndpoint.trim()) {
@@ -318,9 +238,10 @@ export const EquipmentConfigModal: React.FC<Props> = ({
         ? rawData.find((p: any) => String(p.pm_id || p.pm || "").toUpperCase() === cleanPm) || rawData[0] || {}
         : rawData[cleanPm] || rawData;
 
-      const keys = Object.keys(targetObj).slice(0, 15);
+      const allKeys = Object.keys(targetObj);
+      const keys = allKeys.slice(0, 15);
 
-      // Find power & energy values
+      // Find power & energy values (supports exact, suffixed like _PM181, and substring match)
       let foundPower: number | null = null;
       let foundEnergy: number | null = null;
 
@@ -330,6 +251,17 @@ export const EquipmentConfigModal: React.FC<Props> = ({
           foundPower = Number(targetObj[k]);
           break;
         }
+        const suffixed = `${k}_${cleanPm}`;
+        if (targetObj[suffixed] !== undefined && !isNaN(Number(targetObj[suffixed]))) {
+          foundPower = Number(targetObj[suffixed]);
+          break;
+        }
+      }
+      if (foundPower === null) {
+        const pKey = allKeys.find((k) => k.toLowerCase().includes("active_power") || k.toLowerCase().includes("power"));
+        if (pKey && !isNaN(Number(targetObj[pKey]))) {
+          foundPower = Number(targetObj[pKey]);
+        }
       }
 
       const energyCandidates = ["ActiveEnergy", "Active_Energy", "Energy", "total_kwh", "Total_KWH", "kWh"];
@@ -337,6 +269,17 @@ export const EquipmentConfigModal: React.FC<Props> = ({
         if (targetObj[k] !== undefined && !isNaN(Number(targetObj[k]))) {
           foundEnergy = Number(targetObj[k]);
           break;
+        }
+        const suffixed = `${k}_${cleanPm}`;
+        if (targetObj[suffixed] !== undefined && !isNaN(Number(targetObj[suffixed]))) {
+          foundEnergy = Number(targetObj[suffixed]);
+          break;
+        }
+      }
+      if (foundEnergy === null) {
+        const eKey = allKeys.find((k) => k.toLowerCase().includes("activeenergy") || k.toLowerCase().includes("energy") || k.toLowerCase().includes("kwh"));
+        if (eKey && !isNaN(Number(targetObj[eKey]))) {
+          foundEnergy = Number(targetObj[eKey]);
         }
       }
 
@@ -421,9 +364,8 @@ export const EquipmentConfigModal: React.FC<Props> = ({
       setNewPmEndpoint("");
       setVerifyResult(null);
 
-      // Refresh list & close modal
+      // Refresh list & switch back to manage tab
       await loadEquipmentItems();
-      await loadAvailablePms();
       onItemsUpdated();
       setActiveTab("manage");
     } catch (err: any) {
@@ -564,126 +506,54 @@ export const EquipmentConfigModal: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* Quick Actions Bar: Bulk Toggle & Add Existing PM */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <button
-                      type="button"
-                      onClick={() => handleBulkToggle(true)}
-                      disabled={isSubmitting || filteredItems.length === 0}
-                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50 transition cursor-pointer"
-                      title="Tampilkan semua equipment dalam daftar filter ini"
-                    >
-                      ✓ Tampilkan Semua
-                    </button>
-                    <span className="text-slate-300 dark:text-slate-600">|</span>
-                    <button
-                      type="button"
-                      onClick={() => handleBulkToggle(false)}
-                      disabled={isSubmitting || filteredItems.length === 0}
-                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition cursor-pointer"
-                      title="Sembunyikan semua equipment dalam daftar filter ini"
-                    >
-                      ✕ Sembunyikan Semua
-                    </button>
-                  </div>
-
+                {/* Quick Actions Bar: Bulk Toggle */}
+                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
                   <button
                     type="button"
-                    onClick={() => setIsAddExistingOpen(!isAddExistingOpen)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400 text-xs font-bold hover:bg-sky-500/20 transition cursor-pointer"
+                    onClick={() => handleBulkToggle(true)}
+                    disabled={isSubmitting || filteredItems.length === 0}
+                    className="px-2.5 py-1 text-[11px] font-bold rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50 transition cursor-pointer"
+                    title="Tampilkan semua equipment dalam daftar filter ini"
                   >
-                    <span>{isAddExistingOpen ? "✕ Batal" : "+ Tambah dari Database PM"}</span>
+                    ✓ Tampilkan Semua
+                  </button>
+                  <span className="text-slate-300 dark:text-slate-600">|</span>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkToggle(false)}
+                    disabled={isSubmitting || filteredItems.length === 0}
+                    className="px-2.5 py-1 text-[11px] font-bold rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition cursor-pointer"
+                    title="Sembunyikan semua equipment dalam daftar filter ini"
+                  >
+                    ✕ Sembunyikan Semua
                   </button>
                 </div>
               </div>
 
-              {/* Collapsible: Add Existing PM Panel */}
-              {isAddExistingOpen && (
-                <div className="p-4 rounded-xl border border-sky-500/20 bg-sky-500/5 dark:bg-sky-950/20 space-y-3">
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-sky-600 dark:text-sky-400">
-                    Tambahkan PM yang Sudah Terdaftar ke Tampilan
-                  </h4>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div>
-                      <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                        Pilih Power Meter
-                      </label>
-                      <select
-                        value={selectedExistingPm}
-                        onChange={(e) => {
-                          setSelectedExistingPm(e.target.value);
-                          const p = availablePms.find((x) => x.pm_id === e.target.value);
-                          if (p) setExistingCustomLabel(p.label);
-                        }}
-                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none font-bold"
-                      >
-                        <option value="">-- Pilih PM Database --</option>
-                        {availablePms.map((p) => (
-                          <option key={p.pm_id} value={p.pm_id}>
-                            {p.pm_id} — {p.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                        Nama Tampilan (Opsional)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Nama tampilan di chart..."
-                        value={existingCustomLabel}
-                        onChange={(e) => setExistingCustomLabel(e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                        Kategori Tampilan
-                      </label>
-                      <div className="flex gap-2">
-                        <select
-                          value={existingCategory}
-                          onChange={(e) => setExistingCategory(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none font-bold"
-                        >
-                          {EQUIPMENT_CATEGORIES.filter((c) => c.key !== "all").map((c) => (
-                            <option key={c.key} value={c.key}>
-                              {c.label}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={handleAddExisting}
-                          disabled={isSubmitting || !selectedExistingPm}
-                          className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white text-xs font-bold transition flex-shrink-0 cursor-pointer"
-                        >
-                          {isSubmitting ? "..." : "Tambah"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Items List / Table */}
+              {/* Items List / Table with Fixed Widths & Solid Opaque Sticky Headers */}
               <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm">
                 <div className="max-h-[460px] overflow-y-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead className="sticky top-0 bg-slate-50 dark:bg-slate-950/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-extrabold text-slate-400 tracking-wider">
+                  <table className="w-full text-left text-xs border-collapse table-fixed">
+                    <thead className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm">
                       <tr>
-                        <th className="px-4 py-3">Equipment / Title</th>
-                        <th className="px-3 py-3">PM ID</th>
-                        <th className="px-3 py-3">Kategori</th>
-                        <th className="px-3 py-3">Endpoint API</th>
-                        <th className="px-4 py-3 text-center">Status Tampilan di Dashboard</th>
+                        <th className="w-[34%] px-4 py-3 text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-100 dark:bg-slate-800">
+                          Equipment / Title
+                        </th>
+                        <th className="w-[14%] px-3 py-3 text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-100 dark:bg-slate-800">
+                          PM ID
+                        </th>
+                        <th className="w-[18%] px-3 py-3 text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-100 dark:bg-slate-800">
+                          Kategori
+                        </th>
+                        <th className="w-[18%] px-3 py-3 text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-100 dark:bg-slate-800">
+                          Endpoint
+                        </th>
+                        <th className="w-[16%] px-4 py-3 text-center text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-slate-100 dark:bg-slate-800 whitespace-nowrap">
+                          Status Tampilan
+                        </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {isLoading ? (
                         <tr>
                           <td colSpan={5} className="text-center py-10 text-slate-400">
@@ -710,11 +580,11 @@ export const EquipmentConfigModal: React.FC<Props> = ({
                                 !item.enabled ? "opacity-60 bg-slate-50/40 dark:bg-slate-950/20" : ""
                               }`}
                             >
-                              <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">
-                                <div className="flex items-center gap-2">
-                                  <span>{item.label}</span>
+                              <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 truncate">
+                                <div className="flex items-center gap-2 truncate">
+                                  <span className="truncate">{item.label}</span>
                                   {val.is_new_pm && (
-                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex-shrink-0">
                                       NEW PM
                                     </span>
                                   )}
@@ -725,41 +595,32 @@ export const EquipmentConfigModal: React.FC<Props> = ({
                                   {val.pm_id || item.config_key.toUpperCase()}
                                 </span>
                               </td>
-                              <td className="px-3 py-3">
+                              <td className="px-3 py-3 truncate">
                                 <span
-                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${catBadge}`}
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border inline-block truncate max-w-full ${catBadge}`}
                                 >
                                   {val.categoryLabel || val.category || "General"}
                                 </span>
                               </td>
-                              <td className="px-3 py-3 font-mono text-[10px] text-slate-400 truncate max-w-[150px]" title={val.endpoint_url || ""}>
-                                {val.endpoint_url || "-"}
+                              <td className="px-3 py-3">
+                                <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100/70 dark:bg-slate-800/70 px-2 py-0.5 rounded border border-slate-200/60 dark:border-slate-700/60 truncate block max-w-full">
+                                  {val.endpoint_url || "-"}
+                                </span>
                               </td>
-                              <td className="px-4 py-3 text-center">
-                                <div className="flex items-center justify-center gap-2.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggle(item)}
-                                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                      item.enabled ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700"
-                                    }`}
-                                    title={item.enabled ? "Klik untuk menyembunyikan dari dashboard" : "Klik untuk menampilkan di dashboard"}
-                                  >
-                                    <span
-                                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-                                        item.enabled ? "translate-x-4" : "translate-x-0"
-                                      }`}
-                                    />
-                                  </button>
-                                  <span
-                                    className={`text-[11px] font-bold min-w-[85px] text-left cursor-pointer ${
-                                      item.enabled ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
-                                    }`}
-                                    onClick={() => handleToggle(item)}
-                                  >
-                                    {item.enabled ? "Ditampilkan" : "Disembunyikan"}
-                                  </span>
-                                </div>
+                              <td className="px-4 py-3 text-center whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggle(item)}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer border ${
+                                    item.enabled
+                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 shadow-sm"
+                                      : "bg-slate-100 text-slate-400 dark:bg-slate-800/80 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-200/50"
+                                  }`}
+                                  title={item.enabled ? "Klik untuk sembunyikan dari dashboard" : "Klik untuk tampilkan di dashboard"}
+                                >
+                                  <span className={`w-2 h-2 rounded-full ${item.enabled ? "bg-emerald-500" : "bg-slate-400"}`} />
+                                  <span>{item.enabled ? "Ditampilkan" : "Disembunyikan"}</span>
+                                </button>
                               </td>
                             </tr>
                           );
@@ -786,18 +647,6 @@ export const EquipmentConfigModal: React.FC<Props> = ({
           {/* TAB 2: REGISTER BRAND NEW PM FROM API ENDPOINT */}
           {activeTab === "register" && (
             <form onSubmit={handleRegisterNewPm} className="space-y-5">
-              <div className="p-4 rounded-xl border border-sky-500/20 bg-sky-500/5 dark:bg-sky-950/20">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sky-500 text-sm">💡</span>
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-sky-700 dark:text-sky-400">
-                    Otomatis Menyesuaikan Isi Endpoint & Verifikasi Anti-Duplikasi
-                  </h4>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Sistem akan memverifikasi terlebih dahulu apakah PM sudah pernah tersimpan di database agar tidak terjadi redundansi.
-                  Jika benar-benar baru, sistem akan mencatat informasi endpoint, otomatis membaca parameter energy/power, dan langsung menyimpannya ke database sehingga langsung siap ditampilkan ke web.
-                </p>
-              </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 {/* PM ID */}

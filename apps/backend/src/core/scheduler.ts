@@ -1864,9 +1864,14 @@ export const startIncomingElectricityPolling = () => {
             const parsedArr = parseEwApi(raw, ts, customPm.group_id);
             rec = parsedArr.find(p => p.pm_id.toUpperCase() === customPm.pm_id.toUpperCase()) || null;
           } else if (typeof raw === "object") {
+            const pmKey = customPm.pm_id.toUpperCase();
             const subObj = (customPm.json_key && raw[customPm.json_key] && typeof raw[customPm.json_key] === "object")
               ? raw[customPm.json_key]
-              : raw;
+              : (raw[pmKey] && typeof raw[pmKey] === "object")
+                ? raw[pmKey]
+                : (raw[customPm.pm_id] && typeof raw[customPm.pm_id] === "object")
+                  ? raw[customPm.pm_id]
+                  : raw;
 
             const getNum = (fields: string[]): number | null => {
               for (const f of fields) {
@@ -1874,12 +1879,17 @@ export const startIncomingElectricityPolling = () => {
                   const n = Number(subObj[f]);
                   if (!isNaN(n)) return n;
                 }
+                const suffixed = `${f}_${pmKey}`;
+                if (subObj[suffixed] !== undefined && subObj[suffixed] !== null) {
+                  const n = Number(subObj[suffixed]);
+                  if (!isNaN(n)) return n;
+                }
               }
               return null;
             };
 
             const directVal = customPm.json_key && typeof subObj[customPm.json_key] === "number" ? subObj[customPm.json_key] : null;
-            const activePower = directVal ?? getNum(["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower"]);
+            const activePower = directVal ?? getNum(["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower", "Scale_Total_KW"]);
             const activeEnergy = getNum(["Active_Energy", "ActiveEnergy", "Energy", "total_kwh", "kWh", "Total_kWh"]);
 
             rec = {
