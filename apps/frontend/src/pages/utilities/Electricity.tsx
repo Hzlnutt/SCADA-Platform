@@ -251,7 +251,8 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
   previousBreakdown,
   solarRate,
   pvRate,
-  showPrevious = true
+  showPrevious = true,
+  isZoomed = false
 }: {
   currentData: number[];
   previousData: number[];
@@ -264,6 +265,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
   solarRate?: number;
   pvRate?: number;
   showPrevious?: boolean;
+  isZoomed?: boolean;
 }) {
   const daysInMonth = Math.max(currentData?.length || 0, previousData?.length || 0, 28);
   const dayLabels = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, "0")), [daysInMonth]);
@@ -285,6 +287,10 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
   }, [previousData, daysInMonth]);
 
   const data = useMemo(() => {
+    const barPct = isZoomed ? 0.68 : 0.55;
+    const catPct = isZoomed ? 0.88 : 0.8;
+    const barRadius = isZoomed ? 4 : 2;
+
     if (selectorType === "all") {
       const plnData = (currentBreakdown || []).map((b) => b.pln || 0);
       const solarData = (currentBreakdown || []).map((b) => (b.poi1 || 0) + (b.poi2 || 0));
@@ -298,10 +304,10 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             backgroundColor: "rgba(59, 130, 246, 0.85)",
             hoverBackgroundColor: "rgba(37, 99, 235, 1)",
             borderWidth: 0,
-            borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 2, bottomRight: 2 },
+            borderRadius: { topLeft: 0, topRight: 0, bottomLeft: barRadius, bottomRight: barRadius },
             stack: "current",
-            barPercentage: 0.55,
-            categoryPercentage: 0.8
+            barPercentage: barPct,
+            categoryPercentage: catPct
           },
           {
             label: "Solar PLTS",
@@ -309,10 +315,10 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             backgroundColor: "rgba(16, 185, 129, 0.85)",
             hoverBackgroundColor: "rgba(5, 150, 105, 1)",
             borderWidth: 0,
-            borderRadius: { topLeft: 2, topRight: 2, bottomLeft: 0, bottomRight: 0 },
+            borderRadius: { topLeft: barRadius, topRight: barRadius, bottomLeft: 0, bottomRight: 0 },
             stack: "current",
-            barPercentage: 0.55,
-            categoryPercentage: 0.8
+            barPercentage: barPct,
+            categoryPercentage: catPct
           },
           ...(showPrevious ? [{
             label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
@@ -320,10 +326,10 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             backgroundColor: "rgba(239, 68, 68, 0.75)",
             hoverBackgroundColor: "rgba(220, 38, 38, 1)",
             borderWidth: 0,
-            borderRadius: 2,
+            borderRadius: barRadius,
             stack: "previous",
-            barPercentage: 0.55,
-            categoryPercentage: 0.8
+            barPercentage: barPct,
+            categoryPercentage: catPct
           }] : [])
         ]
       };
@@ -338,10 +344,10 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           backgroundColor: "rgba(59, 130, 246, 0.85)",
           hoverBackgroundColor: "rgba(37, 99, 235, 1)",
           borderWidth: 0,
-          borderRadius: 2,
+          borderRadius: barRadius,
           stack: "current",
-          barPercentage: 0.55,
-          categoryPercentage: 0.8
+          barPercentage: barPct,
+          categoryPercentage: catPct
         },
         ...(showPrevious ? [{
           label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
@@ -349,14 +355,14 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           backgroundColor: "rgba(239, 68, 68, 0.75)",
           hoverBackgroundColor: "rgba(220, 38, 38, 1)",
           borderWidth: 0,
-          borderRadius: 2,
+          borderRadius: barRadius,
           stack: "previous",
-          barPercentage: 0.55,
-          categoryPercentage: 0.8
+          barPercentage: barPct,
+          categoryPercentage: catPct
         }] : [])
       ]
     };
-  }, [dayLabels, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, showPrevious]);
+  }, [dayLabels, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, showPrevious, isZoomed]);
 
   const options: any = useMemo(() => ({
     responsive: true,
@@ -382,11 +388,13 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         display: true,
         position: "bottom" as const,
         labels: {
-          color: isDark ? "rgba(148, 163, 184, 0.9)" : "rgba(71, 85, 105, 0.9)",
-          font: { size: 10, weight: "600" as const },
+          color: isDark ? "rgba(203, 213, 225, 0.9)" : "rgba(51, 65, 85, 0.9)",
+          font: { size: isZoomed ? 13 : 10, weight: isZoomed ? "700" : "600" },
           usePointStyle: true,
           pointStyle: "rectRounded",
-          padding: 14
+          padding: isZoomed ? 20 : 14,
+          boxWidth: isZoomed ? 14 : 10,
+          boxHeight: isZoomed ? 14 : 10
         }
       },
       tooltip: {
@@ -396,13 +404,13 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         },
         backgroundColor: isDark ? "rgba(13, 21, 39, 0.96)" : "rgba(255, 255, 255, 0.98)",
         titleColor: isDark ? "#38bdf8" : "#0284c7",
-        titleFont: { size: 12, weight: "700" as const },
+        titleFont: { size: isZoomed ? 14 : 12, weight: "700" as const },
         bodyColor: isDark ? "#f1f5f9" : "#0f172a",
         borderColor: isDark ? "rgba(56, 189, 248, 0.3)" : "rgba(14, 165, 233, 0.3)",
         borderWidth: 1,
-        padding: 10,
+        padding: isZoomed ? 14 : 10,
         boxPadding: 4,
-        bodyFont: { family: "IBM Plex Mono, monospace", size: 11 },
+        bodyFont: { family: "IBM Plex Mono, monospace", size: isZoomed ? 13 : 11 },
         callbacks: {
           title: (items: any[]) => {
             if (!items || items.length === 0) return "";
@@ -468,8 +476,29 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
     scales: {
       x: {
         stacked: true,
-        grid: { display: false },
-        ticks: { color: isDark ? "rgba(148, 163, 184, 0.7)" : "rgba(71, 85, 105, 0.7)", font: { size: 9 }, maxRotation: 0 }
+        grid: {
+          display: isZoomed,
+          color: isDark ? "rgba(51, 65, 85, 0.3)" : "rgba(203, 213, 225, 0.4)"
+        },
+        ticks: {
+          color: isDark ? "rgba(203, 213, 225, 0.85)" : "rgba(51, 65, 85, 0.85)",
+          font: {
+            size: isZoomed ? 12 : 9,
+            weight: isZoomed ? ("700" as const) : ("normal" as const),
+            family: "IBM Plex Mono, monospace"
+          },
+          padding: isZoomed ? 6 : 2,
+          maxRotation: 0
+        },
+        ...(isZoomed ? {
+          title: {
+            display: true,
+            text: `Hari / Tanggal (01 - ${dayLabels.length}) ${currMonthName || ""}`,
+            color: isDark ? "rgba(148, 163, 184, 0.9)" : "rgba(71, 85, 105, 0.9)",
+            font: { size: 12, weight: "700" as const },
+            padding: { top: 8, bottom: 0 }
+          }
+        } : {})
       },
       y: {
         stacked: true,
@@ -478,17 +507,31 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         grace: "15%",
         grid: { color: isDark ? "rgba(51, 65, 85, 0.4)" : "rgba(203, 213, 225, 0.5)" },
         ticks: {
-          color: isDark ? "rgba(148, 163, 184, 0.7)" : "rgba(71, 85, 105, 0.7)",
-          font: { size: 9 },
+          color: isDark ? "rgba(203, 213, 225, 0.85)" : "rgba(51, 65, 85, 0.85)",
+          font: {
+            size: isZoomed ? 12 : 9,
+            weight: isZoomed ? ("700" as const) : ("normal" as const),
+            family: "IBM Plex Mono, monospace"
+          },
+          padding: isZoomed ? 8 : 4,
           callback: (v: number) => {
             if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
             if (Number.isInteger(v)) return `${v}`;
             return `${Number(v.toFixed(2))}`;
           }
-        }
+        },
+        ...(isZoomed ? {
+          title: {
+            display: true,
+            text: "Konsumsi Energi (kWh)",
+            color: isDark ? "rgba(148, 163, 184, 0.9)" : "rgba(71, 85, 105, 0.9)",
+            font: { size: 12, weight: "700" as const },
+            padding: { top: 0, bottom: 8 }
+          }
+        } : {})
       }
     }
-  }), [isDark, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, solarRate, pvRate]);
+  }), [isDark, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, solarRate, pvRate, isZoomed, dayLabels]);
 
   return <Bar data={data} options={options} />;
 });
@@ -520,17 +563,39 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
 }) {
   const [showPrevious, setShowPrevious] = useState(true);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const modalContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isZoomOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setIsZoomOpen(false);
+        if (document.fullscreenElement) {
+          document.exitFullscreen?.().catch(() => {});
+        } else {
+          setIsZoomOpen(false);
+        }
       }
     };
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
   }, [isZoomOpen]);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      modalContainerRef.current?.requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+    }
+  };
 
   const currTotalKwh = useMemo(() => (currentData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [currentData]);
   const prevTotalKwh = useMemo(() => (previousData || []).reduce((sum, v) => sum + (Number(v) || 0), 0), [previousData]);
@@ -538,6 +603,26 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
     if (prevTotalKwh <= 0) return null;
     return (((currTotalKwh - prevTotalKwh) / prevTotalKwh) * 100).toFixed(1);
   }, [currTotalKwh, prevTotalKwh]);
+
+  // Daily average & peak day stats for the modal
+  const peakDayInfo = useMemo(() => {
+    let maxVal = 0;
+    let maxIdx = -1;
+    (currentData || []).forEach((v, idx) => {
+      const val = Number(v) || 0;
+      if (val > maxVal) {
+        maxVal = val;
+        maxIdx = idx;
+      }
+    });
+    if (maxIdx < 0 || maxVal <= 0) return null;
+    return { day: String(maxIdx + 1).padStart(2, "0"), val: maxVal };
+  }, [currentData]);
+
+  const avgKwh = useMemo(() => {
+    const activeDays = (currentData || []).filter((v) => Number(v) > 0).length || 1;
+    return currTotalKwh / activeDays;
+  }, [currTotalKwh, currentData]);
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
@@ -606,31 +691,58 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
         />
       </div>
 
-      {/* Zoom Popup Modal */}
+      {/* Zoom Popup Modal - Extra-Large Viewport Filling (98vw x 96vh) */}
       {isZoomOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
-          onClick={() => setIsZoomOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-1 sm:p-2 md:p-3 animate-in fade-in duration-200"
+          onClick={() => {
+            if (document.fullscreenElement) {
+              document.exitFullscreen?.().catch(() => {});
+            }
+            setIsZoomOpen(false);
+          }}
         >
           <div
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-[94vw] max-w-[96vw] h-[92vh] max-h-[94vh] p-6 flex flex-col space-y-4 overflow-hidden"
+            ref={modalContainerRef}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden transition-all duration-150"
+            style={{
+              width: isFullscreen ? "100vw" : "98vw",
+              maxWidth: isFullscreen ? "100vw" : "98vw",
+              height: isFullscreen ? "100vh" : "96vh",
+              maxHeight: isFullscreen ? "100vh" : "96vh",
+              borderRadius: isFullscreen ? "0px" : "1.25rem",
+              padding: isFullscreen ? "1.5rem" : "1.25rem 1.5rem"
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-slate-800 dark:text-white uppercase tracking-wide">{title}</h3>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 font-bold">
+                <div className="flex items-center gap-2.5">
+                  <h3 className="text-lg sm:text-xl md:text-2xl font-black text-slate-800 dark:text-white uppercase tracking-wide">
+                    {title}
+                  </h3>
+                  <span className="text-xs px-3 py-1 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 font-extrabold tracking-wider uppercase">
                     Perbesar Chart
                   </span>
                 </div>
-                <div className="flex items-center gap-3 mt-2">
-                  <span className="text-xl font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400">
-                    {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">kWh</span>
-                  </span>
+                {/* KPI Metrics Strip */}
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xs text-slate-400 uppercase font-semibold">Bulan Ini:</span>
+                    <span className="text-2xl sm:text-3xl font-black font-mono text-[#1f6fb5] dark:text-sky-400">
+                      {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">kWh</span>
+                    </span>
+                  </div>
+
+                  {showPrevious && (
+                    <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                      {prevMonthName || "Bulan Lalu"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
+                    </span>
+                  )}
+
                   {showPrevious && diffPct !== null && (
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${
                       Number(diffPct) > 0
                         ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
                         : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
@@ -638,11 +750,24 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
                       {Number(diffPct) > 0 ? `+${diffPct}%` : `${diffPct}%`} vs bln lalu
                     </span>
                   )}
+
+                  {avgKwh > 0 && (
+                    <span className="hidden sm:inline-flex px-3 py-1 rounded-xl text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                      Rata-rata: <strong>{formatNumber(avgKwh)}</strong> kWh/hari
+                    </span>
+                  )}
+
+                  {peakDayInfo && (
+                    <span className="hidden md:inline-flex px-3 py-1 rounded-xl text-xs font-mono font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20">
+                      Puncak: <strong>Tgl {peakDayInfo.day} ({formatNumber(peakDayInfo.val)} kWh)</strong>
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer select-none">
+              {/* Action Buttons Top Right */}
+              <div className="flex items-center gap-2 sm:gap-3">
+                <label className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 cursor-pointer select-none transition">
                   <input
                     type="checkbox"
                     checked={showPrevious}
@@ -651,16 +776,35 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
                   />
                   <span>Bulan Lalu</span>
                 </label>
-                {showPrevious && (
-                  <span className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                    {prevMonthName || "Bln Pembanding"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
-                  </span>
-                )}
+
+                {/* Fullscreen Toggle */}
                 <button
                   type="button"
-                  onClick={() => setIsZoomOpen(false)}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer"
-                  title="Tutup Modal"
+                  onClick={toggleFullscreen}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-sky-600 dark:text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-xl transition cursor-pointer"
+                  title="Toggle Fullscreen Layar Penuh"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                    {isFullscreen ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0l5 0m-5 0l0 5M15 9l5-5m0 0l-5 0m5 0l0 5M9 15l-5 5m0 0l5 0m-5 0l0-5M15 15l5 5m0 0l-5 0m5 0l0-5" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                    )}
+                  </svg>
+                  <span className="hidden sm:inline">{isFullscreen ? "Keluar Layar Penuh" : "Layar Penuh"}</span>
+                </button>
+
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (document.fullscreenElement) {
+                      document.exitFullscreen?.().catch(() => {});
+                    }
+                    setIsZoomOpen(false);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition cursor-pointer"
+                  title="Tutup Modal (ESC)"
                 >
                   <span>Tutup</span>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -670,8 +814,8 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
               </div>
             </div>
 
-            {/* Modal Body: Large Chart filling 90% view */}
-            <div className="w-full flex-1 min-h-0">
+            {/* Modal Body: Extra-Large Chart filling full available height */}
+            <div className="relative w-full flex-1 min-h-[480px] sm:min-h-[560px] md:min-h-[620px] pt-2">
               <MonthlyComparisonBarChart
                 currentData={currentData}
                 previousData={previousData}
@@ -684,6 +828,7 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
                 solarRate={solarRate}
                 pvRate={pvRate}
                 showPrevious={showPrevious}
+                isZoomed={true}
               />
             </div>
           </div>
@@ -714,17 +859,39 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
   const [machine, setMachine] = useState("F1 MAIN SUPPLY QC OFFICE & LAB");
   const [showPrevious, setShowPrevious] = useState(true);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const modalContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isZoomOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setIsZoomOpen(false);
+        if (document.fullscreenElement) {
+          document.exitFullscreen?.().catch(() => {});
+        } else {
+          setIsZoomOpen(false);
+        }
       }
     };
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
   }, [isZoomOpen]);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      modalContainerRef.current?.requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+    }
+  };
 
   const machineOptions = useMemo(() => {
     if (factory === "wf1") {
@@ -813,6 +980,25 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
     return (((currTotalKwh - prevTotalKwh) / prevTotalKwh) * 100).toFixed(1);
   }, [currTotalKwh, prevTotalKwh]);
   const hasData = (currentData.length > 0 && currentData.some(v => v > 0)) || (previousData.length > 0 && previousData.some(v => v > 0));
+
+  const peakDayInfo = useMemo(() => {
+    let maxVal = 0;
+    let maxIdx = -1;
+    (currentData || []).forEach((v, idx) => {
+      const val = Number(v) || 0;
+      if (val > maxVal) {
+        maxVal = val;
+        maxIdx = idx;
+      }
+    });
+    if (maxIdx < 0 || maxVal <= 0) return null;
+    return { day: String(maxIdx + 1).padStart(2, "0"), val: maxVal };
+  }, [currentData]);
+
+  const avgKwh = useMemo(() => {
+    const activeDays = (currentData || []).filter((v) => Number(v) > 0).length || 1;
+    return currTotalKwh / activeDays;
+  }, [currTotalKwh, currentData]);
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
@@ -904,33 +1090,58 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
         />
       </div>
 
-      {/* Zoom Popup Modal */}
+      {/* Zoom Popup Modal - Extra-Large Viewport Filling (98vw x 96vh) */}
       {isZoomOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
-          onClick={() => setIsZoomOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-1 sm:p-2 md:p-3 animate-in fade-in duration-200"
+          onClick={() => {
+            if (document.fullscreenElement) {
+              document.exitFullscreen?.().catch(() => {});
+            }
+            setIsZoomOpen(false);
+          }}
         >
           <div
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-[94vw] max-w-[96vw] h-[92vh] max-h-[94vh] p-6 flex flex-col space-y-4 overflow-hidden"
+            ref={modalContainerRef}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden transition-all duration-150"
+            style={{
+              width: isFullscreen ? "100vw" : "98vw",
+              maxWidth: isFullscreen ? "100vw" : "98vw",
+              height: isFullscreen ? "100vh" : "96vh",
+              maxHeight: isFullscreen ? "100vh" : "96vh",
+              borderRadius: isFullscreen ? "0px" : "1.25rem",
+              padding: isFullscreen ? "1.5rem" : "1.25rem 1.5rem"
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-slate-800 dark:text-white uppercase tracking-wide">
+                <div className="flex items-center gap-2.5">
+                  <h3 className="text-lg sm:text-xl md:text-2xl font-black text-slate-800 dark:text-white uppercase tracking-wide">
                     {machine} ({dbData.pmId || "PM"})
                   </h3>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 font-bold">
+                  <span className="text-xs px-3 py-1 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 font-extrabold tracking-wider uppercase">
                     Perbesar Chart
                   </span>
                 </div>
-                <div className="flex items-center gap-3 mt-2">
-                  <span className="text-xl font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400">
-                    {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">kWh</span>
-                  </span>
+                {/* KPI Metrics Strip */}
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xs text-slate-400 uppercase font-semibold">Bulan Ini:</span>
+                    <span className="text-2xl sm:text-3xl font-black font-mono text-[#1f6fb5] dark:text-sky-400">
+                      {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">kWh</span>
+                    </span>
+                  </div>
+
+                  {showPrevious && (
+                    <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                      {prevMonthName || "Bulan Lalu"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
+                    </span>
+                  )}
+
                   {showPrevious && diffPct !== null && (
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${
                       Number(diffPct) > 0
                         ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
                         : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
@@ -938,11 +1149,24 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
                       {Number(diffPct) > 0 ? `+${diffPct}%` : `${diffPct}%`} vs bln lalu
                     </span>
                   )}
+
+                  {avgKwh > 0 && (
+                    <span className="hidden sm:inline-flex px-3 py-1 rounded-xl text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                      Rata-rata: <strong>{formatNumber(avgKwh)}</strong> kWh/hari
+                    </span>
+                  )}
+
+                  {peakDayInfo && (
+                    <span className="hidden md:inline-flex px-3 py-1 rounded-xl text-xs font-mono font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20">
+                      Puncak: <strong>Tgl {peakDayInfo.day} ({formatNumber(peakDayInfo.val)} kWh)</strong>
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer select-none">
+              {/* Action Buttons Top Right */}
+              <div className="flex items-center gap-2 sm:gap-3">
+                <label className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 cursor-pointer select-none transition">
                   <input
                     type="checkbox"
                     checked={showPrevious}
@@ -951,16 +1175,35 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
                   />
                   <span>Bulan Lalu</span>
                 </label>
-                {showPrevious && (
-                  <span className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                    {prevMonthName || "Bln Pembanding"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
-                  </span>
-                )}
+
+                {/* Fullscreen Toggle */}
                 <button
                   type="button"
-                  onClick={() => setIsZoomOpen(false)}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer"
-                  title="Tutup Modal"
+                  onClick={toggleFullscreen}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-sky-600 dark:text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-xl transition cursor-pointer"
+                  title="Toggle Fullscreen Layar Penuh"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                    {isFullscreen ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0l5 0m-5 0l0 5M15 9l5-5m0 0l-5 0m5 0l0 5M9 15l-5 5m0 0l5 0m-5 0l0-5M15 15l5 5m0 0l-5 0m5 0l0-5" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                    )}
+                  </svg>
+                  <span className="hidden sm:inline">{isFullscreen ? "Keluar Layar Penuh" : "Layar Penuh"}</span>
+                </button>
+
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (document.fullscreenElement) {
+                      document.exitFullscreen?.().catch(() => {});
+                    }
+                    setIsZoomOpen(false);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition cursor-pointer"
+                  title="Tutup Modal (ESC)"
                 >
                   <span>Tutup</span>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -970,8 +1213,8 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
               </div>
             </div>
 
-            {/* Modal Body: Large Chart filling 90% view */}
-            <div className="w-full flex-1 min-h-0">
+            {/* Modal Body: Extra-Large Chart filling full available height */}
+            <div className="relative w-full flex-1 min-h-[480px] sm:min-h-[560px] md:min-h-[620px] pt-2">
               <MonthlyComparisonBarChart
                 currentData={currentData}
                 previousData={previousData}
@@ -979,6 +1222,7 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
                 currMonthName={currMonthName}
                 prevMonthName={prevMonthName}
                 showPrevious={showPrevious}
+                isZoomed={true}
               />
             </div>
           </div>
