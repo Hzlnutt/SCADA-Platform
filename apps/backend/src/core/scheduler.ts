@@ -687,20 +687,6 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
     };
 
     const getStatus = (): boolean | null => {
-      // Check if numerical electrical reading exists and is valid
-      const hasAnyReading = [
-        getVal(["VoltAB"]),
-        getVal(["VoltBC"]),
-        getVal(["Volt_LL", "VoltLL"]),
-        getVal(["Active_Power_Total", "Active_Power"]),
-        getVal(["Current_A", "Current_B", "Current_C"]),
-        obj[`ActiveEnergy_${pmId}`],
-        obj[`Active_Power_Total_${pmId}`],
-        obj[`VoltAB_${pmId}`],
-        obj.ActiveEnergy,
-        obj.Active_Power_Total
-      ].some(v => v !== null && v !== undefined && !isNaN(Number(v)) && Number(v) > 0);
-
       const statusCandidates = [
         `Status_${pmId}`,
         `Status_${pmId.toLowerCase()}`,
@@ -709,18 +695,20 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
         `Status__${pmId}`,
         `Status_pm${cleanNum}`,
         `Status_PM${cleanNum}`,
-        "Status"
+        "Status",
+        "status"
       ];
       for (const sk of statusCandidates) {
         if (obj[sk] !== undefined && obj[sk] !== null) {
-          if (Boolean(obj[sk]) === true) return true;
-          // If status flag is 0/false, but active electrical measurements are flowing (e.g. PM13x series where status contact is not wired), the meter is physically online!
-          if (hasAnyReading) return true;
-          return false;
+          const val = obj[sk];
+          if (typeof val === "boolean") return val;
+          const num = Number(val);
+          if (!isNaN(num)) return num === 1;
+          return val === "1" || String(val).toLowerCase() === "true";
         }
       }
 
-      return hasAnyReading ? true : false;
+      return null;
     };
 
     return {
@@ -1899,6 +1887,31 @@ export const startIncomingElectricityPolling = () => {
               return null;
             };
 
+            const cleanNum = pmKey.replace(/\D/g, "");
+            const getStatus = (): boolean | null => {
+              const statusCandidates = [
+                `Status_${pmKey}`,
+                `Status_${pmKey.toLowerCase()}`,
+                `Status_PM5500_WF1_${pmKey}`,
+                `Status_PM5500_WF1_${pmKey.toLowerCase()}`,
+                `Status__${pmKey}`,
+                `Status_pm${cleanNum}`,
+                `Status_PM${cleanNum}`,
+                "Status",
+                "status"
+              ];
+              for (const sk of statusCandidates) {
+                if (subObj[sk] !== undefined && subObj[sk] !== null) {
+                  const val = subObj[sk];
+                  if (typeof val === "boolean") return val;
+                  const num = Number(val);
+                  if (!isNaN(num)) return num === 1;
+                  return val === "1" || String(val).toLowerCase() === "true";
+                }
+              }
+              return null;
+            };
+
             const directVal = customPm.json_key && typeof subObj[customPm.json_key] === "number" ? subObj[customPm.json_key] : null;
             const activePower = directVal ?? getNum(["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower", "Scale_Total_KW"]);
             const activeEnergy = getNum(["Active_Energy", "ActiveEnergy", "Energy", "total_kwh", "kWh", "Total_kWh"]);
@@ -1907,7 +1920,7 @@ export const startIncomingElectricityPolling = () => {
               t_stamp: ts,
               group_id: customPm.group_id,
               pm_id: customPm.pm_id,
-              status: true,
+              status: getStatus(),
               volt_ab: getNum(["Volt_AB", "VoltAB", "VR", "V_AB"]),
               volt_bc: getNum(["Volt_BC", "VoltBC", "VS", "V_BC"]),
               volt_ca: getNum(["Volt_CA", "VoltCA", "VT", "V_CA"]),

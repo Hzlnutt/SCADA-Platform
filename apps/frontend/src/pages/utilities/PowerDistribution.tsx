@@ -236,8 +236,9 @@ function mapPmToTransformer(
   }
 
   const kwh = pm.active_energy !== null && pm.active_energy !== undefined ? Number(Number(pm.active_energy).toFixed(0)) : null;
-  const hasLiveReading = (activePowerKw !== null && activePowerKw !== undefined) || (voltageOutL2L !== null && voltageOutL2L > 100);
-  const isOnline = pm.status === true || (pm.status !== false && hasLiveReading) || hasLiveReading;
+  const isOnline = pm.status !== null && pm.status !== undefined
+    ? Boolean(pm.status)
+    : ((activePowerKw !== null && activePowerKw !== undefined) || (voltageOutL2L !== null && voltageOutL2L > 100));
 
   return {
     ...initialTx,
