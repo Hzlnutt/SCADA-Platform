@@ -4569,7 +4569,7 @@ export default function Electricity() {
             <div className={`mt-2 flex items-center justify-between text-[10px] ${isDark ? 'text-blue-200' : 'text-blue-800'}`}>
               <span>Fact 1: <strong className={isDark ? 'text-white' : 'text-blue-950'}>
                 {isLiveLoading ? (
-                  <span className="opacity-40">...</span>
+                  <span className="inline-block h-3 w-14 bg-blue-300/30 rounded animate-pulse align-middle" />
                 ) : isFact1Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -4578,7 +4578,7 @@ export default function Electricity() {
               </strong></span>
               <span>Fact 2: <strong className={isDark ? 'text-white' : 'text-blue-950'}>
                 {isLiveLoading ? (
-                  <span className="opacity-40">...</span>
+                  <span className="inline-block h-3 w-14 bg-blue-300/30 rounded animate-pulse align-middle" />
                 ) : isFact2Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -4629,7 +4629,7 @@ export default function Electricity() {
             <div className={`mt-2 flex items-center justify-between text-[10px] ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>
               <span>POI-1: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
                 {isLiveLoading ? (
-                  <span className="opacity-40">...</span>
+                  <span className="inline-block h-3 w-14 bg-emerald-300/30 rounded animate-pulse align-middle" />
                 ) : isPoi1Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -4638,7 +4638,7 @@ export default function Electricity() {
               </strong></span>
               <span>POI-2: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
                 {isLiveLoading ? (
-                  <span className="opacity-40">...</span>
+                  <span className="inline-block h-3 w-14 bg-emerald-300/30 rounded animate-pulse align-middle" />
                 ) : isPoi2Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -4733,7 +4733,7 @@ export default function Electricity() {
             <div className={`mt-2 flex items-center gap-3 text-[10px] ${isDark ? 'text-cyan-200' : 'text-cyan-800'}`}>
               <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>
                 {isLiveLoading ? (
-                  <span className="opacity-40">...</span>
+                  <span className="inline-block h-3 w-14 bg-cyan-300/30 rounded animate-pulse align-middle" />
                 ) : isPlnOffline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -4742,7 +4742,7 @@ export default function Electricity() {
               </strong></span>
               <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>
                 {isLiveLoading ? (
-                  <span className="opacity-40">...</span>
+                  <span className="inline-block h-3 w-14 bg-cyan-300/30 rounded animate-pulse align-middle" />
                 ) : isSolarOffline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (

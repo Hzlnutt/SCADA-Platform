@@ -1125,7 +1125,7 @@ function SldScaledCanvas({ children }: { children: React.ReactNode }) {
 }
 
 /* ═══════════ SLD TRANSFORMER MINI CARD ═══════════ */
-function SldMiniCard({ tx, onClick, loadConfig }: { tx: TransformerData; onClick: () => void; loadConfig: { safeMax: number; cautionMax: number } }) {
+function SldMiniCard({ tx, onClick, loadConfig, isLoading = false }: { tx: TransformerData; onClick: () => void; loadConfig: { safeMax: number; cautionMax: number }; isLoading?: boolean }) {
   const hasData = tx.activePowerKw !== null && tx.activePowerKw !== undefined;
   const loadPct = hasData && tx.capacityKva && tx.activePowerKw !== null ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null;
   
@@ -1147,8 +1147,8 @@ function SldMiniCard({ tx, onClick, loadConfig }: { tx: TransformerData; onClick
             className="rounded-full flex-shrink-0"
             style={{
               width: 6, height: 6,
-              backgroundColor: hasData ? (tx.status === "online" ? "#10b981" : "#f59e0b") : "#94a3b8",
-              boxShadow: hasData ? "0 0 4px #10b981" : "none",
+              backgroundColor: isLoading ? "#38bdf8" : hasData ? (tx.status === "online" ? "#10b981" : "#f59e0b") : "#94a3b8",
+              boxShadow: isLoading ? "0 0 4px #38bdf8" : hasData ? "0 0 4px #10b981" : "none",
             }}
           />
           {tx.name}
@@ -1157,31 +1157,50 @@ function SldMiniCard({ tx, onClick, loadConfig }: { tx: TransformerData; onClick
       </div>
 
       {/* Power value */}
-      <div className="py-2 space-y-0.5">
-        <div className={`text-xs font-extrabold font-mono ${hasData ? "text-slate-800 dark:text-slate-100" : "text-slate-400"}`}>
-          {hasData ? `${tx.activePowerKw} kW` : "— kW"}
+      {isLoading ? (
+        <div className="py-2 space-y-1">
+          <div className="h-3.5 w-16 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />
+          <div className="h-2.5 w-10 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />
         </div>
-        <div className="text-[9px] font-bold text-slate-500">
-          PF: <span className="font-mono text-slate-400">{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"}</span>
+      ) : (
+        <div className="py-2 space-y-0.5">
+          <div className={`text-xs font-extrabold font-mono ${hasData ? "text-slate-800 dark:text-slate-100" : "text-slate-400"}`}>
+            {hasData ? `${tx.activePowerKw} kW` : "— kW"}
+          </div>
+          <div className="text-[9px] font-bold text-slate-500">
+            PF: <span className="font-mono text-slate-400">{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"}</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Load bar */}
-      <div className="space-y-1">
-        <div className="flex justify-between text-[7px] font-extrabold text-slate-400">
-          <span>LOAD</span>
-          <span style={{ color: loadColor }}>{loadPct !== null ? `${loadPct}%` : "—%"}</span>
+      {isLoading ? (
+        <div className="space-y-1">
+          <div className="flex justify-between text-[7px] font-extrabold text-slate-400">
+            <span>LOAD</span>
+            <span className="text-slate-400 font-mono animate-pulse">...</span>
+          </div>
+          <div className="w-full rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700/60" style={{ height: 4 }}>
+            <div className="h-full bg-slate-300 dark:bg-slate-600 rounded-full animate-pulse w-1/3" />
+          </div>
         </div>
-        <div
-          className="w-full rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700/60"
-          style={{ height: 4 }}
-        >
+      ) : (
+        <div className="space-y-1">
+          <div className="flex justify-between text-[7px] font-extrabold text-slate-400">
+            <span>LOAD</span>
+            <span style={{ color: loadColor }}>{loadPct !== null ? `${loadPct}%` : "—%"}</span>
+          </div>
           <div
-            className="h-full rounded-full transition-all duration-1000"
-            style={{ width: `${loadPct ? Math.min(100, loadPct) : 0}%`, backgroundColor: loadColor }}
-          />
+            className="w-full rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700/60"
+            style={{ height: 4 }}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-1000"
+              style={{ width: `${loadPct ? Math.min(100, loadPct) : 0}%`, backgroundColor: loadColor }}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Detail button */}
       <button
@@ -1252,6 +1271,13 @@ export default function PowerDistribution() {
 
   const [telemetryTransformers, setTelemetryTransformers] = useState<TransformerData[]>(INITIAL_TRANSFORMERS);
   const [selectedTx, setSelectedTx] = useState<TransformerData | null>(null);
+  const [loadingSld, setLoadingSld] = useState<boolean>(true);
+
+  // Safety timer so skeleton never gets stuck indefinitely
+  useEffect(() => {
+    const t = setTimeout(() => setLoadingSld(false), 2500);
+    return () => clearTimeout(t);
+  }, []);
 
   // Incoming live telemetry data
   const [incomingData, setIncomingData] = useState<{
@@ -1314,6 +1340,7 @@ export default function PowerDistribution() {
           wf2Pf: wf2Res?.data?.pqData?.pf !== undefined ? wf2Res.data.pqData.pf : prev.wf2Pf,
           wf2Volt: toKv(wf2Res?.data?.pqData?.vll1 ?? wf2Res?.data?.pqData?.voltage) ?? prev.wf2Volt,
         }));
+        setLoadingSld(false);
       } catch (err) {
         console.error("Failed to load incoming telemetries for SLD:", err);
       }
@@ -1325,6 +1352,7 @@ export default function PowerDistribution() {
     const socket = getSocket();
     const handleIncomingLive = (payload: any) => {
       if (!payload || !payload.deviceId || !payload.pqData) return;
+      setLoadingSld(false);
       setIncomingData(prev => {
         if (payload.deviceId === "Cubicle_PLN_PM8000") {
           return {
@@ -1452,6 +1480,7 @@ export default function PowerDistribution() {
               return mapPmToTransformer(tx, pmRecord, incomingKv);
             })
           );
+          setLoadingSld(false);
         }
       } catch (err) {
         console.error("Failed to load transformer telemetries:", err);
@@ -1464,6 +1493,7 @@ export default function PowerDistribution() {
     const socket = getSocket();
     const handlePmUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
       if (!payload || !Array.isArray(payload.data)) return;
+      setLoadingSld(false);
       const pmMap = new Map<string, ElectricPmItem>();
       payload.data.forEach((pm) => {
         if (pm.pm_id) {
@@ -2043,9 +2073,13 @@ export default function PowerDistribution() {
           )}
           <div className="px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm flex items-center gap-3">
             <span className="text-[10px] font-extrabold uppercase text-slate-400">Total Load</span>
-            <span className="text-base font-extrabold font-mono text-slate-800 dark:text-white">
-              {totalLoadKw > 0 ? `${totalLoadKw.toLocaleString("id-ID")} kW` : "— kW"}
-            </span>
+            {loadingSld ? (
+              <span className="inline-block h-5 w-20 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />
+            ) : (
+              <span className="text-base font-extrabold font-mono text-slate-800 dark:text-white">
+                {totalLoadKw > 0 ? `${totalLoadKw.toLocaleString("id-ID")} kW` : "— kW"}
+              </span>
+            )}
           </div>
           <div className="px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm flex items-center gap-3">
             <span className="text-[10px] font-extrabold uppercase text-slate-400">Kapasitas</span>
@@ -2067,11 +2101,20 @@ export default function PowerDistribution() {
             <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200 uppercase tracking-wider">Single Line Diagram</span>
           </div>
           <div className="flex items-center gap-2">
-            <span
-              className="rounded-full"
-              style={{ width: 6, height: 6, backgroundColor: "#10b981", boxShadow: "0 0 6px #10b981" }}
-            />
-            <span className="text-[10px] font-bold text-slate-400">Real-time</span>
+            {loadingSld ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-500/10 text-sky-500 border border-sky-500/20 animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-ping" />
+                Memuat SLD Real-Time...
+              </span>
+            ) : (
+              <>
+                <span
+                  className="rounded-full"
+                  style={{ width: 6, height: 6, backgroundColor: "#10b981", boxShadow: "0 0 6px #10b981" }}
+                />
+                <span className="text-[10px] font-bold text-slate-400">Real-time</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -2236,12 +2279,20 @@ export default function PowerDistribution() {
               <div className="text-[11px] font-extrabold text-blue-700 dark:text-blue-300">5,540 kVa</div>
               <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-1">
                 Active Power <br />
-                <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
-                  {incomingData.plnKw !== null ? `${incomingData.plnKw.toLocaleString("id-ID")} kW` : "— kW"}
-                </span>
+                {loadingSld ? (
+                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                ) : (
+                  <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                    {incomingData.plnKw !== null ? `${incomingData.plnKw.toLocaleString("id-ID")} kW` : "— kW"}
+                  </span>
+                )}
               </div>
               <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono">{incomingData.plnPf !== null ? incomingData.plnPf.toFixed(3) : "—"}</span>
+                PF : {loadingSld ? (
+                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                ) : (
+                  <span className="font-bold font-mono">{incomingData.plnPf !== null ? incomingData.plnPf.toFixed(3) : "—"}</span>
+                )}
               </div>
             </div>
           </div>
@@ -2268,12 +2319,20 @@ export default function PowerDistribution() {
               <div className="text-[11px] font-black text-blue-600 dark:text-blue-400">Fact-1</div>
               <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
-                <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
-                  {incomingData.wf1Kw !== null ? `${incomingData.wf1Kw.toLocaleString("id-ID")} kW` : "— kW"}
-                </span>
+                {loadingSld ? (
+                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                ) : (
+                  <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                    {incomingData.wf1Kw !== null ? `${incomingData.wf1Kw.toLocaleString("id-ID")} kW` : "— kW"}
+                  </span>
+                )}
               </div>
               <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono">{incomingData.wf1Pf !== null ? incomingData.wf1Pf.toFixed(3) : "—"}</span>
+                PF : {loadingSld ? (
+                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                ) : (
+                  <span className="font-bold font-mono">{incomingData.wf1Pf !== null ? incomingData.wf1Pf.toFixed(3) : "—"}</span>
+                )}
               </div>
             </div>
           </div>
@@ -2287,12 +2346,20 @@ export default function PowerDistribution() {
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">POI-1</div>
               <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
-                <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
-                  {solarData.poi1Kw !== null ? `${solarData.poi1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "— kW"}
-                </span>
+                {loadingSld ? (
+                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                ) : (
+                  <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                    {solarData.poi1Kw !== null ? `${solarData.poi1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "— kW"}
+                  </span>
+                )}
               </div>
               <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono">{solarData.poi1Pf !== null ? solarData.poi1Pf.toFixed(2) : "—"}</span>
+                PF : {loadingSld ? (
+                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                ) : (
+                  <span className="font-bold font-mono">{solarData.poi1Pf !== null ? solarData.poi1Pf.toFixed(2) : "—"}</span>
+                )}
               </div>
             </div>
           </div>
@@ -2307,12 +2374,20 @@ export default function PowerDistribution() {
               <div className="text-[11px] font-black text-blue-600 dark:text-blue-400">Fact-2</div>
               <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
-                <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
-                  {incomingData.wf2Kw !== null ? `${incomingData.wf2Kw.toLocaleString("id-ID")} kW` : "— kW"}
-                </span>
+                {loadingSld ? (
+                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                ) : (
+                  <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                    {incomingData.wf2Kw !== null ? `${incomingData.wf2Kw.toLocaleString("id-ID")} kW` : "— kW"}
+                  </span>
+                )}
               </div>
               <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono">{incomingData.wf2Pf !== null ? incomingData.wf2Pf.toFixed(3) : "—"}</span>
+                PF : {loadingSld ? (
+                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                ) : (
+                  <span className="font-bold font-mono">{incomingData.wf2Pf !== null ? incomingData.wf2Pf.toFixed(3) : "—"}</span>
+                )}
               </div>
             </div>
           </div>
@@ -2326,12 +2401,20 @@ export default function PowerDistribution() {
               <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">POI-2</div>
               <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
-                <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
-                  {solarData.poi2Kw !== null ? `${solarData.poi2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "— kW"}
-                </span>
+                {loadingSld ? (
+                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                ) : (
+                  <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                    {solarData.poi2Kw !== null ? `${solarData.poi2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "— kW"}
+                  </span>
+                )}
               </div>
               <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
-                PF : <span className="font-bold font-mono">{solarData.poi2Pf !== null ? solarData.poi2Pf.toFixed(2) : "—"}</span>
+                PF : {loadingSld ? (
+                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                ) : (
+                  <span className="font-bold font-mono">{solarData.poi2Pf !== null ? solarData.poi2Pf.toFixed(2) : "—"}</span>
+                )}
               </div>
             </div>
           </div>
@@ -2372,23 +2455,32 @@ export default function PowerDistribution() {
                     {tx.name}
                   </div>
                   <div className="mt-1 text-[8px] text-slate-400 font-semibold">Active Power</div>
-                  <div className={`text-[11px] font-extrabold font-mono ${hasData ? (idx === 0 ? "text-sky-400" : "text-slate-800 dark:text-slate-100") : "text-slate-400"}`}>
-                    {hasData ? `${tx.activePowerKw} kW` : "— kW"}
-                  </div>
-                  <div className="text-[8px] text-slate-400">
-                    PF: <span className="font-bold">{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"}</span>
-                  </div>
+                  {loadingSld ? (
+                    <div className="my-1 space-y-1">
+                      <div className="h-3.5 w-14 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                      <div className="h-2 w-10 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                    </div>
+                  ) : (
+                    <>
+                      <div className={`text-[11px] font-extrabold font-mono ${hasData ? (idx === 0 ? "text-sky-400" : "text-slate-800 dark:text-slate-100") : "text-slate-400"}`}>
+                        {hasData ? `${tx.activePowerKw} kW` : "— kW"}
+                      </div>
+                      <div className="text-[8px] text-slate-400">
+                        PF: <span className="font-bold">{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"}</span>
+                      </div>
+                    </>
+                  )}
                   
                   {/* Load progress bar */}
                   <div className="mt-1.5 pt-1 border-t border-slate-200 dark:border-slate-700/60">
                     <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
                       <div
-                        className="h-full rounded-full bg-slate-300 dark:bg-slate-600"
-                        style={{ width: `${loadPct ? Math.min(100, loadPct) : 0}%` }}
+                        className={`h-full rounded-full ${loadingSld ? "bg-slate-300 dark:bg-slate-500 animate-pulse w-1/3" : "bg-slate-300 dark:bg-slate-600"}`}
+                        style={{ width: loadingSld ? "33%" : `${loadPct ? Math.min(100, loadPct) : 0}%` }}
                       />
                     </div>
                     <div className="text-[7.5px] font-bold text-center mt-0.5 text-slate-400">
-                      {loadPct !== null ? `${loadPct}%` : "—%"}
+                      {loadingSld ? "..." : (loadPct !== null ? `${loadPct}%` : "—%")}
                     </div>
                   </div>
                 </div>
@@ -2433,23 +2525,32 @@ export default function PowerDistribution() {
                     {tx.name}
                   </div>
                   <div className="mt-1 text-[8px] text-slate-400 font-semibold">Active Power</div>
-                  <div className={`text-[11px] font-extrabold font-mono ${hasData ? (idx === 0 ? "text-emerald-400" : "text-slate-800 dark:text-slate-100") : "text-slate-400"}`}>
-                    {hasData ? `${tx.activePowerKw} kW` : "— kW"}
-                  </div>
-                  <div className="text-[8px] text-slate-400">
-                    PF: <span className="font-bold">{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"}</span>
-                  </div>
+                  {loadingSld ? (
+                    <div className="my-1 space-y-1">
+                      <div className="h-3.5 w-14 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                      <div className="h-2 w-10 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                    </div>
+                  ) : (
+                    <>
+                      <div className={`text-[11px] font-extrabold font-mono ${hasData ? (idx === 0 ? "text-emerald-400" : "text-slate-800 dark:text-slate-100") : "text-slate-400"}`}>
+                        {hasData ? `${tx.activePowerKw} kW` : "— kW"}
+                      </div>
+                      <div className="text-[8px] text-slate-400">
+                        PF: <span className="font-bold">{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"}</span>
+                      </div>
+                    </>
+                  )}
 
                   {/* Load progress bar */}
                   <div className="mt-1.5 pt-1 border-t border-slate-200 dark:border-slate-700/60">
                     <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
                       <div
-                        className="h-full rounded-full bg-slate-300 dark:bg-slate-600"
-                        style={{ width: `${loadPct ? Math.min(100, loadPct) : 0}%` }}
+                        className={`h-full rounded-full ${loadingSld ? "bg-slate-300 dark:bg-slate-500 animate-pulse w-1/3" : "bg-slate-300 dark:bg-slate-600"}`}
+                        style={{ width: loadingSld ? "33%" : `${loadPct ? Math.min(100, loadPct) : 0}%` }}
                       />
                     </div>
                     <div className="text-[7.5px] font-bold text-center mt-0.5 text-slate-400">
-                      {loadPct !== null ? `${loadPct}%` : "—%"}
+                      {loadingSld ? "..." : (loadPct !== null ? `${loadPct}%` : "—%")}
                     </div>
                   </div>
                 </div>

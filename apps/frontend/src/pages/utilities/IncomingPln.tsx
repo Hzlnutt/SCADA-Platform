@@ -52,12 +52,14 @@ function UnbalancedGauge({
   label,
   value,
   maxAllowed,
-  isDark
+  isDark,
+  isLoading = false
 }: {
   label: string;
   value: number | string;
   maxAllowed: number;
   isDark: boolean;
+  isLoading?: boolean;
 }) {
   const isOffline = typeof value === "string" && (value.includes("API") || value === "xx" || value.includes("xx") || value.includes("TIDAK"));
   const numVal = isOffline ? 0 : Number(value) || 0;
@@ -88,7 +90,7 @@ function UnbalancedGauge({
             strokeLinecap="round"
           />
           {/* Progress Arc */}
-          {!isOffline && (
+          {!isLoading && !isOffline && (
             <path
               d="M 10 60 A 50 50 0 0 1 110 60"
               fill="none"
@@ -102,7 +104,9 @@ function UnbalancedGauge({
           )}
         </svg>
         <div className="absolute bottom-2 text-center flex flex-col items-center justify-center w-full px-1">
-          {isOffline ? (
+          {isLoading ? (
+            <span className="h-6 w-16 bg-slate-200 dark:bg-slate-700/60 rounded-md animate-pulse inline-block" />
+          ) : isOffline ? (
             <span className="text-[9px] font-bold font-mono text-amber-500 uppercase leading-none text-center select-none break-all">{value === "BELUM ADA API" ? "BELUM ADA API" : "GAGAL POLLING API"}</span>
           ) : (
             <div>
@@ -113,7 +117,11 @@ function UnbalancedGauge({
         </div>
       </div>
 
-      {isOffline ? (
+      {isLoading ? (
+        <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-sky-500/10 border border-sky-500/20 text-[10px] font-extrabold uppercase text-sky-500 animate-pulse tracking-wider">
+          MEMUAT DATA...
+        </div>
+      ) : isOffline ? (
         <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-amber-500/10 border border-amber-500/20 text-[10px] font-extrabold uppercase text-amber-500 tracking-wider">
           ✕ {value === "BELUM ADA API" ? "BELUM ADA API" : "GAGAL POLLING API"}
         </div>
@@ -619,6 +627,11 @@ interface HourlyTrend5sPoint {
 
   // Reset/update metrics when config changes
   useEffect(() => {
+    setLoading(true);
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2500);
+
     try {
       const cached = localStorage.getItem(`incoming_trend_1h_${config.deviceId}`);
       if (cached) {
@@ -656,6 +669,8 @@ interface HourlyTrend5sPoint {
       thdI_R: 0, thdI_S: 0, thdI_T: 0,
       isConnected: true
     });
+
+    return () => clearTimeout(safetyTimer);
   }, [config]);
 
   useEffect(() => {
@@ -674,6 +689,7 @@ interface HourlyTrend5sPoint {
     
     const handleLiveUpdate = (payload: any) => {
       if (payload && payload.deviceId === config.deviceId) {
+        setLoading(false);
         const isOffline = payload.online === false || payload.status === false || payload.pqData?.pfStatus === "offline" || payload.error;
         if (isOffline) {
           setMetrics((prev) => ({
@@ -798,6 +814,9 @@ interface HourlyTrend5sPoint {
   }, [prefix, getApiVal, metrics]);
 
   const renderMetricVal = useCallback((val: any, formatFn: (v: number) => string) => {
+    if (loading) {
+      return <span className="h-5 w-20 bg-slate-200 dark:bg-slate-700/60 rounded-md animate-pulse inline-block align-middle" />;
+    }
     if (val === "BELUM ADA API") {
       return <span className="text-red-500 text-xs font-extrabold font-mono uppercase tracking-wider">BELUM ADA API</span>;
     }
@@ -812,7 +831,20 @@ interface HourlyTrend5sPoint {
       return <span className="text-amber-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">GAGAL POLLING API</span>;
     }
     return formatFn(num);
-  }, []);
+  }, [loading]);
+
+  const renderTableStatus = useCallback((isOffline: boolean, isNormal: boolean, overlimitLabel = "⚠ Overlimit") => {
+    if (loading) {
+      return <span className="inline-block w-16 h-4 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />;
+    }
+    if (isOffline) {
+      return <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>;
+    }
+    if (isNormal) {
+      return <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>;
+    }
+    return <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">{overlimitLabel}</span>;
+  }, [loading]);
 
   // Averages and stats helpers for Phase details
   const statsV = useMemo(() => {
@@ -1169,16 +1201,23 @@ interface HourlyTrend5sPoint {
               </button>
             </>
           )}
-          <span className={`px-3 py-1.5 rounded-full text-xs font-extrabold uppercase flex items-center gap-1.5 border transition-colors duration-300 ${
-            isConnected
-              ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-              : "bg-amber-500/10 text-amber-500 border-amber-500/20"
-          }`}>
-            <span className={`h-2 w-2 rounded-full animate-pulse ${
-              isConnected ? "bg-emerald-500" : "bg-amber-500"
-            }`} />
-            {isConnected ? config.connectedLabel : "GAGAL POLLING API"}
-          </span>
+          {loading ? (
+            <span className="px-3 py-1.5 rounded-full text-xs font-extrabold uppercase flex items-center gap-1.5 border bg-sky-500/10 text-sky-500 border-sky-500/20 animate-pulse">
+              <span className="h-2 w-2 rounded-full bg-sky-500 animate-ping" />
+              MEMUAT DATA...
+            </span>
+          ) : (
+            <span className={`px-3 py-1.5 rounded-full text-xs font-extrabold uppercase flex items-center gap-1.5 border transition-colors duration-300 ${
+              isConnected
+                ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                : "bg-amber-500/10 text-amber-500 border-amber-500/20"
+            }`}>
+              <span className={`h-2 w-2 rounded-full animate-pulse ${
+                isConnected ? "bg-emerald-500" : "bg-amber-500"
+              }`} />
+              {isConnected ? config.connectedLabel : "GAGAL POLLING API"}
+            </span>
+          )}
         </div>
       </div>
 
@@ -1283,8 +1322,8 @@ interface HourlyTrend5sPoint {
 
       {/* ═══════════ SECTION B: POWER QUALITY INDEX & GAUGES ═══════════ */}
       <section className="grid gap-6 md:grid-cols-3">
-        <UnbalancedGauge label="Voltage Unbalanced" value={liveMetrics.unbalanceV} maxAllowed={standards.unbalanceVMax} isDark={isDark} />
-        <UnbalancedGauge label="Current Unbalanced" value={liveMetrics.unbalanceI} maxAllowed={standards.unbalanceIMax} isDark={isDark} />
+        <UnbalancedGauge label="Voltage Unbalanced" value={liveMetrics.unbalanceV} maxAllowed={standards.unbalanceVMax} isDark={isDark} isLoading={loading} />
+        <UnbalancedGauge label="Current Unbalanced" value={liveMetrics.unbalanceI} maxAllowed={standards.unbalanceIMax} isDark={isDark} isLoading={loading} />
 
         {/* Power Quality Radar Index */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
@@ -1341,9 +1380,9 @@ interface HourlyTrend5sPoint {
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{statsV.avg.toFixed(3)}</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{statsV.min.toFixed(3)}</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{statsV.max.toFixed(3)}</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsV.avg.toFixed(3)}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsV.min.toFixed(3)}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsV.max.toFixed(3)}</strong></span>
           </div>
         </div>
 
@@ -1388,9 +1427,9 @@ interface HourlyTrend5sPoint {
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{statsI.avg.toFixed(1)}</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{statsI.min.toFixed(1)}</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{statsI.max.toFixed(1)}</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsI.avg.toFixed(1)}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsI.min.toFixed(1)}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsI.max.toFixed(1)}</strong></span>
           </div>
         </div>
 
@@ -1435,9 +1474,9 @@ interface HourlyTrend5sPoint {
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{statsThdV.avg.toFixed(2)}</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{statsThdV.min.toFixed(2)}</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{statsThdV.max.toFixed(2)}</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdV.avg.toFixed(2)}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdV.min.toFixed(2)}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdV.max.toFixed(2)}</strong></span>
           </div>
         </div>
 
@@ -1482,9 +1521,9 @@ interface HourlyTrend5sPoint {
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{statsThdI.avg.toFixed(2)}</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{statsThdI.min.toFixed(2)}</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{statsThdI.max.toFixed(2)}</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdI.avg.toFixed(2)}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdI.min.toFixed(2)}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdI.max.toFixed(2)}</strong></span>
           </div>
         </div>
       </section>
@@ -1669,12 +1708,9 @@ interface HourlyTrend5sPoint {
                 <td className="py-3 px-3 whitespace-nowrap">kV</td>
                 <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{standards.voltageNominal} ± {standards.voltageTolerance}%</td>
                 <td className="py-3 px-3 text-right whitespace-nowrap">
-                  {isOfflineVal(liveMetrics.voltage) ? (
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                  ) : Math.abs(Number(liveMetrics.voltage) - standards.voltageNominal) <= (standards.voltageNominal * standards.voltageTolerance / 100) ? (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  {renderTableStatus(
+                    isOfflineVal(liveMetrics.voltage),
+                    Math.abs(Number(liveMetrics.voltage) - standards.voltageNominal) <= (standards.voltageNominal * standards.voltageTolerance / 100)
                   )}
                 </td>
               </tr>
@@ -1685,12 +1721,9 @@ interface HourlyTrend5sPoint {
                 <td className="py-3 px-3 whitespace-nowrap">Hz</td>
                 <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{standards.frequencyNominal} ± {standards.frequencyTolerance}</td>
                 <td className="py-3 px-3 text-right whitespace-nowrap">
-                  {isOfflineVal(liveMetrics.frequency) ? (
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                  ) : Math.abs(Number(liveMetrics.frequency) - standards.frequencyNominal) <= standards.frequencyTolerance ? (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  {renderTableStatus(
+                    isOfflineVal(liveMetrics.frequency),
+                    Math.abs(Number(liveMetrics.frequency) - standards.frequencyNominal) <= standards.frequencyTolerance
                   )}
                 </td>
               </tr>
@@ -1701,12 +1734,9 @@ interface HourlyTrend5sPoint {
                 <td className="py-3 px-3 whitespace-nowrap">kW</td>
                 <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{standards.activePowerMax > 0 ? `≤ ${standards.activePowerMax}` : "—"}</td>
                 <td className="py-3 px-3 text-right whitespace-nowrap">
-                  {isOfflineVal(liveMetrics.activePower) ? (
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                  ) : (standards.activePowerMax > 0 && Number(liveMetrics.activePower) > standards.activePowerMax) ? (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  {renderTableStatus(
+                    isOfflineVal(liveMetrics.activePower),
+                    !(standards.activePowerMax > 0 && Number(liveMetrics.activePower) > standards.activePowerMax)
                   )}
                 </td>
               </tr>
@@ -1717,12 +1747,9 @@ interface HourlyTrend5sPoint {
                 <td className="py-3 px-3 whitespace-nowrap">kVAR</td>
                 <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{standards.reactivePowerMax > 0 ? `≤ ${standards.reactivePowerMax}` : "—"}</td>
                 <td className="py-3 px-3 text-right whitespace-nowrap">
-                  {isOfflineVal(liveMetrics.reactivePower) ? (
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                  ) : (standards.reactivePowerMax > 0 && Number(liveMetrics.reactivePower) > standards.reactivePowerMax) ? (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  {renderTableStatus(
+                    isOfflineVal(liveMetrics.reactivePower),
+                    !(standards.reactivePowerMax > 0 && Number(liveMetrics.reactivePower) > standards.reactivePowerMax)
                   )}
                 </td>
               </tr>
@@ -1733,12 +1760,9 @@ interface HourlyTrend5sPoint {
                 <td className="py-3 px-3 whitespace-nowrap">kVA</td>
                 <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">{standards.apparentPowerMax > 0 ? `≤ ${standards.apparentPowerMax}` : "—"}</td>
                 <td className="py-3 px-3 text-right whitespace-nowrap">
-                  {isOfflineVal(liveMetrics.apparentPower) ? (
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                  ) : (standards.apparentPowerMax > 0 && Number(liveMetrics.apparentPower) > standards.apparentPowerMax) ? (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
+                  {renderTableStatus(
+                    isOfflineVal(liveMetrics.apparentPower),
+                    !(standards.apparentPowerMax > 0 && Number(liveMetrics.apparentPower) > standards.apparentPowerMax)
                   )}
                 </td>
               </tr>
@@ -1749,12 +1773,10 @@ interface HourlyTrend5sPoint {
                 <td className="py-3 px-3 whitespace-nowrap">PF</td>
                 <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">≥ {standards.powerFactorMin}</td>
                 <td className="py-3 px-3 text-right whitespace-nowrap">
-                  {isOfflineVal(liveMetrics.powerFactor) ? (
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                  ) : Number(liveMetrics.powerFactor) >= standards.powerFactorMin ? (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Low PF</span>
+                  {renderTableStatus(
+                    isOfflineVal(liveMetrics.powerFactor),
+                    Number(liveMetrics.powerFactor) >= standards.powerFactorMin,
+                    "⚠ Low PF"
                   )}
                 </td>
               </tr>
@@ -1765,12 +1787,9 @@ interface HourlyTrend5sPoint {
                 <td className="py-3 px-3 whitespace-nowrap">%</td>
                 <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">≤ {standards.unbalanceVMax}%</td>
                 <td className="py-3 px-3 text-right whitespace-nowrap">
-                  {isOfflineVal(liveMetrics.unbalanceV) ? (
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                  ) : Number(liveMetrics.unbalanceV) <= standards.unbalanceVMax ? (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  {renderTableStatus(
+                    isOfflineVal(liveMetrics.unbalanceV),
+                    Number(liveMetrics.unbalanceV) <= standards.unbalanceVMax
                   )}
                 </td>
               </tr>
@@ -1781,12 +1800,9 @@ interface HourlyTrend5sPoint {
                 <td className="py-3 px-3 whitespace-nowrap">%</td>
                 <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">≤ {standards.unbalanceIMax}%</td>
                 <td className="py-3 px-3 text-right whitespace-nowrap">
-                  {isOfflineVal(liveMetrics.unbalanceI) ? (
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                  ) : Number(liveMetrics.unbalanceI) <= standards.unbalanceIMax ? (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  {renderTableStatus(
+                    isOfflineVal(liveMetrics.unbalanceI),
+                    Number(liveMetrics.unbalanceI) <= standards.unbalanceIMax
                   )}
                 </td>
               </tr>
@@ -1797,12 +1813,9 @@ interface HourlyTrend5sPoint {
                 <td className="py-3 px-3 whitespace-nowrap">%</td>
                 <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">≤ {standards.thdVoltageMax}%</td>
                 <td className="py-3 px-3 text-right whitespace-nowrap">
-                  {isOfflineVal(liveMetrics.thdV_R) ? (
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                  ) : statsThdV.avg <= standards.thdVoltageMax ? (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  {renderTableStatus(
+                    isOfflineVal(liveMetrics.thdV_R),
+                    statsThdV.avg <= standards.thdVoltageMax
                   )}
                 </td>
               </tr>
@@ -1813,12 +1826,9 @@ interface HourlyTrend5sPoint {
                 <td className="py-3 px-3 whitespace-nowrap">%</td>
                 <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">≤ {standards.thdCurrentMax}%</td>
                 <td className="py-3 px-3 text-right whitespace-nowrap">
-                  {isOfflineVal(liveMetrics.thdI_R) ? (
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>
-                  ) : statsThdI.avg <= standards.thdCurrentMax ? (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">⚠ Overlimit</span>
+                  {renderTableStatus(
+                    isOfflineVal(liveMetrics.thdI_R),
+                    statsThdI.avg <= standards.thdCurrentMax
                   )}
                 </td>
               </tr>
