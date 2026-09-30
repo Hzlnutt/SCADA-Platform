@@ -1397,6 +1397,8 @@ export const deleteApiSourceHandler = async (req: Request, res: Response, next: 
 const apiProxyCache = new Map<string, { data: any; status: number; success: boolean; error?: string; ts: number }>();
 
 export const testApiSourceHandler = async (req: Request, res: Response, next: NextFunction) => {
+  let targetUrl: string = "";
+  let reqMethod: string = "GET";
   try {
     let { url, method, headers: customHeaders } = req.body;
 
@@ -1427,13 +1429,14 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
       return;
     }
 
-    const reqMethod = (method || "GET").toUpperCase();
+    targetUrl = url;
+    reqMethod = (method || "GET").toUpperCase();
     const now = Date.now();
 
-    // Cache GET requests for 1000ms so multiple components or tabs sharing the same URL don't flood the server with HTTP fetches
+    // Cache GET requests for 4000ms so multiple components or tabs sharing the same URL don't flood the server with HTTP fetches
     if (reqMethod === "GET") {
       const cached = apiProxyCache.get(url);
-      if (cached && now - cached.ts < 1000) {
+      if (cached && now - cached.ts < 4000) {
         res.json({
           success: cached.success,
           status: cached.status,
@@ -1445,7 +1448,7 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
 
     const fetchOptions: RequestInit = {
       method: reqMethod,
@@ -1490,6 +1493,7 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
       data: null,
       ts: Date.now()
     };
+    if (reqMethod === "GET" && targetUrl) apiProxyCache.set(targetUrl, result);
     res.json(result);
   }
 };

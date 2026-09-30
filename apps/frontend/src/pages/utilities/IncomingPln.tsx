@@ -332,7 +332,7 @@ export default function IncomingPln() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 1000);
+    const interval = setInterval(fetchActiveApiData, 30000); // 30s fallback poll (WebSockets handle 1s real-time stream)
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -509,8 +509,8 @@ interface HourlyTrend5sPoint {
       }
     }
 
-    // If live API poll explicitly failed for this URL, do not fallback to stale metrics
-    if (url && apiLiveData[url] === null) {
+    // If direct live API poll is unavailable for this URL, fallback to backend WebSocket/telemetry metrics first
+    if (url && apiLiveData[url] === null && (!metrics || !metrics.isConnected)) {
       return "GAGAL POLLING API";
     }
 
@@ -678,18 +678,6 @@ interface HourlyTrend5sPoint {
         if (isOffline) {
           setMetrics((prev) => ({
             ...prev,
-            voltage: 0,
-            frequency: 0,
-            activePower: 0,
-            powerFactor: 0,
-            reactivePower: 0,
-            apparentPower: 0,
-            unbalanceV: 0,
-            unbalanceI: 0,
-            vR: 0, vS: 0, vT: 0,
-            iR: 0, iS: 0, iT: 0,
-            thdV_R: 0, thdV_S: 0, thdV_T: 0,
-            thdI_R: 0, thdI_S: 0, thdI_T: 0,
             isConnected: false
           }));
           return;

@@ -3290,9 +3290,11 @@ export default function Electricity() {
     }
 
     if (tagKey === "electricity/p_grid") {
+      if (livePGridKw !== null && livePGridKw !== undefined) return livePGridKw;
       const plnRaw = apiLiveData[DEFAULT_PLN_API_URL]?.[DEFAULT_PLN_JSON_KEYS["pln/active_power"]];
       if (typeof plnRaw === "number" && plnRaw > 10000) return plnRaw / 1000.0;
       if (typeof plnRaw === "number") return plnRaw;
+      if (summaryData?.pln?.activePower) return summaryData.pln.activePower;
       return "API TIDAK TERKIRIM";
     }
 
@@ -3557,7 +3559,7 @@ export default function Electricity() {
     };
     const handleLiveUpdate = (payload: any) => {
       if (!active || !payload) return;
-      const isOffline = payload.online === false || payload.status === false || payload.pqData?.pfStatus === "offline" || payload.pqData?.activePower === null;
+      const isOffline = payload.online === false || payload.status === false || payload.pqData?.pfStatus === "offline";
 
       if (payload.deviceId === "Cubicle_PLN_PM8000") {
         if (isOffline) {
@@ -4469,7 +4471,9 @@ export default function Electricity() {
   const fact2Kw = rawFact2Val !== null ? Math.max(0, rawFact2Val) : null;
 
   const apiPlnVal = getCleanNum(getApiVal("pln/active_power"));
-  const rawPGridVal = livePGridKw !== null && livePGridKw !== undefined ? livePGridKw : apiPlnVal;
+  const rawPGridVal = livePGridKw !== null && livePGridKw !== undefined
+    ? livePGridKw
+    : (apiPlnVal !== null ? apiPlnVal : (summaryData?.pln?.activePower ?? null));
   const isPlnOffline = !isLiveLoading && rawPGridVal === null;
   const pGridNum = rawPGridVal !== null ? Math.max(0, rawPGridVal) : null;
 
