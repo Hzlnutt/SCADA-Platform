@@ -1272,6 +1272,26 @@ export default function PowerDistribution() {
     wf2Volt: null,
   });
 
+  const incomingDataRef = useRef(incomingData);
+  useEffect(() => {
+    incomingDataRef.current = incomingData;
+  }, [incomingData]);
+
+  const toKv = (v: number | null | undefined): number | null => {
+    if (v === null || v === undefined || isNaN(Number(v))) return null;
+    const num = Number(v);
+    return num > 100 ? Number((num / 1000).toFixed(2)) : Number(num.toFixed(2));
+  };
+
+  const safeActivePower = (val: any, prev: number | null): number | null => {
+    if (val === undefined || val === null || isNaN(Number(val))) return prev;
+    const num = Number(val);
+    if (num > 0 && num < 1.0 && prev !== null && prev > 10.0) {
+      return Number((num * 1000).toFixed(1));
+    }
+    return Number(num.toFixed(1));
+  };
+
   // Fetch incoming telemetries for PLN, Fact-1, Fact-2
   useEffect(() => {
     if (!isPageActive) return;
@@ -1282,16 +1302,16 @@ export default function PowerDistribution() {
           getJson<{ data: any }>("/analytics/electricity?deviceId=Feeder_WF1_PM5560"),
           getJson<{ data: any }>("/analytics/electricity?deviceId=Feeder_WF2_PM5500"),
         ]);
-        setIncomingData({
-          plnKw: plnRes?.data?.pqData?.activePower !== undefined ? plnRes.data.pqData.activePower : null,
-          plnPf: plnRes?.data?.pqData?.pf !== undefined ? plnRes.data.pqData.pf : null,
-          wf1Kw: wf1Res?.data?.pqData?.activePower !== undefined ? wf1Res.data.pqData.activePower : null,
-          wf1Pf: wf1Res?.data?.pqData?.pf !== undefined ? wf1Res.data.pqData.pf : null,
-          wf1Volt: wf1Res?.data?.pqData?.vll1 ? Number((wf1Res.data.pqData.vll1 / 1000).toFixed(2)) : null,
-          wf2Kw: wf2Res?.data?.pqData?.activePower !== undefined ? wf2Res.data.pqData.activePower : null,
-          wf2Pf: wf2Res?.data?.pqData?.pf !== undefined ? wf2Res.data.pqData.pf : null,
-          wf2Volt: wf2Res?.data?.pqData?.vll1 ? Number((wf2Res.data.pqData.vll1 / 1000).toFixed(2)) : null,
-        });
+        setIncomingData(prev => ({
+          plnKw: plnRes?.data?.pqData?.activePower !== undefined ? safeActivePower(plnRes.data.pqData.activePower, prev.plnKw) : prev.plnKw,
+          plnPf: plnRes?.data?.pqData?.pf !== undefined ? plnRes.data.pqData.pf : prev.plnPf,
+          wf1Kw: wf1Res?.data?.pqData?.activePower !== undefined ? safeActivePower(wf1Res.data.pqData.activePower, prev.wf1Kw) : prev.wf1Kw,
+          wf1Pf: wf1Res?.data?.pqData?.pf !== undefined ? wf1Res.data.pqData.pf : prev.wf1Pf,
+          wf1Volt: toKv(wf1Res?.data?.pqData?.vll1 ?? wf1Res?.data?.pqData?.voltage) ?? prev.wf1Volt,
+          wf2Kw: wf2Res?.data?.pqData?.activePower !== undefined ? safeActivePower(wf2Res.data.pqData.activePower, prev.wf2Kw) : prev.wf2Kw,
+          wf2Pf: wf2Res?.data?.pqData?.pf !== undefined ? wf2Res.data.pqData.pf : prev.wf2Pf,
+          wf2Volt: toKv(wf2Res?.data?.pqData?.vll1 ?? wf2Res?.data?.pqData?.voltage) ?? prev.wf2Volt,
+        }));
       } catch (err) {
         console.error("Failed to load incoming telemetries for SLD:", err);
       }
@@ -1305,22 +1325,26 @@ export default function PowerDistribution() {
       if (!payload || !payload.deviceId || !payload.pqData) return;
       setIncomingData(prev => {
         if (payload.deviceId === "Cubicle_PLN_PM8000") {
-          return { ...prev, plnKw: payload.pqData.activePower, plnPf: payload.pqData.pf };
+          return {
+            ...prev,
+            plnKw: safeActivePower(payload.pqData.activePower, prev.plnKw),
+            plnPf: payload.pqData.pf !== undefined ? payload.pqData.pf : prev.plnPf
+          };
         }
         if (payload.deviceId === "Feeder_WF1_PM5560") {
           return {
             ...prev,
-            wf1Kw: payload.pqData.activePower,
-            wf1Pf: payload.pqData.pf,
-            wf1Volt: payload.pqData.vll1 ? Number((payload.pqData.vll1 / 1000).toFixed(2)) : prev.wf1Volt
+            wf1Kw: safeActivePower(payload.pqData.activePower, prev.wf1Kw),
+            wf1Pf: payload.pqData.pf !== undefined ? payload.pqData.pf : prev.wf1Pf,
+            wf1Volt: toKv(payload.pqData.vll1 ?? payload.pqData.voltage) ?? prev.wf1Volt
           };
         }
         if (payload.deviceId === "Feeder_WF2_PM5500") {
           return {
             ...prev,
-            wf2Kw: payload.pqData.activePower,
-            wf2Pf: payload.pqData.pf,
-            wf2Volt: payload.pqData.vll1 ? Number((payload.pqData.vll1 / 1000).toFixed(2)) : prev.wf2Volt
+            wf2Kw: safeActivePower(payload.pqData.activePower, prev.wf2Kw),
+            wf2Pf: payload.pqData.pf !== undefined ? payload.pqData.pf : prev.wf2Pf,
+            wf2Volt: toKv(payload.pqData.vll1 ?? payload.pqData.voltage) ?? prev.wf2Volt
           };
         }
         return prev;
@@ -1389,6 +1413,18 @@ export default function PowerDistribution() {
     };
   }, [isPageActive]);
 
+  // Sync transformer incoming voltage whenever wf1Volt or wf2Volt updates
+  useEffect(() => {
+    if (incomingData.wf1Volt === null && incomingData.wf2Volt === null) return;
+    setTelemetryTransformers((prevTrafos) =>
+      prevTrafos.map((tx) => {
+        const kv = tx.factory === 1 ? incomingData.wf1Volt : incomingData.wf2Volt;
+        if (tx.voltageInKv === kv) return tx;
+        return { ...tx, voltageInKv: kv };
+      })
+    );
+  }, [incomingData.wf1Volt, incomingData.wf2Volt]);
+
   // Fetch and sync power meter records for all 7 transformers
   useEffect(() => {
     if (!isPageActive) return;
@@ -1409,7 +1445,8 @@ export default function PowerDistribution() {
               const mapping = TRAFO_PM_MAP[tx.id];
               if (!mapping) return tx;
               const pmRecord = pmMap.get(mapping.pmId.toUpperCase());
-              const incomingKv = tx.factory === 1 ? incomingData.wf1Volt : incomingData.wf2Volt;
+              if (!pmRecord) return tx;
+              const incomingKv = tx.factory === 1 ? incomingDataRef.current.wf1Volt : incomingDataRef.current.wf2Volt;
               return mapPmToTransformer(tx, pmRecord, incomingKv);
             })
           );
@@ -1438,7 +1475,7 @@ export default function PowerDistribution() {
           if (!mapping) return tx;
           const pmRecord = pmMap.get(mapping.pmId.toUpperCase());
           if (!pmRecord) return tx;
-          const incomingKv = tx.factory === 1 ? incomingData.wf1Volt : incomingData.wf2Volt;
+          const incomingKv = tx.factory === 1 ? incomingDataRef.current.wf1Volt : incomingDataRef.current.wf2Volt;
           return mapPmToTransformer(tx, pmRecord, incomingKv);
         })
       );
@@ -1456,7 +1493,7 @@ export default function PowerDistribution() {
       socket.off("electricity:ew22_live", handlePmUpdate);
       socket.off("electricity:ew23_live", handlePmUpdate);
     };
-  }, [isPageActive, incomingData.wf1Volt, incomingData.wf2Volt]);
+  }, [isPageActive]);
 
   // Sub-Distribution Power Meters (EW23, EW21, EW22)
   const [selectedEwGroup, setSelectedEwGroup] = useState<"ew23" | "ew21" | "ew22">("ew23");

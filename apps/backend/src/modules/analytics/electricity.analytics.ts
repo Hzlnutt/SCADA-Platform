@@ -991,15 +991,15 @@ export const getElectricityAnalytics = async (
       peakDemandVal = Number(pgPq.pqData.peakDemand);
     }
     const rawActive = pgPq.active_power !== undefined ? pgPq.active_power : pgPq.active_power_total;
-    activePowerVal = rawActive !== null ? Number(rawActive) / 1000.0 : 0;
-    reactivePowerVal = pgPq.reactive_power_total !== null ? Number(pgPq.reactive_power_total) / 1000.0 : 0;
-    apparentPowerVal = pgPq.apparent_power_total !== null ? Number(pgPq.apparent_power_total) / 1000.0 : 0;
+    activePowerVal = rawActive !== null ? Math.abs(Number(rawActive) > 10000 ? Number(rawActive) / 1000.0 : Number(rawActive)) : 0;
+    reactivePowerVal = pgPq.reactive_power_total !== null ? (Number(pgPq.reactive_power_total) > 10000 ? Number(pgPq.reactive_power_total) / 1000.0 : Number(pgPq.reactive_power_total)) : 0;
+    apparentPowerVal = pgPq.apparent_power_total !== null ? (Number(pgPq.apparent_power_total) > 10000 ? Number(pgPq.apparent_power_total) / 1000.0 : Number(pgPq.apparent_power_total)) : 0;
     pfVal = pgPq.power_factor !== null && pgPq.power_factor !== undefined ? Math.abs(Number(pgPq.power_factor)) : null;
     freqVal = pgPq.frequency !== null ? Number(pgPq.frequency) : freqVal;
-    voltLAvg = pgPq.volt_ll !== null ? Number(pgPq.volt_ll) / 1000.0 : voltLAvg;
-    voltABVal = pgPq.volt_ab !== null ? Number(pgPq.volt_ab) / 1000.0 : voltABVal;
-    voltBCVal = pgPq.volt_bc !== null ? Number(pgPq.volt_bc) / 1000.0 : voltBCVal;
-    voltCAVal = pgPq.volt_ca !== null ? Number(pgPq.volt_ca) / 1000.0 : voltCAVal;
+    voltLAvg = pgPq.volt_ll !== null ? (Number(pgPq.volt_ll) > 1000 ? Number(pgPq.volt_ll) / 1000.0 : Number(pgPq.volt_ll)) : voltLAvg;
+    voltABVal = pgPq.volt_ab !== null ? (Number(pgPq.volt_ab) > 1000 ? Number(pgPq.volt_ab) / 1000.0 : Number(pgPq.volt_ab)) : voltABVal;
+    voltBCVal = pgPq.volt_bc !== null ? (Number(pgPq.volt_bc) > 1000 ? Number(pgPq.volt_bc) / 1000.0 : Number(pgPq.volt_bc)) : voltBCVal;
+    voltCAVal = pgPq.volt_ca !== null ? (Number(pgPq.volt_ca) > 1000 ? Number(pgPq.volt_ca) / 1000.0 : Number(pgPq.volt_ca)) : voltCAVal;
     currentAVal = pgPq.current_a !== null ? Number(pgPq.current_a) : currentAVal;
     currentBVal = pgPq.current_b !== null ? Number(pgPq.current_b) : currentBVal;
     currentCVal = pgPq.current_c !== null ? Number(pgPq.current_c) : currentCVal;
@@ -1033,7 +1033,7 @@ export const getElectricityAnalytics = async (
 
     const statusVal = deviceId === "Cubicle_PLN_PM8000" ? pgPq.status_pm8000 : pgPq.status_pm5500;
     const recordTime = new Date(pgPq.t_stamp).getTime();
-    const isStale = (Date.now() - recordTime) > 10000; // 10 seconds stale threshold
+    const isStale = (Date.now() - recordTime) > 60000; // 60 seconds stale threshold
     isConnected = (statusVal !== null ? !!statusVal : true) && !isStale;
   }
 
