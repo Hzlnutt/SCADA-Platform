@@ -236,7 +236,8 @@ function mapPmToTransformer(
   }
 
   const kwh = pm.active_energy !== null && pm.active_energy !== undefined ? Number(Number(pm.active_energy).toFixed(0)) : null;
-  const isOnline = pm.status !== false && activePowerKw !== null;
+  const hasLiveReading = (activePowerKw !== null && activePowerKw !== undefined) || (voltageOutL2L !== null && voltageOutL2L > 100);
+  const isOnline = pm.status === true || (pm.status !== false && hasLiveReading) || hasLiveReading;
 
   return {
     ...initialTx,
@@ -1672,45 +1673,28 @@ export default function PowerDistribution() {
   }, [bottomZoomChart]);
 
   useEffect(() => {
-    try {
-      const cached = localStorage.getItem(`trafo_rolling_3s_${bottomTxId}`);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const dayAgo = Date.now() - 25 * 3600 * 1000;
-          const fresh = parsed.filter((p: any) => !p.ts || Number(p.ts) >= dayAgo);
-          setBottomHistory(fresh);
-        }
-      }
-    } catch (e) {}
-
     if (!isPageActive) return;
+
+    // Reset history when switching transformer to ensure lazy loading only selected unit
+    setBottomHistory([]);
+    setLoadingBottomHistory(true);
+
+    const pmId = TRAFO_PM_MAP[bottomTxId]?.pmId || bottomTxId;
     const fetchBottomHistory = () => {
-      setLoadingBottomHistory(true);
-      const pmId = TRAFO_PM_MAP[bottomTxId]?.pmId || bottomTxId;
       getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?rolling=true&_t=${Date.now()}`)
         .then((res) => {
           if (res?.data && Array.isArray(res.data)) {
-            setBottomHistory((prev) => {
-              const dayAgo = Date.now() - 25 * 3600 * 1000;
-              const map = new Map<string, any>();
-              for (const p of prev) {
-                if (!p.ts || Number(p.ts) >= dayAgo) {
-                  const key = p.time || p.label || String(p.ts);
-                  map.set(key, p);
-                }
+            const dayAgo = Date.now() - 24 * 3600 * 1000;
+            // Clean sort & deduplication by timestamp
+            const map = new Map<number, any>();
+            for (const p of res.data) {
+              const tsNum = Number(p.ts) || 0;
+              if (tsNum >= dayAgo) {
+                map.set(tsNum, p);
               }
-              for (const p of res.data) {
-                const key = p.time || p.label || String(p.ts);
-                map.set(key, p);
-              }
-              const merged = Array.from(map.values()).sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
-              const trimmed = merged.length > 4000 ? merged.slice(merged.length - 4000) : merged;
-              try {
-                localStorage.setItem(`trafo_rolling_3s_${bottomTxId}`, JSON.stringify(trimmed.slice(-1500)));
-              } catch (e) {}
-              return trimmed;
-            });
+            }
+            const sorted = Array.from(map.values()).sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
+            setBottomHistory(sorted);
           }
         })
         .catch((err) => console.error("Failed to load bottom trafo history:", err))
@@ -1770,13 +1754,10 @@ export default function PowerDistribution() {
       };
 
       setBottomHistory((prev) => {
-        const updated = [...prev, newPoint];
-        // 24-hour continuous rolling FIFO buffer
-        const trimmed = updated.length > 4000 ? updated.slice(updated.length - 4000) : updated;
-        try {
-          localStorage.setItem(`trafo_rolling_3s_${bottomTxId}`, JSON.stringify(trimmed.slice(-1500)));
-        } catch (e) {}
-        return trimmed;
+        const windowStart = now - 24 * 3600 * 1000;
+        // Continuous 24-hour FIFO rolling buffer: drop points older than 24 hours
+        const filtered = prev.filter((p) => (Number(p.ts) || 0) >= windowStart);
+        return [...filtered, newPoint];
       });
     };
 
@@ -2588,7 +2569,7 @@ export default function PowerDistribution() {
                 <option key={t.id} value={t.id}>{t.factory === 1 ? "F1" : "F2"} {t.name}</option>
               ))}
             </select>
-            <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${
+            <span className={`w-20 inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border transition-colors ${
               bottomTx?.status === "online"
                 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
                 : "bg-slate-500/10 text-slate-400 border-slate-500/20"

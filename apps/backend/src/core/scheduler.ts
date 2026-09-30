@@ -687,6 +687,20 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
     };
 
     const getStatus = (): boolean | null => {
+      // Check if numerical electrical reading exists and is valid
+      const hasAnyReading = [
+        getVal(["VoltAB"]),
+        getVal(["VoltBC"]),
+        getVal(["Volt_LL", "VoltLL"]),
+        getVal(["Active_Power_Total", "Active_Power"]),
+        getVal(["Current_A", "Current_B", "Current_C"]),
+        obj[`ActiveEnergy_${pmId}`],
+        obj[`Active_Power_Total_${pmId}`],
+        obj[`VoltAB_${pmId}`],
+        obj.ActiveEnergy,
+        obj.Active_Power_Total
+      ].some(v => v !== null && v !== undefined && !isNaN(Number(v)) && Number(v) > 0);
+
       const statusCandidates = [
         `Status_${pmId}`,
         `Status_${pmId.toLowerCase()}`,
@@ -698,19 +712,13 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
         "Status"
       ];
       for (const sk of statusCandidates) {
-        if (obj[sk] !== undefined) {
-          if (obj[sk] === null) return false;
-          return Boolean(obj[sk]);
+        if (obj[sk] !== undefined && obj[sk] !== null) {
+          if (Boolean(obj[sk]) === true) return true;
+          // If status flag is 0/false, but active electrical measurements are flowing (e.g. PM13x series where status contact is not wired), the meter is physically online!
+          if (hasAnyReading) return true;
+          return false;
         }
       }
-      // If no status flag, check if any numerical electrical reading exists
-      const hasAnyReading = [
-        obj[`ActiveEnergy_${pmId}`],
-        obj[`Active_Power_Total_${pmId}`],
-        obj[`VoltAB_${pmId}`],
-        obj.ActiveEnergy,
-        obj.Active_Power_Total
-      ].some(v => v !== null && v !== undefined);
 
       return hasAnyReading ? true : false;
     };
