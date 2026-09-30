@@ -18,10 +18,9 @@ import { SeniorUnitHeadConfigModal, type ConsumptionFactCategory } from "../../c
 import { EquipmentConfigModal, type EquipmentDisplayItem } from "../../components/electricity/EquipmentConfigModal";
 import { ErrorBoundary } from "../../components/ui/ErrorBoundary";
 import {
-  DEFAULT_FACT1_CATEGORIES,
-  DEFAULT_FACT2_CATEGORIES,
   getMachineSeries
 } from "../../data/equipmentSeriesData";
+
 
 /* ═══════════ CONSTANTS ═══════════ */
 const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
@@ -787,6 +786,94 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   );
 });
 
+// Default Fallback Equipment Items (57 Standard Units with explicit factory mapping)
+const DEFAULT_ALL_EQUIPMENT_DISPLAY_ITEMS: EquipmentDisplayItem[] = [
+  // 1. Cooling Tower (7 Units)
+  { id: 1, config_type: "equipment_display", config_key: "pm152", label: "Cooling Tower Pump WF1-U3", sort_order: 1, enabled: true, value: { pm_id: "PM152", seriesKey: "F1 COOLING TOWER PUMP WF1-U3", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 2, config_type: "equipment_display", config_key: "pm181", label: "Cooling Tower Fan WF1-U3", sort_order: 2, enabled: true, value: { pm_id: "PM181", seriesKey: "F1 COOLING TOWER FAN WF1-U3", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 3, config_type: "equipment_display", config_key: "pm206", label: "Cooling Fase-1 WF2", sort_order: 3, enabled: true, value: { pm_id: "PM206", seriesKey: "F2 COOLING FASE-1", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 4, config_type: "equipment_display", config_key: "pm215", label: "Cooling Critical WF2", sort_order: 4, enabled: true, value: { pm_id: "PM215", seriesKey: "F2 COOLING CRITICAL", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 5, config_type: "equipment_display", config_key: "pm318", label: "Cooling Fase-2 WF2", sort_order: 5, enabled: true, value: { pm_id: "PM318", seriesKey: "F2 COOLING FASE-2", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew23", factory: "wf2" } },
+  { id: 6, config_type: "equipment_display", config_key: "pm324", label: "Cooling Tower CT-Pump WF2", sort_order: 6, enabled: true, value: { pm_id: "PM324", seriesKey: "F2 COOLING TOWER CT-PUMP", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew23", factory: "wf2" } },
+  { id: 7, config_type: "equipment_display", config_key: "pm325", label: "Cooling Tower CT-Fan WF2", sort_order: 7, enabled: true, value: { pm_id: "PM325", seriesKey: "F2 COOLING TOWER CT-FAN", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew23", factory: "wf2" } },
+
+  // 2. Boiler (2 Units)
+  { id: 8, config_type: "equipment_display", config_key: "pm184", label: "Boiler 4 WF1", sort_order: 8, enabled: true, value: { pm_id: "PM184", seriesKey: "F1 BOILER 4", category: "boiler", categoryLabel: "Boiler", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 9, config_type: "equipment_display", config_key: "pm213", label: "Boiler-5 WF2", sort_order: 9, enabled: true, value: { pm_id: "PM213", seriesKey: "F2 BOILER-5", category: "boiler", categoryLabel: "Boiler", endpoint_url: "electric_ew22", factory: "wf2" } },
+
+  // 3. Compressed Air (5 Units)
+  { id: 10, config_type: "equipment_display", config_key: "pm140", label: "Compressed Air ZT-55 WF1", sort_order: 10, enabled: true, value: { pm_id: "PM140", seriesKey: "F1 COMPRESSED AIR ZT-55", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 11, config_type: "equipment_display", config_key: "pm182", label: "Compressed Air ZT-30.1&2 WF1", sort_order: 11, enabled: true, value: { pm_id: "PM182", seriesKey: "F1 COMPRESSED AIR ZT-30.1&2", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 12, config_type: "equipment_display", config_key: "pm183", label: "Compressed Air ALE-30 WF1", sort_order: 12, enabled: true, value: { pm_id: "PM183", seriesKey: "F1 COMPRESSED AIR ALE-30", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 13, config_type: "equipment_display", config_key: "pm214", label: "Compressed Air Atlas WF2", sort_order: 13, enabled: true, value: { pm_id: "PM214", seriesKey: "F2 COMPRESSED AIR ATLAS", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 14, config_type: "equipment_display", config_key: "pm229", label: "Kobelco ALE-250 WF2", sort_order: 14, enabled: true, value: { pm_id: "PM229", seriesKey: "F2 KOBELCO ALE-250", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew22", factory: "wf2" } },
+
+  // 4. Chiller (8 Units)
+  { id: 15, config_type: "equipment_display", config_key: "pm177", label: "Chiller Prep Daikin Barat WF1", sort_order: 15, enabled: true, value: { pm_id: "PM177", seriesKey: "F1 CHILLER PREP DAIKIN BARAT", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 16, config_type: "equipment_display", config_key: "pm178", label: "Chiller Prep Daikin Timur WF1", sort_order: 16, enabled: true, value: { pm_id: "PM178", seriesKey: "F1 CHILLER PREP DAIKIN TIMUR", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 17, config_type: "equipment_display", config_key: "pm180", label: "Chiller BP WF1-U3", sort_order: 17, enabled: true, value: { pm_id: "PM180", seriesKey: "F1 CHILLER BP WF1-U3", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 18, config_type: "equipment_display", config_key: "pm209", label: "Chiller - WF2U2", sort_order: 18, enabled: true, value: { pm_id: "PM209", seriesKey: "F2 CHILLER - WF2U2", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 19, config_type: "equipment_display", config_key: "pm271", label: "Chiller RTAC 250 (RO & HVAC) WF2", sort_order: 19, enabled: true, value: { pm_id: "PM271", seriesKey: "F2 CHILLER RTAC 250 (RO&HVAC)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 20, config_type: "equipment_display", config_key: "pm272", label: "Chiller RTAC 170 (RO) WF2", sort_order: 20, enabled: true, value: { pm_id: "PM272", seriesKey: "F2 CHILLER RTAC 170 (RO)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 21, config_type: "equipment_display", config_key: "pm274", label: "Chiller RTAC 100 (BP) WF2", sort_order: 21, enabled: true, value: { pm_id: "PM274", seriesKey: "F2 CHILLER RTAC 100 (BP)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 22, config_type: "equipment_display", config_key: "pm319", label: "Chiller RTAC-275 (Prep) WF2", sort_order: 22, enabled: true, value: { pm_id: "PM319", seriesKey: "F2 CHILLER RTAC-275 (PREP)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew23", factory: "wf2" } },
+
+  // 5. HVAC Warehouse & Penerangan (8 Units)
+  { id: 23, config_type: "equipment_display", config_key: "pm134", label: "WH 4 Penerangan WF1", sort_order: 23, enabled: true, value: { pm_id: "PM134", seriesKey: "F1 WH 4 PENERANGAN", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 24, config_type: "equipment_display", config_key: "pm154", label: "Lighting WH 1 WF1", sort_order: 24, enabled: true, value: { pm_id: "PM154", seriesKey: "F1 LIGHTING WH 1", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 25, config_type: "equipment_display", config_key: "pm151", label: "HVAC Office Atas WF1", sort_order: 25, enabled: true, value: { pm_id: "PM151", seriesKey: "F1 HVAC OFFICE ATAS", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 26, config_type: "equipment_display", config_key: "pm179", label: "HVAC WH-3 WF1", sort_order: 26, enabled: true, value: { pm_id: "PM179", seriesKey: "F1 HVAC WH-3", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 27, config_type: "equipment_display", config_key: "pm207", label: "WH 6 WF2", sort_order: 27, enabled: true, value: { pm_id: "PM207", seriesKey: "F2 WH 6", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 28, config_type: "equipment_display", config_key: "pm208", label: "WH 5 WF2", sort_order: 28, enabled: true, value: { pm_id: "PM208", seriesKey: "F2 WH 5", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 29, config_type: "equipment_display", config_key: "pm226", label: "WH-7 WF2", sort_order: 29, enabled: true, value: { pm_id: "PM226", seriesKey: "F2 WH-7", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 30, config_type: "equipment_display", config_key: "pm288", label: "Penerangan PD WF2", sort_order: 30, enabled: true, value: { pm_id: "PM288", seriesKey: "F2 Penerangan PD", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22", factory: "wf2" } },
+
+  // 6. HVAC QC & Produksi (9 Units)
+  { id: 31, config_type: "equipment_display", config_key: "pm138", label: "Full Cooling WF1-U3", sort_order: 31, enabled: true, value: { pm_id: "PM138", seriesKey: "F1 FULL COOLING WF1-U3", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 32, config_type: "equipment_display", config_key: "pm153", label: "HVAC-QC WF1", sort_order: 32, enabled: true, value: { pm_id: "PM153", seriesKey: "F1 HVAC-QC", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 33, config_type: "equipment_display", config_key: "pm185", label: "HVAC WF1U3", sort_order: 33, enabled: true, value: { pm_id: "PM185", seriesKey: "F1 HVAC WF1U3", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 34, config_type: "equipment_display", config_key: "pm203", label: "Heater WF2U2", sort_order: 34, enabled: true, value: { pm_id: "PM203", seriesKey: "F2 HEATER WF2U2", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 35, config_type: "equipment_display", config_key: "pm205", label: "AHU WF2UI", sort_order: 35, enabled: true, value: { pm_id: "PM205", seriesKey: "F2 AHU WF2UI", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 36, config_type: "equipment_display", config_key: "pm273", label: "Return Sample QC WF2", sort_order: 36, enabled: true, value: { pm_id: "PM273", seriesKey: "RETURN SAMPLE QC", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 37, config_type: "equipment_display", config_key: "pm321", label: "AHU-1 - WF2U2", sort_order: 37, enabled: true, value: { pm_id: "PM321", seriesKey: "F2 AHU-1 - WF2U2", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew23", factory: "wf2" } },
+  { id: 38, config_type: "equipment_display", config_key: "pm322", label: "AHU-2 - WF2U2", sort_order: 38, enabled: true, value: { pm_id: "PM322", seriesKey: "F2 AHU-2 - WF2U2", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew23", factory: "wf2" } },
+  { id: 39, config_type: "equipment_display", config_key: "pm132", label: "Main Supply QC Office & Lab WF1", sort_order: 39, enabled: true, value: { pm_id: "PM132", seriesKey: "F1 MAIN SUPPLY QC OFFICE & LAB", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21", factory: "wf1" } },
+
+  // 7. Panel Distribusi & Water Treatment (15 Units)
+  { id: 40, config_type: "equipment_display", config_key: "pm133", label: "MDP3 WF1", sort_order: 40, enabled: true, value: { pm_id: "PM133", seriesKey: "F1 MDP3", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 41, config_type: "equipment_display", config_key: "pm135", label: "MDP-2 WF1", sort_order: 41, enabled: true, value: { pm_id: "PM135", seriesKey: "F1 MDP-2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 42, config_type: "equipment_display", config_key: "pm136", label: "MDP-1.2 WF1", sort_order: 42, enabled: true, value: { pm_id: "PM136", seriesKey: "F1 MDP-1.2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 43, config_type: "equipment_display", config_key: "pm139", label: "MDP-1.1 WF1", sort_order: 43, enabled: true, value: { pm_id: "PM139", seriesKey: "F1 MDP-1.1", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 44, config_type: "equipment_display", config_key: "pm175", label: "ST3 WF1", sort_order: 44, enabled: true, value: { pm_id: "PM175", seriesKey: "F1 ST3", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 45, config_type: "equipment_display", config_key: "pm176", label: "QC Lab WF1", sort_order: 45, enabled: true, value: { pm_id: "PM176", seriesKey: "F1 QC LAB", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21", factory: "wf1" } },
+  { id: 46, config_type: "equipment_display", config_key: "pm201", label: "PUTR-1 WF2", sort_order: 46, enabled: true, value: { pm_id: "PM201", seriesKey: "F2 PUTR-1", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 47, config_type: "equipment_display", config_key: "pm202", label: "PUTR-2 WF2", sort_order: 47, enabled: true, value: { pm_id: "PM202", seriesKey: "F2 PUTR-2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 48, config_type: "equipment_display", config_key: "pm210", label: "Main Critical Panel WF2", sort_order: 48, enabled: true, value: { pm_id: "PM210", seriesKey: "F2 MAIN CRITICAL PANEL", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 49, config_type: "equipment_display", config_key: "pm211", label: "Panel Otoklaf WF2U1", sort_order: 49, enabled: true, value: { pm_id: "PM211", seriesKey: "F2 PANEL OTOKLAF WF2U1", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 50, config_type: "equipment_display", config_key: "pm212", label: "Panel Otoklaf WF2U2", sort_order: 50, enabled: true, value: { pm_id: "PM212", seriesKey: "F2 PANEL OTOKLAF WF2U2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22", factory: "wf2" } },
+  { id: 51, config_type: "equipment_display", config_key: "pm320", label: "WT-DU-PSG WF2", sort_order: 51, enabled: true, value: { pm_id: "PM320", seriesKey: "F2 WT-DU-PSG", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23", factory: "wf2" } },
+  { id: 52, config_type: "equipment_display", config_key: "pm323", label: "PW Generation - RO WF2", sort_order: 52, enabled: true, value: { pm_id: "PM323", seriesKey: "F2 PW GENERATION - RO", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23", factory: "wf2" } },
+  { id: 53, config_type: "equipment_display", config_key: "pm327", label: "PUTR-NEW WF2", sort_order: 53, enabled: true, value: { pm_id: "PM327", seriesKey: "F2 PUTR-NEW", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23", factory: "wf2" } },
+  { id: 54, config_type: "equipment_display", config_key: "pm337", label: "MCC BP 7 WF2", sort_order: 54, enabled: true, value: { pm_id: "PM337", seriesKey: "F2 MCC BP 7", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23", factory: "wf2" } },
+
+  // 8. Incoming Cubicles (3 Units)
+  { id: 55, config_type: "equipment_display", config_key: "pm410", label: "Incoming Cubicle PLN (PM8000)", sort_order: 55, enabled: true, value: { pm_id: "PM410", seriesKey: "incoming cubicle pln", category: "cubicles", categoryLabel: "Incoming Cubicles", endpoint_url: "electric_pln", factory: "wf2" } },
+  { id: 56, config_type: "equipment_display", config_key: "pm411", label: "Incoming Cubicle WF1 (PM5560)", sort_order: 56, enabled: true, value: { pm_id: "PM411", seriesKey: "incoming cubicle WF1", category: "cubicles", categoryLabel: "Incoming Cubicles", endpoint_url: "electric_wf1", factory: "wf1" } },
+  { id: 57, config_type: "equipment_display", config_key: "pm412", label: "Incoming Cubicle WF2 (PM5560)", sort_order: 57, enabled: true, value: { pm_id: "PM412", seriesKey: "incoming cubicle WF2", category: "cubicles", categoryLabel: "Incoming Cubicles", endpoint_url: "electric_wf2", factory: "wf2" } }
+];
+
+function getFactoryOfEquipmentItem(item: EquipmentDisplayItem): "wf1" | "wf2" | "cubicles" | "other" {
+  const f = item.value?.factory?.toLowerCase();
+  if (f === "wf1" || f === "factory 1") return "wf1";
+  if (f === "wf2" || f === "factory 2") return "wf2";
+  if (item.value?.category === "cubicles") return "wf2";
+
+  const s = `${item.label} ${item.value?.seriesKey || ""} ${item.value?.endpoint_url || ""}`.toLowerCase();
+  if (s.includes("wf1") || s.includes("f1 ") || s.includes("ew21") || s.includes("electric_wf1")) return "wf1";
+  if (s.includes("wf2") || s.includes("f2 ") || s.includes("ew22") || s.includes("ew23") || s.includes("electric_wf2") || s.includes("pln")) return "wf2";
+  return "wf1";
+}
+
 const DynamicSelectionChart = memo(function DynamicSelectionChart({
   isDark,
   currMonthName,
@@ -794,7 +881,8 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
   currentYear,
   currentMonthIdx,
   compYear,
-  compMonthIdx
+  compMonthIdx,
+  allEquipmentItems
 }: {
   isDark: boolean;
   currMonthName?: string;
@@ -803,9 +891,10 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
   currentMonthIdx?: number;
   compYear?: number;
   compMonthIdx?: number;
+  allEquipmentItems?: EquipmentDisplayItem[];
 }) {
-  const [factory, setFactory] = useState<"wf1" | "wf2">("wf1");
-  const [machine, setMachine] = useState("F1 MAIN SUPPLY QC OFFICE & LAB");
+  const [factory, setFactory] = useState<"wf1" | "wf2" | "all">("wf1");
+  const [selectedKey, setSelectedKey] = useState<string>("pm132");
   const [showPrevious, setShowPrevious] = useState(true);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
 
@@ -820,20 +909,37 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isZoomOpen]);
 
-  const machineOptions = useMemo(() => {
-    if (factory === "wf1") {
-      return DEFAULT_FACT1_CATEGORIES.map((c) => c.label);
-    } else {
-      return DEFAULT_FACT2_CATEGORIES.map((c) => c.label);
-    }
-  }, [factory]);
+  // Combined equipment pool: use allEquipmentItems passed from SectionHEquipment or fallback
+  // CRITICAL REQUIREMENT: Do NOT filter out disabled items (enabled === false).
+  // All items saved in database remain fully selectable in this monthly comparison card!
+  const availableItems = useMemo(() => {
+    const list = (allEquipmentItems && allEquipmentItems.length > 0)
+      ? allEquipmentItems
+      : DEFAULT_ALL_EQUIPMENT_DISPLAY_ITEMS;
 
-  // Sync selected machine when options change
+    if (factory === "all") return list;
+    return list.filter((it) => getFactoryOfEquipmentItem(it) === factory);
+  }, [allEquipmentItems, factory]);
+
+  // Keep selectedKey synchronized if factory switch or list change makes current key invalid
   useEffect(() => {
-    if (!machineOptions.includes(machine)) {
-      setMachine(machineOptions[0] || "F1 MAIN SUPPLY QC OFFICE & LAB");
+    if (availableItems.length === 0) return;
+    const exists = availableItems.some((it) => it.config_key.toLowerCase() === selectedKey.toLowerCase());
+    if (!exists) {
+      setSelectedKey(availableItems[0].config_key);
     }
-  }, [machineOptions, machine]);
+  }, [availableItems, selectedKey]);
+
+  const selectedItem = useMemo(() => {
+    return availableItems.find((it) => it.config_key.toLowerCase() === selectedKey.toLowerCase())
+      || availableItems[0]
+      || null;
+  }, [availableItems, selectedKey]);
+
+  const machineName = selectedItem?.value?.seriesKey || selectedItem?.label || "F1 MAIN SUPPLY QC OFFICE & LAB";
+  const itemPmId = (selectedItem?.value?.pm_id || selectedItem?.config_key || "PM132").toUpperCase();
+  const itemConfigKey = selectedItem?.config_key || "";
+  const isItemHidden = selectedItem?.enabled === false;
 
   // Dynamic state from database
   const [dbData, setDbData] = useState<{
@@ -866,13 +972,21 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
 
     setDbData((prev) => ({ ...prev, loading: true }));
 
+    const query = new URLSearchParams({
+      machine: machineName,
+      pmId: itemPmId,
+      configKey: itemConfigKey,
+      currentMonth: currMonthStr,
+      comparisonMonth: compMonthStr
+    });
+
     getJson<{
       pmId: string;
       label: string;
       currentMonth: { daily: number[]; totalKwh: number; hasData: boolean };
       comparisonMonth: { daily: number[]; totalKwh: number; hasData: boolean };
       hasData: boolean;
-    }>(`/analytics/electricity/equipment-monthly?machine=${encodeURIComponent(machine)}&currentMonth=${currMonthStr}&comparisonMonth=${compMonthStr}`)
+    }>(`/analytics/electricity/equipment-monthly?${query.toString()}`)
       .then((res) => {
         if (!isCancelled && res) {
           setDbData({
@@ -880,7 +994,7 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
             previousData: res.comparisonMonth?.daily || [],
             currTotalKwh: res.currentMonth?.totalKwh || 0,
             prevTotalKwh: res.comparisonMonth?.totalKwh || 0,
-            pmId: res.pmId,
+            pmId: res.pmId || itemPmId,
             hasData: Boolean(res.hasData),
             loading: false
           });
@@ -895,7 +1009,7 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
     return () => {
       isCancelled = true;
     };
-  }, [machine, currentYear, currentMonthIdx, compYear, compMonthIdx]);
+  }, [machineName, itemPmId, itemConfigKey, currentYear, currentMonthIdx, compYear, compMonthIdx]);
 
   // Strictly factual data from database (no dummy sinusoidal fallback)
   const currentData = dbData.currentData || [];
@@ -957,21 +1071,24 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
           {/* Factory Selector */}
           <select
             value={factory}
-            onChange={(e) => setFactory(e.target.value as "wf1" | "wf2")}
+            onChange={(e) => setFactory(e.target.value as "wf1" | "wf2" | "all")}
             className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1.5 text-xs font-bold text-[#002b5c] dark:text-slate-300 focus:outline-none cursor-pointer"
           >
             <option value="wf1">Factory 1</option>
             <option value="wf2">Factory 2</option>
+            <option value="all">Semua Pabrik / Unit</option>
           </select>
 
           {/* Machine Selector */}
           <select
-            value={machine}
-            onChange={(e) => setMachine(e.target.value)}
-            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1.5 text-xs font-bold text-[#002b5c] dark:text-slate-300 focus:outline-none cursor-pointer max-w-[240px]"
+            value={selectedKey}
+            onChange={(e) => setSelectedKey(e.target.value)}
+            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1.5 text-xs font-bold text-[#002b5c] dark:text-slate-300 focus:outline-none cursor-pointer max-w-[280px]"
           >
-            {machineOptions.map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
+            {availableItems.map((opt) => (
+              <option key={opt.config_key} value={opt.config_key}>
+                {opt.value?.seriesKey || opt.label}
+              </option>
             ))}
           </select>
 
@@ -988,8 +1105,18 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
 
           {/* Status Indicator */}
           <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-mono">
-            TERHUBUNG API ({dbData.pmId || "PM"})
+            TERHUBUNG API ({dbData.pmId || itemPmId})
           </span>
+
+          {/* Hidden Card Indicator */}
+          {isItemHidden && (
+            <span
+              className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+              title="Kartu equipment ini disembunyikan dari grid kartu di atas, namun tetap dapat diakses di kartu ini"
+            >
+              KARTU DISEMBUNYIKAN DI ATAS
+            </span>
+          )}
 
           {/* Zoom In Button */}
           <button
@@ -1039,11 +1166,16 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
               <div>
                 <div className="flex items-center gap-2.5">
                   <h3 className="text-lg sm:text-xl md:text-2xl font-black text-slate-800 dark:text-white uppercase tracking-wide">
-                    {machine} ({dbData.pmId || "PM"})
+                    {machineName} ({dbData.pmId || itemPmId})
                   </h3>
                   <span className="text-xs px-3 py-1 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 font-extrabold tracking-wider uppercase">
                     Perbesar Chart
                   </span>
+                  {isItemHidden && (
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 font-bold uppercase">
+                      Kartu Disembunyikan Di Atas
+                    </span>
+                  )}
                 </div>
                 {/* KPI Metrics Strip */}
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2">
@@ -1182,80 +1314,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
   });
 
   // Default Fallback Equipment Items (57 Standard Units)
-  const ALL_DEFAULT_ITEMS: EquipmentDisplayItem[] = useMemo(() => [
-    // 1. Cooling Tower (7 Units)
-    { id: 1, config_type: "equipment_display", config_key: "pm152", label: "Cooling Tower Pump WF1-U3", sort_order: 1, enabled: true, value: { pm_id: "PM152", seriesKey: "F1 COOLING TOWER PUMP WF1-U3", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew21" } },
-    { id: 2, config_type: "equipment_display", config_key: "pm181", label: "Cooling Tower Fan WF1-U3", sort_order: 2, enabled: true, value: { pm_id: "PM181", seriesKey: "F1 COOLING TOWER FAN WF1-U3", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew21" } },
-    { id: 3, config_type: "equipment_display", config_key: "pm206", label: "Cooling Fase-1 WF2", sort_order: 3, enabled: true, value: { pm_id: "PM206", seriesKey: "F2 COOLING FASE-1", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew22" } },
-    { id: 4, config_type: "equipment_display", config_key: "pm215", label: "Cooling Critical WF2", sort_order: 4, enabled: true, value: { pm_id: "PM215", seriesKey: "F2 COOLING CRITICAL", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew22" } },
-    { id: 5, config_type: "equipment_display", config_key: "pm318", label: "Cooling Fase-2 WF2", sort_order: 5, enabled: true, value: { pm_id: "PM318", seriesKey: "F2 COOLING FASE-2", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew23" } },
-    { id: 6, config_type: "equipment_display", config_key: "pm324", label: "Cooling Tower CT-Pump WF2", sort_order: 6, enabled: true, value: { pm_id: "PM324", seriesKey: "F2 COOLING TOWER CT-PUMP", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew23" } },
-    { id: 7, config_type: "equipment_display", config_key: "pm325", label: "Cooling Tower CT-Fan WF2", sort_order: 7, enabled: true, value: { pm_id: "PM325", seriesKey: "F2 COOLING TOWER CT-FAN", category: "cooling_tower", categoryLabel: "Cooling Tower", endpoint_url: "electric_ew23" } },
-
-    // 2. Boiler (2 Units)
-    { id: 8, config_type: "equipment_display", config_key: "pm184", label: "Boiler 4 WF1", sort_order: 8, enabled: true, value: { pm_id: "PM184", seriesKey: "F1 BOILER 4", category: "boiler", categoryLabel: "Boiler", endpoint_url: "electric_ew21" } },
-    { id: 9, config_type: "equipment_display", config_key: "pm213", label: "Boiler-5 WF2", sort_order: 9, enabled: true, value: { pm_id: "PM213", seriesKey: "F2 BOILER-5", category: "boiler", categoryLabel: "Boiler", endpoint_url: "electric_ew22" } },
-
-    // 3. Compressed Air (5 Units)
-    { id: 10, config_type: "equipment_display", config_key: "pm140", label: "Compressed Air ZT-55 WF1", sort_order: 10, enabled: true, value: { pm_id: "PM140", seriesKey: "F1 COMPRESSED AIR ZT-55", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew21" } },
-    { id: 11, config_type: "equipment_display", config_key: "pm182", label: "Compressed Air ZT-30.1&2 WF1", sort_order: 11, enabled: true, value: { pm_id: "PM182", seriesKey: "F1 COMPRESSED AIR ZT-30.1&2", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew21" } },
-    { id: 12, config_type: "equipment_display", config_key: "pm183", label: "Compressed Air ALE-30 WF1", sort_order: 12, enabled: true, value: { pm_id: "PM183", seriesKey: "F1 COMPRESSED AIR ALE-30", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew21" } },
-    { id: 13, config_type: "equipment_display", config_key: "pm214", label: "Compressed Air Atlas WF2", sort_order: 13, enabled: true, value: { pm_id: "PM214", seriesKey: "F2 COMPRESSED AIR ATLAS", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew22" } },
-    { id: 14, config_type: "equipment_display", config_key: "pm229", label: "Kobelco ALE-250 WF2", sort_order: 14, enabled: true, value: { pm_id: "PM229", seriesKey: "F2 KOBELCO ALE-250", category: "compressed_air", categoryLabel: "Compressed Air", endpoint_url: "electric_ew22" } },
-
-    // 4. Chiller (8 Units)
-    { id: 15, config_type: "equipment_display", config_key: "pm177", label: "Chiller Prep Daikin Barat WF1", sort_order: 15, enabled: true, value: { pm_id: "PM177", seriesKey: "F1 CHILLER PREP DAIKIN BARAT", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew21" } },
-    { id: 16, config_type: "equipment_display", config_key: "pm178", label: "Chiller Prep Daikin Timur WF1", sort_order: 16, enabled: true, value: { pm_id: "PM178", seriesKey: "F1 CHILLER PREP DAIKIN TIMUR", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew21" } },
-    { id: 17, config_type: "equipment_display", config_key: "pm180", label: "Chiller BP WF1-U3", sort_order: 17, enabled: true, value: { pm_id: "PM180", seriesKey: "F1 CHILLER BP WF1-U3", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew21" } },
-    { id: 18, config_type: "equipment_display", config_key: "pm209", label: "Chiller - WF2U2", sort_order: 18, enabled: true, value: { pm_id: "PM209", seriesKey: "F2 CHILLER - WF2U2", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22" } },
-    { id: 19, config_type: "equipment_display", config_key: "pm271", label: "Chiller RTAC 250 (RO & HVAC) WF2", sort_order: 19, enabled: true, value: { pm_id: "PM271", seriesKey: "F2 CHILLER RTAC 250 (RO&HVAC)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22" } },
-    { id: 20, config_type: "equipment_display", config_key: "pm272", label: "Chiller RTAC 170 (RO) WF2", sort_order: 20, enabled: true, value: { pm_id: "PM272", seriesKey: "F2 CHILLER RTAC 170 (RO)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22" } },
-    { id: 21, config_type: "equipment_display", config_key: "pm274", label: "Chiller RTAC 100 (BP) WF2", sort_order: 21, enabled: true, value: { pm_id: "PM274", seriesKey: "F2 CHILLER RTAC 100 (BP)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew22" } },
-    { id: 22, config_type: "equipment_display", config_key: "pm319", label: "Chiller RTAC-275 (Prep) WF2", sort_order: 22, enabled: true, value: { pm_id: "PM319", seriesKey: "F2 CHILLER RTAC-275 (PREP)", category: "chiller", categoryLabel: "Chiller", endpoint_url: "electric_ew23" } },
-
-    // 5. HVAC Warehouse & Penerangan (8 Units)
-    { id: 23, config_type: "equipment_display", config_key: "pm134", label: "WH 4 Penerangan WF1", sort_order: 23, enabled: true, value: { pm_id: "PM134", seriesKey: "F1 WH 4 PENERANGAN", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21" } },
-    { id: 24, config_type: "equipment_display", config_key: "pm154", label: "Lighting WH 1 WF1", sort_order: 24, enabled: true, value: { pm_id: "PM154", seriesKey: "F1 LIGHTING WH 1", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21" } },
-    { id: 25, config_type: "equipment_display", config_key: "pm151", label: "HVAC Office Atas WF1", sort_order: 25, enabled: true, value: { pm_id: "PM151", seriesKey: "F1 HVAC OFFICE ATAS", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21" } },
-    { id: 26, config_type: "equipment_display", config_key: "pm179", label: "HVAC WH-3 WF1", sort_order: 26, enabled: true, value: { pm_id: "PM179", seriesKey: "F1 HVAC WH-3", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew21" } },
-    { id: 27, config_type: "equipment_display", config_key: "pm207", label: "WH 6 WF2", sort_order: 27, enabled: true, value: { pm_id: "PM207", seriesKey: "F2 WH 6", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22" } },
-    { id: 28, config_type: "equipment_display", config_key: "pm208", label: "WH 5 WF2", sort_order: 28, enabled: true, value: { pm_id: "PM208", seriesKey: "F2 WH 5", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22" } },
-    { id: 29, config_type: "equipment_display", config_key: "pm226", label: "WH-7 WF2", sort_order: 29, enabled: true, value: { pm_id: "PM226", seriesKey: "F2 WH-7", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22" } },
-    { id: 30, config_type: "equipment_display", config_key: "pm288", label: "Penerangan PD WF2", sort_order: 30, enabled: true, value: { pm_id: "PM288", seriesKey: "F2 Penerangan PD", category: "hvac_wh", categoryLabel: "HVAC Warehouse & Penerangan", endpoint_url: "electric_ew22" } },
-
-    // 6. HVAC QC & Produksi (9 Units)
-    { id: 31, config_type: "equipment_display", config_key: "pm138", label: "Full Cooling WF1-U3", sort_order: 31, enabled: true, value: { pm_id: "PM138", seriesKey: "F1 FULL COOLING WF1-U3", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21" } },
-    { id: 32, config_type: "equipment_display", config_key: "pm153", label: "HVAC-QC WF1", sort_order: 32, enabled: true, value: { pm_id: "PM153", seriesKey: "F1 HVAC-QC", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21" } },
-    { id: 33, config_type: "equipment_display", config_key: "pm185", label: "HVAC WF1U3", sort_order: 33, enabled: true, value: { pm_id: "PM185", seriesKey: "F1 HVAC WF1U3", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21" } },
-    { id: 34, config_type: "equipment_display", config_key: "pm203", label: "Heater WF2U2", sort_order: 34, enabled: true, value: { pm_id: "PM203", seriesKey: "F2 HEATER WF2U2", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew22" } },
-    { id: 35, config_type: "equipment_display", config_key: "pm205", label: "AHU WF2UI", sort_order: 35, enabled: true, value: { pm_id: "PM205", seriesKey: "F2 AHU WF2UI", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew22" } },
-    { id: 36, config_type: "equipment_display", config_key: "pm273", label: "Return Sample QC WF2", sort_order: 36, enabled: true, value: { pm_id: "PM273", seriesKey: "RETURN SAMPLE QC", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew22" } },
-    { id: 37, config_type: "equipment_display", config_key: "pm321", label: "AHU-1 - WF2U2", sort_order: 37, enabled: true, value: { pm_id: "PM321", seriesKey: "F2 AHU-1 - WF2U2", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew23" } },
-    { id: 38, config_type: "equipment_display", config_key: "pm322", label: "AHU-2 - WF2U2", sort_order: 38, enabled: true, value: { pm_id: "PM322", seriesKey: "F2 AHU-2 - WF2U2", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew23" } },
-    { id: 39, config_type: "equipment_display", config_key: "pm132", label: "Main Supply QC Office & Lab WF1", sort_order: 39, enabled: true, value: { pm_id: "PM132", seriesKey: "F1 MAIN SUPPLY QC OFFICE & LAB", category: "hvac_qc", categoryLabel: "HVAC QC & Produksi", endpoint_url: "electric_ew21" } },
-
-    // 7. Panel Distribusi & Water Treatment (15 Units)
-    { id: 40, config_type: "equipment_display", config_key: "pm133", label: "MDP3 WF1", sort_order: 40, enabled: true, value: { pm_id: "PM133", seriesKey: "F1 MDP3", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21" } },
-    { id: 41, config_type: "equipment_display", config_key: "pm135", label: "MDP-2 WF1", sort_order: 41, enabled: true, value: { pm_id: "PM135", seriesKey: "F1 MDP-2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21" } },
-    { id: 42, config_type: "equipment_display", config_key: "pm136", label: "MDP-1.2 WF1", sort_order: 42, enabled: true, value: { pm_id: "PM136", seriesKey: "F1 MDP-1.2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21" } },
-    { id: 43, config_type: "equipment_display", config_key: "pm139", label: "MDP-1.1 WF1", sort_order: 43, enabled: true, value: { pm_id: "PM139", seriesKey: "F1 MDP-1.1", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21" } },
-    { id: 44, config_type: "equipment_display", config_key: "pm175", label: "ST3 WF1", sort_order: 44, enabled: true, value: { pm_id: "PM175", seriesKey: "F1 ST3", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21" } },
-    { id: 45, config_type: "equipment_display", config_key: "pm176", label: "QC Lab WF1", sort_order: 45, enabled: true, value: { pm_id: "PM176", seriesKey: "F1 QC LAB", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew21" } },
-    { id: 46, config_type: "equipment_display", config_key: "pm201", label: "PUTR-1 WF2", sort_order: 46, enabled: true, value: { pm_id: "PM201", seriesKey: "F2 PUTR-1", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22" } },
-    { id: 47, config_type: "equipment_display", config_key: "pm202", label: "PUTR-2 WF2", sort_order: 47, enabled: true, value: { pm_id: "PM202", seriesKey: "F2 PUTR-2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22" } },
-    { id: 48, config_type: "equipment_display", config_key: "pm210", label: "Main Critical Panel WF2", sort_order: 48, enabled: true, value: { pm_id: "PM210", seriesKey: "F2 MAIN CRITICAL PANEL", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22" } },
-    { id: 49, config_type: "equipment_display", config_key: "pm211", label: "Panel Otoklaf WF2U1", sort_order: 49, enabled: true, value: { pm_id: "PM211", seriesKey: "F2 PANEL OTOKLAF WF2U1", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22" } },
-    { id: 50, config_type: "equipment_display", config_key: "pm212", label: "Panel Otoklaf WF2U2", sort_order: 50, enabled: true, value: { pm_id: "PM212", seriesKey: "F2 PANEL OTOKLAF WF2U2", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew22" } },
-    { id: 51, config_type: "equipment_display", config_key: "pm320", label: "WT-DU-PSG WF2", sort_order: 51, enabled: true, value: { pm_id: "PM320", seriesKey: "F2 WT-DU-PSG", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23" } },
-    { id: 52, config_type: "equipment_display", config_key: "pm323", label: "PW Generation - RO WF2", sort_order: 52, enabled: true, value: { pm_id: "PM323", seriesKey: "F2 PW GENERATION - RO", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23" } },
-    { id: 53, config_type: "equipment_display", config_key: "pm327", label: "PUTR-NEW WF2", sort_order: 53, enabled: true, value: { pm_id: "PM327", seriesKey: "F2 PUTR-NEW", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23" } },
-    { id: 54, config_type: "equipment_display", config_key: "pm337", label: "MCC BP 7 WF2", sort_order: 54, enabled: true, value: { pm_id: "PM337", seriesKey: "F2 MCC BP 7", category: "distribution", categoryLabel: "Panel Distribusi & Water Treatment", endpoint_url: "electric_ew23" } },
-
-    // 8. Incoming Cubicles (3 Units)
-    { id: 55, config_type: "equipment_display", config_key: "pm410", label: "Incoming Cubicle PLN (PM8000)", sort_order: 55, enabled: true, value: { pm_id: "PM410", seriesKey: "incoming cubicle pln", category: "cubicles", categoryLabel: "Incoming Cubicles", endpoint_url: "electric_pln" } },
-    { id: 56, config_type: "equipment_display", config_key: "pm411", label: "Incoming Cubicle WF1 (PM5560)", sort_order: 56, enabled: true, value: { pm_id: "PM411", seriesKey: "incoming cubicle WF1", category: "cubicles", categoryLabel: "Incoming Cubicles", endpoint_url: "electric_wf1" } },
-    { id: 57, config_type: "equipment_display", config_key: "pm412", label: "Incoming Cubicle WF2 (PM5560)", sort_order: 57, enabled: true, value: { pm_id: "PM412", seriesKey: "incoming cubicle WF2", category: "cubicles", categoryLabel: "Incoming Cubicles", endpoint_url: "electric_wf2" } }
-  ], []);
+  const ALL_DEFAULT_ITEMS: EquipmentDisplayItem[] = useMemo(() => DEFAULT_ALL_EQUIPMENT_DISPLAY_ITEMS, []);
 
   // Standard categories in default order
   const STANDARD_CATEGORIES = useMemo(() => [
@@ -2386,6 +2445,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
         currentMonthIdx={currentMonthIdx}
         compYear={compYear}
         compMonthIdx={compMonth}
+        allEquipmentItems={configuredItems.length > 0 ? configuredItems : DEFAULT_ALL_EQUIPMENT_DISPLAY_ITEMS}
       />
 
       {/* Senior Unit Head Equipment Config Modal */}
