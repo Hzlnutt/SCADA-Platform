@@ -2124,16 +2124,16 @@ export default function PowerDistribution() {
           {/* 1. SVG PIPELINE AND POWER LINES OVERLAY (z-20 on top so never occluded) */}
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-20">
             <defs>
-              <marker id="arrow-green" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <marker id="arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10b981" />
               </marker>
-              <marker id="arrow-red" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <marker id="arrow-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#ef4444" />
               </marker>
-              <marker id="arrow-orange" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <marker id="arrow-orange" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#f97316" />
               </marker>
-              <marker id="arrow-blue" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <marker id="arrow-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill={activeLineColor} />
               </marker>
             </defs>
@@ -2271,23 +2271,23 @@ export default function PowerDistribution() {
 
           {/* 2. ABSOLUTE CARDS LAYOUT */}
           {/* Main PLN card at top center (X = 600) */}
-          <div className="absolute z-10" style={{ left: 515, top: 16 }}>
-            <div className={`text-center p-3 w-[170px] rounded-2xl border shadow-md transition duration-300 ${
+          <div className="absolute z-30" style={{ left: 515, top: 16 }}>
+            <div className={`text-center px-3 py-2 w-[170px] h-[98px] flex flex-col justify-center rounded-2xl border shadow-md transition duration-300 ${
               isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
             }`}>
-              <div className="text-xs font-black text-blue-600 dark:text-blue-400 tracking-wide">PLN-21 kV</div>
-              <div className="text-[11px] font-extrabold text-blue-700 dark:text-blue-300">5,540 kVa</div>
-              <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-1">
+              <div className="text-xs leading-tight font-black text-blue-600 dark:text-blue-400 tracking-wide">PLN-21 kV</div>
+              <div className="text-[11px] leading-tight font-extrabold text-blue-700 dark:text-blue-300">5,540 kVa</div>
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
                   <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
                     {incomingData.plnKw !== null ? `${incomingData.plnKw.toLocaleString("id-ID")} kW` : "— kW"}
                   </span>
                 )}
               </div>
-              <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
+              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
                   <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
@@ -2299,35 +2299,35 @@ export default function PowerDistribution() {
 
           {/* ═══════════ FACTORY 1 SOURCES (Left Wing, Center = 285) ═══════════ */}
           {/* 1. Genset Natural Gas (Outer Left) */}
-          <div className="absolute z-10" style={{ left: 30, top: 160 }}>
-            <div className={`p-2.5 w-[130px] text-center rounded-2xl border shadow-sm transition duration-300 ${
+          <div className="absolute z-30" style={{ left: 30, top: 152 }}>
+            <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
             }`}>
-              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Genset</div>
-              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Natural Gas</div>
-              <div className="text-[10px] font-bold text-slate-600 dark:text-slate-300 mt-0.5">1350 kVa</div>
-              <div className="text-[8px] text-slate-400 mt-1 font-mono">Belum Ada Sensor</div>
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Genset</div>
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Natural Gas</div>
+              <div className="text-[10px] leading-tight font-bold text-slate-600 dark:text-slate-300 mt-0.5">1350 kVa</div>
+              <div className="text-[8px] leading-tight text-slate-400 mt-1 font-mono">Belum Ada Sensor</div>
             </div>
           </div>
 
           {/* 2. Incoming Fact-1 (Center F1) */}
           <div className="absolute z-30" style={{ left: 215, top: 150 }}>
-            <div className={`p-2.5 w-[140px] text-center rounded-2xl border shadow-sm transition duration-300 ${
+            <div className={`px-2.5 py-1.5 w-[140px] h-[96px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
             }`}>
-              <div className="text-[11px] font-black text-blue-600 dark:text-blue-400">Incoming</div>
-              <div className="text-[11px] font-black text-blue-600 dark:text-blue-400">Fact-1</div>
-              <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Incoming</div>
+              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Fact-1</div>
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
                   <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
                     {incomingData.wf1Kw !== null ? `${incomingData.wf1Kw.toLocaleString("id-ID")} kW` : "— kW"}
                   </span>
                 )}
               </div>
-              <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
+              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
                   <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
@@ -2338,23 +2338,23 @@ export default function PowerDistribution() {
           </div>
 
           {/* 3. Solar PV POI-1 (Inner Left) */}
-          <div className="absolute z-10" style={{ left: 410, top: 160 }}>
-            <div className={`p-2.5 w-[130px] text-center rounded-2xl border shadow-sm transition duration-300 ${
+          <div className="absolute z-30" style={{ left: 410, top: 152 }}>
+            <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
             }`}>
-              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
-              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">POI-1</div>
-              <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">POI-1</div>
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
                   <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
                     {solarData.poi1Kw !== null ? `${solarData.poi1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "— kW"}
                   </span>
                 )}
               </div>
-              <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
+              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
                   <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
@@ -2367,22 +2367,22 @@ export default function PowerDistribution() {
           {/* ═══════════ FACTORY 2 SOURCES (Right Wing) ═══════════ */}
           {/* 1. Incoming Fact-2 (Left F2, Center = 795) */}
           <div className="absolute z-30" style={{ left: 725, top: 150 }}>
-            <div className={`p-2.5 w-[140px] text-center rounded-2xl border shadow-sm transition duration-300 ${
+            <div className={`px-2.5 py-1.5 w-[140px] h-[96px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
             }`}>
-              <div className="text-[11px] font-black text-blue-600 dark:text-blue-400">Incoming</div>
-              <div className="text-[11px] font-black text-blue-600 dark:text-blue-400">Fact-2</div>
-              <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Incoming</div>
+              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Fact-2</div>
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
                   <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
                     {incomingData.wf2Kw !== null ? `${incomingData.wf2Kw.toLocaleString("id-ID")} kW` : "— kW"}
                   </span>
                 )}
               </div>
-              <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
+              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
                   <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
@@ -2393,23 +2393,23 @@ export default function PowerDistribution() {
           </div>
 
           {/* 2. Solar PV POI-2 (Center F2, Center = 950) */}
-          <div className="absolute z-10" style={{ left: 885, top: 160 }}>
-            <div className={`p-2.5 w-[130px] text-center rounded-2xl border shadow-sm transition duration-300 ${
+          <div className="absolute z-30" style={{ left: 885, top: 152 }}>
+            <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
             }`}>
-              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
-              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">POI-2</div>
-              <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">POI-2</div>
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
                   <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
                     {solarData.poi2Kw !== null ? `${solarData.poi2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "— kW"}
                   </span>
                 )}
               </div>
-              <div className="text-[8px] font-semibold text-slate-500 dark:text-slate-400">
+              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
                   <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
@@ -2420,14 +2420,14 @@ export default function PowerDistribution() {
           </div>
 
           {/* 3. Genset Diesel Fuel (Outer Right, Center = 1105) */}
-          <div className="absolute z-10" style={{ left: 1040, top: 160 }}>
-            <div className={`p-2.5 w-[130px] text-center rounded-2xl border shadow-sm transition duration-300 ${
+          <div className="absolute z-30" style={{ left: 1040, top: 152 }}>
+            <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
             }`}>
-              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Genset</div>
-              <div className="text-[10px] font-extrabold text-orange-600 dark:text-orange-400">Diesel Fuel</div>
-              <div className="text-[10px] font-bold text-slate-600 dark:text-slate-300 mt-0.5">1000 kVa</div>
-              <div className="text-[8px] text-slate-400 mt-1 font-mono">Belum Ada Sensor</div>
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Genset</div>
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Diesel Fuel</div>
+              <div className="text-[10px] leading-tight font-bold text-slate-600 dark:text-slate-300 mt-0.5">1000 kVa</div>
+              <div className="text-[8px] leading-tight text-slate-400 mt-1 font-mono">Belum Ada Sensor</div>
             </div>
           </div>
 
