@@ -39,7 +39,8 @@ import {
   deleteEquipmentItemHandler,
   reorderEquipmentItemsHandler,
   renameEquipmentCategoryHandler,
-  verifyAndRegisterNewPmHandler
+  verifyAndRegisterNewPmHandler,
+  discoverEndpointPmsHandler
 } from "./config.controller";
 
 export const configRouter = Router();
@@ -103,4 +104,5 @@ configRouter.post("/config/electricity/equipment-items/toggle", authenticate, au
 configRouter.post("/config/electricity/equipment-items/reorder", authenticate, authorize(seniorUnitHeadOnlyRoles), reorderEquipmentItemsHandler);
 configRouter.post("/config/electricity/equipment-items/rename-category", authenticate, authorize(seniorUnitHeadOnlyRoles), renameEquipmentCategoryHandler);
 configRouter.delete("/config/electricity/equipment-items/:configKey", authenticate, authorize(seniorUnitHeadOnlyRoles), deleteEquipmentItemHandler);
+configRouter.get("/config/electricity/discover-endpoint-pms", authenticate, discoverEndpointPmsHandler);
 configRouter.post("/config/electricity/verify-and-register-pm", authenticate, authorize(seniorUnitHeadOnlyRoles), verifyAndRegisterNewPmHandler);

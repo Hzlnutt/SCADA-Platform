@@ -747,13 +747,16 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
       const keys = Object.keys(item);
       let detectedPm = "PM_UNKNOWN";
       for (const k of keys) {
-        const m = k.match(/(?:PM|pm)(\d+)/i);
+        const cleaned = k.replace(/PM(?:5500|5560|8000)(?:_WF[12])?_/gi, "");
+        const m = cleaned.match(/(?:PM|pm)_?(\d+[A-Z0-9]*)/i);
         if (m) {
-          detectedPm = `PM${m[1]}`;
+          detectedPm = `PM${m[1].toUpperCase()}`;
           break;
         }
       }
-      records.push(extractPm(detectedPm, item));
+      if (detectedPm !== "PM_UNKNOWN") {
+        records.push(extractPm(detectedPm, item));
+      }
     }
   } else if (typeof data === "object") {
     for (const [key, val] of Object.entries(data)) {
@@ -761,9 +764,10 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
         records.push(extractPm(key, val));
       } else {
         // Flat object (legacy)
-        const m = key.match(/(?:PM|pm)(\d+)/i);
+        const cleaned = key.replace(/PM(?:5500|5560|8000)(?:_WF[12])?_/gi, "");
+        const m = cleaned.match(/(?:PM|pm)_?(\d+[A-Z0-9]*)/i);
         if (m) {
-          const pmKey = `PM${m[1]}`;
+          const pmKey = `PM${m[1].toUpperCase()}`;
           let existing = records.find(r => r.pm_id === pmKey);
           if (!existing) {
             existing = extractPm(pmKey, data);
@@ -1338,9 +1342,20 @@ export const refreshDynamicCustomPmSources = async (): Promise<void> => {
       const val = r.value || {};
       const endpoint = String(val.endpoint_url || "").trim();
       const rawPmId = String(val.pm_id || val.json_key || r.config_key).toUpperCase().replace(/[^A-Z0-9_]/g, "");
-      const normalizedPmId = rawPmId.startsWith("PM") ? rawPmId : `PM_${rawPmId}`;
+      const normalizedPmId = (rawPmId.startsWith("PM") ? rawPmId : `PM${rawPmId}`).replace(/^PM_(\d+)$/, "PM$1");
       const dept = String(val.department || "Utility").toLowerCase();
-      const groupId = dept === "hvac" ? "hvac" : dept === "utility" ? "utility" : "custom";
+      const epLower = endpoint.toLowerCase();
+      const groupId = epLower.includes("electric_ew21")
+        ? "ew21"
+        : epLower.includes("electric_ew22")
+          ? "ew22"
+          : epLower.includes("electric_ew23")
+            ? "ew23"
+            : dept === "hvac"
+              ? "hvac"
+              : dept === "utility"
+                ? "utility"
+                : "custom";
 
       list.push({
         id: r.id,
@@ -1357,6 +1372,20 @@ export const refreshDynamicCustomPmSources = async (): Promise<void> => {
   } catch (err: any) {
     logger.warn(`Failed to refresh dynamic custom PM sources: ${err.message}`);
   }
+};
+
+const isRegisteredPmInSystem = (pmId: string): boolean => {
+  const up = String(pmId || "").toUpperCase().trim();
+  const norm = up.replace(/^PM_(\d+)$/, "PM$1");
+  for (const grp of Object.values(EW_GROUP_PMS)) {
+    if (grp.includes(up) || grp.includes(norm)) return true;
+  }
+  for (const c of cachedDynamicCustomPms) {
+    const cUp = c.pm_id.toUpperCase();
+    const cNorm = cUp.replace(/^PM_(\d+)$/, "PM$1");
+    if (cUp === up || cNorm === norm) return true;
+  }
+  return false;
 };
 
 const insertHvacMinuteTelemetry = async (retainLive: HvacRetainLiveState, minuteTs: Date) => {
@@ -1776,11 +1805,15 @@ export const startIncomingElectricityPolling = () => {
       await insertPltsMinuteTelemetry(pltsRecords, minuteTs);
     }
 
+    if (Date.now() - lastDynamicPmFetch > 30000 || (cachedDynamicCustomPms.length === 0 && lastDynamicPmFetch === 0)) {
+      await refreshDynamicCustomPmSources().catch(() => {});
+    }
+
     // 5. Process EW23 (Sub-distribution Power Meters)
     let ew23Parsed: ElectricPmRecord[] = [];
     if (ew23Raw) {
       try {
-        ew23Parsed = parseEwApi(ew23Raw, ts, "ew23");
+        ew23Parsed = parseEwApi(ew23Raw, ts, "ew23").filter((r) => isRegisteredPmInSystem(r.pm_id));
       } catch (err: any) {
         logger.warn(`Incoming EW23 polling failed: ${err.message}`);
       }
@@ -1811,7 +1844,7 @@ export const startIncomingElectricityPolling = () => {
     let ew21Parsed: ElectricPmRecord[] = [];
     if (ew21Raw) {
       try {
-        ew21Parsed = parseEwApi(ew21Raw, ts, "ew21");
+        ew21Parsed = parseEwApi(ew21Raw, ts, "ew21").filter((r) => isRegisteredPmInSystem(r.pm_id));
       } catch (err: any) {
         logger.warn(`Incoming EW21 polling failed: ${err.message}`);
       }
@@ -1830,7 +1863,7 @@ export const startIncomingElectricityPolling = () => {
     let ew22Parsed: ElectricPmRecord[] = [];
     if (ew22Raw) {
       try {
-        ew22Parsed = parseEwApi(ew22Raw, ts, "ew22");
+        ew22Parsed = parseEwApi(ew22Raw, ts, "ew22").filter((r) => isRegisteredPmInSystem(r.pm_id));
       } catch (err: any) {
         logger.warn(`Incoming EW22 polling failed: ${err.message}`);
       }
@@ -1958,7 +1991,13 @@ export const startIncomingElectricityPolling = () => {
           ["electric_wf2", wf2Raw]
         ]);
 
+        const alreadyProcessedInEw = new Set(
+          [...ew21Parsed, ...ew22Parsed, ...ew23Parsed].map((r) => r.pm_id.toUpperCase().replace(/^PM_(\d+)$/, "PM$1"))
+        );
+
         for (const customPm of cachedDynamicCustomPms) {
+          const normCustomId = customPm.pm_id.toUpperCase().replace(/^PM_(\d+)$/, "PM$1");
+          if (alreadyProcessedInEw.has(normCustomId)) continue;
           const raw = customDataMap.get(customPm.endpoint_url) ?? coreDataMap.get(customPm.endpoint_url);
           if (!raw) continue;
 

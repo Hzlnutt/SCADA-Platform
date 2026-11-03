@@ -23,6 +23,72 @@ export interface EquipmentDisplayItem {
   enabled: boolean;
 }
 
+export interface StoredEndpointOption {
+  url: string;
+  alias: string;
+  label: string;
+  defaultFactory: "wf1" | "wf2";
+}
+
+export interface UnregisteredPmItem {
+  pm_id: string;
+  detectedFields: string[];
+  initialValues: {
+    activePower: number | null;
+    activeEnergy: number | null;
+  };
+}
+
+export interface DiscoverEndpointResponse {
+  success: boolean;
+  storedEndpoints: StoredEndpointOption[];
+  selectedEndpoint: string | null;
+  endpointReachable: boolean;
+  endpointError: string | null;
+  totalDetectedPmsOnEndpoint: number;
+  alreadyRegisteredPmsOnEndpoint: string[];
+  unregisteredPms: UnregisteredPmItem[];
+}
+
+export const FALLBACK_STORED_ENDPOINTS: StoredEndpointOption[] = [
+  {
+    url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew21",
+    alias: "electric_ew21",
+    label: "Endpoint EW21 — Factory 1 Sub-Meters (electric_ew21)",
+    defaultFactory: "wf1"
+  },
+  {
+    url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew22",
+    alias: "electric_ew22",
+    label: "Endpoint EW22 — Factory 2 Sub-Meters (electric_ew22)",
+    defaultFactory: "wf2"
+  },
+  {
+    url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew23",
+    alias: "electric_ew23",
+    label: "Endpoint EW23 — Panel Distribusi, Incoming & Trafo (electric_ew23)",
+    defaultFactory: "wf1"
+  },
+  {
+    url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln",
+    alias: "electric_pln",
+    label: "Endpoint PLN — Incoming Cubicle PLN (electric_pln)",
+    defaultFactory: "wf1"
+  },
+  {
+    url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1",
+    alias: "electric_wf1",
+    label: "Endpoint WF1 — Incoming Feeder Factory 1 (electric_wf1)",
+    defaultFactory: "wf1"
+  },
+  {
+    url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2",
+    alias: "electric_wf2",
+    label: "Endpoint WF2 — Incoming Feeder Factory 2 (electric_wf2)",
+    defaultFactory: "wf2"
+  }
+];
+
 export const EQUIPMENT_CATEGORIES = [
   { key: "all", label: "Semua Kategori" },
   { key: "cooling_tower", label: "Cooling Tower", badgeColor: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20" },
@@ -46,7 +112,6 @@ interface Props {
 export const EquipmentConfigModal: React.FC<Props> = ({
   isOpen,
   onClose,
-  isDark,
   onItemsUpdated
 }) => {
   const [activeTab, setActiveTab] = useState<"manage" | "register">("manage");
@@ -55,19 +120,24 @@ export const EquipmentConfigModal: React.FC<Props> = ({
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Register New PM form
+  // Stored endpoints & dynamic unregistered PM discovery
+  const [storedEndpoints, setStoredEndpoints] = useState<StoredEndpointOption[]>(FALLBACK_STORED_ENDPOINTS);
+  const [unregisteredPms, setUnregisteredPms] = useState<UnregisteredPmItem[]>([]);
+  const [totalDetectedOnEndpoint, setTotalDetectedOnEndpoint] = useState<number>(0);
+
+  // Register New PM form (Dropdown-only for Endpoint & PM ID)
+  const [newPmEndpoint, setNewPmEndpoint] = useState("");
   const [newPmId, setNewPmId] = useState("");
   const [newPmLabel, setNewPmLabel] = useState("");
-  const [newPmEndpoint, setNewPmEndpoint] = useState("");
   const [newPmCategory, setNewPmCategory] = useState("cooling_tower");
   const [newPmFactory, setNewPmFactory] = useState("wf1");
   const [newPmDepartment, setNewPmDepartment] = useState("Utility");
 
-  // Inspect & Test
+  // Inspect & Scan Endpoint status
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<{
     success: boolean;
-    duplicate?: boolean;
+    hasNewPms?: boolean;
     message: string;
     detectedFields?: string[];
     initialValues?: { activePower: number | null; activeEnergy: number | null };
@@ -94,14 +164,141 @@ export const EquipmentConfigModal: React.FC<Props> = ({
     }
   }, []);
 
+  // Load stored endpoints list from backend
+  const loadStoredEndpoints = useCallback(async () => {
+    try {
+      const res = await getJson<DiscoverEndpointResponse>(
+        "/config/electricity/discover-endpoint-pms"
+      );
+      if (res?.storedEndpoints && res.storedEndpoints.length > 0) {
+        setStoredEndpoints(res.storedEndpoints);
+      }
+    } catch (err) {
+      console.error("Failed to load stored endpoints:", err);
+    }
+  }, []);
+
+  // Scan a selected endpoint URL for unregistered new PMs
+  const scanEndpointForNewPms = useCallback(
+    async (endpointUrl: string) => {
+      const cleanUrl = endpointUrl.trim();
+      if (!cleanUrl) {
+        setUnregisteredPms([]);
+        setNewPmId("");
+        setTotalDetectedOnEndpoint(0);
+        setVerifyResult(null);
+        return;
+      }
+
+      // Auto-sync default factory based on chosen endpoint
+      const matchedEp = storedEndpoints.find((ep) => ep.url === cleanUrl || ep.alias === cleanUrl);
+      if (matchedEp) {
+        setNewPmFactory(matchedEp.defaultFactory);
+      }
+
+      setIsVerifying(true);
+      setVerifyResult(null);
+      setUnregisteredPms([]);
+      setNewPmId("");
+
+      try {
+        const res = await getJson<DiscoverEndpointResponse>(
+          `/config/electricity/discover-endpoint-pms?endpoint=${encodeURIComponent(cleanUrl)}`
+        );
+
+        if (res?.storedEndpoints && res.storedEndpoints.length > 0) {
+          setStoredEndpoints(res.storedEndpoints);
+        }
+
+        if (!res || !res.endpointReachable) {
+          setUnregisteredPms([]);
+          setNewPmId("");
+          setTotalDetectedOnEndpoint(0);
+          setVerifyResult({
+            success: false,
+            hasNewPms: false,
+            message: `Gagal menghubungi endpoint: ${res?.endpointError || "Response kosong atau timeout"}`
+          });
+          return;
+        }
+
+        const newPms = res.unregisteredPms || [];
+        const totalOnApi = res.totalDetectedPmsOnEndpoint || 0;
+        setUnregisteredPms(newPms);
+        setTotalDetectedOnEndpoint(totalOnApi);
+
+        if (newPms.length > 0) {
+          const firstPm = newPms[0];
+          setNewPmId(firstPm.pm_id);
+          setVerifyResult({
+            success: true,
+            hasNewPms: true,
+            message: `Ditemukan ${newPms.length} PM baru yang belum terdaftar di sistem (dari total ${totalOnApi} PM pada endpoint ini). Silakan pilih PM ID pada dropdown.`,
+            detectedFields: firstPm.detectedFields,
+            initialValues: firstPm.initialValues
+          });
+        } else {
+          setNewPmId("");
+          setVerifyResult({
+            success: true,
+            hasNewPms: false,
+            message:
+              totalOnApi > 0
+                ? `Semua Power Meter pada endpoint ini (${totalOnApi} PM) sudah terdaftar di database & website. Tidak ada PM baru yang belum ditambahkan.`
+                : `Endpoint aktif, namun tidak ditemukan tag Power Meter baru yang belum terdaftar.`
+          });
+        }
+      } catch (err: any) {
+        setUnregisteredPms([]);
+        setNewPmId("");
+        setTotalDetectedOnEndpoint(0);
+        setVerifyResult({
+          success: false,
+          hasNewPms: false,
+          message: `Gagal memindai endpoint: ${err?.message || "Terjadi kesalahan jaringan"}`
+        });
+      } finally {
+        setIsVerifying(false);
+      }
+    },
+    [storedEndpoints]
+  );
+
   useEffect(() => {
     if (isOpen) {
       loadEquipmentItems();
+      loadStoredEndpoints();
       setStatusMsg(null);
       setVerifyResult(null);
       setSearchQuery("");
+      setNewPmEndpoint("");
+      setNewPmId("");
+      setNewPmLabel("");
+      setUnregisteredPms([]);
+      setTotalDetectedOnEndpoint(0);
     }
-  }, [isOpen, loadEquipmentItems]);
+  }, [isOpen, loadEquipmentItems, loadStoredEndpoints]);
+
+  // Handle Endpoint Dropdown selection change
+  const handleSelectEndpoint = (selectedUrl: string) => {
+    setNewPmEndpoint(selectedUrl);
+    scanEndpointForNewPms(selectedUrl);
+  };
+
+  // Handle PM ID Dropdown selection change
+  const handleSelectPmId = (selectedPmId: string) => {
+    setNewPmId(selectedPmId);
+    const found = unregisteredPms.find((p) => p.pm_id === selectedPmId);
+    if (found) {
+      setVerifyResult({
+        success: true,
+        hasNewPms: true,
+        message: `PM baru '${found.pm_id}' siap didaftarkan (${unregisteredPms.length} PM baru ditemukan dari total ${totalDetectedOnEndpoint} PM di endpoint ini).`,
+        detectedFields: found.detectedFields,
+        initialValues: found.initialValues
+      });
+    }
+  };
 
   // Filtered items
   const filteredItems = useMemo(() => {
@@ -186,122 +383,6 @@ export const EquipmentConfigModal: React.FC<Props> = ({
     }
   };
 
-  // Add existing PM to display
-  // Test & Verify API endpoint
-  const handleTestEndpoint = async () => {
-    if (!newPmEndpoint.trim()) {
-      setVerifyResult({ success: false, message: "Masukkan API Endpoint URL terlebih dahulu." });
-      return;
-    }
-    const cleanPm = newPmId.trim().toUpperCase();
-    if (!cleanPm) {
-      setVerifyResult({ success: false, message: "Masukkan PM ID (contoh: PM501) terlebih dahulu." });
-      return;
-    }
-
-    setIsVerifying(true);
-    setVerifyResult(null);
-
-    try {
-      // 1. Check duplicate locally first
-      const existsInCurrent = items.some(
-        (i) => (i.value?.pm_id || i.config_key).toUpperCase() === cleanPm
-      );
-      if (existsInCurrent) {
-        setVerifyResult({
-          success: false,
-          duplicate: true,
-          message: `Power Meter '${cleanPm}' sudah terdaftar dalam tampilan per-equipment. Tidak dapat menambahkan duplikat.`
-        });
-        setIsVerifying(false);
-        return;
-      }
-
-      // 2. Test endpoint connectivity
-      const testRes = await postJson<{ success: boolean; data?: any; error?: string; status?: number }>(
-        "/config/api-sources/test",
-        { url: newPmEndpoint.trim(), method: "GET" }
-      );
-
-      if (!testRes.success || !testRes.data) {
-        setVerifyResult({
-          success: false,
-          message: `Gagal menghubungi endpoint: ${testRes.error || "Response kosong atau timeout"}`
-        });
-        setIsVerifying(false);
-        return;
-      }
-
-      // Inspect data structure
-      const rawData = testRes.data;
-      const targetObj = Array.isArray(rawData)
-        ? rawData.find((p: any) => String(p.pm_id || p.pm || "").toUpperCase() === cleanPm) || rawData[0] || {}
-        : rawData[cleanPm] || rawData;
-
-      const allKeys = Object.keys(targetObj);
-      const keys = allKeys.slice(0, 15);
-
-      // Find power & energy values (supports exact, suffixed like _PM181, and substring match)
-      let foundPower: number | null = null;
-      let foundEnergy: number | null = null;
-
-      const powerCandidates = ["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower"];
-      for (const k of powerCandidates) {
-        if (targetObj[k] !== undefined && !isNaN(Number(targetObj[k]))) {
-          foundPower = Number(targetObj[k]);
-          break;
-        }
-        const suffixed = `${k}_${cleanPm}`;
-        if (targetObj[suffixed] !== undefined && !isNaN(Number(targetObj[suffixed]))) {
-          foundPower = Number(targetObj[suffixed]);
-          break;
-        }
-      }
-      if (foundPower === null) {
-        const pKey = allKeys.find((k) => k.toLowerCase().includes("active_power") || k.toLowerCase().includes("power"));
-        if (pKey && !isNaN(Number(targetObj[pKey]))) {
-          foundPower = Number(targetObj[pKey]);
-        }
-      }
-
-      const energyCandidates = ["ActiveEnergy", "Active_Energy", "Energy", "total_kwh", "Total_KWH", "kWh"];
-      for (const k of energyCandidates) {
-        if (targetObj[k] !== undefined && !isNaN(Number(targetObj[k]))) {
-          foundEnergy = Number(targetObj[k]);
-          break;
-        }
-        const suffixed = `${k}_${cleanPm}`;
-        if (targetObj[suffixed] !== undefined && !isNaN(Number(targetObj[suffixed]))) {
-          foundEnergy = Number(targetObj[suffixed]);
-          break;
-        }
-      }
-      if (foundEnergy === null) {
-        const eKey = allKeys.find((k) => k.toLowerCase().includes("activeenergy") || k.toLowerCase().includes("energy") || k.toLowerCase().includes("kwh"));
-        if (eKey && !isNaN(Number(targetObj[eKey]))) {
-          foundEnergy = Number(targetObj[eKey]);
-        }
-      }
-
-      setVerifyResult({
-        success: true,
-        message: `Endpoint responsif! Sistem otomatis mendeteksi parameter dari endpoint.`,
-        detectedFields: keys,
-        initialValues: {
-          activePower: foundPower,
-          activeEnergy: foundEnergy
-        }
-      });
-    } catch (err: any) {
-      setVerifyResult({
-        success: false,
-        message: `Koneksi gagal: ${err?.message || "Terjadi kesalahan saat menguji endpoint"}`
-      });
-    } finally {
-      setIsVerifying(false);
-    }
-  };
-
   // Submit Brand New PM registration
   const handleRegisterNewPm = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -309,10 +390,26 @@ export const EquipmentConfigModal: React.FC<Props> = ({
     const cleanLabel = newPmLabel.trim();
     const cleanUrl = newPmEndpoint.trim();
 
-    if (!cleanPm || !cleanLabel || !cleanUrl) {
+    if (!cleanUrl) {
       setStatusMsg({
         type: "error",
-        text: "PM ID, Nama Item, dan API Endpoint wajib diisi lengkap."
+        text: "Pilih API Endpoint URL dari opsi dropdown terlebih dahulu."
+      });
+      return;
+    }
+
+    if (!cleanPm) {
+      setStatusMsg({
+        type: "error",
+        text: "Pilih PM ID baru dari opsi dropdown. Jika kosong, berarti tidak ada PM baru pada endpoint ini."
+      });
+      return;
+    }
+
+    if (!cleanLabel) {
+      setStatusMsg({
+        type: "error",
+        text: "Nama Equipment / Item wajib diisi."
       });
       return;
     }
@@ -339,17 +436,10 @@ export const EquipmentConfigModal: React.FC<Props> = ({
       });
 
       if (!res.success) {
-        if (res.duplicate) {
-          setStatusMsg({
-            type: "error",
-            text: res.message || "Power meter sudah ada di database."
-          });
-        } else {
-          setStatusMsg({
-            type: "error",
-            text: res.message || "Gagal mendaftarkan Power Meter baru."
-          });
-        }
+        setStatusMsg({
+          type: "error",
+          text: res.message || "Gagal mendaftarkan Power Meter baru."
+        });
         return;
       }
 
@@ -362,10 +452,12 @@ export const EquipmentConfigModal: React.FC<Props> = ({
       setNewPmId("");
       setNewPmLabel("");
       setNewPmEndpoint("");
+      setUnregisteredPms([]);
       setVerifyResult(null);
 
       // Refresh list & switch back to manage tab
       await loadEquipmentItems();
+      await loadStoredEndpoints();
       onItemsUpdated();
       setActiveTab("manage");
     } catch (err: any) {
@@ -647,23 +739,90 @@ export const EquipmentConfigModal: React.FC<Props> = ({
           {/* TAB 2: REGISTER BRAND NEW PM FROM API ENDPOINT */}
           {activeTab === "register" && (
             <form onSubmit={handleRegisterNewPm} className="space-y-5">
-
               <div className="grid gap-4 sm:grid-cols-2">
-                {/* PM ID */}
+                {/* API Endpoint URL Dropdown (No Manual Input) */}
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    API Endpoint URL <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      required
+                      value={newPmEndpoint}
+                      onChange={(e) => handleSelectEndpoint(e.target.value)}
+                      className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer"
+                    >
+                      <option value="">
+                        — Pilih API Endpoint yang Tersimpan —
+                      </option>
+                      {storedEndpoints.map((ep) => (
+                        <option key={ep.url} value={ep.url}>
+                          {ep.label} ({ep.url})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => scanEndpointForNewPms(newPmEndpoint)}
+                      disabled={isVerifying || !newPmEndpoint.trim()}
+                      className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer flex-shrink-0"
+                      title="Cek ulang daftar PM baru yang belum terdaftar pada endpoint ini"
+                    >
+                      {isVerifying ? (
+                        <>
+                          <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Memindai...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🔄</span>
+                          <span>Cek Ulang Endpoint</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Pilih dari opsi endpoint yang tersimpan di sistem. Sistem otomatis mengecek apakah ada PM baru yang belum terdaftar di database &amp; website.
+                  </span>
+                </div>
+
+                {/* PM ID Dropdown (Populated automatically from unregistered PMs on the selected endpoint; empty if none) */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
                     PM ID <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="text"
+                  <select
                     required
-                    placeholder="Contoh: PM501, PM190, PM_CHILLER3"
                     value={newPmId}
-                    onChange={(e) => setNewPmId(e.target.value.toUpperCase())}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  />
+                    onChange={(e) => handleSelectPmId(e.target.value)}
+                    disabled={!newPmEndpoint || isVerifying || unregisteredPms.length === 0}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {!newPmEndpoint ? (
+                      <option value="">— Pilih API Endpoint terlebih dahulu —</option>
+                    ) : isVerifying ? (
+                      <option value="">Memeriksa PM baru di endpoint...</option>
+                    ) : unregisteredPms.length === 0 ? (
+                      <option value=""></option>
+                    ) : (
+                      unregisteredPms.map((pm) => (
+                        <option key={pm.pm_id} value={pm.pm_id}>
+                          {pm.pm_id}
+                          {pm.initialValues?.activePower !== null && pm.initialValues?.activePower !== undefined
+                            ? ` (${pm.initialValues.activePower} kW)`
+                            : ""}
+                        </option>
+                      ))
+                    )}
+                  </select>
                   <span className="text-[10px] text-slate-400 mt-1 block">
-                    ID unik Power Meter di sistem (harus unik, tidak boleh duplikat).
+                    {!newPmEndpoint
+                      ? "Opsi PM ID akan muncul otomatis setelah Anda memilih API Endpoint URL."
+                      : isVerifying
+                      ? "Sedang mengecek daftar PM baru pada endpoint..."
+                      : unregisteredPms.length > 0
+                      ? `Ditemukan ${unregisteredPms.length} PM baru yang belum terdaftar pada endpoint ini.`
+                      : "Tidak ada PM baru yang belum terdaftar pada endpoint ini (dropdown kosong)."}
                   </span>
                 </div>
 
@@ -682,44 +841,6 @@ export const EquipmentConfigModal: React.FC<Props> = ({
                   />
                   <span className="text-[10px] text-slate-400 mt-1 block">
                     Nama judul yang akan tampil pada chart di dashboard.
-                  </span>
-                </div>
-
-                {/* API Endpoint URL */}
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                    API Endpoint URL <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew23 atau alias"
-                      value={newPmEndpoint}
-                      onChange={(e) => setNewPmEndpoint(e.target.value)}
-                      className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono focus:outline-none focus:ring-1 focus:ring-sky-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleTestEndpoint}
-                      disabled={isVerifying || !newPmEndpoint.trim()}
-                      className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer flex-shrink-0"
-                    >
-                      {isVerifying ? (
-                        <>
-                          <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          <span>Memeriksa...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>⚡</span>
-                          <span>Tes &amp; Deteksi Endpoint</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    Sistem dapat langsung menguji koneksi ke endpoint URL ini dan membaca strukturnya secara otomatis.
                   </span>
                 </div>
 
@@ -778,20 +899,24 @@ export const EquipmentConfigModal: React.FC<Props> = ({
               {verifyResult && (
                 <div
                   className={`p-4 rounded-xl border text-xs space-y-2 transition ${
-                    verifyResult.success
+                    !verifyResult.success
+                      ? "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                      : verifyResult.hasNewPms
                       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                      : "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                      : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
                   }`}
                 >
                   <div className="flex items-center gap-2 font-bold">
-                    <span>{verifyResult.success ? "✓" : "⚠️"}</span>
+                    <span>
+                      {!verifyResult.success ? "⚠️" : verifyResult.hasNewPms ? "✓" : "ℹ️"}
+                    </span>
                     <span>{verifyResult.message}</span>
                   </div>
 
-                  {verifyResult.success && verifyResult.detectedFields && (
+                  {verifyResult.success && verifyResult.hasNewPms && verifyResult.detectedFields && (
                     <div className="pt-2 border-t border-emerald-500/20 space-y-1.5">
                       <div className="flex items-center gap-2 text-[11px]">
-                        <span className="font-bold">Parameter Terdeteksi:</span>
+                        <span className="font-bold">Parameter Terdeteksi ({newPmId}):</span>
                         <div className="flex flex-wrap gap-1">
                           {verifyResult.detectedFields.map((f) => (
                             <span
@@ -841,7 +966,13 @@ export const EquipmentConfigModal: React.FC<Props> = ({
 
                 <button
                   type="submit"
-                  disabled={isSubmitting || !newPmId.trim() || !newPmLabel.trim() || !newPmEndpoint.trim()}
+                  disabled={
+                    isSubmitting ||
+                    isVerifying ||
+                    !newPmId.trim() ||
+                    !newPmLabel.trim() ||
+                    !newPmEndpoint.trim()
+                  }
                   className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 disabled:opacity-50 text-white text-xs font-bold transition shadow-lg shadow-sky-500/20 flex items-center gap-2 cursor-pointer"
                 >
                   {isSubmitting ? (

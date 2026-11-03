@@ -1,6 +1,12 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { getJson, postJson, deleteJson } from "../../services/api.client";
+import {
+  type StoredEndpointOption,
+  type UnregisteredPmItem,
+  type DiscoverEndpointResponse,
+  FALLBACK_STORED_ENDPOINTS
+} from "./EquipmentConfigModal";
 
 export interface ConsumptionFactCategory {
   id: number;
@@ -65,6 +71,8 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
 
   // Add New PM form toggle & state
   const [isAddPmOpen, setIsAddPmOpen] = useState(false);
+  const [storedEndpoints, setStoredEndpoints] = useState<StoredEndpointOption[]>(FALLBACK_STORED_ENDPOINTS);
+  const [unregisteredPms, setUnregisteredPms] = useState<UnregisteredPmItem[]>([]);
   const [newPmTargetFact, setNewPmTargetFact] = useState<"consumption_fact_1" | "consumption_fact_2">(initialFact);
   const [newPmDept, setNewPmDept] = useState<"Utility" | "HVAC" | "Other">("Utility");
   const [newPmId, setNewPmId] = useState("");
@@ -98,17 +106,32 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
       });
   }, []);
 
+  const loadStoredEndpoints = useCallback(() => {
+    getJson<DiscoverEndpointResponse>("/config/electricity/discover-endpoint-pms")
+      .then((res) => {
+        if (res?.storedEndpoints && res.storedEndpoints.length > 0) {
+          setStoredEndpoints(res.storedEndpoints);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       loadAvailablePms();
+      loadStoredEndpoints();
       setActiveFact(initialFact);
       setDeptFilter(initialDept);
       setSearchQuery("");
       setIsAddPmOpen(false);
+      setNewPmEndpoint("");
+      setNewPmId("");
+      setNewPmLabel("");
+      setUnregisteredPms([]);
       setTestResult(null);
       setActionMessage(null);
     }
-  }, [isOpen, initialFact, initialDept, loadAvailablePms]);
+  }, [isOpen, initialFact, initialDept, loadAvailablePms, loadStoredEndpoints]);
 
   // Map of currently configured items for active fact: pm_id (uppercase) -> ConsumptionFactCategory
   const activeFactItems = useMemo(() => {
@@ -243,55 +266,98 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
     }
   };
 
-  // Test API for new PM
-  const handleTestNewPmApi = async () => {
-    if (!newPmEndpoint.trim()) {
-      setTestResult({ success: false, message: "Masukkan Endpoint URL terlebih dahulu." });
-      return;
-    }
-    setIsTestingApi(true);
-    setTestResult(null);
+  // Scan endpoint for unregistered PMs
+  const scanEndpointForNewPms = useCallback(
+    async (endpointUrl: string) => {
+      const cleanUrl = endpointUrl.trim();
+      if (!cleanUrl) {
+        setUnregisteredPms([]);
+        setNewPmId("");
+        setTestResult(null);
+        return;
+      }
 
-    try {
-      const res = await postJson<{ success: boolean; data?: any; message?: string }>("/config/api-sources/test", {
-        url: newPmEndpoint.trim(),
-        method: "GET"
-      });
+      const matchedEp = storedEndpoints.find((ep) => ep.url === cleanUrl || ep.alias === cleanUrl);
+      if (matchedEp) {
+        setNewPmTargetFact(
+          matchedEp.defaultFactory === "wf2" ? "consumption_fact_2" : "consumption_fact_1"
+        );
+      }
 
-      if (res && res.success && res.data) {
-        setTestResult({
-          success: true,
-          message: "✓ Endpoint terhubung sukses! Data API berhasil diterima."
-        });
-      } else {
+      setIsTestingApi(true);
+      setTestResult(null);
+      setUnregisteredPms([]);
+      setNewPmId("");
+
+      try {
+        const res = await getJson<DiscoverEndpointResponse>(
+          `/config/electricity/discover-endpoint-pms?endpoint=${encodeURIComponent(cleanUrl)}`
+        );
+
+        if (res?.storedEndpoints && res.storedEndpoints.length > 0) {
+          setStoredEndpoints(res.storedEndpoints);
+        }
+
+        if (!res || !res.endpointReachable) {
+          setUnregisteredPms([]);
+          setNewPmId("");
+          setTestResult({
+            success: false,
+            message: res?.endpointError || "Gagal menghubungi endpoint. Periksa URL dan koneksi jaringan."
+          });
+          return;
+        }
+
+        const newPms = res.unregisteredPms || [];
+        const totalOnApi = res.totalDetectedPmsOnEndpoint || 0;
+        setUnregisteredPms(newPms);
+
+        if (newPms.length > 0) {
+          setNewPmId(newPms[0].pm_id);
+          setTestResult({
+            success: true,
+            message: `✓ Ditemukan ${newPms.length} PM baru yang belum terdaftar di sistem (dari total ${totalOnApi} PM di endpoint ini).`
+          });
+        } else {
+          setNewPmId("");
+          setTestResult({
+            success: false,
+            message:
+              totalOnApi > 0
+                ? `Semua Power Meter pada endpoint ini (${totalOnApi} PM) sudah terdaftar di database & website.`
+                : `Tidak ada PM baru yang belum terdaftar pada endpoint ini.`
+          });
+        }
+      } catch (err: any) {
+        setUnregisteredPms([]);
+        setNewPmId("");
         setTestResult({
           success: false,
-          message: res?.message || "Gagal menghubungi endpoint. Periksa URL dan koneksi jaringan."
+          message: `Koneksi gagal: ${err?.message || "Network error"}`
         });
+      } finally {
+        setIsTestingApi(false);
       }
-    } catch (err: any) {
-      setTestResult({
-        success: false,
-        message: `Koneksi gagal: ${err?.message || "Network error"}`
-      });
-    } finally {
-      setIsTestingApi(false);
-    }
-  };
+    },
+    [storedEndpoints]
+  );
 
-  // Submit Add New PM (ONLY Endpoint, Label, and PM ID)
+  // Submit Add New PM (Dropdown-only Endpoint & PM ID)
   const handleAddNewPm = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newPmEndpoint.trim()) {
+      setActionMessage({ type: "error", text: "Pilih Endpoint URL dari dropdown terlebih dahulu." });
+      return;
+    }
     if (!newPmId.trim()) {
-      setActionMessage({ type: "error", text: "Power Meter ID (PM ID) wajib diisi." });
+      setActionMessage({
+        type: "error",
+        text: "Pilih Power Meter ID (PM ID) baru dari dropdown. Jika kosong, berarti tidak ada PM baru pada endpoint ini."
+      });
       return;
     }
     if (!newPmLabel.trim()) {
       setActionMessage({ type: "error", text: "Nama / Label Item wajib diisi." });
-      return;
-    }
-    if (!newPmEndpoint.trim()) {
-      setActionMessage({ type: "error", text: "Endpoint URL wajib diisi." });
       return;
     }
 
@@ -299,17 +365,18 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
     setActionMessage(null);
 
     try {
-      const payload = {
-        config_type: newPmTargetFact,
-        config_key: newPmId.toLowerCase().trim().replace(/[^a-z0-9_]/g, ""),
-        label: newPmLabel.trim(),
-        pm_id: newPmId.trim(),
-        endpoint_url: newPmEndpoint.trim(),
-        department: newPmDept,
-        enabled: true
-      };
-
-      const res = await postJson<{ message?: string }>("/config/electricity", payload);
+      const res = await postJson<{ success?: boolean; message?: string }>(
+        "/config/electricity/verify-and-register-pm",
+        {
+          pm_id: newPmId.trim().toUpperCase(),
+          label: newPmLabel.trim(),
+          endpoint_url: newPmEndpoint.trim(),
+          category: "custom",
+          categoryLabel: "Kustom / Lainnya",
+          factory: newPmTargetFact === "consumption_fact_2" ? "wf2" : "wf1",
+          department: newPmDept
+        }
+      );
 
       setActionMessage({
         type: "success",
@@ -320,10 +387,12 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
       setNewPmId("");
       setNewPmLabel("");
       setNewPmEndpoint("");
+      setUnregisteredPms([]);
       setTestResult(null);
       setIsAddPmOpen(false);
 
       loadAvailablePms();
+      loadStoredEndpoints();
       onRefresh();
     } catch (err: any) {
       setActionMessage({
@@ -511,7 +580,7 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
           </button>
         </div>
 
-        {/* Minimal Add New PM Form (ONLY Endpoint, Label, and PM ID) */}
+        {/* Minimal Add New PM Form (Dropdown Endpoint & Dropdown Unregistered PM ID) */}
         {isAddPmOpen && (
           <form
             onSubmit={handleAddNewPm}
@@ -530,55 +599,81 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
             </div>
 
             <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-              Cukup masukkan <strong>Endpoint URL</strong>, <strong>Label</strong>, dan <strong>PM ID</strong>.
-              Semua parameter teknis (Active Power, Energy, Tegangan, Arus, Power Factor, Frekuensi) akan otomatis dibaca dan disimpan ke database <span className="font-mono text-emerald-600">electric_pm</span>.
+              Pilih <strong>Endpoint URL</strong> dari dropdown, lalu pilih <strong>PM ID baru</strong> yang terdeteksi belum terdaftar di sistem dan isi <strong>Label</strong>.
             </p>
 
+            {/* Endpoint URL Dropdown */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Endpoint URL (Ignition Webdev API) *
+              </label>
+              <div className="flex items-center gap-2">
+                <select
+                  required
+                  value={newPmEndpoint}
+                  onChange={(e) => {
+                    setNewPmEndpoint(e.target.value);
+                    scanEndpointForNewPms(e.target.value);
+                  }}
+                  className="flex-1 px-3 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
+                >
+                  <option value="">— Pilih API Endpoint yang Tersimpan —</option>
+                  {storedEndpoints.map((ep) => (
+                    <option key={ep.url} value={ep.url}>
+                      {ep.label} ({ep.url})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => scanEndpointForNewPms(newPmEndpoint)}
+                  disabled={isTestingApi || !newPmEndpoint.trim()}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition shrink-0 cursor-pointer"
+                >
+                  {isTestingApi ? "Memindai..." : "🔄 Cek Ulang"}
+                </button>
+              </div>
+              {testResult && (
+                <div
+                  className={`mt-1.5 text-[11px] font-semibold ${
+                    testResult.success ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                  }`}
+                >
+                  {testResult.message}
+                </div>
+              )}
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {/* Target Factory */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Target Factory *
-                </label>
-                <select
-                  value={newPmTargetFact}
-                  onChange={(e) => setNewPmTargetFact(e.target.value as any)}
-                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 outline-none"
-                >
-                  <option value="consumption_fact_1">Fact 1 (Utility & Production)</option>
-                  <option value="consumption_fact_2">Fact 2 (Utility & HVAC)</option>
-                </select>
-              </div>
-
-              {/* Department */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Departemen *
-                </label>
-                <select
-                  value={newPmDept}
-                  onChange={(e) => setNewPmDept(e.target.value as any)}
-                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 outline-none"
-                >
-                  <option value="Utility">Utility</option>
-                  <option value="HVAC">HVAC</option>
-                  <option value="Other">Other / Production</option>
-                </select>
-              </div>
-
-              {/* Power Meter ID */}
+              {/* Power Meter ID Dropdown */}
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Power Meter ID (PM ID) *
                 </label>
-                <input
-                  type="text"
+                <select
                   required
-                  placeholder="Contoh: PM350 / PM_CHILLER_3"
                   value={newPmId}
                   onChange={(e) => setNewPmId(e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
+                  disabled={!newPmEndpoint || isTestingApi || unregisteredPms.length === 0}
+                  className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {!newPmEndpoint ? (
+                    <option value="">— Pilih Endpoint dulu —</option>
+                  ) : isTestingApi ? (
+                    <option value="">Memeriksa PM baru...</option>
+                  ) : unregisteredPms.length === 0 ? (
+                    <option value=""></option>
+                  ) : (
+                    unregisteredPms.map((pm) => (
+                      <option key={pm.pm_id} value={pm.pm_id}>
+                        {pm.pm_id}
+                        {pm.initialValues?.activePower !== null && pm.initialValues?.activePower !== undefined
+                          ? ` (${pm.initialValues.activePower} kW)`
+                          : ""}
+                      </option>
+                    ))
+                  )}
+                </select>
               </div>
 
               {/* Label / Item Name */}
@@ -595,40 +690,37 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
                   className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
               </div>
-            </div>
 
-            {/* Endpoint URL */}
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Endpoint URL (Ignition Webdev API) *
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  required
-                  placeholder="http://10.3.164.3:8088/system/webdev/Utility_Dashboard/PM350 atau endpoint API lainnya"
-                  value={newPmEndpoint}
-                  onChange={(e) => setNewPmEndpoint(e.target.value)}
-                  className="flex-1 px-3 py-1.5 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={handleTestNewPmApi}
-                  disabled={isTestingApi || !newPmEndpoint.trim()}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition shrink-0"
+              {/* Target Factory */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Target Factory *
+                </label>
+                <select
+                  value={newPmTargetFact}
+                  onChange={(e) => setNewPmTargetFact(e.target.value as any)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
                 >
-                  {isTestingApi ? "Menguji API..." : "🔍 Test API"}
-                </button>
+                  <option value="consumption_fact_1">Fact 1 (Utility & Production)</option>
+                  <option value="consumption_fact_2">Fact 2 (Utility & HVAC)</option>
+                </select>
               </div>
-              {testResult && (
-                <div
-                  className={`mt-1.5 text-[11px] font-semibold ${
-                    testResult.success ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
-                  }`}
+
+              {/* Department */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Departemen *
+                </label>
+                <select
+                  value={newPmDept}
+                  onChange={(e) => setNewPmDept(e.target.value as any)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
                 >
-                  {testResult.message}
-                </div>
-              )}
+                  <option value="Utility">Utility</option>
+                  <option value="HVAC">HVAC</option>
+                  <option value="Other">Other / Production</option>
+                </select>
+              </div>
             </div>
 
             {/* Form Submit Footer */}
@@ -642,8 +734,8 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
               </button>
               <button
                 type="submit"
-                disabled={isProcessing}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition disabled:opacity-50 flex items-center gap-1.5"
+                disabled={isProcessing || isTestingApi || !newPmEndpoint.trim() || !newPmId.trim() || !newPmLabel.trim()}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
               >
                 <span>✓</span>
                 <span>{isProcessing ? "Menyimpan..." : "Simpan & Daftarkan PM Baru"}</span>

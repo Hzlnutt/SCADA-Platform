@@ -1581,35 +1581,8 @@ export const getAvailablePowerMetersHandler = async (req: Request, res: Response
       pmMap.set(m.pm_id.toUpperCase(), { ...m, factory, is_database: true });
     }
 
-    // 2. Query distinct PMs recorded in electric_pm_telemetry and minute table
-    try {
-      const dbRes = await pool.query(`
-        SELECT DISTINCT UPPER(pm_id) as pm_id, LOWER(group_id) as group_id
-        FROM (
-          SELECT pm_id, group_id FROM electric_pm_telemetry
-          UNION
-          SELECT pm_id, group_id FROM electric_pm_telemetry_minute
-        ) c
-        WHERE pm_id IS NOT NULL AND pm_id != ''
-      `);
-      for (const row of dbRes.rows) {
-        const id = String(row.pm_id).toUpperCase();
-        if (!pmMap.has(id)) {
-          const factory = row.group_id === "ew21" ? "consumption_fact_1" : (row.group_id === "ew22" || row.group_id === "ew23") ? "consumption_fact_2" : "all";
-          pmMap.set(id, {
-            pm_id: id,
-            label: `${id} (${row.group_id || "Sub-distribution"})`,
-            endpoint_url: `electric_${row.group_id || "ew23"}`,
-            json_key: id,
-            group_id: row.group_id || "ew23",
-            factory,
-            department: row.group_id === "hvac" ? "HVAC" : "Utility",
-            subArea: "General",
-            is_database: true
-          });
-        }
-      }
-    } catch {}
+    // 2. Only include PMs that are registered in STANDARD_METERS or electricity_config
+    // (Unregistered new PMs in live API endpoints are discovered via /config/electricity/discover-endpoint-pms)
 
     // 3. Query electricity_config for any custom configured items
     try {
@@ -2363,6 +2336,468 @@ export const renameEquipmentCategoryHandler = async (req: Request, res: Response
   }
 };
 
+const CORE_PM_ENDPOINTS: {
+  value: string;
+  alias: string;
+  url: string;
+  label: string;
+  defaultFactory: "wf1" | "wf2";
+}[] = [
+  {
+    value: "electric_ew21",
+    alias: "electric_ew21",
+    url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew21",
+    label: "electric_ew21 — http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew21 (Factory 1 / WF1)",
+    defaultFactory: "wf1"
+  },
+  {
+    value: "electric_ew22",
+    alias: "electric_ew22",
+    url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew22",
+    label: "electric_ew22 — http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew22 (Factory 2 / WF2)",
+    defaultFactory: "wf2"
+  },
+  {
+    value: "electric_ew23",
+    alias: "electric_ew23",
+    url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew23",
+    label: "electric_ew23 — http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew23 (Factory 2 Sub / EW23)",
+    defaultFactory: "wf2"
+  },
+  {
+    value: "electric_pln",
+    alias: "electric_pln",
+    url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln",
+    label: "electric_pln — http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln (Incoming Cubicle PLN)",
+    defaultFactory: "wf2"
+  },
+  {
+    value: "electric_wf1",
+    alias: "electric_wf1",
+    url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1",
+    label: "electric_wf1 — http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1 (Incoming Cubicle WF1)",
+    defaultFactory: "wf1"
+  },
+  {
+    value: "electric_wf2",
+    alias: "electric_wf2",
+    url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2",
+    label: "electric_wf2 — http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2 (Incoming Cubicle WF2)",
+    defaultFactory: "wf2"
+  }
+];
+
+const RESERVED_CUBICLE_TOKENS = new Set([
+  "PM",
+  "PM_UNKNOWN",
+  "PM8000",
+  "PM5500",
+  "PM5560",
+  "PM5500_WF1",
+  "PM5500_WF2",
+  "PM5560_WF1",
+  "PM5560_WF2"
+]);
+
+const normalizePmIdToken = (raw: string): string => {
+  const up = String(raw || "").toUpperCase().trim().replace(/[^A-Z0-9_]/g, "");
+  if (!up) return "";
+  const withPrefix = up.startsWith("PM") ? up : `PM${up}`;
+  return withPrefix.replace(/^PM_(\d+[A-Z0-9]*)$/, "PM$1");
+};
+
+const extractPmIdsFromKey = (rawKey: string): string[] => {
+  if (!rawKey || typeof rawKey !== "string") return [];
+  // Strip known feeder prefixes like Status_PM5500_WF1_PM132 -> Status_PM132
+  const cleaned = rawKey.replace(/PM(?:5500|5560|8000)(?:_WF[12])?_/gi, "");
+  const results: string[] = [];
+
+  // 1. Suffix match e.g. Active_Power_Total_PM181, VoltAB_pm291, Active_Power_PM_CHILLER3
+  const suffixNum = cleaned.match(/(?:^|_)(?:PM|pm)_?(\d+[A-Z0-9]*)$/);
+  if (suffixNum) {
+    const id = `PM${suffixNum[1].toUpperCase()}`;
+    if (!RESERVED_CUBICLE_TOKENS.has(id)) results.push(id);
+    return results;
+  }
+
+  const suffixCustom = cleaned.match(/(?:^|_)(PM_[A-Z0-9_]+)$/i);
+  if (suffixCustom) {
+    const id = normalizePmIdToken(suffixCustom[1]);
+    if (id && !RESERVED_CUBICLE_TOKENS.has(id)) results.push(id);
+    return results;
+  }
+
+  // 2. Prefix or exact match e.g. PM181, PM181_Active_Power
+  const prefixMatch = cleaned.match(/^(?:PM|pm)_?(\d+[A-Z0-9]*)(?:_|$)/);
+  if (prefixMatch) {
+    const id = `PM${prefixMatch[1].toUpperCase()}`;
+    if (!RESERVED_CUBICLE_TOKENS.has(id)) results.push(id);
+    return results;
+  }
+
+  // 3. Any embedded _PM123_ token
+  const regex = /(?:^|_)(?:PM|pm)_?(\d+[A-Z0-9]*)(?:_|$)/g;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(cleaned)) !== null) {
+    const id = `PM${m[1].toUpperCase()}`;
+    if (!RESERVED_CUBICLE_TOKENS.has(id)) results.push(id);
+  }
+  return results;
+};
+
+const fetchLiveEndpointPayload = async (endpointOrUrl: string): Promise<{ ok: boolean; data: any; resolvedUrl: string; error?: string }> => {
+  const clean = String(endpointOrUrl || "").trim();
+  const coreMatch = CORE_PM_ENDPOINTS.find(
+    (e) => e.alias.toLowerCase() === clean.toLowerCase() || e.url.toLowerCase() === clean.toLowerCase()
+  );
+
+  const candidateUrls: string[] = [];
+  if (coreMatch) {
+    candidateUrls.push(
+      `http://10.3.164.3:8088/system/webdev/Utility_Dashboard/${coreMatch.alias}`,
+      `http://10.3.161.3:8088/system/webdev/Utility_Dashboard/${coreMatch.alias}`
+    );
+  } else if (clean.startsWith("http://") || clean.startsWith("https://")) {
+    candidateUrls.push(clean);
+    if (clean.includes("10.3.164.3:8088")) {
+      candidateUrls.push(clean.replace("10.3.164.3:8088", "10.3.161.3:8088"));
+    }
+  } else {
+    candidateUrls.push(
+      `http://10.3.164.3:8088/system/webdev/Utility_Dashboard/${clean}`,
+      `http://10.3.161.3:8088/system/webdev/Utility_Dashboard/${clean}`
+    );
+  }
+
+  let lastError = "Gagal menghubungi endpoint";
+  for (const url of candidateUrls) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    try {
+      const fetchRes = await fetch(url, {
+        method: "GET",
+        headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      if (!fetchRes.ok) {
+        lastError = `HTTP ${fetchRes.status}: ${fetchRes.statusText}`;
+        continue;
+      }
+      const data = await fetchRes.json();
+      return { ok: true, data, resolvedUrl: url };
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      lastError = err?.name === "AbortError" ? "Koneksi ke endpoint timeout" : (err?.message || "Network error");
+    }
+  }
+
+  return { ok: false, data: null, resolvedUrl: candidateUrls[0] || clean, error: lastError };
+};
+
+const extractPmTelemetryFromPayload = (apiData: any, pmId: string) => {
+  const normPmId = normalizePmIdToken(pmId);
+  const cleanNum = normPmId.replace(/\D/g, "");
+
+  const inspectObj = Array.isArray(apiData)
+    ? (apiData.find((p: any) => {
+        if (!p || typeof p !== "object") return false;
+        if (normalizePmIdToken(String(p.pm_id || p.pm || "")) === normPmId) return true;
+        return Object.keys(p).some((k) => extractPmIdsFromKey(k).includes(normPmId));
+      }) || {})
+    : (apiData && typeof apiData === "object"
+        ? (apiData[normPmId] && typeof apiData[normPmId] === "object" ? apiData[normPmId] : apiData)
+        : {});
+
+  const allKeys = Object.keys(inspectObj || {});
+  const pmSpecificKeys = allKeys.filter((k) => {
+    const ids = extractPmIdsFromKey(k);
+    return ids.includes(normPmId);
+  });
+  const detectedFields = (pmSpecificKeys.length > 0 ? pmSpecificKeys : allKeys).slice(0, 24);
+
+  const getVal = (prefixList: string[]): number | null => {
+    for (const p of prefixList) {
+      const candidateKeys = [
+        `${p}_${normPmId}`,
+        `${p}_${normPmId.toLowerCase()}`,
+        ...(cleanNum ? [
+          `${p}_PM${cleanNum}`,
+          `${p}_pm${cleanNum}`,
+          `${p}_${cleanNum}`,
+          `${p}__PM${cleanNum}`,
+          `${p}__pm${cleanNum}`
+        ] : []),
+        `${p}__${normPmId}`,
+        // Only fall back to bare prefix if inspectObj is a dedicated single-PM object
+        ...(pmSpecificKeys.length === 0 ? [p] : [])
+      ];
+      for (const ck of candidateKeys) {
+        if (inspectObj[ck] !== undefined && inspectObj[ck] !== null && inspectObj[ck] !== "") {
+          const num = Number(inspectObj[ck]);
+          if (!isNaN(num)) return num;
+        }
+      }
+    }
+    return null;
+  };
+
+  const getStatus = (): boolean => {
+    const statusCandidates = [
+      `Status_${normPmId}`,
+      `Status_${normPmId.toLowerCase()}`,
+      `Status_PM5500_WF1_${normPmId}`,
+      `Status_PM5500_WF1_${normPmId.toLowerCase()}`,
+      `Status_PM5500_WF2_${normPmId}`,
+      `Status_PM5500_WF2_${normPmId.toLowerCase()}`,
+      `Status__${normPmId}`,
+      ...(cleanNum ? [`Status_PM${cleanNum}`, `Status_pm${cleanNum}`] : []),
+      ...(pmSpecificKeys.length === 0 ? ["Status", "status"] : [])
+    ];
+    for (const sk of statusCandidates) {
+      if (inspectObj[sk] !== undefined && inspectObj[sk] !== null) {
+        const val = inspectObj[sk];
+        if (typeof val === "boolean") return val;
+        const num = Number(val);
+        if (!isNaN(num)) return num === 1;
+        return val === "1" || String(val).toLowerCase() === "true";
+      }
+    }
+    return true;
+  };
+
+  return {
+    detectedFields,
+    status: getStatus(),
+    volt_ab: getVal(["VoltAB", "Volt_AB", "VR", "V_AB"]),
+    volt_bc: getVal(["VoltBC", "Volt_BC", "VS", "V_BC"]),
+    volt_ca: getVal(["VoltCA", "Volt_CA", "VT", "V_CA"]),
+    volt_ll: getVal(["Volt_LL", "VoltLL", "VLL"]),
+    current_a: getVal(["Current_A", "CurrentA", "IR", "I_A"]),
+    current_b: getVal(["Current_B", "CurrentB", "IS", "I_B"]),
+    current_c: getVal(["Current_C", "CurrentC", "IT", "I_C"]),
+    frequency: getVal(["Frequency", "Freq", "Hz"]) ?? 50.0,
+    active_power_total: getVal(["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower", "Scale_Total_KW"]),
+    reactive_power_total: getVal(["Reactive_Power_Total", "Reactive_Power", "kVAR"]),
+    apparent_power_total: getVal(["Apparent_Power_Total", "Apparent_Power", "kVA"]),
+    power_factor: getVal(["Power_Factor", "PF"]),
+    voltage_unbalance: getVal(["Volatage_Unbalance", "Voltage_Unbalance"]),
+    current_unbalance: getVal(["Current_Umbalance", "Current_Unbalance"]),
+    thd_volt_a: getVal(["THD_Volt_A"]),
+    thd_volt_b: getVal(["THD_Volt_B"]),
+    thd_volt_c: getVal(["THD_Volt_C"]),
+    thd_current_a: getVal(["THD_Current_A"]),
+    thd_current_b: getVal(["THD_Current_B"]),
+    thd_current_c: getVal(["THD_Current_C"]),
+    active_energy: getVal(["ActiveEnergy", "Active_Energy", "Energy", "total_kwh", "Total_KWH", "kWh", "Total_kWh"])
+  };
+};
+
+export const discoverEndpointPmsHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pool = getPostgresPool();
+    const selectedEndpoint = typeof req.query.endpoint === "string" ? req.query.endpoint.trim() : "";
+
+    // 1. Build list of stored endpoints from core PMs + electricity_config + api_sources
+    const endpointMap = new Map<string, {
+      value: string;
+      alias: string;
+      url: string;
+      label: string;
+      defaultFactory: "wf1" | "wf2";
+    }>();
+
+    for (const ep of CORE_PM_ENDPOINTS) {
+      endpointMap.set(ep.alias.toLowerCase(), ep);
+    }
+
+    try {
+      const cfgEpRes = await pool.query(`
+        SELECT DISTINCT trim(value->>'endpoint_url') AS endpoint_url, value->>'factory' AS factory
+        FROM electricity_config
+        WHERE value->>'endpoint_url' IS NOT NULL AND length(trim(value->>'endpoint_url')) > 0
+      `);
+      for (const r of cfgEpRes.rows) {
+        const rawEp = String(r.endpoint_url || "").trim();
+        if (!rawEp) continue;
+        const matchCore = CORE_PM_ENDPOINTS.find(
+          (c) => c.alias.toLowerCase() === rawEp.toLowerCase() || c.url.toLowerCase() === rawEp.toLowerCase()
+        );
+        if (!matchCore && !endpointMap.has(rawEp.toLowerCase())) {
+          const defFact = String(r.factory || "").toLowerCase().includes("2") ? "wf2" : "wf1";
+          endpointMap.set(rawEp.toLowerCase(), {
+            value: rawEp,
+            alias: rawEp,
+            url: rawEp,
+            label: `${rawEp} (Endpoint Kustom Tersimpan)`,
+            defaultFactory: defFact
+          });
+        }
+      }
+    } catch {}
+
+    try {
+      const srcRes = await pool.query(`
+        SELECT DISTINCT name, trim(url) AS url
+        FROM api_sources
+        WHERE unit_id LIKE 'electric%' AND url IS NOT NULL AND length(trim(url)) > 0
+      `);
+      for (const r of srcRes.rows) {
+        const rawUrl = String(r.url || "").trim();
+        if (!rawUrl) continue;
+        const matchCore = CORE_PM_ENDPOINTS.find(
+          (c) => c.alias.toLowerCase() === rawUrl.toLowerCase() || c.url.toLowerCase() === rawUrl.toLowerCase()
+        );
+        if (!matchCore && !endpointMap.has(rawUrl.toLowerCase())) {
+          endpointMap.set(rawUrl.toLowerCase(), {
+            value: rawUrl,
+            alias: r.name || rawUrl,
+            url: rawUrl,
+            label: r.name ? `${r.name} — ${rawUrl}` : rawUrl,
+            defaultFactory: "wf1"
+          });
+        }
+      }
+    } catch {}
+
+    const endpoints = Array.from(endpointMap.values());
+
+    if (!selectedEndpoint) {
+      res.json({
+        success: true,
+        endpoints,
+        unregisteredPms: [],
+        totalDetectedInApi: 0,
+        alreadyRegisteredCount: 0
+      });
+      return;
+    }
+
+    // 2. Gather all PM IDs already registered in the system (STANDARD_METERS + DEFAULT_EQUIPMENT_DISPLAY_ITEMS + electricity_config)
+    const registeredPmIds = new Set<string>();
+    for (const m of STANDARD_METERS) {
+      registeredPmIds.add(normalizePmIdToken(m.pm_id));
+    }
+    for (const item of DEFAULT_EQUIPMENT_DISPLAY_ITEMS) {
+      registeredPmIds.add(normalizePmIdToken(item.pm_id));
+    }
+    for (const tok of RESERVED_CUBICLE_TOKENS) {
+      registeredPmIds.add(tok);
+    }
+
+    try {
+      const regRes = await pool.query(`
+        SELECT config_key, value
+        FROM electricity_config
+        WHERE config_type IN ('equipment_display', 'consumption_fact_1', 'consumption_fact_2')
+      `);
+      for (const r of regRes.rows) {
+        const val = r.value || {};
+        if (val.pm_id) registeredPmIds.add(normalizePmIdToken(String(val.pm_id)));
+        if (val.json_key) registeredPmIds.add(normalizePmIdToken(String(val.json_key)));
+        if (r.config_key) registeredPmIds.add(normalizePmIdToken(String(r.config_key)));
+      }
+    } catch {}
+
+    // 3. Fetch live payload from the selected endpoint and extract all PM IDs present in API
+    const liveRes = await fetchLiveEndpointPayload(selectedEndpoint);
+    if (!liveRes.ok || !liveRes.data) {
+      res.json({
+        success: false,
+        message: `Gagal membaca endpoint '${selectedEndpoint}': ${liveRes.error || "Endpoint tidak merespons"}`,
+        endpoint: selectedEndpoint,
+        resolvedUrl: liveRes.resolvedUrl,
+        endpoints,
+        unregisteredPms: [],
+        totalDetectedInApi: 0,
+        alreadyRegisteredCount: 0
+      });
+      return;
+    }
+
+    const apiData = liveRes.data;
+    const allDetectedPmIds = new Set<string>();
+
+    // Handle single-cubicle endpoints explicitly
+    const epLower = selectedEndpoint.toLowerCase();
+    if (epLower.includes("electric_pln")) allDetectedPmIds.add("PM410");
+    if (epLower.includes("electric_wf1")) allDetectedPmIds.add("PM411");
+    if (epLower.includes("electric_wf2")) allDetectedPmIds.add("PM412");
+
+    if (Array.isArray(apiData)) {
+      for (const item of apiData) {
+        if (!item || typeof item !== "object") continue;
+        if (item.pm_id || item.pm) {
+          const id = normalizePmIdToken(String(item.pm_id || item.pm));
+          if (id && !RESERVED_CUBICLE_TOKENS.has(id)) allDetectedPmIds.add(id);
+        }
+        for (const k of Object.keys(item)) {
+          for (const id of extractPmIdsFromKey(k)) {
+            allDetectedPmIds.add(id);
+          }
+        }
+      }
+    } else if (apiData && typeof apiData === "object") {
+      for (const [k, v] of Object.entries(apiData)) {
+        for (const id of extractPmIdsFromKey(k)) {
+          allDetectedPmIds.add(id);
+        }
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          for (const subK of Object.keys(v)) {
+            for (const id of extractPmIdsFromKey(subK)) {
+              allDetectedPmIds.add(id);
+            }
+          }
+        }
+      }
+    }
+
+    // 4. Filter only new PMs that have NOT been registered to the system/website
+    const unregisteredList: {
+      pm_id: string;
+      detectedFields: string[];
+      initialValues: { activePower: number | null; activeEnergy: number | null };
+    }[] = [];
+
+    let alreadyRegisteredCount = 0;
+    for (const pmId of allDetectedPmIds) {
+      const norm = normalizePmIdToken(pmId);
+      if (registeredPmIds.has(norm) || registeredPmIds.has(pmId.toUpperCase())) {
+        alreadyRegisteredCount++;
+      } else {
+        const telemetry = extractPmTelemetryFromPayload(apiData, norm);
+        unregisteredList.push({
+          pm_id: norm,
+          detectedFields: telemetry.detectedFields,
+          initialValues: {
+            activePower: telemetry.active_power_total,
+            activeEnergy: telemetry.active_energy
+          }
+        });
+      }
+    }
+
+    unregisteredList.sort((a, b) => {
+      const numA = parseInt(a.pm_id.replace(/\D/g, "") || "99999", 10);
+      const numB = parseInt(b.pm_id.replace(/\D/g, "") || "99999", 10);
+      if (numA !== numB) return numA - numB;
+      return a.pm_id.localeCompare(b.pm_id);
+    });
+
+    res.json({
+      success: true,
+      endpoint: selectedEndpoint,
+      resolvedUrl: liveRes.resolvedUrl,
+      totalDetectedInApi: allDetectedPmIds.size,
+      alreadyRegisteredCount,
+      unregisteredPms: unregisteredList,
+      endpoints
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const verifyAndRegisterNewPmHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { pm_id, label, endpoint_url, category, categoryLabel, department, factory, subArea } = req.body;
@@ -2372,150 +2807,90 @@ export const verifyAndRegisterNewPmHandler = async (req: Request, res: Response,
     }
 
     const pool = getPostgresPool();
-    const rawPmId = String(pm_id).toUpperCase().replace(/[^A-Z0-9_]/g, "");
-    const resolvedPmId = rawPmId.startsWith("PM") ? rawPmId : `PM_${rawPmId}`;
+    const resolvedPmId = normalizePmIdToken(String(pm_id));
     const cleanKey = resolvedPmId.toLowerCase();
     const cleanEndpoint = String(endpoint_url).trim();
 
-    // 1. Verifikasi agar tidak ada data redundan atau duplikat
+    // 1. Verifikasi agar tidak ada duplikat di konfigurasi sistem / website
     let isDuplicate = false;
     try {
       const checkRes = await pool.query(`
-        SELECT 1 FROM electric_pm_telemetry WHERE UPPER(pm_id) = $1
-        UNION
-        SELECT 1 FROM electric_pm_telemetry_minute WHERE UPPER(pm_id) = $1
-        UNION
-        SELECT 1 FROM electricity_config WHERE (UPPER(value->>'pm_id') = $1 OR UPPER(config_key) = $1)
+        SELECT 1 FROM electricity_config
+        WHERE config_type = 'equipment_display'
+          AND (UPPER(value->>'pm_id') = $1 OR UPPER(config_key) = $1)
         LIMIT 1
       `, [resolvedPmId]);
       isDuplicate = (checkRes.rowCount ?? 0) > 0;
     } catch {}
 
     if (!isDuplicate) {
-      isDuplicate = STANDARD_METERS.some(m => m.pm_id.toUpperCase() === resolvedPmId);
+      isDuplicate = STANDARD_METERS.some((m) => normalizePmIdToken(m.pm_id) === resolvedPmId);
     }
 
     if (isDuplicate) {
       res.status(409).json({
         success: false,
         duplicate: true,
-        message: `Power Meter '${resolvedPmId}' sudah ada di database/sistem. Tidak dapat menambahkan duplikat. Anda dapat langsung mengaktifkannya dari daftar item yang ada.`
+        message: `Power Meter '${resolvedPmId}' sudah terdaftar di sistem/website. Tidak dapat menambahkan duplikat.`
       });
       return;
     }
 
-    // 2. Verifikasi endpoint URL dan deteksi isinya secara otomatis
-    let fullUrl = cleanEndpoint;
-    const CORE_URLS: Record<string, string> = {
-      "electric_pln": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln",
-      "electric_wf1": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1",
-      "electric_wf2": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2",
-      "electric_plts": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_plts",
-      "electric_ew21": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew21",
-      "electric_ew22": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew22",
-      "electric_ew23": "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew23"
-    };
-    if (CORE_URLS[fullUrl]) fullUrl = CORE_URLS[fullUrl];
-
-    let apiData: any = null;
-    let detectedFields: string[] = [];
-    let initialActivePower: number | null = null;
-    let initialActiveEnergy: number | null = null;
-
-    if (fullUrl.startsWith("http://") || fullUrl.startsWith("https://")) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
-      try {
-        const fetchRes = await fetch(fullUrl, {
-          method: "GET",
-          headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" },
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        if (!fetchRes.ok) {
-          res.status(400).json({
-            success: false,
-            message: `Endpoint mengembalikan status HTTP ${fetchRes.status}: ${fetchRes.statusText}`
-          });
-          return;
-        }
-
-        apiData = await fetchRes.json();
-      } catch (fErr: any) {
-        clearTimeout(timeoutId);
-        res.status(400).json({
-          success: false,
-          message: `Gagal menghubungi endpoint: ${fErr.message}`
-        });
-        return;
-      }
+    // 2. Verifikasi endpoint URL dan ekstraksi parameter otomatis dari API
+    const liveRes = await fetchLiveEndpointPayload(cleanEndpoint);
+    if (!liveRes.ok || !liveRes.data) {
+      res.status(400).json({
+        success: false,
+        message: `Gagal menghubungi endpoint '${cleanEndpoint}': ${liveRes.error || "Endpoint tidak merespons"}`
+      });
+      return;
     }
 
-    // Ekstraksi otomatis parameter dari isi endpoint
-    if (apiData && typeof apiData === "object") {
-      const inspectObj = Array.isArray(apiData)
-        ? (apiData.find((p: any) => String(p.pm_id || p.pm || "").toUpperCase() === resolvedPmId) || apiData[0] || {})
-        : (apiData[resolvedPmId] && typeof apiData[resolvedPmId] === "object" ? apiData[resolvedPmId] : apiData);
-
-      const allKeys = Object.keys(inspectObj);
-      detectedFields = allKeys.slice(0, 20);
-
-      // Cari Active Power (exact, suffixed like _PM181, or substring)
-      const powerCandidates = ["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower", "Scale_Total_KW"];
-      for (const k of powerCandidates) {
-        if (inspectObj[k] !== undefined && inspectObj[k] !== null && !isNaN(Number(inspectObj[k]))) {
-          initialActivePower = Number(inspectObj[k]);
-          break;
-        }
-        const suffixed = `${k}_${resolvedPmId}`;
-        if (inspectObj[suffixed] !== undefined && inspectObj[suffixed] !== null && !isNaN(Number(inspectObj[suffixed]))) {
-          initialActivePower = Number(inspectObj[suffixed]);
-          break;
-        }
-      }
-      if (initialActivePower === null) {
-        const pKey = allKeys.find((k) => k.toLowerCase().includes("active_power") || k.toLowerCase().includes("power"));
-        if (pKey && inspectObj[pKey] !== undefined && !isNaN(Number(inspectObj[pKey]))) {
-          initialActivePower = Number(inspectObj[pKey]);
-        }
-      }
-
-      // Cari Active Energy (exact, suffixed like _PM181, or substring)
-      const energyCandidates = ["ActiveEnergy", "Active_Energy", "Energy", "total_kwh", "Total_KWH", "kWh", "Total_kWh"];
-      for (const k of energyCandidates) {
-        if (inspectObj[k] !== undefined && inspectObj[k] !== null && !isNaN(Number(inspectObj[k]))) {
-          initialActiveEnergy = Number(inspectObj[k]);
-          break;
-        }
-        const suffixed = `${k}_${resolvedPmId}`;
-        if (inspectObj[suffixed] !== undefined && inspectObj[suffixed] !== null && !isNaN(Number(inspectObj[suffixed]))) {
-          initialActiveEnergy = Number(inspectObj[suffixed]);
-          break;
-        }
-      }
-      if (initialActiveEnergy === null) {
-        const eKey = allKeys.find((k) => k.toLowerCase().includes("activeenergy") || k.toLowerCase().includes("energy") || k.toLowerCase().includes("kwh"));
-        if (eKey && inspectObj[eKey] !== undefined && !isNaN(Number(inspectObj[eKey]))) {
-          initialActiveEnergy = Number(inspectObj[eKey]);
-        }
-      }
-    }
+    const extracted = extractPmTelemetryFromPayload(liveRes.data, resolvedPmId);
+    const detectedFields = extracted.detectedFields;
+    const initialActivePower = extracted.active_power_total;
+    const initialActiveEnergy = extracted.active_energy;
 
     // 3. Simpan konfigurasi item baru ke database
     const resolvedCat = category || "custom";
-    const resolvedCatLabel = categoryLabel || (resolvedCat === "cooling_tower" ? "Cooling Tower" : resolvedCat === "chiller" ? "Chiller" : resolvedCat === "boiler" ? "Boiler" : resolvedCat === "compressed_air" ? "Compressed Air" : resolvedCat === "hvac_wh" ? "HVAC Warehouse" : resolvedCat === "hvac_qc" ? "HVAC QC & Produksi" : resolvedCat === "distribution" ? "Panel Distribusi" : "Kustom");
+    const resolvedCatLabel =
+      categoryLabel ||
+      (resolvedCat === "cooling_tower"
+        ? "Cooling Tower"
+        : resolvedCat === "chiller"
+          ? "Chiller"
+          : resolvedCat === "boiler"
+            ? "Boiler"
+            : resolvedCat === "compressed_air"
+              ? "Compressed Air"
+              : resolvedCat === "hvac_wh"
+                ? "HVAC Warehouse"
+                : resolvedCat === "hvac_qc"
+                  ? "HVAC QC & Produksi"
+                  : resolvedCat === "distribution"
+                    ? "Panel Distribusi"
+                    : "Kustom");
     const resolvedDept = department || "Utility";
-    const resolvedFact = factory || "wf1";
+    const resolvedFact = factory || (cleanEndpoint.toLowerCase().includes("ew22") || cleanEndpoint.toLowerCase().includes("ew23") ? "wf2" : "wf1");
+    const epLower = cleanEndpoint.toLowerCase();
+    const resolvedGroupId = epLower.includes("electric_ew21")
+      ? "ew21"
+      : epLower.includes("electric_ew22")
+        ? "ew22"
+        : epLower.includes("electric_ew23")
+          ? "ew23"
+          : (resolvedDept || "utility").toLowerCase();
 
     const itemValue = {
       pm_id: resolvedPmId,
+      json_key: resolvedPmId,
       seriesKey: label.toUpperCase(),
       category: resolvedCat,
       categoryLabel: resolvedCatLabel,
       endpoint_url: cleanEndpoint,
       department: resolvedDept,
       factory: resolvedFact,
+      group_id: resolvedGroupId,
       subArea: subArea || "General",
       is_new_pm: true,
       registered_at: new Date().toISOString()
@@ -2532,7 +2907,7 @@ export const verifyAndRegisterNewPmHandler = async (req: Request, res: Response,
     );
 
     // B. Simpan ke sub-metering fact list
-    const factType = resolvedFact === "wf1" ? "consumption_fact_1" : "consumption_fact_2";
+    const factType = resolvedFact === "wf1" || resolvedFact === "consumption_fact_1" ? "consumption_fact_1" : "consumption_fact_2";
     await pool.query(
       `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
        VALUES ($1, $2, $3, $4, 999, true, NOW())
@@ -2552,35 +2927,91 @@ export const verifyAndRegisterNewPmHandler = async (req: Request, res: Response,
       } catch {}
     }
 
-    // D. Simpan baris telemetri perdana jika pembacaan nilai terdeteksi
-    if (initialActiveEnergy !== null || initialActivePower !== null) {
-      try {
-        const now = new Date();
-        await pool.query(`
-          INSERT INTO electric_pm_telemetry_minute (
-            t_stamp, group_id, pm_id, status, active_power_total, active_energy, frequency
-          ) VALUES ($1, $2, $3, true, $4, $5, 50.0)
-          ON CONFLICT (t_stamp, pm_id) DO UPDATE SET
-            active_power_total = EXCLUDED.active_power_total,
-            active_energy = EXCLUDED.active_energy
-        `, [now, (resolvedDept || "utility").toLowerCase(), resolvedPmId, initialActivePower, initialActiveEnergy]);
+    // D. Simpan baris telemetri perdana lengkap ke electric_pm_telemetry_minute dan electric_pm_telemetry
+    try {
+      const now = new Date();
+      await pool.query(
+        `DELETE FROM electric_pm_telemetry_minute WHERE UPPER(pm_id) = $1 AND t_stamp = date_trunc('minute', $2::timestamp)`,
+        [resolvedPmId, now]
+      );
+      await pool.query(
+        `INSERT INTO electric_pm_telemetry_minute (
+          t_stamp, group_id, pm_id, status,
+          volt_ab, volt_bc, volt_ca, volt_ll,
+          current_a, current_b, current_c, frequency,
+          active_power_total, reactive_power_total, apparent_power_total, power_factor,
+          voltage_unbalance, current_unbalance,
+          thd_volt_a, thd_volt_b, thd_volt_c,
+          thd_current_a, thd_current_b, thd_current_c,
+          active_energy
+        ) VALUES (
+          date_trunc('minute', $1::timestamp), $2, $3, $4,
+          $5, $6, $7, $8,
+          $9, $10, $11, $12,
+          $13, $14, $15, $16,
+          $17, $18,
+          $19, $20, $21,
+          $22, $23, $24,
+          $25
+        )`,
+        [
+          now, resolvedGroupId, resolvedPmId, extracted.status,
+          extracted.volt_ab, extracted.volt_bc, extracted.volt_ca, extracted.volt_ll,
+          extracted.current_a, extracted.current_b, extracted.current_c, extracted.frequency,
+          extracted.active_power_total, extracted.reactive_power_total, extracted.apparent_power_total, extracted.power_factor,
+          extracted.voltage_unbalance, extracted.current_unbalance,
+          extracted.thd_volt_a, extracted.thd_volt_b, extracted.thd_volt_c,
+          extracted.thd_current_a, extracted.thd_current_b, extracted.thd_current_c,
+          extracted.active_energy
+        ]
+      );
 
-        await pool.query(`
-          INSERT INTO electric_pm_telemetry (
-            t_stamp, group_id, pm_id, status, active_power_total, active_energy, frequency
-          ) VALUES (date_trunc('hour', $1::timestamp), $2, $3, true, $4, $5, 50.0)
-          ON CONFLICT (t_stamp, pm_id) DO UPDATE SET
-            active_power_total = EXCLUDED.active_power_total,
-            active_energy = EXCLUDED.active_energy
-        `, [now, (resolvedDept || "utility").toLowerCase(), resolvedPmId, initialActivePower, initialActiveEnergy]);
-      } catch (err: any) {
-        console.warn("Initial telemetry insertion warning:", err.message);
-      }
+      await pool.query(
+        `DELETE FROM electric_pm_telemetry WHERE UPPER(pm_id) = $1 AND t_stamp = date_trunc('hour', $2::timestamp)`,
+        [resolvedPmId, now]
+      );
+      await pool.query(
+        `INSERT INTO electric_pm_telemetry (
+          t_stamp, group_id, pm_id, status,
+          volt_ab, volt_bc, volt_ca, volt_ll,
+          current_a, current_b, current_c, frequency,
+          active_power_total, reactive_power_total, apparent_power_total, power_factor,
+          voltage_unbalance, current_unbalance,
+          thd_volt_a, thd_volt_b, thd_volt_c,
+          thd_current_a, thd_current_b, thd_current_c,
+          active_energy
+        ) VALUES (
+          date_trunc('hour', $1::timestamp), $2, $3, $4,
+          $5, $6, $7, $8,
+          $9, $10, $11, $12,
+          $13, $14, $15, $16,
+          $17, $18,
+          $19, $20, $21,
+          $22, $23, $24,
+          $25
+        )`,
+        [
+          now, resolvedGroupId, resolvedPmId, extracted.status,
+          extracted.volt_ab, extracted.volt_bc, extracted.volt_ca, extracted.volt_ll,
+          extracted.current_a, extracted.current_b, extracted.current_c, extracted.frequency,
+          extracted.active_power_total, extracted.reactive_power_total, extracted.apparent_power_total, extracted.power_factor,
+          extracted.voltage_unbalance, extracted.current_unbalance,
+          extracted.thd_volt_a, extracted.thd_volt_b, extracted.thd_volt_c,
+          extracted.thd_current_a, extracted.thd_current_b, extracted.thd_current_c,
+          extracted.active_energy
+        ]
+      );
+    } catch (err: any) {
+      console.warn("Initial telemetry insertion warning:", err.message);
     }
 
-    // E. Segarkan scheduler agar continuous polling segera aktif
+    // E. Segarkan scheduler & analytics cache agar continuous polling dan grafik langsung aktif
     try {
       await refreshDynamicCustomPmSources();
+    } catch {}
+    try {
+      const { clearElectricityAnalyticsCache } = require("../analytics/analytics.controller");
+      clearElectricityAnalyticsCache();
     } catch {}
 
     const io = getSocketServer();
@@ -2602,4 +3033,3 @@ export const verifyAndRegisterNewPmHandler = async (req: Request, res: Response,
     next(err);
   }
 };
-
