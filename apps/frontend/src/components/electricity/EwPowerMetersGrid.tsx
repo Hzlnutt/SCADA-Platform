@@ -17,7 +17,11 @@ export function EwPowerMetersGrid({
   title = "Sub-Distribution Machine Telemetry"
 }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedPm, setSelectedPm] = useState<ElectricPmItem | null>(null);
+  const [selectedPmId, setSelectedPmId] = useState<string | null>(null);
+const selectedPm = useMemo(
+  () => powerMeters.find((p) => p.pm_id === selectedPmId) ?? null,
+  [powerMeters, selectedPmId]
+);
 
   const filtered = useMemo(() => {
     return [...powerMeters]
@@ -102,7 +106,7 @@ export function EwPowerMetersGrid({
               return (
                 <div
                   key={pm.pm_id}
-                  onClick={() => setSelectedPm(pm)}
+                  onClick={() => setSelectedPmId(pm.pm_id)}
                   className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-800/40 hover:border-sky-500/40 hover:shadow-lg hover:shadow-sky-500/5 transition-all cursor-pointer group flex flex-col justify-between"
                 >
                   {/* Card Header */}
@@ -175,7 +179,7 @@ export function EwPowerMetersGrid({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedPm(pm);
+                      setSelectedPmId(pm.pm_id);
                     }}
                     className="w-full mt-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 group-hover:border-sky-500/40 text-[9px] font-bold text-slate-400 group-hover:text-sky-500 dark:group-hover:text-sky-400 bg-slate-50/50 dark:bg-slate-800/30 group-hover:bg-sky-500/5 transition-all text-center"
                   >
@@ -192,7 +196,7 @@ export function EwPowerMetersGrid({
       {selectedPm && (
         <PmDetailModal
           pm={selectedPm}
-          onClose={() => setSelectedPm(null)}
+          onClose={() => setSelectedPmId(null)}
           isDark={isDark}
         />
       )}

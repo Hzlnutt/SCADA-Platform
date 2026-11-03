@@ -1041,10 +1041,10 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
 
   const isPln = deviceId === "Cubicle_PLN_PM8000";
   const rawActive = pgPq.active_power !== undefined ? pgPq.active_power : pgPq.active_power_total;
-  const activePowerVal = rawActive !== null ? Math.abs(Number(rawActive) > 10000 ? Number(rawActive) / 1000.0 : Number(rawActive)) : 0;
+  const activePowerVal = rawActive !== null ? (Math.abs(Number(rawActive)) > 10000 ? Number(rawActive) / 1000.0 : Number(rawActive)) : 0;
   const reactivePowerVal = pgPq.reactive_power_total !== null ? (Number(pgPq.reactive_power_total) > 10000 ? Number(pgPq.reactive_power_total) / 1000.0 : Number(pgPq.reactive_power_total)) : 0;
   const apparentPowerVal = pgPq.apparent_power_total !== null ? (Number(pgPq.apparent_power_total) > 10000 ? Number(pgPq.apparent_power_total) / 1000.0 : Number(pgPq.apparent_power_total)) : 0;
-  const pfVal = pgPq.power_factor !== null && pgPq.power_factor !== undefined ? Math.abs(Number(pgPq.power_factor)) : null;
+  const pfVal = pgPq.power_factor !== null && pgPq.power_factor !== undefined ? Number(pgPq.power_factor) : null;
   const freqVal = pgPq.frequency !== null ? Number(pgPq.frequency) : 50.0;
   const voltLAvg = pgPq.volt_ll !== null ? (Number(pgPq.volt_ll) > 1000 ? Number(pgPq.volt_ll) / 1000.0 : Number(pgPq.volt_ll)) : 20.0;
   const voltABVal = pgPq.volt_ab !== null ? (Number(pgPq.volt_ab) > 1000 ? Number(pgPq.volt_ab) / 1000.0 : Number(pgPq.volt_ab)) : 20.0;
@@ -1583,7 +1583,8 @@ export const startIncomingElectricityPolling = () => {
     if (isNewMinute) {
       await insertPlnMinuteTelemetry(plnParsed, minuteTs);
     }
-
+    const toKw = (v: number | null) =>
+      v === null ? null : (Math.abs(v) > 10000 ? v / 1000.0 : v);
     lastPlnRec = {
       t_stamp: ts,
       group_id: "ew23",
@@ -1597,9 +1598,9 @@ export const startIncomingElectricityPolling = () => {
       current_b: plnParsed.current_b,
       current_c: plnParsed.current_c,
       frequency: plnParsed.frequency,
-      active_power_total: plnParsed.active_power,
-      reactive_power_total: plnParsed.reactive_power_total,
-      apparent_power_total: plnParsed.apparent_power_total,
+      active_power_total: toKw(plnParsed.active_power),
+      reactive_power_total: toKw(plnParsed.reactive_power_total),
+      apparent_power_total: toKw(plnParsed.apparent_power_total),
       power_factor: plnParsed.power_factor,
       voltage_unbalance: plnParsed.voltage_unbalance,
       current_unbalance: plnParsed.current_unbalance,

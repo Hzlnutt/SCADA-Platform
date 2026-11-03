@@ -991,10 +991,10 @@ export const getElectricityAnalytics = async (
       peakDemandVal = Number(pgPq.pqData.peakDemand);
     }
     const rawActive = pgPq.active_power !== undefined ? pgPq.active_power : pgPq.active_power_total;
-    activePowerVal = rawActive !== null ? Math.abs(Number(rawActive) > 10000 ? Number(rawActive) / 1000.0 : Number(rawActive)) : 0;
+    activePowerVal = rawActive !== null ? (Math.abs(Number(rawActive)) > 10000 ? Number(rawActive) / 1000.0 : Number(rawActive)) : 0;
     reactivePowerVal = pgPq.reactive_power_total !== null ? (Number(pgPq.reactive_power_total) > 10000 ? Number(pgPq.reactive_power_total) / 1000.0 : Number(pgPq.reactive_power_total)) : 0;
     apparentPowerVal = pgPq.apparent_power_total !== null ? (Number(pgPq.apparent_power_total) > 10000 ? Number(pgPq.apparent_power_total) / 1000.0 : Number(pgPq.apparent_power_total)) : 0;
-    pfVal = pgPq.power_factor !== null && pgPq.power_factor !== undefined ? Math.abs(Number(pgPq.power_factor)) : null;
+    pfVal = pgPq.power_factor !== null && pgPq.power_factor !== undefined ? Number(pgPq.power_factor) : null;
     freqVal = pgPq.frequency !== null ? Number(pgPq.frequency) : freqVal;
     voltLAvg = pgPq.volt_ll !== null ? (Number(pgPq.volt_ll) > 1000 ? Number(pgPq.volt_ll) / 1000.0 : Number(pgPq.volt_ll)) : voltLAvg;
     voltABVal = pgPq.volt_ab !== null ? (Number(pgPq.volt_ab) > 1000 ? Number(pgPq.volt_ab) / 1000.0 : Number(pgPq.volt_ab)) : voltABVal;

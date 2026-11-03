@@ -54,6 +54,9 @@ export const PM_NAME_MAPPING: Record<string, PowerMeterInfo> = {
   PM273: { name: "RETURN SAMPLE QC", model: "PA330", category: "Quality Control", location: "Factory 2", diewonName: "RETURN SAMPLE QC" },
   PM274: { name: "F2 CHILLER RTAC 100 (BP)", model: "PA330", category: "Chiller", location: "Factory 2", diewonName: "CHILLER RTAC 100 (BP)" },
   PM288: { name: "F2 Penerangan PD", model: "PA330", category: "Lighting", location: "Factory 2", diewonName: "Penerangan PD" },
+  
+  PM291: { name: "F2 WH-4", model: "Weidmuller", category: "HVAC", location: "Factory 2", diewonName: "WH-4" },
+  PM292: { name: "F2 CHILLER RTAC 185", model: "PA330", category: "HVAC", location: "Factory 2", diewonName: "CHILLER RTAC 185" },
 
   // EW23 Sub-Distribution Power Meters (Factory 2 Sub: 10 Units)
   PM318: { name: "F2 COOLING FASE-2", model: "PM5300", category: "Cooling Water", location: "Factory 2", diewonName: "COOLING FASE-2" },
