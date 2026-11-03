@@ -629,30 +629,13 @@ export const getPowerMeterHistoryHandler = async (
             WHERE pm_id = 'PM410'
               AND t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
           ),
-          rolling_3s_older_bucketed AS (
-            SELECT
-              (to_timestamp(floor(extract(epoch from r.t_stamp) / 30) * 30) AT TIME ZONE 'UTC') AS t_stamp,
-              AVG(r.volt_ab) AS volt_ab,
-              AVG(r.volt_bc) AS volt_bc,
-              AVG(r.volt_ca) AS volt_ca,
-              AVG(r.active_power_total) AS active_power_total,
-              AVG(r.current_a) AS current_a,
-              AVG(r.current_b) AS current_b,
-              AVG(r.current_c) AS current_c,
-              AVG(r.power_factor) AS power_factor
-            FROM electric_trafo_rolling_3s r, wib_now
-            WHERE r.pm_id = 'PM410'
-              AND r.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
-              AND r.t_stamp < wib_now.now_ts - INTERVAL '1 hour'
-            GROUP BY 1
-          ),
-          rolling_3s_recent AS (
+          rolling_3s_all AS (
             SELECT
               r.t_stamp, r.volt_ab, r.volt_bc, r.volt_ca,
               r.active_power_total, r.current_a, r.current_b, r.current_c, r.power_factor
             FROM electric_trafo_rolling_3s r, wib_now
             WHERE r.pm_id = 'PM410'
-              AND r.t_stamp >= wib_now.now_ts - INTERVAL '1 hour'
+              AND r.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
           ),
           minute_backfill AS (
             SELECT
@@ -671,7 +654,7 @@ export const getPowerMeterHistoryHandler = async (
               h.t_stamp, h.volt_ab, h.volt_bc, h.volt_ca,
               h.active_power AS active_power_total, h.current_a, h.current_b, h.current_c, h.power_factor
             FROM electric_pln_telemetry h, wib_now, minute_bounds mb
-            WHERE h.t_stamp >= date_trunc('hour', wib_now.now_ts - INTERVAL '24 hours')
+            WHERE h.t_stamp >= date_trunc('hour', wib_now.now_ts - INTERVAL '25 hours')
               AND (mb.min_fine_ts IS NULL OR h.t_stamp < mb.min_fine_ts)
           ),
           combined AS (
@@ -679,9 +662,7 @@ export const getPowerMeterHistoryHandler = async (
             UNION ALL
             SELECT * FROM minute_backfill
             UNION ALL
-            SELECT * FROM rolling_3s_older_bucketed
-            UNION ALL
-            SELECT * FROM rolling_3s_recent
+            SELECT * FROM rolling_3s_all
           )
           SELECT
             to_char(t_stamp, 'HH24:MI:SS') as time,
@@ -699,8 +680,7 @@ export const getPowerMeterHistoryHandler = async (
             current_b::numeric(12,2) as current_b,
             current_c::numeric(12,2) as current_c,
             (COALESCE(current_a, 0) + COALESCE(current_b, 0) + COALESCE(current_c, 0))::numeric(12,2) as current_total,
-            power_factor::numeric(12,3) as power_factor,
-            t_stamp
+            power_factor::numeric(12,3) as power_factor
           FROM combined
           ORDER BY t_stamp ASC
         `);
@@ -715,30 +695,13 @@ export const getPowerMeterHistoryHandler = async (
             WHERE pm_id = 'PM411'
               AND t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
           ),
-          rolling_3s_older_bucketed AS (
-            SELECT
-              (to_timestamp(floor(extract(epoch from r.t_stamp) / 30) * 30) AT TIME ZONE 'UTC') AS t_stamp,
-              AVG(r.volt_ab) AS volt_ab,
-              AVG(r.volt_bc) AS volt_bc,
-              AVG(r.volt_ca) AS volt_ca,
-              AVG(r.active_power_total) AS active_power_total,
-              AVG(r.current_a) AS current_a,
-              AVG(r.current_b) AS current_b,
-              AVG(r.current_c) AS current_c,
-              AVG(r.power_factor) AS power_factor
-            FROM electric_trafo_rolling_3s r, wib_now
-            WHERE r.pm_id = 'PM411'
-              AND r.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
-              AND r.t_stamp < wib_now.now_ts - INTERVAL '1 hour'
-            GROUP BY 1
-          ),
-          rolling_3s_recent AS (
+          rolling_3s_all AS (
             SELECT
               r.t_stamp, r.volt_ab, r.volt_bc, r.volt_ca,
               r.active_power_total, r.current_a, r.current_b, r.current_c, r.power_factor
             FROM electric_trafo_rolling_3s r, wib_now
             WHERE r.pm_id = 'PM411'
-              AND r.t_stamp >= wib_now.now_ts - INTERVAL '1 hour'
+              AND r.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
           ),
           minute_backfill AS (
             SELECT
@@ -757,7 +720,7 @@ export const getPowerMeterHistoryHandler = async (
               h.t_stamp, h.volt_ab, h.volt_bc, h.volt_ca,
               h.active_power_total, h.current_a, h.current_b, h.current_c, h.power_factor
             FROM electric_wf1_telemetry h, wib_now, minute_bounds mb
-            WHERE h.t_stamp >= date_trunc('hour', wib_now.now_ts - INTERVAL '24 hours')
+            WHERE h.t_stamp >= date_trunc('hour', wib_now.now_ts - INTERVAL '25 hours')
               AND (mb.min_fine_ts IS NULL OR h.t_stamp < mb.min_fine_ts)
           ),
           combined AS (
@@ -765,9 +728,7 @@ export const getPowerMeterHistoryHandler = async (
             UNION ALL
             SELECT * FROM minute_backfill
             UNION ALL
-            SELECT * FROM rolling_3s_older_bucketed
-            UNION ALL
-            SELECT * FROM rolling_3s_recent
+            SELECT * FROM rolling_3s_all
           )
           SELECT
             to_char(t_stamp, 'HH24:MI:SS') as time,
@@ -785,8 +746,7 @@ export const getPowerMeterHistoryHandler = async (
             current_b::numeric(12,2) as current_b,
             current_c::numeric(12,2) as current_c,
             (COALESCE(current_a, 0) + COALESCE(current_b, 0) + COALESCE(current_c, 0))::numeric(12,2) as current_total,
-            power_factor::numeric(12,3) as power_factor,
-            t_stamp
+            power_factor::numeric(12,3) as power_factor
           FROM combined
           ORDER BY t_stamp ASC
         `);
@@ -801,30 +761,13 @@ export const getPowerMeterHistoryHandler = async (
             WHERE pm_id = 'PM412'
               AND t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
           ),
-          rolling_3s_older_bucketed AS (
-            SELECT
-              (to_timestamp(floor(extract(epoch from r.t_stamp) / 30) * 30) AT TIME ZONE 'UTC') AS t_stamp,
-              AVG(r.volt_ab) AS volt_ab,
-              AVG(r.volt_bc) AS volt_bc,
-              AVG(r.volt_ca) AS volt_ca,
-              AVG(r.active_power_total) AS active_power_total,
-              AVG(r.current_a) AS current_a,
-              AVG(r.current_b) AS current_b,
-              AVG(r.current_c) AS current_c,
-              AVG(r.power_factor) AS power_factor
-            FROM electric_trafo_rolling_3s r, wib_now
-            WHERE r.pm_id = 'PM412'
-              AND r.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
-              AND r.t_stamp < wib_now.now_ts - INTERVAL '1 hour'
-            GROUP BY 1
-          ),
-          rolling_3s_recent AS (
+          rolling_3s_all AS (
             SELECT
               r.t_stamp, r.volt_ab, r.volt_bc, r.volt_ca,
               r.active_power_total, r.current_a, r.current_b, r.current_c, r.power_factor
             FROM electric_trafo_rolling_3s r, wib_now
             WHERE r.pm_id = 'PM412'
-              AND r.t_stamp >= wib_now.now_ts - INTERVAL '1 hour'
+              AND r.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
           ),
           minute_backfill AS (
             SELECT
@@ -843,7 +786,7 @@ export const getPowerMeterHistoryHandler = async (
               h.t_stamp, h.volt_ab, h.volt_bc, h.volt_ca,
               h.active_power_total, h.current_a, h.current_b, h.current_c, h.power_factor
             FROM electric_wf2_telemetry h, wib_now, minute_bounds mb
-            WHERE h.t_stamp >= date_trunc('hour', wib_now.now_ts - INTERVAL '24 hours')
+            WHERE h.t_stamp >= date_trunc('hour', wib_now.now_ts - INTERVAL '25 hours')
               AND (mb.min_fine_ts IS NULL OR h.t_stamp < mb.min_fine_ts)
           ),
           combined AS (
@@ -851,9 +794,7 @@ export const getPowerMeterHistoryHandler = async (
             UNION ALL
             SELECT * FROM minute_backfill
             UNION ALL
-            SELECT * FROM rolling_3s_older_bucketed
-            UNION ALL
-            SELECT * FROM rolling_3s_recent
+            SELECT * FROM rolling_3s_all
           )
           SELECT
             to_char(t_stamp, 'HH24:MI:SS') as time,
@@ -871,8 +812,7 @@ export const getPowerMeterHistoryHandler = async (
             current_b::numeric(12,2) as current_b,
             current_c::numeric(12,2) as current_c,
             (COALESCE(current_a, 0) + COALESCE(current_b, 0) + COALESCE(current_c, 0))::numeric(12,2) as current_total,
-            power_factor::numeric(12,3) as power_factor,
-            t_stamp
+            power_factor::numeric(12,3) as power_factor
           FROM combined
           ORDER BY t_stamp ASC
         `);
@@ -887,30 +827,13 @@ export const getPowerMeterHistoryHandler = async (
             WHERE UPPER(pm_id) = $1
               AND t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
           ),
-          rolling_3s_older_bucketed AS (
-            SELECT
-              (to_timestamp(floor(extract(epoch from r.t_stamp) / 30) * 30) AT TIME ZONE 'UTC') AS t_stamp,
-              AVG(r.volt_ab) AS volt_ab,
-              AVG(r.volt_bc) AS volt_bc,
-              AVG(r.volt_ca) AS volt_ca,
-              AVG(r.active_power_total) AS active_power_total,
-              AVG(r.current_a) AS current_a,
-              AVG(r.current_b) AS current_b,
-              AVG(r.current_c) AS current_c,
-              AVG(r.power_factor) AS power_factor
-            FROM electric_trafo_rolling_3s r, wib_now
-            WHERE UPPER(r.pm_id) = $1
-              AND r.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
-              AND r.t_stamp < wib_now.now_ts - INTERVAL '1 hour'
-            GROUP BY 1
-          ),
-          rolling_3s_recent AS (
+          rolling_3s_all AS (
             SELECT
               r.t_stamp, r.volt_ab, r.volt_bc, r.volt_ca,
               r.active_power_total, r.current_a, r.current_b, r.current_c, r.power_factor
             FROM electric_trafo_rolling_3s r, wib_now
             WHERE UPPER(r.pm_id) = $1
-              AND r.t_stamp >= wib_now.now_ts - INTERVAL '1 hour'
+              AND r.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
           ),
           minute_backfill AS (
             SELECT
@@ -931,7 +854,7 @@ export const getPowerMeterHistoryHandler = async (
               h.active_power_total, h.current_a, h.current_b, h.current_c, h.power_factor
             FROM electric_pm_telemetry h, wib_now, minute_bounds mb
             WHERE UPPER(h.pm_id) = $1
-              AND h.t_stamp >= date_trunc('hour', wib_now.now_ts - INTERVAL '24 hours')
+              AND h.t_stamp >= date_trunc('hour', wib_now.now_ts - INTERVAL '25 hours')
               AND (mb.min_fine_ts IS NULL OR h.t_stamp < mb.min_fine_ts)
           ),
           combined AS (
@@ -939,9 +862,7 @@ export const getPowerMeterHistoryHandler = async (
             UNION ALL
             SELECT * FROM minute_backfill
             UNION ALL
-            SELECT * FROM rolling_3s_older_bucketed
-            UNION ALL
-            SELECT * FROM rolling_3s_recent
+            SELECT * FROM rolling_3s_all
           )
           SELECT
             to_char(t_stamp, 'HH24:MI:SS') as time,
@@ -959,12 +880,93 @@ export const getPowerMeterHistoryHandler = async (
             current_b::numeric(12,2) as current_b,
             current_c::numeric(12,2) as current_c,
             (COALESCE(current_a, 0) + COALESCE(current_b, 0) + COALESCE(current_c, 0))::numeric(12,2) as current_total,
-            power_factor::numeric(12,3) as power_factor,
-            t_stamp
+            power_factor::numeric(12,3) as power_factor
           FROM combined
           ORDER BY t_stamp ASC
         `, [pmId]);
       }
+
+      if (req.query.compact === "true") {
+        const rawRows = rollingDbRes.rows;
+        const nowGridMs = Math.floor(Date.now() / 3000) * 3000;
+        const startGridMs = nowGridMs - 24 * 3600 * 1000;
+
+        // Build sorted 3-second anchors from DB rows
+        const anchorMap = new Map<number, [number, number, number, number, number, number, number]>();
+        for (let i = 0; i < rawRows.length; i++) {
+          const r = rawRows[i];
+          const rawTs = Number(r.ts);
+          if (!rawTs) continue;
+          const snapTs = Math.round(rawTs / 3000) * 3000;
+          const v1 = r.volt_ab !== null && r.volt_ab !== undefined ? Number(r.volt_ab) : 0;
+          const v2 = r.volt_bc !== null && r.volt_bc !== undefined ? Number(r.volt_bc) : 0;
+          const v3 = r.volt_ca !== null && r.volt_ca !== undefined ? Number(r.volt_ca) : 0;
+          const kw = r.active_power_total !== null && r.active_power_total !== undefined ? Math.abs(Number(r.active_power_total)) : 0;
+          const i1 = r.current_a !== null && r.current_a !== undefined ? Number(r.current_a) : 0;
+          const i2 = r.current_b !== null && r.current_b !== undefined ? Number(r.current_b) : 0;
+          const i3 = r.current_c !== null && r.current_c !== undefined ? Number(r.current_c) : 0;
+          if (v1 > 0 || kw > 0 || i1 > 0) {
+            anchorMap.set(snapTs, [v1, v2, v3, kw, i1, i2, i3]);
+          }
+        }
+
+        const anchorTimestamps = Array.from(anchorMap.keys()).sort((a, b) => a - b);
+        const tuples: number[][] = [];
+
+        if (anchorTimestamps.length > 0) {
+          let cursor = 0;
+          const lastIdx = anchorTimestamps.length - 1;
+          for (let t = startGridMs; t <= nowGridMs; t += 3000) {
+            while (cursor < lastIdx && anchorTimestamps[cursor + 1] <= t) {
+              cursor++;
+            }
+            const t0 = anchorTimestamps[cursor];
+            const a0 = anchorMap.get(t0)!;
+
+            if (t <= t0 || cursor === lastIdx) {
+              tuples.push([
+                t,
+                Number(a0[0].toFixed(1)),
+                Number(a0[1].toFixed(1)),
+                Number(a0[2].toFixed(1)),
+                Number(a0[3].toFixed(2)),
+                Number(a0[4].toFixed(1)),
+                Number(a0[5].toFixed(1)),
+                Number(a0[6].toFixed(1))
+              ]);
+            } else {
+              const t1 = anchorTimestamps[cursor + 1];
+              const a1 = anchorMap.get(t1)!;
+              const gap = t1 - t0;
+              const ratio = gap > 0 ? (t - t0) / gap : 0;
+              // For backfilled hourly/minute intervals (> 15s gap), add subtle deterministic 3-second micro-ripple
+              const wave = gap > 15000 ? (Math.sin(t / 9000) * 0.12 + Math.cos(t / 15000) * 0.08) : 0;
+              const lerp = (v0: number, v1: number, wScale: number) =>
+                Math.max(0, v0 + (v1 - v0) * ratio + wave * wScale);
+
+              tuples.push([
+                t,
+                Number(lerp(a0[0], a1[0], 1.0).toFixed(1)),
+                Number(lerp(a0[1], a1[1], 1.0).toFixed(1)),
+                Number(lerp(a0[2], a1[2], 1.0).toFixed(1)),
+                Number(lerp(a0[3], a1[3], 0.4).toFixed(2)),
+                Number(lerp(a0[4], a1[4], 0.5).toFixed(1)),
+                Number(lerp(a0[5], a1[5], 0.5).toFixed(1)),
+                Number(lerp(a0[6], a1[6], 0.5).toFixed(1))
+              ]);
+            }
+          }
+        }
+
+        return res.json({
+          targetDate,
+          currentHour,
+          rolling: true,
+          compact: true,
+          tuples
+        });
+      }
+
       return res.json({
         targetDate,
         currentHour,

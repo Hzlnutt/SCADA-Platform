@@ -395,17 +395,43 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
     onSaveCoverage(updated);
   };
 
-  const [modalHistory, setModalHistory] = useState<any[]>([]);
+  const [modalPointCount, setModalPointCount] = useState(0);
+  const [modalTickMs, setModalTickMs] = useState<number>(() => Math.floor(Date.now() / 3000) * 3000);
   const [loadingModalHistory, setLoadingModalHistory] = useState(true);
   const [modalVoltageType, setModalVoltageType] = useState<"380v" | "230v">("380v");
-  const lastModalLiveTsRef = useRef<number>(0);
+
+  const modalSeriesRef = useRef<{
+    vAb: { x: number; y: number }[];
+    vBc: { x: number; y: number }[];
+    vCa: { x: number; y: number }[];
+    vRn: { x: number; y: number }[];
+    vSn: { x: number; y: number }[];
+    vTn: { x: number; y: number }[];
+    kw: { x: number; y: number }[];
+    iTot: { x: number; y: number }[];
+    iR: { x: number; y: number }[];
+    iS: { x: number; y: number }[];
+    iT: { x: number; y: number }[];
+  }>({
+    vAb: [], vBc: [], vCa: [],
+    vRn: [], vSn: [], vTn: [],
+    kw: [],
+    iTot: [], iR: [], iS: [], iT: []
+  });
+
+  const latestModalLiveRef = useRef<{
+    vAb: number; vBc: number; vCa: number;
+    vRn: number; vSn: number; vTn: number;
+    kw: number; iTot: number; iR: number; iS: number; iT: number;
+  } | null>(null);
 
   const formatModalWibTick = useCallback((ms: number): string => {
     if (!Number.isFinite(ms)) return "";
     const wib = new Date(ms + 7 * 3600 * 1000);
     const hh = String(wib.getUTCHours()).padStart(2, "0");
     const mm = String(wib.getUTCMinutes()).padStart(2, "0");
-    return `${hh}:${mm}`;
+    const ss = String(wib.getUTCSeconds()).padStart(2, "0");
+    return `${hh}:${mm}:${ss}`;
   }, []);
 
   const formatModalWibTooltip = useCallback((items: any[]): string => {
@@ -424,21 +450,68 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
   useEffect(() => {
     if (!transformer?.id) return;
     setLoadingModalHistory(true);
+    setModalPointCount(0);
     const pmId = TRAFO_PM_MAP[transformer.id]?.pmId || transformer.id;
-    getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?rolling=true&_t=${Date.now()}`)
+
+    getJson<{ tuples?: number[][]; data?: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?rolling=true&compact=true&_t=${Date.now()}`)
       .then((res) => {
-        if (res?.data && Array.isArray(res.data)) {
-          const now = Date.now();
-          const minKeep = now - 25 * 3600 * 1000;
-          const map = new Map<number, any>();
-          for (const p of res.data) {
-            const tsNum = Number(p.ts) || 0;
-            if (tsNum >= minKeep && tsNum <= now + 60000) {
-              map.set(tsNum, p);
-            }
+        const tuples = res?.tuples;
+        if (Array.isArray(tuples) && tuples.length > 0) {
+          const n = tuples.length;
+          const vAb = new Array(n);
+          const vBc = new Array(n);
+          const vCa = new Array(n);
+          const vRn = new Array(n);
+          const vSn = new Array(n);
+          const vTn = new Array(n);
+          const kw = new Array(n);
+          const iTot = new Array(n);
+          const iR = new Array(n);
+          const iS = new Array(n);
+          const iT = new Array(n);
+
+          for (let i = 0; i < n; i++) {
+            const row = tuples[i];
+            const x = Number(row[0]);
+            const v1 = Number(row[1]) || 0;
+            const v2 = Number(row[2]) || 0;
+            const v3 = Number(row[3]) || 0;
+            const p = Number(row[4]) || 0;
+            const c1 = Number(row[5]) || 0;
+            const c2 = Number(row[6]) || 0;
+            const c3 = Number(row[7]) || 0;
+            vAb[i] = { x, y: v1 };
+            vBc[i] = { x, y: v2 };
+            vCa[i] = { x, y: v3 };
+            vRn[i] = { x, y: Number((v1 / 1.7320508).toFixed(1)) };
+            vSn[i] = { x, y: Number((v2 / 1.7320508).toFixed(1)) };
+            vTn[i] = { x, y: Number((v3 / 1.7320508).toFixed(1)) };
+            kw[i] = { x, y: p };
+            iR[i] = { x, y: c1 };
+            iS[i] = { x, y: c2 };
+            iT[i] = { x, y: c3 };
+            iTot[i] = { x, y: Number((c1 + c2 + c3).toFixed(1)) };
           }
-          const sorted = Array.from(map.values()).sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
-          setModalHistory(sorted);
+
+          modalSeriesRef.current = { vAb, vBc, vCa, vRn, vSn, vTn, kw, iTot, iR, iS, iT };
+          const last = tuples[n - 1];
+          const lv1 = Number(last[1]) || 0;
+          const lv2 = Number(last[2]) || 0;
+          const lv3 = Number(last[3]) || 0;
+          const lc1 = Number(last[5]) || 0;
+          const lc2 = Number(last[6]) || 0;
+          const lc3 = Number(last[7]) || 0;
+          latestModalLiveRef.current = {
+            vAb: lv1, vBc: lv2, vCa: lv3,
+            vRn: Number((lv1 / 1.7320508).toFixed(1)),
+            vSn: Number((lv2 / 1.7320508).toFixed(1)),
+            vTn: Number((lv3 / 1.7320508).toFixed(1)),
+            kw: Number(last[4]) || 0,
+            iR: lc1, iS: lc2, iT: lc3,
+            iTot: Number((lc1 + lc2 + lc3).toFixed(1))
+          };
+          setModalPointCount(n);
+          setModalTickMs(Number(last[0]) || Math.floor(Date.now() / 3000) * 3000);
         }
       })
       .catch((err) => console.error("Failed to load modal trafo history:", err))
@@ -450,207 +523,178 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
       if (!payload || !Array.isArray(payload.data)) return;
       const pm = payload.data.find((item: any) => String(item.pm_id).toUpperCase() === targetPmId);
       if (!pm) return;
-      const now = Date.now();
-      if (now - lastModalLiveTsRef.current < 2800) return;
-      lastModalLiveTsRef.current = now;
-
-      const v_ab = pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : null;
-      const v_bc = pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : null;
-      const v_ca = pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : null;
-      const v_rn = pm.volt_rn !== undefined && pm.volt_rn !== null ? Number(Number(pm.volt_rn).toFixed(1)) : (v_ab ? Number((v_ab / 1.732).toFixed(1)) : null);
-      const v_sn = pm.volt_sn !== undefined && pm.volt_sn !== null ? Number(Number(pm.volt_sn).toFixed(1)) : (v_bc ? Number((v_bc / 1.732).toFixed(1)) : null);
-      const v_tn = pm.volt_tn !== undefined && pm.volt_tn !== null ? Number(Number(pm.volt_tn).toFixed(1)) : (v_ca ? Number((v_ca / 1.732).toFixed(1)) : null);
-      const active_power = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(1))) : null;
-      const cur_a = pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : null;
-      const cur_b = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : null;
-      const cur_c = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : null;
-      const cur_tot = pm.current_total !== undefined && pm.current_total !== null ? Number(Number(pm.current_total).toFixed(1)) : ((cur_a || 0) + (cur_b || 0) + (cur_c || 0));
-
-      setModalHistory((prev) => {
-        const minKeep = now - 25 * 3600 * 1000;
-        const filtered = prev.filter((p) => (Number(p.ts) || 0) >= minKeep);
-        return [...filtered, {
-          ts: now,
-          volt_ab: v_ab, volt_bc: v_bc, volt_ca: v_ca,
-          volt_rn: v_rn, volt_sn: v_sn, volt_tn: v_tn,
-          active_power_total: active_power,
-          current_a: cur_a, current_b: cur_b, current_c: cur_c, current_total: cur_tot
-        }];
-      });
+      const v1 = pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : 0;
+      const v2 = pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : 0;
+      const v3 = pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : 0;
+      const c1 = pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : 0;
+      const c2 = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
+      const c3 = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
+      const p = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
+      if (v1 > 0 || p > 0 || c1 > 0) {
+        latestModalLiveRef.current = {
+          vAb: v1, vBc: v2, vCa: v3,
+          vRn: Number((v1 / 1.7320508).toFixed(1)),
+          vSn: Number((v2 / 1.7320508).toFixed(1)),
+          vTn: Number((v3 / 1.7320508).toFixed(1)),
+          kw: p,
+          iR: c1, iS: c2, iT: c3,
+          iTot: Number((c1 + c2 + c3).toFixed(1))
+        };
+      }
     };
+
+    const tickInterval = setInterval(() => {
+      const live = latestModalLiveRef.current;
+      const s = modalSeriesRef.current;
+      if (!live || s.vAb.length === 0) return;
+      const nowGrid = Math.floor(Date.now() / 3000) * 3000;
+      const lastX = s.vAb[s.vAb.length - 1]?.x || 0;
+      const nextX = nowGrid > lastX ? nowGrid : lastX + 3000;
+      const cutoff = nextX - 24 * 3600 * 1000;
+
+      const pushAndShift = (arr: { x: number; y: number }[], val: number) => {
+        arr.push({ x: nextX, y: val });
+        while (arr.length > 0 && arr[0].x < cutoff) {
+          arr.shift();
+        }
+      };
+
+      pushAndShift(s.vAb, live.vAb);
+      pushAndShift(s.vBc, live.vBc);
+      pushAndShift(s.vCa, live.vCa);
+      pushAndShift(s.vRn, live.vRn);
+      pushAndShift(s.vSn, live.vSn);
+      pushAndShift(s.vTn, live.vTn);
+      pushAndShift(s.kw, live.kw);
+      pushAndShift(s.iTot, live.iTot);
+      pushAndShift(s.iR, live.iR);
+      pushAndShift(s.iS, live.iS);
+      pushAndShift(s.iT, live.iT);
+
+      setModalTickMs(nextX);
+    }, 3000);
 
     socket.on("electricity:pm_live_update", handleModalLive);
     socket.on("electricity:ew23_live", handleModalLive);
     return () => {
+      clearInterval(tickInterval);
       socket.off("electricity:pm_live_update", handleModalLive);
       socket.off("electricity:ew23_live", handleModalLive);
     };
   }, [transformer?.id]);
 
   const modalWindowRange = useMemo(() => {
-    const lastTs = modalHistory.length > 0 ? Number(modalHistory[modalHistory.length - 1].ts) || 0 : 0;
-    const endMs = Math.ceil(Math.max(Date.now(), lastTs) / 3000) * 3000;
-    return { min: endMs - 24 * 3600 * 1000, max: endMs };
-  }, [modalHistory]);
+    return { min: modalTickMs - 24 * 3600 * 1000, max: modalTickMs };
+  }, [modalTickMs]);
 
   const chartData = useMemo(() => {
+    const s = modalSeriesRef.current;
     if (activeTab === "voltage") {
       const is380 = modalVoltageType === "380v";
-      const pts1: { x: number; y: number | null }[] = [];
-      const pts2: { x: number; y: number | null }[] = [];
-      const pts3: { x: number; y: number | null }[] = [];
-      for (let i = 0; i < modalHistory.length; i++) {
-        const d = modalHistory[i];
-        const x = Number(d.ts);
-        if (!x) continue;
-        if (is380) {
-          pts1.push({ x, y: d.volt_ab !== null && d.volt_ab !== undefined ? Number(d.volt_ab) : null });
-          pts2.push({ x, y: d.volt_bc !== null && d.volt_bc !== undefined ? Number(d.volt_bc) : null });
-          pts3.push({ x, y: d.volt_ca !== null && d.volt_ca !== undefined ? Number(d.volt_ca) : null });
-        } else {
-          pts1.push({ x, y: d.volt_rn !== null && d.volt_rn !== undefined ? Number(d.volt_rn) : null });
-          pts2.push({ x, y: d.volt_sn !== null && d.volt_sn !== undefined ? Number(d.volt_sn) : null });
-          pts3.push({ x, y: d.volt_tn !== null && d.volt_tn !== undefined ? Number(d.volt_tn) : null });
-        }
-      }
       return {
         datasets: [
           {
             label: is380 ? "Fasa R-S (380V)" : "Fasa R-N (230V)",
-            data: pts1,
+            data: is380 ? s.vAb : s.vRn,
             borderColor: "#f59e0b",
             backgroundColor: "transparent",
-            borderWidth: 1.8,
-            tension: 0.2,
+            borderWidth: 1.5,
+            tension: 0,
             pointRadius: 0,
             pointHoverRadius: 4,
-            spanGaps: true,
           },
           {
             label: is380 ? "Fasa S-T (380V)" : "Fasa S-N (230V)",
-            data: pts2,
+            data: is380 ? s.vBc : s.vSn,
             borderColor: "#06b6d4",
             backgroundColor: "transparent",
-            borderWidth: 1.8,
-            tension: 0.2,
+            borderWidth: 1.5,
+            tension: 0,
             pointRadius: 0,
             pointHoverRadius: 4,
-            spanGaps: true,
           },
           {
             label: is380 ? "Fasa T-R (380V)" : "Fasa T-N (230V)",
-            data: pts3,
+            data: is380 ? s.vCa : s.vTn,
             borderColor: "#8b5cf6",
             backgroundColor: "transparent",
-            borderWidth: 1.8,
-            tension: 0.2,
+            borderWidth: 1.5,
+            tension: 0,
             pointRadius: 0,
             pointHoverRadius: 4,
-            spanGaps: true,
           },
         ],
       };
     }
     if (activeTab === "ampere") {
-      const ptsTot: { x: number; y: number | null }[] = [];
-      const ptsR: { x: number; y: number | null }[] = [];
-      const ptsS: { x: number; y: number | null }[] = [];
-      const ptsT: { x: number; y: number | null }[] = [];
-      for (let i = 0; i < modalHistory.length; i++) {
-        const d = modalHistory[i];
-        const x = Number(d.ts);
-        if (!x) continue;
-        const tot = d.current_total !== null && d.current_total !== undefined
-          ? Number(d.current_total)
-          : (d.current_a !== null ? Number(d.current_a) + Number(d.current_b || 0) + Number(d.current_c || 0) : null);
-        ptsTot.push({ x, y: tot });
-        ptsR.push({ x, y: d.current_a !== null && d.current_a !== undefined ? Number(d.current_a) : null });
-        ptsS.push({ x, y: d.current_b !== null && d.current_b !== undefined ? Number(d.current_b) : null });
-        ptsT.push({ x, y: d.current_c !== null && d.current_c !== undefined ? Number(d.current_c) : null });
-      }
       return {
         datasets: [
           {
             label: "Ampere Total (A)",
-            data: ptsTot,
+            data: s.iTot,
             borderColor: "#8b5cf6",
             backgroundColor: "transparent",
-            borderWidth: 1.8,
+            borderWidth: 1.5,
             borderDash: [5, 5],
-            tension: 0.2,
+            tension: 0,
             pointRadius: 0,
             pointHoverRadius: 4,
-            spanGaps: true,
           },
           {
             label: "Phase R (A)",
-            data: ptsR,
+            data: s.iR,
             borderColor: "#ef4444",
             backgroundColor: "transparent",
-            borderWidth: 1.5,
-            tension: 0.2,
+            borderWidth: 1.3,
+            tension: 0,
             pointRadius: 0,
             pointHoverRadius: 4,
-            spanGaps: true,
           },
           {
             label: "Phase S (A)",
-            data: ptsS,
+            data: s.iS,
             borderColor: "#f59e0b",
             backgroundColor: "transparent",
-            borderWidth: 1.5,
-            tension: 0.2,
+            borderWidth: 1.3,
+            tension: 0,
             pointRadius: 0,
             pointHoverRadius: 4,
-            spanGaps: true,
           },
           {
             label: "Phase T (A)",
-            data: ptsT,
+            data: s.iT,
             borderColor: "#10b981",
             backgroundColor: "transparent",
-            borderWidth: 1.5,
-            tension: 0.2,
+            borderWidth: 1.3,
+            tension: 0,
             pointRadius: 0,
             pointHoverRadius: 4,
-            spanGaps: true,
           },
         ],
       };
-    }
-    // "power"
-    const ptsKw: { x: number; y: number | null }[] = [];
-    for (let i = 0; i < modalHistory.length; i++) {
-      const d = modalHistory[i];
-      const x = Number(d.ts);
-      if (!x) continue;
-      ptsKw.push({
-        x,
-        y: d.active_power_total !== null && d.active_power_total !== undefined ? Math.abs(Number(d.active_power_total)) : null
-      });
     }
     return {
       datasets: [
         {
           label: "kW Total (Daya Aktif)",
-          data: ptsKw,
+          data: s.kw,
           borderColor: "#0284c7",
           backgroundColor: "rgba(2, 132, 199, 0.15)",
-          borderWidth: 2,
-          tension: 0.2,
+          borderWidth: 1.6,
+          tension: 0,
           fill: true,
           pointRadius: 0,
           pointHoverRadius: 5,
-          spanGaps: true,
         },
       ],
     };
-  }, [activeTab, modalVoltageType, modalHistory]);
+  }, [activeTab, modalVoltageType, modalTickMs, modalPointCount]);
 
   const modalChartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     animation: false as const,
+    parsing: false as const,
     normalized: true,
     plugins: {
       legend: {
@@ -681,13 +725,23 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
         type: "linear" as const,
         min: modalWindowRange.min,
         max: modalWindowRange.max,
+        afterBuildTicks: (axis: any) => {
+          const min = axis.min;
+          const max = axis.max;
+          if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return;
+          const step = (max - min) / 8;
+          const ticks: { value: number }[] = [];
+          for (let i = 0; i <= 8; i++) {
+            ticks.push({ value: Math.round(min + i * step) });
+          }
+          axis.ticks = ticks;
+        },
         grid: { color: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)" },
         ticks: {
           color: isDark ? "#64748b" : "#94a3b8",
           font: { size: 9, weight: 600 },
           maxRotation: 0,
-          autoSkip: true,
-          maxTicksLimit: 12,
+          autoSkip: false,
           callback: (val: any) => formatModalWibTick(Number(val)),
         },
       },
@@ -797,7 +851,7 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
                 <div className="flex-1 flex items-center justify-center text-xs text-sky-500 font-bold gap-2">
                   <span className="animate-spin">⏳</span> Memuat riwayat telemetri...
                 </div>
-              ) : modalHistory.some(d => d.active_power_total !== null || d.volt_ab !== null) ? (
+              ) : modalPointCount > 0 ? (
                 <div className="w-full h-full min-h-[240px]">
                   <Line data={chartData} options={modalChartOptions} />
                 </div>
@@ -1779,20 +1833,45 @@ export default function PowerDistribution() {
     return transformers.find(t => t.id === bottomTxId) || transformers[0];
   }, [transformers, bottomTxId]);
 
-  // Section C Historical records state (24-Hour Rolling Window with 3-Second Live Polling)
-  const [bottomHistory, setBottomHistory] = useState<any[]>([]);
+  // Section C Historical records state (24-Hour Rolling Window with Consistent 3-Second Polling & FIFO)
+  const [bottomPointCount, setBottomPointCount] = useState(0);
+  const [bottomTickMs, setBottomTickMs] = useState<number>(() => Math.floor(Date.now() / 3000) * 3000);
   const [loadingBottomHistory, setLoadingBottomHistory] = useState(false);
   const [bottomVoltageMode, setBottomVoltageMode] = useState<"380v" | "230v">("380v");
   const [bottomZoomChart, setBottomZoomChart] = useState<"voltage" | "power" | "current" | null>(null);
-  const lastBottomRecordTsRef = useRef<number>(0);
-  const lastCompactTsRef = useRef<number>(0);
+
+  const bottomSeriesRef = useRef<{
+    vAb: { x: number; y: number }[];
+    vBc: { x: number; y: number }[];
+    vCa: { x: number; y: number }[];
+    vRn: { x: number; y: number }[];
+    vSn: { x: number; y: number }[];
+    vTn: { x: number; y: number }[];
+    kw: { x: number; y: number }[];
+    iTot: { x: number; y: number }[];
+    iR: { x: number; y: number }[];
+    iS: { x: number; y: number }[];
+    iT: { x: number; y: number }[];
+  }>({
+    vAb: [], vBc: [], vCa: [],
+    vRn: [], vSn: [], vTn: [],
+    kw: [],
+    iTot: [], iR: [], iS: [], iT: []
+  });
+
+  const latestBottomLiveRef = useRef<{
+    vAb: number; vBc: number; vCa: number;
+    vRn: number; vSn: number; vTn: number;
+    kw: number; iTot: number; iR: number; iS: number; iT: number;
+  } | null>(null);
 
   const formatWibTick = useCallback((ms: number): string => {
     if (!Number.isFinite(ms)) return "";
     const wib = new Date(ms + 7 * 3600 * 1000);
     const hh = String(wib.getUTCHours()).padStart(2, "0");
     const mm = String(wib.getUTCMinutes()).padStart(2, "0");
-    return `${hh}:${mm}`;
+    const ss = String(wib.getUTCSeconds()).padStart(2, "0");
+    return `${hh}:${mm}:${ss}`;
   }, []);
 
   const formatWibTooltipTitle = useCallback((items: any[]): string => {
@@ -1820,38 +1899,87 @@ export default function PowerDistribution() {
   useEffect(() => {
     if (!isPageActive) return;
 
-    // Reset history when switching transformer to ensure lazy loading only selected unit
-    setBottomHistory([]);
+    // Reset series when switching transformer to lazy-load only the selected unit
+    bottomSeriesRef.current = {
+      vAb: [], vBc: [], vCa: [],
+      vRn: [], vSn: [], vTn: [],
+      kw: [],
+      iTot: [], iR: [], iS: [], iT: []
+    };
+    latestBottomLiveRef.current = null;
+    setBottomPointCount(0);
     setLoadingBottomHistory(true);
-    lastBottomRecordTsRef.current = 0;
 
     const pmId = TRAFO_PM_MAP[bottomTxId]?.pmId || bottomTxId;
     const fetchBottomHistory = () => {
-      getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?rolling=true&_t=${Date.now()}`)
+      getJson<{ tuples?: number[][]; data?: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?rolling=true&compact=true&_t=${Date.now()}`)
         .then((res) => {
-          if (res?.data && Array.isArray(res.data)) {
-            const now = Date.now();
-            const minKeep = now - 25 * 3600 * 1000;
-            // Clean sort & deduplication by timestamp (ignore any corrupted future timestamps)
-            const map = new Map<number, any>();
-            for (const p of res.data) {
-              const tsNum = Number(p.ts) || 0;
-              if (tsNum >= minKeep && tsNum <= now + 60000) {
-                map.set(tsNum, p);
-              }
+          const tuples = res?.tuples;
+          if (Array.isArray(tuples) && tuples.length > 0) {
+            const n = tuples.length;
+            const vAb = new Array(n);
+            const vBc = new Array(n);
+            const vCa = new Array(n);
+            const vRn = new Array(n);
+            const vSn = new Array(n);
+            const vTn = new Array(n);
+            const kw = new Array(n);
+            const iTot = new Array(n);
+            const iR = new Array(n);
+            const iS = new Array(n);
+            const iT = new Array(n);
+
+            for (let i = 0; i < n; i++) {
+              const row = tuples[i];
+              const x = Number(row[0]);
+              const v1 = Number(row[1]) || 0;
+              const v2 = Number(row[2]) || 0;
+              const v3 = Number(row[3]) || 0;
+              const p = Number(row[4]) || 0;
+              const c1 = Number(row[5]) || 0;
+              const c2 = Number(row[6]) || 0;
+              const c3 = Number(row[7]) || 0;
+              vAb[i] = { x, y: v1 };
+              vBc[i] = { x, y: v2 };
+              vCa[i] = { x, y: v3 };
+              vRn[i] = { x, y: Number((v1 / 1.7320508).toFixed(1)) };
+              vSn[i] = { x, y: Number((v2 / 1.7320508).toFixed(1)) };
+              vTn[i] = { x, y: Number((v3 / 1.7320508).toFixed(1)) };
+              kw[i] = { x, y: p };
+              iR[i] = { x, y: c1 };
+              iS[i] = { x, y: c2 };
+              iT[i] = { x, y: c3 };
+              iTot[i] = { x, y: Number((c1 + c2 + c3).toFixed(1)) };
             }
-            const sorted = Array.from(map.values()).sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
-            setBottomHistory(sorted);
+
+            bottomSeriesRef.current = { vAb, vBc, vCa, vRn, vSn, vTn, kw, iTot, iR, iS, iT };
+            const last = tuples[n - 1];
+            const lv1 = Number(last[1]) || 0;
+            const lv2 = Number(last[2]) || 0;
+            const lv3 = Number(last[3]) || 0;
+            const lc1 = Number(last[5]) || 0;
+            const lc2 = Number(last[6]) || 0;
+            const lc3 = Number(last[7]) || 0;
+            latestBottomLiveRef.current = {
+              vAb: lv1, vBc: lv2, vCa: lv3,
+              vRn: Number((lv1 / 1.7320508).toFixed(1)),
+              vSn: Number((lv2 / 1.7320508).toFixed(1)),
+              vTn: Number((lv3 / 1.7320508).toFixed(1)),
+              kw: Number(last[4]) || 0,
+              iR: lc1, iS: lc2, iT: lc3,
+              iTot: Number((lc1 + lc2 + lc3).toFixed(1))
+            };
+            setBottomPointCount(n);
+            setBottomTickMs(Number(last[0]) || Math.floor(Date.now() / 3000) * 3000);
           }
         })
         .catch((err) => console.error("Failed to load bottom trafo history:", err))
         .finally(() => setLoadingBottomHistory(false));
     };
 
-    // Fetch initial 24h rolling history once; subsequent 3-second updates stream via WebSocket
+    // Fetch initial 24h 3-second rolling history once; subsequent 3-second updates stream via WebSocket
     fetchBottomHistory();
 
-    // Live 3-second rolling stream listener via socket
     const socket = getSocket();
     const targetPmId = (TRAFO_PM_MAP[bottomTxId]?.pmId || bottomTxId).toUpperCase();
 
@@ -1860,70 +1988,59 @@ export default function PowerDistribution() {
       const pm = payload.data.find((item: any) => String(item.pm_id).toUpperCase() === targetPmId);
       if (!pm) return;
 
-      const now = Date.now();
-      // Throttle recording to 3-second cadence
-      if (now - lastBottomRecordTsRef.current < 2800) return;
-      lastBottomRecordTsRef.current = now;
+      const v1 = pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : 0;
+      const v2 = pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : 0;
+      const v3 = pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : 0;
+      const c1 = pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : 0;
+      const c2 = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
+      const c3 = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
+      const p = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
 
-      const v_ab = pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : null;
-      const v_bc = pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : null;
-      const v_ca = pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : null;
-      const v_rn = pm.volt_rn !== undefined && pm.volt_rn !== null ? Number(Number(pm.volt_rn).toFixed(1)) : (v_ab ? Number((v_ab / 1.732).toFixed(1)) : null);
-      const v_sn = pm.volt_sn !== undefined && pm.volt_sn !== null ? Number(Number(pm.volt_sn).toFixed(1)) : (v_bc ? Number((v_bc / 1.732).toFixed(1)) : null);
-      const v_tn = pm.volt_tn !== undefined && pm.volt_tn !== null ? Number(Number(pm.volt_tn).toFixed(1)) : (v_ca ? Number((v_ca / 1.732).toFixed(1)) : null);
-      const active_power = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(1))) : null;
-      const cur_a = pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : null;
-      const cur_b = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : null;
-      const cur_c = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : null;
-      const cur_tot = pm.current_total !== undefined && pm.current_total !== null ? Number(Number(pm.current_total).toFixed(1)) : ((cur_a || 0) + (cur_b || 0) + (cur_c || 0));
+      if (v1 > 0 || p > 0 || c1 > 0) {
+        latestBottomLiveRef.current = {
+          vAb: v1, vBc: v2, vCa: v3,
+          vRn: Number((v1 / 1.7320508).toFixed(1)),
+          vSn: Number((v2 / 1.7320508).toFixed(1)),
+          vTn: Number((v3 / 1.7320508).toFixed(1)),
+          kw: p,
+          iR: c1, iS: c2, iT: c3,
+          iTot: Number((c1 + c2 + c3).toFixed(1))
+        };
+      }
+    };
 
-      const newPoint = {
-        ts: now,
-        volt_ab: v_ab,
-        volt_bc: v_bc,
-        volt_ca: v_ca,
-        volt_rn: v_rn,
-        volt_sn: v_sn,
-        volt_tn: v_tn,
-        active_power_total: active_power,
-        current_a: cur_a,
-        current_b: cur_b,
-        current_c: cur_c,
-        current_total: cur_tot
+    // Consistent 3-second FIFO sliding window ticker: every 3s adds 1 new point on the right & drops 1 point older than 24h on the left
+    const tickInterval = setInterval(() => {
+      const live = latestBottomLiveRef.current;
+      const s = bottomSeriesRef.current;
+      if (!live || s.vAb.length === 0) return;
+
+      const nowGrid = Math.floor(Date.now() / 3000) * 3000;
+      const lastX = s.vAb[s.vAb.length - 1]?.x || 0;
+      const nextX = nowGrid > lastX ? nowGrid : lastX + 3000;
+      const cutoff = nextX - 24 * 3600 * 1000;
+
+      const pushAndShift = (arr: { x: number; y: number }[], val: number) => {
+        arr.push({ x: nextX, y: val });
+        while (arr.length > 0 && arr[0].x < cutoff) {
+          arr.shift();
+        }
       };
 
-      setBottomHistory((prev) => {
-        const minKeep = now - 25 * 3600 * 1000;
-        const shouldCompact = now - lastCompactTsRef.current > 60000;
-        if (!shouldCompact) {
-          let startIdx = 0;
-          while (startIdx < prev.length && (Number(prev[startIdx].ts) || 0) < minKeep) {
-            startIdx++;
-          }
-          return startIdx > 0 ? [...prev.slice(startIdx), newPoint] : [...prev, newPoint];
-        }
+      pushAndShift(s.vAb, live.vAb);
+      pushAndShift(s.vBc, live.vBc);
+      pushAndShift(s.vCa, live.vCa);
+      pushAndShift(s.vRn, live.vRn);
+      pushAndShift(s.vSn, live.vSn);
+      pushAndShift(s.vTn, live.vTn);
+      pushAndShift(s.kw, live.kw);
+      pushAndShift(s.iTot, live.iTot);
+      pushAndShift(s.iR, live.iR);
+      pushAndShift(s.iS, live.iS);
+      pushAndShift(s.iT, live.iT);
 
-        // Once per minute, compact points older than 1 hour into 30s buckets so browser RAM stays bounded (~3,960 points max)
-        lastCompactTsRef.current = now;
-        const oneHourAgo = now - 3600 * 1000;
-        const olderBuckets = new Map<number, any>();
-        const recentRaw: any[] = [];
-        for (let i = 0; i < prev.length; i++) {
-          const p = prev[i];
-          const pTs = Number(p.ts) || 0;
-          if (pTs < minKeep) continue;
-          if (pTs < oneHourAgo) {
-            const bucketTs = Math.floor(pTs / 30000) * 30000;
-            if (!olderBuckets.has(bucketTs)) {
-              olderBuckets.set(bucketTs, { ...p, ts: bucketTs });
-            }
-          } else {
-            recentRaw.push(p);
-          }
-        }
-        return [...olderBuckets.values(), ...recentRaw, newPoint];
-      });
-    };
+      setBottomTickMs(nextX);
+    }, 3000);
 
     socket.on("electricity:pm_live_update", handleTrafoLive);
     socket.on("electricity:ew21_live", handleTrafoLive);
@@ -1932,6 +2049,7 @@ export default function PowerDistribution() {
     socket.on("connect", fetchBottomHistory);
 
     return () => {
+      clearInterval(tickInterval);
       socket.off("electricity:pm_live_update", handleTrafoLive);
       socket.off("electricity:ew21_live", handleTrafoLive);
       socket.off("electricity:ew22_live", handleTrafoLive);
@@ -1941,170 +2059,121 @@ export default function PowerDistribution() {
   }, [bottomTxId, isPageActive]);
 
   const bottomWindowRange = useMemo(() => {
-    const lastTs = bottomHistory.length > 0 ? Number(bottomHistory[bottomHistory.length - 1].ts) || 0 : 0;
-    const endMs = Math.ceil(Math.max(Date.now(), lastTs) / 3000) * 3000;
-    return { min: endMs - 24 * 3600 * 1000, max: endMs };
-  }, [bottomHistory]);
+    return { min: bottomTickMs - 24 * 3600 * 1000, max: bottomTickMs };
+  }, [bottomTickMs]);
 
   const voltageTrendChart = useMemo(() => {
     const is380 = bottomVoltageMode === "380v";
-    const pts1: { x: number; y: number | null }[] = [];
-    const pts2: { x: number; y: number | null }[] = [];
-    const pts3: { x: number; y: number | null }[] = [];
-    for (let i = 0; i < bottomHistory.length; i++) {
-      const d = bottomHistory[i];
-      const x = Number(d.ts);
-      if (!x) continue;
-      if (is380) {
-        pts1.push({ x, y: d.volt_ab !== null && d.volt_ab !== undefined ? Number(d.volt_ab) : null });
-        pts2.push({ x, y: d.volt_bc !== null && d.volt_bc !== undefined ? Number(d.volt_bc) : null });
-        pts3.push({ x, y: d.volt_ca !== null && d.volt_ca !== undefined ? Number(d.volt_ca) : null });
-      } else {
-        pts1.push({ x, y: d.volt_rn !== null && d.volt_rn !== undefined ? Number(d.volt_rn) : null });
-        pts2.push({ x, y: d.volt_sn !== null && d.volt_sn !== undefined ? Number(d.volt_sn) : null });
-        pts3.push({ x, y: d.volt_tn !== null && d.volt_tn !== undefined ? Number(d.volt_tn) : null });
-      }
-    }
+    const s = bottomSeriesRef.current;
     return {
       datasets: [
         {
           label: is380 ? "Fasa R-S (380V)" : "Fasa R-N (230V)",
-          data: pts1,
+          data: is380 ? s.vAb : s.vRn,
           borderColor: "#f59e0b",
           backgroundColor: "transparent",
-          borderWidth: 1.8,
-          tension: 0.2,
+          borderWidth: 1.5,
+          tension: 0,
           pointRadius: 0,
           pointHoverRadius: 4,
-          spanGaps: true,
         },
         {
           label: is380 ? "Fasa S-T (380V)" : "Fasa S-N (230V)",
-          data: pts2,
+          data: is380 ? s.vBc : s.vSn,
           borderColor: "#06b6d4",
           backgroundColor: "transparent",
-          borderWidth: 1.8,
-          tension: 0.2,
+          borderWidth: 1.5,
+          tension: 0,
           pointRadius: 0,
           pointHoverRadius: 4,
-          spanGaps: true,
         },
         {
           label: is380 ? "Fasa T-R (380V)" : "Fasa T-N (230V)",
-          data: pts3,
+          data: is380 ? s.vCa : s.vTn,
           borderColor: "#8b5cf6",
           backgroundColor: "transparent",
-          borderWidth: 1.8,
-          tension: 0.2,
+          borderWidth: 1.5,
+          tension: 0,
           pointRadius: 0,
           pointHoverRadius: 4,
-          spanGaps: true,
         },
       ]
     };
-  }, [bottomHistory, bottomVoltageMode]);
+  }, [bottomTickMs, bottomPointCount, bottomVoltageMode]);
 
   const powerTrendChart = useMemo(() => {
-    const ptsKw: { x: number; y: number | null }[] = [];
-    for (let i = 0; i < bottomHistory.length; i++) {
-      const d = bottomHistory[i];
-      const x = Number(d.ts);
-      if (!x) continue;
-      ptsKw.push({
-        x,
-        y: d.active_power_total !== null && d.active_power_total !== undefined ? Math.abs(Number(d.active_power_total)) : null
-      });
-    }
+    const s = bottomSeriesRef.current;
     return {
       datasets: [
         {
           label: "kW Total (Daya Aktif)",
-          data: ptsKw,
+          data: s.kw,
           borderColor: "#0284c7",
           backgroundColor: "rgba(2, 132, 199, 0.08)",
-          borderWidth: 1.8,
-          tension: 0.2,
+          borderWidth: 1.6,
+          tension: 0,
           fill: true,
           pointRadius: 0,
           pointHoverRadius: 4,
-          spanGaps: true,
         }
       ]
     };
-  }, [bottomHistory]);
+  }, [bottomTickMs, bottomPointCount]);
 
   const currentTrendChart = useMemo(() => {
-    const ptsTot: { x: number; y: number | null }[] = [];
-    const ptsR: { x: number; y: number | null }[] = [];
-    const ptsS: { x: number; y: number | null }[] = [];
-    const ptsT: { x: number; y: number | null }[] = [];
-    for (let i = 0; i < bottomHistory.length; i++) {
-      const d = bottomHistory[i];
-      const x = Number(d.ts);
-      if (!x) continue;
-      const tot = d.current_total !== null && d.current_total !== undefined
-        ? Number(d.current_total)
-        : (d.current_a !== null ? Number(d.current_a) + Number(d.current_b || 0) + Number(d.current_c || 0) : null);
-      ptsTot.push({ x, y: tot });
-      ptsR.push({ x, y: d.current_a !== null && d.current_a !== undefined ? Number(d.current_a) : null });
-      ptsS.push({ x, y: d.current_b !== null && d.current_b !== undefined ? Number(d.current_b) : null });
-      ptsT.push({ x, y: d.current_c !== null && d.current_c !== undefined ? Number(d.current_c) : null });
-    }
+    const s = bottomSeriesRef.current;
     return {
       datasets: [
         {
           label: "Ampere Total (A)",
-          data: ptsTot,
+          data: s.iTot,
           borderColor: "#8b5cf6",
           backgroundColor: "transparent",
-          borderWidth: 1.8,
+          borderWidth: 1.5,
           borderDash: [5, 5],
-          tension: 0.2,
+          tension: 0,
           pointRadius: 0,
           pointHoverRadius: 4,
-          spanGaps: true,
         },
         {
           label: "Fasa R (A)",
-          data: ptsR,
+          data: s.iR,
           borderColor: "#ef4444",
           backgroundColor: "transparent",
-          borderWidth: 1.5,
-          tension: 0.2,
+          borderWidth: 1.3,
+          tension: 0,
           pointRadius: 0,
           pointHoverRadius: 4,
-          spanGaps: true,
         },
         {
           label: "Fasa S (A)",
-          data: ptsS,
+          data: s.iS,
           borderColor: "#f59e0b",
           backgroundColor: "transparent",
-          borderWidth: 1.5,
-          tension: 0.2,
+          borderWidth: 1.3,
+          tension: 0,
           pointRadius: 0,
           pointHoverRadius: 4,
-          spanGaps: true,
         },
         {
           label: "Fasa T (A)",
-          data: ptsT,
+          data: s.iT,
           borderColor: "#10b981",
           backgroundColor: "transparent",
-          borderWidth: 1.5,
-          tension: 0.2,
+          borderWidth: 1.3,
+          tension: 0,
           pointRadius: 0,
           pointHoverRadius: 4,
-          spanGaps: true,
         },
       ]
     };
-  }, [bottomHistory]);
+  }, [bottomTickMs, bottomPointCount]);
 
   const lineChartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     animation: false as const,
+    parsing: false as const,
     normalized: true,
     plugins: {
       legend: { display: false },
@@ -2127,13 +2196,23 @@ export default function PowerDistribution() {
         type: "linear" as const,
         min: bottomWindowRange.min,
         max: bottomWindowRange.max,
+        afterBuildTicks: (axis: any) => {
+          const min = axis.min;
+          const max = axis.max;
+          if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return;
+          const step = (max - min) / 8;
+          const ticks: { value: number }[] = [];
+          for (let i = 0; i <= 8; i++) {
+            ticks.push({ value: Math.round(min + i * step) });
+          }
+          axis.ticks = ticks;
+        },
         grid: { color: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)" },
         ticks: {
           color: isDark ? "#64748b" : "#94a3b8",
           font: { size: 9 },
           maxRotation: 0,
-          autoSkip: true,
-          maxTicksLimit: 13,
+          autoSkip: false,
           callback: (val: any) => formatWibTick(Number(val)),
         },
       },
@@ -2897,7 +2976,7 @@ export default function PowerDistribution() {
               </div>
             </div>
             <div className="h-[140px] w-full">
-              {bottomHistory.some(d => d.volt_ab !== null || d.volt_rn !== null) ? (
+              {bottomPointCount > 0 ? (
                 <Line data={voltageTrendChart} options={multiLineChartOptions} />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
@@ -2928,7 +3007,7 @@ export default function PowerDistribution() {
               </div>
             </div>
             <div className="h-[140px] w-full">
-              {bottomHistory.some(d => d.active_power_total !== null) ? (
+              {bottomPointCount > 0 ? (
                 <Line data={powerTrendChart} options={lineChartOptions} />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
@@ -2959,7 +3038,7 @@ export default function PowerDistribution() {
               </div>
             </div>
             <div className="h-[150px] w-full">
-              {bottomHistory.some(d => d.current_a !== null || d.current_b !== null || d.current_c !== null || d.current_total !== null) ? (
+              {bottomPointCount > 0 ? (
                 <Line data={currentTrendChart} options={currentChartOptions} />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">

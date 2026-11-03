@@ -1870,7 +1870,10 @@ export const startIncomingElectricityPolling = () => {
         const placeholders: string[] = [];
         let pIdx = 1;
         for (const r of trafoRowsToInsert) {
-          placeholders.push(`(${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++})`);
+          placeholders.push(
+            "($" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) +
+            ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ")"
+          );
           vals.push(
             r.pm_id.toUpperCase(),
             wibTrafo.tStampStr,
@@ -1884,27 +1887,23 @@ export const startIncomingElectricityPolling = () => {
             r.power_factor !== null ? Number(r.power_factor) : null
           );
         }
+        const purgeTrafoDate = new Date(ts.getTime() - 24 * 3600 * 1000);
+        const purgeTrafoWib = getWibDateTime(purgeTrafoDate);
         getPostgresPool().query(`
           INSERT INTO electric_trafo_rolling_3s (
             pm_id, t_stamp, volt_ab, volt_bc, volt_ca,
             active_power_total, current_a, current_b, current_c, power_factor
           ) VALUES ${placeholders.join(", ")}
           ON CONFLICT (pm_id, t_stamp) DO NOTHING
-        `, vals).catch((err: any) => {
-          logger.warn(`Failed to insert 3s trafo rolling batch: ${err.message}`);
+        `, vals).then(() => {
+          return getPostgresPool().query(
+            `DELETE FROM electric_trafo_rolling_3s WHERE t_stamp < $1`,
+            [purgeTrafoWib.tStampStr]
+          );
+        }).catch((err: any) => {
+          logger.warn(`Failed to insert/cleanup 3s trafo rolling batch: ${err.message}`);
         });
       }
-    }
-
-    if (isNewMinute) {
-      const purgeTrafoDate = new Date(ts.getTime() - 24 * 3600 * 1000);
-      const purgeTrafoWib = getWibDateTime(purgeTrafoDate);
-      getPostgresPool().query(
-        `DELETE FROM electric_trafo_rolling_3s WHERE t_stamp < $1`,
-        [purgeTrafoWib.tStampStr]
-      ).catch((err: any) => {
-        logger.warn(`Failed to cleanup old electric_trafo_rolling_3s: ${err.message}`);
-      });
     }
 
     // 7b. Process Dynamic Custom Power Meters (User Configured PMs)
