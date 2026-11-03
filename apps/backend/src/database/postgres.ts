@@ -774,6 +774,22 @@ export const ensurePostgresTables = async () => {
       CREATE INDEX IF NOT EXISTS idx_incoming_trend_5s_tstamp ON electric_incoming_trend_5s (t_stamp ASC);
       CREATE INDEX IF NOT EXISTS idx_incoming_trend_5s_dev_ts ON electric_incoming_trend_5s (device_id, t_stamp DESC);
 
+      -- 3-SECOND TRANSFORMER ROLLING 24-HOUR TABLE (FIFO SLIDING WINDOW)
+      CREATE TABLE IF NOT EXISTS electric_trafo_rolling_3s (
+        pm_id VARCHAR(32) NOT NULL,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        volt_ab NUMERIC,
+        volt_bc NUMERIC,
+        volt_ca NUMERIC,
+        active_power_total NUMERIC,
+        current_a NUMERIC,
+        current_b NUMERIC,
+        current_c NUMERIC,
+        power_factor NUMERIC,
+        PRIMARY KEY (pm_id, t_stamp)
+      );
+      CREATE INDEX IF NOT EXISTS idx_trafo_rolling_3s_ts ON electric_trafo_rolling_3s (t_stamp);
+
       CREATE TABLE IF NOT EXISTS electric_pm_telemetry_minute (
         id SERIAL PRIMARY KEY,
         t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,

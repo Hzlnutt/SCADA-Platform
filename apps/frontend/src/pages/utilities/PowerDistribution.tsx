@@ -398,168 +398,260 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
   const [modalHistory, setModalHistory] = useState<any[]>([]);
   const [loadingModalHistory, setLoadingModalHistory] = useState(true);
   const [modalVoltageType, setModalVoltageType] = useState<"380v" | "230v">("380v");
+  const lastModalLiveTsRef = useRef<number>(0);
+
+  const formatModalWibTick = useCallback((ms: number): string => {
+    if (!Number.isFinite(ms)) return "";
+    const wib = new Date(ms + 7 * 3600 * 1000);
+    const hh = String(wib.getUTCHours()).padStart(2, "0");
+    const mm = String(wib.getUTCMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
+  }, []);
+
+  const formatModalWibTooltip = useCallback((items: any[]): string => {
+    const rawX = items?.[0]?.parsed?.x ?? items?.[0]?.raw?.x;
+    const ms = Number(rawX);
+    if (!Number.isFinite(ms)) return "";
+    const wib = new Date(ms + 7 * 3600 * 1000);
+    const dd = String(wib.getUTCDate()).padStart(2, "0");
+    const mo = String(wib.getUTCMonth() + 1).padStart(2, "0");
+    const hh = String(wib.getUTCHours()).padStart(2, "0");
+    const mm = String(wib.getUTCMinutes()).padStart(2, "0");
+    const ss = String(wib.getUTCSeconds()).padStart(2, "0");
+    return `${dd}/${mo} ${hh}:${mm}:${ss} WIB`;
+  }, []);
 
   useEffect(() => {
     if (!transformer?.id) return;
     setLoadingModalHistory(true);
-    const clientHour = new Date().getHours();
     const pmId = TRAFO_PM_MAP[transformer.id]?.pmId || transformer.id;
-    getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?hour=${clientHour}&_t=${Date.now()}`)
+    getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?rolling=true&_t=${Date.now()}`)
       .then((res) => {
-        if (res?.data) {
-          setModalHistory(res.data);
+        if (res?.data && Array.isArray(res.data)) {
+          const now = Date.now();
+          const minKeep = now - 25 * 3600 * 1000;
+          const map = new Map<number, any>();
+          for (const p of res.data) {
+            const tsNum = Number(p.ts) || 0;
+            if (tsNum >= minKeep && tsNum <= now + 60000) {
+              map.set(tsNum, p);
+            }
+          }
+          const sorted = Array.from(map.values()).sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
+          setModalHistory(sorted);
         }
       })
       .catch((err) => console.error("Failed to load modal trafo history:", err))
       .finally(() => setLoadingModalHistory(false));
+
+    const socket = getSocket();
+    const targetPmId = pmId.toUpperCase();
+    const handleModalLive = (payload: any) => {
+      if (!payload || !Array.isArray(payload.data)) return;
+      const pm = payload.data.find((item: any) => String(item.pm_id).toUpperCase() === targetPmId);
+      if (!pm) return;
+      const now = Date.now();
+      if (now - lastModalLiveTsRef.current < 2800) return;
+      lastModalLiveTsRef.current = now;
+
+      const v_ab = pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : null;
+      const v_bc = pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : null;
+      const v_ca = pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : null;
+      const v_rn = pm.volt_rn !== undefined && pm.volt_rn !== null ? Number(Number(pm.volt_rn).toFixed(1)) : (v_ab ? Number((v_ab / 1.732).toFixed(1)) : null);
+      const v_sn = pm.volt_sn !== undefined && pm.volt_sn !== null ? Number(Number(pm.volt_sn).toFixed(1)) : (v_bc ? Number((v_bc / 1.732).toFixed(1)) : null);
+      const v_tn = pm.volt_tn !== undefined && pm.volt_tn !== null ? Number(Number(pm.volt_tn).toFixed(1)) : (v_ca ? Number((v_ca / 1.732).toFixed(1)) : null);
+      const active_power = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(1))) : null;
+      const cur_a = pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : null;
+      const cur_b = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : null;
+      const cur_c = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : null;
+      const cur_tot = pm.current_total !== undefined && pm.current_total !== null ? Number(Number(pm.current_total).toFixed(1)) : ((cur_a || 0) + (cur_b || 0) + (cur_c || 0));
+
+      setModalHistory((prev) => {
+        const minKeep = now - 25 * 3600 * 1000;
+        const filtered = prev.filter((p) => (Number(p.ts) || 0) >= minKeep);
+        return [...filtered, {
+          ts: now,
+          volt_ab: v_ab, volt_bc: v_bc, volt_ca: v_ca,
+          volt_rn: v_rn, volt_sn: v_sn, volt_tn: v_tn,
+          active_power_total: active_power,
+          current_a: cur_a, current_b: cur_b, current_c: cur_c, current_total: cur_tot
+        }];
+      });
+    };
+
+    socket.on("electricity:pm_live_update", handleModalLive);
+    socket.on("electricity:ew23_live", handleModalLive);
+    return () => {
+      socket.off("electricity:pm_live_update", handleModalLive);
+      socket.off("electricity:ew23_live", handleModalLive);
+    };
   }, [transformer?.id]);
 
-  const fallbackLabels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
-  const historyLabels = modalHistory.length > 0
-    ? modalHistory.map((d) => d.label || `${String(d.hour).padStart(2, "0")}:00`)
-    : fallbackLabels;
+  const modalWindowRange = useMemo(() => {
+    const lastTs = modalHistory.length > 0 ? Number(modalHistory[modalHistory.length - 1].ts) || 0 : 0;
+    const endMs = Math.ceil(Math.max(Date.now(), lastTs) / 3000) * 3000;
+    return { min: endMs - 24 * 3600 * 1000, max: endMs };
+  }, [modalHistory]);
 
   const chartData = useMemo(() => {
     if (activeTab === "voltage") {
-      if (modalVoltageType === "380v") {
-        return {
-          labels: historyLabels,
-          datasets: [
-            {
-              label: "Fasa R-S (380V)",
-              data: modalHistory.map((d) => (d.volt_ab !== null && d.volt_ab !== undefined ? Number(d.volt_ab) : null)),
-              borderColor: "#f59e0b",
-              backgroundColor: "transparent",
-              borderWidth: 2,
-              tension: 0.35,
-              pointRadius: 2.5,
-              pointHoverRadius: 5,
-            },
-            {
-              label: "Fasa S-T (380V)",
-              data: modalHistory.map((d) => (d.volt_bc !== null && d.volt_bc !== undefined ? Number(d.volt_bc) : null)),
-              borderColor: "#06b6d4",
-              backgroundColor: "transparent",
-              borderWidth: 2,
-              tension: 0.35,
-              pointRadius: 2.5,
-              pointHoverRadius: 5,
-            },
-            {
-              label: "Fasa T-R (380V)",
-              data: modalHistory.map((d) => (d.volt_ca !== null && d.volt_ca !== undefined ? Number(d.volt_ca) : null)),
-              borderColor: "#8b5cf6",
-              backgroundColor: "transparent",
-              borderWidth: 2,
-              tension: 0.35,
-              pointRadius: 2.5,
-              pointHoverRadius: 5,
-            },
-          ],
-        };
+      const is380 = modalVoltageType === "380v";
+      const pts1: { x: number; y: number | null }[] = [];
+      const pts2: { x: number; y: number | null }[] = [];
+      const pts3: { x: number; y: number | null }[] = [];
+      for (let i = 0; i < modalHistory.length; i++) {
+        const d = modalHistory[i];
+        const x = Number(d.ts);
+        if (!x) continue;
+        if (is380) {
+          pts1.push({ x, y: d.volt_ab !== null && d.volt_ab !== undefined ? Number(d.volt_ab) : null });
+          pts2.push({ x, y: d.volt_bc !== null && d.volt_bc !== undefined ? Number(d.volt_bc) : null });
+          pts3.push({ x, y: d.volt_ca !== null && d.volt_ca !== undefined ? Number(d.volt_ca) : null });
+        } else {
+          pts1.push({ x, y: d.volt_rn !== null && d.volt_rn !== undefined ? Number(d.volt_rn) : null });
+          pts2.push({ x, y: d.volt_sn !== null && d.volt_sn !== undefined ? Number(d.volt_sn) : null });
+          pts3.push({ x, y: d.volt_tn !== null && d.volt_tn !== undefined ? Number(d.volt_tn) : null });
+        }
       }
       return {
-        labels: historyLabels,
         datasets: [
           {
-            label: "Fasa R-N (230V)",
-            data: modalHistory.map((d) => (d.volt_rn !== null && d.volt_rn !== undefined ? Number(d.volt_rn) : null)),
+            label: is380 ? "Fasa R-S (380V)" : "Fasa R-N (230V)",
+            data: pts1,
             borderColor: "#f59e0b",
             backgroundColor: "transparent",
-            borderWidth: 2,
-            tension: 0.35,
-            pointRadius: 2.5,
-            pointHoverRadius: 5,
+            borderWidth: 1.8,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            spanGaps: true,
           },
           {
-            label: "Fasa S-N (230V)",
-            data: modalHistory.map((d) => (d.volt_sn !== null && d.volt_sn !== undefined ? Number(d.volt_sn) : null)),
+            label: is380 ? "Fasa S-T (380V)" : "Fasa S-N (230V)",
+            data: pts2,
             borderColor: "#06b6d4",
             backgroundColor: "transparent",
-            borderWidth: 2,
-            tension: 0.35,
-            pointRadius: 2.5,
-            pointHoverRadius: 5,
+            borderWidth: 1.8,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            spanGaps: true,
           },
           {
-            label: "Fasa T-N (230V)",
-            data: modalHistory.map((d) => (d.volt_tn !== null && d.volt_tn !== undefined ? Number(d.volt_tn) : null)),
+            label: is380 ? "Fasa T-R (380V)" : "Fasa T-N (230V)",
+            data: pts3,
             borderColor: "#8b5cf6",
             backgroundColor: "transparent",
-            borderWidth: 2,
-            tension: 0.35,
-            pointRadius: 2.5,
-            pointHoverRadius: 5,
+            borderWidth: 1.8,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            spanGaps: true,
           },
         ],
       };
     }
     if (activeTab === "ampere") {
+      const ptsTot: { x: number; y: number | null }[] = [];
+      const ptsR: { x: number; y: number | null }[] = [];
+      const ptsS: { x: number; y: number | null }[] = [];
+      const ptsT: { x: number; y: number | null }[] = [];
+      for (let i = 0; i < modalHistory.length; i++) {
+        const d = modalHistory[i];
+        const x = Number(d.ts);
+        if (!x) continue;
+        const tot = d.current_total !== null && d.current_total !== undefined
+          ? Number(d.current_total)
+          : (d.current_a !== null ? Number(d.current_a) + Number(d.current_b || 0) + Number(d.current_c || 0) : null);
+        ptsTot.push({ x, y: tot });
+        ptsR.push({ x, y: d.current_a !== null && d.current_a !== undefined ? Number(d.current_a) : null });
+        ptsS.push({ x, y: d.current_b !== null && d.current_b !== undefined ? Number(d.current_b) : null });
+        ptsT.push({ x, y: d.current_c !== null && d.current_c !== undefined ? Number(d.current_c) : null });
+      }
       return {
-        labels: historyLabels,
         datasets: [
           {
             label: "Ampere Total (A)",
-            data: modalHistory.map((d) => (d.current_total !== null && d.current_total !== undefined ? Number(d.current_total) : (d.current_a !== null ? Number(d.current_a) + Number(d.current_b || 0) + Number(d.current_c || 0) : null))),
+            data: ptsTot,
             borderColor: "#8b5cf6",
             backgroundColor: "transparent",
-            borderWidth: 2,
+            borderWidth: 1.8,
             borderDash: [5, 5],
-            tension: 0.35,
-            pointRadius: 2.5,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            spanGaps: true,
           },
           {
             label: "Phase R (A)",
-            data: modalHistory.map((d) => (d.current_a !== null && d.current_a !== undefined ? Number(d.current_a) : null)),
+            data: ptsR,
             borderColor: "#ef4444",
             backgroundColor: "transparent",
-            borderWidth: 2,
-            tension: 0.35,
-            pointRadius: 2,
+            borderWidth: 1.5,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            spanGaps: true,
           },
           {
             label: "Phase S (A)",
-            data: modalHistory.map((d) => (d.current_b !== null && d.current_b !== undefined ? Number(d.current_b) : null)),
+            data: ptsS,
             borderColor: "#f59e0b",
             backgroundColor: "transparent",
-            borderWidth: 2,
-            tension: 0.35,
-            pointRadius: 2,
+            borderWidth: 1.5,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            spanGaps: true,
           },
           {
             label: "Phase T (A)",
-            data: modalHistory.map((d) => (d.current_c !== null && d.current_c !== undefined ? Number(d.current_c) : null)),
+            data: ptsT,
             borderColor: "#10b981",
             backgroundColor: "transparent",
-            borderWidth: 2,
-            tension: 0.35,
-            pointRadius: 2,
+            borderWidth: 1.5,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            spanGaps: true,
           },
         ],
       };
     }
     // "power"
+    const ptsKw: { x: number; y: number | null }[] = [];
+    for (let i = 0; i < modalHistory.length; i++) {
+      const d = modalHistory[i];
+      const x = Number(d.ts);
+      if (!x) continue;
+      ptsKw.push({
+        x,
+        y: d.active_power_total !== null && d.active_power_total !== undefined ? Math.abs(Number(d.active_power_total)) : null
+      });
+    }
     return {
-      labels: historyLabels,
       datasets: [
         {
           label: "kW Total (Daya Aktif)",
-          data: modalHistory.map((d) => (d.active_power_total !== null && d.active_power_total !== undefined ? Number(d.active_power_total) : null)),
+          data: ptsKw,
           borderColor: "#0284c7",
           backgroundColor: "rgba(2, 132, 199, 0.15)",
-          borderWidth: 2.5,
-          tension: 0.35,
+          borderWidth: 2,
+          tension: 0.2,
           fill: true,
-          pointRadius: 2.5,
+          pointRadius: 0,
           pointHoverRadius: 5,
+          spanGaps: true,
         },
       ],
     };
-  }, [activeTab, modalVoltageType, modalHistory, historyLabels]);
+  }, [activeTab, modalVoltageType, modalHistory]);
 
   const modalChartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
+    animation: false as const,
+    normalized: true,
     plugins: {
       legend: {
         display: activeTab === "ampere" || activeTab === "voltage",
@@ -579,19 +671,32 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
         borderColor: isDark ? "#334155" : "#e2e8f0",
         borderWidth: 1,
         padding: 8,
+        callbacks: {
+          title: formatModalWibTooltip,
+        },
       },
     },
     scales: {
       x: {
+        type: "linear" as const,
+        min: modalWindowRange.min,
+        max: modalWindowRange.max,
         grid: { color: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)" },
-        ticks: { color: isDark ? "#64748b" : "#94a3b8", font: { size: 9, weight: 600 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
+        ticks: {
+          color: isDark ? "#64748b" : "#94a3b8",
+          font: { size: 9, weight: 600 },
+          maxRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: 12,
+          callback: (val: any) => formatModalWibTick(Number(val)),
+        },
       },
       y: {
         grid: { color: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)" },
         ticks: { color: isDark ? "#64748b" : "#94a3b8", font: { size: 9, weight: 600 } },
       },
     },
-  }), [isDark, activeTab]);
+  }), [isDark, activeTab, modalWindowRange, formatModalWibTick, formatModalWibTooltip]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -1674,25 +1779,34 @@ export default function PowerDistribution() {
     return transformers.find(t => t.id === bottomTxId) || transformers[0];
   }, [transformers, bottomTxId]);
 
-  // Section C Historical records state
-  const [bottomHistory, setBottomHistory] = useState<any[]>(() => {
-    try {
-      const cached = localStorage.getItem(`trafo_rolling_3s_${bottomTxId}`);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const dayAgo = Date.now() - 25 * 3600 * 1000;
-          const fresh = parsed.filter((p: any) => !p.ts || Number(p.ts) >= dayAgo);
-          if (fresh.length > 0) return fresh;
-        }
-      }
-    } catch (e) {}
-    return [];
-  });
+  // Section C Historical records state (24-Hour Rolling Window with 3-Second Live Polling)
+  const [bottomHistory, setBottomHistory] = useState<any[]>([]);
   const [loadingBottomHistory, setLoadingBottomHistory] = useState(false);
   const [bottomVoltageMode, setBottomVoltageMode] = useState<"380v" | "230v">("380v");
   const [bottomZoomChart, setBottomZoomChart] = useState<"voltage" | "power" | "current" | null>(null);
   const lastBottomRecordTsRef = useRef<number>(0);
+  const lastCompactTsRef = useRef<number>(0);
+
+  const formatWibTick = useCallback((ms: number): string => {
+    if (!Number.isFinite(ms)) return "";
+    const wib = new Date(ms + 7 * 3600 * 1000);
+    const hh = String(wib.getUTCHours()).padStart(2, "0");
+    const mm = String(wib.getUTCMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
+  }, []);
+
+  const formatWibTooltipTitle = useCallback((items: any[]): string => {
+    const rawX = items?.[0]?.parsed?.x ?? items?.[0]?.raw?.x;
+    const ms = Number(rawX);
+    if (!Number.isFinite(ms)) return "";
+    const wib = new Date(ms + 7 * 3600 * 1000);
+    const dd = String(wib.getUTCDate()).padStart(2, "0");
+    const mo = String(wib.getUTCMonth() + 1).padStart(2, "0");
+    const hh = String(wib.getUTCHours()).padStart(2, "0");
+    const mm = String(wib.getUTCMinutes()).padStart(2, "0");
+    const ss = String(wib.getUTCSeconds()).padStart(2, "0");
+    return `${dd}/${mo} ${hh}:${mm}:${ss} WIB`;
+  }, []);
 
   useEffect(() => {
     if (!bottomZoomChart) return;
@@ -1709,18 +1823,20 @@ export default function PowerDistribution() {
     // Reset history when switching transformer to ensure lazy loading only selected unit
     setBottomHistory([]);
     setLoadingBottomHistory(true);
+    lastBottomRecordTsRef.current = 0;
 
     const pmId = TRAFO_PM_MAP[bottomTxId]?.pmId || bottomTxId;
     const fetchBottomHistory = () => {
       getJson<{ data: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?rolling=true&_t=${Date.now()}`)
         .then((res) => {
           if (res?.data && Array.isArray(res.data)) {
-            const dayAgo = Date.now() - 24 * 3600 * 1000;
-            // Clean sort & deduplication by timestamp
+            const now = Date.now();
+            const minKeep = now - 25 * 3600 * 1000;
+            // Clean sort & deduplication by timestamp (ignore any corrupted future timestamps)
             const map = new Map<number, any>();
             for (const p of res.data) {
               const tsNum = Number(p.ts) || 0;
-              if (tsNum >= dayAgo) {
+              if (tsNum >= minKeep && tsNum <= now + 60000) {
                 map.set(tsNum, p);
               }
             }
@@ -1732,8 +1848,8 @@ export default function PowerDistribution() {
         .finally(() => setLoadingBottomHistory(false));
     };
 
+    // Fetch initial 24h rolling history once; subsequent 3-second updates stream via WebSocket
     fetchBottomHistory();
-    const interval = setInterval(fetchBottomHistory, 30000);
 
     // Live 3-second rolling stream listener via socket
     const socket = getSocket();
@@ -1745,14 +1861,9 @@ export default function PowerDistribution() {
       if (!pm) return;
 
       const now = Date.now();
-      // Throttle recording to ~3 seconds cadence
+      // Throttle recording to 3-second cadence
       if (now - lastBottomRecordTsRef.current < 2800) return;
       lastBottomRecordTsRef.current = now;
-
-      const d = new Date(now);
-      const pad = (n: number) => String(n).padStart(2, "0");
-      const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-      const labelStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 
       const v_ab = pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : null;
       const v_bc = pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : null;
@@ -1760,16 +1871,13 @@ export default function PowerDistribution() {
       const v_rn = pm.volt_rn !== undefined && pm.volt_rn !== null ? Number(Number(pm.volt_rn).toFixed(1)) : (v_ab ? Number((v_ab / 1.732).toFixed(1)) : null);
       const v_sn = pm.volt_sn !== undefined && pm.volt_sn !== null ? Number(Number(pm.volt_sn).toFixed(1)) : (v_bc ? Number((v_bc / 1.732).toFixed(1)) : null);
       const v_tn = pm.volt_tn !== undefined && pm.volt_tn !== null ? Number(Number(pm.volt_tn).toFixed(1)) : (v_ca ? Number((v_ca / 1.732).toFixed(1)) : null);
-      const active_power = pm.active_power_total !== undefined && pm.active_power_total !== null ? Number(Number(pm.active_power_total).toFixed(1)) : null;
+      const active_power = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(1))) : null;
       const cur_a = pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : null;
       const cur_b = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : null;
       const cur_c = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : null;
       const cur_tot = pm.current_total !== undefined && pm.current_total !== null ? Number(Number(pm.current_total).toFixed(1)) : ((cur_a || 0) + (cur_b || 0) + (cur_c || 0));
 
       const newPoint = {
-        label: labelStr,
-        time: timeStr,
-        hour: d.getHours(),
         ts: now,
         volt_ab: v_ab,
         volt_bc: v_bc,
@@ -1785,10 +1893,35 @@ export default function PowerDistribution() {
       };
 
       setBottomHistory((prev) => {
-        const windowStart = now - 24 * 3600 * 1000;
-        // Continuous 24-hour FIFO rolling buffer: drop points older than 24 hours
-        const filtered = prev.filter((p) => (Number(p.ts) || 0) >= windowStart);
-        return [...filtered, newPoint];
+        const minKeep = now - 25 * 3600 * 1000;
+        const shouldCompact = now - lastCompactTsRef.current > 60000;
+        if (!shouldCompact) {
+          let startIdx = 0;
+          while (startIdx < prev.length && (Number(prev[startIdx].ts) || 0) < minKeep) {
+            startIdx++;
+          }
+          return startIdx > 0 ? [...prev.slice(startIdx), newPoint] : [...prev, newPoint];
+        }
+
+        // Once per minute, compact points older than 1 hour into 30s buckets so browser RAM stays bounded (~3,960 points max)
+        lastCompactTsRef.current = now;
+        const oneHourAgo = now - 3600 * 1000;
+        const olderBuckets = new Map<number, any>();
+        const recentRaw: any[] = [];
+        for (let i = 0; i < prev.length; i++) {
+          const p = prev[i];
+          const pTs = Number(p.ts) || 0;
+          if (pTs < minKeep) continue;
+          if (pTs < oneHourAgo) {
+            const bucketTs = Math.floor(pTs / 30000) * 30000;
+            if (!olderBuckets.has(bucketTs)) {
+              olderBuckets.set(bucketTs, { ...p, ts: bucketTs });
+            }
+          } else {
+            recentRaw.push(p);
+          }
+        }
+        return [...olderBuckets.values(), ...recentRaw, newPoint];
       });
     };
 
@@ -1796,166 +1929,183 @@ export default function PowerDistribution() {
     socket.on("electricity:ew21_live", handleTrafoLive);
     socket.on("electricity:ew22_live", handleTrafoLive);
     socket.on("electricity:ew23_live", handleTrafoLive);
+    socket.on("connect", fetchBottomHistory);
 
     return () => {
-      clearInterval(interval);
       socket.off("electricity:pm_live_update", handleTrafoLive);
       socket.off("electricity:ew21_live", handleTrafoLive);
       socket.off("electricity:ew22_live", handleTrafoLive);
       socket.off("electricity:ew23_live", handleTrafoLive);
+      socket.off("connect", fetchBottomHistory);
     };
   }, [bottomTxId, isPageActive]);
 
-  const fallbackLabels = useMemo(() => Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`), []);
-  const bottomLabels = useMemo(() => {
-    return bottomHistory.length > 0
-      ? bottomHistory.map((d) => d.time || d.label || `${String(d.hour).padStart(2, "0")}:00`)
-      : fallbackLabels;
-  }, [bottomHistory, fallbackLabels]);
+  const bottomWindowRange = useMemo(() => {
+    const lastTs = bottomHistory.length > 0 ? Number(bottomHistory[bottomHistory.length - 1].ts) || 0 : 0;
+    const endMs = Math.ceil(Math.max(Date.now(), lastTs) / 3000) * 3000;
+    return { min: endMs - 24 * 3600 * 1000, max: endMs };
+  }, [bottomHistory]);
 
   const voltageTrendChart = useMemo(() => {
-    if (bottomVoltageMode === "380v") {
-      return {
-        labels: bottomLabels,
-        datasets: [
-          {
-            label: "Fasa R-S (380V)",
-            data: bottomHistory.map((d) => (d.volt_ab !== null && d.volt_ab !== undefined ? Number(d.volt_ab) : null)),
-            borderColor: "#f59e0b",
-            backgroundColor: "transparent",
-            borderWidth: 1.8,
-            tension: 0.2,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-          },
-          {
-            label: "Fasa S-T (380V)",
-            data: bottomHistory.map((d) => (d.volt_bc !== null && d.volt_bc !== undefined ? Number(d.volt_bc) : null)),
-            borderColor: "#06b6d4",
-            backgroundColor: "transparent",
-            borderWidth: 1.8,
-            tension: 0.2,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-          },
-          {
-            label: "Fasa T-R (380V)",
-            data: bottomHistory.map((d) => (d.volt_ca !== null && d.volt_ca !== undefined ? Number(d.volt_ca) : null)),
-            borderColor: "#8b5cf6",
-            backgroundColor: "transparent",
-            borderWidth: 1.8,
-            tension: 0.2,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-          },
-        ]
-      };
+    const is380 = bottomVoltageMode === "380v";
+    const pts1: { x: number; y: number | null }[] = [];
+    const pts2: { x: number; y: number | null }[] = [];
+    const pts3: { x: number; y: number | null }[] = [];
+    for (let i = 0; i < bottomHistory.length; i++) {
+      const d = bottomHistory[i];
+      const x = Number(d.ts);
+      if (!x) continue;
+      if (is380) {
+        pts1.push({ x, y: d.volt_ab !== null && d.volt_ab !== undefined ? Number(d.volt_ab) : null });
+        pts2.push({ x, y: d.volt_bc !== null && d.volt_bc !== undefined ? Number(d.volt_bc) : null });
+        pts3.push({ x, y: d.volt_ca !== null && d.volt_ca !== undefined ? Number(d.volt_ca) : null });
+      } else {
+        pts1.push({ x, y: d.volt_rn !== null && d.volt_rn !== undefined ? Number(d.volt_rn) : null });
+        pts2.push({ x, y: d.volt_sn !== null && d.volt_sn !== undefined ? Number(d.volt_sn) : null });
+        pts3.push({ x, y: d.volt_tn !== null && d.volt_tn !== undefined ? Number(d.volt_tn) : null });
+      }
     }
     return {
-      labels: bottomLabels,
       datasets: [
         {
-          label: "Fasa R-N (230V)",
-          data: bottomHistory.map((d) => (d.volt_rn !== null && d.volt_rn !== undefined ? Number(d.volt_rn) : null)),
+          label: is380 ? "Fasa R-S (380V)" : "Fasa R-N (230V)",
+          data: pts1,
           borderColor: "#f59e0b",
           backgroundColor: "transparent",
           borderWidth: 1.8,
           tension: 0.2,
           pointRadius: 0,
           pointHoverRadius: 4,
+          spanGaps: true,
         },
         {
-          label: "Fasa S-N (230V)",
-          data: bottomHistory.map((d) => (d.volt_sn !== null && d.volt_sn !== undefined ? Number(d.volt_sn) : null)),
+          label: is380 ? "Fasa S-T (380V)" : "Fasa S-N (230V)",
+          data: pts2,
           borderColor: "#06b6d4",
           backgroundColor: "transparent",
           borderWidth: 1.8,
           tension: 0.2,
           pointRadius: 0,
           pointHoverRadius: 4,
+          spanGaps: true,
         },
         {
-          label: "Fasa T-N (230V)",
-          data: bottomHistory.map((d) => (d.volt_tn !== null && d.volt_tn !== undefined ? Number(d.volt_tn) : null)),
+          label: is380 ? "Fasa T-R (380V)" : "Fasa T-N (230V)",
+          data: pts3,
           borderColor: "#8b5cf6",
           backgroundColor: "transparent",
           borderWidth: 1.8,
           tension: 0.2,
           pointRadius: 0,
           pointHoverRadius: 4,
+          spanGaps: true,
         },
       ]
     };
-  }, [bottomLabels, bottomHistory, bottomVoltageMode]);
+  }, [bottomHistory, bottomVoltageMode]);
 
-  const powerTrendChart = useMemo(() => ({
-    labels: bottomLabels,
-    datasets: [
-      {
-        label: "kW Total (Daya Aktif)",
-        data: bottomHistory.map((d) => (d.active_power_total !== null && d.active_power_total !== undefined ? Number(d.active_power_total) : null)),
-        borderColor: "#0284c7",
-        backgroundColor: "rgba(2, 132, 199, 0.08)",
-        borderWidth: 1.8,
-        tension: 0.2,
-        fill: true,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      }
-    ]
-  }), [bottomLabels, bottomHistory]);
+  const powerTrendChart = useMemo(() => {
+    const ptsKw: { x: number; y: number | null }[] = [];
+    for (let i = 0; i < bottomHistory.length; i++) {
+      const d = bottomHistory[i];
+      const x = Number(d.ts);
+      if (!x) continue;
+      ptsKw.push({
+        x,
+        y: d.active_power_total !== null && d.active_power_total !== undefined ? Math.abs(Number(d.active_power_total)) : null
+      });
+    }
+    return {
+      datasets: [
+        {
+          label: "kW Total (Daya Aktif)",
+          data: ptsKw,
+          borderColor: "#0284c7",
+          backgroundColor: "rgba(2, 132, 199, 0.08)",
+          borderWidth: 1.8,
+          tension: 0.2,
+          fill: true,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          spanGaps: true,
+        }
+      ]
+    };
+  }, [bottomHistory]);
 
-  const currentTrendChart = useMemo(() => ({
-    labels: bottomLabels,
-    datasets: [
-      {
-        label: "Ampere Total (A)",
-        data: bottomHistory.map((d) => (d.current_total !== null && d.current_total !== undefined ? Number(d.current_total) : (d.current_a !== null ? Number(d.current_a) + Number(d.current_b || 0) + Number(d.current_c || 0) : null))),
-        borderColor: "#8b5cf6",
-        backgroundColor: "transparent",
-        borderWidth: 1.8,
-        borderDash: [5, 5],
-        tension: 0.2,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      },
-      {
-        label: "Fasa R (A)",
-        data: bottomHistory.map((d) => (d.current_a !== null && d.current_a !== undefined ? Number(d.current_a) : null)),
-        borderColor: "#ef4444",
-        backgroundColor: "transparent",
-        borderWidth: 1.5,
-        tension: 0.2,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      },
-      {
-        label: "Fasa S (A)",
-        data: bottomHistory.map((d) => (d.current_b !== null && d.current_b !== undefined ? Number(d.current_b) : null)),
-        borderColor: "#f59e0b",
-        backgroundColor: "transparent",
-        borderWidth: 1.5,
-        tension: 0.2,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      },
-      {
-        label: "Fasa T (A)",
-        data: bottomHistory.map((d) => (d.current_c !== null && d.current_c !== undefined ? Number(d.current_c) : null)),
-        borderColor: "#10b981",
-        backgroundColor: "transparent",
-        borderWidth: 1.5,
-        tension: 0.2,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      },
-    ]
-  }), [bottomLabels, bottomHistory]);
+  const currentTrendChart = useMemo(() => {
+    const ptsTot: { x: number; y: number | null }[] = [];
+    const ptsR: { x: number; y: number | null }[] = [];
+    const ptsS: { x: number; y: number | null }[] = [];
+    const ptsT: { x: number; y: number | null }[] = [];
+    for (let i = 0; i < bottomHistory.length; i++) {
+      const d = bottomHistory[i];
+      const x = Number(d.ts);
+      if (!x) continue;
+      const tot = d.current_total !== null && d.current_total !== undefined
+        ? Number(d.current_total)
+        : (d.current_a !== null ? Number(d.current_a) + Number(d.current_b || 0) + Number(d.current_c || 0) : null);
+      ptsTot.push({ x, y: tot });
+      ptsR.push({ x, y: d.current_a !== null && d.current_a !== undefined ? Number(d.current_a) : null });
+      ptsS.push({ x, y: d.current_b !== null && d.current_b !== undefined ? Number(d.current_b) : null });
+      ptsT.push({ x, y: d.current_c !== null && d.current_c !== undefined ? Number(d.current_c) : null });
+    }
+    return {
+      datasets: [
+        {
+          label: "Ampere Total (A)",
+          data: ptsTot,
+          borderColor: "#8b5cf6",
+          backgroundColor: "transparent",
+          borderWidth: 1.8,
+          borderDash: [5, 5],
+          tension: 0.2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          spanGaps: true,
+        },
+        {
+          label: "Fasa R (A)",
+          data: ptsR,
+          borderColor: "#ef4444",
+          backgroundColor: "transparent",
+          borderWidth: 1.5,
+          tension: 0.2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          spanGaps: true,
+        },
+        {
+          label: "Fasa S (A)",
+          data: ptsS,
+          borderColor: "#f59e0b",
+          backgroundColor: "transparent",
+          borderWidth: 1.5,
+          tension: 0.2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          spanGaps: true,
+        },
+        {
+          label: "Fasa T (A)",
+          data: ptsT,
+          borderColor: "#10b981",
+          backgroundColor: "transparent",
+          borderWidth: 1.5,
+          tension: 0.2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          spanGaps: true,
+        },
+      ]
+    };
+  }, [bottomHistory]);
 
   const lineChartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     animation: false as const,
+    normalized: true,
     plugins: {
       legend: { display: false },
       tooltip: {
@@ -1967,19 +2117,32 @@ export default function PowerDistribution() {
         borderColor: isDark ? "#334155" : "#e2e8f0",
         borderWidth: 1,
         padding: 6,
+        callbacks: {
+          title: formatWibTooltipTitle,
+        },
       },
     },
     scales: {
       x: {
+        type: "linear" as const,
+        min: bottomWindowRange.min,
+        max: bottomWindowRange.max,
         grid: { color: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)" },
-        ticks: { color: isDark ? "#64748b" : "#94a3b8", font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
+        ticks: {
+          color: isDark ? "#64748b" : "#94a3b8",
+          font: { size: 9 },
+          maxRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: 13,
+          callback: (val: any) => formatWibTick(Number(val)),
+        },
       },
       y: {
         grid: { color: isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)" },
         ticks: { color: isDark ? "#64748b" : "#94a3b8", font: { size: 9 } },
       },
     },
-  }), [isDark]);
+  }), [isDark, bottomWindowRange, formatWibTick, formatWibTooltipTitle]);
 
   const multiLineChartOptions = useMemo(() => ({
     ...lineChartOptions,
@@ -2655,11 +2818,14 @@ export default function PowerDistribution() {
       {/* ═══════════ SECTION C: HISTORICAL TREND BOTTOM CHARTS ═══════════ */}
       <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-5">
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3.5">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <span className="text-sky-500 font-bold">📈</span>
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Transformator Historical Records
             </h3>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+              24 Jam Terakhir • Polling 3 Detik (FIFO)
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <select

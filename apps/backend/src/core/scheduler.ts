@@ -1492,8 +1492,30 @@ const insertHvacMinuteTelemetry = async (retainLive: HvacRetainLiveState, minute
   }
 };
 
+let lastTrafo3sTimestampStr = "";
+
 export const startIncomingElectricityPolling = () => {
   if (incomingElectricityPollingInterval) return;
+
+  // Ensure 3-second rolling 24h table exists for distribution transformers
+  getPostgresPool().query(`
+    CREATE TABLE IF NOT EXISTS electric_trafo_rolling_3s (
+      pm_id VARCHAR(32) NOT NULL,
+      t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+      volt_ab NUMERIC,
+      volt_bc NUMERIC,
+      volt_ca NUMERIC,
+      active_power_total NUMERIC,
+      current_a NUMERIC,
+      current_b NUMERIC,
+      current_c NUMERIC,
+      power_factor NUMERIC,
+      PRIMARY KEY (pm_id, t_stamp)
+    );
+    CREATE INDEX IF NOT EXISTS idx_trafo_rolling_3s_ts ON electric_trafo_rolling_3s (t_stamp);
+  `).catch((err: any) => {
+    logger.warn(`Failed to ensure electric_trafo_rolling_3s table: ${err.message}`);
+  });
 
   const poll = async () => {
     const startTime = Date.now();
@@ -1822,6 +1844,68 @@ export const startIncomingElectricityPolling = () => {
       await insertPmMinuteTelemetryBatch(ew22Parsed, minuteTs);
     }
     broadcastEwLiveTelemetry("ew22", ew22Parsed);
+
+    // 7a. Persist 3-second rolling 24-hour FIFO telemetry for Distribution Transformers
+    const wibTrafo = getWibDateTime(ts);
+    if (wibTrafo.second % 3 === 0 && wibTrafo.tStampStr !== lastTrafo3sTimestampStr) {
+      lastTrafo3sTimestampStr = wibTrafo.tStampStr;
+      const trafoTargetIds = new Set([
+        "PM139", "PM136", "PM135", "PM133", "PM201", "PM202", "PM327",
+        "PM410", "PM411", "PM412"
+      ]);
+      const allParsedForTrafo = [...ew23Parsed, ...ew21Parsed, ...ew22Parsed];
+      const trafoRowsToInsert: ElectricPmRecord[] = [];
+      const seenTrafoIds = new Set<string>();
+      for (const rec of allParsedForTrafo) {
+        const upId = (rec.pm_id || "").toUpperCase();
+        if (trafoTargetIds.has(upId) && !seenTrafoIds.has(upId)) {
+          if (rec.volt_ab !== null || rec.active_power_total !== null || rec.current_a !== null) {
+            seenTrafoIds.add(upId);
+            trafoRowsToInsert.push(rec);
+          }
+        }
+      }
+      if (trafoRowsToInsert.length > 0) {
+        const vals: any[] = [];
+        const placeholders: string[] = [];
+        let pIdx = 1;
+        for (const r of trafoRowsToInsert) {
+          placeholders.push(`(${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++}, ${pIdx++})`);
+          vals.push(
+            r.pm_id.toUpperCase(),
+            wibTrafo.tStampStr,
+            r.volt_ab,
+            r.volt_bc,
+            r.volt_ca,
+            r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : null,
+            r.current_a,
+            r.current_b,
+            r.current_c,
+            r.power_factor !== null ? Number(r.power_factor) : null
+          );
+        }
+        getPostgresPool().query(`
+          INSERT INTO electric_trafo_rolling_3s (
+            pm_id, t_stamp, volt_ab, volt_bc, volt_ca,
+            active_power_total, current_a, current_b, current_c, power_factor
+          ) VALUES ${placeholders.join(", ")}
+          ON CONFLICT (pm_id, t_stamp) DO NOTHING
+        `, vals).catch((err: any) => {
+          logger.warn(`Failed to insert 3s trafo rolling batch: ${err.message}`);
+        });
+      }
+    }
+
+    if (isNewMinute) {
+      const purgeTrafoDate = new Date(ts.getTime() - 24 * 3600 * 1000);
+      const purgeTrafoWib = getWibDateTime(purgeTrafoDate);
+      getPostgresPool().query(
+        `DELETE FROM electric_trafo_rolling_3s WHERE t_stamp < $1`,
+        [purgeTrafoWib.tStampStr]
+      ).catch((err: any) => {
+        logger.warn(`Failed to cleanup old electric_trafo_rolling_3s: ${err.message}`);
+      });
+    }
 
     // 7b. Process Dynamic Custom Power Meters (User Configured PMs)
     if (Date.now() - lastDynamicPmFetch > 30000 || (cachedDynamicCustomPms.length === 0 && lastDynamicPmFetch === 0)) {

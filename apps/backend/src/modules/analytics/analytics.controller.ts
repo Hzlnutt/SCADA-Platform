@@ -620,17 +620,73 @@ export const getPowerMeterHistoryHandler = async (
       let rollingDbRes;
       if (pmId === "PM410" || pmId === "PM8000" || pmId === "CUBICLE_PLN_PM8000") {
         rollingDbRes = await pool.query(`
-          WITH combined AS (
-            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power as active_power_total, current_a, current_b, current_c, power_factor
-            FROM electric_pln_telemetry WHERE t_stamp >= NOW() - INTERVAL '24 hours'
+          WITH wib_now AS (
+            SELECT (NOW() AT TIME ZONE 'Asia/Jakarta') AS now_ts
+          ),
+          rolling_3s_bounds AS (
+            SELECT MIN(t_stamp) AS min_3s_ts
+            FROM electric_trafo_rolling_3s, wib_now
+            WHERE pm_id = 'PM410'
+              AND t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
+          ),
+          rolling_3s_older_bucketed AS (
+            SELECT
+              (to_timestamp(floor(extract(epoch from r.t_stamp) / 30) * 30) AT TIME ZONE 'UTC') AS t_stamp,
+              AVG(r.volt_ab) AS volt_ab,
+              AVG(r.volt_bc) AS volt_bc,
+              AVG(r.volt_ca) AS volt_ca,
+              AVG(r.active_power_total) AS active_power_total,
+              AVG(r.current_a) AS current_a,
+              AVG(r.current_b) AS current_b,
+              AVG(r.current_c) AS current_c,
+              AVG(r.power_factor) AS power_factor
+            FROM electric_trafo_rolling_3s r, wib_now
+            WHERE r.pm_id = 'PM410'
+              AND r.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
+              AND r.t_stamp < wib_now.now_ts - INTERVAL '1 hour'
+            GROUP BY 1
+          ),
+          rolling_3s_recent AS (
+            SELECT
+              r.t_stamp, r.volt_ab, r.volt_bc, r.volt_ca,
+              r.active_power_total, r.current_a, r.current_b, r.current_c, r.power_factor
+            FROM electric_trafo_rolling_3s r, wib_now
+            WHERE r.pm_id = 'PM410'
+              AND r.t_stamp >= wib_now.now_ts - INTERVAL '1 hour'
+          ),
+          minute_backfill AS (
+            SELECT
+              m.t_stamp, m.volt_ab, m.volt_bc, m.volt_ca,
+              m.active_power AS active_power_total, m.current_a, m.current_b, m.current_c, m.power_factor
+            FROM electric_pln_telemetry_minute m, wib_now, rolling_3s_bounds b
+            WHERE m.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
+              AND (b.min_3s_ts IS NULL OR m.t_stamp < b.min_3s_ts)
+          ),
+          minute_bounds AS (
+            SELECT COALESCE(MIN(m.t_stamp), (SELECT min_3s_ts FROM rolling_3s_bounds)) AS min_fine_ts
+            FROM minute_backfill m
+          ),
+          hourly_backfill AS (
+            SELECT
+              h.t_stamp, h.volt_ab, h.volt_bc, h.volt_ca,
+              h.active_power AS active_power_total, h.current_a, h.current_b, h.current_c, h.power_factor
+            FROM electric_pln_telemetry h, wib_now, minute_bounds mb
+            WHERE h.t_stamp >= date_trunc('hour', wib_now.now_ts - INTERVAL '24 hours')
+              AND (mb.min_fine_ts IS NULL OR h.t_stamp < mb.min_fine_ts)
+          ),
+          combined AS (
+            SELECT * FROM hourly_backfill
             UNION ALL
-            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power as active_power_total, current_a, current_b, current_c, power_factor
-            FROM electric_pln_telemetry_minute WHERE t_stamp >= NOW() - INTERVAL '24 hours'
+            SELECT * FROM minute_backfill
+            UNION ALL
+            SELECT * FROM rolling_3s_older_bucketed
+            UNION ALL
+            SELECT * FROM rolling_3s_recent
           )
           SELECT
             to_char(t_stamp, 'HH24:MI:SS') as time,
             to_char(t_stamp, 'HH24:MI') as label,
-            extract(epoch from t_stamp) * 1000 as ts,
+            (extract(epoch from (t_stamp AT TIME ZONE 'Asia/Jakarta')) * 1000)::bigint as ts,
             extract(hour from t_stamp)::int as hour,
             volt_ab::numeric(12,2) as volt_ab,
             volt_bc::numeric(12,2) as volt_bc,
@@ -638,7 +694,7 @@ export const getPowerMeterHistoryHandler = async (
             ROUND(volt_ab / 1.7320508, 2)::numeric(12,2) as volt_rn,
             ROUND(volt_bc / 1.7320508, 2)::numeric(12,2) as volt_sn,
             ROUND(volt_ca / 1.7320508, 2)::numeric(12,2) as volt_tn,
-            active_power_total::numeric(12,2) as active_power_total,
+            ABS(active_power_total)::numeric(12,2) as active_power_total,
             current_a::numeric(12,2) as current_a,
             current_b::numeric(12,2) as current_b,
             current_c::numeric(12,2) as current_c,
@@ -650,17 +706,73 @@ export const getPowerMeterHistoryHandler = async (
         `);
       } else if (pmId === "PM411" || pmId === "PM5560" || pmId === "PM5560_WF1" || pmId === "FEEDER_WF1_PM5560") {
         rollingDbRes = await pool.query(`
-          WITH combined AS (
-            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power_total, current_a, current_b, current_c, power_factor
-            FROM electric_wf1_telemetry WHERE t_stamp >= NOW() - INTERVAL '24 hours'
+          WITH wib_now AS (
+            SELECT (NOW() AT TIME ZONE 'Asia/Jakarta') AS now_ts
+          ),
+          rolling_3s_bounds AS (
+            SELECT MIN(t_stamp) AS min_3s_ts
+            FROM electric_trafo_rolling_3s, wib_now
+            WHERE pm_id = 'PM411'
+              AND t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
+          ),
+          rolling_3s_older_bucketed AS (
+            SELECT
+              (to_timestamp(floor(extract(epoch from r.t_stamp) / 30) * 30) AT TIME ZONE 'UTC') AS t_stamp,
+              AVG(r.volt_ab) AS volt_ab,
+              AVG(r.volt_bc) AS volt_bc,
+              AVG(r.volt_ca) AS volt_ca,
+              AVG(r.active_power_total) AS active_power_total,
+              AVG(r.current_a) AS current_a,
+              AVG(r.current_b) AS current_b,
+              AVG(r.current_c) AS current_c,
+              AVG(r.power_factor) AS power_factor
+            FROM electric_trafo_rolling_3s r, wib_now
+            WHERE r.pm_id = 'PM411'
+              AND r.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
+              AND r.t_stamp < wib_now.now_ts - INTERVAL '1 hour'
+            GROUP BY 1
+          ),
+          rolling_3s_recent AS (
+            SELECT
+              r.t_stamp, r.volt_ab, r.volt_bc, r.volt_ca,
+              r.active_power_total, r.current_a, r.current_b, r.current_c, r.power_factor
+            FROM electric_trafo_rolling_3s r, wib_now
+            WHERE r.pm_id = 'PM411'
+              AND r.t_stamp >= wib_now.now_ts - INTERVAL '1 hour'
+          ),
+          minute_backfill AS (
+            SELECT
+              m.t_stamp, m.volt_ab, m.volt_bc, m.volt_ca,
+              m.active_power_total, m.current_a, m.current_b, m.current_c, m.power_factor
+            FROM electric_wf1_telemetry_minute m, wib_now, rolling_3s_bounds b
+            WHERE m.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
+              AND (b.min_3s_ts IS NULL OR m.t_stamp < b.min_3s_ts)
+          ),
+          minute_bounds AS (
+            SELECT COALESCE(MIN(m.t_stamp), (SELECT min_3s_ts FROM rolling_3s_bounds)) AS min_fine_ts
+            FROM minute_backfill m
+          ),
+          hourly_backfill AS (
+            SELECT
+              h.t_stamp, h.volt_ab, h.volt_bc, h.volt_ca,
+              h.active_power_total, h.current_a, h.current_b, h.current_c, h.power_factor
+            FROM electric_wf1_telemetry h, wib_now, minute_bounds mb
+            WHERE h.t_stamp >= date_trunc('hour', wib_now.now_ts - INTERVAL '24 hours')
+              AND (mb.min_fine_ts IS NULL OR h.t_stamp < mb.min_fine_ts)
+          ),
+          combined AS (
+            SELECT * FROM hourly_backfill
             UNION ALL
-            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power_total, current_a, current_b, current_c, power_factor
-            FROM electric_wf1_telemetry_minute WHERE t_stamp >= NOW() - INTERVAL '24 hours'
+            SELECT * FROM minute_backfill
+            UNION ALL
+            SELECT * FROM rolling_3s_older_bucketed
+            UNION ALL
+            SELECT * FROM rolling_3s_recent
           )
           SELECT
             to_char(t_stamp, 'HH24:MI:SS') as time,
             to_char(t_stamp, 'HH24:MI') as label,
-            extract(epoch from t_stamp) * 1000 as ts,
+            (extract(epoch from (t_stamp AT TIME ZONE 'Asia/Jakarta')) * 1000)::bigint as ts,
             extract(hour from t_stamp)::int as hour,
             volt_ab::numeric(12,2) as volt_ab,
             volt_bc::numeric(12,2) as volt_bc,
@@ -668,7 +780,7 @@ export const getPowerMeterHistoryHandler = async (
             ROUND(volt_ab / 1.7320508, 2)::numeric(12,2) as volt_rn,
             ROUND(volt_bc / 1.7320508, 2)::numeric(12,2) as volt_sn,
             ROUND(volt_ca / 1.7320508, 2)::numeric(12,2) as volt_tn,
-            active_power_total::numeric(12,2) as active_power_total,
+            ABS(active_power_total)::numeric(12,2) as active_power_total,
             current_a::numeric(12,2) as current_a,
             current_b::numeric(12,2) as current_b,
             current_c::numeric(12,2) as current_c,
@@ -680,17 +792,73 @@ export const getPowerMeterHistoryHandler = async (
         `);
       } else if (pmId === "PM412" || pmId === "PM5560_WF2" || pmId === "PM5500" || pmId === "FEEDER_WF2_PM5500") {
         rollingDbRes = await pool.query(`
-          WITH combined AS (
-            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power_total, current_a, current_b, current_c, power_factor
-            FROM electric_wf2_telemetry WHERE t_stamp >= NOW() - INTERVAL '24 hours'
+          WITH wib_now AS (
+            SELECT (NOW() AT TIME ZONE 'Asia/Jakarta') AS now_ts
+          ),
+          rolling_3s_bounds AS (
+            SELECT MIN(t_stamp) AS min_3s_ts
+            FROM electric_trafo_rolling_3s, wib_now
+            WHERE pm_id = 'PM412'
+              AND t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
+          ),
+          rolling_3s_older_bucketed AS (
+            SELECT
+              (to_timestamp(floor(extract(epoch from r.t_stamp) / 30) * 30) AT TIME ZONE 'UTC') AS t_stamp,
+              AVG(r.volt_ab) AS volt_ab,
+              AVG(r.volt_bc) AS volt_bc,
+              AVG(r.volt_ca) AS volt_ca,
+              AVG(r.active_power_total) AS active_power_total,
+              AVG(r.current_a) AS current_a,
+              AVG(r.current_b) AS current_b,
+              AVG(r.current_c) AS current_c,
+              AVG(r.power_factor) AS power_factor
+            FROM electric_trafo_rolling_3s r, wib_now
+            WHERE r.pm_id = 'PM412'
+              AND r.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
+              AND r.t_stamp < wib_now.now_ts - INTERVAL '1 hour'
+            GROUP BY 1
+          ),
+          rolling_3s_recent AS (
+            SELECT
+              r.t_stamp, r.volt_ab, r.volt_bc, r.volt_ca,
+              r.active_power_total, r.current_a, r.current_b, r.current_c, r.power_factor
+            FROM electric_trafo_rolling_3s r, wib_now
+            WHERE r.pm_id = 'PM412'
+              AND r.t_stamp >= wib_now.now_ts - INTERVAL '1 hour'
+          ),
+          minute_backfill AS (
+            SELECT
+              m.t_stamp, m.volt_ab, m.volt_bc, m.volt_ca,
+              m.active_power_total, m.current_a, m.current_b, m.current_c, m.power_factor
+            FROM electric_wf2_telemetry_minute m, wib_now, rolling_3s_bounds b
+            WHERE m.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
+              AND (b.min_3s_ts IS NULL OR m.t_stamp < b.min_3s_ts)
+          ),
+          minute_bounds AS (
+            SELECT COALESCE(MIN(m.t_stamp), (SELECT min_3s_ts FROM rolling_3s_bounds)) AS min_fine_ts
+            FROM minute_backfill m
+          ),
+          hourly_backfill AS (
+            SELECT
+              h.t_stamp, h.volt_ab, h.volt_bc, h.volt_ca,
+              h.active_power_total, h.current_a, h.current_b, h.current_c, h.power_factor
+            FROM electric_wf2_telemetry h, wib_now, minute_bounds mb
+            WHERE h.t_stamp >= date_trunc('hour', wib_now.now_ts - INTERVAL '24 hours')
+              AND (mb.min_fine_ts IS NULL OR h.t_stamp < mb.min_fine_ts)
+          ),
+          combined AS (
+            SELECT * FROM hourly_backfill
             UNION ALL
-            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power_total, current_a, current_b, current_c, power_factor
-            FROM electric_wf2_telemetry_minute WHERE t_stamp >= NOW() - INTERVAL '24 hours'
+            SELECT * FROM minute_backfill
+            UNION ALL
+            SELECT * FROM rolling_3s_older_bucketed
+            UNION ALL
+            SELECT * FROM rolling_3s_recent
           )
           SELECT
             to_char(t_stamp, 'HH24:MI:SS') as time,
             to_char(t_stamp, 'HH24:MI') as label,
-            extract(epoch from t_stamp) * 1000 as ts,
+            (extract(epoch from (t_stamp AT TIME ZONE 'Asia/Jakarta')) * 1000)::bigint as ts,
             extract(hour from t_stamp)::int as hour,
             volt_ab::numeric(12,2) as volt_ab,
             volt_bc::numeric(12,2) as volt_bc,
@@ -698,7 +866,7 @@ export const getPowerMeterHistoryHandler = async (
             ROUND(volt_ab / 1.7320508, 2)::numeric(12,2) as volt_rn,
             ROUND(volt_bc / 1.7320508, 2)::numeric(12,2) as volt_sn,
             ROUND(volt_ca / 1.7320508, 2)::numeric(12,2) as volt_tn,
-            active_power_total::numeric(12,2) as active_power_total,
+            ABS(active_power_total)::numeric(12,2) as active_power_total,
             current_a::numeric(12,2) as current_a,
             current_b::numeric(12,2) as current_b,
             current_c::numeric(12,2) as current_c,
@@ -710,17 +878,75 @@ export const getPowerMeterHistoryHandler = async (
         `);
       } else {
         rollingDbRes = await pool.query(`
-          WITH combined AS (
-            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power_total, current_a, current_b, current_c, power_factor
-            FROM electric_pm_telemetry WHERE UPPER(pm_id) = $1 AND t_stamp >= NOW() - INTERVAL '24 hours'
+          WITH wib_now AS (
+            SELECT (NOW() AT TIME ZONE 'Asia/Jakarta') AS now_ts
+          ),
+          rolling_3s_bounds AS (
+            SELECT MIN(t_stamp) AS min_3s_ts
+            FROM electric_trafo_rolling_3s, wib_now
+            WHERE UPPER(pm_id) = $1
+              AND t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
+          ),
+          rolling_3s_older_bucketed AS (
+            SELECT
+              (to_timestamp(floor(extract(epoch from r.t_stamp) / 30) * 30) AT TIME ZONE 'UTC') AS t_stamp,
+              AVG(r.volt_ab) AS volt_ab,
+              AVG(r.volt_bc) AS volt_bc,
+              AVG(r.volt_ca) AS volt_ca,
+              AVG(r.active_power_total) AS active_power_total,
+              AVG(r.current_a) AS current_a,
+              AVG(r.current_b) AS current_b,
+              AVG(r.current_c) AS current_c,
+              AVG(r.power_factor) AS power_factor
+            FROM electric_trafo_rolling_3s r, wib_now
+            WHERE UPPER(r.pm_id) = $1
+              AND r.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
+              AND r.t_stamp < wib_now.now_ts - INTERVAL '1 hour'
+            GROUP BY 1
+          ),
+          rolling_3s_recent AS (
+            SELECT
+              r.t_stamp, r.volt_ab, r.volt_bc, r.volt_ca,
+              r.active_power_total, r.current_a, r.current_b, r.current_c, r.power_factor
+            FROM electric_trafo_rolling_3s r, wib_now
+            WHERE UPPER(r.pm_id) = $1
+              AND r.t_stamp >= wib_now.now_ts - INTERVAL '1 hour'
+          ),
+          minute_backfill AS (
+            SELECT
+              m.t_stamp, m.volt_ab, m.volt_bc, m.volt_ca,
+              m.active_power_total, m.current_a, m.current_b, m.current_c, m.power_factor
+            FROM electric_pm_telemetry_minute m, wib_now, rolling_3s_bounds b
+            WHERE UPPER(m.pm_id) = $1
+              AND m.t_stamp >= wib_now.now_ts - INTERVAL '24 hours'
+              AND (b.min_3s_ts IS NULL OR m.t_stamp < b.min_3s_ts)
+          ),
+          minute_bounds AS (
+            SELECT COALESCE(MIN(m.t_stamp), (SELECT min_3s_ts FROM rolling_3s_bounds)) AS min_fine_ts
+            FROM minute_backfill m
+          ),
+          hourly_backfill AS (
+            SELECT
+              h.t_stamp, h.volt_ab, h.volt_bc, h.volt_ca,
+              h.active_power_total, h.current_a, h.current_b, h.current_c, h.power_factor
+            FROM electric_pm_telemetry h, wib_now, minute_bounds mb
+            WHERE UPPER(h.pm_id) = $1
+              AND h.t_stamp >= date_trunc('hour', wib_now.now_ts - INTERVAL '24 hours')
+              AND (mb.min_fine_ts IS NULL OR h.t_stamp < mb.min_fine_ts)
+          ),
+          combined AS (
+            SELECT * FROM hourly_backfill
             UNION ALL
-            SELECT t_stamp, volt_ab, volt_bc, volt_ca, active_power_total, current_a, current_b, current_c, power_factor
-            FROM electric_pm_telemetry_minute WHERE UPPER(pm_id) = $1 AND t_stamp >= NOW() - INTERVAL '24 hours'
+            SELECT * FROM minute_backfill
+            UNION ALL
+            SELECT * FROM rolling_3s_older_bucketed
+            UNION ALL
+            SELECT * FROM rolling_3s_recent
           )
           SELECT
             to_char(t_stamp, 'HH24:MI:SS') as time,
             to_char(t_stamp, 'HH24:MI') as label,
-            extract(epoch from t_stamp) * 1000 as ts,
+            (extract(epoch from (t_stamp AT TIME ZONE 'Asia/Jakarta')) * 1000)::bigint as ts,
             extract(hour from t_stamp)::int as hour,
             volt_ab::numeric(12,2) as volt_ab,
             volt_bc::numeric(12,2) as volt_bc,
@@ -728,7 +954,7 @@ export const getPowerMeterHistoryHandler = async (
             ROUND(volt_ab / 1.7320508, 2)::numeric(12,2) as volt_rn,
             ROUND(volt_bc / 1.7320508, 2)::numeric(12,2) as volt_sn,
             ROUND(volt_ca / 1.7320508, 2)::numeric(12,2) as volt_tn,
-            active_power_total::numeric(12,2) as active_power_total,
+            ABS(active_power_total)::numeric(12,2) as active_power_total,
             current_a::numeric(12,2) as current_a,
             current_b::numeric(12,2) as current_b,
             current_c::numeric(12,2) as current_c,
