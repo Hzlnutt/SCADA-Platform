@@ -1889,6 +1889,7 @@ export const startIncomingElectricityPolling = () => {
         }
         const purgeTrafoDate = new Date(ts.getTime() - 24 * 3600 * 1000);
         const purgeTrafoWib = getWibDateTime(purgeTrafoDate);
+        const savedTsMs = Math.floor(ts.getTime() / 1000) * 1000;
         getPostgresPool().query(`
           INSERT INTO electric_trafo_rolling_3s (
             pm_id, t_stamp, volt_ab, volt_bc, volt_ca,
@@ -1896,6 +1897,25 @@ export const startIncomingElectricityPolling = () => {
           ) VALUES ${placeholders.join(", ")}
           ON CONFLICT (pm_id, t_stamp) DO NOTHING
         `, vals).then(() => {
+          if (io) {
+            io.emit("electricity:trafo_3s_saved", {
+              ts: savedTsMs,
+              t_stamp: wibTrafo.tStampStr,
+              data: trafoRowsToInsert.map((r) => ({
+                pm_id: r.pm_id.toUpperCase(),
+                ts: savedTsMs,
+                t_stamp: wibTrafo.tStampStr,
+                volt_ab: r.volt_ab,
+                volt_bc: r.volt_bc,
+                volt_ca: r.volt_ca,
+                active_power_total: r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : null,
+                current_a: r.current_a,
+                current_b: r.current_b,
+                current_c: r.current_c,
+                power_factor: r.power_factor !== null ? Number(r.power_factor) : null
+              }))
+            });
+          }
           return getPostgresPool().query(
             `DELETE FROM electric_trafo_rolling_3s WHERE t_stamp < $1`,
             [purgeTrafoWib.tStampStr]

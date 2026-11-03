@@ -519,10 +519,8 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
 
     const socket = getSocket();
     const targetPmId = pmId.toUpperCase();
-    const handleModalLive = (payload: any) => {
-      if (!payload || !Array.isArray(payload.data)) return;
-      const pm = payload.data.find((item: any) => String(item.pm_id).toUpperCase() === targetPmId);
-      if (!pm) return;
+
+    const appendModalPoint = (pm: any, fallbackTs?: number) => {
       const v1 = pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : 0;
       const v2 = pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : 0;
       const v3 = pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : 0;
@@ -530,26 +528,13 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
       const c2 = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
       const c3 = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
       const p = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
-      if (v1 > 0 || p > 0 || c1 > 0) {
-        latestModalLiveRef.current = {
-          vAb: v1, vBc: v2, vCa: v3,
-          vRn: Number((v1 / 1.7320508).toFixed(1)),
-          vSn: Number((v2 / 1.7320508).toFixed(1)),
-          vTn: Number((v3 / 1.7320508).toFixed(1)),
-          kw: p,
-          iR: c1, iS: c2, iT: c3,
-          iTot: Number((c1 + c2 + c3).toFixed(1))
-        };
-      }
-    };
+      if (v1 <= 0 && p <= 0 && c1 <= 0) return;
 
-    const tickInterval = setInterval(() => {
-      const live = latestModalLiveRef.current;
       const s = modalSeriesRef.current;
-      if (!live || s.vAb.length === 0) return;
-      const nowGrid = Math.floor(Date.now() / 3000) * 3000;
-      const lastX = s.vAb[s.vAb.length - 1]?.x || 0;
-      const nextX = nowGrid > lastX ? nowGrid : lastX + 3000;
+      const lastX = s.vAb.length > 0 ? s.vAb[s.vAb.length - 1].x : 0;
+      const rawX = Number(pm.ts) || fallbackTs || Date.now();
+      if (rawX - lastX < 2500) return;
+      const nextX = rawX;
       const cutoff = nextX - 24 * 3600 * 1000;
 
       const pushAndShift = (arr: { x: number; y: number }[], val: number) => {
@@ -559,33 +544,40 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
         }
       };
 
-      pushAndShift(s.vAb, live.vAb);
-      pushAndShift(s.vBc, live.vBc);
-      pushAndShift(s.vCa, live.vCa);
-      pushAndShift(s.vRn, live.vRn);
-      pushAndShift(s.vSn, live.vSn);
-      pushAndShift(s.vTn, live.vTn);
-      pushAndShift(s.kw, live.kw);
-      pushAndShift(s.iTot, live.iTot);
-      pushAndShift(s.iR, live.iR);
-      pushAndShift(s.iS, live.iS);
-      pushAndShift(s.iT, live.iT);
+      pushAndShift(s.vAb, v1);
+      pushAndShift(s.vBc, v2);
+      pushAndShift(s.vCa, v3);
+      pushAndShift(s.vRn, Number((v1 / 1.7320508).toFixed(1)));
+      pushAndShift(s.vSn, Number((v2 / 1.7320508).toFixed(1)));
+      pushAndShift(s.vTn, Number((v3 / 1.7320508).toFixed(1)));
+      pushAndShift(s.kw, p);
+      pushAndShift(s.iTot, Number((c1 + c2 + c3).toFixed(1)));
+      pushAndShift(s.iR, c1);
+      pushAndShift(s.iS, c2);
+      pushAndShift(s.iT, c3);
 
+      setModalPointCount(s.vAb.length);
       setModalTickMs(nextX);
-    }, 3000);
+    };
 
-    socket.on("electricity:pm_live_update", handleModalLive);
-    socket.on("electricity:ew23_live", handleModalLive);
+    const handleModalSaved3s = (payload: any) => {
+      if (!payload || !Array.isArray(payload.data)) return;
+      const pm = payload.data.find((item: any) => String(item.pm_id).toUpperCase() === targetPmId);
+      if (pm) appendModalPoint(pm, Number(payload.ts));
+    };
+
+    socket.on("electricity:trafo_3s_saved", handleModalSaved3s);
     return () => {
-      clearInterval(tickInterval);
-      socket.off("electricity:pm_live_update", handleModalLive);
-      socket.off("electricity:ew23_live", handleModalLive);
+      socket.off("electricity:trafo_3s_saved", handleModalSaved3s);
     };
   }, [transformer?.id]);
 
   const modalWindowRange = useMemo(() => {
-    return { min: modalTickMs - 24 * 3600 * 1000, max: modalTickMs };
-  }, [modalTickMs]);
+    const firstX = modalSeriesRef.current.vAb[0]?.x;
+    const min24h = modalTickMs - 24 * 3600 * 1000;
+    const min = firstX && firstX > min24h ? firstX : min24h;
+    return { min: min < modalTickMs ? min : modalTickMs - 30000, max: modalTickMs };
+  }, [modalTickMs, modalPointCount]);
 
   const chartData = useMemo(() => {
     const s = modalSeriesRef.current;
@@ -1983,11 +1975,7 @@ export default function PowerDistribution() {
     const socket = getSocket();
     const targetPmId = (TRAFO_PM_MAP[bottomTxId]?.pmId || bottomTxId).toUpperCase();
 
-    const handleTrafoLive = (payload: any) => {
-      if (!payload || !Array.isArray(payload.data)) return;
-      const pm = payload.data.find((item: any) => String(item.pm_id).toUpperCase() === targetPmId);
-      if (!pm) return;
-
+    const appendBottomPoint = (pm: any, fallbackTs?: number) => {
       const v1 = pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : 0;
       const v2 = pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : 0;
       const v3 = pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : 0;
@@ -1995,29 +1983,13 @@ export default function PowerDistribution() {
       const c2 = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
       const c3 = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
       const p = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
+      if (v1 <= 0 && p <= 0 && c1 <= 0) return;
 
-      if (v1 > 0 || p > 0 || c1 > 0) {
-        latestBottomLiveRef.current = {
-          vAb: v1, vBc: v2, vCa: v3,
-          vRn: Number((v1 / 1.7320508).toFixed(1)),
-          vSn: Number((v2 / 1.7320508).toFixed(1)),
-          vTn: Number((v3 / 1.7320508).toFixed(1)),
-          kw: p,
-          iR: c1, iS: c2, iT: c3,
-          iTot: Number((c1 + c2 + c3).toFixed(1))
-        };
-      }
-    };
-
-    // Consistent 3-second FIFO sliding window ticker: every 3s adds 1 new point on the right & drops 1 point older than 24h on the left
-    const tickInterval = setInterval(() => {
-      const live = latestBottomLiveRef.current;
       const s = bottomSeriesRef.current;
-      if (!live || s.vAb.length === 0) return;
-
-      const nowGrid = Math.floor(Date.now() / 3000) * 3000;
-      const lastX = s.vAb[s.vAb.length - 1]?.x || 0;
-      const nextX = nowGrid > lastX ? nowGrid : lastX + 3000;
+      const lastX = s.vAb.length > 0 ? s.vAb[s.vAb.length - 1].x : 0;
+      const rawX = Number(pm.ts) || fallbackTs || Date.now();
+      if (rawX - lastX < 2500) return;
+      const nextX = rawX;
       const cutoff = nextX - 24 * 3600 * 1000;
 
       const pushAndShift = (arr: { x: number; y: number }[], val: number) => {
@@ -2027,40 +1999,44 @@ export default function PowerDistribution() {
         }
       };
 
-      pushAndShift(s.vAb, live.vAb);
-      pushAndShift(s.vBc, live.vBc);
-      pushAndShift(s.vCa, live.vCa);
-      pushAndShift(s.vRn, live.vRn);
-      pushAndShift(s.vSn, live.vSn);
-      pushAndShift(s.vTn, live.vTn);
-      pushAndShift(s.kw, live.kw);
-      pushAndShift(s.iTot, live.iTot);
-      pushAndShift(s.iR, live.iR);
-      pushAndShift(s.iS, live.iS);
-      pushAndShift(s.iT, live.iT);
+      pushAndShift(s.vAb, v1);
+      pushAndShift(s.vBc, v2);
+      pushAndShift(s.vCa, v3);
+      pushAndShift(s.vRn, Number((v1 / 1.7320508).toFixed(1)));
+      pushAndShift(s.vSn, Number((v2 / 1.7320508).toFixed(1)));
+      pushAndShift(s.vTn, Number((v3 / 1.7320508).toFixed(1)));
+      pushAndShift(s.kw, p);
+      pushAndShift(s.iTot, Number((c1 + c2 + c3).toFixed(1)));
+      pushAndShift(s.iR, c1);
+      pushAndShift(s.iS, c2);
+      pushAndShift(s.iT, c3);
 
+      setBottomPointCount(s.vAb.length);
       setBottomTickMs(nextX);
-    }, 3000);
+    };
 
-    socket.on("electricity:pm_live_update", handleTrafoLive);
-    socket.on("electricity:ew21_live", handleTrafoLive);
-    socket.on("electricity:ew22_live", handleTrafoLive);
-    socket.on("electricity:ew23_live", handleTrafoLive);
+    // Auto-refresh immediately when a new 3-second batch is saved into electric_trafo_rolling_3s in PostgreSQL
+    const handleTrafo3sSaved = (payload: any) => {
+      if (!payload || !Array.isArray(payload.data)) return;
+      const pm = payload.data.find((item: any) => String(item.pm_id).toUpperCase() === targetPmId);
+      if (pm) appendBottomPoint(pm, Number(payload.ts));
+    };
+
+    socket.on("electricity:trafo_3s_saved", handleTrafo3sSaved);
     socket.on("connect", fetchBottomHistory);
 
     return () => {
-      clearInterval(tickInterval);
-      socket.off("electricity:pm_live_update", handleTrafoLive);
-      socket.off("electricity:ew21_live", handleTrafoLive);
-      socket.off("electricity:ew22_live", handleTrafoLive);
-      socket.off("electricity:ew23_live", handleTrafoLive);
+      socket.off("electricity:trafo_3s_saved", handleTrafo3sSaved);
       socket.off("connect", fetchBottomHistory);
     };
   }, [bottomTxId, isPageActive]);
 
   const bottomWindowRange = useMemo(() => {
-    return { min: bottomTickMs - 24 * 3600 * 1000, max: bottomTickMs };
-  }, [bottomTickMs]);
+    const firstX = bottomSeriesRef.current.vAb[0]?.x;
+    const min24h = bottomTickMs - 24 * 3600 * 1000;
+    const min = firstX && firstX > min24h ? firstX : min24h;
+    return { min: min < bottomTickMs ? min : bottomTickMs - 30000, max: bottomTickMs };
+  }, [bottomTickMs, bottomPointCount]);
 
   const voltageTrendChart = useMemo(() => {
     const is380 = bottomVoltageMode === "380v";
