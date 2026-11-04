@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { useSystemStore } from "../../store/system.store";
 import { getJson } from "../../services/api.client";
@@ -66,6 +66,8 @@ const TAGS: TagOption[] = [
   { id: "pm273", label: "RETURN SAMPLE QC (PM273)", factory: "f2" },
   { id: "pm274", label: "F2 CHILLER RTAC 100 (BP) (PM274)", factory: "f2" },
   { id: "pm288", label: "F2 Penerangan PD (PM288)", factory: "f2" },
+  { id: "pm291", label: "F2 WH-4 (PM291)", factory: "f2" },
+  { id: "pm292", label: "F2 CHILLER RTAC 185 (PM292)", factory: "f2" },
   { id: "pm318", label: "F2 COOLING FASE-2 (PM318)", factory: "f2" },
   { id: "pm319", label: "F2 CHILLER RTAC-27S (PREP) (PM319)", factory: "f2" },
   { id: "pm320", label: "F2 WT-DU-PSG (PM320)", factory: "f2" },
@@ -160,104 +162,10 @@ const COLUMNS: Record<ReportCategory, { key: string; label: string; unit?: strin
   ],
 };
 
-/* ═══════════ MOCK DATA GENERATORS ═══════════ */
+/* ═══════════ HELPERS ═══════════ */
 const getLocalTodayString = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-
-const COVERED_MACHINES: Record<string, string[]> = {
-  "f1-mdp-1.1": [
-    "Sparepart Room & Office Prod",
-    "Warehouse-3",
-    "Penerangan Steril-1",
-    "Penerangan Security",
-    "Penerangan WT",
-    "Penerangan Utility",
-    "HVAC IP Unit-2",
-    "Cooling-1",
-    "Steril-1 Penerangan",
-    "Boiler-1",
-    "Compressor Unit-1 (Mitsui)",
-    "Workshop",
-    "IP-1",
-    "Warehouse-2",
-    "Crusher",
-    "Preparation-1",
-    "WT-1",
-    "Steril-2 Mesin",
-    "Chiller Daikin-Timur",
-    "Deep Well",
-    "Compressor Unit-3"
-  ],
-  "f1-mdp-1.2": [
-    "Chiller Daikin",
-    "HVAC Warehouse-3",
-    "DU & WT",
-    "Mini Lab & R.Server MIS",
-    "Chiller Unit-1",
-    "BP Unit-1",
-    "HVAC Unit-1"
-  ],
-  "f1-mdp-2": [
-    "Chiller Trane",
-    "Material Storage Unit-2",
-    "Corridor & R. SPV Unit-2",
-    "P. Penerangan Depan Laundry",
-    "P. Preparation Unit-2",
-    "P. WT Unit-2",
-    "P. IP Unit-2",
-    "P. Warehouse-1",
-    "P. Cooling Unit-2",
-    "P. HVAC Mezanine Unit-2",
-    "P. Chiller HVAC Unit-2",
-    "P. Capacitor Bank",
-    "Steril Unit-2",
-    "Corridor Unit-2",
-    "Penerangan Warehouse-2",
-    "Charger Battery Genset Fact-1",
-    "P. Warehouse-4",
-    "BP-3 & BP-4",
-    "Compressor Unit-2",
-    "Cooling Unit-3"
-  ],
-  "f1-mdp-3": [
-    "Office & Lab QC",
-    "P. Preparation Unit-3",
-    "P. WT Unit-3",
-    "P. IP Unit-3",
-    "P. Steril Unit-3",
-    "P. Boiler & Compressor",
-    "P. HVAC Unit-3",
-    "P. BP-5",
-    "P. BP-6",
-    "P. Boiler",
-    "Material Warehouse-2",
-    "Penerangan IP-3"
-  ],
-  "f2-putr-1": [
-    "MCC Water Treatment",
-    "Panel Preparation",
-    "Panel Produk Palletizing",
-    "Panel Weighing",
-    "Panel Laundry",
-    "Panel Mesin",
-    "Panel Bottle"
-  ],
-  "f2-putr-2": [
-    "Panel Chiller / Panel Chiller ELV +6.60",
-    "Panel Lighting Area 1",
-    "Panel Lighting Area 2",
-    "Area Utility",
-    "Panel Main Critical"
-  ],
-  "f2-putr-new": [
-    "AC WHO & New Crusher",
-    "Spare 1",
-    "Spare 2",
-    "Spare 3",
-    "Spare 4"
-  ]
 };
 
 /* ═══════════ EXPORT TO EXCEL HELPER ═══════════ */
@@ -293,11 +201,11 @@ const fmtNum = (v: any) => {
 export default function ElectricityReport() {
   const theme = useSystemStore((s) => s.theme);
   const isDark = theme === "dark";
+  void isDark;
 
   const [activeCategory, setActiveCategory] = useState<ReportCategory>("energy");
   const [selectedFactory, setSelectedFactory] = useState("f1");
   const [selectedTag, setSelectedTag] = useState("f1-mdp-3");
-  const [selectedMachine, setSelectedMachine] = useState("all");
   const [selectedGranularity, setSelectedGranularity] = useState("hour");
   const today = getLocalTodayString();
   const [dateStart, setDateStart] = useState(today);
@@ -315,18 +223,6 @@ export default function ElectricityReport() {
     return found ?? filteredTags[0];
   }, [filteredTags, selectedTag]);
 
-  // Dynamically filter machine options based on selected tag
-  const machineOptions = useMemo(() => {
-    if (!effectiveTag) return [];
-    const list = COVERED_MACHINES[effectiveTag.id] || [];
-    return [{ id: "all", label: "Semua Mesin" }, ...list.map(name => ({ id: name, label: name }))];
-  }, [effectiveTag]);
-
-  // Reset selected machine to "all" when tag changes
-  useEffect(() => {
-    setSelectedMachine("all");
-  }, [effectiveTag]);
-
   // Live backend data
   const [data, setData] = useState<Record<string, any>[]>([]);
   const [hasFiltered, setHasFiltered] = useState(false);
@@ -340,7 +236,6 @@ export default function ElectricityReport() {
         category: activeCategory.startsWith("tegangan") ? "tegangan" : activeCategory,
         factory: selectedFactory,
         tag: effectiveTag.id,
-        machine: selectedMachine,
         granularity: selectedGranularity,
         startDate: dateStart,
         endDate: dateEnd,
@@ -372,14 +267,14 @@ export default function ElectricityReport() {
       setIsLoading(false);
       setHasFiltered(true);
     }
-  }, [activeCategory, selectedFactory, effectiveTag, selectedMachine, selectedGranularity, dateStart, dateEnd]);
+  }, [activeCategory, selectedFactory, effectiveTag, selectedGranularity, dateStart, dateEnd]);
 
   const columns = COLUMNS[activeCategory];
 
   const handleExport = useCallback(() => {
-    const fn = `report_${activeCategory}_${effectiveTag?.label?.replace(/\s+/g, "_") ?? "data"}_${selectedMachine !== "all" ? `_${selectedMachine.replace(/\s+/g, "_")}` : ""}_${dateStart}_${dateEnd}.xlsx`;
+    const fn = `report_${activeCategory}_${effectiveTag?.label?.replace(/\s+/g, "_") ?? "data"}_${dateStart}_${dateEnd}.xlsx`;
     exportToExcel(data, columns, fn);
-  }, [data, columns, activeCategory, effectiveTag, selectedMachine, dateStart, dateEnd]);
+  }, [data, columns, activeCategory, effectiveTag, dateStart, dateEnd]);
 
   // Styling helpers
   const sidebarItemClass = (active: boolean) =>
@@ -498,7 +393,7 @@ export default function ElectricityReport() {
               ))}
             </select>
 
-            {/* Tag Select */}
+            {/* Power Meter / Tag Select */}
             <select
               value={effectiveTag?.id ?? ""}
               onChange={(e) => { setSelectedTag(e.target.value); setHasFiltered(false); }}
@@ -509,20 +404,7 @@ export default function ElectricityReport() {
               ))}
             </select>
 
-            {/* Machine Select (shown only if panel has sub-machines) */}
-            {selectedFactory !== "all" && machineOptions.length > 1 && (
-              <select
-                value={selectedMachine}
-                onChange={(e) => { setSelectedMachine(e.target.value); setHasFiltered(false); }}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/30 cursor-pointer"
-              >
-                {machineOptions.map(m => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
-              </select>
-            )}
-
-            {/* Granularity Select */}
+            {/* Granularity / Timeframe Select */}
             <select
               value={selectedGranularity}
               onChange={(e) => { setSelectedGranularity(e.target.value); setHasFiltered(false); }}
