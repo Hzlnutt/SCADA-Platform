@@ -255,27 +255,25 @@ export default function ElectricityReport() {
       const res = await getJson<{ data: Record<string, any>[] }>(`/analytics/electricity/report?${q}`);
       if (res && Array.isArray(res.data)) {
         const mapped = res.data.map((row) => {
-          const vll = (row.vrs !== null && row.vst !== null && row.vtr !== null)
-            ? +((Number(row.vrs) + Number(row.vst) + Number(row.vtr)) / 3).toFixed(1)
-            : (row.vrs !== null ? +Number(row.vrs).toFixed(1) : null);
-          const vln = (row.vr !== null && row.vs !== null && row.vt !== null)
-            ? +((Number(row.vr) + Number(row.vs) + Number(row.vt)) / 3).toFixed(1)
-            : (row.vr !== null ? +Number(row.vr).toFixed(1) : null);
           const kvarh = row.kvarh !== null && row.kvarh !== undefined 
             ? row.kvarh 
             : (row.kvar !== null && row.kvar !== undefined ? Math.abs(row.kvar) : null);
           const kwh = row.kwh ?? null;
-          const kvah = row.kvah !== null && row.kvah !== undefined
-            ? row.kvah
-            : (kwh !== null && kvarh !== null ? +(Math.sqrt(kwh * kwh + kvarh * kvarh)).toFixed(2) : null);
+          const kvah = row.kvah !== null && row.kvah !== undefined ? row.kvah : null;
 
           return {
             ...row,
             kvar: kvarh,
             kvarh: kvarh,
             kvah: kvah,
-            vll_avg: row.vll_avg ?? vll,
-            vln_avg: row.vln_avg ?? vln,
+            vr: row.vr ?? null,
+            vs: row.vs ?? null,
+            vt: row.vt ?? null,
+            vrs: row.vrs ?? null,
+            vst: row.vst ?? null,
+            vtr: row.vtr ?? null,
+            vll_avg: row.vll_avg ?? null,
+            vln_avg: row.vln_avg ?? null,
           };
         });
         setData(mapped);

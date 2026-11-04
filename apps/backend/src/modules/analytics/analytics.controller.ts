@@ -631,9 +631,9 @@ export const getPowerMeterHistoryHandler = async (
           volt_ab::numeric(12,2) as volt_ab,
           volt_bc::numeric(12,2) as volt_bc,
           volt_ca::numeric(12,2) as volt_ca,
-          ROUND(volt_ab / 1.7320508, 2)::numeric(12,2) as volt_rn,
-          ROUND(volt_bc / 1.7320508, 2)::numeric(12,2) as volt_sn,
-          ROUND(volt_ca / 1.7320508, 2)::numeric(12,2) as volt_tn,
+          NULL::numeric(12,2) as volt_rn,
+          NULL::numeric(12,2) as volt_sn,
+          NULL::numeric(12,2) as volt_tn,
           ABS(active_power_total)::numeric(12,2) as active_power_total,
           current_a::numeric(12,2) as current_a,
           current_b::numeric(12,2) as current_b,
@@ -691,9 +691,9 @@ export const getPowerMeterHistoryHandler = async (
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            ROUND(AVG(volt_ab) / 1.7320508, 2) as volt_rn,
-            ROUND(AVG(volt_bc) / 1.7320508, 2) as volt_sn,
-            ROUND(AVG(volt_ca) / 1.7320508, 2) as volt_tn,
+            NULL::numeric(12,2) as volt_rn,
+            NULL::numeric(12,2) as volt_sn,
+            NULL::numeric(12,2) as volt_tn,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -712,9 +712,9 @@ export const getPowerMeterHistoryHandler = async (
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            ROUND(AVG(volt_ab) / 1.7320508, 2) as volt_rn,
-            ROUND(AVG(volt_bc) / 1.7320508, 2) as volt_sn,
-            ROUND(AVG(volt_ca) / 1.7320508, 2) as volt_tn,
+            NULL::numeric(12,2) as volt_rn,
+            NULL::numeric(12,2) as volt_sn,
+            NULL::numeric(12,2) as volt_tn,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -812,9 +812,9 @@ export const getPowerMeterHistoryHandler = async (
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            ROUND(AVG(volt_ab) / 1.7320508, 2) as volt_rn,
-            ROUND(AVG(volt_bc) / 1.7320508, 2) as volt_sn,
-            ROUND(AVG(volt_ca) / 1.7320508, 2) as volt_tn,
+            NULL::numeric(12,2) as volt_rn,
+            NULL::numeric(12,2) as volt_sn,
+            NULL::numeric(12,2) as volt_tn,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -833,9 +833,9 @@ export const getPowerMeterHistoryHandler = async (
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            ROUND(AVG(volt_ab) / 1.7320508, 2) as volt_rn,
-            ROUND(AVG(volt_bc) / 1.7320508, 2) as volt_sn,
-            ROUND(AVG(volt_ca) / 1.7320508, 2) as volt_tn,
+            NULL::numeric(12,2) as volt_rn,
+            NULL::numeric(12,2) as volt_sn,
+            NULL::numeric(12,2) as volt_tn,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -933,9 +933,9 @@ export const getPowerMeterHistoryHandler = async (
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            ROUND(AVG(volt_ab) / 1.7320508, 2) as volt_rn,
-            ROUND(AVG(volt_bc) / 1.7320508, 2) as volt_sn,
-            ROUND(AVG(volt_ca) / 1.7320508, 2) as volt_tn,
+            NULL::numeric(12,2) as volt_rn,
+            NULL::numeric(12,2) as volt_sn,
+            NULL::numeric(12,2) as volt_tn,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -954,9 +954,9 @@ export const getPowerMeterHistoryHandler = async (
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            ROUND(AVG(volt_ab) / 1.7320508, 2) as volt_rn,
-            ROUND(AVG(volt_bc) / 1.7320508, 2) as volt_sn,
-            ROUND(AVG(volt_ca) / 1.7320508, 2) as volt_tn,
+            NULL::numeric(12,2) as volt_rn,
+            NULL::numeric(12,2) as volt_sn,
+            NULL::numeric(12,2) as volt_tn,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -1055,9 +1055,9 @@ export const getPowerMeterHistoryHandler = async (
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            ROUND(AVG(volt_ab) / 1.7320508, 2) as volt_rn,
-            ROUND(AVG(volt_bc) / 1.7320508, 2) as volt_sn,
-            ROUND(AVG(volt_ca) / 1.7320508, 2) as volt_tn,
+            NULL::numeric(12,2) as volt_rn,
+            NULL::numeric(12,2) as volt_sn,
+            NULL::numeric(12,2) as volt_tn,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -1077,9 +1077,9 @@ export const getPowerMeterHistoryHandler = async (
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            ROUND(AVG(volt_ab) / 1.7320508, 2) as volt_rn,
-            ROUND(AVG(volt_bc) / 1.7320508, 2) as volt_sn,
-            ROUND(AVG(volt_ca) / 1.7320508, 2) as volt_tn,
+            NULL::numeric(12,2) as volt_rn,
+            NULL::numeric(12,2) as volt_sn,
+            NULL::numeric(12,2) as volt_tn,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -1361,19 +1361,21 @@ export const getElectricityReportHandler = async (
         )
         SELECT 
           to_char(date_trunc('${truncUnit}', p.t_stamp), '${toCharFmt}') AS date_str,
-          ROUND(AVG(p.volt_ab) / 1.7320508, 1) AS vr, 
-          ROUND(AVG(p.volt_bc) / 1.7320508, 1) AS vs, 
-          ROUND(AVG(p.volt_ca) / 1.7320508, 1) AS vt,
+          NULL::numeric AS vr, 
+          NULL::numeric AS vs, 
+          NULL::numeric AS vt,
           ROUND(AVG(p.volt_ab), 1) AS vrs, 
           ROUND(AVG(p.volt_bc), 1) AS vst, 
           ROUND(AVG(p.volt_ca), 1) AS vtr,
+          ROUND(AVG(p.volt_ll), 1) AS vll_avg,
+          NULL::numeric AS vln_avg,
           AVG(p.current_a) AS ir, AVG(p.current_b) AS is_val, AVG(p.current_c) AS it, AVG(p.current_unbalance) AS in_val,
-          COALESCE(AVG(p.thd_volt_a), f.f_thdv_r) AS thdv_r,
-          COALESCE(AVG(p.thd_volt_b), f.f_thdv_s) AS thdv_s,
-          COALESCE(AVG(p.thd_volt_c), f.f_thdv_t) AS thdv_t,
-          COALESCE(AVG(p.thd_current_a), f.f_thdi_r) AS thdi_r,
-          COALESCE(AVG(p.thd_current_b), f.f_thdi_s) AS thdi_s,
-          COALESCE(AVG(p.thd_current_c), f.f_thdi_t) AS thdi_t,
+          AVG(p.thd_volt_a) AS thdv_r,
+          AVG(p.thd_volt_b) AS thdv_s,
+          AVG(p.thd_volt_c) AS thdv_t,
+          AVG(p.thd_current_a) AS thdi_r,
+          AVG(p.thd_current_b) AS thdi_s,
+          AVG(p.thd_current_c) AS thdi_t,
           AVG(p.active_power_total) AS kw,
           AVG(p.reactive_power_total) AS kvar,
           AVG(p.apparent_power_total) AS kva,
@@ -1383,8 +1385,7 @@ export const getElectricityReportHandler = async (
           MIN(p.active_energy) AS min_energy,
           COUNT(*) as sample_count
         FROM raw_pm p
-        LEFT JOIN feeder_hourly f ON f.f_bucket = date_trunc('${truncUnit}', p.t_stamp)
-        GROUP BY date_trunc('${truncUnit}', p.t_stamp), f.f_thdv_r, f.f_thdv_s, f.f_thdv_t, f.f_thdi_r, f.f_thdi_s, f.f_thdi_t
+        GROUP BY date_trunc('${truncUnit}', p.t_stamp)
         ${orderClausePm}
       `;
       const pmRes = await pool.query(pmSql, [targetPmId || "%", targetGroup || "%", `${startDate} 00:00:00`, endDate]);
@@ -1434,12 +1435,14 @@ export const getElectricityReportHandler = async (
           )
           SELECT 
             to_char(date_trunc('${truncUnit}', t_stamp), '${toCharFmt}') AS date_str,
-            ROUND(AVG(volt_ab) / 1.7320508, 1) AS vr, 
-            ROUND(AVG(volt_bc) / 1.7320508, 1) AS vs, 
-            ROUND(AVG(volt_ca) / 1.7320508, 1) AS vt,
+            NULL::numeric AS vr, 
+            NULL::numeric AS vs, 
+            NULL::numeric AS vt,
             ROUND(AVG(volt_ab), 1) AS vrs, 
             ROUND(AVG(volt_bc), 1) AS vst, 
             ROUND(AVG(volt_ca), 1) AS vtr,
+            ROUND(AVG(volt_ll), 1) AS vll_avg,
+            NULL::numeric AS vln_avg,
             AVG(current_a) AS ir, AVG(current_b) AS is_val, AVG(current_c) AS it, AVG(current_unbalance) AS in_val,
             AVG(thd_volt_a) AS thdv_r, AVG(thd_volt_b) AS thdv_s, AVG(thd_volt_c) AS thdv_t,
             AVG(thd_current_a) AS thdi_r, AVG(thd_current_b) AS thdi_s, AVG(thd_current_c) AS thdi_t,
@@ -1486,10 +1489,8 @@ export const getElectricityReportHandler = async (
       // Real reactive energy (kVARh) - calculated directly from real reactive_power_total
       const kvarhVal = kvarVal !== null ? Math.abs(kvarVal) : null;
 
-      // Real apparent energy (kVAh) - calculated directly from real apparent_power_total
-      const kvahVal = kvaVal !== null 
-        ? Math.abs(kvaVal) 
-        : (kwhVal !== null && kvarhVal !== null ? Math.sqrt(kwhVal * kwhVal + kvarhVal * kvarhVal) : null);
+      // Real apparent energy (kVAh) - only if measured directly, no formula calculation
+      const kvahVal = kvaVal !== null ? Math.abs(kvaVal) : null;
 
       return {
         date: dateStr,
@@ -1498,19 +1499,15 @@ export const getElectricityReportHandler = async (
         kwh: kwhVal !== null ? +kwhVal.toFixed(2) : null,
         kvarh: kvarhVal !== null ? +kvarhVal.toFixed(2) : null,
         kvah: kvahVal !== null ? +kvahVal.toFixed(2) : null,
-        // Tegangan tab: 380V (R-S-T / L-L) and 230V (L-N)
+        // Tegangan tab: 380V and 230V - purely raw telemetry, no synthetic math
         vr: r.vr !== null ? +Number(r.vr).toFixed(1) : null,
         vs: r.vs !== null ? +Number(r.vs).toFixed(1) : null,
         vt: r.vt !== null ? +Number(r.vt).toFixed(1) : null,
         vrs: r.vrs !== null ? +Number(r.vrs).toFixed(1) : null,
         vst: r.vst !== null ? +Number(r.vst).toFixed(1) : null,
         vtr: r.vtr !== null ? +Number(r.vtr).toFixed(1) : null,
-        vll_avg: (r.vrs !== null && r.vst !== null && r.vtr !== null)
-          ? +((Number(r.vrs) + Number(r.vst) + Number(r.vtr)) / 3).toFixed(1)
-          : (r.vrs !== null ? +Number(r.vrs).toFixed(1) : null),
-        vln_avg: (r.vr !== null && r.vs !== null && r.vt !== null)
-          ? +((Number(r.vr) + Number(r.vs) + Number(r.vt)) / 3).toFixed(1)
-          : (r.vr !== null ? +Number(r.vr).toFixed(1) : null),
+        vll_avg: r.vll_avg !== null ? +Number(r.vll_avg).toFixed(1) : null,
+        vln_avg: r.vln_avg !== null ? +Number(r.vln_avg).toFixed(1) : null,
         // Ampere tab
         ir: r.ir !== null ? +Number(r.ir).toFixed(1) : null,
         is: r.is_val !== null ? +Number(r.is_val).toFixed(1) : null,
