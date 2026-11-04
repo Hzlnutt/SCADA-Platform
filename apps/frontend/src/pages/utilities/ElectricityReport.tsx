@@ -129,10 +129,11 @@ const COLUMNS: Record<ReportCategory, { key: string; label: string; unit?: strin
     { key: "vrs", label: "V R (380V)", unit: "V" },
     { key: "vst", label: "V S (380V)", unit: "V" },
     { key: "vtr", label: "V T (380V)", unit: "V" },
+    { key: "vll_avg", label: "V L-L AVG (380V)", unit: "V" },
     { key: "vr", label: "V R-N (230V)", unit: "V" },
     { key: "vs", label: "V S-N (230V)", unit: "V" },
     { key: "vt", label: "V T-N (230V)", unit: "V" },
-    { key: "vln_avg", label: "V L-N (230V)", unit: "V" },
+    { key: "vln_avg", label: "V L-N AVG (230V)", unit: "V" },
   ],
   ampere: [
     { key: "date", label: "DATE" },
