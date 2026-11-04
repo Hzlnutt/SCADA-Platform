@@ -92,8 +92,8 @@ const GRANULARITY: GranularityOption[] = [
 
 const REPORT_TABS: { key: ReportCategory; label: string; icon: string }[] = [
   { key: "energy", label: "Energy", icon: "⚡" },
-  { key: "tegangan_380", label: "Tegangan 380V (R-S-T)", icon: "🔌" },
-  { key: "tegangan_230", label: "Tegangan 230V (L-N)", icon: "🔌" },
+  { key: "tegangan_380", label: "Tegangan 380V", icon: "🔌" },
+  { key: "tegangan_230", label: "Tegangan 230V", icon: "🔌" },
   { key: "ampere", label: "Ampere", icon: "🔋" },
   { key: "thd", label: "THD", icon: "📊" },
   { key: "daya", label: "Daya", icon: "💡" },
@@ -366,7 +366,7 @@ export default function ElectricityReport() {
                       : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
-                  <span>⚡ 380V (R-S-T)</span>
+                  <span>⚡ 380V</span>
                 </button>
                 <button
                   type="button"
@@ -377,7 +377,7 @@ export default function ElectricityReport() {
                       : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
-                  <span>🔌 230V (L-N)</span>
+                  <span>🔌 230V</span>
                 </button>
                 <button
                   type="button"
