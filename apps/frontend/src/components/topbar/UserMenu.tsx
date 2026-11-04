@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { logout } from "../../services/auth.service";
 import { useAuthStore } from "../../store/auth.store";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { useTranslation } from "../../i18n/useTranslation";
 
 const initialsFromName = (name?: string | null) => {
   if (!name) return "U";
@@ -18,6 +19,7 @@ const displayName = (name?: string | null) => {
 };
 
 export const UserMenu = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const refreshToken = useAuthStore((state) => state.refreshToken);
@@ -63,7 +65,7 @@ export const UserMenu = () => {
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-2 rounded-full bg-[#2f8f5b] px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
+        className="flex items-center gap-2 rounded-full bg-[#2f8f5b] px-3 py-1.5 text-xs font-semibold text-white shadow-sm cursor-pointer"
       >
         {user?.avatarUrl ? (
           <img
@@ -81,20 +83,20 @@ export const UserMenu = () => {
       </button>
 
       {open ? (
-        <div className="absolute right-0 mt-2 w-48 rounded-xl border border-[#d6e9fb] bg-white p-2 text-xs text-[#003b75] shadow-[0_12px_30px_rgba(31,111,181,0.18)]">
+        <div className="absolute right-0 mt-2 w-48 rounded-xl border border-[#d6e9fb] bg-white dark:bg-slate-900 dark:border-slate-700 p-2 text-xs text-[#003b75] dark:text-slate-200 shadow-[0_12px_30px_rgba(31,111,181,0.18)] z-50">
           <Link
             to="/profile"
-            className="block rounded-lg px-3 py-2 transition hover:bg-[#e8f3ff]"
+            className="block rounded-lg px-3 py-2 transition hover:bg-[#e8f3ff] dark:hover:bg-slate-800"
             onClick={() => setOpen(false)}
           >
-            Edit Profile
+            {t("userMenu.editProfile")}
           </Link>
           <Link
             to="/settings"
-            className="block rounded-lg px-3 py-2 transition hover:bg-[#e8f3ff]"
+            className="block rounded-lg px-3 py-2 transition hover:bg-[#e8f3ff] dark:hover:bg-slate-800"
             onClick={() => setOpen(false)}
           >
-            User Settings
+            {t("userMenu.userSettings")}
           </Link>
           <button
             type="button"
@@ -102,19 +104,19 @@ export const UserMenu = () => {
               setOpen(false);
               setConfirmLogout(true);
             }}
-            className="mt-1 w-full rounded-lg px-3 py-2 text-left text-[#b42318] transition hover:bg-[#ffe6df]"
+            className="mt-1 w-full rounded-lg px-3 py-2 text-left text-[#b42318] dark:text-rose-400 transition hover:bg-[#ffe6df] dark:hover:bg-rose-950/20 cursor-pointer"
           >
-            Logout
+            {t("userMenu.logout")}
           </button>
         </div>
       ) : null}
 
       <ConfirmDialog
         open={confirmLogout}
-        title="Confirm Logout"
-        description="Are you sure you want to log out of the system?"
-        confirmText="Yes"
-        cancelText="No"
+        title={t("userMenu.confirmLogoutTitle")}
+        description={t("userMenu.confirmLogoutDesc")}
+        confirmText={t("userMenu.yes")}
+        cancelText={t("userMenu.no")}
         onConfirm={handleLogout}
         onCancel={() => setConfirmLogout(false)}
       />

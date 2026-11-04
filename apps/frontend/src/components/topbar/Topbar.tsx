@@ -2,9 +2,11 @@ import { useState, useEffect } from "react";
 import { useAlarmStore } from "../../store/alarm.store";
 import { useSystemStore } from "../../store/system.store";
 import { useAuthStore } from "../../store/auth.store";
+import { useTranslation } from "../../i18n/useTranslation";
 import { UserMenu } from "./UserMenu";
 
 export const Topbar = () => {
+  const { t, language, setLanguage } = useTranslation();
   const socketStatus = useSystemStore((state) => state.socketStatus);
   const theme = useSystemStore((state) => state.theme);
   const toggleTheme = useSystemStore((state) => state.toggleTheme);
@@ -12,22 +14,23 @@ export const Topbar = () => {
   const activeAlarms = useAlarmStore(
     (state) => state.activeList.filter((alarm) => alarm.status !== "ack").length
   );
-  const statusLabel = socketStatus === "connected" ? "Realtime Online" : "Realtime Offline";
+  const statusLabel = socketStatus === "connected" ? t("topbar.realtimeOnline") : t("topbar.realtimeOffline");
   const [usdToIdr, setUsdToIdr] = useState(16200);
   const [timeStr, setTimeStr] = useState("");
 
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
+      const locale = language === "id" ? "id-ID" : "en-US";
       const optionsDate: Intl.DateTimeFormatOptions = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
-      const dateString = now.toLocaleDateString("id-ID", optionsDate);
-      const timeString = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      const dateString = now.toLocaleDateString(locale, optionsDate);
+      const timeString = now.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
       setTimeStr(`${dateString} | ${timeString}`);
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [language]);
 
   useEffect(() => {
     fetch("https://api.exchangerate.host/latest?base=USD&symbols=IDR")
@@ -51,13 +54,13 @@ export const Topbar = () => {
     <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-900 px-5 py-3 lg:flex-row lg:items-start lg:justify-between lg:px-6 transition-colors duration-300">
       <div className="min-w-0">
         <div className="text-xl font-semibold text-[#002b5c] dark:text-slate-100">
-          Halo, {displayName}!
+          {t("topbar.greeting")}, {displayName}!
         </div>
         <div className="mt-1 truncate text-base font-semibold text-[#002b5c] dark:text-slate-200">
-          WIDATRA EMS | Utility HVAC Monitoring System
+          {t("topbar.systemTitle")}
         </div>
         <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-          Plant Operations & Utilities | Local Network
+          {t("topbar.systemSubtitle")}
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-3 text-xs">
@@ -79,12 +82,12 @@ export const Topbar = () => {
               : "border-[#f5aa99] dark:border-rose-800/40 bg-[#ffe6df] dark:bg-rose-950/20 text-[#b42318] dark:text-rose-400"
           ].join(" ")}
         >
-          {socketStatus === "connected" ? "Gateway Connected" : "Gateway Offline"}
+          {socketStatus === "connected" ? t("topbar.gatewayConnected") : t("topbar.gatewayOffline")}
         </div>
 
         {/* Alarm counter */}
         <div className="rounded-full border border-[#acd3ff] dark:border-slate-700 bg-[#e8f3ff] dark:bg-slate-800 px-3 py-1.5 text-[#003b75] dark:text-slate-300 font-medium">
-          {activeAlarms} Active Alarms
+          {activeAlarms} {t("topbar.activeAlarms")}
         </div>
 
         {/* Currency Widget */}
@@ -96,11 +99,41 @@ export const Topbar = () => {
           <span className="text-[10px] text-emerald-500 font-bold">▲</span>
         </div>
 
+        {/* Language Toggle: ID / EN */}
+        <div className="flex items-center rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-800 p-0.5 text-xs font-bold shadow-xs">
+          <button
+            type="button"
+            onClick={() => setLanguage("id")}
+            className={`px-2.5 py-1 rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
+              language === "id"
+                ? "bg-sky-500 text-white shadow-sm font-extrabold"
+                : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+            }`}
+            title="Bahasa Indonesia"
+          >
+            <span className="text-sm leading-none">🇮🇩</span>
+            <span>ID</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setLanguage("en")}
+            className={`px-2.5 py-1 rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
+              language === "en"
+                ? "bg-sky-500 text-white shadow-sm font-extrabold"
+                : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+            }`}
+            title="English"
+          >
+            <span className="text-sm leading-none">🇬🇧</span>
+            <span>EN</span>
+          </button>
+        </div>
+
         {/* Dark Mode Toggle */}
         <button
           type="button"
           onClick={toggleTheme}
-          className="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
+          className="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
           aria-label="Toggle theme"
         >
           {theme === "light" ? (
@@ -123,4 +156,3 @@ export const Topbar = () => {
     </div>
   );
 };
-

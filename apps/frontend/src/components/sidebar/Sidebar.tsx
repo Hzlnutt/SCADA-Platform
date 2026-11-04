@@ -4,6 +4,7 @@ import { machineGroups } from "../../data/machines";
 import { useAuthStore } from "../../store/auth.store";
 import { getJson } from "../../services/api.client";
 import { canAccessConfigAndAudit } from "../../utils/roles";
+import { useTranslation } from "../../i18n/useTranslation";
 
 const IconDashboard = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -26,12 +27,6 @@ const IconMachine = () => (
 const IconAlarm = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 4a6 6 0 0 0-6 6v3l-2 2h16l-2-2v-3a6 6 0 0 0-6-6" /><path d="M9.5 19a2.5 2.5 0 0 0 5 0" />
-  </svg>
-);
-
-const IconHistorian = () => (
-  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="7" /><path d="M12 8v5l3 2" />
   </svg>
 );
 
@@ -86,6 +81,7 @@ const IconChevron = ({ open }: { open: boolean }) => (
 );
 
 export const Sidebar = () => {
+  const { t } = useTranslation();
   const role = useAuthStore((state) => state.user?.role ?? "user");
   const isAdmin = role === "admin";
   const canApprove =
@@ -99,23 +95,22 @@ export const Sidebar = () => {
   const canAccessConfig = canAccessConfigAndAudit(role);
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
-    const saved = localStorage.getItem("scada.sidebar.open");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // use default
-      }
+    try {
+      const saved = localStorage.getItem("scada.sidebar.open");
+      return saved ? JSON.parse(saved) : {
+        utility: true,
+        hvac: true,
+        penggunaanUtility: true,
+        operasional: true
+      };
+    } catch {
+      return {
+        utility: true,
+        hvac: true,
+        penggunaanUtility: true,
+        operasional: true
+      };
     }
-    return {
-      utility: true,
-      hvac: false,
-      penggunaanUtility: true,
-      electricity: true,
-      water: true,
-      gas: true,
-      operasional: true
-    };
   });
 
   const toggleSection = (section: string) => {
@@ -164,19 +159,21 @@ export const Sidebar = () => {
       </div>
 
       {/* MAIN MENU */}
-      <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400">MAIN MENU</div>
+      <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400">
+        {t("sidebar.mainMenu")}
+      </div>
       <nav className="flex flex-col gap-0.5 mb-5">
-        <NavItem to="/dashboard" label="Dashboard" icon={<IconDashboard />} tone="scada" />
-        <NavItem to="/plant" label="Plant Layout" icon={<IconPlant />} tone="scada" />
-        <NavItem to="/machines" label="Machines" icon={<IconMachine />} tone="scada" />
-        <NavItem to="/alarms" label="Alarms" icon={<IconAlarm />} tone="scada" />
-        <NavItem to="/analytics" label="Analytics" icon={<IconAnalytics />} tone="scada" />
-        <NavItem to="/devices" label="Devices" icon={<IconDevice />} tone="scada" />
+        <NavItem to="/dashboard" label={t("sidebar.dashboard")} icon={<IconDashboard />} tone="scada" />
+        <NavItem to="/plant" label={t("sidebar.plantLayout")} icon={<IconPlant />} tone="scada" />
+        <NavItem to="/machines" label={t("sidebar.machines")} icon={<IconMachine />} tone="scada" />
+        <NavItem to="/alarms" label={t("sidebar.alarms")} icon={<IconAlarm />} tone="scada" />
+        <NavItem to="/analytics" label={t("sidebar.analytics")} icon={<IconAnalytics />} tone="scada" />
+        <NavItem to="/devices" label={t("sidebar.devices")} icon={<IconDevice />} tone="scada" />
       </nav>
 
       {/* MACHINE PAGES */}
       <div className="mb-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400">
-        MACHINE PAGES
+        {t("sidebar.machinePages")}
       </div>
       <div className="flex flex-col gap-2 mb-5 pl-2">
         {/* UTILITY SUB-ACCORDION */}
@@ -184,21 +181,20 @@ export const Sidebar = () => {
           <button
             type="button"
             onClick={() => toggleSection("utility")}
-            className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white"
+            className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white cursor-pointer"
           >
             <span className="flex items-center gap-1.5">
               <IconMachine />
-              <span>Utility</span>
+              <span>{t("sidebar.utility")}</span>
             </span>
             <IconChevron open={openSections.utility} />
           </button>
           {openSections.utility && (
             <div className="flex flex-col gap-1 mt-1 border-l border-[#acd3ff] dark:border-slate-800 ml-2 pl-2">
-              
               {/* Factory 1 Sub-division */}
               <div className="mt-1">
                 <div className="text-[10px] uppercase font-extrabold text-[#002b5c] dark:text-sky-400 tracking-wider mb-1 px-1 flex items-center gap-1.5">
-                  🏭 <span>Factory 1</span>
+                  🏭 <span>{t("sidebar.factory1")}</span>
                 </div>
                 <div className="flex flex-col gap-0.5 border-l border-slate-200 dark:border-slate-800/40 pl-2">
                   <NavItem to="/machines/cooling-water-system/factory-1/cooling-water-1" label="Cooling Tower WF1-U3" tone="scada" />
@@ -211,7 +207,7 @@ export const Sidebar = () => {
               {/* Factory 2 Sub-division */}
               <div className="mt-3">
                 <div className="text-[10px] uppercase font-extrabold text-[#002b5c] dark:text-sky-400 tracking-wider mb-1 px-1 flex items-center gap-1.5">
-                  🏭 <span>Factory 2</span>
+                  🏭 <span>{t("sidebar.factory2")}</span>
                 </div>
                 <div className="flex flex-col gap-0.5 border-l border-slate-200 dark:border-slate-800/40 pl-2">
                   <NavItem to="/machines/cooling-water-system/factory-2/cooling-water-2" label="Cooling Tower WF2" tone="scada" />
@@ -220,7 +216,6 @@ export const Sidebar = () => {
                   <NavItem to="/machines/chiller-system/factory-2/chiller-fact-2" label="Chiller Fact-2" tone="scada" />
                 </div>
               </div>
-
             </div>
           )}
         </div>
@@ -230,69 +225,35 @@ export const Sidebar = () => {
           <button
             type="button"
             onClick={() => toggleSection("hvac")}
-            className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white"
+            className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white cursor-pointer"
           >
             <span className="flex items-center gap-1.5">
               <IconBolt />
-              <span>HVAC</span>
+              <span>{t("sidebar.hvac")}</span>
             </span>
             <IconChevron open={openSections.hvac} />
           </button>
           {openSections.hvac && (
             <div className="flex flex-col gap-0.5 mt-1 border-l border-[#acd3ff] dark:border-slate-800 ml-2 max-h-72 overflow-y-auto scrollbar-thin">
-              {/* HVAC QC */}
               <div className="pl-6 py-1 text-[10px] uppercase font-bold text-[#47729f] dark:text-[#79b6eb]/70 tracking-wider">HVAC QC</div>
               {hvacQcGroup?.units.map((unit) => (
-                <NavItem
-                  key={unit.id}
-                  to={`/machines/hvac-qc/${unit.id}`}
-                  label={unit.unitLabel}
-                  tone="scada"
-                />
+                <NavItem key={unit.id} to={`/machines/hvac-qc/${unit.id}`} label={unit.unitLabel} tone="scada" />
               ))}
-
-              {/* HVAC Warehouse */}
               <div className="pl-6 py-1 text-[10px] uppercase font-bold text-[#47729f] dark:text-[#79b6eb]/70 tracking-wider">HVAC Warehouse</div>
               {hvacWarehouseGroup?.units.map((unit) => (
-                <NavItem
-                  key={unit.id}
-                  to={`/machines/hvac-warehouse/${unit.id}`}
-                  label={unit.unitLabel}
-                  tone="scada"
-                />
+                <NavItem key={unit.id} to={`/machines/hvac-warehouse/${unit.id}`} label={unit.unitLabel} tone="scada" />
               ))}
-
-              {/* HVAC Production WF1 */}
               <div className="pl-6 py-1 text-[10px] uppercase font-bold text-[#47729f] dark:text-[#79b6eb]/70 tracking-wider">HVAC Production WF1</div>
               {hvacWf1Group?.units.map((unit) => (
-                <NavItem
-                  key={unit.id}
-                  to={`/machines/hvac-wf1u3/${unit.id}`}
-                  label={unit.unitLabel}
-                  tone="scada"
-                />
+                <NavItem key={unit.id} to={`/machines/hvac-wf1u3/${unit.id}`} label={unit.unitLabel} tone="scada" />
               ))}
-
-              {/* HVAC Production WF2U1 */}
               <div className="pl-6 py-1 text-[10px] uppercase font-bold text-[#47729f] dark:text-[#79b6eb]/70 tracking-wider">HVAC Production WF2U1</div>
               {hvacWf2u1Group?.units.map((unit) => (
-                <NavItem
-                  key={unit.id}
-                  to={`/machines/hvac-wf2u1/${unit.id}`}
-                  label={unit.unitLabel}
-                  tone="scada"
-                />
+                <NavItem key={unit.id} to={`/machines/hvac-wf2u1/${unit.id}`} label={unit.unitLabel} tone="scada" />
               ))}
-
-              {/* HVAC Production WF2U2 */}
               <div className="pl-6 py-1 text-[10px] uppercase font-bold text-[#47729f] dark:text-[#79b6eb]/70 tracking-wider">HVAC Production WF2U2</div>
               {hvacWf2u2Group?.units.map((unit) => (
-                <NavItem
-                  key={unit.id}
-                  to={`/machines/hvac-wf2u2/${unit.id}`}
-                  label={unit.unitLabel}
-                  tone="scada"
-                />
+                <NavItem key={unit.id} to={`/machines/hvac-wf2u2/${unit.id}`} label={unit.unitLabel} tone="scada" />
               ))}
             </div>
           )}
@@ -312,9 +273,9 @@ export const Sidebar = () => {
         <button
           type="button"
           onClick={() => toggleSection("penggunaanUtility")}
-          className="flex w-full items-center justify-between py-1 text-left text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400 hover:text-[#002b5c] dark:hover:text-white"
+          className="flex w-full items-center justify-between py-1 text-left text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400 hover:text-[#002b5c] dark:hover:text-white cursor-pointer"
         >
-          <span>UTILITY CONSUMPTION</span>
+          <span>{t("sidebar.utilityConsumption")}</span>
           <IconChevron open={openSections.penggunaanUtility} />
         </button>
       </div>
@@ -326,22 +287,22 @@ export const Sidebar = () => {
             <button
               type="button"
               onClick={() => toggleSection("electricity")}
-              className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white"
+              className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white cursor-pointer"
             >
               <span className="flex items-center gap-1.5">
                 <IconDevice />
-                <span>Electricity</span>
+                <span>{t("sidebar.electricity")}</span>
               </span>
               <IconChevron open={openSections.electricity} />
             </button>
             {openSections.electricity && (
               <div className="flex flex-col gap-0.5 mt-1 border-l border-[#acd3ff] dark:border-slate-800 ml-2.5 pl-1.5">
-                <NavItem to="/listrik" label="Overview" tone="scada" />
-                <NavItem to="/listrik/incoming-pln" label="Incoming PLN" tone="scada" />
-                <NavItem to="/listrik/incoming-fact-1" label="Incoming Fact-1" tone="scada" />
-                <NavItem to="/listrik/incoming-fact-2" label="Incoming Fact-2" tone="scada" />
-                <NavItem to="/listrik/distribusi" label="Distribusi Daya" tone="scada" />
-                <NavItem to="/listrik/report" label="Report" tone="scada" />
+                <NavItem to="/listrik" label={t("sidebar.overview")} tone="scada" />
+                <NavItem to="/listrik/incoming-pln" label={t("sidebar.incomingPln")} tone="scada" />
+                <NavItem to="/listrik/incoming-fact-1" label={t("sidebar.incomingFact1")} tone="scada" />
+                <NavItem to="/listrik/incoming-fact-2" label={t("sidebar.incomingFact2")} tone="scada" />
+                <NavItem to="/listrik/distribusi" label={t("sidebar.powerDistribution")} tone="scada" />
+                <NavItem to="/listrik/report" label={t("sidebar.report")} tone="scada" />
               </div>
             )}
           </div>
@@ -351,45 +312,46 @@ export const Sidebar = () => {
             <button
               type="button"
               onClick={() => toggleSection("gas")}
-              className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white"
+              className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white cursor-pointer"
             >
               <span className="flex items-center gap-1.5">
                 <IconDevice />
-                <span>Gas</span>
+                <span>{t("sidebar.gas")}</span>
               </span>
               <IconChevron open={openSections.gas} />
             </button>
             {openSections.gas && (
               <div className="flex flex-col gap-0.5 mt-1 border-l border-[#acd3ff] dark:border-slate-800 ml-2.5 pl-1.5">
-                <NavItem to="/gas" label="Overview" tone="scada" />
-                <NavItem to="/gas/distribusi" label="Distribusi Gas" tone="scada" />
+                <NavItem to="/gas" label={t("sidebar.overview")} tone="scada" />
+                <NavItem to="/gas/distribusi" label={t("sidebar.gasDistribution")} tone="scada" />
               </div>
             )}
           </div>
+
           {/* Collapsible Water Item */}
           <div className="mb-1">
             <button
               type="button"
               onClick={() => toggleSection("water")}
-              className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white"
+              className="flex w-full items-center justify-between py-1 text-left text-[11px] font-semibold text-[#47729f] dark:text-[#8bbce9] hover:text-[#002b5c] dark:hover:text-white cursor-pointer"
             >
               <span className="flex items-center gap-1.5">
                 <IconDevice />
-                <span>Water</span>
+                <span>{t("sidebar.water")}</span>
               </span>
               <IconChevron open={openSections.water} />
             </button>
             {openSections.water && (
               <div className="flex flex-col gap-0.5 mt-1 border-l border-[#acd3ff] dark:border-slate-800 ml-2.5 pl-1.5">
-                <NavItem to="/air" label="Overview" tone="scada" />
-                <NavItem to="/air/distribusi" label="Distribusi Air" tone="scada" />
-                <NavItem to="/air/energy" label="Energy" tone="scada" />
+                <NavItem to="/air" label={t("sidebar.overview")} tone="scada" />
+                <NavItem to="/air/distribusi" label={t("sidebar.waterDistribution")} tone="scada" />
+                <NavItem to="/air/energy" label={t("sidebar.waterEnergy")} tone="scada" />
               </div>
             )}
           </div>
-          <NavItem to="/wwtp" label="WWTP" icon={<IconDevice />} tone="scada" />
-          <NavItem to="/utility-billing" label="Billing" icon={<IconReport />} tone="scada" />
-          {canAccessConfig && <NavItem to="/utility-config" label="Config" icon={<IconSettings />} tone="scada" />}
+          <NavItem to="/wwtp" label={t("sidebar.wwtp")} icon={<IconDevice />} tone="scada" />
+          <NavItem to="/utility-billing" label={t("sidebar.billing")} icon={<IconReport />} tone="scada" />
+          {canAccessConfig && <NavItem to="/utility-config" label={t("sidebar.config")} icon={<IconSettings />} tone="scada" />}
         </nav>
       )}
 
@@ -398,33 +360,33 @@ export const Sidebar = () => {
         <button
           type="button"
           onClick={() => toggleSection("operasional")}
-          className="flex w-full items-center justify-between py-1 text-left text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400 hover:text-[#002b5c] dark:hover:text-white"
+          className="flex w-full items-center justify-between py-1 text-left text-xs font-semibold uppercase tracking-[0.18em] text-[#47729f] dark:text-sky-400 hover:text-[#002b5c] dark:hover:text-white cursor-pointer"
         >
-          <span>OPERATIONS</span>
+          <span>{t("sidebar.operations")}</span>
           <IconChevron open={openSections.operasional} />
         </button>
       </div>
 
       {openSections.operasional && (
         <nav className="flex flex-col gap-0.5 mb-5 pl-2">
-          <NavItem to="/tasks" label="Tasks" icon={<IconReport />} tone="scada" />
-          <NavItem to="/reports" label="Reports" icon={<IconReport />} tone="scada" />
-          <NavItem to="/settings" label="Settings" icon={<IconSettings />} tone="scada" />
-          {canAccessConfig && <NavItem to="/settings/machines" label="Machine Config" icon={<IconSettings />} tone="scada" />}
-          {canApprove && <NavItem to="/approvals" label="Approvals" icon={<IconReport />} tone="scada" />}
+          <NavItem to="/tasks" label={t("sidebar.tasks")} icon={<IconReport />} tone="scada" />
+          <NavItem to="/reports" label={t("sidebar.reports")} icon={<IconReport />} tone="scada" />
+          <NavItem to="/settings" label={t("sidebar.settings")} icon={<IconSettings />} tone="scada" />
+          {canAccessConfig && <NavItem to="/settings/machines" label={t("sidebar.machineConfig")} icon={<IconSettings />} tone="scada" />}
+          {canApprove && <NavItem to="/approvals" label={t("sidebar.approvals")} icon={<IconReport />} tone="scada" />}
 
-          {isAdmin && <NavItem to="/admin" label="Admin Panel" icon={<IconAdmin />} tone="scada" />}
-          {canAccessConfig && <NavItem to="/audit-trail" label="Audit Trail" icon={<IconReport />} tone="scada" />}
+          {isAdmin && <NavItem to="/admin" label={t("sidebar.adminPanel")} icon={<IconAdmin />} tone="scada" />}
+          {canAccessConfig && <NavItem to="/audit-trail" label={t("sidebar.auditTrail")} icon={<IconReport />} tone="scada" />}
         </nav>
       )}
 
       <div className="mt-auto rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-[#eef6ff]/80 dark:bg-slate-950 p-3 text-xs transition-colors duration-300 space-y-1.5 shadow-xs">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#47729f] dark:text-slate-400">Server IP</span>
+          <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#47729f] dark:text-slate-400">{t("sidebar.serverIp")}</span>
           <span className="font-mono font-bold text-[#002b5c] dark:text-sky-300 text-[11px]">{netInfo.serverIp}</span>
         </div>
         <div className="flex items-center justify-between gap-2 border-t border-[#acd3ff]/50 dark:border-slate-800/80 pt-1.5">
-          <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#47729f] dark:text-slate-400">Client IP</span>
+          <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#47729f] dark:text-slate-400">{t("sidebar.clientIp")}</span>
           <span className="font-mono font-bold text-[#002b5c] dark:text-emerald-400 text-[11px]">{netInfo.clientIp}</span>
         </div>
       </div>

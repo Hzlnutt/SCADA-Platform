@@ -11,6 +11,7 @@ import { canAccessConfigAndAudit } from "../../utils/roles";
 import { EwPowerMetersGrid } from "../../components/electricity/EwPowerMetersGrid";
 import type { ElectricPmItem } from "../../components/electricity/PmDetailModal";
 import { getPmSortIndex } from "../../data/pmMapping";
+import { useTranslation } from "../../i18n/useTranslation";
 
 /* ═══════════ DETAILED COVERED DIRECTORY ═══════════ */
 const COVERED_EQUIPMENT: Record<string, { group?: string; breaker: string; load: string; label: string }[]> = {
@@ -1413,6 +1414,7 @@ function TransformerSymbol() {
 
 /* ═══════════ MAIN COMPONENT ═══════════ */
 export default function PowerDistribution() {
+  const { t, language } = useTranslation();
   const isPageActive = usePageActive();
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
@@ -2325,8 +2327,8 @@ export default function PowerDistribution() {
       {/* HEADER */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <PageHeader
-          title="Single Line Diagram — Distribusi Daya"
-          description="Monitoring diagram garis tunggal jaringan distribusi kelistrikan Factory 1 & Factory 2"
+          title={t("electricity.distributionSldTitle")}
+          description={t("electricity.distributionSldDesc")}
         />
         <div className="flex items-center gap-4">
           {canAccessConfig && (
@@ -2334,11 +2336,11 @@ export default function PowerDistribution() {
               onClick={handleOpenConfig}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition border border-slate-200 dark:border-slate-700 shadow-sm"
             >
-              ⚙️ Config Load
+              ⚙️ {t("electricity.configLoad")}
             </button>
           )}
           <div className="px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm flex items-center gap-3">
-            <span className="text-[10px] font-extrabold uppercase text-slate-400">Total Load</span>
+            <span className="text-[10px] font-extrabold uppercase text-slate-400">{t("electricity.totalLoad")}</span>
             {loadingSld ? (
               <span className="inline-block h-5 w-20 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />
             ) : (
@@ -2348,7 +2350,7 @@ export default function PowerDistribution() {
             )}
           </div>
           <div className="px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm flex items-center gap-3">
-            <span className="text-[10px] font-extrabold uppercase text-slate-400">Kapasitas</span>
+            <span className="text-[10px] font-extrabold uppercase text-slate-400">{t("electricity.capacity")}</span>
             <span className="text-base font-extrabold font-mono text-slate-800 dark:text-white">
               {totalCapacityKva.toLocaleString("id-ID")} <span className="text-xs text-slate-400 font-bold">kVA</span>
             </span>
@@ -2924,10 +2926,10 @@ export default function PowerDistribution() {
           <div className="flex items-center gap-2.5 flex-wrap">
             <span className="text-sky-500 font-bold">📈</span>
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Transformator Historical Records
+              {t("electricity.trafoRecords")}
             </h3>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
-              24 Jam Terakhir • Polling 3 Detik (FIFO)
+              {t("electricity.trafoBadge")}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -2957,7 +2959,7 @@ export default function PowerDistribution() {
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                  Voltage Record (V) — {bottomVoltageMode === "380v" ? "Tegangan 380V" : "Tegangan 230V"}
+                  {t("electricity.voltageRecord")} {bottomVoltageMode === "380v" ? t("electricity.voltage380Label") : t("electricity.voltage230Label")}
                 </h4>
                 {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
               </div>
@@ -2990,7 +2992,7 @@ export default function PowerDistribution() {
                   type="button"
                   onClick={() => setBottomZoomChart("voltage")}
                   className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 transition cursor-pointer"
-                  title="Perbesar Chart Voltage"
+                  title={t("electricity.zoomVoltageChart")}
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
@@ -3014,14 +3016,14 @@ export default function PowerDistribution() {
           {/* Daya Aktif */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Daya Aktif Record — kW Total (kW)</h4>
+              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">{t("electricity.activePowerRecord")}</h4>
               <div className="flex items-center gap-2">
                 {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
                 <button
                   type="button"
                   onClick={() => setBottomZoomChart("power")}
                   className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold text-sky-600 dark:text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 transition cursor-pointer"
-                  title="Perbesar Chart Daya Aktif"
+                  title={t("electricity.zoomPowerChart")}
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
@@ -3045,14 +3047,14 @@ export default function PowerDistribution() {
           {/* Ampere */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Ampere Record (A) — Total & 3 Fasa (R, S, T)</h4>
+              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">{t("electricity.ampereRecord")}</h4>
               <div className="flex items-center gap-2">
                 {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
                 <button
                   type="button"
                   onClick={() => setBottomZoomChart("current")}
                   className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 transition cursor-pointer"
-                  title="Perbesar Chart Ampere"
+                  title={t("electricity.zoomAmpereChart")}
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
@@ -3123,7 +3125,7 @@ export default function PowerDistribution() {
                           : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                       }`}
                     >
-                      Tegangan 380V
+                      {t("electricity.voltage380Label")}
                     </button>
                     <button
                       type="button"
@@ -3134,7 +3136,7 @@ export default function PowerDistribution() {
                           : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                       }`}
                     >
-                      Tegangan 230V
+                      {t("electricity.voltage230Label")}
                     </button>
                   </div>
                 )}
@@ -3144,7 +3146,7 @@ export default function PowerDistribution() {
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer"
                   title="Tutup Modal"
                 >
-                  <span>Tutup</span>
+                  <span>{t("common.close")}</span>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -3164,7 +3166,7 @@ export default function PowerDistribution() {
             </div>
 
             <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-3 text-xs text-slate-400">
-              <span>Data telemetri transformator tersinkronisasi per 3 detik secara rolling kontinu.</span>
+              <span>{t("electricity.syncNote")}</span>
               <span className="text-[11px]">Tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] border border-slate-200 dark:border-slate-700">ESC</kbd> untuk menutup</span>
             </div>
           </div>

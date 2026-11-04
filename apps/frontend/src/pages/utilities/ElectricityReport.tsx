@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { useSystemStore } from "../../store/system.store";
 import { getJson } from "../../services/api.client";
+import { useTranslation } from "../../i18n/useTranslation";
 
 /* ═══════════ TYPES ═══════════ */
 type ReportCategory = "energy" | "tegangan_380" | "tegangan_230" | "tegangan" | "ampere" | "thd" | "daya";
@@ -11,12 +12,6 @@ type TagOption = { id: string; label: string; factory: string };
 type GranularityOption = { id: string; label: string };
 
 /* ═══════════ CONSTANTS ═══════════ */
-const FACTORIES: FactoryOption[] = [
-  { id: "all", label: "Semua Factory" },
-  { id: "f1", label: "Factory 1" },
-  { id: "f2", label: "Factory 2" },
-];
-
 const TAGS: TagOption[] = [
   // ─── Factory 1 (WF1 - ew21) ───
   { id: "f1-mdp-1.1", label: "F1 MDP-1.1 (PM139)", factory: "f1" },
@@ -82,21 +77,6 @@ const TAGS: TagOption[] = [
   { id: "pm411", label: "incoming cubicle pln (PM411)", factory: "all" },
   { id: "pm412", label: "incoming cubicle WF1 (PM412)", factory: "f1" },
   { id: "pm410", label: "incoming cubicle WF2 (PM410)", factory: "f2" },
-];
-
-const GRANULARITY: GranularityOption[] = [
-  { id: "hour", label: "Hour" },
-  { id: "day", label: "Day" },
-  { id: "month", label: "Month" },
-];
-
-const REPORT_TABS: { key: ReportCategory; label: string; icon: string }[] = [
-  { key: "energy", label: "Energy", icon: "⚡" },
-  { key: "tegangan_380", label: "Tegangan 380V", icon: "🔌" },
-  { key: "tegangan_230", label: "Tegangan 230V", icon: "🔌" },
-  { key: "ampere", label: "Ampere", icon: "🔋" },
-  { key: "thd", label: "THD", icon: "📊" },
-  { key: "daya", label: "Daya", icon: "💡" },
 ];
 
 const COLUMNS: Record<ReportCategory, { key: string; label: string; unit?: string }[]> = {
@@ -209,9 +189,31 @@ const fmtNum = (v: any) => {
 
 /* ═══════════ MAIN COMPONENT ═══════════ */
 export default function ElectricityReport() {
+  const { t } = useTranslation();
   const theme = useSystemStore((s) => s.theme);
   const isDark = theme === "dark";
   void isDark;
+
+  const factories: FactoryOption[] = useMemo(() => [
+    { id: "all", label: t("electricity.allFactories") },
+    { id: "f1", label: "Factory 1" },
+    { id: "f2", label: "Factory 2" },
+  ], [t]);
+
+  const granularity: GranularityOption[] = useMemo(() => [
+    { id: "hour", label: t("electricity.granularity.hour") },
+    { id: "day", label: t("electricity.granularity.day") },
+    { id: "month", label: t("electricity.granularity.month") },
+  ], [t]);
+
+  const reportTabs = useMemo(() => [
+    { key: "energy" as ReportCategory, label: t("electricity.tabs.energy"), icon: "⚡" },
+    { key: "tegangan_380" as ReportCategory, label: t("electricity.tabs.tegangan_380"), icon: "🔌" },
+    { key: "tegangan_230" as ReportCategory, label: t("electricity.tabs.tegangan_230"), icon: "🔌" },
+    { key: "ampere" as ReportCategory, label: t("electricity.tabs.ampere"), icon: "🔋" },
+    { key: "thd" as ReportCategory, label: t("electricity.tabs.thd"), icon: "📊" },
+    { key: "daya" as ReportCategory, label: t("electricity.tabs.daya"), icon: "💡" },
+  ], [t]);
 
   const [activeCategory, setActiveCategory] = useState<ReportCategory>("energy");
   const [selectedFactory, setSelectedFactory] = useState("f1");
@@ -308,8 +310,8 @@ export default function ElectricityReport() {
     <div className="space-y-5">
       {/* Page Header */}
       <PageHeader
-        title="Laporan Kelistrikan"
-        description="Report data historis parameter kelistrikan per transformator"
+        title={t("electricity.reportTitle")}
+        description={t("electricity.reportDesc")}
       />
 
       {/* Main Content: Sidebar + Table */}
@@ -325,12 +327,14 @@ export default function ElectricityReport() {
             <svg style={{ width: 16, height: 16 }} className="text-sky-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200 uppercase tracking-wider">Reports</span>
+            <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+              {t("electricity.reportsSidebarTitle")}
+            </span>
           </div>
 
           {/* Category List */}
           <div className="p-3 space-y-1.5">
-            {REPORT_TABS.map((tab) => (
+            {reportTabs.map((tab) => (
               <div
                 key={tab.key}
                 className={sidebarItemClass(activeCategory === tab.key)}
@@ -360,7 +364,7 @@ export default function ElectricityReport() {
           >
             {/* Category Title */}
             <h3 className="text-sm font-extrabold text-slate-800 dark:text-white mr-2 flex-shrink-0">
-              <span>{REPORT_TABS.find(t => t.key === activeCategory)?.label ?? "Report"}</span>
+              <span>{reportTabs.find(t => t.key === activeCategory)?.label ?? t("common.report")}</span>
             </h3>
 
             {/* Quick Toggle for Voltage 380V vs 230V */}
@@ -397,7 +401,7 @@ export default function ElectricityReport() {
                       : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
-                  <span>📊 Semua</span>
+                  <span>📊 {t("common.all")}</span>
                 </button>
               </div>
             )}
@@ -408,7 +412,7 @@ export default function ElectricityReport() {
               onChange={(e) => { setSelectedFactory(e.target.value); setHasFiltered(false); }}
               className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
             >
-              {FACTORIES.map(f => (
+              {factories.map(f => (
                 <option key={f.id} value={f.id}>{f.label}</option>
               ))}
             </select>
@@ -431,7 +435,7 @@ export default function ElectricityReport() {
               onChange={(e) => { setSelectedGranularity(e.target.value); setHasFiltered(false); }}
               className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
             >
-              {GRANULARITY.map(g => (
+              {granularity.map(g => (
                 <option key={g.id} value={g.id}>{g.label}</option>
               ))}
             </select>
@@ -442,19 +446,21 @@ export default function ElectricityReport() {
               value={dateStart}
               onChange={(e) => { setDateStart(e.target.value); setHasFiltered(false); }}
               className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
-            />
+            >
+            </input>
             <input
               type="date"
               value={dateEnd}
               onChange={(e) => { setDateEnd(e.target.value); setHasFiltered(false); }}
               className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
-            />
+            >
+            </input>
 
             {/* Filter Button */}
             <button
               onClick={handleFilter}
               disabled={isLoading}
-              className="px-4 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white text-xs font-extrabold uppercase tracking-wider transition-colors shadow-sm shadow-sky-500/20 flex items-center gap-1.5"
+              className="px-4 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white text-xs font-extrabold uppercase tracking-wider transition-colors shadow-sm shadow-sky-500/20 flex items-center gap-1.5 cursor-pointer"
             >
               {isLoading ? (
                 <span key="btn-loading" className="inline-flex items-center gap-1.5">
@@ -462,10 +468,10 @@ export default function ElectricityReport() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                   </svg>
-                  <span>Memuat...</span>
+                  <span>{t("common.loading")}</span>
                 </span>
               ) : (
-                <span key="btn-idle">Filter</span>
+                <span key="btn-idle">{t("common.filter")}</span>
               )}
             </button>
 
@@ -473,9 +479,9 @@ export default function ElectricityReport() {
             <button
               onClick={handleExport}
               disabled={data.length === 0 || isLoading}
-              className="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-extrabold uppercase tracking-wider transition-colors shadow-sm shadow-emerald-500/20"
+              className="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-extrabold uppercase tracking-wider transition-colors shadow-sm shadow-emerald-500/20 cursor-pointer"
             >
-              <span>Export to Excel</span>
+              <span>{t("common.exportExcel")}</span>
             </button>
           </div>
 
@@ -488,7 +494,7 @@ export default function ElectricityReport() {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                 </svg>
                 <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
-                  <span>Mengambil data real dari database...</span>
+                  <span>{t("electricity.loadingData")}</span>
                 </p>
               </div>
             ) : !hasFiltered ? (
@@ -498,18 +504,16 @@ export default function ElectricityReport() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v.75" />
                 </svg>
                 <p className="text-sm font-bold text-slate-400 dark:text-slate-500">
-                  <span>Pilih parameter dan klik </span>
-                  <span className="text-sky-500">Filter</span>
-                  <span> untuk menampilkan data</span>
+                  <span>{t("electricity.filterPrompt")}</span>
                 </p>
                 <p className="text-xs text-slate-300 dark:text-slate-600 mt-1">
-                  <span>Data akan ditarik langsung dari database historis telemetri</span>
+                  <span>{t("electricity.directDbNote")}</span>
                 </p>
               </div>
             ) : data.length === 0 ? (
               <div key="state-empty" className="flex flex-col items-center justify-center h-full py-20 text-center">
                 <p className="text-sm font-bold text-slate-400">
-                  <span>Tidak ada data untuk filter yang dipilih di database</span>
+                  <span>{t("electricity.noDataMatch")}</span>
                 </p>
               </div>
             ) : (
@@ -579,12 +583,12 @@ export default function ElectricityReport() {
           {hasFiltered && data.length > 0 && (
             <div className="px-5 py-2.5 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/30 dark:bg-slate-800/10 flex items-center justify-between">
               <span className="text-[10px] font-bold text-slate-400">
-                <span>Menampilkan </span>
+                <span>{t("electricity.showingRecords")} </span>
                 <span className="text-slate-600 dark:text-slate-300">{data.length}</span>
-                <span>{` record • ${effectiveTag?.label ?? ""} • ${GRANULARITY.find(g => g.id === selectedGranularity)?.label ?? ""} • ${dateStart} s/d ${dateEnd}`}</span>
+                <span>{` ${t("electricity.recordUnit")} • ${effectiveTag?.label ?? ""} • ${granularity.find(g => g.id === selectedGranularity)?.label ?? ""} • ${dateStart} s/d ${dateEnd}`}</span>
               </span>
               <span className="text-[10px] font-bold text-slate-400">
-                <span>Kategori: </span>
+                <span>{t("electricity.categoryPrefix")} </span>
                 <span className="text-sky-500 font-extrabold uppercase">{activeCategory}</span>
               </span>
             </div>
