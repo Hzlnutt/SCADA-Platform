@@ -128,6 +128,10 @@ const parsePlnApi = (data: any, ts: Date) => {
   const peakDemand = (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)))
     ? Number(rawPeak) / 1000.0 // Konversi Watt ke kW
     : null;
+  const rawExportPln = data.Export_PLN ?? data.export_pln ?? data.ExportPLN ?? data.Export_Pln;
+  const exportPln = (rawExportPln !== undefined && rawExportPln !== null && !isNaN(Number(rawExportPln)))
+    ? Number(rawExportPln)
+    : null;
 
   return {
     t_stamp: ts,
@@ -154,6 +158,7 @@ const parsePlnApi = (data: any, ts: Date) => {
     thd_current_c: typeof data.THD_Current_C === "number" ? data.THD_Current_C : null,
     active_energy: typeof data.ActiveEnergy === "number" ? data.ActiveEnergy : null,
     peak_demand: peakDemand,
+    export_pln: exportPln,
   };
 };
 
@@ -202,7 +207,7 @@ const getNullPlnRecord = (ts: Date) => ({
   apparent_power_total: null, power_factor: null, voltage_unbalance: null,
   current_unbalance: null, thd_volt_a: null, thd_volt_b: null,
   thd_volt_c: null, thd_current_a: null, thd_current_b: null,
-  thd_current_c: null, active_energy: null, peak_demand: null
+  thd_current_c: null, active_energy: null, peak_demand: null, export_pln: null
 });
 
 const getNullWfRecord = (ts: Date) => ({
@@ -324,10 +329,10 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
       current_a, current_b, current_c, frequency, active_power,
       reactive_power_total, apparent_power_total, power_factor,
       voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
-      thd_current_a, thd_current_b, thd_current_c, active_energy
+      thd_current_a, thd_current_b, thd_current_c, active_energy, export_pln
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL,
-      $14, $15, $16, $17, $18, $19, $20, $21, $22
+      $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
     )
     ON CONFLICT (t_stamp) DO UPDATE SET
       status_pm8000 = EXCLUDED.status_pm8000,
@@ -351,13 +356,14 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
       thd_current_a = EXCLUDED.thd_current_a,
       thd_current_b = EXCLUDED.thd_current_b,
       thd_current_c = EXCLUDED.thd_current_c,
-      active_energy = EXCLUDED.active_energy;
+      active_energy = EXCLUDED.active_energy,
+      export_pln = EXCLUDED.export_pln;
   `, [
     minuteTs, payload.status_pm8000, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
     payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power,
     payload.reactive_power_total, payload.apparent_power_total,
     payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
-    payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy
+    payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy, payload.export_pln
   ]).catch((err) => {
     logger.warn(`Failed to insert PLN minute telemetry: ${err.message}`);
   });
@@ -373,9 +379,9 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
           reactive_power_total, apparent_power_total, power_factor,
           voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
           thd_current_a, thd_current_b, thd_current_c, active_energy,
-          peak_demand
+          peak_demand, export_pln
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
         )
       `, [
         minuteTs, payload.status_pm8000, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
@@ -383,7 +389,7 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
         payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
         payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
         payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy,
-        payload.peak_demand
+        payload.peak_demand, payload.export_pln
       ]);
     } catch (err: any) {
       logger.warn(`Failed to save hourly PLN telemetry to main table: ${err.message}`);
@@ -1129,7 +1135,8 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
     thdI_T: Number(thdIT.toFixed(2)),
     voltage: Number(voltLAvg.toFixed(2)),
     status: isConnected,
-    peakDemand: (pgPq.peak_demand !== undefined && pgPq.peak_demand !== null) ? Number(Number(pgPq.peak_demand).toFixed(2)) : null
+    peakDemand: (pgPq.peak_demand !== undefined && pgPq.peak_demand !== null) ? Number(Number(pgPq.peak_demand).toFixed(2)) : null,
+    exportPln: (pgPq.export_pln !== undefined && pgPq.export_pln !== null) ? Number(Number(pgPq.export_pln).toFixed(3)) : null
   };
 
   latestIncomingTelemetry[deviceId] = {
@@ -2351,7 +2358,11 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(thd_current_c) as thd_current_c,
             MAX(active_energy) as active_energy,
             bool_or(status_pm8000) as status_pm8000,
-            (SELECT peak_demand FROM electric_pln_telemetry WHERE t_stamp = $1::timestamp) as peak_demand
+            (SELECT peak_demand FROM electric_pln_telemetry WHERE t_stamp = $1::timestamp) as peak_demand,
+            COALESCE(
+              (SELECT export_pln FROM electric_pln_telemetry WHERE t_stamp = $1::timestamp),
+              MAX(export_pln)
+            ) as export_pln
           FROM electric_pln_telemetry_minute
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
         `, [hourStartStr]);
@@ -2359,6 +2370,7 @@ export const runElectricityRollupAndCleanup = async () => {
         const r = aggRes.rows[0];
         if (r && (r.volt_ab !== null || r.active_power !== null || r.active_energy !== null)) {
           const preservedPeakDemand = r.peak_demand !== undefined && r.peak_demand !== null ? r.peak_demand : null;
+          const preservedExportPln = r.export_pln !== undefined && r.export_pln !== null ? r.export_pln : null;
           await client.query(`DELETE FROM electric_pln_telemetry WHERE t_stamp = $1`, [hourStartStr]);
           await client.query(`
             INSERT INTO electric_pln_telemetry (
@@ -2367,9 +2379,9 @@ export const runElectricityRollupAndCleanup = async () => {
               reactive_power_total, apparent_power_total, power_factor,
               voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
               thd_current_a, thd_current_b, thd_current_c, active_energy,
-              peak_demand
+              peak_demand, export_pln
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
             )
           `, [
             hourStartStr, r.status_pm8000 ?? false, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
@@ -2377,7 +2389,7 @@ export const runElectricityRollupAndCleanup = async () => {
             r.reactive_power_total, r.apparent_power_total, r.power_factor,
             r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
             r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy,
-            preservedPeakDemand
+            preservedPeakDemand, preservedExportPln
           ]);
         }
 

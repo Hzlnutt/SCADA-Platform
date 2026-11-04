@@ -493,7 +493,8 @@ export const ensurePostgresTables = async () => {
         thd_current_b NUMERIC,
         thd_current_c NUMERIC,
         active_energy NUMERIC(15,3),
-        peak_demand NUMERIC
+        peak_demand NUMERIC,
+        export_pln NUMERIC
       );
     `);
 
@@ -624,8 +625,9 @@ export const ensurePostgresTables = async () => {
       await pool.query(`ALTER TABLE ${table} ALTER COLUMN power_factor_min TYPE NUMERIC;`);
     }
 
-    // Ensure peak_demand column exists on electric_pln_telemetry
+    // Ensure peak_demand and export_pln columns exist on electric_pln_telemetry (historical rows default to NULL)
     await pool.query(`ALTER TABLE electric_pln_telemetry ADD COLUMN IF NOT EXISTS peak_demand NUMERIC;`);
+    await pool.query(`ALTER TABLE electric_pln_telemetry ADD COLUMN IF NOT EXISTS export_pln NUMERIC;`);
 
     // Ensure timestamp indexes for fast telemetry queries
     await pool.query(`
@@ -694,8 +696,10 @@ export const ensurePostgresTables = async () => {
         thd_current_a NUMERIC,
         thd_current_b NUMERIC,
         thd_current_c NUMERIC,
-        active_energy NUMERIC
+        active_energy NUMERIC,
+        export_pln NUMERIC
       );
+      ALTER TABLE electric_pln_telemetry_minute ADD COLUMN IF NOT EXISTS export_pln NUMERIC;
       CREATE UNIQUE INDEX IF NOT EXISTS uq_pln_minute_tstamp ON electric_pln_telemetry_minute (t_stamp);
       CREATE INDEX IF NOT EXISTS idx_electric_pln_minute_tstamp ON electric_pln_telemetry_minute (t_stamp DESC);
 
@@ -1033,13 +1037,13 @@ export const ensurePostgresTables = async () => {
                       current_a, current_b, current_c, frequency, active_power,
                       reactive_power_total, apparent_power_total, power_factor,
                       voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
-                      thd_current_a, thd_current_b, thd_current_c, active_energy
+                      thd_current_a, thd_current_b, thd_current_c, active_energy, export_pln
                   ) VALUES (
                       date_trunc('minute', NEW.t_stamp), NEW.status_pm8000, NEW.volt_ab, NEW.volt_bc, NEW.volt_ca, NEW.volt_ll,
                       NEW.current_a, NEW.current_b, NEW.current_c, NEW.frequency, NEW.active_power,
                       NEW.reactive_power_total, NEW.apparent_power_total, NEW.power_factor,
                       NEW.voltage_unbalance, NEW.current_unbalance, NEW.thd_volt_a, NEW.thd_volt_b, NEW.thd_volt_c,
-                      NEW.thd_current_a, NEW.thd_current_b, NEW.thd_current_c, NEW.active_energy
+                      NEW.thd_current_a, NEW.thd_current_b, NEW.thd_current_c, NEW.active_energy, NEW.export_pln
                   );
               END IF;
               RETURN NULL;
