@@ -103,8 +103,9 @@ const COLUMNS: Record<ReportCategory, { key: string; label: string; unit?: strin
   energy: [
     { key: "date", label: "DATE" },
     { key: "tag", label: "TAG DESCRIPTION" },
-    { key: "kwh", label: "KWH", unit: "kWh" },
-    { key: "kvar", label: "KVAR", unit: "kVAR" },
+    { key: "kwh", label: "KWH" },
+    { key: "kvarh", label: "KVARH" },
+    { key: "kvah", label: "KVAH" },
   ],
   tegangan_380: [
     { key: "date", label: "DATE" },
@@ -260,9 +261,19 @@ export default function ElectricityReport() {
           const vln = (row.vr !== null && row.vs !== null && row.vt !== null)
             ? +((Number(row.vr) + Number(row.vs) + Number(row.vt)) / 3).toFixed(1)
             : (row.vr !== null ? +Number(row.vr).toFixed(1) : null);
+          const kvarh = row.kvarh !== null && row.kvarh !== undefined 
+            ? row.kvarh 
+            : (row.kvar !== null && row.kvar !== undefined ? Math.abs(row.kvar) : null);
+          const kwh = row.kwh ?? null;
+          const kvah = row.kvah !== null && row.kvah !== undefined
+            ? row.kvah
+            : (kwh !== null && kvarh !== null ? +(Math.sqrt(kwh * kwh + kvarh * kvarh)).toFixed(2) : null);
+
           return {
             ...row,
-            kvar: row.kvar ?? row.kvarh ?? null,
+            kvar: kvarh,
+            kvarh: kvarh,
+            kvah: kvah,
             vll_avg: row.vll_avg ?? vll,
             vln_avg: row.vln_avg ?? vln,
           };
