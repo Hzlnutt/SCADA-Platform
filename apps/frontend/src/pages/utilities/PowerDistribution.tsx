@@ -573,10 +573,8 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
   }, [transformer?.id]);
 
   const modalWindowRange = useMemo(() => {
-    const firstX = modalSeriesRef.current.vAb[0]?.x;
     const min24h = modalTickMs - 24 * 3600 * 1000;
-    const min = firstX && firstX > min24h ? firstX : min24h;
-    return { min: min < modalTickMs ? min : modalTickMs - 30000, max: modalTickMs };
+    return { min: min24h, max: modalTickMs };
   }, [modalTickMs, modalPointCount]);
 
   const chartData = useMemo(() => {
@@ -626,8 +624,7 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
             data: s.iTot,
             borderColor: "#8b5cf6",
             backgroundColor: "transparent",
-            borderWidth: 1.5,
-            borderDash: [5, 5],
+            borderWidth: 1.8,
             tension: 0,
             pointRadius: 0,
             pointHoverRadius: 4,
@@ -820,7 +817,7 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
                         : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                     }`}
                   >
-                    380V (L-L)
+                    Tegangan 380V
                   </button>
                   <button
                     type="button"
@@ -831,7 +828,7 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
                         : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                     }`}
                   >
-                    230V (L-N)
+                    Tegangan 230V
                   </button>
                 </div>
               )}
@@ -1642,7 +1639,11 @@ export default function PowerDistribution() {
     const interval = setInterval(fetchTrafoTelemetries, 10000);
 
     const socket = getSocket();
+    let lastLivePmUpdate = 0;
     const handlePmUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
+      const now = Date.now();
+      if (now - lastLivePmUpdate < 2800) return; // Strict 3-second display polling cadence
+      lastLivePmUpdate = now;
       if (!payload || !Array.isArray(payload.data)) return;
       setLoadingSld(false);
       const pmMap = new Map<string, ElectricPmItem>();
@@ -2032,10 +2033,8 @@ export default function PowerDistribution() {
   }, [bottomTxId, isPageActive]);
 
   const bottomWindowRange = useMemo(() => {
-    const firstX = bottomSeriesRef.current.vAb[0]?.x;
     const min24h = bottomTickMs - 24 * 3600 * 1000;
-    const min = firstX && firstX > min24h ? firstX : min24h;
-    return { min: min < bottomTickMs ? min : bottomTickMs - 30000, max: bottomTickMs };
+    return { min: min24h, max: bottomTickMs };
   }, [bottomTickMs, bottomPointCount]);
 
   const voltageTrendChart = useMemo(() => {
@@ -2105,8 +2104,7 @@ export default function PowerDistribution() {
           data: s.iTot,
           borderColor: "#8b5cf6",
           backgroundColor: "transparent",
-          borderWidth: 1.5,
-          borderDash: [5, 5],
+          borderWidth: 1.8,
           tension: 0,
           pointRadius: 0,
           pointHoverRadius: 4,
@@ -2909,7 +2907,7 @@ export default function PowerDistribution() {
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                  Voltage Record (V) — {bottomVoltageMode === "380v" ? "380V Line-to-Line (R-S-T)" : "230V Line-to-Neutral (L-N)"}
+                  Voltage Record (V) — {bottomVoltageMode === "380v" ? "Tegangan 380V" : "Tegangan 230V"}
                 </h4>
                 {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
               </div>
@@ -3044,7 +3042,7 @@ export default function PowerDistribution() {
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-bold text-slate-800 dark:text-white uppercase tracking-wide">
                     {bottomZoomChart === "voltage"
-                      ? `Voltage Record (V) — ${bottomVoltageMode === "380v" ? "380V (L-L)" : "230V (L-N)"}`
+                      ? `Voltage Record (V) — ${bottomVoltageMode === "380v" ? "Tegangan 380V" : "Tegangan 230V"}`
                       : bottomZoomChart === "power"
                       ? "Daya Aktif Record — kW Total (kW)"
                       : "Ampere Record (A) — Total & 3 Fasa (R, S, T)"}
@@ -3075,7 +3073,7 @@ export default function PowerDistribution() {
                           : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                       }`}
                     >
-                      380V (L-L)
+                      Tegangan 380V
                     </button>
                     <button
                       type="button"
@@ -3086,7 +3084,7 @@ export default function PowerDistribution() {
                           : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                       }`}
                     >
-                      230V (L-N)
+                      Tegangan 230V
                     </button>
                   </div>
                 )}
