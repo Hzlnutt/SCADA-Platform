@@ -148,6 +148,8 @@ export const PM_ORDER_INDEX: Record<string, number> = {
   PM273: 273,
   PM274: 274,
   PM288: 288,
+  PM291: 291,
+  PM292: 292,
 
   // EW23 Sub-Distribution Power Meters (Factory 2 Sub)
   PM318: 318,

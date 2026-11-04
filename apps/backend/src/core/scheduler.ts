@@ -233,7 +233,8 @@ const EW_GROUP_PMS: Record<string, string[]> = {
   ew22: [
     "PM201", "PM202", "PM203", "PM205", "PM206", "PM207", "PM208", "PM209",
     "PM210", "PM211", "PM212", "PM213", "PM214", "PM215",
-    "PM226", "PM229", "PM271", "PM272", "PM273", "PM274", "PM288"
+    "PM226", "PM229", "PM271", "PM272", "PM273", "PM274", "PM288",
+    "PM291", "PM292"
   ],
   // Factory 2 & Incoming (ew23): PM318 - PM337 + Cubicles 410, 411, 412
   ew23: [
@@ -794,7 +795,7 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
     PM207: 207, PM208: 208, PM209: 209, PM210: 210, PM211: 211,
     PM212: 212, PM213: 213, PM214: 214, PM215: 215, PM226: 226,
     PM229: 229, PM271: 271, PM272: 272, PM273: 273, PM274: 274,
-    PM288: 288,
+    PM288: 288, PM291: 291, PM292: 292,
     // EW23 (Factory 2 Sub)
     PM318: 318, PM319: 319, PM320: 320, PM321: 321, PM322: 322,
     PM323: 323, PM324: 324, PM325: 325, PM327: 327, PM337: 337,
@@ -2097,6 +2098,12 @@ export const startIncomingElectricityPolling = () => {
           if (isNewMinute) {
             await insertPmMinuteTelemetryBatch(customRecords, minuteTs);
           }
+          const customEw21 = customRecords.filter(r => r.group_id?.toLowerCase() === "ew21");
+          const customEw22 = customRecords.filter(r => r.group_id?.toLowerCase() === "ew22");
+          const customEw23 = customRecords.filter(r => r.group_id?.toLowerCase() === "ew23");
+          if (customEw21.length > 0) broadcastEwLiveTelemetry("ew21", customEw21);
+          if (customEw22.length > 0) broadcastEwLiveTelemetry("ew22", customEw22);
+          if (customEw23.length > 0) broadcastEwLiveTelemetry("ew23", customEw23);
           broadcastEwLiveTelemetry("custom_pm", customRecords);
         }
       } catch (err: any) {

@@ -1691,8 +1691,30 @@ export default function PowerDistribution() {
       getJson<{ data: ElectricPmItem[] }>(`/analytics/electricity/power-meters?group=${selectedEwGroup}&_t=${Date.now()}`)
         .then((res) => {
           if (active && res?.data) {
-            const sorted = [...res.data].sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
-            setEwPowerMeters(sorted);
+            setEwPowerMeters((prev) => {
+              if (prev.length === 0) {
+                return [...res.data].sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
+              }
+              const map = new Map<string, ElectricPmItem>();
+              for (const item of res.data) {
+                if (item?.pm_id) map.set(item.pm_id.toUpperCase(), item);
+              }
+              for (const prevItem of prev) {
+                if (!prevItem?.pm_id) continue;
+                const upId = prevItem.pm_id.toUpperCase();
+                const existing = map.get(upId);
+                if (existing) {
+                  const prevTime = prevItem.t_stamp ? new Date(prevItem.t_stamp).getTime() : 0;
+                  const newTime = existing.t_stamp ? new Date(existing.t_stamp).getTime() : 0;
+                  if (prevTime >= newTime) {
+                    map.set(upId, { ...existing, ...prevItem });
+                  }
+                } else {
+                  map.set(upId, prevItem);
+                }
+              }
+              return Array.from(map.values()).sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
+            });
           }
         })
         .catch((err) => console.error("Failed to load EW power meters:", err));
@@ -1703,19 +1725,47 @@ export default function PowerDistribution() {
 
     const socket = getSocket();
     const handleLiveUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
-      if (payload?.groupId?.toLowerCase() === selectedEwGroup && Array.isArray(payload.data)) {
-        const sorted = [...payload.data].sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
-        setEwPowerMeters(sorted);
-      }
+      if (!payload || !Array.isArray(payload.data)) return;
+      const targetGroup = payload.groupId?.toLowerCase();
+      const isRelevant = targetGroup === selectedEwGroup || targetGroup === "custom_pm" || !targetGroup;
+      if (!isRelevant) return;
+
+      setEwPowerMeters((prev) => {
+        if (prev.length === 0) {
+          const sorted = [...payload.data]
+            .filter((p) => !p.group_id || p.group_id.toLowerCase() === selectedEwGroup || targetGroup !== "custom_pm")
+            .sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
+          return sorted;
+        }
+        const map = new Map<string, ElectricPmItem>();
+        for (const p of prev) {
+          if (p?.pm_id) map.set(p.pm_id.toUpperCase(), p);
+        }
+        let updated = false;
+        for (const incoming of payload.data) {
+          if (!incoming?.pm_id) continue;
+          if (targetGroup === "custom_pm" && incoming.group_id && incoming.group_id.toLowerCase() !== selectedEwGroup) {
+            continue;
+          }
+          const upId = incoming.pm_id.toUpperCase();
+          const existing = map.get(upId);
+          map.set(upId, existing ? { ...existing, ...incoming } : incoming);
+          updated = true;
+        }
+        if (!updated) return prev;
+        return Array.from(map.values()).sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
+      });
     };
 
     socket.on(`electricity:${selectedEwGroup}_live`, handleLiveUpdate);
+    socket.on("electricity:custom_pm_live", handleLiveUpdate);
     socket.on("electricity:pm_live_update", handleLiveUpdate);
 
     return () => {
       active = false;
       clearInterval(interval);
       socket.off(`electricity:${selectedEwGroup}_live`, handleLiveUpdate);
+      socket.off("electricity:custom_pm_live", handleLiveUpdate);
       socket.off("electricity:pm_live_update", handleLiveUpdate);
     };
   }, [selectedEwGroup, isPageActive]);
@@ -2847,7 +2897,7 @@ export default function PowerDistribution() {
             {(["ew23", "ew21", "ew22"] as const).map((grp) => (
               <button
                 key={grp}
-                onClick={() => setSelectedEwGroup(grp)}
+                onClick={() => { setSelectedEwGroup(grp); setEwPowerMeters([]); }}
                 className={`px-3 py-1 rounded-lg text-xs font-extrabold uppercase transition-all ${
                   selectedEwGroup === grp
                     ? "bg-white dark:bg-slate-900 text-sky-500 shadow-sm"
