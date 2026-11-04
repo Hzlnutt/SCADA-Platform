@@ -123,10 +123,28 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
   const oneHourAgoWib = getWibDateTime(oneHourAgoDate);
 
   try {
+    // Also clean up any stale rows older than 1 hour so the table strictly holds the latest 1 hour
+    pool.query(
+      `DELETE FROM electric_incoming_trend_5s WHERE t_stamp < $1`,
+      [oneHourAgoWib.tStampStr]
+    ).catch(() => {});
+
     const res = await pool.query(`
-      SELECT * FROM (
-        SELECT
-          to_char(t_stamp, 'HH24:MI:SS') AS time_str,
+      SELECT
+        to_char(t_stamp, 'HH24:MI:SS') AS time_str,
+        hour,
+        volt_ll,
+        volt_ab,
+        volt_bc,
+        volt_ca,
+        active_power,
+        current_a,
+        current_b,
+        current_c,
+        t_stamp
+      FROM (
+        SELECT DISTINCT ON (t_stamp)
+          t_stamp,
           hour,
           volt_ll,
           volt_ab,
@@ -135,19 +153,22 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
           active_power,
           current_a,
           current_b,
-          current_c,
-          t_stamp
+          current_c
         FROM electric_incoming_trend_5s
         WHERE device_id = $1
           AND t_stamp >= $2
-        ORDER BY t_stamp DESC
-        LIMIT 720
+        ORDER BY t_stamp ASC, id DESC
       ) sub
       ORDER BY sub.t_stamp ASC
     `, [deviceId, oneHourAgoWib.tStampStr]);
 
-    const points = res.rows.map((row: any) => {
-      const timeStr = row.time_str;
+    const bucketMap = new Map<number, IncomingTrend5sPoint>();
+    for (const row of res.rows) {
+      const rawTs = row.t_stamp instanceof Date ? row.t_stamp.getTime() : new Date(row.t_stamp).getTime();
+      const bucketTs = Math.round(rawTs / 5000) * 5000;
+      const wibBucket = getWibDateTime(new Date(bucketTs));
+      const timeStr = wibBucket.timeStr;
+
       const vR = Number(row.volt_ab) || 0;
       const vS = Number(row.volt_bc) || 0;
       const vT = Number(row.volt_ca) || 0;
@@ -163,9 +184,7 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
       const pS = iTotal > 0 ? Number((activePower * (iS / iTotal)).toFixed(1)) : Number((activePower / 3.0).toFixed(1));
       const pT = iTotal > 0 ? Number((activePower * (iT / iTotal)).toFixed(1)) : Number((activePower / 3.0).toFixed(1));
 
-      const tsVal = row.t_stamp instanceof Date ? row.t_stamp.getTime() : new Date(row.t_stamp).getTime();
-
-      return {
+      bucketMap.set(bucketTs, {
         time: timeStr,
         hour: Number(row.hour),
         voltage: Number(voltage.toFixed(3)),
@@ -176,10 +195,11 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
         pR: Math.abs(pR),
         pS: Math.abs(pS),
         pT: Math.abs(pT),
-        ts: tsVal
-      };
-    });
+        ts: bucketTs
+      });
+    }
 
+    const points = Array.from(bucketMap.values()).sort((a, b) => (a.ts || 0) - (b.ts || 0));
     incomingTrendCache.set(deviceId, { points, expiresAt: Date.now() + 2000 });
     return points;
   } catch (err: any) {

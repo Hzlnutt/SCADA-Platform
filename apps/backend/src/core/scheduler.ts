@@ -914,10 +914,10 @@ const lastTrendHour: Record<string, number> = {
   Feeder_WF2_PM5500: -1
 };
 
-const lastRecordedSecond: Record<string, number> = {
-  Cubicle_PLN_PM8000: -1,
-  Feeder_WF1_PM5560: -1,
-  Feeder_WF2_PM5500: -1
+const lastRecordedSlot5s: Record<string, string> = {
+  Cubicle_PLN_PM8000: "",
+  Feeder_WF1_PM5560: "",
+  Feeder_WF2_PM5500: ""
 };
 
 const latestIncomingTelemetry: Record<string, { data: any; ts: number }> = {};
@@ -956,16 +956,14 @@ const recordIncomingTrend5s = async (
 ) => {
   if (!incomingHourlyTrends[deviceId]) return;
   const now = new Date();
-  const wib = getWibDateTime(now);
+  const slot5sMs = Math.floor(now.getTime() / 5000) * 5000;
+  const slotDate = new Date(slot5sMs);
+  const wib = getWibDateTime(slotDate);
   const currentHour = wib.hour;
-  const currentSec = wib.second;
 
-  // Record strictly every 5 seconds (0, 5, 10, 15, ..., 55)
-  if (currentSec % 5 === 0 && lastRecordedSecond[deviceId] !== currentSec) {
-    lastRecordedSecond[deviceId] = currentSec;
-
-    // Detect when WIB hour changes (e.g. from 7 to 8, or 8 to 9)
-    const isHourChange = lastTrendHour[deviceId] !== -1 && lastTrendHour[deviceId] !== currentHour;
+  // Record strictly once per 5-second slot (00, 05, 10, 15, ..., 55) without skipping slots if poll takes >1s
+  if (lastRecordedSlot5s[deviceId] !== wib.tStampStr) {
+    lastRecordedSlot5s[deviceId] = wib.tStampStr;
     lastTrendHour[deviceId] = currentHour;
 
     const timeStr = wib.timeStr;
@@ -980,35 +978,30 @@ const recordIncomingTrend5s = async (
       pR: Math.abs(Number(data.pR.toFixed(1))),
       pS: Math.abs(Number(data.pS.toFixed(1))),
       pT: Math.abs(Number(data.pT.toFixed(1))),
-      ts: now.getTime()
+      ts: slot5sMs
     };
 
     const pool = getPostgresPool();
 
     // Maintain continuous 1-hour rolling window in memory: discard points older than 3600 seconds
-    const oneHourAgoMs = now.getTime() - 3600 * 1000;
+    const oneHourAgoMs = slot5sMs - 3600 * 1000;
     incomingHourlyTrends[deviceId] = (incomingHourlyTrends[deviceId] || []).filter(
-      (p) => (p.ts || 0) >= oneHourAgoMs
+      (p) => (p.ts || 0) >= oneHourAgoMs && p.time !== timeStr
     );
     incomingHourlyTrends[deviceId].push(point);
     if (incomingHourlyTrends[deviceId].length > 720) {
       incomingHourlyTrends[deviceId].shift();
     }
 
-    // Periodically clean up records older than 70 minutes from postgres so database stays rolling 1-hour
-    if (currentSec === 0) {
-      const purgeDate = new Date(now.getTime() - 70 * 60 * 1000);
-      const purgeWib = getWibDateTime(purgeDate);
-      pool.query(
-        `DELETE FROM electric_incoming_trend_5s WHERE t_stamp < $1`,
-        [purgeWib.tStampStr]
-      ).catch((err: any) => {
-        logger.warn(`Failed to cleanup old electric_incoming_trend_5s: ${err.message}`);
-      });
-    }
+    // Strictly keep only the latest 1 hour (3600 seconds) in electric_incoming_trend_5s and prevent duplicate rows
+    const purgeDate = new Date(slot5sMs - 3600 * 1000);
+    const purgeWib = getWibDateTime(purgeDate);
 
-    // Save every 5 seconds to electric_incoming_trend_5s with WIB timestamp
     try {
+      await pool.query(
+        `DELETE FROM electric_incoming_trend_5s WHERE (device_id = $1 AND t_stamp = $2) OR t_stamp < $3`,
+        [deviceId, wib.tStampStr, purgeWib.tStampStr]
+      );
       await pool.query(`
         INSERT INTO electric_incoming_trend_5s (
           device_id, t_stamp, hour, volt_ll, volt_ab, volt_bc, volt_ca,

@@ -594,8 +594,15 @@ interface HourlyTrend5sPoint {
           const currentHour = typeof payload?.hour === "number" ? payload.hour : trendHour;
           setTrendHour(currentHour);
           lastTrendHourRef.current = currentHour;
+          if (pts.length > 0) {
+            const latestServerTs = Number(pts[pts.length - 1]?.ts) || 0;
+            if (latestServerTs > 0) {
+              setCurrentTime(latestServerTs);
+            }
+          }
           setHourlyTrend5s((prev) => {
-            const oneHourAgo = Date.now() - 3600 * 1000;
+            const refNow = pts.length > 0 && Number(pts[pts.length - 1]?.ts) ? Number(pts[pts.length - 1].ts) : Date.now();
+            const oneHourAgo = refNow - 3600 * 1000;
             const map = new Map<number, any>();
             for (const p of prev) {
               if (p.ts && Number(p.ts) >= oneHourAgo) {
@@ -935,8 +942,12 @@ interface HourlyTrend5sPoint {
     const oneHourAgoTs = currentSlotTs - (SLOTS_COUNT - 1) * STEP_MS;
 
     const map = new Map<number, HourlyTrend5sPoint>();
+    const timeStrMap = new Map<string, HourlyTrend5sPoint>();
     for (const p of hourlyTrend5s) {
-      if (p.ts && p.ts >= oneHourAgoTs - 5000 && p.ts <= currentSlotTs + 5000) {
+      if (p.time) {
+        timeStrMap.set(p.time, p);
+      }
+      if (p.ts && p.ts >= oneHourAgoTs - 15000 && p.ts <= currentSlotTs + 15000) {
         const bucket = Math.round(p.ts / STEP_MS) * STEP_MS;
         map.set(bucket, p);
       }
@@ -970,7 +981,7 @@ interface HourlyTrend5sPoint {
       }
       labels.push(timeStr);
 
-      const pt = map.get(slotTs);
+      const pt = map.get(slotTs) || timeStrMap.get(timeStr);
       if (pt) {
         const vr = pt.vR !== undefined && pt.vR > 0 ? pt.vR : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
         const vs = pt.vS !== undefined && pt.vS > 0 ? pt.vS : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);

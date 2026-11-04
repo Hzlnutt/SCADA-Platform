@@ -777,6 +777,9 @@ export const ensurePostgresTables = async () => {
       CREATE INDEX IF NOT EXISTS idx_incoming_trend_5s_dev_hour ON electric_incoming_trend_5s (device_id, hour);
       CREATE INDEX IF NOT EXISTS idx_incoming_trend_5s_tstamp ON electric_incoming_trend_5s (t_stamp ASC);
       CREATE INDEX IF NOT EXISTS idx_incoming_trend_5s_dev_ts ON electric_incoming_trend_5s (device_id, t_stamp DESC);
+      DELETE FROM electric_incoming_trend_5s WHERE t_stamp < (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '1 hour';
+      DELETE FROM electric_incoming_trend_5s a USING electric_incoming_trend_5s b WHERE a.id < b.id AND a.device_id = b.device_id AND a.t_stamp = b.t_stamp;
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_incoming_trend_5s_dev_ts ON electric_incoming_trend_5s (device_id, t_stamp);
 
       -- 3-SECOND TRANSFORMER ROLLING 24-HOUR TABLE (FIFO SLIDING WINDOW)
       CREATE TABLE IF NOT EXISTS electric_trafo_rolling_3s (
