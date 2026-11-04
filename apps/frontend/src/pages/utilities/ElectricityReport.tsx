@@ -168,6 +168,15 @@ const getLocalTodayString = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
+const normalizeDateIso = (val: string): string => {
+  const trimmed = (val || "").trim();
+  const dmy = trimmed.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
+  if (dmy) {
+    return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+  }
+  return trimmed || getLocalTodayString();
+};
+
 /* ═══════════ EXPORT TO EXCEL HELPER ═══════════ */
 async function exportToExcel(data: Record<string, any>[], columns: { key: string; label: string; unit?: string }[], filename: string) {
   try {
@@ -232,13 +241,15 @@ export default function ElectricityReport() {
     if (!effectiveTag) return;
     setIsLoading(true);
     try {
+      const normalizedStart = normalizeDateIso(dateStart);
+      const normalizedEnd = normalizeDateIso(dateEnd);
       const q = new URLSearchParams({
         category: activeCategory.startsWith("tegangan") ? "tegangan" : activeCategory,
         factory: selectedFactory,
         tag: effectiveTag.id,
         granularity: selectedGranularity,
-        startDate: dateStart,
-        endDate: dateEnd,
+        startDate: normalizedStart,
+        endDate: normalizedEnd,
       }).toString();
       const res = await getJson<{ data: Record<string, any>[] }>(`/analytics/electricity/report?${q}`);
       if (res && Array.isArray(res.data)) {
@@ -272,7 +283,7 @@ export default function ElectricityReport() {
   const columns = COLUMNS[activeCategory];
 
   const handleExport = useCallback(() => {
-    const fn = `report_${activeCategory}_${effectiveTag?.label?.replace(/\s+/g, "_") ?? "data"}_${dateStart}_${dateEnd}.xlsx`;
+    const fn = `report_${activeCategory}_${effectiveTag?.label?.replace(/\s+/g, "_") ?? "data"}_${normalizeDateIso(dateStart)}_${normalizeDateIso(dateEnd)}.xlsx`;
     exportToExcel(data, columns, fn);
   }, [data, columns, activeCategory, effectiveTag, dateStart, dateEnd]);
 
@@ -340,7 +351,7 @@ export default function ElectricityReport() {
           >
             {/* Category Title */}
             <h3 className="text-sm font-extrabold text-slate-800 dark:text-white mr-2 flex-shrink-0">
-              {REPORT_TABS.find(t => t.key === activeCategory)?.label ?? "Report"}
+              <span>{REPORT_TABS.find(t => t.key === activeCategory)?.label ?? "Report"}</span>
             </h3>
 
             {/* Quick Toggle for Voltage 380V vs 230V */}
@@ -355,7 +366,7 @@ export default function ElectricityReport() {
                       : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
-                  ⚡ 380V (R-S-T)
+                  <span>⚡ 380V (R-S-T)</span>
                 </button>
                 <button
                   type="button"
@@ -366,7 +377,7 @@ export default function ElectricityReport() {
                       : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
-                  🔌 230V (L-N)
+                  <span>🔌 230V (L-N)</span>
                 </button>
                 <button
                   type="button"
@@ -377,7 +388,7 @@ export default function ElectricityReport() {
                       : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
-                  📊 Semua
+                  <span>📊 Semua</span>
                 </button>
               </div>
             )}
@@ -395,9 +406,10 @@ export default function ElectricityReport() {
 
             {/* Power Meter / Tag Select */}
             <select
+              translate="no"
               value={effectiveTag?.id ?? ""}
               onChange={(e) => { setSelectedTag(e.target.value); setHasFiltered(false); }}
-              className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
+              className="notranslate px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
             >
               {filteredTags.map(t => (
                 <option key={t.id} value={t.id}>{t.label}</option>
@@ -435,13 +447,17 @@ export default function ElectricityReport() {
               disabled={isLoading}
               className="px-4 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white text-xs font-extrabold uppercase tracking-wider transition-colors shadow-sm shadow-sky-500/20 flex items-center gap-1.5"
             >
-              {isLoading && (
-                <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                </svg>
+              {isLoading ? (
+                <span key="btn-loading" className="inline-flex items-center gap-1.5">
+                  <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                  </svg>
+                  <span>Memuat...</span>
+                </span>
+              ) : (
+                <span key="btn-idle">Filter</span>
               )}
-              {isLoading ? "Memuat..." : "Filter"}
             </button>
 
             {/* Export Button */}
@@ -450,40 +466,46 @@ export default function ElectricityReport() {
               disabled={data.length === 0 || isLoading}
               className="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-extrabold uppercase tracking-wider transition-colors shadow-sm shadow-emerald-500/20"
             >
-              Export to Excel
+              <span>Export to Excel</span>
             </button>
           </div>
 
           {/* Table Area */}
           <div className="flex-1 overflow-auto">
             {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-full py-20 text-center">
+              <div key="state-loading" className="flex flex-col items-center justify-center h-full py-20 text-center">
                 <svg className="animate-spin h-8 w-8 text-sky-500 mb-3" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                 </svg>
-                <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Mengambil data real dari database...</p>
+                <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
+                  <span>Mengambil data real dari database...</span>
+                </p>
               </div>
             ) : !hasFiltered ? (
               /* Empty State */
-              <div className="flex flex-col items-center justify-center h-full py-20 text-center">
+              <div key="state-unfiltered" className="flex flex-col items-center justify-center h-full py-20 text-center">
                 <svg style={{ width: 48, height: 48 }} className="text-slate-300 dark:text-slate-700 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v.75" />
                 </svg>
                 <p className="text-sm font-bold text-slate-400 dark:text-slate-500">
-                  Pilih parameter dan klik <span className="text-sky-500">Filter</span> untuk menampilkan data
+                  <span>Pilih parameter dan klik </span>
+                  <span className="text-sky-500">Filter</span>
+                  <span> untuk menampilkan data</span>
                 </p>
                 <p className="text-xs text-slate-300 dark:text-slate-600 mt-1">
-                  Data akan ditarik langsung dari database historis telemetri
+                  <span>Data akan ditarik langsung dari database historis telemetri</span>
                 </p>
               </div>
             ) : data.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full py-20 text-center">
-                <p className="text-sm font-bold text-slate-400">Tidak ada data untuk filter yang dipilih di database</p>
+              <div key="state-empty" className="flex flex-col items-center justify-center h-full py-20 text-center">
+                <p className="text-sm font-bold text-slate-400">
+                  <span>Tidak ada data untuk filter yang dipilih di database</span>
+                </p>
               </div>
             ) : (
               /* Data Table */
-              <table className="w-full text-left" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
+              <table key="state-table" className="w-full text-left" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
                 <thead>
                   <tr>
                     {columns.map((col) => (
@@ -500,12 +522,12 @@ export default function ElectricityReport() {
                           borderBottom: "2px solid rgba(56,189,248,0.25)",
                         }}
                       >
-                        {col.unit ? `${col.label} (${col.unit})` : col.label}
+                        <span>{col.unit ? `${col.label} (${col.unit})` : col.label}</span>
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody translate="no" className="notranslate">
                   {data.map((row, idx) => (
                     <tr
                       key={idx}
@@ -534,7 +556,7 @@ export default function ElectricityReport() {
                               : "text-slate-800 dark:text-slate-200"
                           }
                         >
-                          {col.key === "date" || col.key === "tag" ? row[col.key] : fmtNum(row[col.key])}
+                          <span>{col.key === "date" || col.key === "tag" ? row[col.key] : fmtNum(row[col.key])}</span>
                         </td>
                       ))}
                     </tr>
@@ -548,15 +570,13 @@ export default function ElectricityReport() {
           {hasFiltered && data.length > 0 && (
             <div className="px-5 py-2.5 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/30 dark:bg-slate-800/10 flex items-center justify-between">
               <span className="text-[10px] font-bold text-slate-400">
-                Menampilkan <span className="text-slate-600 dark:text-slate-300">{data.length}</span> record
-                {" • "}
-                {effectiveTag?.label} {" • "}
-                {GRANULARITY.find(g => g.id === selectedGranularity)?.label}
-                {" • "}
-                {dateStart} s/d {dateEnd}
+                <span>Menampilkan </span>
+                <span className="text-slate-600 dark:text-slate-300">{data.length}</span>
+                <span>{` record • ${effectiveTag?.label ?? ""} • ${GRANULARITY.find(g => g.id === selectedGranularity)?.label ?? ""} • ${dateStart} s/d ${dateEnd}`}</span>
               </span>
               <span className="text-[10px] font-bold text-slate-400">
-                Kategori: <span className="text-sky-500 font-extrabold uppercase">{activeCategory}</span>
+                <span>Kategori: </span>
+                <span className="text-sky-500 font-extrabold uppercase">{activeCategory}</span>
               </span>
             </div>
           )}

@@ -1188,8 +1188,12 @@ export const getElectricityReportHandler = async (
     const tag = (req.query.tag as string) || "f1-mdp-3";
     const machine = (req.query.machine as string) || "all";
     const granularity = ((req.query.granularity as string) || "hour").toLowerCase();
-    const startDate = (req.query.startDate as string) || new Date().toISOString().slice(0, 10);
-    const endDate = (req.query.endDate as string) || startDate;
+    const normDate = (d: string) => {
+      const m = (d || "").trim().match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
+      return m ? `${m[3]}-${m[2]}-${m[1]}` : (d || "").trim();
+    };
+    const startDate = normDate(req.query.startDate as string) || new Date().toISOString().slice(0, 10);
+    const endDate = normDate(req.query.endDate as string) || startDate;
 
     const pool = getPostgresPool();
 
@@ -1251,6 +1255,8 @@ export const getElectricityReportHandler = async (
       "pm273": { pmId: "PM273", group: "ew22", label: "RETURN SAMPLE QC" },
       "pm274": { pmId: "PM274", group: "ew22", label: "F2 CHILLER RTAC 100 (BP)" },
       "pm288": { pmId: "PM288", group: "ew22", label: "F2 Penerangan PD" },
+      "pm291": { pmId: "PM291", group: "ew22", label: "F2 WH-4" },
+      "pm292": { pmId: "PM292", group: "ew22", label: "F2 CHILLER RTAC 185" },
 
       // Factory 2 (ew23)
       "pm318": { pmId: "PM318", group: "ew23", label: "F2 COOLING FASE-2" },
