@@ -1,4 +1,4 @@
-import { useMemo, useState, memo, useCallback } from "react";
+import React, { useMemo, useState, memo, useCallback } from "react";
 import { PmDetailModal } from "./PmDetailModal";
 import type { ElectricPmItem } from "./PmDetailModal";
 import { getPmInfo, getPmSortIndex } from "../../data/pmMapping";

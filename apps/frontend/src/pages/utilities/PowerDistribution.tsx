@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import React, { useEffect, useState, useMemo, useRef, useCallback, memo } from "react";
 import { usePageActive } from "../../hooks/usePageActive";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Line, Bar } from "react-chartjs-2";
