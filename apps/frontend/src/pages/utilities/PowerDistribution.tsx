@@ -398,6 +398,25 @@ const TARIF_PER_KWH = 1114.74; // Industrial I-3 tariff in IDR
 const formatCurrencyIDR = (v: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(v);
 
+export interface TrafoLayoutConfig {
+  id: string;
+  factory: number;
+  row?: number;
+  span?: "1" | "full";
+  align?: "left" | "center" | "right";
+  sortOrder?: number;
+}
+
+const DEFAULT_TRAFO_LAYOUT: TrafoLayoutConfig[] = [
+  { id: "mdp-1.1", factory: 1, row: 0, span: "1", align: "center", sortOrder: 1 },
+  { id: "mdp-1.2", factory: 1, row: 0, span: "1", align: "center", sortOrder: 2 },
+  { id: "mdp-2", factory: 1, row: 1, span: "1", align: "center", sortOrder: 3 },
+  { id: "mdp-3", factory: 1, row: 1, span: "1", align: "center", sortOrder: 4 },
+  { id: "putr-1", factory: 2, row: 0, span: "1", align: "center", sortOrder: 5 },
+  { id: "putr-2", factory: 2, row: 0, span: "1", align: "center", sortOrder: 6 },
+  { id: "putr-new", factory: 2, row: 1, span: "full", align: "center", sortOrder: 7 },
+];
+
 /* ═══════════ DETAILED HISTORICAL MODAL ═══════════ */
 type ModalProps = {
   transformer: TransformerData & { vectorGroup: string; impedance: number; year: string; manufacturer: string };
@@ -1113,9 +1132,16 @@ const TransformerDetailCard = React.memo(
     factoryLabel,
     loadConfig,
     isEditMode,
-    onMoveLeft,
-    onMoveRight,
+    isBeingDragged,
+    isDropTarget,
+    dragAction,
+    isSingleInRow,
+    span,
+    align,
+    onSetSpan,
+    onSetAlign,
     onDragStart,
+    onDragEnd,
     onDragOver,
     onDrop
   }: {
@@ -1123,9 +1149,16 @@ const TransformerDetailCard = React.memo(
     factoryLabel: string;
     loadConfig: { safeMax: number; cautionMax: number };
     isEditMode?: boolean;
-    onMoveLeft?: () => void;
-    onMoveRight?: () => void;
+    isBeingDragged?: boolean;
+    isDropTarget?: boolean;
+    dragAction?: "insert-left" | "insert-right" | "swap" | null;
+    isSingleInRow?: boolean;
+    span?: "1" | "full";
+    align?: "left" | "center" | "right";
+    onSetSpan?: (span: "1" | "full") => void;
+    onSetAlign?: (align: "left" | "center" | "right") => void;
     onDragStart?: (e: React.DragEvent) => void;
+    onDragEnd?: () => void;
     onDragOver?: (e: React.DragEvent) => void;
     onDrop?: () => void;
   }) {
@@ -1159,14 +1192,44 @@ const TransformerDetailCard = React.memo(
       <div
         draggable={isEditMode}
         onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
         onDragOver={onDragOver}
         onDrop={onDrop}
-        className={`rounded-2xl border transition-shadow duration-150 bg-white dark:bg-slate-900 shadow-sm overflow-hidden relative ${
-          isEditMode
-            ? "ring-2 ring-sky-500/50 border-sky-400 shadow-lg cursor-grab active:cursor-grabbing hover:scale-[1.01]"
+        className={`rounded-2xl border transition-all duration-150 bg-white dark:bg-slate-900 shadow-sm overflow-hidden relative flex flex-col justify-between ${
+          isBeingDragged
+            ? "opacity-30 scale-95 ring-2 ring-sky-500 rounded-2xl cursor-grabbing"
+            : isDropTarget
+            ? "scale-[1.01] rounded-2xl"
+            : isEditMode
+            ? "ring-1 ring-sky-400/40 hover:ring-sky-500 rounded-2xl cursor-grab active:cursor-grabbing shadow-md"
             : "border-slate-200 dark:border-slate-800"
         }`}
       >
+        {/* Drop Indicators: Insert Left, Insert Right, or Swap */}
+        {isDropTarget && dragAction === "insert-left" && (
+          <div className="absolute inset-y-0 -left-2 w-3 bg-sky-500 rounded-l-xl shadow-[0_0_16px_rgba(14,165,233,0.9)] z-40 flex items-center justify-center animate-pulse pointer-events-none">
+            <div className="bg-sky-600 text-white text-[10px] font-black px-2.5 py-1 rounded-md shadow-lg whitespace-nowrap -translate-x-full mr-1 flex items-center gap-1">
+              <span>←</span> Sisipkan di Kiri
+            </div>
+          </div>
+        )}
+
+        {isDropTarget && dragAction === "insert-right" && (
+          <div className="absolute inset-y-0 -right-2 w-3 bg-sky-500 rounded-r-xl shadow-[0_0_16px_rgba(14,165,233,0.9)] z-40 flex items-center justify-center animate-pulse pointer-events-none">
+            <div className="bg-sky-600 text-white text-[10px] font-black px-2.5 py-1 rounded-md shadow-lg whitespace-nowrap translate-x-full ml-1 flex items-center gap-1">
+              Sisipkan di Kanan <span>→</span>
+            </div>
+          </div>
+        )}
+
+        {isDropTarget && dragAction === "swap" && (
+          <div className="absolute inset-0 bg-amber-500/15 dark:bg-amber-400/15 border-2 border-amber-500 rounded-2xl z-40 flex items-center justify-center pointer-events-none shadow-[0_0_20px_rgba(245,158,11,0.5)]">
+            <div className="bg-amber-600 text-white text-xs font-black px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-1.5 animate-bounce">
+              <span>🔄</span> Tukar Posisi dengan Kartu Ini
+            </div>
+          </div>
+        )}
+
         {/* Card Header */}
         <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
           <div className="flex items-center gap-2.5 flex-wrap">
@@ -1207,9 +1270,12 @@ const TransformerDetailCard = React.memo(
           </div>
           <div className="flex items-center gap-3">
             {isEditMode ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500 text-white text-[10px] font-black uppercase tracking-wider shadow-sm select-none">
-                <span>⋮⋮</span>
-                <span>Pindahkan</span>
+              <div
+                className="flex items-center gap-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md shadow-sky-500/30 px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-grab active:cursor-grabbing select-none hover:scale-105 transition-transform"
+                title="Tahan dan tarik kartu ini untuk memindahkan atau menukar posisi"
+              >
+                <span className="text-xs">⋮⋮</span>
+                <span className="text-[9px] uppercase tracking-wider font-extrabold hidden sm:inline">Pindahkan</span>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -1323,32 +1389,65 @@ const TransformerDetailCard = React.memo(
               </span>
             </div>
           </div>
-
-          {/* Edit Mode Direction Controls */}
-          {isEditMode && (
-            <div className="mt-4 pt-3 border-t border-sky-200 dark:border-sky-800/50 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={onMoveLeft}
-                className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold border border-slate-300 dark:border-slate-700 transition flex items-center gap-1 cursor-pointer"
-                title="Geser posisi kartu ke kiri"
-              >
-                <span>◀</span>
-                <span>Geser Kiri</span>
-              </button>
-              <span className="text-[10px] text-sky-500 font-bold">Atur Posisi Aktif</span>
-              <button
-                type="button"
-                onClick={onMoveRight}
-                className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold border border-slate-300 dark:border-slate-700 transition flex items-center gap-1 cursor-pointer"
-                title="Geser posisi kartu ke kanan"
-              >
-                <span>Geser Kanan</span>
-                <span>▶</span>
-              </button>
-            </div>
-          )}
         </div>
+
+        {/* In-Card Layout Controls: ONLY rendered when Edit Position Mode is active AND only 1 card is in this row */}
+        {isEditMode && isSingleInRow && (
+          <div className="p-2.5 bg-slate-50/95 dark:bg-slate-800/95 border-t border-slate-200 dark:border-slate-700/80 rounded-b-2xl flex flex-wrap items-center justify-between gap-2 text-xs min-h-[46px]">
+            {/* Ukuran Kolom (1 Kolom atau Penuh) */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] text-slate-400 font-bold">Ukuran:</span>
+              {[
+                { key: "1", label: "1 Kolom" },
+                { key: "full", label: "Penuh (2 Kolom)" }
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSetSpan?.(opt.key as any);
+                  }}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
+                    (span === opt.key || (!span && opt.key === "full"))
+                      ? "bg-sky-500 text-white shadow-xs"
+                      : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Posisi Alignment (Kiri, Tengah, Kanan) - hanya jika ukuran bukan penuh */}
+            {span !== "full" && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-slate-400 font-bold">Posisi:</span>
+                {[
+                  { key: "left", label: "Kiri" },
+                  { key: "center", label: "Tengah" },
+                  { key: "right", label: "Kanan" }
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSetAlign?.(opt.key as any);
+                    }}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
+                      (align === opt.key || (!align && opt.key === "center"))
+                        ? "bg-sky-500 text-white shadow-xs"
+                        : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   },
@@ -1357,6 +1456,12 @@ const TransformerDetailCard = React.memo(
       isTransformerEqual(prev.tx, next.tx) &&
       prev.factoryLabel === next.factoryLabel &&
       prev.isEditMode === next.isEditMode &&
+      prev.isBeingDragged === next.isBeingDragged &&
+      prev.isDropTarget === next.isDropTarget &&
+      prev.dragAction === next.dragAction &&
+      prev.isSingleInRow === next.isSingleInRow &&
+      prev.span === next.span &&
+      prev.align === next.align &&
       prev.loadConfig.safeMax === next.loadConfig.safeMax &&
       prev.loadConfig.cautionMax === next.loadConfig.cautionMax
     );
@@ -2221,70 +2326,338 @@ export default function PowerDistribution() {
   const canAccessConfig = canAccessConfigAndAudit(role);
   const canEditPosition = isSeniorUnitHeadOrAdmin(role);
 
-  // Detail Transformator Custom Order State (Senior Unit Head & Admin)
+  // Detail Transformator Custom Layout State (Senior Unit Head & Admin)
   const [isEditingTrafoPos, setIsEditingTrafoPos] = useState(false);
-  const [trafoOrderIds, setTrafoOrderIds] = useState<string[]>(() => {
+  const [trafoLayoutConfigs, setTrafoLayoutConfigs] = useState<TrafoLayoutConfig[]>(() => {
     try {
-      const saved = localStorage.getItem("scada_trafo_detail_order_v1");
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      const savedLayout = localStorage.getItem("scada_trafo_detail_layout_v2");
+      if (savedLayout) {
+        const parsed = JSON.parse(savedLayout);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
+      const savedOrder = localStorage.getItem("scada_trafo_detail_order_v1");
+      if (savedOrder) {
+        const parsedOrder = JSON.parse(savedOrder);
+        if (Array.isArray(parsedOrder) && parsedOrder.length > 0) {
+          return DEFAULT_TRAFO_LAYOUT.map(item => {
+            const idx = parsedOrder.indexOf(item.id);
+            return {
+              ...item,
+              sortOrder: idx !== -1 ? idx + 1 : item.sortOrder
+            };
+          }).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+        }
+      }
     } catch (e) {}
-    return INITIAL_TRANSFORMERS.map((t) => t.id);
+    return DEFAULT_TRAFO_LAYOUT;
   });
-  const [draftTrafoOrderIds, setDraftTrafoOrderIds] = useState<string[]>([]);
+
+  const [draftTrafoLayoutConfigs, setDraftTrafoLayoutConfigs] = useState<TrafoLayoutConfig[]>([]);
   const [trafoToast, setTrafoToast] = useState<string | null>(null);
-  const [draggedTrafoId, setDraggedTrafoId] = useState<string | null>(null);
+  const [draggedTrafo, setDraggedTrafo] = useState<{ id: string; factory: number; name: string } | null>(null);
+  const [activeDropTxId, setActiveDropTxId] = useState<string | null>(null);
+  const [activeDropFactory, setActiveDropFactory] = useState<number | null>(null);
+  const [dragAction, setDragAction] = useState<"insert-left" | "insert-right" | "swap" | null>(null);
+
+  const trafoGroups = useMemo(() => {
+    const activeConfigs = isEditingTrafoPos && draftTrafoLayoutConfigs.length > 0
+      ? draftTrafoLayoutConfigs
+      : trafoLayoutConfigs;
+
+    const txMap = new Map(transformers.map(t => [t.id, t]));
+
+    const buildFactoryRows = (factoryNum: number) => {
+      const fConfigs = activeConfigs
+        .filter(c => c.factory === factoryNum)
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+      const rowMap = new Map<number, TrafoLayoutConfig[]>();
+      fConfigs.forEach((item, idx) => {
+        const r = typeof item.row === "number" ? item.row : Math.floor(idx / 2);
+        item.row = r;
+        if (!rowMap.has(r)) rowMap.set(r, []);
+        rowMap.get(r)!.push(item);
+      });
+
+      const sortedRowKeys = Array.from(rowMap.keys()).sort((a, b) => a - b);
+      const rows = sortedRowKeys.map((rKey, newRowIdx) => {
+        const rowItems = rowMap.get(rKey)!;
+        rowItems.forEach(it => { it.row = newRowIdx; });
+        return {
+          rowIdx: newRowIdx,
+          items: rowItems
+            .map(c => ({
+              ...c,
+              tx: txMap.get(c.id) || transformers.find(t => t.id === c.id)!
+            }))
+            .filter(it => Boolean(it.tx))
+        };
+      }).filter(r => r.items.length > 0);
+
+      return { rows, count: fConfigs.length };
+    };
+
+    const f1 = buildFactoryRows(1);
+    const f2 = buildFactoryRows(2);
+
+    return [
+      { key: 1, label: "Factory 1", rows: f1.rows, count: f1.count },
+      { key: 2, label: "Factory 2", rows: f2.rows, count: f2.count },
+    ];
+  }, [isEditingTrafoPos, draftTrafoLayoutConfigs, trafoLayoutConfigs, transformers]);
 
   const handleStartEditTrafoPos = () => {
-    setDraftTrafoOrderIds([...trafoOrderIds]);
+    setDraftTrafoLayoutConfigs(JSON.parse(JSON.stringify(trafoLayoutConfigs)));
     setIsEditingTrafoPos(true);
   };
 
   const handleCancelEditTrafoPos = () => {
     setIsEditingTrafoPos(false);
-    setDraftTrafoOrderIds([]);
+    setDraftTrafoLayoutConfigs([]);
+    setDraggedTrafo(null);
+    setActiveDropTxId(null);
+    setActiveDropFactory(null);
+    setDragAction(null);
   };
 
   const handleSaveTrafoPos = () => {
-    setTrafoOrderIds(draftTrafoOrderIds);
+    setTrafoLayoutConfigs(draftTrafoLayoutConfigs);
     try {
-      localStorage.setItem("scada_trafo_detail_order_v1", JSON.stringify(draftTrafoOrderIds));
+      localStorage.setItem("scada_trafo_detail_layout_v2", JSON.stringify(draftTrafoLayoutConfigs));
+      const orderIds = draftTrafoLayoutConfigs.map(c => c.id);
+      localStorage.setItem("scada_trafo_detail_order_v1", JSON.stringify(orderIds));
     } catch (e) {}
     setIsEditingTrafoPos(false);
     setTrafoToast("✓ Posisi kartu Transformator berhasil disimpan!");
     setTimeout(() => setTrafoToast(null), 3000);
   };
 
-  const handleMoveTrafoDirection = (txId: string, direction: "left" | "right") => {
-    const list = [...draftTrafoOrderIds];
-    const idx = list.indexOf(txId);
-    if (idx === -1) return;
-    const targetIdx = direction === "left" ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= list.length) return;
-    const temp = list[idx];
-    list[idx] = list[targetIdx];
-    list[targetIdx] = temp;
-    setDraftTrafoOrderIds(list);
-  };
-
-  const handleTrafoDragStart = (e: React.DragEvent, txId: string) => {
-    setDraggedTrafoId(txId);
+  const handleTrafoDragStart = (e: React.DragEvent, txId: string, factory: number, name: string) => {
+    if (!canEditPosition || !isEditingTrafoPos) return;
+    setDraggedTrafo({ id: txId, factory, name });
+    e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", txId);
   };
 
-  const handleTrafoDrop = (targetTxId: string) => {
-    if (!draggedTrafoId || draggedTrafoId === targetTxId) return;
-    const list = [...draftTrafoOrderIds];
-    const srcIdx = list.indexOf(draggedTrafoId);
-    const tgtIdx = list.indexOf(targetTxId);
-    if (srcIdx !== -1 && tgtIdx !== -1) {
-      list.splice(srcIdx, 1);
-      list.splice(tgtIdx, 0, draggedTrafoId);
-      setDraftTrafoOrderIds(list);
+  const handleTrafoDragEnd = () => {
+    setDraggedTrafo(null);
+    setActiveDropTxId(null);
+    setActiveDropFactory(null);
+    setDragAction(null);
+  };
+
+  const handleTrafoDragOverFactory = (e: React.DragEvent, factory: number) => {
+    if (!draggedTrafo || !isEditingTrafoPos) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (activeDropFactory !== factory) {
+      setActiveDropFactory(factory);
     }
-    setDraggedTrafoId(null);
+  };
+
+  const handleTrafoDragOverCard = (e: React.DragEvent, factory: number, targetTxId: string) => {
+    if (!draggedTrafo || !isEditingTrafoPos) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+
+    if (activeDropFactory !== factory) setActiveDropFactory(factory);
+
+    if (draggedTrafo.id.toLowerCase() === targetTxId.toLowerCase()) {
+      setActiveDropTxId(null);
+      setDragAction(null);
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = e.clientX - rect.left;
+    const ratio = relX / Math.max(rect.width, 1);
+
+    let action: "insert-left" | "insert-right" | "swap";
+    if (ratio < 0.30) {
+      action = "insert-left";
+    } else if (ratio > 0.70) {
+      action = "insert-right";
+    } else {
+      action = "swap";
+    }
+
+    setActiveDropTxId(targetTxId);
+    setDragAction(action);
+  };
+
+  const handleTrafoDropOnCard = (targetFactory: number, targetTxId: string) => {
+    if (!draggedTrafo || !isEditingTrafoPos) return;
+    const { id: sourceId, name: sourceName } = draggedTrafo;
+    if (sourceId.toLowerCase() === targetTxId.toLowerCase()) {
+      handleTrafoDragEnd();
+      return;
+    }
+
+    const currentConfigs = draftTrafoLayoutConfigs.length > 0 ? [...draftTrafoLayoutConfigs] : [...trafoLayoutConfigs];
+    const targetName = transformers.find(t => t.id === targetTxId)?.name || targetTxId;
+
+    // Build rows map per factory
+    const factoryRowsMap = new Map<number, string[][]>();
+    trafoGroups.forEach(g => {
+      factoryRowsMap.set(g.key, g.rows.map(r => r.items.map(it => it.id)));
+    });
+
+    let sourceFactory: number | null = null;
+    let sourceRowIdx = -1;
+    let sourceColIdx = -1;
+    let targetRowIdx = -1;
+    let targetColIdx = -1;
+
+    factoryRowsMap.forEach((rows, fKey) => {
+      rows.forEach((rowCards, rIdx) => {
+        rowCards.forEach((cId, cIdx) => {
+          if (cId.toLowerCase() === sourceId.toLowerCase()) {
+            sourceFactory = fKey;
+            sourceRowIdx = rIdx;
+            sourceColIdx = cIdx;
+          }
+          if (cId.toLowerCase() === targetTxId.toLowerCase()) {
+            targetRowIdx = rIdx;
+            targetColIdx = cIdx;
+          }
+        });
+      });
+    });
+
+    if (sourceFactory === null || sourceRowIdx === -1 || targetRowIdx === -1) {
+      handleTrafoDragEnd();
+      return;
+    }
+
+    const sRows = factoryRowsMap.get(sourceFactory)!;
+    const tRows = factoryRowsMap.get(targetFactory)!;
+    const action = dragAction || "insert-right";
+
+    if (action === "swap") {
+      const temp = sRows[sourceRowIdx][sourceColIdx];
+      sRows[sourceRowIdx][sourceColIdx] = tRows[targetRowIdx][targetColIdx];
+      tRows[targetRowIdx][targetColIdx] = temp;
+      setTrafoToast(`✓ Menukar posisi '${sourceName}' dengan '${targetName}'`);
+    } else {
+      sRows[sourceRowIdx].splice(sourceColIdx, 1);
+      const curTargetColIdx = tRows[targetRowIdx].findIndex(k => k.toLowerCase() === targetTxId.toLowerCase());
+      if (curTargetColIdx !== -1) {
+        const insertIdx = action === "insert-left" ? curTargetColIdx : curTargetColIdx + 1;
+        tRows[targetRowIdx].splice(insertIdx, 0, sourceId);
+        setTrafoToast(`✓ Memindahkan '${sourceName}' ke sebelah ${action === "insert-left" ? "kiri" : "kanan"} '${targetName}'`);
+      }
+    }
+
+    // Flatten back to nextDraft
+    const nextDraft: TrafoLayoutConfig[] = [];
+    let sortCounter = 1;
+
+    [1, 2].forEach(fKey => {
+      const rows = factoryRowsMap.get(fKey) || [];
+      const nonEmptyRows = rows.filter(r => r.length > 0);
+      nonEmptyRows.forEach((rowCards, newRowIdx) => {
+        rowCards.forEach(cId => {
+          const existing = currentConfigs.find(it => it.id.toLowerCase() === cId.toLowerCase());
+          nextDraft.push({
+            id: cId,
+            factory: fKey,
+            row: newRowIdx,
+            span: existing?.span || "1",
+            align: existing?.align || "center",
+            sortOrder: sortCounter++
+          });
+        });
+      });
+    });
+
+    setDraftTrafoLayoutConfigs(nextDraft);
+    handleTrafoDragEnd();
+    setTimeout(() => setTrafoToast(null), 3000);
+  };
+
+  const handleDropOnNewRow = (factory: number) => {
+    if (!draggedTrafo || !isEditingTrafoPos) return;
+    const { id: sourceId, name: sourceName } = draggedTrafo;
+
+    const currentConfigs = draftTrafoLayoutConfigs.length > 0 ? [...draftTrafoLayoutConfigs] : [...trafoLayoutConfigs];
+    const factoryRowsMap = new Map<number, string[][]>();
+    trafoGroups.forEach(g => {
+      factoryRowsMap.set(g.key, g.rows.map(r => r.items.map(it => it.id)));
+    });
+
+    let sourceFactory: number | null = null;
+    let sourceRowIdx = -1;
+    let sourceColIdx = -1;
+
+    factoryRowsMap.forEach((rows, fKey) => {
+      rows.forEach((rowCards, rIdx) => {
+        rowCards.forEach((cId, cIdx) => {
+          if (cId.toLowerCase() === sourceId.toLowerCase()) {
+            sourceFactory = fKey;
+            sourceRowIdx = rIdx;
+            sourceColIdx = cIdx;
+          }
+        });
+      });
+    });
+
+    if (sourceFactory === null || sourceRowIdx === -1) {
+      handleTrafoDragEnd();
+      return;
+    }
+
+    const sRows = factoryRowsMap.get(sourceFactory)!;
+    sRows[sourceRowIdx].splice(sourceColIdx, 1);
+
+    const tRows = factoryRowsMap.get(factory)!;
+    tRows.push([sourceId]);
+
+    const nextDraft: TrafoLayoutConfig[] = [];
+    let sortCounter = 1;
+
+    [1, 2].forEach(fKey => {
+      const rows = factoryRowsMap.get(fKey) || [];
+      const nonEmptyRows = rows.filter(r => r.length > 0);
+      nonEmptyRows.forEach((rowCards, newRowIdx) => {
+        rowCards.forEach(cId => {
+          const existing = currentConfigs.find(it => it.id.toLowerCase() === cId.toLowerCase());
+          nextDraft.push({
+            id: cId,
+            factory: fKey,
+            row: newRowIdx,
+            span: rowCards.length === 1 ? (existing?.span || "full") : "1",
+            align: existing?.align || "center",
+            sortOrder: sortCounter++
+          });
+        });
+      });
+    });
+
+    setDraftTrafoLayoutConfigs(nextDraft);
+    setTrafoToast(`✓ Memindahkan '${sourceName}' ke baris baru di Factory ${factory}`);
+    handleTrafoDragEnd();
+    setTimeout(() => setTrafoToast(null), 3000);
+  };
+
+  const handleSetCardSpan = (txId: string, span: "1" | "full") => {
+    const list = (draftTrafoLayoutConfigs.length > 0 ? draftTrafoLayoutConfigs : trafoLayoutConfigs).map(c => {
+      if (c.id === txId) {
+        return { ...c, span };
+      }
+      return c;
+    });
+    setDraftTrafoLayoutConfigs(list);
+  };
+
+  const handleSetCardAlign = (txId: string, align: "left" | "center" | "right") => {
+    const list = (draftTrafoLayoutConfigs.length > 0 ? draftTrafoLayoutConfigs : trafoLayoutConfigs).map(c => {
+      if (c.id === txId) {
+        return { ...c, align };
+      }
+      return c;
+    });
+    setDraftTrafoLayoutConfigs(list);
   };
 
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -2737,16 +3110,17 @@ export default function PowerDistribution() {
   }, [transformers]);
 
   const orderedTransformers = useMemo(() => {
-    const orderList = isEditingTrafoPos ? draftTrafoOrderIds : trafoOrderIds;
+    const activeConfigs = isEditingTrafoPos && draftTrafoLayoutConfigs.length > 0
+      ? draftTrafoLayoutConfigs
+      : trafoLayoutConfigs;
+
+    const orderMap = new Map(activeConfigs.map((c, idx) => [c.id, idx]));
     return [...transformers].sort((a, b) => {
-      const idxA = orderList.indexOf(a.id);
-      const idxB = orderList.indexOf(b.id);
-      if (idxA === -1 && idxB === -1) return 0;
-      if (idxA === -1) return 1;
-      if (idxB === -1) return -1;
+      const idxA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999;
+      const idxB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999;
       return idxA - idxB;
     });
-  }, [transformers, isEditingTrafoPos, draftTrafoOrderIds, trafoOrderIds]);
+  }, [transformers, isEditingTrafoPos, draftTrafoLayoutConfigs, trafoLayoutConfigs]);
 
   const factory1 = orderedTransformers.filter(tx => tx.factory === 1);
   const factory2 = orderedTransformers.filter(tx => tx.factory === 2);
@@ -3239,51 +3613,112 @@ export default function PowerDistribution() {
           )}
         </div>
 
-        {/* Factory 1 */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-extrabold text-[#47729f] dark:text-sky-400 uppercase tracking-widest pl-2">
-            ● Factory 1 — {factory1.length} Transformator
-          </h4>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            {factory1.map((tx) => (
-              <TransformerDetailCard
-                key={tx.id}
-                tx={tx}
-                factoryLabel="Factory 1"
-                loadConfig={loadConfig}
-                isEditMode={isEditingTrafoPos}
-                onMoveLeft={() => handleMoveTrafoDirection(tx.id, "left")}
-                onMoveRight={() => handleMoveTrafoDirection(tx.id, "right")}
-                onDragStart={(e) => handleTrafoDragStart(e, tx.id)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => handleTrafoDrop(tx.id)}
-              />
-            ))}
-          </div>
-        </div>
+        {/* Factory Sections with Rows and Drag & Drop */}
+        {trafoGroups.map((group) => {
+          const isGroupDrop = isEditingTrafoPos && activeDropFactory === group.key && !activeDropTxId;
 
-        {/* Factory 2 */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-extrabold text-[#47729f] dark:text-sky-400 uppercase tracking-widest pl-2">
-            ● Factory 2 — {factory2.length} Transformator
-          </h4>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            {factory2.map((tx) => (
-              <TransformerDetailCard
-                key={tx.id}
-                tx={tx}
-                factoryLabel="Factory 2"
-                loadConfig={loadConfig}
-                isEditMode={isEditingTrafoPos}
-                onMoveLeft={() => handleMoveTrafoDirection(tx.id, "left")}
-                onMoveRight={() => handleMoveTrafoDirection(tx.id, "right")}
-                onDragStart={(e) => handleTrafoDragStart(e, tx.id)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => handleTrafoDrop(tx.id)}
-              />
-            ))}
-          </div>
-        </div>
+          return (
+            <div
+              key={group.key}
+              onDragOver={(e) => handleTrafoDragOverFactory(e, group.key)}
+              className={`space-y-3 transition-all duration-200 rounded-2xl p-2.5 ${
+                isGroupDrop ? "bg-sky-500/5 ring-2 ring-dashed ring-sky-400 p-4 shadow-inner" : ""
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-extrabold text-[#47729f] dark:text-sky-400 uppercase tracking-widest pl-2">
+                  ● {group.label} — {group.count} Transformator
+                </h4>
+                {isEditingTrafoPos && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400/80 hidden sm:inline">
+                    Tarik kartu ke {group.label}
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-5">
+                {group.rows.map((row) => {
+                  const isSingle = row.items.length === 1;
+                  if (isSingle) {
+                    const item = row.items[0];
+                    const align = item.align || "center";
+                    const span = item.span || "full";
+                    const justifyClass = align === "left" ? "justify-start" : align === "right" ? "justify-end" : "justify-center";
+                    const widthClass = span === "1" ? "w-full xl:w-1/2" : "w-full";
+
+                    return (
+                      <div key={row.rowIdx} className={`w-full flex items-stretch ${justifyClass}`}>
+                        <div className={widthClass}>
+                          <TransformerDetailCard
+                            tx={item.tx}
+                            factoryLabel={group.label}
+                            loadConfig={loadConfig}
+                            isEditMode={isEditingTrafoPos}
+                            isBeingDragged={draggedTrafo?.id === item.id}
+                            isDropTarget={activeDropTxId === item.id}
+                            dragAction={activeDropTxId === item.id ? dragAction : null}
+                            isSingleInRow={true}
+                            span={span}
+                            align={align}
+                            onSetSpan={(newSpan) => handleSetCardSpan(item.id, newSpan)}
+                            onSetAlign={(newAlign) => handleSetCardAlign(item.id, newAlign)}
+                            onDragStart={(e) => handleTrafoDragStart(e, item.id, group.key, item.tx.name)}
+                            onDragEnd={handleTrafoDragEnd}
+                            onDragOver={(e) => handleTrafoDragOverCard(e, group.key, item.id)}
+                            onDrop={() => handleTrafoDropOnCard(group.key, item.id)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={row.rowIdx} className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                      {row.items.map((item) => (
+                        <TransformerDetailCard
+                          key={item.id}
+                          tx={item.tx}
+                          factoryLabel={group.label}
+                          loadConfig={loadConfig}
+                          isEditMode={isEditingTrafoPos}
+                          isBeingDragged={draggedTrafo?.id === item.id}
+                          isDropTarget={activeDropTxId === item.id}
+                          dragAction={activeDropTxId === item.id ? dragAction : null}
+                          isSingleInRow={false}
+                          span="1"
+                          align="center"
+                          onDragStart={(e) => handleTrafoDragStart(e, item.id, group.key, item.tx.name)}
+                          onDragEnd={handleTrafoDragEnd}
+                          onDragOver={(e) => handleTrafoDragOverCard(e, group.key, item.id)}
+                          onDrop={() => handleTrafoDropOnCard(group.key, item.id)}
+                        />
+                      ))}
+                    </div>
+                  );
+                })}
+
+                {isEditingTrafoPos && (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.dataTransfer.dropEffect = "move";
+                    }}
+                    onDrop={(e) => {
+                      e.stopPropagation();
+                      handleDropOnNewRow(group.key);
+                    }}
+                    className="border-2 border-dashed border-sky-300/60 dark:border-slate-700 hover:border-sky-500 hover:bg-sky-500/5 rounded-2xl p-3 text-center transition flex items-center justify-center gap-2 text-xs font-bold text-sky-600 dark:text-sky-400 cursor-pointer"
+                    title={`Tarik kartu ke sini untuk membuat Baris Baru di ${group.label}`}
+                  >
+                    <span className="text-sm font-black">+</span>
+                    <span>Tarik kartu ke sini untuk membuat Baris Baru di {group.label}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </section>
 
       {/* ═══════════ SECTION: SUB-DISTRIBUTION POWER METERS (SDP) ═══════════ */}

@@ -7,11 +7,14 @@ type PowerMeterCardProps = {
   pm: ElectricPmItem;
   info: ReturnType<typeof getPmInfo>;
   isEditingPosition: boolean;
+  isBeingDragged?: boolean;
+  isDropTarget?: boolean;
+  dragAction?: "insert-left" | "insert-right" | "swap" | null;
   onDragStart: (e: React.DragEvent, id: string) => void;
+  onDragEnd?: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
   onDropOnCard: (id: string) => void;
   onSelect: (id: string) => void;
-  onMoveLeft?: () => void;
-  onMoveRight?: () => void;
 };
 
 const PowerMeterCard = memo(
@@ -19,11 +22,14 @@ const PowerMeterCard = memo(
     pm,
     info,
     isEditingPosition,
+    isBeingDragged,
+    isDropTarget,
+    dragAction,
     onDragStart,
+    onDragEnd,
+    onDragOver,
     onDropOnCard,
     onSelect,
-    onMoveLeft,
-    onMoveRight,
   }: PowerMeterCardProps) {
     const isMati = pm.status === false;
     const isTerputus = pm.status === null || pm.status === undefined || pm.active_power_total === null;
@@ -47,17 +53,47 @@ const PowerMeterCard = memo(
       <div
         draggable={isEditingPosition}
         onDragStart={(e) => onDragStart(e, pm.pm_id)}
-        onDragOver={(e) => e.preventDefault()}
+        onDragEnd={onDragEnd}
+        onDragOver={onDragOver}
         onDrop={() => onDropOnCard(pm.pm_id)}
         onClick={() => {
           if (!isEditingPosition) onSelect(pm.pm_id);
         }}
-        className={`p-4 rounded-2xl border transition-shadow duration-150 flex flex-col justify-between relative ${
-          isEditingPosition
-            ? "ring-2 ring-sky-500/50 border-sky-400 bg-sky-50/20 dark:bg-slate-800/80 cursor-grab active:cursor-grabbing hover:scale-[1.02]"
+        className={`p-4 rounded-2xl border transition-all duration-150 flex flex-col justify-between relative ${
+          isBeingDragged
+            ? "opacity-30 scale-95 ring-2 ring-sky-500 rounded-2xl cursor-grabbing"
+            : isDropTarget
+            ? "scale-[1.01] rounded-2xl"
+            : isEditingPosition
+            ? "ring-1 ring-sky-400/40 hover:ring-sky-500 rounded-2xl cursor-grab active:cursor-grabbing shadow-md bg-white dark:bg-slate-800/80"
             : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-800/40 hover:border-sky-500/50 hover:shadow-lg hover:shadow-sky-500/5 cursor-pointer group"
         }`}
       >
+        {/* Drop Indicators: Insert Left, Insert Right, or Swap */}
+        {isDropTarget && dragAction === "insert-left" && (
+          <div className="absolute inset-y-0 -left-2 w-3 bg-sky-500 rounded-l-xl shadow-[0_0_16px_rgba(14,165,233,0.9)] z-40 flex items-center justify-center animate-pulse pointer-events-none">
+            <div className="bg-sky-600 text-white text-[10px] font-black px-2.5 py-1 rounded-md shadow-lg whitespace-nowrap -translate-x-full mr-1 flex items-center gap-1">
+              <span>←</span> Sisipkan di Kiri
+            </div>
+          </div>
+        )}
+
+        {isDropTarget && dragAction === "insert-right" && (
+          <div className="absolute inset-y-0 -right-2 w-3 bg-sky-500 rounded-r-xl shadow-[0_0_16px_rgba(14,165,233,0.9)] z-40 flex items-center justify-center animate-pulse pointer-events-none">
+            <div className="bg-sky-600 text-white text-[10px] font-black px-2.5 py-1 rounded-md shadow-lg whitespace-nowrap translate-x-full ml-1 flex items-center gap-1">
+              Sisipkan di Kanan <span>→</span>
+            </div>
+          </div>
+        )}
+
+        {isDropTarget && dragAction === "swap" && (
+          <div className="absolute inset-0 bg-amber-500/15 dark:bg-amber-400/15 border-2 border-amber-500 rounded-2xl z-40 flex items-center justify-center pointer-events-none shadow-[0_0_20px_rgba(245,158,11,0.5)]">
+            <div className="bg-amber-600 text-white text-xs font-black px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-1.5 animate-bounce">
+              <span>🔄</span> Tukar Posisi dengan Kartu Ini
+            </div>
+          </div>
+        )}
+
         {/* Card Header */}
         <div>
           <div className="flex items-start justify-between gap-1.5 mb-2">
@@ -74,25 +110,37 @@ const PowerMeterCard = memo(
                 </span>
               </div>
             </div>
-            <span
-              className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black ${
-                isOnline
-                  ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                  : isStandby
-                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
-                  : isMati
-                  ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
-                  : "bg-slate-500/10 text-slate-400 border border-slate-500/20"
-              }`}
-            >
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              {isEditingPosition && (
+                <div
+                  className="flex items-center gap-1 bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md shadow-sky-500/30 px-2 py-0.5 rounded-lg text-[9px] font-extrabold cursor-grab active:cursor-grabbing select-none hover:scale-105 transition-transform"
+                  title="Tahan dan tarik kartu ini untuk memindahkan atau menukar posisi"
+                >
+                  <span className="text-xs">⋮⋮</span>
+                  <span className="uppercase tracking-wider">Pindahkan</span>
+                </div>
+              )}
               <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  isOnline ? "bg-emerald-500" : isStandby ? "bg-amber-500" : isMati ? "bg-rose-500" : "bg-slate-400"
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black ${
+                  isOnline
+                    ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                    : isStandby
+                    ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                    : isMati
+                    ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                    : "bg-slate-500/10 text-slate-400 border border-slate-500/20"
                 }`}
-                style={{ boxShadow: isOnline ? "0 0 6px #10b981" : "none" }}
-              />
-              {isOnline ? "ONLINE" : isStandby ? "STANDBY" : isMati ? "OFFLINE" : "TERPUTUS"}
-            </span>
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    isOnline ? "bg-emerald-500" : isStandby ? "bg-amber-500" : isMati ? "bg-rose-500" : "bg-slate-400"
+                  }`}
+                  style={{ boxShadow: isOnline ? "0 0 6px #10b981" : "none" }}
+                />
+                {isOnline ? "ONLINE" : isStandby ? "STANDBY" : isMati ? "OFFLINE" : "TERPUTUS"}
+              </span>
+            </div>
           </div>
 
           {/* Main Metric: Active Power */}
@@ -137,36 +185,8 @@ const PowerMeterCard = memo(
           </div>
         </div>
 
-        {/* Card Actions / Reorder Buttons */}
-        {isEditingPosition ? (
-          <div className="mt-3 pt-2.5 border-t border-sky-200 dark:border-sky-800/50 flex items-center justify-between gap-1.5">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMoveLeft?.();
-              }}
-              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-sky-50 text-slate-700 dark:text-slate-200 text-xs font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer"
-              title="Geser posisi kartu ke kiri"
-            >
-              <span>◀</span>
-              <span>Kiri</span>
-            </button>
-            <span className="text-[10px] text-sky-500 font-extrabold uppercase">Atur</span>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMoveRight?.();
-              }}
-              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-sky-50 text-slate-700 dark:text-slate-200 text-xs font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer"
-              title="Geser posisi kartu ke kanan"
-            >
-              <span>Kanan</span>
-              <span>▶</span>
-            </button>
-          </div>
-        ) : (
+        {/* Card Footer Button (Only in Normal View) */}
+        {!isEditingPosition && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -183,7 +203,10 @@ const PowerMeterCard = memo(
   (prev, next) => {
     return (
       prev.pm === next.pm &&
-      prev.isEditingPosition === next.isEditingPosition
+      prev.isEditingPosition === next.isEditingPosition &&
+      prev.isBeingDragged === next.isBeingDragged &&
+      prev.isDropTarget === next.isDropTarget &&
+      prev.dragAction === next.dragAction
     );
   }
 );
@@ -225,6 +248,8 @@ export function EwPowerMetersGrid({
   const [draftOrder, setDraftOrder] = useState<string[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [draggedPmId, setDraggedPmId] = useState<string | null>(null);
+  const [activeDropPmId, setActiveDropPmId] = useState<string | null>(null);
+  const [dragAction, setDragAction] = useState<"insert-left" | "insert-right" | "swap" | null>(null);
 
   const activeOrder = isEditingPosition ? draftOrder : customOrder;
 
@@ -266,6 +291,9 @@ export function EwPowerMetersGrid({
   const handleCancelEdit = () => {
     setIsEditingPosition(false);
     setDraftOrder([]);
+    setDraggedPmId(null);
+    setActiveDropPmId(null);
+    setDragAction(null);
   };
 
   const handleSaveOrder = () => {
@@ -278,37 +306,82 @@ export function EwPowerMetersGrid({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleMoveDirection = useCallback((pmId: string, direction: "left" | "right") => {
-    const upId = pmId.toUpperCase();
-    const list = [...draftOrder];
-    const idx = list.indexOf(upId);
-    if (idx === -1) return;
-    const targetIdx = direction === "left" ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= list.length) return;
-    const temp = list[idx];
-    list[idx] = list[targetIdx];
-    list[targetIdx] = temp;
-    setDraftOrder(list);
-  }, [draftOrder]);
-
   const handleDragStart = useCallback((e: React.DragEvent, pmId: string) => {
     setDraggedPmId(pmId.toUpperCase());
+    e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", pmId.toUpperCase());
   }, []);
 
+  const handleDragEnd = useCallback(() => {
+    setDraggedPmId(null);
+    setActiveDropPmId(null);
+    setDragAction(null);
+  }, []);
+
+  const handleDragOverCard = useCallback((e: React.DragEvent, targetPmId: string) => {
+    if (!draggedPmId || !isEditingPosition) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+
+    const tgt = targetPmId.toUpperCase();
+    if (draggedPmId === tgt) {
+      setActiveDropPmId(null);
+      setDragAction(null);
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = e.clientX - rect.left;
+    const ratio = relX / Math.max(rect.width, 1);
+
+    let action: "insert-left" | "insert-right" | "swap";
+    if (ratio < 0.30) {
+      action = "insert-left";
+    } else if (ratio > 0.70) {
+      action = "insert-right";
+    } else {
+      action = "swap";
+    }
+
+    setActiveDropPmId(tgt);
+    setDragAction(action);
+  }, [draggedPmId, isEditingPosition]);
+
   const handleDropOnCard = useCallback((targetPmId: string) => {
     const tgt = targetPmId.toUpperCase();
-    if (!draggedPmId || draggedPmId === tgt) return;
+    if (!draggedPmId || draggedPmId === tgt) {
+      handleDragEnd();
+      return;
+    }
     const list = [...draftOrder];
     const srcIdx = list.indexOf(draggedPmId);
     const tgtIdx = list.indexOf(tgt);
+
     if (srcIdx !== -1 && tgtIdx !== -1) {
-      list.splice(srcIdx, 1);
-      list.splice(tgtIdx, 0, draggedPmId);
+      const srcInfo = getPmInfo(draggedPmId);
+      const tgtInfo = getPmInfo(tgt);
+      const action = dragAction || "insert-right";
+
+      if (action === "swap") {
+        const temp = list[srcIdx];
+        list[srcIdx] = list[tgtIdx];
+        list[tgtIdx] = temp;
+        setToastMessage(`✓ Menukar posisi '${srcInfo.name}' dengan '${tgtInfo.name}'`);
+      } else {
+        list.splice(srcIdx, 1);
+        const curTargetIdx = list.indexOf(tgt);
+        if (curTargetIdx !== -1) {
+          const insertIdx = action === "insert-left" ? curTargetIdx : curTargetIdx + 1;
+          list.splice(insertIdx, 0, draggedPmId);
+          setToastMessage(`✓ Memindahkan '${srcInfo.name}' ke sebelah ${action === "insert-left" ? "kiri" : "kanan"} '${tgtInfo.name}'`);
+        }
+      }
       setDraftOrder(list);
+      setTimeout(() => setToastMessage(null), 3000);
     }
-    setDraggedPmId(null);
-  }, [draggedPmId, draftOrder]);
+    handleDragEnd();
+  }, [draggedPmId, draftOrder, dragAction, handleDragEnd]);
 
   return (
     <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
@@ -404,17 +477,22 @@ export function EwPowerMetersGrid({
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {filtered.map((pm) => {
               const info = getPmInfo(pm.pm_id);
+              const isBeingDragged = draggedPmId === pm.pm_id.toUpperCase();
+              const isDropTarget = activeDropPmId === pm.pm_id.toUpperCase();
               return (
                 <PowerMeterCard
                   key={pm.pm_id}
                   pm={pm}
                   info={info}
                   isEditingPosition={isEditingPosition}
+                  isBeingDragged={isBeingDragged}
+                  isDropTarget={isDropTarget}
+                  dragAction={isDropTarget ? dragAction : null}
                   onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => handleDragOverCard(e, pm.pm_id)}
                   onDropOnCard={handleDropOnCard}
                   onSelect={setSelectedPmId}
-                  onMoveLeft={() => handleMoveDirection(pm.pm_id, "left")}
-                  onMoveRight={() => handleMoveDirection(pm.pm_id, "right")}
                 />
               );
             })}
