@@ -25,11 +25,23 @@ const PowerMeterCard = memo(
     onMoveLeft,
     onMoveRight,
   }: PowerMeterCardProps) {
-    const isOnline = pm.status !== false;
-    const pKw = Number(pm.active_power_total) || 0;
-    const pf = Math.abs(Number(pm.power_factor) || 0);
-    const vL = Number(pm.volt_ab) || Number(pm.volt_ll) || 0;
-    const iAvg = ((Number(pm.current_a) || 0) + (Number(pm.current_b) || 0) + (Number(pm.current_c) || 0)) / 3;
+    const isMati = pm.status === false;
+    const isTerputus = pm.status === null || pm.status === undefined || pm.active_power_total === null;
+    const isStandby = !isMati && !isTerputus && (Number(pm.active_power_total) <= 0.05);
+    const isOnline = !isMati && !isTerputus && !isStandby;
+
+    const pKw = pm.active_power_total !== null && pm.active_power_total !== undefined && !isNaN(Number(pm.active_power_total))
+      ? Number(pm.active_power_total)
+      : null;
+    const pf = pm.power_factor !== null && pm.power_factor !== undefined && !isNaN(Number(pm.power_factor))
+      ? Math.abs(Number(pm.power_factor))
+      : null;
+    const vL = pm.volt_ab !== null && pm.volt_ab !== undefined
+      ? Number(pm.volt_ab)
+      : (pm.volt_ll !== null && pm.volt_ll !== undefined ? Number(pm.volt_ll) : null);
+    const iAvg = (pm.current_a !== null || pm.current_b !== null || pm.current_c !== null)
+      ? ((Number(pm.current_a) || 0) + (Number(pm.current_b) || 0) + (Number(pm.current_c) || 0)) / 3
+      : null;
 
     return (
       <div
@@ -66,25 +78,40 @@ const PowerMeterCard = memo(
               className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black ${
                 isOnline
                   ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                  : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                  : isStandby
+                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                  : isMati
+                  ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                  : "bg-slate-500/10 text-slate-400 border border-slate-500/20"
               }`}
             >
               <span
-                className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-emerald-500" : "bg-rose-500"}`}
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isOnline ? "bg-emerald-500" : isStandby ? "bg-amber-500" : isMati ? "bg-rose-500" : "bg-slate-400"
+                }`}
                 style={{ boxShadow: isOnline ? "0 0 6px #10b981" : "none" }}
               />
-              {isOnline ? "LIVE" : "OFF"}
+              {isOnline ? "AKTIF" : isStandby ? "STANDBY" : isMati ? "MATI" : "TERPUTUS"}
             </span>
           </div>
 
           {/* Main Metric: Active Power */}
           <div className="my-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-100 dark:border-slate-700/50">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-              Active Power
-            </span>
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Active Power
+              </span>
+              <span className={`text-[10px] font-bold ${
+                isOnline ? "text-emerald-500" : isStandby ? "text-amber-500" : isMati ? "text-rose-500" : "text-slate-400"
+              }`}>
+                {isOnline ? "Beban Aktif" : isStandby ? "Siaga (0 kW)" : isMati ? "Unit Non-Aktif" : "Sensor Terputus"}
+              </span>
+            </div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-black font-mono tabular-nums text-sky-500 tracking-tight">
-                {pKw.toFixed(1)}
+              <span className={`text-2xl font-black font-mono tabular-nums tracking-tight ${
+                isOnline ? "text-sky-500" : isStandby ? "text-amber-500" : isMati ? "text-rose-500" : "text-slate-400"
+              }`}>
+                {pKw !== null ? (isMati ? "0.0" : pKw.toFixed(1)) : "—"}
               </span>
               <span className="text-xs font-black text-slate-400">kW</span>
             </div>
@@ -94,15 +121,15 @@ const PowerMeterCard = memo(
           <div className="grid grid-cols-2 gap-2 text-xs font-mono tabular-nums">
             <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
               <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Tegangan</span>
-              <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">{vL.toFixed(0)} V</span>
+              <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">{vL !== null ? `${vL.toFixed(0)} V` : "—"}</span>
             </div>
             <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
               <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Arus Rata2</span>
-              <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">{iAvg.toFixed(1)} A</span>
+              <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">{iAvg !== null ? `${iAvg.toFixed(1)} A` : "—"}</span>
             </div>
             <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
               <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Power Factor</span>
-              <span className="text-xs sm:text-sm font-black text-emerald-500">{pf.toFixed(2)}</span>
+              <span className="text-xs sm:text-sm font-black text-emerald-500">{pf !== null ? pf.toFixed(2) : "—"}</span>
             </div>
             <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
               <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Energi</span>

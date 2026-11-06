@@ -168,29 +168,27 @@ function mapPmToTransformer(
   const rawActive = pm.active_power_total !== null && pm.active_power_total !== undefined && !isNaN(Number(pm.active_power_total))
     ? Number(Number(pm.active_power_total).toFixed(1))
     : null;
-  const activePowerKw = (rawActive !== null && (rawActive > 0 || initialTx.activePowerKw === null))
-    ? rawActive
-    : initialTx.activePowerKw;
+  const activePowerKw = rawActive;
 
   const rawReactive = pm.reactive_power_total !== null && pm.reactive_power_total !== undefined && !isNaN(Number(pm.reactive_power_total))
     ? Number(Number(pm.reactive_power_total).toFixed(1))
     : null;
-  const reactivePowerKvar = rawReactive !== null ? rawReactive : initialTx.reactivePowerKvar;
+  const reactivePowerKvar = rawReactive;
 
   const rawApparent = pm.apparent_power_total !== null && pm.apparent_power_total !== undefined && !isNaN(Number(pm.apparent_power_total))
     ? Number(Number(pm.apparent_power_total).toFixed(1))
     : null;
-  const apparentPowerKva = rawApparent !== null ? rawApparent : initialTx.apparentPowerKva;
+  const apparentPowerKva = rawApparent;
 
   const rawPf = pm.power_factor !== null && pm.power_factor !== undefined && !isNaN(Number(pm.power_factor))
     ? Number(pm.power_factor)
     : null;
-  const powerFactor = rawPf !== null ? Math.min(1.0, Math.abs(rawPf)) : initialTx.powerFactor;
+  const powerFactor = rawPf !== null ? Math.min(1.0, Math.abs(rawPf)) : null;
 
   const rawFreq = pm.frequency !== null && pm.frequency !== undefined && !isNaN(Number(pm.frequency))
     ? Number(Number(pm.frequency).toFixed(2))
     : null;
-  const frequencyHz = (rawFreq !== null && rawFreq > 0) ? rawFreq : initialTx.frequencyHz;
+  const frequencyHz = rawFreq;
 
   const vAb = pm.volt_ab !== null && pm.volt_ab !== undefined && !isNaN(Number(pm.volt_ab)) ? Number(pm.volt_ab) : null;
   const vBc = pm.volt_bc !== null && pm.volt_bc !== undefined && !isNaN(Number(pm.volt_bc)) ? Number(pm.volt_bc) : null;
@@ -264,9 +262,14 @@ function mapPmToTransformer(
     : null;
   const kwh = rawKwh !== null && rawKwh > 0 ? rawKwh : initialTx.kwh;
 
-  const isOnline = pm.status !== null && pm.status !== undefined
-    ? Boolean(pm.status)
-    : ((activePowerKw !== null && activePowerKw !== undefined) || (voltageOutL2L !== null && voltageOutL2L > 100));
+  let status: "online" | "warning" | "offline" = "offline";
+  if (pm.status === false) {
+    status = "offline";
+  } else if (pm.status === true) {
+    status = (activePowerKw !== null && activePowerKw > 0.05) ? "online" : "warning";
+  } else {
+    status = (activePowerKw !== null && activePowerKw > 0) ? "online" : "offline";
+  }
 
   const resolvedIncomingKv = incomingKv ?? initialTx.voltageInKv;
 
@@ -298,7 +301,7 @@ function mapPmToTransformer(
     currentUnbalance: iUnb,
     tempCc: null, // No physical temperature sensors installed on transformers
     kwh,
-    status: isOnline ? "online" : "offline",
+    status,
   };
 }
 
@@ -1166,18 +1169,40 @@ const TransformerDetailCard = React.memo(
       >
         {/* Card Header */}
         <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <span
-              className="rounded-full"
+              className="rounded-full shrink-0"
               style={{
                 width: 9, height: 9,
-                backgroundColor: hasData ? (tx.status === "online" ? "#10b981" : "#f59e0b") : "#94a3b8",
-                boxShadow: hasData ? "0 0 6px #10b981" : "none",
+                backgroundColor: tx.activePowerKw === null ? "#94a3b8" : (tx.status === "online" ? "#10b981" : (tx.activePowerKw === 0 ? "#ef4444" : "#f59e0b")),
+                boxShadow: tx.status === "online" ? "0 0 6px #10b981" : "none",
               }}
             />
             <span className="text-base font-black text-slate-800 dark:text-white tracking-wide">{tx.name}</span>
             <span className="px-2.5 py-0.5 rounded text-[10px] font-black bg-sky-500/10 text-sky-500 border border-sky-500/20 uppercase tracking-wider">
               {factoryLabel} — {tx.capacityKva} kVA
+            </span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 ${
+                tx.status === "online"
+                  ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                  : tx.activePowerKw === 0
+                  ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                  : tx.activePowerKw === null
+                  ? "bg-slate-500/10 text-slate-400 border border-slate-500/20"
+                  : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                tx.status === "online" ? "bg-emerald-500" : (tx.activePowerKw === 0 ? "bg-rose-500" : (tx.activePowerKw === null ? "bg-slate-400" : "bg-amber-500"))
+              }`} />
+              {tx.status === "online"
+                ? "Aktif / Online"
+                : tx.activePowerKw === 0
+                ? "Mati / Non-Aktif"
+                : tx.activePowerKw === null
+                ? "Sensor Terputus"
+                : "Siaga (Standby)"}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -1215,7 +1240,12 @@ const TransformerDetailCard = React.memo(
             <ParamCell label="Output Volt 400V" value={tx.voltageOutL2L !== null ? `R:${vR_400} S:${vS_400} T:${vT_400} V` : "R: —  S: —  T: — V"} />
             <ParamCell label="Output Volt 230V" value={tx.voltageOutL2N !== null ? `R:${vR_230} S:${vS_230} T:${vT_230} V` : "R: —  S: —  T: — V"} />
             
-            <ParamCell label="Active Power" value={tx.activePowerKw !== null ? `${tx.activePowerKw} kW` : "—"} accent={hasData} />
+            <ParamCell
+              label="Active Power"
+              value={tx.activePowerKw !== null ? (tx.activePowerKw === 0 ? "0 kW (Mati / Non-Aktif)" : `${tx.activePowerKw} kW`) : "— (Sensor Terputus)"}
+              accent={tx.activePowerKw !== null && tx.activePowerKw > 0}
+              warn={tx.activePowerKw === 0}
+            />
             <ParamCell label="Reactive Power" value={tx.reactivePowerKvar !== null ? `${tx.reactivePowerKvar} kVAR` : "—"} />
             <ParamCell label="Apparent Power" value={tx.apparentPowerKva !== null ? `${tx.apparentPowerKva} kVA` : "—"} />
             
@@ -1550,8 +1580,40 @@ const SldTransformerCard = React.memo(
           <div className={`text-xs font-black ${isFirst ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
             {tx.capacityKva} kVA
           </div>
-          <div className={`text-[10px] font-black tracking-wider uppercase ${isFirst ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
-            {tx.name}
+          <div className="flex items-center justify-between gap-1 mt-0.5 mb-1">
+            <span className={`text-[10px] font-black tracking-wider uppercase truncate ${isFirst ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
+              {tx.name}
+            </span>
+            <span
+              className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-black ${
+                tx.status === "online"
+                  ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                  : tx.status === "warning" || (tx.activePowerKw === 0 && tx.status !== "offline")
+                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                  : tx.activePowerKw === null
+                  ? "bg-slate-500/10 text-slate-400 border border-slate-500/20"
+                  : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+              }`}
+            >
+              <span
+                className={`w-1 h-1 rounded-full ${
+                  tx.status === "online"
+                    ? "bg-emerald-500"
+                    : tx.status === "warning" || (tx.activePowerKw === 0 && tx.status !== "offline")
+                    ? "bg-amber-500"
+                    : tx.activePowerKw === null
+                    ? "bg-slate-400"
+                    : "bg-rose-500"
+                }`}
+              />
+              {tx.status === "online"
+                ? "Aktif"
+                : tx.activePowerKw === 0
+                ? "Mati"
+                : tx.activePowerKw === null
+                ? "Terputus"
+                : "Offline"}
+            </span>
           </div>
           <div className="mt-1 text-[9px] text-slate-400 font-bold uppercase">Active Power</div>
           {loadingSld ? (
@@ -1561,8 +1623,14 @@ const SldTransformerCard = React.memo(
             </div>
           ) : (
             <>
-              <div className={`text-xs font-black font-mono tabular-nums ${hasData ? (isFirst ? "text-sky-400" : "text-slate-800 dark:text-slate-100") : "text-slate-400"}`}>
-                {hasData ? `${tx.activePowerKw} kW` : "— kW"}
+              <div className={`text-xs font-black font-mono tabular-nums ${
+                tx.activePowerKw !== null && tx.activePowerKw > 0
+                  ? (isFirst ? "text-sky-400" : "text-slate-800 dark:text-slate-100")
+                  : (tx.activePowerKw === 0 ? "text-rose-500" : "text-slate-400")
+              }`}>
+                {tx.activePowerKw !== null
+                  ? (tx.activePowerKw === 0 ? "0 kW (Mati)" : `${tx.activePowerKw} kW`)
+                  : "— (Terputus)"}
               </div>
               <div className="text-[9px] text-slate-400 font-bold">
                 PF: <span className="font-black font-mono tabular-nums">{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : "—"}</span>
@@ -1711,24 +1779,22 @@ export default function PowerDistribution() {
   };
 
   const safeActivePower = (val: any, prev: number | null): number | null => {
-    if (val === undefined || val === null || isNaN(Number(val))) return prev;
+    if (val === undefined || val === null || isNaN(Number(val))) return null;
     const num = Number(val);
-    if (num === 0 && prev !== null && prev > 0) return prev;
     if (num > 0 && num < 1.0 && prev !== null && prev > 10.0) {
       return Number((num * 1000).toFixed(1));
     }
     return Number(num.toFixed(1));
   };
 
-  const safePf = (val: any, prev: number | null): number | null => {
-    if (val === undefined || val === null || isNaN(Number(val))) return prev;
+  const safePf = (val: any, _prev: number | null): number | null => {
+    if (val === undefined || val === null || isNaN(Number(val))) return null;
     const num = Math.abs(Number(val));
-    if (num === 0 && prev !== null && prev > 0) return prev;
     return Number(Math.min(1.0, num).toFixed(3));
   };
 
-  const safeVolt = (val: number | null, prev: number | null): number | null => {
-    if (val === null || val === undefined || isNaN(val) || val <= 0) return prev;
+  const safeVolt = (val: number | null, _prev: number | null): number | null => {
+    if (val === null || val === undefined || isNaN(val)) return null;
     return val;
   };
 
@@ -2940,9 +3006,19 @@ export default function PowerDistribution() {
                 {loadingSld ? (
                   <span className="inline-block h-3.5 w-20 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
                 ) : (
-                  <span className="text-sm font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
-                    {incomingData.plnKw !== null ? `${incomingData.plnKw.toLocaleString("id-ID")} kW` : "— kW"}
-                  </span>
+                  incomingData.plnKw !== null ? (
+                    incomingData.plnKw === 0 ? (
+                      <span className="text-xs sm:text-sm font-black font-mono tabular-nums text-rose-500">0 kW (Mati / Non-Aktif)</span>
+                    ) : (
+                      <span className="text-sm font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
+                        {incomingData.plnKw.toLocaleString("id-ID")} kW
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-xs font-bold text-slate-400 font-mono">
+                      — (Sensor Terputus)
+                    </span>
+                  )
                 )}
               </div>
               <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
@@ -2979,9 +3055,19 @@ export default function PowerDistribution() {
                 {loadingSld ? (
                   <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
                 ) : (
-                  <span className="text-xs sm:text-sm font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
-                    {incomingData.wf1Kw !== null ? `${incomingData.wf1Kw.toLocaleString("id-ID")} kW` : "— kW"}
-                  </span>
+                  incomingData.wf1Kw !== null ? (
+                    incomingData.wf1Kw === 0 ? (
+                      <span className="text-xs font-black font-mono tabular-nums text-rose-500">0 kW (Mati / Non-Aktif)</span>
+                    ) : (
+                      <span className="text-xs sm:text-sm font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
+                        {incomingData.wf1Kw.toLocaleString("id-ID")} kW
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400 font-mono">
+                      — (Sensor Terputus)
+                    </span>
+                  )
                 )}
               </div>
               <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
@@ -3005,9 +3091,19 @@ export default function PowerDistribution() {
                 {loadingSld ? (
                   <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
                 ) : (
-                  <span className="text-xs font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
-                    {solarData.poi1Kw !== null ? `${solarData.poi1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "— kW"}
-                  </span>
+                  solarData.poi1Kw !== null ? (
+                    solarData.poi1Kw === 0 ? (
+                      <span className="text-xs font-black font-mono tabular-nums text-amber-500">0 kW (Siaga / Malam)</span>
+                    ) : (
+                      <span className="text-xs font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
+                        {solarData.poi1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400 font-mono">
+                      — (Sensor Terputus)
+                    </span>
+                  )
                 )}
               </div>
               <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
@@ -3032,9 +3128,19 @@ export default function PowerDistribution() {
                 {loadingSld ? (
                   <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
                 ) : (
-                  <span className="text-xs sm:text-sm font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
-                    {incomingData.wf2Kw !== null ? `${incomingData.wf2Kw.toLocaleString("id-ID")} kW` : "— kW"}
-                  </span>
+                  incomingData.wf2Kw !== null ? (
+                    incomingData.wf2Kw === 0 ? (
+                      <span className="text-xs font-black font-mono tabular-nums text-rose-500">0 kW (Mati / Non-Aktif)</span>
+                    ) : (
+                      <span className="text-xs sm:text-sm font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
+                        {incomingData.wf2Kw.toLocaleString("id-ID")} kW
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400 font-mono">
+                      — (Sensor Terputus)
+                    </span>
+                  )
                 )}
               </div>
               <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
@@ -3058,9 +3164,19 @@ export default function PowerDistribution() {
                 {loadingSld ? (
                   <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
                 ) : (
-                  <span className="text-xs font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
-                    {solarData.poi2Kw !== null ? `${solarData.poi2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "— kW"}
-                  </span>
+                  solarData.poi2Kw !== null ? (
+                    solarData.poi2Kw === 0 ? (
+                      <span className="text-xs font-black font-mono tabular-nums text-amber-500">0 kW (Siaga / Malam)</span>
+                    ) : (
+                      <span className="text-xs font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
+                        {solarData.poi2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400 font-mono">
+                      — (Sensor Terputus)
+                    </span>
+                  )
                 )}
               </div>
               <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">

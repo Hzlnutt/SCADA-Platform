@@ -1199,16 +1199,12 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   });
 };
 const broadcastLiveTelemetryOffline = (deviceId: string) => {
-  const existing = latestIncomingTelemetry[deviceId]?.data?.pqData;
   latestIncomingTelemetry[deviceId] = {
     data: {
       status: false,
       online: false,
-      pqData: existing ? {
-        ...existing,
-        status: false,
-        pfStatus: "offline"
-      } : {
+      error: "Sensor Offline / Tidak Merespons",
+      pqData: {
         activePower: 0,
         reactivePower: 0,
         apparentPower: 0,
@@ -1228,11 +1224,11 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
     deviceId,
     status: false,
     online: false,
-    error: "Gagal polling API",
-    pqData: existing ? { ...existing, status: false, pfStatus: "offline" } : {
-      activePower: null,
-      reactivePower: null,
-      apparentPower: null,
+    error: "Sensor Offline / Tidak Merespons",
+    pqData: {
+      activePower: 0,
+      reactivePower: 0,
+      apparentPower: 0,
       pf: null,
       pfStatus: "offline",
       freq: null,
