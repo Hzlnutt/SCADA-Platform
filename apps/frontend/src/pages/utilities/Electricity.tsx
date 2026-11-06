@@ -699,10 +699,10 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm h-full flex-1 flex flex-col justify-between">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 min-h-[58px]">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-3 min-h-[64px]">
         {/* Top-Left: Title and Total kWh */}
-        <div className="flex flex-col">
-          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">{title}</h4>
+        <div className="flex flex-col min-h-[50px] justify-between">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 line-clamp-2" title={title}>{title}</h4>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-base font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400">
               {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">kWh</span>
@@ -1571,13 +1571,44 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
   // Edit Position handlers
   const handleStartEditPosition = () => {
-    const currentItems = (hasLoadedConfig && configuredItems.length > 0)
+    const currentBase = (hasLoadedConfig && configuredItems.length > 0)
       ? [...configuredItems]
       : [...ALL_DEFAULT_ITEMS];
-    setDraftConfiguredItems(currentItems);
+
+    const initialDraft: any[] = [];
+    let order = 1;
+    categoryGroups.forEach((cg) => {
+      cg.rows.forEach((row, rowIdx) => {
+        row.items.forEach((item) => {
+          const existing = currentBase.find((it) => it.config_key.toLowerCase() === item.configKey.toLowerCase());
+          if (existing) {
+            initialDraft.push({
+              ...existing,
+              sort_order: order++,
+              value: {
+                ...(existing.value || {}),
+                category: cg.key,
+                categoryLabel: cg.label,
+                row: rowIdx,
+                span: item.span || existing.value?.span || "full",
+                align: item.align || existing.value?.align || "center"
+              }
+            });
+          }
+        });
+      });
+    });
+
+    currentBase.forEach((it) => {
+      if (!initialDraft.some((d) => d.config_key.toLowerCase() === it.config_key.toLowerCase())) {
+        initialDraft.push({ ...it, sort_order: order++ });
+      }
+    });
+
+    setDraftConfiguredItems(initialDraft);
     setHasUnsavedChanges(false);
     setIsEditPositionMode(true);
-    setDragToast("Mode Atur Posisi Aktif: Kartu bergoyang menandakan dapat digerakkan. Tarik kartu atau gunakan tombol arah untuk mengatur tata letak.");
+    setDragToast("Mode Atur Posisi Aktif: Tarik kartu untuk memindahkan (kiri/kanan untuk sisip, tengah untuk tukar posisi).");
     setTimeout(() => setDragToast(null), 4000);
   };
 
@@ -1604,7 +1635,8 @@ const SectionHEquipment = memo(function SectionHEquipment({
         category: it.value?.category || "custom",
         categoryLabel: it.value?.categoryLabel || "Kustom",
         row: typeof it.value?.row === "number" ? it.value.row : 0,
-        align: it.value?.align || "full",
+        span: it.value?.span || "full",
+        align: it.value?.align || "center",
         sort_order: idx + 1
       }));
 
@@ -1634,147 +1666,35 @@ const SectionHEquipment = memo(function SectionHEquipment({
     }
   };
 
-  // Direct 1-Click Move Handlers (Horizontal & Vertical Rows)
-  const handleMoveCardDirection = (configKey: string, direction: "left" | "right") => {
+  // Single Card Layout Handlers (Span / Width and Alignment)
+  const handleSetCardSpan = (configKey: string, span: "1" | "2" | "3" | "full") => {
     const currentItems = draftConfiguredItems.length > 0
       ? [...draftConfiguredItems]
       : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
     const idx = currentItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
     if (idx === -1) return;
 
-    const item = currentItems[idx];
-    const currentCat = item.value?.category || "custom";
+    currentItems[idx] = {
+      ...currentItems[idx],
+      value: {
+        ...(currentItems[idx].value || {}),
+        span
+      }
+    };
 
-    // All items in this category
-    const catItems = currentItems.filter((i) => (i.value?.category || "custom") === currentCat);
-    const catIdx = catItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
-    if (catIdx === -1) return;
-
-    const itemRow = typeof item.value?.row === "number" ? item.value.row : Math.floor(catIdx / 4);
-
-    // Filter items in the SAME row of this category
-    const rowItems = catItems.filter((i, cIdx) => {
-      const r = typeof i.value?.row === "number" ? i.value.row : Math.floor(cIdx / 4);
-      return r === itemRow;
-    });
-
-    const rIdx = rowItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
-
-    if (direction === "left" && rIdx > 0) {
-      const targetConfigKey = rowItems[rIdx - 1].config_key;
-      const targetIdx = currentItems.findIndex((i) => i.config_key.toLowerCase() === targetConfigKey.toLowerCase());
-      const temp = currentItems[targetIdx];
-      currentItems[targetIdx] = currentItems[idx];
-      currentItems[idx] = temp;
-    } else if (direction === "right" && rIdx < rowItems.length - 1) {
-      const targetConfigKey = rowItems[rIdx + 1].config_key;
-      const targetIdx = currentItems.findIndex((i) => i.config_key.toLowerCase() === targetConfigKey.toLowerCase());
-      const temp = currentItems[targetIdx];
-      currentItems[targetIdx] = currentItems[idx];
-      currentItems[idx] = temp;
-    }
-
-    const reindexed = currentItems.map((it, i) => ({
-      ...it,
-      sort_order: i + 1
-    }));
-
-    setDraftConfiguredItems(reindexed);
+    setDraftConfiguredItems([...currentItems]);
     setHasUnsavedChanges(true);
+    const spanLabels: Record<string, string> = {
+      "1": "1 Kolom (25%)",
+      "2": "2 Kolom (50%)",
+      "3": "3 Kolom (75%)",
+      "full": "Penuh (4 Kolom / 100%)"
+    };
+    setDragToast(`✓ Ukuran kartu: ${spanLabels[span] || span}`);
+    setTimeout(() => setDragToast(null), 3000);
   };
 
-  const handleMoveCardRow = (configKey: string, direction: "up" | "down") => {
-    const currentItems = draftConfiguredItems.length > 0
-      ? [...draftConfiguredItems]
-      : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
-    
-    const idx = currentItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
-    if (idx === -1) return;
-
-    const item = currentItems[idx];
-    const catKey = item.value?.category || "custom";
-
-    // All items in category
-    const catItems = currentItems.filter((i) => (i.value?.category || "custom") === catKey);
-    const catIdx = catItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
-
-    // Determine current assigned row
-    const currRow = typeof item.value?.row === "number" ? item.value.row : Math.floor(catIdx / 4);
-
-    if (direction === "down") {
-      const targetRow = currRow + 1;
-      currentItems[idx] = {
-        ...item,
-        value: {
-          ...(item.value || {}),
-          row: targetRow
-        }
-      };
-    } else {
-      if (currRow > 0) {
-        const targetRow = currRow - 1;
-        currentItems[idx] = {
-          ...item,
-          value: {
-            ...(item.value || {}),
-            row: targetRow
-          }
-        };
-      } else {
-        // Moving up from row 0 -> create a new top row
-        currentItems.forEach((ci) => {
-          if ((ci.value?.category || "custom") === catKey) {
-            const r = typeof ci.value?.row === "number" ? ci.value.row : 0;
-            if (ci.config_key.toLowerCase() !== configKey.toLowerCase()) {
-              ci.value = { ...(ci.value || {}), row: r + 1 };
-            } else {
-              ci.value = { ...(ci.value || {}), row: 0 };
-            }
-          }
-        });
-      }
-    }
-
-    // Compact row numbers for this category so no empty rows exist
-    const updatedCatItems = currentItems.filter((i) => (i.value?.category || "custom") === catKey);
-    const uniqueRows = Array.from(new Set(updatedCatItems.map((ci, cIdx) => (
-      typeof ci.value?.row === "number" ? ci.value.row : Math.floor(cIdx / 4)
-    )))).sort((a, b) => a - b);
-
-    const rowCompactMap = new Map<number, number>();
-    uniqueRows.forEach((oldR, newR) => rowCompactMap.set(oldR, newR));
-
-    currentItems.forEach((ci) => {
-      if ((ci.value?.category || "custom") === catKey) {
-        const oldR = typeof ci.value?.row === "number" ? ci.value.row : 0;
-        const compactR = rowCompactMap.has(oldR) ? rowCompactMap.get(oldR)! : oldR;
-        ci.value = { ...(ci.value || {}), row: compactR };
-      }
-    });
-
-    // Reorder items in currentItems so category items are grouped by row, then sort_order
-    currentItems.sort((a, b) => {
-      const catA = a.value?.category || "custom";
-      const catB = b.value?.category || "custom";
-      if (catA !== catB) return 0;
-      const rowA = a.value?.row ?? 0;
-      const rowB = b.value?.row ?? 0;
-      if (rowA !== rowB) return rowA - rowB;
-      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
-    });
-
-    const reindexed = currentItems.map((it, i) => ({
-      ...it,
-      sort_order: i + 1
-    }));
-
-    setDraftConfiguredItems(reindexed);
-    setHasUnsavedChanges(true);
-    setDragToast(`✓ Memindahkan '${item.label}' ke ${direction === "down" ? "baris bawah" : "baris atas"} (Ukuran kartu menyesuaikan otomatis)`);
-    setTimeout(() => setDragToast(null), 3500);
-  };
-
-  const handleSetCardAlign = (configKey: string, align: "left" | "center" | "right" | "full") => {
+  const handleSetCardAlign = (configKey: string, align: "left" | "center" | "right") => {
     const currentItems = draftConfiguredItems.length > 0
       ? [...draftConfiguredItems]
       : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
@@ -1789,76 +1709,14 @@ const SectionHEquipment = memo(function SectionHEquipment({
       }
     };
 
-    setDraftConfiguredItems(currentItems);
+    setDraftConfiguredItems([...currentItems]);
     setHasUnsavedChanges(true);
     const alignLabels: Record<string, string> = {
       left: "Rata Kiri",
       center: "Rata Tengah",
-      right: "Rata Kanan",
-      full: "Penuh"
+      right: "Rata Kanan"
     };
-    setDragToast(`✓ Posisi kartu tunggal di baris: ${alignLabels[align] || align}`);
-    setTimeout(() => setDragToast(null), 3000);
-  };
-
-  const handleToggleCardSpan = (configKey: string) => {
-    const currentItems = draftConfiguredItems.length > 0
-      ? [...draftConfiguredItems]
-      : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
-    const idx = currentItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
-    if (idx === -1) return;
-
-    const currentSpan = currentItems[idx].value?.span || "auto";
-    const nextSpan = currentSpan === "auto" ? "2" : currentSpan === "2" ? "full" : "auto";
-    currentItems[idx] = {
-      ...currentItems[idx],
-      value: {
-        ...(currentItems[idx].value || {}),
-        span: nextSpan
-      }
-    };
-    setDraftConfiguredItems([...currentItems]);
-    setHasUnsavedChanges(true);
-  };
-
-  const handleQuickMoveCategory = (configKey: string, newCatKey: string) => {
-    const currentItems = draftConfiguredItems.length > 0
-      ? [...draftConfiguredItems]
-      : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
-    const idx = currentItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
-    if (idx === -1) return;
-
-    const targetGroup = categoryGroups.find((g) => g.key === newCatKey);
-    const targetLabel = targetGroup ? targetGroup.label : newCatKey;
-
-    const [item] = currentItems.splice(idx, 1);
-    const updated = {
-      ...item,
-      value: {
-        ...(item.value || {}),
-        category: newCatKey,
-        categoryLabel: targetLabel
-      }
-    };
-
-    const lastInTargetCat = currentItems
-      .map((it, i) => ({ it, i }))
-      .filter(({ it }) => (it.value?.category || "custom") === newCatKey);
-
-    let insertIdx = currentItems.length;
-    if (lastInTargetCat.length > 0) {
-      insertIdx = lastInTargetCat[lastInTargetCat.length - 1].i + 1;
-    }
-    currentItems.splice(insertIdx, 0, updated);
-
-    const reindexed = currentItems.map((it, i) => ({
-      ...it,
-      sort_order: i + 1
-    }));
-
-    setDraftConfiguredItems(reindexed);
-    setHasUnsavedChanges(true);
-    setDragToast(`✓ Memindahkan '${item.label}' ke kategori ${targetLabel.toUpperCase()}`);
+    setDragToast(`✓ Posisi kartu tunggal: ${alignLabels[align] || align}`);
     setTimeout(() => setDragToast(null), 3000);
   };
 
@@ -1913,8 +1771,15 @@ const SectionHEquipment = memo(function SectionHEquipment({
     const relX = e.clientX - rect.left;
     const ratio = relX / Math.max(rect.width, 1);
 
-    // Langsung menyisipkan di kiri atau kanan target (tanpa menukar posisi)
-    const action: "insert-left" | "insert-right" = ratio <= 0.5 ? "insert-left" : "insert-right";
+    // Kiri < 30% -> Sisipkan di kiri; Kanan > 70% -> Sisipkan di kanan; Tengah 30%-70% -> Tukar posisi (Swap)
+    let action: "insert-left" | "insert-right" | "swap";
+    if (ratio < 0.30) {
+      action = "insert-left";
+    } else if (ratio > 0.70) {
+      action = "insert-right";
+    } else {
+      action = "swap";
+    }
 
     setActiveDropConfigKey(targetConfigKey);
     setDragAction(action);
@@ -1933,68 +1798,247 @@ const SectionHEquipment = memo(function SectionHEquipment({
       ? [...draftConfiguredItems]
       : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
 
-    const sourceIdx = currentItems.findIndex((i) => i.config_key.toLowerCase() === sourceKey.toLowerCase());
-    const targetIdx = currentItems.findIndex((i) => i.config_key.toLowerCase() === targetConfigKey.toLowerCase());
+    // Build the visual rows map from current categoryGroups:
+    let sourceCatKey: string | null = null;
+    let sourceRowIdx = -1;
+    let sourceColIdx = -1;
 
-    if (sourceIdx === -1 || targetIdx === -1) {
+    let targetActualCatKey = targetCategoryKey;
+    let targetRowIdx = -1;
+    let targetColIdx = -1;
+
+    const catRowsMap = new Map<string, string[][]>();
+    categoryGroups.forEach((cg) => {
+      const rows = cg.rows.map((r) => r.items.map((it) => it.configKey));
+      catRowsMap.set(cg.key, rows);
+
+      rows.forEach((rCards, rIdx) => {
+        rCards.forEach((cKey, cIdx) => {
+          if (cKey.toLowerCase() === sourceKey.toLowerCase()) {
+            sourceCatKey = cg.key;
+            sourceRowIdx = rIdx;
+            sourceColIdx = cIdx;
+          }
+          if (cKey.toLowerCase() === targetConfigKey.toLowerCase()) {
+            targetActualCatKey = cg.key;
+            targetRowIdx = rIdx;
+            targetColIdx = cIdx;
+          }
+        });
+      });
+    });
+
+    if (!sourceCatKey || sourceRowIdx === -1 || targetRowIdx === -1) {
       handleDragEnd();
       return;
     }
 
-    const targetItem = currentItems[targetIdx];
-    const targetGroup = categoryGroups.find((g) => g.key === targetCategoryKey);
-    const targetCategoryLabel = targetGroup ? targetGroup.label : (targetItem.value?.categoryLabel || targetCategoryKey);
-    const targetCategory = targetItem.value?.category || targetCategoryKey;
-    const targetRow = typeof targetItem.value?.row === "number" ? targetItem.value.row : 0;
+    const sRows = catRowsMap.get(sourceCatKey)!;
+    const tRows = catRowsMap.get(targetActualCatKey)!;
 
-    const newItems = [...currentItems];
-    const [sourceItem] = newItems.splice(sourceIdx, 1);
-    const updatedSource = {
-      ...sourceItem,
-      value: {
-        ...(sourceItem.value || {}),
-        category: targetCategory,
-        categoryLabel: targetCategoryLabel,
-        row: targetRow
-      }
-    };
+    const targetItemMeta = currentItems.find((it) => it.config_key.toLowerCase() === targetConfigKey.toLowerCase());
+    const targetTitle = targetItemMeta?.label || targetConfigKey;
 
-    const newTargetIdx = newItems.findIndex((i) => i.config_key.toLowerCase() === targetConfigKey.toLowerCase());
-    const action = dragAction === "insert-left" ? "insert-left" : "insert-right";
+    const action = dragAction || "insert-right";
 
-    if (action === "insert-left") {
-      newItems.splice(newTargetIdx, 0, updatedSource);
-      setDragToast(`✓ Memindahkan '${sourceTitle}' ke sebelah kiri '${targetItem.label}' (Ukuran baris menyesuaikan otomatis)`);
+    if (action === "swap") {
+      const temp = sRows[sourceRowIdx][sourceColIdx];
+      sRows[sourceRowIdx][sourceColIdx] = tRows[targetRowIdx][targetColIdx];
+      tRows[targetRowIdx][targetColIdx] = temp;
+      setDragToast(`✓ Menukar posisi '${sourceTitle}' dengan '${targetTitle}'`);
     } else {
-      newItems.splice(newTargetIdx + 1, 0, updatedSource);
-      setDragToast(`✓ Memindahkan '${sourceTitle}' ke sebelah kanan '${targetItem.label}' (Ukuran baris menyesuaikan otomatis)`);
+      // Sisipkan di kiri atau kanan target
+      sRows[sourceRowIdx].splice(sourceColIdx, 1);
+
+      // Re-find targetColIdx in tRows[targetRowIdx] because splicing in same row might shift index
+      const curTargetColIdx = tRows[targetRowIdx].findIndex(
+        (k) => k.toLowerCase() === targetConfigKey.toLowerCase()
+      );
+
+      if (curTargetColIdx !== -1) {
+        const insertIdx = action === "insert-left" ? curTargetColIdx : curTargetColIdx + 1;
+        tRows[targetRowIdx].splice(insertIdx, 0, sourceKey);
+        setDragToast(
+          `✓ Memindahkan '${sourceTitle}' ke sebelah ${action === "insert-left" ? "kiri" : "kanan"} '${targetTitle}' (Ukuran baris otomatis menyesuaikan)`
+        );
+      }
     }
 
-    // Kompakkan baris untuk kategori terdampak agar tidak ada baris kosong
-    const affectedCats = new Set([targetCategory, sourceItem.value?.category || "custom"]);
-    affectedCats.forEach((catKey) => {
-      const catItems = newItems.filter((i) => (i.value?.category || "custom") === catKey);
-      const uniqueRows = Array.from(new Set(catItems.map((ci, cIdx) => (
-        typeof ci.value?.row === "number" ? ci.value.row : Math.floor(cIdx / 4)
-      )))).sort((a, b) => a - b);
-      const rowCompactMap = new Map<number, number>();
-      uniqueRows.forEach((oldR, newR) => rowCompactMap.set(oldR, newR));
+    // Flatten rows back to draftConfiguredItems
+    const nextDraft: any[] = [];
+    let counter = 1;
 
-      catItems.forEach((ci) => {
-        const oldR = typeof ci.value?.row === "number" ? ci.value.row : 0;
-        const compactR = rowCompactMap.has(oldR) ? rowCompactMap.get(oldR)! : oldR;
-        ci.value = { ...(ci.value || {}), row: compactR };
+    categoryGroups.forEach((cg) => {
+      const catKey = cg.key;
+      const rows = catRowsMap.get(catKey) || [];
+      const nonEmptyRows = rows.filter((r) => r.length > 0);
+
+      nonEmptyRows.forEach((rowCards, newRowIdx) => {
+        rowCards.forEach((cKey) => {
+          const item = currentItems.find((it) => it.config_key.toLowerCase() === cKey.toLowerCase());
+          if (item) {
+            nextDraft.push({
+              ...item,
+              sort_order: counter++,
+              value: {
+                ...(item.value || {}),
+                category: catKey,
+                categoryLabel: cg.label,
+                row: newRowIdx
+              }
+            });
+          }
+        });
       });
     });
 
-    const reindexed = newItems.map((it, idx) => ({
-      ...it,
-      sort_order: idx + 1
-    }));
-
-    setDraftConfiguredItems(reindexed);
+    setDraftConfiguredItems(nextDraft);
     setHasUnsavedChanges(true);
     handleDragEnd();
+    setTimeout(() => setDragToast(null), 3500);
+  };
+
+  const handleDropOnNewRow = (categoryKey: string) => {
+    if (!draggedItem || !isEditPositionMode) return;
+    const { configKey: sourceKey, title: sourceTitle } = draggedItem;
+
+    const currentItems = draftConfiguredItems.length > 0
+      ? [...draftConfiguredItems]
+      : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
+
+    const catRowsMap = new Map<string, string[][]>();
+    let sourceCatKey: string | null = null;
+    let sourceRowIdx = -1;
+    let sourceColIdx = -1;
+
+    categoryGroups.forEach((cg) => {
+      const rows = cg.rows.map((r) => r.items.map((it) => it.configKey));
+      catRowsMap.set(cg.key, rows);
+
+      rows.forEach((rCards, rIdx) => {
+        rCards.forEach((cKey, cIdx) => {
+          if (cKey.toLowerCase() === sourceKey.toLowerCase()) {
+            sourceCatKey = cg.key;
+            sourceRowIdx = rIdx;
+            sourceColIdx = cIdx;
+          }
+        });
+      });
+    });
+
+    if (!sourceCatKey || sourceRowIdx === -1) {
+      handleDragEnd();
+      return;
+    }
+
+    const sRows = catRowsMap.get(sourceCatKey)!;
+    sRows[sourceRowIdx].splice(sourceColIdx, 1);
+
+    const tRows = catRowsMap.get(categoryKey) || [];
+    tRows.push([sourceKey]);
+    catRowsMap.set(categoryKey, tRows);
+
+    const nextDraft: any[] = [];
+    let counter = 1;
+
+    categoryGroups.forEach((cg) => {
+      const catKey = cg.key;
+      const rows = catRowsMap.get(catKey) || [];
+      const nonEmptyRows = rows.filter((r) => r.length > 0);
+
+      nonEmptyRows.forEach((rowCards, newRowIdx) => {
+        rowCards.forEach((cKey) => {
+          const item = currentItems.find((it) => it.config_key.toLowerCase() === cKey.toLowerCase());
+          if (item) {
+            nextDraft.push({
+              ...item,
+              sort_order: counter++,
+              value: {
+                ...(item.value || {}),
+                category: catKey,
+                categoryLabel: cg.label,
+                row: newRowIdx
+              }
+            });
+          }
+        });
+      });
+    });
+
+    setDraftConfiguredItems(nextDraft);
+    setHasUnsavedChanges(true);
+    handleDragEnd();
+    setDragToast(`✓ Memindahkan '${sourceTitle}' ke baris baru di bawah`);
+    setTimeout(() => setDragToast(null), 3500);
+  };
+
+  const handleMoveCardToNewRow = (configKey: string, categoryKey: string) => {
+    const currentItems = draftConfiguredItems.length > 0
+      ? [...draftConfiguredItems]
+      : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
+
+    const catRowsMap = new Map<string, string[][]>();
+    let sourceCatKey: string | null = null;
+    let sourceRowIdx = -1;
+    let sourceColIdx = -1;
+
+    categoryGroups.forEach((cg) => {
+      const rows = cg.rows.map((r) => r.items.map((it) => it.configKey));
+      catRowsMap.set(cg.key, rows);
+
+      rows.forEach((rCards, rIdx) => {
+        rCards.forEach((cKey, cIdx) => {
+          if (cKey.toLowerCase() === configKey.toLowerCase()) {
+            sourceCatKey = cg.key;
+            sourceRowIdx = rIdx;
+            sourceColIdx = cIdx;
+          }
+        });
+      });
+    });
+
+    if (!sourceCatKey || sourceRowIdx === -1) return;
+
+    const sRows = catRowsMap.get(sourceCatKey)!;
+    sRows[sourceRowIdx].splice(sourceColIdx, 1);
+
+    const tRows = catRowsMap.get(categoryKey) || [];
+    tRows.push([configKey]);
+    catRowsMap.set(categoryKey, tRows);
+
+    const itemMeta = currentItems.find((it) => it.config_key.toLowerCase() === configKey.toLowerCase());
+    const itemTitle = itemMeta?.label || configKey;
+
+    const nextDraft: any[] = [];
+    let counter = 1;
+
+    categoryGroups.forEach((cg) => {
+      const catKey = cg.key;
+      const rows = catRowsMap.get(catKey) || [];
+      const nonEmptyRows = rows.filter((r) => r.length > 0);
+
+      nonEmptyRows.forEach((rowCards, newRowIdx) => {
+        rowCards.forEach((cKey) => {
+          const item = currentItems.find((it) => it.config_key.toLowerCase() === cKey.toLowerCase());
+          if (item) {
+            nextDraft.push({
+              ...item,
+              sort_order: counter++,
+              value: {
+                ...(item.value || {}),
+                category: catKey,
+                categoryLabel: cg.label,
+                row: newRowIdx
+              }
+            });
+          }
+        });
+      });
+    });
+
+    setDraftConfiguredItems(nextDraft);
+    setHasUnsavedChanges(true);
+    setDragToast(`✓ Memindahkan '${itemTitle}' ke baris baru di bawah`);
     setTimeout(() => setDragToast(null), 3500);
   };
 
@@ -2008,42 +2052,73 @@ const SectionHEquipment = memo(function SectionHEquipment({
       ? [...draftConfiguredItems]
       : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
 
-    const sourceIdx = currentItems.findIndex((i) => i.config_key.toLowerCase() === sourceKey.toLowerCase());
-    if (sourceIdx === -1) {
+    const catRowsMap = new Map<string, string[][]>();
+    let sourceCatKey: string | null = null;
+    let sourceRowIdx = -1;
+    let sourceColIdx = -1;
+
+    categoryGroups.forEach((cg) => {
+      const rows = cg.rows.map((r) => r.items.map((it) => it.configKey));
+      catRowsMap.set(cg.key, rows);
+
+      rows.forEach((rCards, rIdx) => {
+        rCards.forEach((cKey, cIdx) => {
+          if (cKey.toLowerCase() === sourceKey.toLowerCase()) {
+            sourceCatKey = cg.key;
+            sourceRowIdx = rIdx;
+            sourceColIdx = cIdx;
+          }
+        });
+      });
+    });
+
+    if (!sourceCatKey || sourceRowIdx === -1) {
       handleDragEnd();
       return;
     }
 
+    const sRows = catRowsMap.get(sourceCatKey)!;
+    sRows[sourceRowIdx].splice(sourceColIdx, 1);
+
+    const tRows = catRowsMap.get(categoryKey) || [];
+    if (tRows.length === 0 || tRows[tRows.length - 1].length >= 4) {
+      tRows.push([sourceKey]);
+    } else {
+      tRows[tRows.length - 1].push(sourceKey);
+    }
+    catRowsMap.set(categoryKey, tRows);
+
     const targetGroup = categoryGroups.find((g) => g.key === categoryKey);
     const targetCategoryLabel = targetGroup ? targetGroup.label : categoryKey;
 
-    const newItems = [...currentItems];
-    const [sourceItem] = newItems.splice(sourceIdx, 1);
-    const updatedSource = {
-      ...sourceItem,
-      value: {
-        ...(sourceItem.value || {}),
-        category: categoryKey,
-        categoryLabel: targetCategoryLabel
-      }
-    };
+    const nextDraft: any[] = [];
+    let counter = 1;
 
-    const lastInTargetCat = newItems
-      .map((it, idx) => ({ it, idx }))
-      .filter(({ it }) => (it.value?.category || "custom") === categoryKey);
+    categoryGroups.forEach((cg) => {
+      const catKey = cg.key;
+      const rows = catRowsMap.get(catKey) || [];
+      const nonEmptyRows = rows.filter((r) => r.length > 0);
 
-    let insertIdx = newItems.length;
-    if (lastInTargetCat.length > 0) {
-      insertIdx = lastInTargetCat[lastInTargetCat.length - 1].idx + 1;
-    }
-    newItems.splice(insertIdx, 0, updatedSource);
+      nonEmptyRows.forEach((rowCards, newRowIdx) => {
+        rowCards.forEach((cKey) => {
+          const item = currentItems.find((it) => it.config_key.toLowerCase() === cKey.toLowerCase());
+          if (item) {
+            nextDraft.push({
+              ...item,
+              sort_order: counter++,
+              value: {
+                ...(item.value || {}),
+                category: catKey,
+                categoryLabel: cg.label,
+                row: newRowIdx
+              }
+            });
+          }
+        });
+      });
+    });
 
-    const reindexed = newItems.map((it, idx) => ({
-      ...it,
-      sort_order: idx + 1
-    }));
-
-    setDraftConfiguredItems(reindexed);
+    setDraftConfiguredItems(nextDraft);
     setHasUnsavedChanges(true);
     handleDragEnd();
     setDragToast(`✓ Memindahkan '${sourceTitle}' ke kategori ${targetCategoryLabel.toUpperCase()}`);
@@ -2211,24 +2286,20 @@ const SectionHEquipment = memo(function SectionHEquipment({
       ? "animate-card-gentle-float ring-2 ring-sky-400/50 border border-dashed border-sky-400 dark:border-sky-500 rounded-2xl shadow-sm"
       : "";
 
-    const span = item.span || "auto";
-    const spanClass = span === "full"
-      ? "col-span-1 md:col-span-2 lg:col-span-3 xl:col-span-4"
-      : span === "2"
-      ? "col-span-1 md:col-span-2"
-      : "col-span-1";
-
     const isSingleInRow = rowTotalCount === 1;
-    const align = item.align || "full";
-    const singleCardAlignClass = isSingleInRow
-      ? align === "center"
-        ? "w-full md:w-2/3 lg:w-1/2 xl:w-1/3 mx-auto"
-        : align === "left"
-        ? "w-full md:w-2/3 lg:w-1/2 xl:w-1/3 mr-auto"
-        : align === "right"
-        ? "w-full md:w-2/3 lg:w-1/2 xl:w-1/3 ml-auto"
+    const span = item.span || "full";
+    const align = item.align || "center";
+
+    // Card width inside container: if single in row, respects span setting; otherwise spans full grid column
+    const cardWidthClass = isSingleInRow
+      ? span === "1"
+        ? "w-full sm:w-1/2 lg:w-1/4"
+        : span === "2"
+        ? "w-full sm:w-2/3 lg:w-1/2"
+        : span === "3"
+        ? "w-full lg:w-3/4"
         : "w-full"
-      : spanClass;
+      : "w-full";
 
     return (
       <div
@@ -2241,7 +2312,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
           e.stopPropagation();
           handleDropOnCard(categoryKey, item.configKey);
         }}
-        className={`relative group transition-all duration-150 h-full flex flex-col justify-between ${singleCardAlignClass} ${wobbleClass} ${
+        className={`relative group transition-all duration-150 h-full min-h-[460px] flex flex-col justify-between ${cardWidthClass} ${wobbleClass} ${
           isBeingDragged
             ? "opacity-30 scale-95 ring-2 ring-sky-500 rounded-2xl cursor-grabbing"
             : isDropTarget
@@ -2251,19 +2322,27 @@ const SectionHEquipment = memo(function SectionHEquipment({
             : ""
         }`}
       >
-        {/* Drop Indicators: Insert Left or Insert Right */}
+        {/* Drop Indicators: Insert Left, Insert Right, or Swap */}
         {isDropTarget && dragAction === "insert-left" && (
           <div className="absolute inset-y-0 -left-2 w-3 bg-sky-500 rounded-l-xl shadow-[0_0_16px_rgba(14,165,233,0.9)] z-40 flex items-center justify-center animate-pulse pointer-events-none">
-            <div className="bg-sky-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-lg whitespace-nowrap -translate-x-full mr-1 flex items-center gap-1">
-              <span>←</span> Pindahkan ke Sini
+            <div className="bg-sky-600 text-white text-[10px] font-black px-2.5 py-1 rounded-md shadow-lg whitespace-nowrap -translate-x-full mr-1 flex items-center gap-1">
+              <span>←</span> Sisipkan di Kiri
             </div>
           </div>
         )}
 
         {isDropTarget && dragAction === "insert-right" && (
           <div className="absolute inset-y-0 -right-2 w-3 bg-sky-500 rounded-r-xl shadow-[0_0_16px_rgba(14,165,233,0.9)] z-40 flex items-center justify-center animate-pulse pointer-events-none">
-            <div className="bg-sky-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-lg whitespace-nowrap translate-x-full ml-1 flex items-center gap-1">
-              Pindahkan ke Sini <span>→</span>
+            <div className="bg-sky-600 text-white text-[10px] font-black px-2.5 py-1 rounded-md shadow-lg whitespace-nowrap translate-x-full ml-1 flex items-center gap-1">
+              Sisipkan di Kanan <span>→</span>
+            </div>
+          </div>
+        )}
+
+        {isDropTarget && dragAction === "swap" && (
+          <div className="absolute inset-0 bg-amber-500/15 dark:bg-amber-400/15 border-2 border-amber-500 rounded-2xl z-40 flex items-center justify-center pointer-events-none shadow-[0_0_20px_rgba(245,158,11,0.5)]">
+            <div className="bg-amber-600 text-white text-xs font-black px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-1.5 animate-bounce">
+              <span>🔄</span> Tukar Posisi dengan Kartu Ini
             </div>
           </div>
         )}
@@ -2272,7 +2351,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
         {isSeniorUnitHead && isEditPositionMode && (
           <div
             className="absolute top-3 right-3 z-30 flex items-center gap-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md shadow-sky-500/30 px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-grab active:cursor-grabbing select-none hover:scale-105 transition-transform"
-            title="Tahan dan tarik kartu ini untuk memindahkan posisi"
+            title="Tahan dan tarik kartu ini untuk memindahkan atau menukar posisi"
           >
             <span className="text-xs">⋮⋮</span>
             <span className="text-[9px] uppercase tracking-wider font-extrabold hidden sm:inline">Pindahkan</span>
@@ -2288,142 +2367,63 @@ const SectionHEquipment = memo(function SectionHEquipment({
           prevMonthName={compMonthLabel}
         />
 
-        {/* In-Card Quick Controls: Move Left, Move Right, Up Row, Down Row, Single Card Alignment, and Category Selection */}
-        {isSeniorUnitHead && isEditPositionMode && (
+        {/* In-Card Layout Controls: ONLY rendered when Edit Position Mode is active AND only 1 card is in this row */}
+        {isSeniorUnitHead && isEditPositionMode && isSingleInRow && (
           <div className="p-2.5 bg-slate-50/95 dark:bg-slate-800/95 border-t border-slate-200 dark:border-slate-700/80 rounded-b-2xl flex flex-wrap items-center justify-between gap-2 text-xs min-h-[46px]">
-            <div className="flex flex-wrap items-center gap-1">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleMoveCardDirection(item.configKey, "left");
-                }}
-                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
-                title="Geser ke Kiri dalam baris ini"
-              >
-                <span>◀</span>
-                <span className="text-[10px]">Kiri</span>
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleMoveCardDirection(item.configKey, "right");
-                }}
-                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
-                title="Geser ke Kanan dalam baris ini"
-              >
-                <span className="text-[10px]">Kanan</span>
-                <span>▶</span>
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleMoveCardRow(item.configKey, "up");
-                }}
-                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
-                title="Pindahkan kartu ke Baris Atas (Menyesuaikan ukuran baris otomatis)"
-              >
-                <span>▲</span>
-                <span className="text-[10px]">Atas</span>
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleMoveCardRow(item.configKey, "down");
-                }}
-                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
-                title="Pindahkan kartu ke Baris Bawah (Menyesuaikan ukuran baris otomatis)"
-              >
-                <span>▼</span>
-                <span className="text-[10px]">Bawah</span>
-              </button>
-
-              {/* Aturan Posisi jika hanya ada 1 kartu di baris */}
-              {isSingleInRow && (
-                <div className="flex items-center gap-1 bg-white dark:bg-slate-700/80 px-2 py-0.5 rounded-lg border border-slate-300 dark:border-slate-600">
-                  <span className="text-[10px] text-slate-400 font-semibold mr-0.5">Posisi:</span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSetCardAlign(item.configKey, "left");
-                    }}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
-                      align === "left"
-                        ? "bg-sky-500 text-white shadow-xs"
-                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600"
-                    }`}
-                    title="Rata Kiri"
-                  >
-                    Kiri
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSetCardAlign(item.configKey, "center");
-                    }}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
-                      align === "center"
-                        ? "bg-sky-500 text-white shadow-xs"
-                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600"
-                    }`}
-                    title="Rata Tengah"
-                  >
-                    Tengah
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSetCardAlign(item.configKey, "right");
-                    }}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
-                      align === "right"
-                        ? "bg-sky-500 text-white shadow-xs"
-                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600"
-                    }`}
-                    title="Rata Kanan"
-                  >
-                    Kanan
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSetCardAlign(item.configKey, "full");
-                    }}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
-                      (!align || align === "full")
-                        ? "bg-sky-500 text-white shadow-xs"
-                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600"
-                    }`}
-                    title="Penuhi Baris"
-                  >
-                    Penuh
-                  </button>
-                </div>
-              )}
+            {/* Ukuran Kolom (1, 2, 3, atau Penuh) */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] text-slate-400 font-bold">Ukuran:</span>
+              {[
+                { key: "1", label: "1 Kolom" },
+                { key: "2", label: "2 Kolom" },
+                { key: "3", label: "3 Kolom" },
+                { key: "full", label: "Penuh (4 Kolom)" }
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSetCardSpan(item.configKey, opt.key as any);
+                  }}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
+                    (span === opt.key || (!item.span && opt.key === "full"))
+                      ? "bg-sky-500 text-white shadow-xs"
+                      : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-slate-400 font-semibold hidden sm:inline">Kategori:</span>
-              <select
-                value={categoryKey}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  handleQuickMoveCategory(item.configKey, e.target.value);
-                }}
-                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-bold border border-slate-300 dark:border-slate-600 focus:outline-none cursor-pointer"
-              >
-                {categoryGroups.map((cg) => (
-                  <option key={cg.key} value={cg.key}>{cg.label}</option>
+            {/* Posisi Alignment (Kiri, Tengah, Kanan) - hanya jika ukuran bukan penuh */}
+            {span !== "full" && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] text-slate-400 font-bold">Posisi:</span>
+                {[
+                  { key: "left", label: "Kiri" },
+                  { key: "center", label: "Tengah" },
+                  { key: "right", label: "Kanan" }
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSetCardAlign(item.configKey, opt.key as any);
+                    }}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
+                      (align === opt.key || (!item.align && opt.key === "center"))
+                        ? "bg-indigo-500 text-white shadow-xs"
+                        : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
                 ))}
-              </select>
-            </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2750,27 +2750,49 @@ const SectionHEquipment = memo(function SectionHEquipment({
               {/* Cards Rendered in Auto-Adjusting Rows (1->100%, 2->50%, 3->33.3%, 4->25%) */}
               {cat.items.length > 0 ? (
                 <div className="space-y-6">
-                  {cat.rows.map((row) => (
-                    <div
-                      key={row.rowIdx}
-                      className={getRowGridClass(row.items.length)}
-                    >
-                      {row.items.map((item, idx) => renderCard(item, cat.key, idx, row.rowIdx, row.items.length))}
-                    </div>
-                  ))}
+                  {cat.rows.map((row) => {
+                    const isSingle = row.items.length === 1;
+                    if (isSingle) {
+                      const item = row.items[0];
+                      const align = item.align || "center";
+                      const justifyClass = align === "left" ? "justify-start" : align === "right" ? "justify-end" : "justify-center";
+                      return (
+                        <div key={row.rowIdx} className={`w-full flex items-stretch ${justifyClass}`}>
+                          {renderCard(item, cat.key, 0, row.rowIdx, 1)}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div
+                        key={row.rowIdx}
+                        className={getRowGridClass(row.items.length)}
+                      >
+                        {row.items.map((item, idx) => renderCard(item, cat.key, idx, row.rowIdx, row.items.length))}
+                      </div>
+                    );
+                  })}
                   {isSeniorUnitHead && isEditPositionMode && (
                     <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.dataTransfer.dropEffect = "move";
+                      }}
+                      onDrop={(e) => {
+                        e.stopPropagation();
+                        handleDropOnNewRow(cat.key);
+                      }}
                       onClick={() => {
                         if (cat.items.length > 0) {
                           const lastItem = cat.items[cat.items.length - 1];
-                          handleMoveCardRow(lastItem.configKey, "down");
+                          handleMoveCardToNewRow(lastItem.configKey, cat.key);
                         }
                       }}
                       className="border-2 border-dashed border-sky-300/60 dark:border-slate-700 hover:border-sky-500 hover:bg-sky-500/5 rounded-2xl p-3 text-center transition flex items-center justify-center gap-2 text-xs font-bold text-sky-600 dark:text-sky-400 cursor-pointer"
-                      title="Klik untuk memindahkan kartu terakhir ke baris baru di bawahnya"
+                      title="Tarik kartu ke sini atau klik untuk membuat baris baru di bawahnya"
                     >
-                      <span className="text-sm">+</span>
-                      <span>Pindahkan kartu terakhir ke Baris Baru di Bawah</span>
+                      <span className="text-sm font-black">+</span>
+                      <span>Tarik kartu ke sini untuk membuat Baris Baru (atau Klik untuk pindah kartu terakhir)</span>
                     </div>
                   )}
                 </div>
