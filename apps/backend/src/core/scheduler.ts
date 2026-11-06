@@ -939,7 +939,7 @@ export const getIncomingHourlyTrend = (deviceId: string) => {
   };
 };
 
-const recordIncomingTrend5s = async (
+const recordIncomingTrend3s = async (
   deviceId: string,
   data: {
     voltage: number;
@@ -957,12 +957,12 @@ const recordIncomingTrend5s = async (
 ) => {
   if (!incomingHourlyTrends[deviceId]) return;
   const now = new Date();
-  const slot5sMs = Math.floor(now.getTime() / 5000) * 5000;
-  const slotDate = new Date(slot5sMs);
+  const slot3sMs = Math.floor(now.getTime() / 3000) * 3000;
+  const slotDate = new Date(slot3sMs);
   const wib = getWibDateTime(slotDate);
   const currentHour = wib.hour;
 
-  // Record strictly once per 5-second slot (00, 05, 10, 15, ..., 55) without skipping slots if poll takes >1s
+  // Record strictly once per 3-second slot without skipping slots
   if (lastRecordedSlot5s[deviceId] !== wib.tStampStr) {
     lastRecordedSlot5s[deviceId] = wib.tStampStr;
     lastTrendHour[deviceId] = currentHour;
@@ -979,23 +979,23 @@ const recordIncomingTrend5s = async (
       pR: Math.abs(Number(data.pR.toFixed(1))),
       pS: Math.abs(Number(data.pS.toFixed(1))),
       pT: Math.abs(Number(data.pT.toFixed(1))),
-      ts: slot5sMs
+      ts: slot3sMs
     };
 
     const pool = getPostgresPool();
 
     // Maintain continuous 1-hour rolling window in memory: discard points older than 3600 seconds
-    const oneHourAgoMs = slot5sMs - 3600 * 1000;
+    const oneHourAgoMs = slot3sMs - 3600 * 1000;
     incomingHourlyTrends[deviceId] = (incomingHourlyTrends[deviceId] || []).filter(
       (p) => (p.ts || 0) >= oneHourAgoMs && p.time !== timeStr
     );
     incomingHourlyTrends[deviceId].push(point);
-    if (incomingHourlyTrends[deviceId].length > 720) {
+    if (incomingHourlyTrends[deviceId].length > 1200) {
       incomingHourlyTrends[deviceId].shift();
     }
 
     // Strictly keep only the latest 1 hour (3600 seconds) in electric_incoming_trend_5s and prevent duplicate rows
-    const purgeDate = new Date(slot5sMs - 3600 * 1000);
+    const purgeDate = new Date(slot3sMs - 3600 * 1000);
     const purgeWib = getWibDateTime(purgeDate);
 
     try {
@@ -1024,16 +1024,22 @@ const recordIncomingTrend5s = async (
         data.currentC ?? null
       ]);
     } catch (err: any) {
-      logger.warn(`Failed to insert 5s trend to electric_incoming_trend_5s for ${deviceId}: ${err.message}`);
+      logger.warn(`Failed to insert 3s trend to electric_incoming_trend_5s for ${deviceId}: ${err.message}`);
     }
 
     const io = getSocketServer();
     if (io) {
+      io.emit("electricity:trend_3s", {
+        deviceId,
+        point,
+        hour: currentHour,
+        isHourChange: false
+      });
       io.emit("electricity:trend_5s", {
         deviceId,
         point,
         hour: currentHour,
-        isHourChange: false // Maintain continuous rolling FIFO stream without abrupt resets
+        isHourChange: false
       });
     }
   }
@@ -1156,7 +1162,7 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   const pS = iTotal > 0 ? (activePowerVal * (currentBVal / iTotal)) : (activePowerVal / 3.0);
   const pT = iTotal > 0 ? (activePowerVal * (currentCVal / iTotal)) : (activePowerVal / 3.0);
 
-  recordIncomingTrend5s(deviceId, {
+  recordIncomingTrend3s(deviceId, {
     voltage: voltLAvg > 0 ? voltLAvg : voltABVal,
     vR: voltABVal,
     vS: voltBCVal,

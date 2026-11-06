@@ -165,7 +165,7 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
     const bucketMap = new Map<number, IncomingTrend5sPoint>();
     for (const row of res.rows) {
       const rawTs = row.t_stamp instanceof Date ? row.t_stamp.getTime() : new Date(row.t_stamp).getTime();
-      const bucketTs = Math.round(rawTs / 5000) * 5000;
+      const bucketTs = Math.round(rawTs / 3000) * 3000;
       const wibBucket = getWibDateTime(new Date(bucketTs));
       const timeStr = wibBucket.timeStr;
 

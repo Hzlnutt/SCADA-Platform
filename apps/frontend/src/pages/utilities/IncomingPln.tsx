@@ -403,11 +403,11 @@ interface HourlyTrend5sPoint {
   });
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
 
-  // 5-second clock ticker to keep rolling sliding window advancing smoothly in real time
+  // 3-second clock ticker to keep rolling sliding window advancing smoothly in real time
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(Date.now());
-    }, 5000);
+    }, 3000);
     return () => clearInterval(timer);
   }, []);
 
@@ -622,18 +622,18 @@ interface HourlyTrend5sPoint {
             const map = new Map<number, any>();
             for (const p of prev) {
               if (p.ts && Number(p.ts) >= oneHourAgo) {
-                const bucket = Math.round(Number(p.ts) / 5000) * 5000;
+                const bucket = Math.round(Number(p.ts) / 3000) * 3000;
                 map.set(bucket, p);
               }
             }
             for (const p of pts) {
               if (p.ts && Number(p.ts) >= oneHourAgo) {
-                const bucket = Math.round(Number(p.ts) / 5000) * 5000;
+                const bucket = Math.round(Number(p.ts) / 3000) * 3000;
                 map.set(bucket, p);
               }
             }
             const merged = Array.from(map.values()).sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
-            const trimmed = merged.length > 720 ? merged.slice(merged.length - 720) : merged;
+            const trimmed = merged.length > 1200 ? merged.slice(merged.length - 1200) : merged;
             try {
               localStorage.setItem(`incoming_trend_1h_${config.deviceId}`, JSON.stringify(trimmed));
             } catch (e) {}
@@ -766,15 +766,15 @@ interface HourlyTrend5sPoint {
           const oneHourAgo = nowMs - 3600 * 1000;
           // Strictly discard points older than 1 hour (rolling FIFO window)
           const filtered = prev.filter((p) => p.ts && Number(p.ts) >= oneHourAgo);
-          // Deduplicate if within same 5s bucket
-          const ptBucket = Math.round((pt.ts || nowMs) / 5000) * 5000;
+          // Deduplicate if within same 3s bucket
+          const ptBucket = Math.round((pt.ts || nowMs) / 3000) * 3000;
           const lastP = filtered[filtered.length - 1];
-          if (lastP && lastP.ts && Math.round(lastP.ts / 5000) * 5000 === ptBucket) {
+          if (lastP && lastP.ts && Math.round(lastP.ts / 3000) * 3000 === ptBucket) {
             filtered[filtered.length - 1] = pt;
             return [...filtered];
           }
           const updated = [...filtered, pt];
-          const trimmed = updated.length > 720 ? updated.slice(updated.length - 720) : updated;
+          const trimmed = updated.length > 1200 ? updated.slice(updated.length - 1200) : updated;
           try {
             localStorage.setItem(`incoming_trend_1h_${config.deviceId}`, JSON.stringify(trimmed));
           } catch (e) {}
@@ -790,12 +790,14 @@ interface HourlyTrend5sPoint {
     socket.on("electricity:minute_update", handleMinuteUpdate);
     socket.on("historian:minute_update", handleMinuteUpdate);
     socket.on("electricity:live_update", handleLiveUpdate);
+    socket.on("electricity:trend_3s", handleTrend5s);
     socket.on("electricity:trend_5s", handleTrend5s);
 
     return () => {
       socket.off("electricity:minute_update", handleMinuteUpdate);
       socket.off("historian:minute_update", handleMinuteUpdate);
       socket.off("electricity:live_update", handleLiveUpdate);
+      socket.off("electricity:trend_3s", handleTrend5s);
       socket.off("electricity:trend_5s", handleTrend5s);
     };
   }, [config.deviceId]);
@@ -955,9 +957,9 @@ interface HourlyTrend5sPoint {
     }
   };
 
-  // Continuous 1-Hour Rolling 5-Second Window (Strictly Fixed 1-Hour Window: 720 slots * 5s = 3600s = 60 min)
-  const SLOTS_COUNT = 720;
-  const STEP_MS = 5000;
+  // Continuous 1-Hour Rolling 3-Second Window (Strictly Fixed 1-Hour Window: 1200 slots * 3s = 3600s = 60 min)
+  const SLOTS_COUNT = 1200;
+  const STEP_MS = 3000;
 
   const rollingTrendData = useMemo(() => {
     const pad = (n: number) => String(n).padStart(2, "0");
@@ -971,7 +973,7 @@ interface HourlyTrend5sPoint {
       if (p.time) {
         timeStrMap.set(p.time, p);
       }
-      if (p.ts && p.ts >= oneHourAgoTs - 15000 && p.ts <= currentSlotTs + 15000) {
+      if (p.ts && p.ts >= oneHourAgoTs - 9000 && p.ts <= currentSlotTs + 9000) {
         const bucket = Math.round(p.ts / STEP_MS) * STEP_MS;
         map.set(bucket, p);
       }
@@ -1568,10 +1570,10 @@ interface HourlyTrend5sPoint {
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400">Trend Tegangan 1 Jam (kV) — Rolling 5s</h4>
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400">Trend Tegangan 1 Jam (kV) — Rolling 3s</h4>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  {rollingTrendData.rangeLabel} (Rolling 5s)
+                  {rollingTrendData.rangeLabel} (Rolling 3s)
                 </span>
                 <button
                   type="button"
@@ -1592,10 +1594,10 @@ interface HourlyTrend5sPoint {
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400">Trend Daya Aktif 1 Jam (kW) — Rolling 5s</h4>
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400">Trend Daya Aktif 1 Jam (kW) — Rolling 3s</h4>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  {rollingTrendData.rangeLabel} (Rolling 5s)
+                  {rollingTrendData.rangeLabel} (Rolling 3s)
                 </span>
                 <button
                   type="button"
@@ -1651,7 +1653,7 @@ interface HourlyTrend5sPoint {
                   <h3 className={`text-base font-bold uppercase tracking-wider ${
                     zoomTrend === "voltage" ? "text-amber-500 dark:text-amber-400" : "text-emerald-500 dark:text-emerald-400"
                   }`}>
-                    {zoomTrend === "voltage" ? "Trend Tegangan 1 Jam (kV) — Rolling 5s" : "Trend Daya Aktif 1 Jam (kW) — Rolling 5s"}
+                    {zoomTrend === "voltage" ? "Trend Tegangan 1 Jam (kV) — Rolling 3s" : "Trend Daya Aktif 1 Jam (kW) — Rolling 3s"}
                   </h3>
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
                     {config.title}
@@ -1659,10 +1661,10 @@ interface HourlyTrend5sPoint {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-2">
                   <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
-                    Rentang: {rollingTrendData.rangeLabel} (Rolling 5s Window)
+                    Rentang: {rollingTrendData.rangeLabel} (Rolling 3s Window)
                   </span>
                   <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                    • Resolusi 5 Detik (Database Historikal Real-Time)
+                    • Resolusi 3 Detik (Database Historikal Real-Time)
                   </span>
                 </div>
               </div>
@@ -1707,7 +1709,7 @@ interface HourlyTrend5sPoint {
                   <span>• Min: <strong className="font-mono">{powerStats.min.toFixed(1)} kW</strong></span>
                 </div>
               ) : (
-                <span className="text-slate-400">Data telemetri tersinkronisasi per 5 detik.</span>
+                <span className="text-slate-400">Data telemetri tersinkronisasi per 3 detik.</span>
               )}
               <span className="text-[11px] text-slate-400">Tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] border border-slate-200 dark:border-slate-700">ESC</kbd> untuk menutup</span>
             </div>
