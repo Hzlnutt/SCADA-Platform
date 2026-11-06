@@ -14,7 +14,7 @@ export const AppLayout = () => {
           <div className="lg:hidden">
             <MobileNav />
           </div>
-          <div className="px-5 py-5 lg:px-6">
+          <div className="px-3 sm:px-5 py-3.5 sm:py-5 lg:px-6">
             <ErrorBoundary>
               <Outlet />
             </ErrorBoundary>

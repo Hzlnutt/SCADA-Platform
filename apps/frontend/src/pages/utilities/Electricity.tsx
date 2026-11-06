@@ -1482,7 +1482,8 @@ const SectionHEquipment = memo(function SectionHEquipment({
         configKey: item.config_key,
         sortOrder: item.sort_order ?? 0,
         category: catKey,
-        categoryLabel: catEntry.label
+        categoryLabel: catEntry.label,
+        span: val.span || "auto"
       });
     }
 
@@ -1613,6 +1614,26 @@ const SectionHEquipment = memo(function SectionHEquipment({
     }));
 
     setDraftConfiguredItems(reindexed);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleToggleCardSpan = (configKey: string) => {
+    const currentItems = draftConfiguredItems.length > 0
+      ? [...draftConfiguredItems]
+      : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
+    const idx = currentItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
+    if (idx === -1) return;
+
+    const currentSpan = currentItems[idx].value?.span || "auto";
+    const nextSpan = currentSpan === "auto" ? "2" : currentSpan === "2" ? "full" : "auto";
+    currentItems[idx] = {
+      ...currentItems[idx],
+      value: {
+        ...(currentItems[idx].value || {}),
+        span: nextSpan
+      }
+    };
+    setDraftConfiguredItems([...currentItems]);
     setHasUnsavedChanges(true);
   };
 
@@ -1932,11 +1953,12 @@ const SectionHEquipment = memo(function SectionHEquipment({
   };
 
   // Helper for responsive grid column count per category
-  const getCategoryGridClass = (catKey: string, itemCount: number) => {
-    if (catKey === "boiler" && itemCount <= 2) return "grid gap-6 md:grid-cols-2";
-    if (catKey === "chiller" || catKey === "hvac_wh") return "grid gap-6 md:grid-cols-2 lg:grid-cols-4";
-    if (catKey === "cubicles") return "grid gap-6 md:grid-cols-3";
-    return "grid gap-6 md:grid-cols-2 lg:grid-cols-3";
+  // 1 card -> 1 column full width; 2 cards -> 2 columns; 3 cards -> 3 columns; 4+ cards -> 4 columns responsive
+  const getCategoryGridClass = (_catKey: string, itemCount: number) => {
+    if (itemCount <= 1) return "grid gap-6 grid-cols-1";
+    if (itemCount === 2) return "grid gap-6 grid-cols-1 md:grid-cols-2";
+    if (itemCount === 3) return "grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+    return "grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
   };
 
   // Dynamic state from database batch endpoint
@@ -2009,7 +2031,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
   }, [fetchEquipmentBatch, currentYear, currentMonthIdx, isEditPositionMode, loadConfiguredItems]);
 
   const renderCard = (
-    item: { title: string; seriesKey: string; pmId: string; configKey: string },
+    item: { title: string; seriesKey: string; pmId: string; configKey: string; span?: string },
     categoryKey: string,
     cardIndex: number
   ) => {
@@ -2024,6 +2046,13 @@ const SectionHEquipment = memo(function SectionHEquipment({
       ? (cardIndex % 2 === 0 ? "animate-card-wobble-even" : "animate-card-wobble-odd")
       : "";
 
+    const span = item.span || "auto";
+    const spanClass = span === "full"
+      ? "col-span-1 md:col-span-2 lg:col-span-3 xl:col-span-4"
+      : span === "2"
+      ? "col-span-1 md:col-span-2"
+      : "col-span-1";
+
     return (
       <div
         key={item.pmId || item.title}
@@ -2035,7 +2064,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
           e.stopPropagation();
           handleDropOnCard(categoryKey, item.configKey);
         }}
-        className={`relative group transition-all duration-150 ${wobbleClass} ${
+        className={`relative group transition-all duration-150 ${spanClass} ${wobbleClass} ${
           isBeingDragged
             ? "opacity-30 scale-95 ring-2 ring-sky-500 rounded-2xl cursor-grabbing"
             : isDropTarget
@@ -2118,6 +2147,20 @@ const SectionHEquipment = memo(function SectionHEquipment({
               >
                 <span className="text-[10px]">Kanan</span>
                 <span>▶</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleCardSpan(item.configKey);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
+                title="Ubah lebar ukuran kartu: Otomatis -> 2 Kolom -> Penuh (1 Baris)"
+              >
+                <span>↔</span>
+                <span className="text-[10px]">
+                  {item.span === "full" ? "Penuh" : item.span === "2" ? "2 Kolom" : "Auto"}
+                </span>
               </button>
             </div>
 

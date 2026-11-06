@@ -7,7 +7,7 @@ import { useSystemStore } from "../../store/system.store";
 import { getJson, postJson } from "../../services/api.client";
 import { getSocket } from "../../services/socket.service";
 import { useAuthStore } from "../../store/auth.store";
-import { canAccessConfigAndAudit } from "../../utils/roles";
+import { canAccessConfigAndAudit, isSeniorUnitHeadOrAdmin } from "../../utils/roles";
 import { EwPowerMetersGrid } from "../../components/electricity/EwPowerMetersGrid";
 import type { ElectricPmItem } from "../../components/electricity/PmDetailModal";
 import { getPmSortIndex } from "../../data/pmMapping";
@@ -1035,7 +1035,27 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
 }
 
 /* ═══════════ TRANSFORMER DETAIL CARD (Section B) ═══════════ */
-function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: TransformerData; factoryLabel: string; loadConfig: { safeMax: number; cautionMax: number } }) {
+function TransformerDetailCard({
+  tx,
+  factoryLabel,
+  loadConfig,
+  isEditMode,
+  onMoveLeft,
+  onMoveRight,
+  onDragStart,
+  onDragOver,
+  onDrop
+}: {
+  tx: TransformerData;
+  factoryLabel: string;
+  loadConfig: { safeMax: number; cautionMax: number };
+  isEditMode?: boolean;
+  onMoveLeft?: () => void;
+  onMoveRight?: () => void;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: () => void;
+}) {
   const hasData = tx.activePowerKw !== null && tx.activePowerKw !== undefined;
   const loadPct = hasData && tx.capacityKva && tx.activePowerKw !== null ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null;
   
@@ -1063,45 +1083,64 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
   const thdi_T = tx.thdCurrentC !== null && tx.thdCurrentC !== undefined ? tx.thdCurrentC.toFixed(2) : (tx.thdCurrent !== null ? tx.thdCurrent.toFixed(2) : "—");
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+    <div
+      draggable={isEditMode}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      className={`rounded-2xl border transition-all duration-200 bg-white dark:bg-slate-900 shadow-sm overflow-hidden relative ${
+        isEditMode
+          ? "ring-2 ring-sky-500/50 border-sky-400 shadow-lg cursor-grab active:cursor-grabbing hover:scale-[1.01]"
+          : "border-slate-200 dark:border-slate-800"
+      }`}
+    >
       {/* Card Header */}
-      <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+      <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <span
             className="rounded-full"
             style={{
-              width: 8, height: 8,
+              width: 9, height: 9,
               backgroundColor: hasData ? (tx.status === "online" ? "#10b981" : "#f59e0b") : "#94a3b8",
-              boxShadow: hasData ? "0 0 6px #10b981" : "none",
+              boxShadow: hasData ? "0 0 8px #10b981" : "none",
             }}
           />
-          <span className="text-sm font-extrabold text-slate-800 dark:text-white">{tx.name}</span>
-          <span className="px-2 py-0.5 rounded text-[8px] font-extrabold bg-sky-500/10 text-sky-500 border border-sky-500/20 uppercase">
+          <span className="text-base font-black text-slate-800 dark:text-white tracking-wide">{tx.name}</span>
+          <span className="px-2.5 py-0.5 rounded text-[10px] font-black bg-sky-500/10 text-sky-500 border border-sky-500/20 uppercase tracking-wider">
             {factoryLabel} — {tx.capacityKva} kVA
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-slate-400">LOAD</span>
-          <div className="flex items-center gap-1.5">
-            <div
-              className="rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800"
-              style={{ width: 60, height: 6 }}
-            >
-              <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${loadPct ? Math.min(100, loadPct) : 0}%`, backgroundColor: loadColor }}
-              />
+        <div className="flex items-center gap-3">
+          {isEditMode ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500 text-white text-[10px] font-black uppercase tracking-wider shadow-sm select-none">
+              <span>⋮⋮</span>
+              <span>Pindahkan</span>
             </div>
-            <span className="text-[10px] font-extrabold font-mono text-slate-400">
-              {loadPct !== null ? `${loadPct}%` : "—%"}
-            </span>
-          </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400">LOAD</span>
+              <div className="flex items-center gap-1.5">
+                <div
+                  className="rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800"
+                  style={{ width: 70, height: 8 }}
+                >
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${loadPct ? Math.min(100, loadPct) : 0}%`, backgroundColor: loadColor }}
+                  />
+                </div>
+                <span className="text-xs font-black font-mono text-slate-600 dark:text-slate-300">
+                  {loadPct !== null ? `${loadPct}%` : "—%"}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Parameters Grid */}
       <div className="p-5">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 16px" }} className="text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4.5">
           <ParamCell label="Input Voltage" value={tx.voltageInKv !== null ? `${tx.voltageInKv.toFixed(2)} kV` : "—"} />
           <ParamCell label="Output Volt 400V" value={tx.voltageOutL2L !== null ? `R:${vR_400} S:${vS_400} T:${vT_400} V` : "R: —  S: —  T: — V"} />
           <ParamCell label="Output Volt 230V" value={tx.voltageOutL2N !== null ? `R:${vR_230} S:${vS_230} T:${vT_230} V` : "R: —  S: —  T: — V"} />
@@ -1110,7 +1149,7 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
           <ParamCell label="Reactive Power" value={tx.reactivePowerKvar !== null ? `${tx.reactivePowerKvar} kVAR` : "—"} />
           <ParamCell label="Apparent Power" value={tx.apparentPowerKva !== null ? `${tx.apparentPowerKva} kVA` : "—"} />
           
-          <ParamCell label="Power Factor" value={tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"} />
+          <ParamCell label="Power Factor" value={tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : "—"} />
           <ParamCell label="Frequency" value={tx.frequencyHz !== null ? `${tx.frequencyHz.toFixed(2)} Hz` : "—"} />
           <ParamCell label="Temperature" value={tx.tempCc !== null ? `${tx.tempCc.toFixed(1)} °C` : "—"} warn={tx.tempCc !== null && tx.tempCc > 60} />
 
@@ -1121,46 +1160,46 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
 
         {/* Current & THD Section */}
         <div
-          className="mt-4 p-3.5 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-slate-800/60 space-y-2.5"
+          className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800/60 space-y-3"
         >
-          <div className="flex justify-between items-center text-xs">
-            <span className="text-[9px] text-slate-400 uppercase font-extrabold tracking-wider">Arus Per Fasa (A)</span>
-            <div className="font-mono font-bold text-slate-400">
-              R: <span className="text-slate-400 mr-2">{tx.currentR !== null ? Math.round(tx.currentR) : "—"}</span>
-              S: <span className="text-slate-400 mr-2">{tx.currentS !== null ? Math.round(tx.currentS) : "—"}</span>
-              T: <span className="text-slate-400">{tx.currentT !== null ? Math.round(tx.currentT) : "—"}</span>
+          <div className="flex flex-wrap justify-between items-center gap-2">
+            <span className="text-xs text-slate-500 dark:text-slate-400 uppercase font-black tracking-wider">Arus Per Fasa (A)</span>
+            <div className="font-mono font-bold text-xs sm:text-sm text-slate-700 dark:text-slate-200">
+              R: <span className="font-black text-rose-500 mr-2">{tx.currentR !== null ? Math.round(tx.currentR) : "—"}</span>
+              S: <span className="font-black text-amber-500 mr-2">{tx.currentS !== null ? Math.round(tx.currentS) : "—"}</span>
+              T: <span className="font-black text-blue-500">{tx.currentT !== null ? Math.round(tx.currentT) : "—"}</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/40 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-800/60">
             <div>
-              <span className="text-[9px] text-slate-400 uppercase block font-extrabold tracking-wider mb-0.5">THDV Per Fasa (%)</span>
-              <div className="font-mono font-bold text-slate-400">
-                R:<span className="mr-1">{thdv_R}</span>
-                S:<span className="mr-1">{thdv_S}</span>
+              <span className="text-[11px] text-slate-400 uppercase block font-black tracking-wider mb-1">THDV Per Fasa (%)</span>
+              <div className="font-mono font-bold text-xs sm:text-sm text-slate-700 dark:text-slate-200">
+                R:<span className="mr-1.5">{thdv_R}</span>
+                S:<span className="mr-1.5">{thdv_S}</span>
                 T:<span>{thdv_T}</span>
               </div>
             </div>
             <div>
-              <span className="text-[9px] text-slate-400 uppercase block font-extrabold tracking-wider mb-0.5">THDi Per Fasa (%)</span>
-              <div className="font-mono font-bold text-slate-400">
-                R:<span className="mr-1">{thdi_R}</span>
-                S:<span className="mr-1">{thdi_S}</span>
+              <span className="text-[11px] text-slate-400 uppercase block font-black tracking-wider mb-1">THDi Per Fasa (%)</span>
+              <div className="font-mono font-bold text-xs sm:text-sm text-slate-700 dark:text-slate-200">
+                R:<span className="mr-1.5">{thdi_R}</span>
+                S:<span className="mr-1.5">{thdi_S}</span>
                 T:<span>{thdi_T}</span>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/40 text-[10px] font-bold text-slate-500">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-800/60 text-xs font-bold text-slate-500">
             <div>
               <span>Voltage Unbalanced: </span>
-              <span className="text-slate-600 dark:text-slate-300 font-mono font-bold">
+              <span className="text-slate-700 dark:text-slate-200 font-mono font-black text-xs sm:text-sm ml-1">
                 {tx.voltageUnbalance !== null && tx.voltageUnbalance !== undefined ? `${tx.voltageUnbalance.toFixed(2)} %` : "—"}
               </span>
             </div>
             <div>
               <span>Current Unbalanced: </span>
-              <span className="text-slate-600 dark:text-slate-300 font-mono font-bold">
+              <span className="text-slate-700 dark:text-slate-200 font-mono font-black text-xs sm:text-sm ml-1">
                 {tx.currentUnbalance !== null && tx.currentUnbalance !== undefined ? `${tx.currentUnbalance.toFixed(2)} %` : "—"}
               </span>
             </div>
@@ -1169,22 +1208,46 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
 
         {/* Cost & kWh */}
         <div
-          className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80"
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "center" }}
+          className="mt-4 pt-3.5 border-t border-slate-100 dark:border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-4 items-center"
         >
           <div>
-            <span className="text-[9px] text-slate-400 uppercase block font-bold">Total Konsumsi</span>
-            <span className="text-xs font-bold text-slate-400 font-mono">
-              {tx.kwh !== null ? tx.kwh.toLocaleString("id-ID") : "—"} <span className="text-[9px] text-slate-400 font-bold">kWh</span>
+            <span className="text-[11px] text-slate-400 uppercase block font-black tracking-wider mb-0.5">Total Konsumsi</span>
+            <span className="text-sm sm:text-base font-black text-slate-800 dark:text-white font-mono">
+              {tx.kwh !== null ? tx.kwh.toLocaleString("id-ID") : "—"} <span className="text-xs text-slate-400 font-bold">kWh</span>
             </span>
           </div>
           <div>
-            <span className="text-[9px] text-slate-400 uppercase block font-bold">Estimasi Cost</span>
-            <span className="text-xs font-bold text-slate-400 font-mono">
+            <span className="text-[11px] text-slate-400 uppercase block font-black tracking-wider mb-0.5">Estimasi Cost</span>
+            <span className="text-sm sm:text-base font-black text-slate-800 dark:text-white font-mono">
               {tx.kwh !== null ? formatCurrencyIDR(tx.kwh * TARIF_PER_KWH) : "Rp —"}
             </span>
           </div>
         </div>
+
+        {/* Edit Mode Direction Controls */}
+        {isEditMode && (
+          <div className="mt-4 pt-3 border-t border-sky-200 dark:border-sky-800/50 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onMoveLeft}
+              className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold border border-slate-300 dark:border-slate-700 transition flex items-center gap-1 cursor-pointer"
+              title="Geser posisi kartu ke kiri"
+            >
+              <span>◀</span>
+              <span>Geser Kiri</span>
+            </button>
+            <span className="text-[10px] text-sky-500 font-bold">Atur Posisi Aktif</span>
+            <button
+              type="button"
+              onClick={onMoveRight}
+              className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold border border-slate-300 dark:border-slate-700 transition flex items-center gap-1 cursor-pointer"
+              title="Geser posisi kartu ke kanan"
+            >
+              <span>Geser Kanan</span>
+              <span>▶</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1193,11 +1256,13 @@ function TransformerDetailCard({ tx, factoryLabel, loadConfig }: { tx: Transform
 function ParamCell({ label, value, accent, warn }: { label: string; value: string; accent?: boolean; warn?: boolean }) {
   return (
     <div>
-      <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-bold">{label}</span>
-      <span className={`font-bold font-mono text-[10px] ${
-        accent ? "text-emerald-500 font-extrabold" :
+      <span className="text-[10px] sm:text-[11px] text-slate-400 dark:text-slate-400 uppercase tracking-wider block font-bold mb-0.5">
+        {label}
+      </span>
+      <span className={`font-black font-mono text-xs sm:text-sm ${
+        accent ? "text-emerald-500" :
         warn ? "text-amber-500" :
-        "text-slate-800 dark:text-slate-200"
+        "text-slate-800 dark:text-slate-100"
       }`}>
         {value}
       </span>
@@ -1221,8 +1286,9 @@ function SldScaledCanvas({ children }: { children: React.ReactNode }) {
     const padding = 32;
     const availableWidth = el.clientWidth - padding;
     if (availableWidth > 0) {
-      const s = availableWidth / SLD_DESIGN_W;
-      setScale(s);
+      // Responsive scale: fits cleanly on desktop (scale >= 1), and on mobile/tablets caps minimum scale at 0.78 so text stays large and readable with horizontal scroll
+      const calculatedScale = availableWidth >= SLD_DESIGN_W ? availableWidth / SLD_DESIGN_W : Math.max(availableWidth / SLD_DESIGN_W, 0.78);
+      setScale(calculatedScale);
     }
   }, []);
 
@@ -1245,29 +1311,34 @@ function SldScaledCanvas({ children }: { children: React.ReactNode }) {
     };
   }, [measure]);
 
+  const scaledWidth = Math.max(SLD_DESIGN_W * scale + 32, 300);
+  const scaledHeight = SLD_DESIGN_H * scale + 36;
+
   return (
-    <div 
-      ref={containerRef} 
-      className="w-full overflow-hidden" 
-      style={{ 
-        padding: "16px", 
-        boxSizing: "border-box",
-        height: SLD_DESIGN_H * scale + 32, // design height scaled + padding
-        position: "relative"
-      }}
-    >
-      <div
-        style={{
-          width: SLD_DESIGN_W,
-          height: SLD_DESIGN_H,
-          transform: `scale(${scale})`,
-          transformOrigin: "top left",
-          position: "absolute",
-          top: 16,
-          left: 16
+    <div className="w-full overflow-x-auto overflow-y-hidden custom-scrollbar">
+      <div 
+        ref={containerRef} 
+        style={{ 
+          minWidth: `${scaledWidth}px`,
+          height: `${scaledHeight}px`,
+          padding: "16px", 
+          boxSizing: "border-box",
+          position: "relative"
         }}
       >
-        {children}
+        <div
+          style={{
+            width: SLD_DESIGN_W,
+            height: SLD_DESIGN_H,
+            transform: `scale(${scale})`,
+            transformOrigin: "top left",
+            position: "absolute",
+            top: 16,
+            left: 16
+          }}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -1497,7 +1568,7 @@ export default function PowerDistribution() {
     };
 
     fetchIncomingData();
-    const interval = setInterval(fetchIncomingData, 5000);
+    const interval = setInterval(fetchIncomingData, 1000);
 
     const socket = getSocket();
     const handleIncomingLive = (payload: any) => {
@@ -1570,7 +1641,7 @@ export default function PowerDistribution() {
     };
 
     fetchSolar();
-    const interval = setInterval(fetchSolar, 10000);
+    const interval = setInterval(fetchSolar, 1000);
 
     const socket = getSocket();
     const handleSolarLive = (payload: any) => {
@@ -1638,14 +1709,10 @@ export default function PowerDistribution() {
     };
 
     fetchTrafoTelemetries();
-    const interval = setInterval(fetchTrafoTelemetries, 10000);
+    const interval = setInterval(fetchTrafoTelemetries, 1000);
 
     const socket = getSocket();
-    let lastLivePmUpdate = 0;
     const handlePmUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
-      const now = Date.now();
-      if (now - lastLivePmUpdate < 2800) return; // Strict 3-second display polling cadence
-      lastLivePmUpdate = now;
       if (!payload || !Array.isArray(payload.data)) return;
       setLoadingSld(false);
       const pmMap = new Map<string, ElectricPmItem>();
@@ -1723,7 +1790,7 @@ export default function PowerDistribution() {
     };
 
     fetchPmData();
-    const interval = setInterval(fetchPmData, 10000);
+    const interval = setInterval(fetchPmData, 1000);
 
     const socket = getSocket();
     const handleLiveUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
@@ -1867,6 +1934,73 @@ export default function PowerDistribution() {
 
   const role = useAuthStore((state) => state.user?.role ?? "user");
   const canAccessConfig = canAccessConfigAndAudit(role);
+  const canEditPosition = isSeniorUnitHeadOrAdmin(role);
+
+  // Detail Transformator Custom Order State (Senior Unit Head & Admin)
+  const [isEditingTrafoPos, setIsEditingTrafoPos] = useState(false);
+  const [trafoOrderIds, setTrafoOrderIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("scada_trafo_detail_order_v1");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return INITIAL_TRANSFORMERS.map((t) => t.id);
+  });
+  const [draftTrafoOrderIds, setDraftTrafoOrderIds] = useState<string[]>([]);
+  const [trafoToast, setTrafoToast] = useState<string | null>(null);
+  const [draggedTrafoId, setDraggedTrafoId] = useState<string | null>(null);
+
+  const handleStartEditTrafoPos = () => {
+    setDraftTrafoOrderIds([...trafoOrderIds]);
+    setIsEditingTrafoPos(true);
+  };
+
+  const handleCancelEditTrafoPos = () => {
+    setIsEditingTrafoPos(false);
+    setDraftTrafoOrderIds([]);
+  };
+
+  const handleSaveTrafoPos = () => {
+    setTrafoOrderIds(draftTrafoOrderIds);
+    try {
+      localStorage.setItem("scada_trafo_detail_order_v1", JSON.stringify(draftTrafoOrderIds));
+    } catch (e) {}
+    setIsEditingTrafoPos(false);
+    setTrafoToast("✓ Posisi kartu Transformator berhasil disimpan!");
+    setTimeout(() => setTrafoToast(null), 3000);
+  };
+
+  const handleMoveTrafoDirection = (txId: string, direction: "left" | "right") => {
+    const list = [...draftTrafoOrderIds];
+    const idx = list.indexOf(txId);
+    if (idx === -1) return;
+    const targetIdx = direction === "left" ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= list.length) return;
+    const temp = list[idx];
+    list[idx] = list[targetIdx];
+    list[targetIdx] = temp;
+    setDraftTrafoOrderIds(list);
+  };
+
+  const handleTrafoDragStart = (e: React.DragEvent, txId: string) => {
+    setDraggedTrafoId(txId);
+    e.dataTransfer.setData("text/plain", txId);
+  };
+
+  const handleTrafoDrop = (targetTxId: string) => {
+    if (!draggedTrafoId || draggedTrafoId === targetTxId) return;
+    const list = [...draftTrafoOrderIds];
+    const srcIdx = list.indexOf(draggedTrafoId);
+    const tgtIdx = list.indexOf(targetTxId);
+    if (srcIdx !== -1 && tgtIdx !== -1) {
+      list.splice(srcIdx, 1);
+      list.splice(tgtIdx, 0, draggedTrafoId);
+      setDraftTrafoOrderIds(list);
+    }
+    setDraggedTrafoId(null);
+  };
 
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
@@ -2317,8 +2451,20 @@ export default function PowerDistribution() {
     return transformers.reduce((sum, tx) => sum + tx.capacityKva, 0);
   }, [transformers]);
 
-  const factory1 = transformers.filter(tx => tx.factory === 1);
-  const factory2 = transformers.filter(tx => tx.factory === 2);
+  const orderedTransformers = useMemo(() => {
+    const orderList = isEditingTrafoPos ? draftTrafoOrderIds : trafoOrderIds;
+    return [...transformers].sort((a, b) => {
+      const idxA = orderList.indexOf(a.id);
+      const idxB = orderList.indexOf(b.id);
+      if (idxA === -1 && idxB === -1) return 0;
+      if (idxA === -1) return 1;
+      if (idxB === -1) return -1;
+      return idxA - idxB;
+    });
+  }, [transformers, isEditingTrafoPos, draftTrafoOrderIds, trafoOrderIds]);
+
+  const factory1 = orderedTransformers.filter(tx => tx.factory === 1);
+  const factory2 = orderedTransformers.filter(tx => tx.factory === 2);
 
   const activeLineColor = isDark ? "#06b6d4" : "#3b82f6";
 
@@ -2539,27 +2685,27 @@ export default function PowerDistribution() {
 
           {/* 2. ABSOLUTE CARDS LAYOUT */}
           {/* Main PLN card at top center (X = 600) */}
-          <div className="absolute z-30" style={{ left: 515, top: 16 }}>
-            <div className={`text-center px-3 py-2 w-[170px] h-[98px] flex flex-col justify-center rounded-2xl border shadow-md transition duration-300 ${
-              isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
+          <div className="absolute z-30" style={{ left: 495, top: 10 }}>
+            <div className={`text-center px-4 py-2.5 w-[210px] h-[112px] flex flex-col justify-center rounded-2xl border shadow-md transition duration-300 ${
+              isDark ? "bg-blue-950/50 border-blue-500/50 text-white" : "bg-blue-50/95 border-blue-300 text-slate-800"
             }`}>
-              <div className="text-xs leading-tight font-black text-blue-600 dark:text-blue-400 tracking-wide">PLN-21 kV</div>
-              <div className="text-[11px] leading-tight font-extrabold text-blue-700 dark:text-blue-300">5,540 kVa</div>
-              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-sm leading-tight font-black text-blue-600 dark:text-blue-400 tracking-wide">PLN-21 kV</div>
+              <div className="text-xs leading-tight font-extrabold text-blue-700 dark:text-blue-300 mt-0.5">5,540 kVA</div>
+              <div className="text-[10px] leading-tight font-bold text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wider">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                  <span className="inline-block h-3.5 w-20 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
-                  <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                  <span className="text-sm font-black font-mono text-slate-800 dark:text-slate-100">
                     {incomingData.plnKw !== null ? `${incomingData.plnKw.toLocaleString("id-ID")} kW` : "— kW"}
                   </span>
                 )}
               </div>
-              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
                 PF : {loadingSld ? (
-                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                  <span className="inline-block h-3 w-10 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
-                  <span className="font-bold font-mono">{incomingData.plnPf !== null ? incomingData.plnPf.toFixed(3) : "—"}</span>
+                  <span className="font-black font-mono">{incomingData.plnPf !== null ? Math.abs(incomingData.plnPf).toFixed(3) : "—"}</span>
                 )}
               </div>
             </div>
@@ -2567,66 +2713,64 @@ export default function PowerDistribution() {
 
           {/* ═══════════ FACTORY 1 SOURCES (Left Wing, Center = 285) ═══════════ */}
           {/* 1. Genset Natural Gas (Outer Left) */}
-          <div className="absolute z-30" style={{ left: 30, top: 152 }}>
-            <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
+          <div className="absolute z-30" style={{ left: 22, top: 148 }}>
+            <div className={`px-3 py-2 w-[145px] h-[100px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-orange-950/40 border-orange-500/40 text-orange-200" : "bg-orange-50/95 border-orange-200 text-slate-800"
             }`}>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Genset</div>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Natural Gas</div>
-              <div className="text-[10px] leading-tight font-bold text-slate-600 dark:text-slate-300 mt-0.5">1350 kVa</div>
-              <div className="text-[8px] leading-tight text-slate-400 mt-1 font-mono">Belum Ada Sensor</div>
+              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400">Genset</div>
+              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400">Natural Gas</div>
+              <div className="text-xs leading-tight font-bold text-slate-700 dark:text-slate-200 mt-1">1,350 kVA</div>
+              <div className="text-[9px] leading-tight text-slate-400 mt-1 font-mono font-bold">Belum Ada Sensor</div>
             </div>
           </div>
 
           {/* 2. Incoming Fact-1 (Center F1) */}
-          <div className="absolute z-30" style={{ left: 215, top: 150 }}>
-            <div className={`px-2.5 py-1.5 w-[140px] h-[96px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
+          <div className="absolute z-30" style={{ left: 208, top: 146 }}>
+            <div className={`px-3 py-2 w-[155px] h-[104px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-blue-950/50 border-blue-500/50 text-white" : "bg-blue-50/95 border-blue-300 text-slate-800"
             }`}>
-              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Incoming</div>
-              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Fact-1</div>
-              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-xs leading-tight font-black text-blue-600 dark:text-blue-400 uppercase tracking-wide">Incoming Fact-1</div>
+              <div className="text-[10px] leading-tight font-bold text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wider">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
-                  <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                  <span className="text-xs sm:text-sm font-black font-mono text-slate-800 dark:text-slate-100">
                     {incomingData.wf1Kw !== null ? `${incomingData.wf1Kw.toLocaleString("id-ID")} kW` : "— kW"}
                   </span>
                 )}
               </div>
-              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
                 PF : {loadingSld ? (
-                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                  <span className="inline-block h-3 w-10 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
-                  <span className="font-bold font-mono">{incomingData.wf1Pf !== null ? incomingData.wf1Pf.toFixed(3) : "—"}</span>
+                  <span className="font-black font-mono">{incomingData.wf1Pf !== null ? Math.abs(incomingData.wf1Pf).toFixed(3) : "—"}</span>
                 )}
               </div>
             </div>
           </div>
 
           {/* 3. Solar PV POI-1 (Inner Left) */}
-          <div className="absolute z-30" style={{ left: 410, top: 152 }}>
-            <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
+          <div className="absolute z-30" style={{ left: 402, top: 148 }}>
+            <div className={`px-3 py-2 w-[145px] h-[100px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-orange-950/40 border-orange-500/40 text-orange-200" : "bg-orange-50/95 border-orange-200 text-slate-800"
             }`}>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">POI-1</div>
-              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400 uppercase tracking-wide">Solar PV POI-1</div>
+              <div className="text-[10px] leading-tight font-bold text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wider">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
-                  <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                  <span className="text-xs font-black font-mono text-slate-800 dark:text-slate-100">
                     {solarData.poi1Kw !== null ? `${solarData.poi1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "— kW"}
                   </span>
                 )}
               </div>
-              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
                 PF : {loadingSld ? (
-                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                  <span className="inline-block h-3 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
-                  <span className="font-bold font-mono">{solarData.poi1Pf !== null ? solarData.poi1Pf.toFixed(2) : "—"}</span>
+                  <span className="font-black font-mono">{solarData.poi1Pf !== null ? Math.abs(solarData.poi1Pf).toFixed(2) : "—"}</span>
                 )}
               </div>
             </div>
@@ -2634,134 +2778,132 @@ export default function PowerDistribution() {
 
           {/* ═══════════ FACTORY 2 SOURCES (Right Wing) ═══════════ */}
           {/* 1. Incoming Fact-2 (Left F2, Center = 795) */}
-          <div className="absolute z-30" style={{ left: 725, top: 150 }}>
-            <div className={`px-2.5 py-1.5 w-[140px] h-[96px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
+          <div className="absolute z-30" style={{ left: 718, top: 146 }}>
+            <div className={`px-3 py-2 w-[155px] h-[104px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-blue-950/50 border-blue-500/50 text-white" : "bg-blue-50/95 border-blue-300 text-slate-800"
             }`}>
-              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Incoming</div>
-              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Fact-2</div>
-              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-xs leading-tight font-black text-blue-600 dark:text-blue-400 uppercase tracking-wide">Incoming Fact-2</div>
+              <div className="text-[10px] leading-tight font-bold text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wider">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
-                  <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                  <span className="text-xs sm:text-sm font-black font-mono text-slate-800 dark:text-slate-100">
                     {incomingData.wf2Kw !== null ? `${incomingData.wf2Kw.toLocaleString("id-ID")} kW` : "— kW"}
                   </span>
                 )}
               </div>
-              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
                 PF : {loadingSld ? (
-                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                  <span className="inline-block h-3 w-10 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
-                  <span className="font-bold font-mono">{incomingData.wf2Pf !== null ? incomingData.wf2Pf.toFixed(3) : "—"}</span>
+                  <span className="font-black font-mono">{incomingData.wf2Pf !== null ? Math.abs(incomingData.wf2Pf).toFixed(3) : "—"}</span>
                 )}
               </div>
             </div>
           </div>
 
           {/* 2. Solar PV POI-2 (Center F2, Center = 950) */}
-          <div className="absolute z-30" style={{ left: 885, top: 152 }}>
-            <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
+          <div className="absolute z-30" style={{ left: 885, top: 148 }}>
+            <div className={`px-3 py-2 w-[145px] h-[100px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-orange-950/40 border-orange-500/40 text-orange-200" : "bg-orange-50/95 border-orange-200 text-slate-800"
             }`}>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">POI-2</div>
-              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400 uppercase tracking-wide">Solar PV POI-2</div>
+              <div className="text-[10px] leading-tight font-bold text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wider">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
-                  <span className="font-extrabold font-mono text-slate-800 dark:text-slate-200">
+                  <span className="text-xs font-black font-mono text-slate-800 dark:text-slate-100">
                     {solarData.poi2Kw !== null ? `${solarData.poi2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "— kW"}
                   </span>
                 )}
               </div>
-              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
                 PF : {loadingSld ? (
-                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                  <span className="inline-block h-3 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
-                  <span className="font-bold font-mono">{solarData.poi2Pf !== null ? solarData.poi2Pf.toFixed(2) : "—"}</span>
+                  <span className="font-black font-mono">{solarData.poi2Pf !== null ? Math.abs(solarData.poi2Pf).toFixed(2) : "—"}</span>
                 )}
               </div>
             </div>
           </div>
 
           {/* 3. Genset Diesel Fuel (Outer Right, Center = 1105) */}
-          <div className="absolute z-30" style={{ left: 1040, top: 152 }}>
-            <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
+          <div className="absolute z-30" style={{ left: 1038, top: 148 }}>
+            <div className={`px-3 py-2 w-[145px] h-[100px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-orange-950/40 border-orange-500/40 text-orange-200" : "bg-orange-50/95 border-orange-200 text-slate-800"
             }`}>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Genset</div>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Diesel Fuel</div>
-              <div className="text-[10px] leading-tight font-bold text-slate-600 dark:text-slate-300 mt-0.5">1000 kVa</div>
-              <div className="text-[8px] leading-tight text-slate-400 mt-1 font-mono">Belum Ada Sensor</div>
+              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400">Genset</div>
+              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400">Diesel Fuel</div>
+              <div className="text-xs leading-tight font-bold text-slate-700 dark:text-slate-200 mt-1">1,000 kVA</div>
+              <div className="text-[9px] leading-tight text-slate-400 mt-1 font-mono font-bold">Belum Ada Sensor</div>
             </div>
           </div>
 
           {/* ═══════════ FACTORY 1 TRANSFORMER CARDS (4 Units) ═══════════ */}
           {factory1.map((tx, idx) => {
-            const cardLeft = 73 + idx * 110;
+            const cardLeft = 70 + idx * 110;
             const hasData = tx.activePowerKw !== null;
             const loadPct = hasData && tx.capacityKva && tx.activePowerKw !== null ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null;
             return (
-              <div key={tx.id} className="absolute z-10" style={{ left: cardLeft, top: 360, width: 94 }}>
+              <div key={tx.id} className="absolute z-10" style={{ left: cardLeft, top: 358, width: 100 }}>
                 <div
                   onClick={() => setSelectedTx(tx)}
                   className={`rounded-2xl border p-2.5 text-center cursor-pointer transition-all duration-300 hover:shadow-lg ${
                     idx === 0
                       ? "bg-slate-900 border-slate-700 text-white"
                       : isDark
-                        ? "bg-slate-800/80 border-slate-700 text-slate-200"
-                        : "bg-slate-100/90 border-slate-300 text-slate-800"
+                        ? "bg-slate-800/90 border-slate-700 text-slate-200"
+                        : "bg-slate-100/95 border-slate-300 text-slate-800"
                   }`}
                 >
-                  <div className={`text-[11px] font-black ${idx === 0 ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
-                    {tx.capacityKva} kVa
+                  <div className={`text-xs font-black ${idx === 0 ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
+                    {tx.capacityKva} kVA
                   </div>
-                  <div className={`text-[9px] font-black tracking-wider uppercase ${idx === 0 ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
+                  <div className={`text-[10px] font-black tracking-wider uppercase ${idx === 0 ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
                     {tx.name}
                   </div>
-                  <div className="mt-1 text-[8px] text-slate-400 font-semibold">Active Power</div>
+                  <div className="mt-1 text-[9px] text-slate-400 font-bold uppercase">Active Power</div>
                   {loadingSld ? (
                     <div className="my-1 space-y-1">
-                      <div className="h-3.5 w-14 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                      <div className="h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
                       <div className="h-2 w-10 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
                     </div>
                   ) : (
                     <>
-                      <div className={`text-[11px] font-extrabold font-mono ${hasData ? (idx === 0 ? "text-sky-400" : "text-slate-800 dark:text-slate-100") : "text-slate-400"}`}>
+                      <div className={`text-xs font-black font-mono ${hasData ? (idx === 0 ? "text-sky-400" : "text-slate-800 dark:text-slate-100") : "text-slate-400"}`}>
                         {hasData ? `${tx.activePowerKw} kW` : "— kW"}
                       </div>
-                      <div className="text-[8px] text-slate-400">
-                        PF: <span className="font-bold">{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"}</span>
+                      <div className="text-[9px] text-slate-400 font-bold">
+                        PF: <span className="font-black">{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : "—"}</span>
                       </div>
                     </>
                   )}
                   
                   {/* Load progress bar */}
                   <div className="mt-1.5 pt-1 border-t border-slate-200 dark:border-slate-700/60">
-                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full ${loadingSld ? "bg-slate-300 dark:bg-slate-500 animate-pulse w-1/3" : "bg-slate-300 dark:bg-slate-600"}`}
                         style={{ width: loadingSld ? "33%" : `${loadPct ? Math.min(100, loadPct) : 0}%` }}
                       />
                     </div>
-                    <div className="text-[7.5px] font-bold text-center mt-0.5 text-slate-400">
+                    <div className="text-[8.5px] font-black text-center mt-0.5 text-slate-400 font-mono">
                       {loadingSld ? "..." : (loadPct !== null ? `${loadPct}%` : "—%")}
                     </div>
                   </div>
                 </div>
 
                 {/* 400V/230V Label Box */}
-                <div className="mt-1.5 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-700 dark:text-slate-300 tracking-wider">
-                  400V/230V
+                <div className="mt-1 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/90 dark:bg-slate-800 text-[9px] font-black text-slate-700 dark:text-slate-300 tracking-wider">
+                  400V / 230V
                 </div>
 
                 {/* Detail Button */}
                 <button
                   onClick={() => setSelectedTx(tx)}
-                  className="w-full mt-1.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-300/80 hover:bg-sky-500 hover:text-white dark:bg-slate-700 dark:hover:bg-sky-600 text-[9px] font-extrabold text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
+                  className="w-full mt-1 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200 hover:bg-sky-500 hover:text-white dark:bg-slate-700 dark:hover:bg-sky-600 text-[10px] font-black text-slate-700 dark:text-slate-200 transition-colors shadow-sm cursor-pointer"
                 >
                   Detail
                 </button>
@@ -2775,63 +2917,63 @@ export default function PowerDistribution() {
             const hasData = tx.activePowerKw !== null;
             const loadPct = hasData && tx.capacityKva && tx.activePowerKw !== null ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null;
             return (
-              <div key={tx.id} className="absolute z-10" style={{ left: cardLeft, top: 360, width: 100 }}>
+              <div key={tx.id} className="absolute z-10" style={{ left: cardLeft, top: 358, width: 104 }}>
                 <div
                   onClick={() => setSelectedTx(tx)}
                   className={`rounded-2xl border p-2.5 text-center cursor-pointer transition-all duration-300 hover:shadow-lg ${
                     idx === 0
                       ? "bg-slate-900 border-slate-700 text-white"
                       : isDark
-                        ? "bg-slate-800/80 border-slate-700 text-slate-200"
-                        : "bg-slate-100/90 border-slate-300 text-slate-800"
+                        ? "bg-slate-800/90 border-slate-700 text-slate-200"
+                        : "bg-slate-100/95 border-slate-300 text-slate-800"
                   }`}
                 >
-                  <div className={`text-[11px] font-black ${idx === 0 ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
-                    {tx.capacityKva} kVa
+                  <div className={`text-xs font-black ${idx === 0 ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
+                    {tx.capacityKva} kVA
                   </div>
-                  <div className={`text-[9px] font-black tracking-wider uppercase ${idx === 0 ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
+                  <div className={`text-[10px] font-black tracking-wider uppercase ${idx === 0 ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
                     {tx.name}
                   </div>
-                  <div className="mt-1 text-[8px] text-slate-400 font-semibold">Active Power</div>
+                  <div className="mt-1 text-[9px] text-slate-400 font-bold uppercase">Active Power</div>
                   {loadingSld ? (
                     <div className="my-1 space-y-1">
-                      <div className="h-3.5 w-14 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                      <div className="h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
                       <div className="h-2 w-10 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
                     </div>
                   ) : (
                     <>
-                      <div className={`text-[11px] font-extrabold font-mono ${hasData ? (idx === 0 ? "text-emerald-400" : "text-slate-800 dark:text-slate-100") : "text-slate-400"}`}>
+                      <div className={`text-xs font-black font-mono ${hasData ? (idx === 0 ? "text-emerald-400" : "text-slate-800 dark:text-slate-100") : "text-slate-400"}`}>
                         {hasData ? `${tx.activePowerKw} kW` : "— kW"}
                       </div>
-                      <div className="text-[8px] text-slate-400">
-                        PF: <span className="font-bold">{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"}</span>
+                      <div className="text-[9px] text-slate-400 font-bold">
+                        PF: <span className="font-black">{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : "—"}</span>
                       </div>
                     </>
                   )}
 
                   {/* Load progress bar */}
                   <div className="mt-1.5 pt-1 border-t border-slate-200 dark:border-slate-700/60">
-                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full ${loadingSld ? "bg-slate-300 dark:bg-slate-500 animate-pulse w-1/3" : "bg-slate-300 dark:bg-slate-600"}`}
                         style={{ width: loadingSld ? "33%" : `${loadPct ? Math.min(100, loadPct) : 0}%` }}
                       />
                     </div>
-                    <div className="text-[7.5px] font-bold text-center mt-0.5 text-slate-400">
+                    <div className="text-[8.5px] font-black text-center mt-0.5 text-slate-400 font-mono">
                       {loadingSld ? "..." : (loadPct !== null ? `${loadPct}%` : "—%")}
                     </div>
                   </div>
                 </div>
 
                 {/* 400V/230V Label Box */}
-                <div className="mt-1.5 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-700 dark:text-slate-300 tracking-wider">
-                  400V/230V
+                <div className="mt-1 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/90 dark:bg-slate-800 text-[9px] font-black text-slate-700 dark:text-slate-300 tracking-wider">
+                  400V / 230V
                 </div>
 
                 {/* Detail Button */}
                 <button
                   onClick={() => setSelectedTx(tx)}
-                  className="w-full mt-1.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-300/80 hover:bg-sky-500 hover:text-white dark:bg-slate-700 dark:hover:bg-sky-600 text-[9px] font-extrabold text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
+                  className="w-full mt-1 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200 hover:bg-sky-500 hover:text-white dark:bg-slate-700 dark:hover:bg-sky-600 text-[10px] font-black text-slate-700 dark:text-slate-200 transition-colors shadow-sm cursor-pointer"
                 >
                   Detail
                 </button>
@@ -2851,13 +2993,51 @@ export default function PowerDistribution() {
 
       {/* ═══════════ SECTION B: DETAIL TRANSFORMATOR CARDS (MDP) ═══════════ */}
       <section className="space-y-6">
-        <div className="flex items-center gap-2.5">
-          <svg style={{ width: 18, height: 18 }} className="text-sky-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-          <h3 className="text-sm font-extrabold text-slate-800 dark:text-white">
-            Detail Transformator — Parameter Lengkap
-          </h3>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/80 pb-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <svg style={{ width: 18, height: 18 }} className="text-sky-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+            <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">
+              Detail Transformator — Parameter Lengkap
+            </h3>
+            {canEditPosition && (
+              <div className="ml-2">
+                {!isEditingTrafoPos ? (
+                  <button
+                    type="button"
+                    onClick={handleStartEditTrafoPos}
+                    className="flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 transition cursor-pointer"
+                    title="Atur Urutan dan Posisi Kartu Transformator (Senior Unit Head / Admin Only)"
+                  >
+                    <span>📐 Atur Posisi</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5 animate-in fade-in duration-150">
+                    <button
+                      type="button"
+                      onClick={handleCancelEditTrafoPos}
+                      className="px-2.5 py-1 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveTrafoPos}
+                      className="flex items-center gap-1.5 px-3 py-1 text-xs font-extrabold rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/25 transition cursor-pointer active:scale-95"
+                    >
+                      <span>💾 Simpan Posisi</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {trafoToast && (
+            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800 animate-in fade-in">
+              {trafoToast}
+            </span>
+          )}
         </div>
 
         {/* Factory 1 */}
@@ -2865,9 +3045,20 @@ export default function PowerDistribution() {
           <h4 className="text-xs font-extrabold text-[#47729f] dark:text-sky-400 uppercase tracking-widest pl-2">
             ● Factory 1 — {factory1.length} Transformator
           </h4>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             {factory1.map((tx) => (
-              <TransformerDetailCard key={tx.id} tx={tx} factoryLabel="F1" loadConfig={loadConfig} />
+              <TransformerDetailCard
+                key={tx.id}
+                tx={tx}
+                factoryLabel="Factory 1"
+                loadConfig={loadConfig}
+                isEditMode={isEditingTrafoPos}
+                onMoveLeft={() => handleMoveTrafoDirection(tx.id, "left")}
+                onMoveRight={() => handleMoveTrafoDirection(tx.id, "right")}
+                onDragStart={(e) => handleTrafoDragStart(e, tx.id)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => handleTrafoDrop(tx.id)}
+              />
             ))}
           </div>
         </div>
@@ -2877,9 +3068,20 @@ export default function PowerDistribution() {
           <h4 className="text-xs font-extrabold text-[#47729f] dark:text-sky-400 uppercase tracking-widest pl-2">
             ● Factory 2 — {factory2.length} Transformator
           </h4>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             {factory2.map((tx) => (
-              <TransformerDetailCard key={tx.id} tx={tx} factoryLabel="F2" loadConfig={loadConfig} />
+              <TransformerDetailCard
+                key={tx.id}
+                tx={tx}
+                factoryLabel="Factory 2"
+                loadConfig={loadConfig}
+                isEditMode={isEditingTrafoPos}
+                onMoveLeft={() => handleMoveTrafoDirection(tx.id, "left")}
+                onMoveRight={() => handleMoveTrafoDirection(tx.id, "right")}
+                onDragStart={(e) => handleTrafoDragStart(e, tx.id)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => handleTrafoDrop(tx.id)}
+              />
             ))}
           </div>
         </div>
@@ -2917,6 +3119,7 @@ export default function PowerDistribution() {
           isDark={isDark}
           groupId={selectedEwGroup}
           title={`Sub-Distribution ${selectedEwGroup.toUpperCase()}`}
+          canEditPosition={canEditPosition}
         />
       </div>
 
