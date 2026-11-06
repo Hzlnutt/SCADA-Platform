@@ -1876,6 +1876,29 @@ export async function computeEquipmentMonthlyBatch(
   return queryPromise;
 }
 
+export function getPmMaxHourlyKwh(pmId: string): number {
+  const id = (pmId || "").toUpperCase();
+  if (id === "PM410") return 3500;
+  if (id === "PM411" || id === "PM412") return 2500;
+
+  // Distribution Panels (MDP, PUTR, MCC)
+  if (["PM133", "PM135", "PM136", "PM139", "PM201", "PM202", "PM210", "PM327", "PM337"].includes(id)) {
+    return 800;
+  }
+
+  // Large Chillers & Compressors (100kW - 275kW)
+  if (["PM229", "PM271", "PM319"].includes(id)) return 380;
+  if (["PM272", "PM209", "PM274", "PM180", "PM214"].includes(id)) return 220;
+
+  // Medium equipment (Boiler, Heaters, Air Compressors, AHU: 30 - 75 kW)
+  if (["PM140", "PM182", "PM183", "PM184", "PM203", "PM205", "PM211", "PM212", "PM213", "PM215", "PM321", "PM322", "PM323"].includes(id)) {
+    return 100;
+  }
+
+  // Pumps, Fans, Lighting, Warehouses, Labs (PM152, PM181, PM206, etc.)
+  return 60;
+}
+
 async function doComputeEquipmentMonthlyBatch(
   currentMonth: string,
   comparisonMonth: string
@@ -1906,6 +1929,7 @@ async function doComputeEquipmentMonthlyBatch(
       UPPER(pm_id) as pm_id,
       t_stamp,
       active_energy::float as value,
+      active_power_total::float as power,
       status
     FROM electric_pm_telemetry
     WHERE t_stamp >= $1 AND t_stamp <= $2
@@ -1922,6 +1946,7 @@ async function doComputeEquipmentMonthlyBatch(
         'PM410' as pm_id,
         t_stamp,
         active_energy::float as value,
+        active_power::float as power,
         status_pm8000 as status
       FROM electric_pln_telemetry
       WHERE t_stamp >= $1 AND t_stamp <= $2
@@ -1932,6 +1957,7 @@ async function doComputeEquipmentMonthlyBatch(
         'PM411' as pm_id,
         t_stamp,
         active_energy::float as value,
+        active_power_total::float as power,
         status_pm5500 as status
       FROM electric_wf1_telemetry
       WHERE t_stamp >= $1 AND t_stamp <= $2
@@ -1942,6 +1968,7 @@ async function doComputeEquipmentMonthlyBatch(
         'PM412' as pm_id,
         t_stamp,
         active_energy::float as value,
+        active_power_total::float as power,
         status_pm5500 as status
       FROM electric_wf2_telemetry
       WHERE t_stamp >= $1 AND t_stamp <= $2
@@ -1960,6 +1987,7 @@ async function doComputeEquipmentMonthlyBatch(
           UPPER(pm_id) as pm_id,
           t_stamp,
           active_energy::float as value,
+          active_power_total::float as power,
           status
         FROM electric_pm_telemetry_minute
         WHERE active_energy IS NOT NULL
@@ -1970,9 +1998,9 @@ async function doComputeEquipmentMonthlyBatch(
       minuteRows = pmMinRes.rows;
 
       const [plnMin, wf1Min, wf2Min] = await Promise.all([
-        pool.query(`SELECT 'PM410' as pm_id, t_stamp, active_energy::float as value, status_pm8000 as status FROM electric_pln_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`),
-        pool.query(`SELECT 'PM411' as pm_id, t_stamp, active_energy::float as value, status_pm5500 as status FROM electric_wf1_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`),
-        pool.query(`SELECT 'PM412' as pm_id, t_stamp, active_energy::float as value, status_pm5500 as status FROM electric_wf2_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`)
+        pool.query(`SELECT 'PM410' as pm_id, t_stamp, active_energy::float as value, active_power::float as power, status_pm8000 as status FROM electric_pln_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`),
+        pool.query(`SELECT 'PM411' as pm_id, t_stamp, active_energy::float as value, active_power_total::float as power, status_pm5500 as status FROM electric_wf1_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`),
+        pool.query(`SELECT 'PM412' as pm_id, t_stamp, active_energy::float as value, active_power_total::float as power, status_pm5500 as status FROM electric_wf2_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`)
       ]);
       minuteRows.push(...plnMin.rows, ...wf1Min.rows, ...wf2Min.rows);
     } catch (e: any) {
@@ -1981,13 +2009,14 @@ async function doComputeEquipmentMonthlyBatch(
   }
 
   // Group records by pm_id
-  const pmRecords = new Map<string, { ts: Date; value: number | null; status?: boolean }[]>();
+  const pmRecords = new Map<string, { ts: Date; value: number | null; power: number | null; status?: boolean }[]>();
   const addRow = (row: any) => {
     const id = row.pm_id;
     if (!pmRecords.has(id)) pmRecords.set(id, []);
     pmRecords.get(id)!.push({
       ts: new Date(row.t_stamp),
       value: row.value !== null ? Number(row.value) : null,
+      power: row.power !== null && row.power !== undefined ? Number(row.power) : null,
       status: row.status !== false
     });
   };
@@ -2007,6 +2036,7 @@ async function doComputeEquipmentMonthlyBatch(
         list.push({
           ts: mTs,
           value: Number(mRow.value),
+          power: mRow.power !== null && mRow.power !== undefined ? Number(mRow.power) : null,
           status: mRow.status !== false
         });
       }
@@ -2080,10 +2110,26 @@ async function doComputeEquipmentMonthlyBatch(
       const timeDiffMs = curr.ts.getTime() - prev.ts.getTime();
 
       let diff = 0;
-      if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal)) {
+      // Sesuai aturan: data sebelumnya dan data saat ini harus valid (> 0 dan tidak null)
+      if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal) && currVal > 0 && prevVal > 0) {
         if (timeDiffMs <= 90 * 60 * 1000) {
-          diff = currVal - prevVal;
-          if (diff < 0 || diff > 20000) diff = 0;
+          const rawDiff = currVal - prevVal;
+          const maxKwh = getPmMaxHourlyKwh(pmId);
+          const powerEst = (curr.power !== null && curr.power !== undefined && !isNaN(curr.power) && curr.power >= 0) ? curr.power : 0;
+
+          // Validasi fisik kelistrikan:
+          // 1. rawDiff tidak boleh negatif
+          // 2. rawDiff tidak boleh melebihi kapasitas fisik motor/panel (maxKwh)
+          // 3. Jika powerEst (kW) terbaca > 0, rawDiff tidak boleh melompat drastis (maks 3x powerEst + 15 kWh)
+          const isPhysicallyValid = rawDiff >= 0 && rawDiff <= maxKwh && (powerEst <= 0 || rawDiff <= Math.max(powerEst * 3, powerEst + 15));
+
+          if (isPhysicallyValid) {
+            diff = rawDiff;
+          } else {
+            // Anomali register/offset flip terdeteksi:
+            // Gunakan active_power_total terukur pada jam tersebut agar data jam tidak hilang dan bar tidak melonjak
+            diff = powerEst > 0 ? Math.min(powerEst, maxKwh) : 0;
+          }
         }
       }
 
