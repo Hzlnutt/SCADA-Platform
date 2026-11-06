@@ -91,7 +91,7 @@ const PowerMeterCard = memo(
                 }`}
                 style={{ boxShadow: isOnline ? "0 0 6px #10b981" : "none" }}
               />
-              {isOnline ? "AKTIF" : isStandby ? "STANDBY" : isMati ? "MATI" : "TERPUTUS"}
+              {isOnline ? "ONLINE" : isStandby ? "STANDBY" : isMati ? "OFFLINE" : "TERPUTUS"}
             </span>
           </div>
 
@@ -100,11 +100,6 @@ const PowerMeterCard = memo(
             <div className="flex items-center justify-between mb-0.5">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
                 Active Power
-              </span>
-              <span className={`text-[10px] font-bold ${
-                isOnline ? "text-emerald-500" : isStandby ? "text-amber-500" : isMati ? "text-rose-500" : "text-slate-400"
-              }`}>
-                {isOnline ? "Beban Aktif" : isStandby ? "Siaga (0 kW)" : isMati ? "Unit Non-Aktif" : "Sensor Terputus"}
               </span>
             </div>
             <div className="flex items-baseline gap-1.5">

@@ -1197,12 +1197,12 @@ const TransformerDetailCard = React.memo(
                 tx.status === "online" ? "bg-emerald-500" : (tx.activePowerKw === 0 ? "bg-rose-500" : (tx.activePowerKw === null ? "bg-slate-400" : "bg-amber-500"))
               }`} />
               {tx.status === "online"
-                ? "Aktif / Online"
+                ? "Online"
                 : tx.activePowerKw === 0
-                ? "Mati / Non-Aktif"
+                ? "Offline"
                 : tx.activePowerKw === null
-                ? "Sensor Terputus"
-                : "Siaga (Standby)"}
+                ? "Terputus"
+                : "Standby"}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -1242,7 +1242,7 @@ const TransformerDetailCard = React.memo(
             
             <ParamCell
               label="Active Power"
-              value={tx.activePowerKw !== null ? (tx.activePowerKw === 0 ? "0 kW (Mati / Non-Aktif)" : `${tx.activePowerKw} kW`) : "— (Sensor Terputus)"}
+              value={tx.activePowerKw !== null ? `${tx.activePowerKw.toLocaleString("id-ID")} kW` : "—"}
               accent={tx.activePowerKw !== null && tx.activePowerKw > 0}
               warn={tx.activePowerKw === 0}
             />
@@ -1580,39 +1580,16 @@ const SldTransformerCard = React.memo(
           <div className={`text-xs font-black ${isFirst ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
             {tx.capacityKva} kVA
           </div>
-          <div className="flex items-center justify-between gap-1 mt-0.5 mb-1">
-            <span className={`text-[10px] font-black tracking-wider uppercase truncate ${isFirst ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
-              {tx.name}
-            </span>
+          <div className="flex items-center justify-center gap-1.5 mt-0.5">
             <span
-              className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-black ${
-                tx.status === "online"
-                  ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                  : tx.status === "warning" || (tx.activePowerKw === 0 && tx.status !== "offline")
-                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
-                  : tx.activePowerKw === null
-                  ? "bg-slate-500/10 text-slate-400 border border-slate-500/20"
-                  : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
-              }`}
-            >
-              <span
-                className={`w-1 h-1 rounded-full ${
-                  tx.status === "online"
-                    ? "bg-emerald-500"
-                    : tx.status === "warning" || (tx.activePowerKw === 0 && tx.status !== "offline")
-                    ? "bg-amber-500"
-                    : tx.activePowerKw === null
-                    ? "bg-slate-400"
-                    : "bg-rose-500"
-                }`}
-              />
-              {tx.status === "online"
-                ? "Aktif"
-                : tx.activePowerKw === 0
-                ? "Mati"
-                : tx.activePowerKw === null
-                ? "Terputus"
-                : "Offline"}
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{
+                backgroundColor: tx.activePowerKw === null ? "#94a3b8" : (tx.status === "online" ? "#10b981" : (tx.activePowerKw === 0 ? "#ef4444" : "#f59e0b")),
+                boxShadow: tx.status === "online" ? "0 0 6px #10b981" : "none",
+              }}
+            />
+            <span className={`text-[10.5px] font-black tracking-wider uppercase ${isFirst ? "text-slate-300" : "text-slate-700 dark:text-slate-300"}`}>
+              {tx.name}
             </span>
           </div>
           <div className="mt-1 text-[9px] text-slate-400 font-bold uppercase">Active Power</div>
@@ -1628,9 +1605,7 @@ const SldTransformerCard = React.memo(
                   ? (isFirst ? "text-sky-400" : "text-slate-800 dark:text-slate-100")
                   : (tx.activePowerKw === 0 ? "text-rose-500" : "text-slate-400")
               }`}>
-                {tx.activePowerKw !== null
-                  ? (tx.activePowerKw === 0 ? "0 kW (Mati)" : `${tx.activePowerKw} kW`)
-                  : "— (Terputus)"}
+                {tx.activePowerKw !== null ? `${tx.activePowerKw.toLocaleString("id-ID")} kW` : "—"}
               </div>
               <div className="text-[9px] text-slate-400 font-bold">
                 PF: <span className="font-black font-mono tabular-nums">{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : "—"}</span>
@@ -3006,19 +2981,13 @@ export default function PowerDistribution() {
                 {loadingSld ? (
                   <span className="inline-block h-3.5 w-20 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
                 ) : (
-                  incomingData.plnKw !== null ? (
-                    incomingData.plnKw === 0 ? (
-                      <span className="text-xs sm:text-sm font-black font-mono tabular-nums text-rose-500">0 kW (Mati / Non-Aktif)</span>
-                    ) : (
-                      <span className="text-sm font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
-                        {incomingData.plnKw.toLocaleString("id-ID")} kW
-                      </span>
-                    )
-                  ) : (
-                    <span className="text-xs font-bold text-slate-400 font-mono">
-                      — (Sensor Terputus)
-                    </span>
-                  )
+                  <span className={`text-sm font-black font-mono tabular-nums ${
+                    incomingData.plnKw !== null && incomingData.plnKw > 0
+                      ? "text-slate-800 dark:text-slate-100"
+                      : (incomingData.plnKw === 0 ? "text-rose-500" : "text-slate-400")
+                  }`}>
+                    {incomingData.plnKw !== null ? `${incomingData.plnKw.toLocaleString("id-ID")} kW` : "—"}
+                  </span>
                 )}
               </div>
               <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
@@ -3055,19 +3024,13 @@ export default function PowerDistribution() {
                 {loadingSld ? (
                   <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
                 ) : (
-                  incomingData.wf1Kw !== null ? (
-                    incomingData.wf1Kw === 0 ? (
-                      <span className="text-xs font-black font-mono tabular-nums text-rose-500">0 kW (Mati / Non-Aktif)</span>
-                    ) : (
-                      <span className="text-xs sm:text-sm font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
-                        {incomingData.wf1Kw.toLocaleString("id-ID")} kW
-                      </span>
-                    )
-                  ) : (
-                    <span className="text-[10px] font-bold text-slate-400 font-mono">
-                      — (Sensor Terputus)
-                    </span>
-                  )
+                  <span className={`text-xs sm:text-sm font-black font-mono tabular-nums ${
+                    incomingData.wf1Kw !== null && incomingData.wf1Kw > 0
+                      ? "text-slate-800 dark:text-slate-100"
+                      : (incomingData.wf1Kw === 0 ? "text-rose-500" : "text-slate-400")
+                  }`}>
+                    {incomingData.wf1Kw !== null ? `${incomingData.wf1Kw.toLocaleString("id-ID")} kW` : "—"}
+                  </span>
                 )}
               </div>
               <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
@@ -3091,19 +3054,13 @@ export default function PowerDistribution() {
                 {loadingSld ? (
                   <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
                 ) : (
-                  solarData.poi1Kw !== null ? (
-                    solarData.poi1Kw === 0 ? (
-                      <span className="text-xs font-black font-mono tabular-nums text-amber-500">0 kW (Siaga / Malam)</span>
-                    ) : (
-                      <span className="text-xs font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
-                        {solarData.poi1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW
-                      </span>
-                    )
-                  ) : (
-                    <span className="text-[10px] font-bold text-slate-400 font-mono">
-                      — (Sensor Terputus)
-                    </span>
-                  )
+                  <span className={`text-xs font-black font-mono tabular-nums ${
+                    solarData.poi1Kw !== null && solarData.poi1Kw > 0
+                      ? "text-slate-800 dark:text-slate-100"
+                      : (solarData.poi1Kw === 0 ? "text-amber-500" : "text-slate-400")
+                  }`}>
+                    {solarData.poi1Kw !== null ? `${solarData.poi1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "—"}
+                  </span>
                 )}
               </div>
               <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
@@ -3128,19 +3085,13 @@ export default function PowerDistribution() {
                 {loadingSld ? (
                   <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
                 ) : (
-                  incomingData.wf2Kw !== null ? (
-                    incomingData.wf2Kw === 0 ? (
-                      <span className="text-xs font-black font-mono tabular-nums text-rose-500">0 kW (Mati / Non-Aktif)</span>
-                    ) : (
-                      <span className="text-xs sm:text-sm font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
-                        {incomingData.wf2Kw.toLocaleString("id-ID")} kW
-                      </span>
-                    )
-                  ) : (
-                    <span className="text-[10px] font-bold text-slate-400 font-mono">
-                      — (Sensor Terputus)
-                    </span>
-                  )
+                  <span className={`text-xs sm:text-sm font-black font-mono tabular-nums ${
+                    incomingData.wf2Kw !== null && incomingData.wf2Kw > 0
+                      ? "text-slate-800 dark:text-slate-100"
+                      : (incomingData.wf2Kw === 0 ? "text-rose-500" : "text-slate-400")
+                  }`}>
+                    {incomingData.wf2Kw !== null ? `${incomingData.wf2Kw.toLocaleString("id-ID")} kW` : "—"}
+                  </span>
                 )}
               </div>
               <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
@@ -3164,19 +3115,13 @@ export default function PowerDistribution() {
                 {loadingSld ? (
                   <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
                 ) : (
-                  solarData.poi2Kw !== null ? (
-                    solarData.poi2Kw === 0 ? (
-                      <span className="text-xs font-black font-mono tabular-nums text-amber-500">0 kW (Siaga / Malam)</span>
-                    ) : (
-                      <span className="text-xs font-black font-mono tabular-nums text-slate-800 dark:text-slate-100">
-                        {solarData.poi2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW
-                      </span>
-                    )
-                  ) : (
-                    <span className="text-[10px] font-bold text-slate-400 font-mono">
-                      — (Sensor Terputus)
-                    </span>
-                  )
+                  <span className={`text-xs font-black font-mono tabular-nums ${
+                    solarData.poi2Kw !== null && solarData.poi2Kw > 0
+                      ? "text-slate-800 dark:text-slate-100"
+                      : (solarData.poi2Kw === 0 ? "text-amber-500" : "text-slate-400")
+                  }`}>
+                    {solarData.poi2Kw !== null ? `${solarData.poi2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "—"}
+                  </span>
                 )}
               </div>
               <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
