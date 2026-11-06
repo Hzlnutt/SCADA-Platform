@@ -1882,21 +1882,22 @@ export function getPmMaxHourlyKwh(pmId: string): number {
   if (id === "PM411" || id === "PM412") return 2500;
 
   // Distribution Panels (MDP, PUTR, MCC)
-  if (["PM133", "PM135", "PM136", "PM139", "PM201", "PM202", "PM210", "PM327", "PM337"].includes(id)) {
-    return 800;
+  if (["PM132", "PM133", "PM135", "PM136", "PM139", "PM175", "PM201", "PM202", "PM210", "PM327", "PM337"].includes(id)) {
+    return 1000;
   }
 
-  // Large Chillers & Compressors (100kW - 275kW)
-  if (["PM229", "PM271", "PM319"].includes(id)) return 380;
-  if (["PM272", "PM209", "PM274", "PM180", "PM214"].includes(id)) return 220;
+  // Large Chillers, HVAC & Compressors (100kW - 300kW)
+  if (["PM185", "PM205", "PM226", "PM229", "PM271", "PM319", "PM272", "PM209", "PM274", "PM180", "PM214"].includes(id)) {
+    return 500;
+  }
 
   // Medium equipment (Boiler, Heaters, Air Compressors, AHU: 30 - 75 kW)
-  if (["PM140", "PM182", "PM183", "PM184", "PM203", "PM205", "PM211", "PM212", "PM213", "PM215", "PM321", "PM322", "PM323"].includes(id)) {
-    return 100;
+  if (["PM140", "PM151", "PM153", "PM177", "PM178", "PM179", "PM182", "PM183", "PM184", "PM203", "PM211", "PM212", "PM213", "PM215", "PM288", "PM291", "PM318", "PM320", "PM321", "PM322", "PM323", "PM324", "PM325"].includes(id)) {
+    return 200;
   }
 
-  // Pumps, Fans, Lighting, Warehouses, Labs (PM152, PM181, PM206, etc.)
-  return 60;
+  // Pumps, Fans, Lighting, Warehouses, Labs (PM134, PM152, PM154, PM176, PM181, PM206, PM273, PM292, etc.)
+  return 100;
 }
 
 async function doComputeEquipmentMonthlyBatch(
@@ -2101,6 +2102,7 @@ async function doComputeEquipmentMonthlyBatch(
 
     const currDaily = new Array(daysInCurr).fill(0);
     const compDaily = new Array(daysInComp).fill(0);
+    let consecutiveStaleCount = 0;
 
     for (let i = 1; i < records.length; i++) {
       const prev = records[i - 1];
@@ -2110,7 +2112,7 @@ async function doComputeEquipmentMonthlyBatch(
       const timeDiffMs = curr.ts.getTime() - prev.ts.getTime();
 
       let diff = 0;
-      // Sesuai aturan: data sebelumnya dan data saat ini harus valid (> 0 dan tidak null)
+      // Sesuai aturan: data sebelumnya dan data saat ini harus bernilai (> 0 dan tidak null)
       if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal) && currVal > 0 && prevVal > 0) {
         if (timeDiffMs <= 90 * 60 * 1000) {
           const rawDiff = currVal - prevVal;
@@ -2118,19 +2120,27 @@ async function doComputeEquipmentMonthlyBatch(
           const powerEst = (curr.power !== null && curr.power !== undefined && !isNaN(curr.power) && curr.power >= 0) ? curr.power : 0;
 
           // Validasi fisik kelistrikan:
-          // 1. rawDiff tidak boleh negatif
+          // 1. rawDiff tidak boleh negatif (counter reset / register flip -> diff = 0)
           // 2. rawDiff tidak boleh melebihi kapasitas fisik motor/panel (maxKwh)
-          // 3. Jika powerEst (kW) terbaca > 0, rawDiff tidak boleh melompat drastis (maks 3x powerEst + 15 kWh)
-          const isPhysicallyValid = rawDiff >= 0 && rawDiff <= maxKwh && (powerEst <= 0 || rawDiff <= Math.max(powerEst * 3, powerEst + 15));
-
-          if (isPhysicallyValid) {
-            diff = rawDiff;
-          } else {
-            // Anomali register/offset flip terdeteksi:
-            // Gunakan active_power_total terukur pada jam tersebut agar data jam tidak hilang dan bar tidak melonjak
-            diff = powerEst > 0 ? Math.min(powerEst, maxKwh) : 0;
+          // 3. Jika sensor sebelumnya beku/stale (>= 4 jam), lonjakan saat tersambung kembali adalah akumulasi multi-jam/multi-hari, bukan 1 jam
+          // 4. Jika powerEst terbaca, rawDiff tidak boleh melonjak drastis melebihi kapasitas (maks 4x powerEst + 30)
+          if (rawDiff >= 0 && rawDiff <= maxKwh) {
+            if (consecutiveStaleCount >= 4) {
+              diff = 0; // Filter lonjakan rekoneksi sensor setelah offline
+            } else if (powerEst > 0 && rawDiff > Math.max(powerEst * 4, 30)) {
+              diff = 0; // Filter lonjakan anomali register meter
+            } else {
+              diff = rawDiff;
+            }
           }
         }
+      }
+
+      // Lacak apakah nilai active_energy beku/identik
+      if (currVal !== null && prevVal !== null && currVal === prevVal) {
+        consecutiveStaleCount++;
+      } else {
+        consecutiveStaleCount = 0;
       }
 
       // Date string in WIB (GMT+7)

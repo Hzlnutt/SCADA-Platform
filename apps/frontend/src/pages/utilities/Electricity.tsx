@@ -658,8 +658,8 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   }, [currTotalKwh, currentData]);
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm h-full flex-1 flex flex-col justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 min-h-[58px]">
         {/* Top-Left: Title and Total kWh */}
         <div className="flex flex-col">
           <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">{title}</h4>
@@ -1484,6 +1484,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
         category: catKey,
         categoryLabel: catEntry.label,
         span: val.span || "auto",
+        align: val.align || "full",
         row: typeof val.row === "number" ? val.row : undefined
       });
     }
@@ -1563,6 +1564,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
         category: it.value?.category || "custom",
         categoryLabel: it.value?.categoryLabel || "Kustom",
         row: typeof it.value?.row === "number" ? it.value.row : 0,
+        align: it.value?.align || "full",
         sort_order: idx + 1
       }));
 
@@ -1732,6 +1734,33 @@ const SectionHEquipment = memo(function SectionHEquipment({
     setTimeout(() => setDragToast(null), 3500);
   };
 
+  const handleSetCardAlign = (configKey: string, align: "left" | "center" | "right" | "full") => {
+    const currentItems = draftConfiguredItems.length > 0
+      ? [...draftConfiguredItems]
+      : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
+    const idx = currentItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
+    if (idx === -1) return;
+
+    currentItems[idx] = {
+      ...currentItems[idx],
+      value: {
+        ...(currentItems[idx].value || {}),
+        align
+      }
+    };
+
+    setDraftConfiguredItems(currentItems);
+    setHasUnsavedChanges(true);
+    const alignLabels: Record<string, string> = {
+      left: "Rata Kiri",
+      center: "Rata Tengah",
+      right: "Rata Kanan",
+      full: "Penuh"
+    };
+    setDragToast(`✓ Posisi kartu tunggal di baris: ${alignLabels[align] || align}`);
+    setTimeout(() => setDragToast(null), 3000);
+  };
+
   const handleToggleCardSpan = (configKey: string) => {
     const currentItems = draftConfiguredItems.length > 0
       ? [...draftConfiguredItems]
@@ -1844,14 +1873,8 @@ const SectionHEquipment = memo(function SectionHEquipment({
     const relX = e.clientX - rect.left;
     const ratio = relX / Math.max(rect.width, 1);
 
-    let action: "insert-left" | "swap" | "insert-right" = "swap";
-    if (ratio < 0.30) {
-      action = "insert-left";
-    } else if (ratio > 0.70) {
-      action = "insert-right";
-    } else {
-      action = "swap";
-    }
+    // Langsung menyisipkan di kiri atau kanan target (tanpa menukar posisi)
+    const action: "insert-left" | "insert-right" = ratio <= 0.5 ? "insert-left" : "insert-right";
 
     setActiveDropConfigKey(targetConfigKey);
     setDragAction(action);
@@ -1878,71 +1901,51 @@ const SectionHEquipment = memo(function SectionHEquipment({
       return;
     }
 
+    const targetItem = currentItems[targetIdx];
     const targetGroup = categoryGroups.find((g) => g.key === targetCategoryKey);
-    const targetCategoryLabel = targetGroup ? targetGroup.label : targetCategoryKey;
+    const targetCategoryLabel = targetGroup ? targetGroup.label : (targetItem.value?.categoryLabel || targetCategoryKey);
+    const targetCategory = targetItem.value?.category || targetCategoryKey;
+    const targetRow = typeof targetItem.value?.row === "number" ? targetItem.value.row : 0;
 
     const newItems = [...currentItems];
-    const action = dragAction || "swap";
-
-    if (action === "swap") {
-      // Menukar langsung posisi dua kartu
-      const sourceItem = { ...newItems[sourceIdx] };
-      const targetItem = { ...newItems[targetIdx] };
-
-      const sourceCat = sourceItem.value?.category || "custom";
-      const sourceCatLabel = sourceItem.value?.categoryLabel || "Kustom";
-      const targetCat = targetItem.value?.category || targetCategoryKey;
-      const targetCatLabel = targetItem.value?.categoryLabel || targetCategoryLabel;
-
-      sourceItem.value = {
+    const [sourceItem] = newItems.splice(sourceIdx, 1);
+    const updatedSource = {
+      ...sourceItem,
+      value: {
         ...(sourceItem.value || {}),
-        category: targetCat,
-        categoryLabel: targetCatLabel
-      };
+        category: targetCategory,
+        categoryLabel: targetCategoryLabel,
+        row: targetRow
+      }
+    };
 
-      targetItem.value = {
-        ...(targetItem.value || {}),
-        category: sourceCat,
-        categoryLabel: sourceCatLabel
-      };
+    const newTargetIdx = newItems.findIndex((i) => i.config_key.toLowerCase() === targetConfigKey.toLowerCase());
+    const action = dragAction === "insert-left" ? "insert-left" : "insert-right";
 
-      newItems[sourceIdx] = targetItem;
-      newItems[targetIdx] = sourceItem;
-
-      setDragToast(`✓ Menukar posisi '${sourceTitle}' ⇄ '${targetItem.label}'`);
-    } else if (action === "insert-left") {
-      // Sisipkan di sebelah kiri kartu target tanpa menukar item lainnya
-      const [sourceItem] = newItems.splice(sourceIdx, 1);
-      const updatedSource = {
-        ...sourceItem,
-        value: {
-          ...(sourceItem.value || {}),
-          category: targetCategoryKey,
-          categoryLabel: targetCategoryLabel
-        }
-      };
-
-      const newTargetIdx = newItems.findIndex((i) => i.config_key.toLowerCase() === targetConfigKey.toLowerCase());
+    if (action === "insert-left") {
       newItems.splice(newTargetIdx, 0, updatedSource);
-
-      setDragToast(`✓ Menyisipkan '${sourceTitle}' di sebelah kiri '${newItems[newTargetIdx + 1]?.label}'`);
-    } else if (action === "insert-right") {
-      // Sisipkan di sebelah kanan kartu target tanpa menukar item lainnya
-      const [sourceItem] = newItems.splice(sourceIdx, 1);
-      const updatedSource = {
-        ...sourceItem,
-        value: {
-          ...(sourceItem.value || {}),
-          category: targetCategoryKey,
-          categoryLabel: targetCategoryLabel
-        }
-      };
-
-      const newTargetIdx = newItems.findIndex((i) => i.config_key.toLowerCase() === targetConfigKey.toLowerCase());
+      setDragToast(`✓ Memindahkan '${sourceTitle}' ke sebelah kiri '${targetItem.label}' (Ukuran baris menyesuaikan otomatis)`);
+    } else {
       newItems.splice(newTargetIdx + 1, 0, updatedSource);
-
-      setDragToast(`✓ Menyisipkan '${sourceTitle}' di sebelah kanan '${newItems[newTargetIdx]?.label}'`);
+      setDragToast(`✓ Memindahkan '${sourceTitle}' ke sebelah kanan '${targetItem.label}' (Ukuran baris menyesuaikan otomatis)`);
     }
+
+    // Kompakkan baris untuk kategori terdampak agar tidak ada baris kosong
+    const affectedCats = new Set([targetCategory, sourceItem.value?.category || "custom"]);
+    affectedCats.forEach((catKey) => {
+      const catItems = newItems.filter((i) => (i.value?.category || "custom") === catKey);
+      const uniqueRows = Array.from(new Set(catItems.map((ci, cIdx) => (
+        typeof ci.value?.row === "number" ? ci.value.row : Math.floor(cIdx / 4)
+      )))).sort((a, b) => a - b);
+      const rowCompactMap = new Map<number, number>();
+      uniqueRows.forEach((oldR, newR) => rowCompactMap.set(oldR, newR));
+
+      catItems.forEach((ci) => {
+        const oldR = typeof ci.value?.row === "number" ? ci.value.row : 0;
+        const compactR = rowCompactMap.has(oldR) ? rowCompactMap.get(oldR)! : oldR;
+        ci.value = { ...(ci.value || {}), row: compactR };
+      });
+    });
 
     const reindexed = newItems.map((it, idx) => ({
       ...it,
@@ -2073,7 +2076,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
   // 3 cards in row -> 3 columns (33.33% each)
   // 4 cards in row -> 4 columns (25% each)
   const getRowGridClass = (itemCount: number) => {
-    if (itemCount <= 1) return "grid gap-6 grid-cols-1";
+    if (itemCount <= 1) return "w-full";
     if (itemCount === 2) return "grid gap-6 grid-cols-1 md:grid-cols-2";
     if (itemCount === 3) return "grid gap-6 grid-cols-1 md:grid-cols-3";
     return "grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4";
@@ -2150,7 +2153,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
   }, [fetchEquipmentBatch, currentYear, currentMonthIdx, isEditPositionMode, loadConfiguredItems]);
 
   const renderCard = (
-    item: { title: string; seriesKey: string; pmId: string; configKey: string; span?: string; row?: number },
+    item: { title: string; seriesKey: string; pmId: string; configKey: string; span?: string; align?: "left" | "center" | "right" | "full"; row?: number },
     categoryKey: string,
     cardIndex: number,
     rowIndex: number = 0,
@@ -2175,6 +2178,18 @@ const SectionHEquipment = memo(function SectionHEquipment({
       ? "col-span-1 md:col-span-2"
       : "col-span-1";
 
+    const isSingleInRow = rowTotalCount === 1;
+    const align = item.align || "full";
+    const singleCardAlignClass = isSingleInRow
+      ? align === "center"
+        ? "w-full md:w-2/3 lg:w-1/2 xl:w-1/3 mx-auto"
+        : align === "left"
+        ? "w-full md:w-2/3 lg:w-1/2 xl:w-1/3 mr-auto"
+        : align === "right"
+        ? "w-full md:w-2/3 lg:w-1/2 xl:w-1/3 ml-auto"
+        : "w-full"
+      : spanClass;
+
     return (
       <div
         key={item.pmId || item.title}
@@ -2186,7 +2201,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
           e.stopPropagation();
           handleDropOnCard(categoryKey, item.configKey);
         }}
-        className={`relative group transition-all duration-150 ${spanClass} ${wobbleClass} ${
+        className={`relative group transition-all duration-150 h-full flex flex-col justify-between ${singleCardAlignClass} ${wobbleClass} ${
           isBeingDragged
             ? "opacity-30 scale-95 ring-2 ring-sky-500 rounded-2xl cursor-grabbing"
             : isDropTarget
@@ -2196,11 +2211,11 @@ const SectionHEquipment = memo(function SectionHEquipment({
             : ""
         }`}
       >
-        {/* Drop Indicators: Insert Left, Insert Right, or Swap */}
+        {/* Drop Indicators: Insert Left or Insert Right */}
         {isDropTarget && dragAction === "insert-left" && (
           <div className="absolute inset-y-0 -left-2 w-3 bg-sky-500 rounded-l-xl shadow-[0_0_16px_rgba(14,165,233,0.9)] z-40 flex items-center justify-center animate-pulse pointer-events-none">
             <div className="bg-sky-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-lg whitespace-nowrap -translate-x-full mr-1 flex items-center gap-1">
-              <span>←</span> Sisipkan di Kiri
+              <span>←</span> Pindahkan ke Sini
             </div>
           </div>
         )}
@@ -2208,16 +2223,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
         {isDropTarget && dragAction === "insert-right" && (
           <div className="absolute inset-y-0 -right-2 w-3 bg-sky-500 rounded-r-xl shadow-[0_0_16px_rgba(14,165,233,0.9)] z-40 flex items-center justify-center animate-pulse pointer-events-none">
             <div className="bg-sky-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-lg whitespace-nowrap translate-x-full ml-1 flex items-center gap-1">
-              Sisipkan di Kanan <span>→</span>
-            </div>
-          </div>
-        )}
-
-        {isDropTarget && dragAction === "swap" && (
-          <div className="absolute inset-0 bg-amber-500/20 ring-4 ring-amber-500 border-2 border-amber-400 rounded-2xl z-30 flex items-center justify-center backdrop-blur-[2px] animate-in fade-in duration-150 pointer-events-none">
-            <div className="bg-amber-600 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-xl flex items-center gap-2 border border-amber-300">
-              <span className="text-base">⇄</span>
-              <span>Tukar Posisi dengan {item.title}</span>
+              Pindahkan ke Sini <span>→</span>
             </div>
           </div>
         )}
@@ -2242,9 +2248,9 @@ const SectionHEquipment = memo(function SectionHEquipment({
           prevMonthName={compMonthLabel}
         />
 
-        {/* In-Card Quick Controls: Move Left, Move Right, Up Row, Down Row, and Category Selection */}
+        {/* In-Card Quick Controls: Move Left, Move Right, Up Row, Down Row, Single Card Alignment, and Category Selection */}
         {isSeniorUnitHead && isEditPositionMode && (
-          <div className="p-2.5 bg-slate-50/95 dark:bg-slate-800/95 border-t border-slate-200 dark:border-slate-700/80 rounded-b-2xl flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="p-2.5 bg-slate-50/95 dark:bg-slate-800/95 border-t border-slate-200 dark:border-slate-700/80 rounded-b-2xl flex flex-wrap items-center justify-between gap-2 text-xs min-h-[46px]">
             <div className="flex flex-wrap items-center gap-1">
               <button
                 type="button"
@@ -2294,6 +2300,73 @@ const SectionHEquipment = memo(function SectionHEquipment({
                 <span>▼</span>
                 <span className="text-[10px]">Bawah</span>
               </button>
+
+              {/* Aturan Posisi jika hanya ada 1 kartu di baris */}
+              {isSingleInRow && (
+                <div className="flex items-center gap-1 bg-white dark:bg-slate-700/80 px-2 py-0.5 rounded-lg border border-slate-300 dark:border-slate-600">
+                  <span className="text-[10px] text-slate-400 font-semibold mr-0.5">Posisi:</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSetCardAlign(item.configKey, "left");
+                    }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
+                      align === "left"
+                        ? "bg-sky-500 text-white shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600"
+                    }`}
+                    title="Rata Kiri"
+                  >
+                    Kiri
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSetCardAlign(item.configKey, "center");
+                    }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
+                      align === "center"
+                        ? "bg-sky-500 text-white shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600"
+                    }`}
+                    title="Rata Tengah"
+                  >
+                    Tengah
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSetCardAlign(item.configKey, "right");
+                    }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
+                      align === "right"
+                        ? "bg-sky-500 text-white shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600"
+                    }`}
+                    title="Rata Kanan"
+                  >
+                    Kanan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSetCardAlign(item.configKey, "full");
+                    }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
+                      (!align || align === "full")
+                        ? "bg-sky-500 text-white shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600"
+                    }`}
+                    title="Penuhi Baris"
+                  >
+                    Penuh
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-1.5">

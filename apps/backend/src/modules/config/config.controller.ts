@@ -2240,6 +2240,7 @@ export const reorderEquipmentItemsHandler = async (req: Request, res: Response, 
             category: item.category || curVal.category,
             categoryLabel: item.categoryLabel || curVal.categoryLabel,
             row: item.row !== undefined ? item.row : curVal.row,
+            align: item.align !== undefined ? item.align : curVal.align,
             sort_order: item.sort_order !== undefined ? item.sort_order : curVal.sort_order
           };
 
@@ -2255,6 +2256,7 @@ export const reorderEquipmentItemsHandler = async (req: Request, res: Response, 
             category: item.category || "custom",
             categoryLabel: item.categoryLabel || "Kustom",
             row: item.row !== undefined ? item.row : 0,
+            align: item.align || "full",
             sort_order: item.sort_order ?? 0
           };
           await client.query(
