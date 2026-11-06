@@ -294,6 +294,58 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
       const plnData = (currentBreakdown || []).map((b) => b.pln || 0);
       const solarData = (currentBreakdown || []).map((b) => (b.poi1 || 0) + (b.poi2 || 0));
 
+      const plnPrevData = (previousBreakdown || []).map((b) => b.pln || 0);
+      const solarPrevData = (previousBreakdown || []).map((b) => (b.poi1 || 0) + (b.poi2 || 0));
+      const hasPrevBreakdown = plnPrevData.some((v) => v > 0) || solarPrevData.some((v) => v > 0);
+
+      const paddedPlnPrev = plnPrevData.length < daysInMonth
+        ? [...plnPrevData, ...new Array(daysInMonth - plnPrevData.length).fill(0)]
+        : plnPrevData;
+      const paddedSolarPrev = solarPrevData.length < daysInMonth
+        ? [...solarPrevData, ...new Array(daysInMonth - solarPrevData.length).fill(0)]
+        : solarPrevData;
+
+      const prevDatasets = showPrevious
+        ? hasPrevBreakdown
+          ? [
+              {
+                label: prevMonthName ? `PLN Grid (${prevMonthName})` : "PLN Bulan Lalu",
+                data: paddedPlnPrev,
+                backgroundColor: "rgba(249, 115, 22, 0.85)",
+                hoverBackgroundColor: "rgba(234, 88, 12, 1)",
+                borderWidth: 0,
+                borderRadius: { topLeft: 0, topRight: 0, bottomLeft: barRadius, bottomRight: barRadius },
+                stack: "previous",
+                barPercentage: barPct,
+                categoryPercentage: catPct
+              },
+              {
+                label: prevMonthName ? `Solar PLTS (${prevMonthName})` : "Solar Bulan Lalu",
+                data: paddedSolarPrev,
+                backgroundColor: "rgba(52, 211, 153, 0.85)",
+                hoverBackgroundColor: "rgba(16, 185, 129, 1)",
+                borderWidth: 0,
+                borderRadius: { topLeft: barRadius, topRight: barRadius, bottomLeft: 0, bottomRight: 0 },
+                stack: "previous",
+                barPercentage: barPct,
+                categoryPercentage: catPct
+              }
+            ]
+          : [
+              {
+                label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
+                data: paddedPreviousData,
+                backgroundColor: "rgba(239, 68, 68, 0.75)",
+                hoverBackgroundColor: "rgba(220, 38, 38, 1)",
+                borderWidth: 0,
+                borderRadius: barRadius,
+                stack: "previous",
+                barPercentage: barPct,
+                categoryPercentage: catPct
+              }
+            ]
+        : [];
+
       return {
         labels: dayLabels,
         datasets: [
@@ -319,17 +371,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             barPercentage: barPct,
             categoryPercentage: catPct
           },
-          ...(showPrevious ? [{
-            label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
-            data: paddedPreviousData,
-            backgroundColor: "rgba(239, 68, 68, 0.75)",
-            hoverBackgroundColor: "rgba(220, 38, 38, 1)",
-            borderWidth: 0,
-            borderRadius: barRadius,
-            stack: "previous",
-            barPercentage: barPct,
-            categoryPercentage: catPct
-          }] : [])
+          ...prevDatasets
         ]
       };
     }
@@ -361,7 +403,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         }] : [])
       ]
     };
-  }, [dayLabels, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, showPrevious, isZoomed]);
+  }, [dayLabels, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, showPrevious, isZoomed, daysInMonth]);
 
   const options: any = useMemo(() => ({
     responsive: true,
@@ -420,10 +462,17 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             const val = Number(ctx.parsed.y || 0);
             const idx = ctx.dataIndex;
             const curVal = Number(paddedCurrentData[idx] || 0);
+            const prevVal = Number(paddedPreviousData[idx] || 0);
 
-            if (selectorType === "all" && ctx.dataset.stack === "current" && curVal > 0) {
-              const pct = Math.round((val / curVal) * 100);
-              return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh (${pct}%)`;
+            if (selectorType === "all") {
+              if (ctx.dataset.stack === "current" && curVal > 0) {
+                const pct = Math.round((val / curVal) * 100);
+                return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh (${pct}%)`;
+              }
+              if (ctx.dataset.stack === "previous" && prevVal > 0) {
+                const pct = Math.round((val / prevVal) * 100);
+                return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh (${pct}%)`;
+              }
             }
             return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`;
           },
@@ -437,9 +486,16 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             if (selectorType === "all") {
               const b = currentBreakdown?.[idx];
               if (b && (b.poi1 > 0 || b.poi2 > 0)) {
-                lines.push(`• Rincian PLTS: POI-1 ${b.poi1.toLocaleString("id-ID", { maximumFractionDigits: 2 })} | POI-2 ${b.poi2.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`);
+                lines.push(`• Rincian PLTS Bulan Ini: POI-1 ${b.poi1.toLocaleString("id-ID", { maximumFractionDigits: 2 })} | POI-2 ${b.poi2.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`);
               }
-              lines.push(`Total Konsumsi: ${curVal.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`);
+              const pb = previousBreakdown?.[idx];
+              if (pb && (pb.poi1 > 0 || pb.poi2 > 0)) {
+                lines.push(`• Rincian PLTS ${prevMonthName || "Bln Lalu"}: POI-1 ${pb.poi1.toLocaleString("id-ID", { maximumFractionDigits: 2 })} | POI-2 ${pb.poi2.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`);
+              }
+              lines.push(`Total Konsumsi Bulan Ini: ${curVal.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`);
+              if (prevVal > 0) {
+                lines.push(`Total Konsumsi ${prevMonthName || "Bln Lalu"}: ${prevVal.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`);
+              }
             }
 
             if (prevVal > 0) {
