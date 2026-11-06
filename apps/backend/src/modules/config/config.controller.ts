@@ -2239,6 +2239,7 @@ export const reorderEquipmentItemsHandler = async (req: Request, res: Response, 
             ...curVal,
             category: item.category || curVal.category,
             categoryLabel: item.categoryLabel || curVal.categoryLabel,
+            row: item.row !== undefined ? item.row : curVal.row,
             sort_order: item.sort_order !== undefined ? item.sort_order : curVal.sort_order
           };
 
@@ -2253,6 +2254,7 @@ export const reorderEquipmentItemsHandler = async (req: Request, res: Response, 
             pm_id: String(item.pm_id || cleanKey).toUpperCase(),
             category: item.category || "custom",
             categoryLabel: item.categoryLabel || "Kustom",
+            row: item.row !== undefined ? item.row : 0,
             sort_order: item.sort_order ?? 0
           };
           await client.query(

@@ -1483,19 +1483,40 @@ const SectionHEquipment = memo(function SectionHEquipment({
         sortOrder: item.sort_order ?? 0,
         category: catKey,
         categoryLabel: catEntry.label,
-        span: val.span || "auto"
+        span: val.span || "auto",
+        row: typeof val.row === "number" ? val.row : undefined
       });
     }
 
-    // Sort items within each category by sortOrder
-    const groups: Array<{ key: string; label: string; items: any[] }> = [];
+    // Sort items within each category and partition into auto-adjusting rows
+    const groups: Array<{ key: string; label: string; items: any[]; rows: Array<{ rowIdx: number; items: any[] }> }> = [];
     for (const [key, val] of catMap.entries()) {
       val.items.sort((a, b) => a.sortOrder - b.sortOrder);
       if (STANDARD_CATEGORIES.some((sc) => sc.key === key) || val.items.length > 0 || customCategoryKeys.some((cc) => cc.key === key)) {
+        // Group items into rows
+        const rowMap = new Map<number, any[]>();
+        val.items.forEach((item, idx) => {
+          const r = typeof item.row === "number" ? item.row : Math.floor(idx / 4);
+          item.row = r;
+          if (!rowMap.has(r)) rowMap.set(r, []);
+          rowMap.get(r)!.push(item);
+        });
+
+        const sortedRowKeys = Array.from(rowMap.keys()).sort((a, b) => a - b);
+        const rows = sortedRowKeys.map((rKey, newRowIdx) => {
+          const rowItems = rowMap.get(rKey)!;
+          rowItems.forEach((it) => { it.row = newRowIdx; });
+          return {
+            rowIdx: newRowIdx,
+            items: rowItems
+          };
+        });
+
         groups.push({
           key,
           label: val.label,
-          items: val.items
+          items: val.items,
+          rows
         });
       }
     }
@@ -1541,6 +1562,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
         label: it.label,
         category: it.value?.category || "custom",
         categoryLabel: it.value?.categoryLabel || "Kustom",
+        row: typeof it.value?.row === "number" ? it.value.row : 0,
         sort_order: idx + 1
       }));
 
@@ -1570,7 +1592,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
     }
   };
 
-  // Direct 1-Click Move Handlers
+  // Direct 1-Click Move Handlers (Horizontal & Vertical Rows)
   const handleMoveCardDirection = (configKey: string, direction: "left" | "right") => {
     const currentItems = draftConfiguredItems.length > 0
       ? [...draftConfiguredItems]
@@ -1578,34 +1600,36 @@ const SectionHEquipment = memo(function SectionHEquipment({
     const idx = currentItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
     if (idx === -1) return;
 
-    const currentCat = currentItems[idx].value?.category || "custom";
+    const item = currentItems[idx];
+    const currentCat = item.value?.category || "custom";
 
-    if (direction === "left") {
-      let swapIdx = -1;
-      for (let i = idx - 1; i >= 0; i--) {
-        if ((currentItems[i].value?.category || "custom") === currentCat) {
-          swapIdx = i;
-          break;
-        }
-      }
-      if (swapIdx !== -1) {
-        const temp = currentItems[swapIdx];
-        currentItems[swapIdx] = currentItems[idx];
-        currentItems[idx] = temp;
-      }
-    } else {
-      let swapIdx = -1;
-      for (let i = idx + 1; i < currentItems.length; i++) {
-        if ((currentItems[i].value?.category || "custom") === currentCat) {
-          swapIdx = i;
-          break;
-        }
-      }
-      if (swapIdx !== -1) {
-        const temp = currentItems[swapIdx];
-        currentItems[swapIdx] = currentItems[idx];
-        currentItems[idx] = temp;
-      }
+    // All items in this category
+    const catItems = currentItems.filter((i) => (i.value?.category || "custom") === currentCat);
+    const catIdx = catItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
+    if (catIdx === -1) return;
+
+    const itemRow = typeof item.value?.row === "number" ? item.value.row : Math.floor(catIdx / 4);
+
+    // Filter items in the SAME row of this category
+    const rowItems = catItems.filter((i, cIdx) => {
+      const r = typeof i.value?.row === "number" ? i.value.row : Math.floor(cIdx / 4);
+      return r === itemRow;
+    });
+
+    const rIdx = rowItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
+
+    if (direction === "left" && rIdx > 0) {
+      const targetConfigKey = rowItems[rIdx - 1].config_key;
+      const targetIdx = currentItems.findIndex((i) => i.config_key.toLowerCase() === targetConfigKey.toLowerCase());
+      const temp = currentItems[targetIdx];
+      currentItems[targetIdx] = currentItems[idx];
+      currentItems[idx] = temp;
+    } else if (direction === "right" && rIdx < rowItems.length - 1) {
+      const targetConfigKey = rowItems[rIdx + 1].config_key;
+      const targetIdx = currentItems.findIndex((i) => i.config_key.toLowerCase() === targetConfigKey.toLowerCase());
+      const temp = currentItems[targetIdx];
+      currentItems[targetIdx] = currentItems[idx];
+      currentItems[idx] = temp;
     }
 
     const reindexed = currentItems.map((it, i) => ({
@@ -1615,6 +1639,97 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
     setDraftConfiguredItems(reindexed);
     setHasUnsavedChanges(true);
+  };
+
+  const handleMoveCardRow = (configKey: string, direction: "up" | "down") => {
+    const currentItems = draftConfiguredItems.length > 0
+      ? [...draftConfiguredItems]
+      : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
+    
+    const idx = currentItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
+    if (idx === -1) return;
+
+    const item = currentItems[idx];
+    const catKey = item.value?.category || "custom";
+
+    // All items in category
+    const catItems = currentItems.filter((i) => (i.value?.category || "custom") === catKey);
+    const catIdx = catItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
+
+    // Determine current assigned row
+    const currRow = typeof item.value?.row === "number" ? item.value.row : Math.floor(catIdx / 4);
+
+    if (direction === "down") {
+      const targetRow = currRow + 1;
+      currentItems[idx] = {
+        ...item,
+        value: {
+          ...(item.value || {}),
+          row: targetRow
+        }
+      };
+    } else {
+      if (currRow > 0) {
+        const targetRow = currRow - 1;
+        currentItems[idx] = {
+          ...item,
+          value: {
+            ...(item.value || {}),
+            row: targetRow
+          }
+        };
+      } else {
+        // Moving up from row 0 -> create a new top row
+        currentItems.forEach((ci) => {
+          if ((ci.value?.category || "custom") === catKey) {
+            const r = typeof ci.value?.row === "number" ? ci.value.row : 0;
+            if (ci.config_key.toLowerCase() !== configKey.toLowerCase()) {
+              ci.value = { ...(ci.value || {}), row: r + 1 };
+            } else {
+              ci.value = { ...(ci.value || {}), row: 0 };
+            }
+          }
+        });
+      }
+    }
+
+    // Compact row numbers for this category so no empty rows exist
+    const updatedCatItems = currentItems.filter((i) => (i.value?.category || "custom") === catKey);
+    const uniqueRows = Array.from(new Set(updatedCatItems.map((ci, cIdx) => (
+      typeof ci.value?.row === "number" ? ci.value.row : Math.floor(cIdx / 4)
+    )))).sort((a, b) => a - b);
+
+    const rowCompactMap = new Map<number, number>();
+    uniqueRows.forEach((oldR, newR) => rowCompactMap.set(oldR, newR));
+
+    currentItems.forEach((ci) => {
+      if ((ci.value?.category || "custom") === catKey) {
+        const oldR = typeof ci.value?.row === "number" ? ci.value.row : 0;
+        const compactR = rowCompactMap.has(oldR) ? rowCompactMap.get(oldR)! : oldR;
+        ci.value = { ...(ci.value || {}), row: compactR };
+      }
+    });
+
+    // Reorder items in currentItems so category items are grouped by row, then sort_order
+    currentItems.sort((a, b) => {
+      const catA = a.value?.category || "custom";
+      const catB = b.value?.category || "custom";
+      if (catA !== catB) return 0;
+      const rowA = a.value?.row ?? 0;
+      const rowB = b.value?.row ?? 0;
+      if (rowA !== rowB) return rowA - rowB;
+      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    });
+
+    const reindexed = currentItems.map((it, i) => ({
+      ...it,
+      sort_order: i + 1
+    }));
+
+    setDraftConfiguredItems(reindexed);
+    setHasUnsavedChanges(true);
+    setDragToast(`✓ Memindahkan '${item.label}' ke ${direction === "down" ? "baris bawah" : "baris atas"} (Ukuran kartu menyesuaikan otomatis)`);
+    setTimeout(() => setDragToast(null), 3500);
   };
 
   const handleToggleCardSpan = (configKey: string) => {
@@ -1952,14 +2067,18 @@ const SectionHEquipment = memo(function SectionHEquipment({
     setTimeout(() => setDragToast(null), 3500);
   };
 
-  // Helper for responsive grid column count per category
-  // 1 card -> 1 column full width; 2 cards -> 2 columns; 3 cards -> 3 columns; 4+ cards -> 4 columns responsive
-  const getCategoryGridClass = (_catKey: string, itemCount: number) => {
+  // Helper for responsive grid column count per row of cards
+  // 1 card in row -> 1 column full width (100%)
+  // 2 cards in row -> 2 columns (50% each)
+  // 3 cards in row -> 3 columns (33.33% each)
+  // 4 cards in row -> 4 columns (25% each)
+  const getRowGridClass = (itemCount: number) => {
     if (itemCount <= 1) return "grid gap-6 grid-cols-1";
     if (itemCount === 2) return "grid gap-6 grid-cols-1 md:grid-cols-2";
-    if (itemCount === 3) return "grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
-    return "grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+    if (itemCount === 3) return "grid gap-6 grid-cols-1 md:grid-cols-3";
+    return "grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4";
   };
+  const getCategoryGridClass = (_catKey: string, itemCount: number) => getRowGridClass(itemCount);
 
   // Dynamic state from database batch endpoint
   const [batchData, setBatchData] = useState<Record<string, {
@@ -2031,9 +2150,11 @@ const SectionHEquipment = memo(function SectionHEquipment({
   }, [fetchEquipmentBatch, currentYear, currentMonthIdx, isEditPositionMode, loadConfiguredItems]);
 
   const renderCard = (
-    item: { title: string; seriesKey: string; pmId: string; configKey: string; span?: string },
+    item: { title: string; seriesKey: string; pmId: string; configKey: string; span?: string; row?: number },
     categoryKey: string,
-    cardIndex: number
+    cardIndex: number,
+    rowIndex: number = 0,
+    rowTotalCount: number = 1
   ) => {
     const itemData = batchData[item.pmId] || batchData[item.seriesKey.toLowerCase()] || batchData[item.title.toLowerCase()];
     const current = itemData?.current || [];
@@ -2042,8 +2163,9 @@ const SectionHEquipment = memo(function SectionHEquipment({
     const isBeingDragged = draggedItem?.configKey.toLowerCase() === item.configKey.toLowerCase();
     const isDropTarget = activeDropConfigKey?.toLowerCase() === item.configKey.toLowerCase();
 
+    // Calm, non-dizzying gentle float in edit mode (zero rotation, soft sky ring)
     const wobbleClass = (isEditPositionMode && !isBeingDragged)
-      ? (cardIndex % 2 === 0 ? "animate-card-wobble-even" : "animate-card-wobble-odd")
+      ? "animate-card-gentle-float ring-2 ring-sky-400/50 border border-dashed border-sky-400 dark:border-sky-500 rounded-2xl shadow-sm"
       : "";
 
     const span = item.span || "auto";
@@ -2120,18 +2242,18 @@ const SectionHEquipment = memo(function SectionHEquipment({
           prevMonthName={compMonthLabel}
         />
 
-        {/* In-Card Quick Controls: Move Left, Move Right, and Category Selection */}
+        {/* In-Card Quick Controls: Move Left, Move Right, Up Row, Down Row, and Category Selection */}
         {isSeniorUnitHead && isEditPositionMode && (
-          <div className="p-2.5 bg-slate-50/90 dark:bg-slate-800/90 border-t border-slate-200 dark:border-slate-700/80 rounded-b-2xl flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-1.5">
+          <div className="p-2.5 bg-slate-50/95 dark:bg-slate-800/95 border-t border-slate-200 dark:border-slate-700/80 rounded-b-2xl flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex flex-wrap items-center gap-1">
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleMoveCardDirection(item.configKey, "left");
                 }}
-                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
-                title="Geser ke Kiri (Tukar dengan item sebelum)"
+                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
+                title="Geser ke Kiri dalam baris ini"
               >
                 <span>◀</span>
                 <span className="text-[10px]">Kiri</span>
@@ -2142,8 +2264,8 @@ const SectionHEquipment = memo(function SectionHEquipment({
                   e.stopPropagation();
                   handleMoveCardDirection(item.configKey, "right");
                 }}
-                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
-                title="Geser ke Kanan (Tukar dengan item sesudah)"
+                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
+                title="Geser ke Kanan dalam baris ini"
               >
                 <span className="text-[10px]">Kanan</span>
                 <span>▶</span>
@@ -2152,15 +2274,25 @@ const SectionHEquipment = memo(function SectionHEquipment({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleToggleCardSpan(item.configKey);
+                  handleMoveCardRow(item.configKey, "up");
                 }}
-                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
-                title="Ubah lebar ukuran kartu: Otomatis -> 2 Kolom -> Penuh (1 Baris)"
+                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
+                title="Pindahkan kartu ke Baris Atas (Menyesuaikan ukuran baris otomatis)"
               >
-                <span>↔</span>
-                <span className="text-[10px]">
-                  {item.span === "full" ? "Penuh" : item.span === "2" ? "2 Kolom" : "Auto"}
-                </span>
+                <span>▲</span>
+                <span className="text-[10px]">Atas</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleMoveCardRow(item.configKey, "down");
+                }}
+                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
+                title="Pindahkan kartu ke Baris Bawah (Menyesuaikan ukuran baris otomatis)"
+              >
+                <span>▼</span>
+                <span className="text-[10px]">Bawah</span>
               </button>
             </div>
 
@@ -2187,23 +2319,15 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
   return (
     <div className="space-y-8 relative">
-      {/* CSS Wobble Animation when Edit Position Mode is Active */}
+      {/* Gentle, non-dizzying float animation when Edit Position Mode is Active */}
       <style>{`
-        @keyframes scadaCardWobbleEven {
-          0% { transform: rotate(-0.55deg) translateY(-0.5px); }
-          50% { transform: rotate(0.55deg) translateY(0.5px); }
-          100% { transform: rotate(-0.55deg) translateY(-0.5px); }
+        @keyframes scadaCardGentleFloat {
+          0% { transform: translateY(0px); }
+          50% { transform: translateY(-3px); }
+          100% { transform: translateY(0px); }
         }
-        @keyframes scadaCardWobbleOdd {
-          0% { transform: rotate(0.55deg) translateY(0.5px); }
-          50% { transform: rotate(-0.55deg) translateY(-0.5px); }
-          100% { transform: rotate(0.55deg) translateY(0.5px); }
-        }
-        .animate-card-wobble-even {
-          animation: scadaCardWobbleEven 0.35s ease-in-out infinite alternate;
-        }
-        .animate-card-wobble-odd {
-          animation: scadaCardWobbleOdd 0.38s ease-in-out infinite alternate;
+        .animate-card-gentle-float {
+          animation: scadaCardGentleFloat 2.2s ease-in-out infinite;
         }
       `}</style>
 
@@ -2510,10 +2634,32 @@ const SectionHEquipment = memo(function SectionHEquipment({
                 )}
               </div>
 
-              {/* Cards Grid or Empty Dropzone */}
+              {/* Cards Rendered in Auto-Adjusting Rows (1->100%, 2->50%, 3->33.3%, 4->25%) */}
               {cat.items.length > 0 ? (
-                <div className={getCategoryGridClass(cat.key, cat.items.length)}>
-                  {cat.items.map((item, idx) => renderCard(item, cat.key, idx))}
+                <div className="space-y-6">
+                  {cat.rows.map((row) => (
+                    <div
+                      key={row.rowIdx}
+                      className={getRowGridClass(row.items.length)}
+                    >
+                      {row.items.map((item, idx) => renderCard(item, cat.key, idx, row.rowIdx, row.items.length))}
+                    </div>
+                  ))}
+                  {isSeniorUnitHead && isEditPositionMode && (
+                    <div
+                      onClick={() => {
+                        if (cat.items.length > 0) {
+                          const lastItem = cat.items[cat.items.length - 1];
+                          handleMoveCardRow(lastItem.configKey, "down");
+                        }
+                      }}
+                      className="border-2 border-dashed border-sky-300/60 dark:border-slate-700 hover:border-sky-500 hover:bg-sky-500/5 rounded-2xl p-3 text-center transition flex items-center justify-center gap-2 text-xs font-bold text-sky-600 dark:text-sky-400 cursor-pointer"
+                      title="Klik untuk memindahkan kartu terakhir ke baris baru di bawahnya"
+                    >
+                      <span className="text-sm">+</span>
+                      <span>Pindahkan kartu terakhir ke Baris Baru di Bawah</span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div
