@@ -285,6 +285,44 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
     return previousData;
   }, [previousData, daysInMonth]);
 
+  // Dynamic scale ceiling calculation based on peak value in the card
+  // Provides clean, proportional headroom (e.g. 12 -> 15) so small values are clearly visible
+  const dynamicMax = useMemo(() => {
+    let peak = 0;
+    if (selectorType === "all") {
+      const curStacks = (currentBreakdown || []).map((b) => (Number(b.pln) || 0) + (Number(b.poi1) || 0) + (Number(b.poi2) || 0));
+      const prevStacks = showPrevious
+        ? (previousBreakdown || []).map((b) => (Number(b.pln) || 0) + (Number(b.poi1) || 0) + (Number(b.poi2) || 0))
+        : [];
+      peak = Math.max(0, ...curStacks, ...prevStacks);
+    } else {
+      const curVals = paddedCurrentData.map((v) => Number(v) || 0);
+      const prevVals = showPrevious ? paddedPreviousData.map((v) => Number(v) || 0) : [];
+      peak = Math.max(0, ...curVals, ...prevVals);
+    }
+
+    if (peak <= 0 || !isFinite(peak)) return 5;
+
+    // Headroom target: ~20% to 25% above peak data point (e.g. 12 * 1.25 = 15.0 -> exactly 0-15)
+    const target = peak * 1.25;
+    const exponent = Math.floor(Math.log10(target));
+    const magnitude = Math.pow(10, exponent);
+    const normalized = target / magnitude;
+
+    // Standard engineering scale steps: 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 8, 10
+    const steps = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 8, 10];
+    let chosenStep = 10;
+    for (const s of steps) {
+      if (s >= normalized) {
+        chosenStep = s;
+        break;
+      }
+    }
+
+    const calculatedMax = chosenStep * magnitude;
+    return Number(calculatedMax.toPrecision(4));
+  }, [selectorType, currentBreakdown, previousBreakdown, showPrevious, paddedCurrentData, paddedPreviousData]);
+
   const data = useMemo(() => {
     const barPct = isZoomed ? 0.68 : 0.55;
     const catPct = isZoomed ? 0.88 : 0.8;
@@ -558,10 +596,11 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
       y: {
         stacked: true,
         beginAtZero: true,
-        suggestedMax: 10,
-        grace: "15%",
+        min: 0,
+        max: dynamicMax,
         grid: { color: isDark ? "rgba(51, 65, 85, 0.4)" : "rgba(203, 213, 225, 0.5)" },
         ticks: {
+          maxTicksLimit: isZoomed ? 10 : 6,
           color: isDark ? "rgba(203, 213, 225, 0.85)" : "rgba(51, 65, 85, 0.85)",
           font: {
             size: isZoomed ? 12 : 9,
@@ -572,6 +611,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           callback: (v: number) => {
             if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
             if (Number.isInteger(v)) return `${v}`;
+            if (v < 0.1 && v > 0) return `${Number(v.toFixed(3))}`;
             return `${Number(v.toFixed(2))}`;
           }
         },
@@ -586,7 +626,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         } : {})
       }
     }
-  }), [isDark, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, solarRate, pvRate, isZoomed, dayLabels]);
+  }), [isDark, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, solarRate, pvRate, isZoomed, dayLabels, dynamicMax]);
 
   return <Bar data={data} options={options} />;
 });
