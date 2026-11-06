@@ -519,7 +519,7 @@ export const getElectricityAnalytics = async (
       const res = await pool.query(`
         SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
           t_stamp::text AS ts_text, 
-          ${energyCol}::float AS value
+          CASE WHEN ${energyCol} <= 0 THEN NULL ELSE ${energyCol}::float END AS value
         FROM ${tableName}
         WHERE t_stamp >= $1 AND t_stamp <= $2 AND poi_id = $3
           AND ${energyCol} IS NOT NULL
@@ -663,12 +663,24 @@ export const getElectricityAnalytics = async (
     const timeDiffMs = currDateObj.getTime() - prevDateObj.getTime();
 
     let diff = 0;
+    // Sesuai aturan: data sebelumnya dan data saat ini harus tidak 0 dan tidak null baru bisa dihitung selisihnya
     // Only calculate diff if consecutive records are consecutive hours (<= 90 minutes)
-    // If there is a gap or power meter was offline (null in between or on reconnect), do not assume consumption -> diff = 0
-    if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal)) {
+    // If there is a gap or power meter was offline / uninitialized (0 or null in between), do not assume consumption -> diff = 0
+    if (
+      currVal !== null &&
+      prevVal !== null &&
+      !isNaN(currVal) &&
+      !isNaN(prevVal) &&
+      currVal > 0 &&
+      prevVal > 0
+    ) {
       if (timeDiffMs <= 90 * 60 * 1000) {
         diff = currVal - prevVal;
         if (diff < 0) diff = 0; // Guard against resets or anomalies
+        // Filter lonjakan anomali baseline meter awal untuk Solar POI (kapasitas 1,7 MWp -> max 2000 kWh per jam)
+        if (poiFilter && diff > 2000) {
+          diff = 0;
+        }
       }
     }
 

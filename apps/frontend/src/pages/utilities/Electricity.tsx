@@ -2688,7 +2688,9 @@ export default function Electricity() {
     const solarDailyMap: Record<string, { poi1: number; poi2: number }> = {};
     (solarData?.charts?.daily || []).forEach((d: any) => {
       if (d.day) {
-        solarDailyMap[d.day] = { poi1: d.poi1 || 0, poi2: d.poi2 || 0 };
+        const p1 = (d.poi1 && d.poi1 < 20000) ? d.poi1 : 0;
+        const p2 = (d.poi2 && d.poi2 < 20000) ? d.poi2 : 0;
+        solarDailyMap[d.day] = { poi1: p1, poi2: p2 };
       }
     });
 
@@ -2720,11 +2722,13 @@ export default function Electricity() {
       if (!isCurr && !isPrev) return;
 
       const plnVal = typeof d.pln === "number" ? d.pln : (cubicleSelector === "all" ? (plnDailyMap[d.day]?.value || 0) : d.value || 0);
-      const poi1Val = typeof d.poi1 === "number" ? d.poi1 : (solarDailyMap[d.day]?.poi1 || 0);
-      const poi2Val = typeof d.poi2 === "number" ? d.poi2 : (solarDailyMap[d.day]?.poi2 || 0);
+      const rawPoi1 = typeof d.poi1 === "number" ? d.poi1 : (solarDailyMap[d.day]?.poi1 || 0);
+      const rawPoi2 = typeof d.poi2 === "number" ? d.poi2 : (solarDailyMap[d.day]?.poi2 || 0);
+      const poi1Val = (rawPoi1 && rawPoi1 < 20000) ? rawPoi1 : 0;
+      const poi2Val = (rawPoi2 && rawPoi2 < 20000) ? rawPoi2 : 0;
       const totalVal = cubicleSelector === "all"
-        ? (typeof d.pln === "number" ? d.value : (plnVal + poi1Val + poi2Val))
-        : (d.value || 0);
+        ? (plnVal + poi1Val + poi2Val)
+        : (cubicleSelector === "poi1" ? poi1Val : cubicleSelector === "poi2" ? poi2Val : (d.value || 0));
 
       const entry: DayDetail = {
         val: totalVal,
