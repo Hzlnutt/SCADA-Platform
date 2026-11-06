@@ -505,9 +505,25 @@ interface HourlyTrend5sPoint {
         if ((rawKey === "voltage" || rawKey === "v_r" || rawKey === "v_s" || rawKey === "v_t") && typeof val === "number" && val > 1000) {
           val = val / 1000.0;
         }
-        // Unbalances & THD (convert decimal 0.0055 to %)
-        if ((rawKey.startsWith("unbalance_") || rawKey.startsWith("thd_")) && typeof val === "number" && val < 1.0) {
-          val = val * 100.0;
+        // Unbalances & THD (convert decimal 0.0055 to % for PLN, preserve % for WF1/WF2)
+        if (rawKey.startsWith("unbalance_v")) {
+          if (mode === "pln" && typeof val === "number" && val < 0.1) {
+            val = val * 100.0;
+          } else if (typeof val === "number" && val < 0.05) {
+            val = val * 100.0;
+          }
+        } else if (rawKey.startsWith("unbalance_i")) {
+          if (mode === "pln" && typeof val === "number" && val < 0.1) {
+            val = val * 100.0;
+          } else if (typeof val === "number" && val < 0.05) {
+            val = val * 100.0;
+          }
+        } else if (rawKey.startsWith("thd_")) {
+          if (mode === "pln" && typeof val === "number" && val < 1.0) {
+            val = val * 100.0;
+          } else if (typeof val === "number" && val < 0.05) {
+            val = val * 100.0;
+          }
         }
         // Power factor convert negative to positive
         if (rawKey === "power_factor" && typeof val === "number") {
@@ -712,7 +728,7 @@ interface HourlyTrend5sPoint {
             voltage: pq.voltage !== undefined ? pq.voltage : prev.voltage,
             frequency: pq.freq !== undefined ? pq.freq : prev.frequency,
             activePower: pq.activePower !== undefined ? pq.activePower : prev.activePower,
-            powerFactor: pq.pf !== undefined && pq.pf !== null ? pq.pf : prev.powerFactor,
+            powerFactor: pq.pf !== undefined && pq.pf !== null ? Math.abs(pq.pf) : prev.powerFactor,
             reactivePower: pq.reactivePower !== undefined ? pq.reactivePower : prev.reactivePower,
             apparentPower: pq.apparentPower !== undefined ? pq.apparentPower : prev.apparentPower,
             unbalanceV: pq.vUnb !== undefined ? pq.vUnb : prev.unbalanceV,
@@ -729,7 +745,7 @@ interface HourlyTrend5sPoint {
             thdI_R: pq.thdI_R !== undefined ? pq.thdI_R : prev.thdI_R,
             thdI_S: pq.thdI_S !== undefined ? pq.thdI_S : prev.thdI_S,
             thdI_T: pq.thdI_T !== undefined ? pq.thdI_T : prev.thdI_T,
-            isConnected: pq.pfStatus === "connected"
+            isConnected: pq.pfStatus !== "offline" && pq.pfStatus !== "disconnected"
           }));
         }
       }
@@ -787,11 +803,19 @@ interface HourlyTrend5sPoint {
   const prefix = mode === "pln" ? "pln" : mode === "fact1" ? "wf1" : "wf2";
 
   const liveMetrics = useMemo(() => {
+    const hasLiveMetrics = metrics.isConnected && (metrics.voltage > 0 || metrics.frequency > 0);
+
     const pickVal = (tag: string, metricVal: any) => {
+      // 1. Prioritize real-time 1-second WebSocket telemetry stream when available
+      if (hasLiveMetrics && metricVal !== undefined && metricVal !== null) {
+        return metricVal;
+      }
+      // 2. Fall back to direct API data if available
       const apiV = getApiVal(`${prefix}/${tag}`);
       if (apiV !== "BELUM ADA API" && apiV !== "API TIDAK TERKIRIM" && apiV !== "GAGAL POLLING API" && apiV !== "Gagal Polling API" && apiV !== "xx") {
         return apiV;
       }
+      // 3. Fall back to socket metricVal
       return metricVal;
     };
 

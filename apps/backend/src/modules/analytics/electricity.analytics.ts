@@ -1024,14 +1024,23 @@ export const getElectricityAnalytics = async (
     currentBVal = pgPq.current_b !== null ? Number(pgPq.current_b) : currentBVal;
     currentCVal = pgPq.current_c !== null ? Number(pgPq.current_c) : currentCVal;
     
-    // Normalize unbalances if they are in decimal form (e.g. 0.0054 -> 0.54%)
+    // Normalize unbalances if they are in decimal form (e.g. 0.0054 -> 0.54% for PLN, already in % for WF1/WF2)
+    const isPln = deviceId === "Cubicle_PLN_PM8000";
     const rawVUnb = pgPq.voltage_unbalance !== null ? Number(pgPq.voltage_unbalance) : null;
     if (rawVUnb !== null) {
-      vUnbVal = rawVUnb < 1.0 ? rawVUnb * 100.0 : rawVUnb;
+      if (isPln) {
+        vUnbVal = rawVUnb < 0.1 ? rawVUnb * 100.0 : rawVUnb;
+      } else {
+        vUnbVal = rawVUnb < 0.05 ? rawVUnb * 100.0 : rawVUnb;
+      }
     }
     const rawIUnb = pgPq.current_unbalance !== null ? Number(pgPq.current_unbalance) : null;
     if (rawIUnb !== null) {
-      iUnbVal = rawIUnb < 1.0 ? rawIUnb * 100.0 : rawIUnb;
+      if (isPln) {
+        iUnbVal = rawIUnb < 0.1 ? rawIUnb * 100.0 : rawIUnb;
+      } else {
+        iUnbVal = rawIUnb < 0.05 ? rawIUnb * 100.0 : rawIUnb;
+      }
     }
 
     // Normalize THDs (e.g. 0.0187 -> 1.87%)

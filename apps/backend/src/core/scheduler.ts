@@ -1061,12 +1061,21 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   let vUnbVal = 0;
   const rawVUnb = pgPq.voltage_unbalance !== null ? Number(pgPq.voltage_unbalance) : null;
   if (rawVUnb !== null) {
-    vUnbVal = rawVUnb < 1.0 ? rawVUnb * 100.0 : rawVUnb;
+    if (isPln) {
+      vUnbVal = rawVUnb < 0.1 ? rawVUnb * 100.0 : rawVUnb;
+    } else {
+      // For Feeder_WF1_PM5560 and Feeder_WF2_PM5500, PM5500/5560 outputs percentage directly (e.g. 0.51%)
+      vUnbVal = rawVUnb < 0.05 ? rawVUnb * 100.0 : rawVUnb;
+    }
   }
   let iUnbVal = 0;
   const rawIUnb = pgPq.current_unbalance !== null ? Number(pgPq.current_unbalance) : null;
   if (rawIUnb !== null) {
-    iUnbVal = rawIUnb < 1.0 ? rawIUnb * 100.0 : rawIUnb;
+    if (isPln) {
+      iUnbVal = rawIUnb < 0.1 ? rawIUnb * 100.0 : rawIUnb;
+    } else {
+      iUnbVal = rawIUnb < 0.05 ? rawIUnb * 100.0 : rawIUnb;
+    }
   }
 
   let thdVR = 0, thdVS = 0, thdVT = 0;
