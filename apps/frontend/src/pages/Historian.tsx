@@ -289,8 +289,8 @@ export default function Historian() {
           maxThreshold={selectedTag.normalMax}
           title={selectedTag.name}
         />
-        <div className="mt-5 overflow-x-auto">
-          <table className="w-full text-left text-sm">
+        <div className="mt-5 overflow-x-auto scrollbar-thin">
+          <table className="w-full min-w-[500px] text-left text-sm">
             <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">
               <tr>
                 <th className="px-3 py-2">Timestamp</th>

@@ -667,7 +667,7 @@ export default function MachineMaintenance() {
       {/* Nameplate Edit Modal Overlay */}
       {nameplateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
-          <div className="relative max-h-[90vh] w-[500px] overflow-y-auto rounded-2xl border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 p-6 shadow-2xl">
+          <div className="relative max-h-[90vh] w-[500px] max-w-full overflow-y-auto rounded-2xl border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 p-6 shadow-2xl">
             <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
               <div>
                 <div className="text-xs uppercase tracking-wider text-[#1f6fb5] font-bold">
@@ -723,7 +723,7 @@ export default function MachineMaintenance() {
       {/* Input Form Overlay modal */}
       {canCreate && formOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
-          <div className="relative max-h-[90vh] w-[500px] overflow-y-auto rounded-2xl border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
+          <div className="relative max-h-[90vh] w-[500px] max-w-full overflow-y-auto rounded-2xl border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
               <div>
                 <div className="text-xs uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400 font-bold">
@@ -870,7 +870,7 @@ export default function MachineMaintenance() {
               No maintenance records available.
             </div>
           ) : (
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full min-w-[650px] text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
                   <th className="pb-3 px-3">Date</th>

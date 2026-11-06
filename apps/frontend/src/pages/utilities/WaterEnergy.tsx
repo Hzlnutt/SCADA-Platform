@@ -182,7 +182,7 @@ function ProgressBarRow({ label, val, unit, nominal }: { label: string, val: num
 
 function WaterSubNav() {
   return (
-    <div className="flex border-b border-slate-200 dark:border-slate-800 mb-6">
+    <div className="flex border-b border-slate-200 dark:border-slate-800 mb-6 overflow-x-auto scrollbar-thin whitespace-nowrap">
       <Link
         to="/air"
         className="border-b-2 border-transparent hover:border-slate-300 dark:hover:border-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400 tracking-wider uppercase transition-all duration-200"

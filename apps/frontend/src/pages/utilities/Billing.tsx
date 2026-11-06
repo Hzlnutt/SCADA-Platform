@@ -394,8 +394,8 @@ export default function Billing() {
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">
                 Rincian Tagihan Bulanan
               </h3>
-              <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800 flex-1">
-                <table className="w-full border-collapse text-left text-xs">
+              <div className="overflow-x-auto scrollbar-thin rounded-xl border border-slate-100 dark:border-slate-800 flex-1">
+                <table className="w-full min-w-[600px] border-collapse text-left text-xs">
                   <thead>
                     <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 font-bold border-b border-slate-100 dark:border-slate-800">
                       <th className="p-3">Bulan</th>
@@ -436,8 +436,8 @@ export default function Billing() {
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">
                 Akumulasi Biaya Tahunan
               </h3>
-              <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800 flex-1">
-                <table className="w-full border-collapse text-left text-xs">
+              <div className="overflow-x-auto scrollbar-thin rounded-xl border border-slate-100 dark:border-slate-800 flex-1">
+                <table className="w-full min-w-[600px] border-collapse text-left text-xs">
                   <thead>
                     <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 font-bold border-b border-slate-100 dark:border-slate-800">
                       <th className="p-3">Tahun</th>

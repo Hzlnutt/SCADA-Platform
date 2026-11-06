@@ -82,7 +82,7 @@ export default function GasDistribution() {
         }}
       >
         {/* ═══ HEADER BAR ═══ */}
-        <div className="px-8 pt-5 pb-4 flex items-center justify-between">
+        <div className="px-5 sm:px-8 pt-5 pb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className={`text-base font-bold italic tracking-wide transition-colors duration-200 ${isDark ? "text-white" : "text-slate-800"}`}>
               Gas Distribution Network
@@ -102,7 +102,8 @@ export default function GasDistribution() {
         </div>
 
         {/* ═══ DIAGRAM AREA ═══ */}
-        <div className="relative" style={{ height: 520 }}>
+        <div className="overflow-x-auto w-full scrollbar-thin">
+          <div className="relative min-w-[740px]" style={{ height: 520 }}>
           {/* CSS keyframes for flowing dashes */}
           <style>{`
             @keyframes dfl { to { stroke-dashoffset: -13; } }
@@ -315,10 +316,11 @@ export default function GasDistribution() {
             );
           })}
         </div>
+        </div>
 
         {/* ═══ BOTTOM SUMMARY STRIP ═══ */}
         <div
-          className="px-8 py-3.5 flex items-center justify-between border-t transition-colors duration-200"
+          className="px-5 sm:px-8 py-3.5 flex flex-wrap items-center justify-between gap-3 border-t transition-colors duration-200"
           style={{
             background: isDark ? "#0d1a2e" : "#f8fafc",
             borderColor: isDark ? "#1e293b" : "#e2e8f0"

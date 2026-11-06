@@ -1221,7 +1221,7 @@ export default function MachineConfig() {
         )}
         <div className="overflow-x-auto">
           {configTab === "sensors" ? (
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full min-w-[650px] text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
                   <th className="pb-3 px-3">SCADA Parameter Tag</th>
@@ -1633,7 +1633,7 @@ export default function MachineConfig() {
                 </div>
               </div>
 
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full min-w-[650px] text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
                     <th className="pb-3 px-3">Equipment SCADA Tag</th>
@@ -1808,7 +1808,7 @@ export default function MachineConfig() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full min-w-[650px] text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
                   <th className="pb-3 px-3 text-center w-12">#</th>
@@ -1964,7 +1964,7 @@ export default function MachineConfig() {
       {/* PASSWORD VERIFICATION MODAL OVERLAY */}
       {showPasswordModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
-          <div className="relative w-[420px] rounded-2xl border border-blue-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
+          <div className="relative w-[420px] max-w-full rounded-2xl border border-blue-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
             <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
               <div>
                 <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">
@@ -2513,7 +2513,7 @@ function HvacConfigConsole({ unitId, machine }: { unitId: string; machine: any }
             Equipment running hours bounds
           </h4>
           <div className="overflow-x-auto max-h-[500px] overflow-y-auto pr-2">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full min-w-[650px] text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
                   <th className="pb-3 px-3">Equipment Component Tag</th>
@@ -2680,8 +2680,8 @@ export function ApiSourcesPanel({ unitId }: { unitId: string }) {
         </button>
       </div>
 
-      <div className="overflow-x-auto max-h-96 border border-slate-200 dark:border-slate-800 rounded-lg">
-        <table className="w-full text-left text-xs border-collapse">
+      <div className="overflow-x-auto max-h-96 border border-slate-200 dark:border-slate-800 rounded-lg scrollbar-thin">
+        <table className="w-full min-w-[650px] text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase tracking-wider text-slate-400 font-bold bg-slate-50 dark:bg-slate-900/40 sticky top-0">
               <th className="py-2.5 px-3 w-8">#</th>

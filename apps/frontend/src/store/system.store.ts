@@ -6,6 +6,9 @@ type SystemState = {
   theme: "light" | "dark";
   toggleTheme: () => void;
   setTheme: (theme: "light" | "dark") => void;
+  mobileSidebarOpen: boolean;
+  setMobileSidebarOpen: (open: boolean) => void;
+  toggleMobileSidebar: () => void;
 };
 
 const getInitialTheme = (): "light" | "dark" => {
@@ -36,6 +39,8 @@ export const useSystemStore = create<SystemState>((set) => ({
       document.documentElement.classList.remove("dark");
     }
     return { theme };
-  })
+  }),
+  mobileSidebarOpen: false,
+  setMobileSidebarOpen: (mobileSidebarOpen) => set({ mobileSidebarOpen }),
+  toggleMobileSidebar: () => set((state) => ({ mobileSidebarOpen: !state.mobileSidebarOpen }))
 }));
-

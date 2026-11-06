@@ -918,8 +918,8 @@ export default function MachineAlarm() {
           </span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full min-w-[720px] text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800/50 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
                 <th className="pb-3 px-3 w-10">
@@ -1050,8 +1050,8 @@ export default function MachineAlarm() {
 
       {/* Acknowledge (Fix) Alarms Modal Overlay */}
       {ackModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
-          <div className="relative w-[450px] rounded-2xl border border-blue-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-6 backdrop-blur-sm">
+          <div className="relative w-[450px] max-w-full rounded-2xl border border-blue-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
             <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
               <div>
                 <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">
@@ -1154,8 +1154,8 @@ export default function MachineAlarm() {
 
       {/* Approve Alarm Password Verification Modal Overlay */}
       {approveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
-          <div className="relative w-[420px] rounded-2xl border border-emerald-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-6 backdrop-blur-sm">
+          <div className="relative w-[420px] max-w-full rounded-2xl border border-emerald-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
             <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
               <div>
                 <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">
@@ -1230,8 +1230,8 @@ export default function MachineAlarm() {
 
       {/* Edit Finalized Action Modal Overlay */}
       {editModalOpen && editingAlarm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
-          <div className="relative w-[450px] rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-6 backdrop-blur-sm">
+          <div className="relative w-[450px] max-w-full rounded-2xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
             <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
               <div>
                 <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100">Edit Alarm Operator Action</h4>
@@ -1284,8 +1284,8 @@ export default function MachineAlarm() {
 
       {/* Detail Alarm Modal Overlay */}
       {detailModalOpen && selectedDetailAlarm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
-          <div className="relative w-[500px] rounded-2xl border border-blue-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-6 backdrop-blur-sm">
+          <div className="relative w-[500px] max-w-full rounded-2xl border border-blue-500/30 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-2xl transition-all">
             <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-900 pb-3 mb-4">
               <div>
                 <h4 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 flex items-center gap-2">

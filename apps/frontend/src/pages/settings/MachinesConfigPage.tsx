@@ -309,8 +309,8 @@ function MachinesTab({ machines, categories, isLoading, refetch, onEdit, onAdd }
         </button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs">
+      <div className="overflow-x-auto scrollbar-thin">
+        <table className="w-full min-w-[560px] text-left text-xs">
           <thead>
             <tr className="border-b border-slate-800 text-[10px] uppercase text-slate-500 font-bold">
               <th className="pb-2">ID</th>

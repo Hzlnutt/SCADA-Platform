@@ -10,6 +10,7 @@ export const Topbar = () => {
   const socketStatus = useSystemStore((state) => state.socketStatus);
   const theme = useSystemStore((state) => state.theme);
   const toggleTheme = useSystemStore((state) => state.toggleTheme);
+  const toggleMobileSidebar = useSystemStore((state) => state.toggleMobileSidebar);
   const fullName = useAuthStore((state) => state.user?.name ?? "User");
   const activeAlarms = useAlarmStore(
     (state) => state.activeList.filter((alarm) => alarm.status !== "ack").length
@@ -22,7 +23,7 @@ export const Topbar = () => {
     const updateTime = () => {
       const now = new Date();
       const locale = language === "id" ? "id-ID" : "en-US";
-      const optionsDate: Intl.DateTimeFormatOptions = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
+      const optionsDate: Intl.DateTimeFormatOptions = { weekday: "short", year: "numeric", month: "short", day: "numeric" };
       const dateString = now.toLocaleDateString(locale, optionsDate);
       const timeString = now.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
       setTimeStr(`${dateString} | ${timeString}`);
@@ -51,32 +52,57 @@ export const Topbar = () => {
     .join(" ");
 
   return (
-    <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-900 px-5 py-3 lg:flex-row lg:items-start lg:justify-between lg:px-6 transition-colors duration-300">
-      <div className="min-w-0">
-        <div className="text-xl font-semibold text-[#002b5c] dark:text-slate-100">
-          {t("topbar.greeting")}, {displayName}!
+    <div className="sticky top-0 z-20 flex flex-col gap-3 border-b border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 sm:px-5 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-6 transition-colors duration-300">
+      {/* Title & Hamburger Row */}
+      <div className="flex items-center justify-between gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {/* Hamburger toggle button for Mobile/Tablet drawer */}
+          <button
+            type="button"
+            onClick={toggleMobileSidebar}
+            className="lg:hidden flex items-center justify-center p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-[#002b5c] dark:text-sky-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer shrink-0"
+            aria-label="Buka Menu SCADA"
+            title="Buka Navigasi Lengkap"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+
+          <div className="min-w-0">
+            <div className="text-base sm:text-lg font-semibold text-[#002b5c] dark:text-slate-100 truncate">
+              {t("topbar.greeting")}, {displayName}!
+            </div>
+            <div className="truncate text-xs sm:text-sm font-semibold text-[#002b5c] dark:text-slate-200">
+              {t("topbar.systemTitle")}
+            </div>
+          </div>
         </div>
-        <div className="mt-1 truncate text-base font-semibold text-[#002b5c] dark:text-slate-200">
-          {t("topbar.systemTitle")}
-        </div>
-        <div className="mt-0.5 text-xs text-[#47729f] dark:text-slate-400">
-          {t("topbar.systemSubtitle")}
+
+        {/* Small Screen User Avatar Quick Link */}
+        <div className="lg:hidden shrink-0">
+          <UserMenu />
         </div>
       </div>
-      <div className="flex flex-wrap items-center justify-end gap-3 text-xs">
+
+      {/* Badges and Quick Controls Row */}
+      <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2 text-xs">
         {/* Gateway connection status */}
-        <div className="flex items-center gap-2 text-[#1f6fb5] dark:text-sky-400 font-semibold">
+        <div className="flex items-center gap-1.5 text-[#1f6fb5] dark:text-sky-400 font-semibold text-[11px] sm:text-xs">
           <span
             className={[
-              "h-2.5 w-2.5 rounded-full",
+              "h-2 w-2 rounded-full",
               socketStatus === "connected" ? "bg-[#2fa981]" : "bg-[#b42318]"
             ].join(" ")}
           />
           {statusLabel}
         </div>
+
         <div
           className={[
-            "rounded-full border px-3 py-1.5 font-medium",
+            "rounded-full border px-2.5 py-1 text-[11px] font-medium hidden sm:inline-flex",
             socketStatus === "connected"
               ? "border-[#9ed9c1] dark:border-emerald-800/40 bg-[#dff4ea] dark:bg-emerald-950/20 text-[#087f5b] dark:text-emerald-400"
               : "border-[#f5aa99] dark:border-rose-800/40 bg-[#ffe6df] dark:bg-rose-950/20 text-[#b42318] dark:text-rose-400"
@@ -86,17 +112,17 @@ export const Topbar = () => {
         </div>
 
         {/* Alarm counter */}
-        <div className="rounded-full border border-[#acd3ff] dark:border-slate-700 bg-[#e8f3ff] dark:bg-slate-800 px-3 py-1.5 text-[#003b75] dark:text-slate-300 font-medium">
+        <div className="rounded-full border border-[#acd3ff] dark:border-slate-700 bg-[#e8f3ff] dark:bg-slate-800 px-2.5 py-1 text-[#003b75] dark:text-slate-300 font-medium text-[11px]">
           {activeAlarms} {t("topbar.activeAlarms")}
         </div>
 
         {/* Currency Widget */}
-        <div className="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 text-slate-700 dark:text-slate-300 font-medium flex items-center gap-1.5">
+        <div className="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-2.5 py-1 text-slate-700 dark:text-slate-300 font-medium flex items-center gap-1 text-[11px]">
           <span className="text-slate-400">USD/IDR</span>
           <span className="font-mono text-blue-600 dark:text-sky-400">
             Rp {usdToIdr.toLocaleString("id-ID", { maximumFractionDigits: 0 })}
           </span>
-          <span className="text-[10px] text-emerald-500 font-bold">▲</span>
+          <span className="text-[9px] text-emerald-500 font-bold">▲</span>
         </div>
 
         {/* Language Toggle: ID / EN */}
@@ -104,27 +130,27 @@ export const Topbar = () => {
           <button
             type="button"
             onClick={() => setLanguage("id")}
-            className={`px-2.5 py-1 rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-2 py-0.5 rounded-full transition-all flex items-center gap-1 cursor-pointer text-[11px] ${
               language === "id"
-                ? "bg-sky-500 text-white shadow-sm font-extrabold"
+                ? "bg-sky-500 text-white shadow-xs font-extrabold"
                 : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
             }`}
             title="Bahasa Indonesia"
           >
-            <span className="text-sm leading-none">🇮🇩</span>
+            <span className="text-xs leading-none">🇮🇩</span>
             <span>ID</span>
           </button>
           <button
             type="button"
             onClick={() => setLanguage("en")}
-            className={`px-2.5 py-1 rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-2 py-0.5 rounded-full transition-all flex items-center gap-1 cursor-pointer text-[11px] ${
               language === "en"
-                ? "bg-sky-500 text-white shadow-sm font-extrabold"
+                ? "bg-sky-500 text-white shadow-xs font-extrabold"
                 : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
             }`}
             title="English"
           >
-            <span className="text-sm leading-none">🇬🇧</span>
+            <span className="text-xs leading-none">🇬🇧</span>
             <span>EN</span>
           </button>
         </div>
@@ -133,7 +159,7 @@ export const Topbar = () => {
         <button
           type="button"
           onClick={toggleTheme}
-          className="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
+          className="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-1.5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
           aria-label="Toggle theme"
         >
           {theme === "light" ? (
@@ -148,10 +174,14 @@ export const Topbar = () => {
         </button>
 
         {/* Realtime clock display */}
-        <div className="rounded-full bg-[#1f6fb5] dark:bg-sky-950/40 border border-[#1f6fb5] dark:border-sky-800/40 px-3.5 py-1.5 font-medium text-white dark:text-sky-400 font-mono">
+        <div className="rounded-full bg-[#1f6fb5] dark:bg-sky-950/40 border border-[#1f6fb5] dark:border-sky-800/40 px-2.5 sm:px-3 py-1 font-medium text-white dark:text-sky-400 font-mono text-[10px] sm:text-xs">
           {timeStr}
         </div>
-        <UserMenu />
+
+        {/* Large screen User Menu */}
+        <div className="hidden lg:block">
+          <UserMenu />
+        </div>
       </div>
     </div>
   );

@@ -1214,12 +1214,12 @@ interface HourlyTrend5sPoint {
   return (
     <div className="space-y-6">
       {/* HEADER SECTION */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <PageHeader
           title={config.title}
           description={`Monitoring real-time parameter kelistrikan ${config.title} - Update setiap 3 detik`}
         />
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {canAccessConfig && (
             <>
               <button
@@ -1724,8 +1724,8 @@ interface HourlyTrend5sPoint {
           <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ringkasan Parameter {config.title}</h4>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full table-fixed text-left text-xs border-collapse">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full min-w-[560px] table-fixed text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
                 <th className="pb-3 px-3 w-[28%] min-w-[160px]">Parameter</th>
@@ -1933,7 +1933,7 @@ interface HourlyTrend5sPoint {
               </div>
 
               {/* Power Limits */}
-              <div className="grid grid-cols-3 gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
                 <div>
                   <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Max Active Power (kW)</label>
                   <input
@@ -1970,7 +1970,7 @@ interface HourlyTrend5sPoint {
               </div>
 
               {/* Power Factor & Unbalance */}
-              <div className="grid grid-cols-3 gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
                 <div>
                   <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Min PF</label>
                   <input

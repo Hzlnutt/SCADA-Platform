@@ -125,7 +125,7 @@ function DistCard({ node, costColor, isDark }: { node: FlowNode; costColor?: str
 /* ═══════════ SUBNAV ═══════════ */
 function WaterSubNav() {
   return (
-    <div className="flex border-b border-slate-200 dark:border-slate-800 mb-6">
+    <div className="flex overflow-x-auto border-b border-slate-200 dark:border-slate-800 mb-6 scrollbar-thin">
       <Link
         to="/air"
         className="border-b-2 border-transparent hover:border-slate-300 dark:hover:border-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400 tracking-wider uppercase transition-all duration-200"
@@ -208,12 +208,12 @@ export default function WaterDistribution() {
       <WaterSubNav />
 
       {/* ═══════════ SYSTEM FLOW DIAGRAM (SVG Canvas Overlay) ═══════════ */}
-      <section className={`rounded-2xl border p-6 shadow-xl relative transition-all duration-300 overflow-x-auto ${
+      <section className={`rounded-2xl border p-4 sm:p-6 shadow-xl relative transition-all duration-300 overflow-hidden ${
         isDark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white"
-      }`} style={{ minWidth: 1200 }}>
+      }`}>
         
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h3 className={`text-sm font-extrabold flex items-center gap-2 ${isDark ? "text-white" : "text-slate-800"}`}>
               <span className="text-blue-500">💧</span> System Flow Diagram
@@ -221,7 +221,7 @@ export default function WaterDistribution() {
             <p className="text-[10px] text-slate-400 mt-0.5">Alur distribusi air dari sumber ke konsumen</p>
           </div>
           {/* Legend */}
-          <div className="flex items-center gap-4 text-[9px] font-bold text-slate-400">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-[9px] font-bold text-slate-400">
             <span className="flex items-center gap-1.5"><span className="w-5 h-0 border-t-2 border-dashed border-sky-500" /> Active Flow</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Online</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-500" /> Hydrant/Alert</span>
@@ -229,8 +229,9 @@ export default function WaterDistribution() {
           </div>
         </div>
 
-        {/* Relative Canvas Container of 1200x580 */}
-        <div className="relative w-[1200px] h-[580px] select-none mx-auto">
+        {/* Scrollable Canvas Container */}
+        <div className="overflow-x-auto pb-2 scrollbar-thin">
+          <div className="relative w-[1200px] h-[580px] select-none mx-auto">
           
           {/* 1. SVG OVERLAY FOR PRECISION PIPELINE LINES */}
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
@@ -320,6 +321,7 @@ export default function WaterDistribution() {
           <div className="absolute z-10" style={{ left: 980, top: 395 }}><DistCard node={flowData["hydrant-sub"]} costColor="text-rose-500" isDark={isDark} /></div>
 
         </div>
+        </div>
       </section>
 
       {/* ═══════════ COST SUMMARY TABLE ═══════════ */}
@@ -329,8 +331,8 @@ export default function WaterDistribution() {
         <h3 className={`text-xs font-extrabold uppercase tracking-wider mb-4 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
           💰 Estimasi Cost Distribusi Air per Jalur
         </h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full min-w-[550px] text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
                 <th className="pb-2.5 px-3">Jalur</th>
