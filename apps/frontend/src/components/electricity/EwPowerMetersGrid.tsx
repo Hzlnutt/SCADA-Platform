@@ -1,7 +1,170 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, memo, useCallback } from "react";
 import { PmDetailModal } from "./PmDetailModal";
 import type { ElectricPmItem } from "./PmDetailModal";
 import { getPmInfo, getPmSortIndex } from "../../data/pmMapping";
+
+type PowerMeterCardProps = {
+  pm: ElectricPmItem;
+  info: ReturnType<typeof getPmInfo>;
+  isEditingPosition: boolean;
+  onDragStart: (e: React.DragEvent, id: string) => void;
+  onDropOnCard: (id: string) => void;
+  onSelect: (id: string) => void;
+  onMoveLeft?: () => void;
+  onMoveRight?: () => void;
+};
+
+const PowerMeterCard = memo(
+  function PowerMeterCard({
+    pm,
+    info,
+    isEditingPosition,
+    onDragStart,
+    onDropOnCard,
+    onSelect,
+    onMoveLeft,
+    onMoveRight,
+  }: PowerMeterCardProps) {
+    const isOnline = pm.status !== false;
+    const pKw = Number(pm.active_power_total) || 0;
+    const pf = Math.abs(Number(pm.power_factor) || 0);
+    const vL = Number(pm.volt_ab) || Number(pm.volt_ll) || 0;
+    const iAvg = ((Number(pm.current_a) || 0) + (Number(pm.current_b) || 0) + (Number(pm.current_c) || 0)) / 3;
+
+    return (
+      <div
+        draggable={isEditingPosition}
+        onDragStart={(e) => onDragStart(e, pm.pm_id)}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={() => onDropOnCard(pm.pm_id)}
+        onClick={() => {
+          if (!isEditingPosition) onSelect(pm.pm_id);
+        }}
+        className={`p-4 rounded-2xl border transition-shadow duration-150 flex flex-col justify-between relative ${
+          isEditingPosition
+            ? "ring-2 ring-sky-500/50 border-sky-400 bg-sky-50/20 dark:bg-slate-800/80 cursor-grab active:cursor-grabbing hover:scale-[1.02]"
+            : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-800/40 hover:border-sky-500/50 hover:shadow-lg hover:shadow-sky-500/5 cursor-pointer group"
+        }`}
+      >
+        {/* Card Header */}
+        <div>
+          <div className="flex items-start justify-between gap-1.5 mb-2">
+            <div className="min-w-0">
+              <h4 className="text-sm font-black text-slate-800 dark:text-slate-100 group-hover:text-sky-500 transition-colors leading-snug line-clamp-2">
+                {info.name}
+              </h4>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-xs font-bold font-mono text-slate-500 dark:text-slate-400">
+                  {pm.pm_id}
+                </span>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                  {info.model}
+                </span>
+              </div>
+            </div>
+            <span
+              className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black ${
+                isOnline
+                  ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                  : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-emerald-500" : "bg-rose-500"}`}
+                style={{ boxShadow: isOnline ? "0 0 6px #10b981" : "none" }}
+              />
+              {isOnline ? "LIVE" : "OFF"}
+            </span>
+          </div>
+
+          {/* Main Metric: Active Power */}
+          <div className="my-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-100 dark:border-slate-700/50">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+              Active Power
+            </span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-black font-mono tabular-nums text-sky-500 tracking-tight">
+                {pKw.toFixed(1)}
+              </span>
+              <span className="text-xs font-black text-slate-400">kW</span>
+            </div>
+          </div>
+
+          {/* Secondary Metrics */}
+          <div className="grid grid-cols-2 gap-2 text-xs font-mono tabular-nums">
+            <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
+              <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Tegangan</span>
+              <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">{vL.toFixed(0)} V</span>
+            </div>
+            <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
+              <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Arus Rata2</span>
+              <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">{iAvg.toFixed(1)} A</span>
+            </div>
+            <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
+              <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Power Factor</span>
+              <span className="text-xs sm:text-sm font-black text-emerald-500">{pf.toFixed(2)}</span>
+            </div>
+            <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
+              <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Energi</span>
+              <span className="text-xs sm:text-sm font-black text-purple-400">
+                {pm.active_energy !== null && pm.active_energy !== undefined
+                  ? Math.round(Number(pm.active_energy)).toLocaleString("id-ID")
+                  : "—"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card Actions / Reorder Buttons */}
+        {isEditingPosition ? (
+          <div className="mt-3 pt-2.5 border-t border-sky-200 dark:border-sky-800/50 flex items-center justify-between gap-1.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveLeft?.();
+              }}
+              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-sky-50 text-slate-700 dark:text-slate-200 text-xs font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer"
+              title="Geser posisi kartu ke kiri"
+            >
+              <span>◀</span>
+              <span>Kiri</span>
+            </button>
+            <span className="text-[10px] text-sky-500 font-extrabold uppercase">Atur</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveRight?.();
+              }}
+              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-sky-50 text-slate-700 dark:text-slate-200 text-xs font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer"
+              title="Geser posisi kartu ke kanan"
+            >
+              <span>Kanan</span>
+              <span>▶</span>
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(pm.pm_id);
+            }}
+            className="w-full mt-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 group-hover:border-sky-500/40 text-xs font-black text-slate-500 group-hover:text-sky-500 dark:group-hover:text-sky-400 bg-slate-50 dark:bg-slate-800/30 group-hover:bg-sky-500/10 transition-colors text-center cursor-pointer"
+          >
+            DETAIL PARAMETER ▾
+          </button>
+        )}
+      </div>
+    );
+  },
+  (prev, next) => {
+    return (
+      prev.pm === next.pm &&
+      prev.isEditingPosition === next.isEditingPosition
+    );
+  }
+);
 
 type Props = {
   powerMeters: ElectricPmItem[];
@@ -93,7 +256,7 @@ export function EwPowerMetersGrid({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleMoveDirection = (pmId: string, direction: "left" | "right") => {
+  const handleMoveDirection = useCallback((pmId: string, direction: "left" | "right") => {
     const upId = pmId.toUpperCase();
     const list = [...draftOrder];
     const idx = list.indexOf(upId);
@@ -104,14 +267,14 @@ export function EwPowerMetersGrid({
     list[idx] = list[targetIdx];
     list[targetIdx] = temp;
     setDraftOrder(list);
-  };
+  }, [draftOrder]);
 
-  const handleDragStart = (e: React.DragEvent, pmId: string) => {
+  const handleDragStart = useCallback((e: React.DragEvent, pmId: string) => {
     setDraggedPmId(pmId.toUpperCase());
     e.dataTransfer.setData("text/plain", pmId.toUpperCase());
-  };
+  }, []);
 
-  const handleDropOnCard = (targetPmId: string) => {
+  const handleDropOnCard = useCallback((targetPmId: string) => {
     const tgt = targetPmId.toUpperCase();
     if (!draggedPmId || draggedPmId === tgt) return;
     const list = [...draftOrder];
@@ -123,7 +286,7 @@ export function EwPowerMetersGrid({
       setDraftOrder(list);
     }
     setDraggedPmId(null);
-  };
+  }, [draggedPmId, draftOrder]);
 
   return (
     <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
@@ -219,139 +382,18 @@ export function EwPowerMetersGrid({
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {filtered.map((pm) => {
               const info = getPmInfo(pm.pm_id);
-              const isOnline = pm.status !== false;
-              const pKw = Number(pm.active_power_total) || 0;
-              const pf = Math.abs(Number(pm.power_factor) || 0);
-              const vL = Number(pm.volt_ab) || Number(pm.volt_ll) || 0;
-              const iAvg = ((Number(pm.current_a) || 0) + (Number(pm.current_b) || 0) + (Number(pm.current_c) || 0)) / 3;
-
               return (
-                <div
+                <PowerMeterCard
                   key={pm.pm_id}
-                  draggable={isEditingPosition}
-                  onDragStart={(e) => handleDragStart(e, pm.pm_id)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => handleDropOnCard(pm.pm_id)}
-                  onClick={() => {
-                    if (!isEditingPosition) setSelectedPmId(pm.pm_id);
-                  }}
-                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between relative ${
-                    isEditingPosition
-                      ? "ring-2 ring-sky-500/50 border-sky-400 bg-sky-50/20 dark:bg-slate-800/80 cursor-grab active:cursor-grabbing hover:scale-[1.02]"
-                      : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-800/40 hover:border-sky-500/50 hover:shadow-lg hover:shadow-sky-500/5 cursor-pointer group"
-                  }`}
-                >
-                  {/* Card Header */}
-                  <div>
-                    <div className="flex items-start justify-between gap-1.5 mb-2">
-                      <div className="min-w-0">
-                        <h4 className="text-sm font-black text-slate-800 dark:text-slate-100 group-hover:text-sky-500 transition-colors leading-snug line-clamp-2">
-                          {info.name}
-                        </h4>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <span className="text-xs font-bold font-mono text-slate-500 dark:text-slate-400">
-                            {pm.pm_id}
-                          </span>
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                            {info.model}
-                          </span>
-                        </div>
-                      </div>
-                      <span
-                        className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black ${
-                          isOnline
-                            ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                            : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            isOnline ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
-                          }`}
-                        />
-                        {isOnline ? "LIVE" : "OFF"}
-                      </span>
-                    </div>
-
-                    {/* Main Metric: Active Power */}
-                    <div className="my-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-100 dark:border-slate-700/50">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-                        Active Power
-                      </span>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-2xl font-black font-mono text-sky-500 tracking-tight">
-                          {pKw.toFixed(1)}
-                        </span>
-                        <span className="text-xs font-black text-slate-400">kW</span>
-                      </div>
-                    </div>
-
-                    {/* Secondary Metrics */}
-                    <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                      <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
-                        <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Tegangan</span>
-                        <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">{vL.toFixed(0)} V</span>
-                      </div>
-                      <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
-                        <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Arus Rata2</span>
-                        <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">{iAvg.toFixed(1)} A</span>
-                      </div>
-                      <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
-                        <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Power Factor</span>
-                        <span className="text-xs sm:text-sm font-black text-emerald-500">{pf.toFixed(2)}</span>
-                      </div>
-                      <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
-                        <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Energi</span>
-                        <span className="text-xs sm:text-sm font-black text-purple-400">
-                          {pm.active_energy !== null && pm.active_energy !== undefined
-                            ? Math.round(Number(pm.active_energy)).toLocaleString("id-ID")
-                            : "—"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card Actions / Reorder Buttons */}
-                  {isEditingPosition ? (
-                    <div className="mt-3 pt-2.5 border-t border-sky-200 dark:border-sky-800/50 flex items-center justify-between gap-1.5">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleMoveDirection(pm.pm_id, "left");
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-sky-50 text-slate-700 dark:text-slate-200 text-xs font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer"
-                        title="Geser posisi kartu ke kiri"
-                      >
-                        <span>◀</span>
-                        <span>Kiri</span>
-                      </button>
-                      <span className="text-[10px] text-sky-500 font-extrabold uppercase">Atur</span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleMoveDirection(pm.pm_id, "right");
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-sky-50 text-slate-700 dark:text-slate-200 text-xs font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer"
-                        title="Geser posisi kartu ke kanan"
-                      >
-                        <span>Kanan</span>
-                        <span>▶</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedPmId(pm.pm_id);
-                      }}
-                      className="w-full mt-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 group-hover:border-sky-500/40 text-xs font-black text-slate-500 group-hover:text-sky-500 dark:group-hover:text-sky-400 bg-slate-50 dark:bg-slate-800/30 group-hover:bg-sky-500/10 transition-all text-center cursor-pointer"
-                    >
-                      DETAIL PARAMETER ▾
-                    </button>
-                  )}
-                </div>
+                  pm={pm}
+                  info={info}
+                  isEditingPosition={isEditingPosition}
+                  onDragStart={handleDragStart}
+                  onDropOnCard={handleDropOnCard}
+                  onSelect={setSelectedPmId}
+                  onMoveLeft={() => handleMoveDirection(pm.pm_id, "left")}
+                  onMoveRight={() => handleMoveDirection(pm.pm_id, "right")}
+                />
               );
             })}
           </div>

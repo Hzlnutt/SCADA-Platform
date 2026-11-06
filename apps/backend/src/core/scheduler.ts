@@ -875,7 +875,7 @@ const broadcastEwLiveTelemetry = (groupId: string, records: ElectricPmRecord[]) 
   });
 };
 
-const fetchJsonWithTimeout = async (url: string, timeoutMs: number = 800): Promise<any> => {
+const fetchJsonWithTimeout = async (url: string, timeoutMs: number = 2000): Promise<any> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -1178,11 +1178,16 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   });
 };
 const broadcastLiveTelemetryOffline = (deviceId: string) => {
+  const existing = latestIncomingTelemetry[deviceId]?.data?.pqData;
   latestIncomingTelemetry[deviceId] = {
     data: {
       status: false,
       online: false,
-      pqData: {
+      pqData: existing ? {
+        ...existing,
+        status: false,
+        pfStatus: "offline"
+      } : {
         activePower: 0,
         reactivePower: 0,
         apparentPower: 0,
@@ -1203,7 +1208,7 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
     status: false,
     online: false,
     error: "Gagal polling API",
-    pqData: {
+    pqData: existing ? { ...existing, status: false, pfStatus: "offline" } : {
       activePower: null,
       reactivePower: null,
       apparentPower: null,
