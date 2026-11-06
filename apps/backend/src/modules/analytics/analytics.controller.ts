@@ -10,7 +10,7 @@ import { getPostgresPool } from "../../database/postgres";
 import { defaultWaterConfig } from "../config/config.controller";
 import { calculateWaterCost } from "../../utils/water";
 import { getElectricityExportData, generateElectricityExcelWorkbook } from "./electricity.export";
-import { getIncomingHourlyTrend, getLatestIncomingTelemetry, getWibDateTime } from "../../core/scheduler";
+import { getIncomingHourlyTrend, getLatestIncomingTelemetry, getLatestEwLiveRecords, getWibDateTime } from "../../core/scheduler";
 import { getIncomingTrend1hFromDb } from "./electricity.analytics";
 
 export const getAnalyticsSummaryHandler = async (
@@ -75,11 +75,29 @@ export const getElectricityAnalyticsHandler = async (
     }
     const cached = electricityAnalyticsCache.get(cacheKey);
     if (!force && cached && cached.expiresAt > now) {
+      const livePq = getLatestIncomingTelemetry(deviceId);
+      if (livePq && livePq.pqData) {
+        return res.json({
+          data: {
+            ...cached.data,
+            pqData: livePq.pqData
+          }
+        });
+      }
       return res.json({ data: cached.data });
     }
 
     if (electricityAnalyticsInflight.has(cacheKey)) {
       const data = await electricityAnalyticsInflight.get(cacheKey);
+      const livePq = getLatestIncomingTelemetry(deviceId);
+      if (livePq && livePq.pqData) {
+        return res.json({
+          data: {
+            ...data,
+            pqData: livePq.pqData
+          }
+        });
+      }
       return res.json({ data });
     }
 
@@ -98,6 +116,15 @@ export const getElectricityAnalyticsHandler = async (
 
     electricityAnalyticsInflight.set(cacheKey, queryPromise);
     const data = await queryPromise;
+    const livePq = getLatestIncomingTelemetry(deviceId);
+    if (livePq && livePq.pqData) {
+      return res.json({
+        data: {
+          ...data,
+          pqData: livePq.pqData
+        }
+      });
+    }
     res.json({ data });
   } catch (err) {
     next(err);
@@ -396,6 +423,11 @@ export const getPowerMetersLatestHandler = async (
 ) => {
   try {
     const group = ((req.query.group as string) || "ew23").toLowerCase();
+    const live = getLatestEwLiveRecords(group);
+    if (live && live.length > 0) {
+      return res.json({ data: live });
+    }
+
     const pool = getPostgresPool();
 
     const dbRes = await pool.query(`

@@ -859,7 +859,28 @@ const insertPmMinuteTelemetryBatch = async (records: ElectricPmRecord[], minuteT
   }
 };
 
+const latestPmRecordsMap = new Map<string, ElectricPmRecord>();
+
+export const updateLatestPmRecords = (records: ElectricPmRecord[]) => {
+  for (const r of records) {
+    if (r && r.pm_id) {
+      latestPmRecordsMap.set(String(r.pm_id).toUpperCase(), { ...r });
+    }
+  }
+};
+
+export const getLatestEwLiveRecords = (group: string = "all"): ElectricPmRecord[] | null => {
+  if (latestPmRecordsMap.size === 0) return null;
+  const g = group.toLowerCase();
+  const all = Array.from(latestPmRecordsMap.values());
+  if (g === "all") {
+    return all;
+  }
+  return all.filter((r) => r.group_id?.toLowerCase() === g);
+};
+
 const broadcastEwLiveTelemetry = (groupId: string, records: ElectricPmRecord[]) => {
+  updateLatestPmRecords(records);
   const io = getSocketServer();
   if (!io) return;
 
@@ -2112,12 +2133,7 @@ export const startIncomingElectricityPolling = () => {
           if (isNewMinute) {
             await insertPmMinuteTelemetryBatch(customRecords, minuteTs);
           }
-          const customEw21 = customRecords.filter(r => r.group_id?.toLowerCase() === "ew21");
-          const customEw22 = customRecords.filter(r => r.group_id?.toLowerCase() === "ew22");
-          const customEw23 = customRecords.filter(r => r.group_id?.toLowerCase() === "ew23");
-          if (customEw21.length > 0) broadcastEwLiveTelemetry("ew21", customEw21);
-          if (customEw22.length > 0) broadcastEwLiveTelemetry("ew22", customEw22);
-          if (customEw23.length > 0) broadcastEwLiveTelemetry("ew23", customEw23);
+          updateLatestPmRecords(customRecords);
           broadcastEwLiveTelemetry("custom_pm", customRecords);
         }
       } catch (err: any) {

@@ -1970,16 +1970,10 @@ export default function PowerDistribution() {
     };
 
     socket.on("electricity:pm_live_update", handlePmUpdate);
-    socket.on("electricity:ew21_live", handlePmUpdate);
-    socket.on("electricity:ew22_live", handlePmUpdate);
-    socket.on("electricity:ew23_live", handlePmUpdate);
 
     return () => {
       clearInterval(interval);
       socket.off("electricity:pm_live_update", handlePmUpdate);
-      socket.off("electricity:ew21_live", handlePmUpdate);
-      socket.off("electricity:ew22_live", handlePmUpdate);
-      socket.off("electricity:ew23_live", handlePmUpdate);
     };
   }, [isPageActive]);
 
@@ -2080,14 +2074,12 @@ export default function PowerDistribution() {
 
     socket.on(`electricity:${selectedEwGroup}_live`, handleLiveUpdate);
     socket.on("electricity:custom_pm_live", handleLiveUpdate);
-    socket.on("electricity:pm_live_update", handleLiveUpdate);
 
     return () => {
       active = false;
       clearInterval(interval);
       socket.off(`electricity:${selectedEwGroup}_live`, handleLiveUpdate);
       socket.off("electricity:custom_pm_live", handleLiveUpdate);
-      socket.off("electricity:pm_live_update", handleLiveUpdate);
     };
   }, [selectedEwGroup, isPageActive]);
 
