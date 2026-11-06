@@ -1035,12 +1035,6 @@ const recordIncomingTrend3s = async (
         hour: currentHour,
         isHourChange: false
       });
-      io.emit("electricity:trend_5s", {
-        deviceId,
-        point,
-        hour: currentHour,
-        isHourChange: false
-      });
     }
   }
 };

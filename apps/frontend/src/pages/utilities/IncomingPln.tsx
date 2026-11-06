@@ -751,7 +751,7 @@ interface HourlyTrend5sPoint {
       }
     };
 
-    const handleTrend5s = (payload: any) => {
+    const handleTrend3s = (payload: any) => {
       if (payload && payload.deviceId === config.deviceId && payload.point) {
         const pt = payload.point;
         if (pt.ts) {
@@ -790,15 +790,13 @@ interface HourlyTrend5sPoint {
     socket.on("electricity:minute_update", handleMinuteUpdate);
     socket.on("historian:minute_update", handleMinuteUpdate);
     socket.on("electricity:live_update", handleLiveUpdate);
-    socket.on("electricity:trend_3s", handleTrend5s);
-    socket.on("electricity:trend_5s", handleTrend5s);
+    socket.on("electricity:trend_3s", handleTrend3s);
 
     return () => {
       socket.off("electricity:minute_update", handleMinuteUpdate);
       socket.off("historian:minute_update", handleMinuteUpdate);
       socket.off("electricity:live_update", handleLiveUpdate);
-      socket.off("electricity:trend_3s", handleTrend5s);
-      socket.off("electricity:trend_5s", handleTrend5s);
+      socket.off("electricity:trend_3s", handleTrend3s);
     };
   }, [config.deviceId]);
 
