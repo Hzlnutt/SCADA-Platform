@@ -3401,35 +3401,47 @@ export default function Electricity() {
               }
               // Extract PLN
               if (url.includes("electric_pln")) {
-                if (res.data.Active_Power !== undefined) {
-                  let plnKw = Number(res.data.Active_Power) || 0;
-                  if (plnKw > 10000) plnKw = plnKw / 1000.0;
-                  setLivePGridKw(Math.max(0, plnKw));
-                }
-                if (res.data.Power_Factor !== undefined && res.data.Power_Factor !== null) {
-                  const pfNum = Math.abs(Number(res.data.Power_Factor));
-                  if (!isNaN(pfNum)) {
-                    setLivePf(pfNum);
-                    setPfStatus(res.data.Status_PM8000 !== false ? "connected" : "offline");
+                const isPlnOnline = res.data.Status_PM8000 !== false && res.data.status_pm8000 !== false;
+                if (!isPlnOnline) {
+                  setLivePGridKw(null);
+                  setPfStatus("offline");
+                } else {
+                  if (res.data.Active_Power !== undefined) {
+                    let plnKw = Number(res.data.Active_Power) || 0;
+                    if (plnKw > 10000) plnKw = plnKw / 1000.0;
+                    setLivePGridKw(Math.max(0, plnKw));
                   }
-                }
-                const rawPeak = res.data.Peak_Demand_W ?? res.data.Peak_Demand_w ?? res.data.PeakDemand_W ?? res.data.peak_demand_w ?? res.data.Peak_Demand ?? res.data.peak_demand;
-                if (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak))) {
-                  setLivePeakDemandKw(Number(rawPeak) / 1000.0);
+                  if (res.data.Power_Factor !== undefined && res.data.Power_Factor !== null) {
+                    const pfNum = Math.abs(Number(res.data.Power_Factor));
+                    if (!isNaN(pfNum)) {
+                      setLivePf(pfNum);
+                      setPfStatus("connected");
+                    }
+                  }
+                  const rawPeak = res.data.Peak_Demand_W ?? res.data.Peak_Demand_w ?? res.data.PeakDemand_W ?? res.data.peak_demand_w ?? res.data.Peak_Demand ?? res.data.peak_demand;
+                  if (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak))) {
+                    setLivePeakDemandKw(Number(rawPeak) / 1000.0);
+                  }
                 }
               }
               // Extract WF1
-              if (url.includes("electric_wf1") && res.data.Active_Power_Total !== undefined) {
-                setLiveWf1Kw(Math.max(0, Number(res.data.Active_Power_Total) || 0));
-                if (res.data.Status_PM5500_WF1 !== undefined) {
-                  setLiveWf1Status(Boolean(res.data.Status_PM5500_WF1));
+              if (url.includes("electric_wf1")) {
+                const isWf1Online = res.data.Status_PM5500_WF1 !== false && res.data.Status_PM5560 !== false && res.data.Status_PM5500 !== false;
+                setLiveWf1Status(isWf1Online);
+                if (!isWf1Online) {
+                  setLiveWf1Kw(null);
+                } else if (res.data.Active_Power_Total !== undefined) {
+                  setLiveWf1Kw(Math.max(0, Number(res.data.Active_Power_Total) || 0));
                 }
               }
               // Extract WF2
-              if (url.includes("electric_wf2") && res.data.Active_Power_Total !== undefined) {
-                setLiveWf2Kw(Math.max(0, Number(res.data.Active_Power_Total) || 0));
-                if (res.data.Status_PM5500_WF1 !== undefined) {
-                  setLiveWf2Status(Boolean(res.data.Status_PM5500_WF1));
+              if (url.includes("electric_wf2")) {
+                const isWf2Online = res.data.Status_PM5500_WF2 !== false && res.data.Status_PM5500 !== false && res.data.Status_PM5500_WF1 !== false;
+                setLiveWf2Status(isWf2Online);
+                if (!isWf2Online) {
+                  setLiveWf2Kw(null);
+                } else if (res.data.Active_Power_Total !== undefined) {
+                  setLiveWf2Kw(Math.max(0, Number(res.data.Active_Power_Total) || 0));
                 }
               }
               // Extract PLTS if this is plts url
@@ -3578,10 +3590,13 @@ export default function Electricity() {
 
   const getApiVal = useCallback((tagKey: string): any => {
     if (tagKey === "pln/power_factor") {
+      const plnApi = apiLiveData[DEFAULT_PLN_API_URL];
+      if (plnApi?.Status_PM8000 === false || plnApi?.status_pm8000 === false) {
+        return null;
+      }
       if (livePf !== null && livePf !== undefined && !isNaN(Number(livePf))) {
         return Math.abs(Number(livePf));
       }
-      const plnApi = apiLiveData[DEFAULT_PLN_API_URL];
       if (plnApi && plnApi.Power_Factor !== undefined && plnApi.Power_Factor !== null) {
         const num = Number(plnApi.Power_Factor);
         if (!isNaN(num)) return Math.abs(num);
@@ -3593,6 +3608,15 @@ export default function Electricity() {
     const isWf2Tag = tagKey.startsWith("wf2/");
     const url = apiSourceUrls[tagKey] || (isPlnTag ? DEFAULT_PLN_API_URL : isWf1Tag ? DEFAULT_WF1_API_URL : isWf2Tag ? DEFAULT_WF2_API_URL : "");
     const rawJsonKey = jsonKeyMap[tagKey] || ((isPlnTag || isWf1Tag || isWf2Tag) ? DEFAULT_PLN_JSON_KEYS[tagKey] : undefined) || tagKey.split("/")[1];
+
+    if (url && apiLiveData[url]) {
+      const plnOff = (isPlnTag || url.includes("electric_pln")) && (apiLiveData[url]?.Status_PM8000 === false || apiLiveData[url]?.status_pm8000 === false);
+      const wf1Off = (isWf1Tag || url.includes("electric_wf1")) && (apiLiveData[url]?.Status_PM5500_WF1 === false || apiLiveData[url]?.Status_PM5560 === false || apiLiveData[url]?.Status_PM5500 === false);
+      const wf2Off = (isWf2Tag || url.includes("electric_wf2")) && (apiLiveData[url]?.Status_PM5500_WF2 === false || apiLiveData[url]?.Status_PM5500 === false || apiLiveData[url]?.Status_PM5500_WF1 === false);
+      if (plnOff || wf1Off || wf2Off) {
+        return null;
+      }
+    }
 
     if (url && apiLiveData[url] && rawJsonKey) {
       let val = apiLiveData[url][rawJsonKey] ?? 

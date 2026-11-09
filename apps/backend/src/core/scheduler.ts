@@ -1065,6 +1065,11 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   if (!io) return;
 
   const isPln = deviceId === "Cubicle_PLN_PM8000";
+  const statusVal = isPln ? pgPq.status_pm8000 : pgPq.status_pm5500;
+  if (statusVal === false) {
+    broadcastLiveTelemetryOffline(deviceId);
+    return;
+  }
   const rawActive = pgPq.active_power !== undefined ? pgPq.active_power : pgPq.active_power_total;
   const activePowerVal = rawActive !== null ? (Math.abs(Number(rawActive)) > 10000 ? Number(rawActive) / 1000.0 : Number(rawActive)) : 0;
   const reactivePowerVal = pgPq.reactive_power_total !== null ? (Number(pgPq.reactive_power_total) > 10000 ? Number(pgPq.reactive_power_total) / 1000.0 : Number(pgPq.reactive_power_total)) : 0;
@@ -1117,7 +1122,6 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   if (rawThdIC !== null) thdIT = rawThdIC < 1.0 ? rawThdIC * 100.0 : rawThdIC;
   const thdIIVal = (thdIR + thdIS + thdIT) / 3.0;
 
-  const statusVal = isPln ? pgPq.status_pm8000 : pgPq.status_pm5500;
   const isConnected = statusVal !== null ? !!statusVal : true;
 
   // In 20 kV medium voltage system, phase voltages correspond directly to 20 kV line voltage readings
@@ -1199,22 +1203,49 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   });
 };
 const broadcastLiveTelemetryOffline = (deviceId: string) => {
+  const offlinePqData = {
+    activePower: 0,
+    reactivePower: 0,
+    apparentPower: 0,
+    pf: null,
+    pfStatus: "offline",
+    freq: null,
+    vUnb: null,
+    iUnb: null,
+    thdV: null,
+    thdI: null,
+    vll1: null,
+    vll2: null,
+    vll3: null,
+    vln1: null,
+    vln2: null,
+    vln3: null,
+    current1: null,
+    current2: null,
+    current3: null,
+    vR: null,
+    vS: null,
+    vT: null,
+    iR: null,
+    iS: null,
+    iT: null,
+    thdV_R: null,
+    thdV_S: null,
+    thdV_T: null,
+    thdI_R: null,
+    thdI_S: null,
+    thdI_T: null,
+    voltage: null,
+    status: false,
+    peakDemand: null
+  };
+
   latestIncomingTelemetry[deviceId] = {
     data: {
-      status: false,
       online: false,
       error: "Sensor Offline / Tidak Merespons",
-      pqData: {
-        activePower: 0,
-        reactivePower: 0,
-        apparentPower: 0,
-        pf: null,
-        pfStatus: "offline",
-        freq: 0,
-        voltage: 0,
-        status: false,
-        peakDemand: null
-      }
+      ...offlinePqData,
+      pqData: offlinePqData
     },
     ts: Date.now()
   };
@@ -1225,42 +1256,7 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
     status: false,
     online: false,
     error: "Sensor Offline / Tidak Merespons",
-    pqData: {
-      activePower: 0,
-      reactivePower: 0,
-      apparentPower: 0,
-      pf: null,
-      pfStatus: "offline",
-      freq: null,
-      vUnb: null,
-      iUnb: null,
-      thdV: null,
-      thdI: null,
-      vll1: null,
-      vll2: null,
-      vll3: null,
-      vln1: null,
-      vln2: null,
-      vln3: null,
-      current1: null,
-      current2: null,
-      current3: null,
-      vR: null,
-      vS: null,
-      vT: null,
-      iR: null,
-      iS: null,
-      iT: null,
-      thdV_R: null,
-      thdV_S: null,
-      thdV_T: null,
-      thdI_R: null,
-      thdI_S: null,
-      thdI_T: null,
-      voltage: null,
-      status: false,
-      peakDemand: null
-    }
+    pqData: offlinePqData
   });
 };
 
@@ -1646,6 +1642,10 @@ export const startIncomingElectricityPolling = () => {
 
     if (!plnParsed) {
       plnParsed = getNullPlnRecord(ts);
+    }
+
+    const isOnline = plnParsed.status_pm8000 !== false;
+    if (!isOnline) {
       broadcastLiveTelemetryOffline("Cubicle_PLN_PM8000");
       setLatestPowerFactor(null, "offline");
       const io = getSocketServer();
@@ -1654,12 +1654,11 @@ export const startIncomingElectricityPolling = () => {
       }
     } else {
       broadcastLiveTelemetry("Cubicle_PLN_PM8000", plnParsed);
-      const isOnline = plnParsed.status_pm8000 !== null ? !!plnParsed.status_pm8000 : true;
       const pfVal = plnParsed.power_factor !== null ? Math.abs(Number(plnParsed.power_factor)) : null;
-      setLatestPowerFactor(pfVal, isOnline ? "connected" : "offline");
+      setLatestPowerFactor(pfVal, "connected");
       const io = getSocketServer();
       if (io) {
-        io.emit("power_factor:status", { value: pfVal, status: isOnline ? "connected" : "offline" });
+        io.emit("power_factor:status", { value: pfVal, status: "connected" });
       }
     }
 
@@ -1708,6 +1707,9 @@ export const startIncomingElectricityPolling = () => {
 
     if (!wf1Parsed) {
       wf1Parsed = getNullWfRecord(ts);
+    }
+    const isWf1Online = wf1Parsed.status_pm5500 !== false;
+    if (!isWf1Online) {
       broadcastLiveTelemetryOffline("Feeder_WF1_PM5560");
     } else {
       broadcastLiveTelemetry("Feeder_WF1_PM5560", wf1Parsed);
@@ -1757,6 +1759,9 @@ export const startIncomingElectricityPolling = () => {
 
     if (!wf2Parsed) {
       wf2Parsed = getNullWfRecord(ts);
+    }
+    const isWf2Online = wf2Parsed && wf2Parsed.status_pm5500 !== false;
+    if (!isWf2Online) {
       broadcastLiveTelemetryOffline("Feeder_WF2_PM5500");
     } else {
       broadcastLiveTelemetry("Feeder_WF2_PM5500", wf2Parsed);

@@ -1830,21 +1830,27 @@ export default function PowerDistribution() {
   const [incomingData, setIncomingData] = useState<{
     plnKw: number | null;
     plnPf: number | null;
+    plnOnline: boolean;
     wf1Kw: number | null;
     wf1Pf: number | null;
     wf1Volt: number | null;
+    wf1Online: boolean;
     wf2Kw: number | null;
     wf2Pf: number | null;
     wf2Volt: number | null;
+    wf2Online: boolean;
   }>({
     plnKw: null,
     plnPf: null,
+    plnOnline: true,
     wf1Kw: null,
     wf1Pf: null,
     wf1Volt: null,
+    wf1Online: true,
     wf2Kw: null,
     wf2Pf: null,
     wf2Volt: null,
+    wf2Online: true,
   });
 
   const incomingDataRef = useRef(incomingData);
@@ -1885,12 +1891,15 @@ export default function PowerDistribution() {
     return (
       a.plnKw === b.plnKw &&
       a.plnPf === b.plnPf &&
+      a.plnOnline === b.plnOnline &&
       a.wf1Kw === b.wf1Kw &&
       a.wf1Pf === b.wf1Pf &&
       a.wf1Volt === b.wf1Volt &&
+      a.wf1Online === b.wf1Online &&
       a.wf2Kw === b.wf2Kw &&
       a.wf2Pf === b.wf2Pf &&
-      a.wf2Volt === b.wf2Volt
+      a.wf2Volt === b.wf2Volt &&
+      a.wf2Online === b.wf2Online
     );
   };
 
@@ -1904,16 +1913,23 @@ export default function PowerDistribution() {
           getJson<{ data: any }>("/analytics/electricity?deviceId=Feeder_WF1_PM5560"),
           getJson<{ data: any }>("/analytics/electricity?deviceId=Feeder_WF2_PM5500"),
         ]);
+        const isPlnOn = plnRes?.data?.status !== false && plnRes?.data?.pqData?.pfStatus !== "offline";
+        const isWf1On = wf1Res?.data?.status !== false && wf1Res?.data?.pqData?.pfStatus !== "offline";
+        const isWf2On = wf2Res?.data?.status !== false && wf2Res?.data?.pqData?.pfStatus !== "offline";
+
         setIncomingData(prev => {
           const next = {
-            plnKw: plnRes?.data?.pqData?.activePower !== undefined ? safeActivePower(plnRes.data.pqData.activePower, prev.plnKw) : prev.plnKw,
-            plnPf: plnRes?.data?.pqData?.pf !== undefined ? safePf(plnRes.data.pqData.pf, prev.plnPf) : prev.plnPf,
-            wf1Kw: wf1Res?.data?.pqData?.activePower !== undefined ? safeActivePower(wf1Res.data.pqData.activePower, prev.wf1Kw) : prev.wf1Kw,
-            wf1Pf: wf1Res?.data?.pqData?.pf !== undefined ? safePf(wf1Res.data.pqData.pf, prev.wf1Pf) : prev.wf1Pf,
-            wf1Volt: safeVolt(toKv(wf1Res?.data?.pqData?.vll1 ?? wf1Res?.data?.pqData?.voltage), prev.wf1Volt),
-            wf2Kw: wf2Res?.data?.pqData?.activePower !== undefined ? safeActivePower(wf2Res.data.pqData.activePower, prev.wf2Kw) : prev.wf2Kw,
-            wf2Pf: wf2Res?.data?.pqData?.pf !== undefined ? safePf(wf2Res.data.pqData.pf, prev.wf2Pf) : prev.wf2Pf,
-            wf2Volt: safeVolt(toKv(wf2Res?.data?.pqData?.vll1 ?? wf2Res?.data?.pqData?.voltage), prev.wf2Volt),
+            plnKw: !isPlnOn ? null : (plnRes?.data?.pqData?.activePower !== undefined ? safeActivePower(plnRes.data.pqData.activePower, prev.plnKw) : prev.plnKw),
+            plnPf: !isPlnOn ? null : (plnRes?.data?.pqData?.pf !== undefined ? safePf(plnRes.data.pqData.pf, prev.plnPf) : prev.plnPf),
+            plnOnline: isPlnOn,
+            wf1Kw: !isWf1On ? null : (wf1Res?.data?.pqData?.activePower !== undefined ? safeActivePower(wf1Res.data.pqData.activePower, prev.wf1Kw) : prev.wf1Kw),
+            wf1Pf: !isWf1On ? null : (wf1Res?.data?.pqData?.pf !== undefined ? safePf(wf1Res.data.pqData.pf, prev.wf1Pf) : prev.wf1Pf),
+            wf1Volt: !isWf1On ? null : safeVolt(toKv(wf1Res?.data?.pqData?.vll1 ?? wf1Res?.data?.pqData?.voltage), prev.wf1Volt),
+            wf1Online: isWf1On,
+            wf2Kw: !isWf2On ? null : (wf2Res?.data?.pqData?.activePower !== undefined ? safeActivePower(wf2Res.data.pqData.activePower, prev.wf2Kw) : prev.wf2Kw),
+            wf2Pf: !isWf2On ? null : (wf2Res?.data?.pqData?.pf !== undefined ? safePf(wf2Res.data.pqData.pf, prev.wf2Pf) : prev.wf2Pf),
+            wf2Volt: !isWf2On ? null : safeVolt(toKv(wf2Res?.data?.pqData?.vll1 ?? wf2Res?.data?.pqData?.voltage), prev.wf2Volt),
+            wf2Online: isWf2On,
           };
           return isIncomingEqual(prev, next) ? prev : next;
         });
@@ -1929,20 +1945,24 @@ export default function PowerDistribution() {
     const socket = getSocket();
     const handleIncomingLive = (payload: any) => {
       if (!payload || !payload.deviceId || !payload.pqData) return;
+      const isOnline = payload.status !== false && payload.online !== false && payload.pqData?.pfStatus !== "offline";
       setLoadingSld(false);
       setIncomingData(prev => {
         const next = { ...prev };
         if (payload.deviceId === "Cubicle_PLN_PM8000") {
-          next.plnKw = safeActivePower(payload.pqData.activePower, prev.plnKw);
-          next.plnPf = safePf(payload.pqData.pf, prev.plnPf);
+          next.plnOnline = isOnline;
+          next.plnKw = !isOnline ? null : safeActivePower(payload.pqData.activePower, prev.plnKw);
+          next.plnPf = !isOnline ? null : safePf(payload.pqData.pf, prev.plnPf);
         } else if (payload.deviceId === "Feeder_WF1_PM5560") {
-          next.wf1Kw = safeActivePower(payload.pqData.activePower, prev.wf1Kw);
-          next.wf1Pf = safePf(payload.pqData.pf, prev.wf1Pf);
-          next.wf1Volt = safeVolt(toKv(payload.pqData.vll1 ?? payload.pqData.voltage), prev.wf1Volt);
+          next.wf1Online = isOnline;
+          next.wf1Kw = !isOnline ? null : safeActivePower(payload.pqData.activePower, prev.wf1Kw);
+          next.wf1Pf = !isOnline ? null : safePf(payload.pqData.pf, prev.wf1Pf);
+          next.wf1Volt = !isOnline ? null : safeVolt(toKv(payload.pqData.vll1 ?? payload.pqData.voltage), prev.wf1Volt);
         } else if (payload.deviceId === "Feeder_WF2_PM5500") {
-          next.wf2Kw = safeActivePower(payload.pqData.activePower, prev.wf2Kw);
-          next.wf2Pf = safePf(payload.pqData.pf, prev.wf2Pf);
-          next.wf2Volt = safeVolt(toKv(payload.pqData.vll1 ?? payload.pqData.voltage), prev.wf2Volt);
+          next.wf2Online = isOnline;
+          next.wf2Kw = !isOnline ? null : safeActivePower(payload.pqData.activePower, prev.wf2Kw);
+          next.wf2Pf = !isOnline ? null : safePf(payload.pqData.pf, prev.wf2Pf);
+          next.wf2Volt = !isOnline ? null : safeVolt(toKv(payload.pqData.vll1 ?? payload.pqData.voltage), prev.wf2Volt);
         }
         return isIncomingEqual(prev, next) ? prev : next;
       });
@@ -3354,6 +3374,10 @@ export default function PowerDistribution() {
                 Active Power <br />
                 {loadingSld ? (
                   <span className="inline-block h-3.5 w-20 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
+                ) : !incomingData.plnOnline ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/25 my-0.5">
+                    ● PM MATI
+                  </span>
                 ) : (
                   <span className={`text-sm font-black font-mono tabular-nums ${
                     incomingData.plnKw !== null && incomingData.plnKw > 0
@@ -3367,6 +3391,8 @@ export default function PowerDistribution() {
               <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
                 PF : {loadingSld ? (
                   <span className="inline-block h-3 w-10 bg-slate-300 dark:bg-slate-700 rounded align-middle" />
+                ) : !incomingData.plnOnline ? (
+                  <span className="font-bold text-rose-500/80 text-[10px]">OFFLINE</span>
                 ) : (
                   <span className="font-black font-mono tabular-nums">{incomingData.plnPf !== null ? Math.abs(incomingData.plnPf).toFixed(3) : "—"}</span>
                 )}
@@ -3397,6 +3423,10 @@ export default function PowerDistribution() {
                 Active Power <br />
                 {loadingSld ? (
                   <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
+                ) : !incomingData.wf1Online ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/25 my-0.5">
+                    ● PM MATI
+                  </span>
                 ) : (
                   <span className={`text-xs sm:text-sm font-black font-mono tabular-nums ${
                     incomingData.wf1Kw !== null && incomingData.wf1Kw > 0
@@ -3410,6 +3440,8 @@ export default function PowerDistribution() {
               <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
                 PF : {loadingSld ? (
                   <span className="inline-block h-3 w-10 bg-slate-300 dark:bg-slate-700 rounded align-middle" />
+                ) : !incomingData.wf1Online ? (
+                  <span className="font-bold text-rose-500/80 text-[10px]">OFFLINE</span>
                 ) : (
                   <span className="font-black font-mono tabular-nums">{incomingData.wf1Pf !== null ? Math.abs(incomingData.wf1Pf).toFixed(3) : "—"}</span>
                 )}
@@ -3458,6 +3490,10 @@ export default function PowerDistribution() {
                 Active Power <br />
                 {loadingSld ? (
                   <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
+                ) : !incomingData.wf2Online ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/25 my-0.5">
+                    ● PM MATI
+                  </span>
                 ) : (
                   <span className={`text-xs sm:text-sm font-black font-mono tabular-nums ${
                     incomingData.wf2Kw !== null && incomingData.wf2Kw > 0
@@ -3471,6 +3507,8 @@ export default function PowerDistribution() {
               <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
                 PF : {loadingSld ? (
                   <span className="inline-block h-3 w-10 bg-slate-300 dark:bg-slate-700 rounded align-middle" />
+                ) : !incomingData.wf2Online ? (
+                  <span className="font-bold text-rose-500/80 text-[10px]">OFFLINE</span>
                 ) : (
                   <span className="font-black font-mono tabular-nums">{incomingData.wf2Pf !== null ? Math.abs(incomingData.wf2Pf).toFixed(3) : "—"}</span>
                 )}

@@ -53,15 +53,18 @@ function UnbalancedGauge({
   value,
   maxAllowed,
   isDark,
-  isLoading = false
+  isLoading = false,
+  isPmOnline = true
 }: {
   label: string;
-  value: number | string;
+  value: number | string | null | undefined;
   maxAllowed: number;
   isDark: boolean;
   isLoading?: boolean;
+  isPmOnline?: boolean;
 }) {
-  const isOffline = typeof value === "string" && (value.includes("API") || value === "xx" || value.includes("xx") || value.includes("TIDAK"));
+  const isDead = !isPmOnline || value === "PM OFFLINE";
+  const isOffline = isDead || value === null || value === undefined || (typeof value === "string" && (value.includes("API") || value === "xx" || value.includes("TIDAK")));
   const numVal = isOffline ? 0 : Number(value) || 0;
   
   const percentage = Math.min(100, (numVal / maxAllowed) * 100);
@@ -106,6 +109,11 @@ function UnbalancedGauge({
         <div className="absolute bottom-2 text-center flex flex-col items-center justify-center w-full px-1">
           {isLoading ? (
             <span className="h-6 w-16 bg-slate-200 dark:bg-slate-700/60 rounded-md animate-pulse inline-block" />
+          ) : isDead ? (
+            <div className="flex flex-col items-center">
+              <span className="text-2xl font-black font-mono text-slate-400 dark:text-slate-600 leading-none">—</span>
+              <span className="text-[9px] font-black uppercase text-rose-500 tracking-wider mt-0.5">PM MATI</span>
+            </div>
           ) : isOffline ? (
             <span className="text-[9px] font-bold font-mono text-amber-500 uppercase leading-none text-center select-none break-all">{value === "BELUM ADA API" ? "BELUM ADA API" : "GAGAL POLLING API"}</span>
           ) : (
@@ -120,6 +128,10 @@ function UnbalancedGauge({
       {isLoading ? (
         <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-sky-500/10 border border-sky-500/20 text-[10px] font-extrabold uppercase text-sky-500 animate-pulse tracking-wider">
           MEMUAT DATA...
+        </div>
+      ) : isDead ? (
+        <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-rose-500/10 border border-rose-500/25 text-[10px] font-black uppercase text-rose-500 tracking-wider">
+          ✕ PM MATI (OFFLINE)
         </div>
       ) : isOffline ? (
         <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-amber-500/10 border border-amber-500/20 text-[10px] font-extrabold uppercase text-amber-500 tracking-wider">
@@ -136,6 +148,32 @@ function UnbalancedGauge({
       )}
     </div>
   );
+}
+
+function checkDeviceStatus(data: any, currentMode: "pln" | "fact1" | "fact2"): boolean | null {
+  if (!data || typeof data !== "object") return null;
+  if (currentMode === "pln") {
+    if (data.Status_PM8000 !== undefined) return Boolean(data.Status_PM8000);
+    if (data.status_pm8000 !== undefined) return Boolean(data.status_pm8000);
+  } else if (currentMode === "fact1") {
+    if (data.Status_PM5500_WF1 !== undefined) return Boolean(data.Status_PM5500_WF1);
+    if (data.status_pm5500_wf1 !== undefined) return Boolean(data.status_pm5500_wf1);
+    if (data.Status_PM5560 !== undefined) return Boolean(data.Status_PM5560);
+    if (data.status_pm5560 !== undefined) return Boolean(data.status_pm5560);
+    if (data.Status_PM5500 !== undefined) return Boolean(data.Status_PM5500);
+    if (data.status_pm5500 !== undefined) return Boolean(data.status_pm5500);
+  } else if (currentMode === "fact2") {
+    if (data.Status_PM5500_WF2 !== undefined) return Boolean(data.Status_PM5500_WF2);
+    if (data.status_pm5500_wf2 !== undefined) return Boolean(data.status_pm5500_wf2);
+    if (data.Status_PM5500 !== undefined) return Boolean(data.Status_PM5500);
+    if (data.status_pm5500 !== undefined) return Boolean(data.status_pm5500);
+    if (data.Status_PM5500_WF1 !== undefined) return Boolean(data.Status_PM5500_WF1);
+  }
+  if (data.status !== undefined) return Boolean(data.status);
+  if (data.Status !== undefined) return Boolean(data.Status);
+  if (data.online !== undefined) return Boolean(data.online);
+  if (data.Connected !== undefined) return Boolean(data.Connected);
+  return null;
 }
 
 /* ═══════════ MAIN COMPONENT ═══════════ */
@@ -225,6 +263,7 @@ export default function IncomingPln() {
         title: "Incoming Fact-1 20 kV — Feeder WF1",
         connectedLabel: "FACT-1 CONNECTED",
         deviceId: "Feeder_WF1_PM5560",
+        pmModel: "PM5560",
         activePowerBase: 0,
         voltageBase: 0,
         pfBase: 0,
@@ -239,6 +278,7 @@ export default function IncomingPln() {
         title: "Incoming Fact-2 20 kV — Feeder WF2",
         connectedLabel: "FACT-2 CONNECTED",
         deviceId: "Feeder_WF2_PM5500",
+        pmModel: "PM5500",
         activePowerBase: 0,
         voltageBase: 0,
         pfBase: 0,
@@ -253,6 +293,7 @@ export default function IncomingPln() {
       title: "Incoming PLN 20 kV — Sumber Utama",
       connectedLabel: "PLN CONNECTED",
       deviceId: "Cubicle_PLN_PM8000",
+      pmModel: "PM8000",
       activePowerBase: 0,
       voltageBase: 0,
       pfBase: 0,
@@ -365,6 +406,24 @@ export default function IncomingPln() {
     isConnected: true
   });
 
+  const isPmOnline = useMemo(() => {
+    // 1. Direct raw API check (e.g. Status_PM8000: false from 10.3.164.3)
+    const defaultUrl = DEFAULT_API_URLS[mode] || "";
+    const activeUrl = Object.keys(apiLiveData).find(u => u && apiLiveData[u]) || defaultUrl;
+    const directPayload = apiLiveData[activeUrl] || apiLiveData[defaultUrl];
+    if (directPayload) {
+      const directSt = checkDeviceStatus(directPayload, mode);
+      if (directSt === false) return false;
+      if (directSt === true) return true;
+    }
+
+    // 2. If API poll explicitly failed for this URL
+    if (directPayload === null && !metrics.isConnected) return false;
+
+    // 3. Fallback to metrics socket / REST telemetry status
+    return metrics.isConnected;
+  }, [mode, apiLiveData, metrics.isConnected]);
+
 interface HourlyTrend5sPoint {
   time: string;
   hour: number;
@@ -467,12 +526,22 @@ interface HourlyTrend5sPoint {
   const [events, setEvents] = useState(MOCK_EVENTS);
 
   const getApiVal = useCallback((tagKey: string) => {
+    // If PM is detected offline, NEVER return stale / cached values
+    if (!isPmOnline) {
+      return "PM OFFLINE";
+    }
+
     const rawKey = tagKey.includes("/") ? tagKey.split("/")[1] : tagKey;
     const defaultUrl = DEFAULT_API_URLS[mode] || "";
     const url = apiSourceUrls[tagKey] || defaultUrl;
     const jsonKey = jsonKeyMap[tagKey] || DEFAULT_JSON_KEYS[rawKey] || rawKey;
 
     if (url && apiLiveData[url]) {
+      const epStatus = checkDeviceStatus(apiLiveData[url], mode);
+      if (epStatus === false) {
+        return "PM OFFLINE";
+      }
+
       let val = apiLiveData[url][jsonKey];
       if (val === undefined && rawKey === "active_power") {
         val = apiLiveData[url]["Active_Power_Total"] ?? apiLiveData[url]["active_power_total"] ?? apiLiveData[url]["Active_Power"];
@@ -535,7 +604,7 @@ interface HourlyTrend5sPoint {
 
     // If direct live API poll is unavailable for this URL, fallback to backend WebSocket/telemetry metrics first
     if (url && apiLiveData[url] === null && (!metrics || !metrics.isConnected)) {
-      return "GAGAL POLLING API";
+      return "PM OFFLINE";
     }
 
     // Fallback to metrics from backend WebSocket
@@ -563,12 +632,22 @@ interface HourlyTrend5sPoint {
     }
 
     if (!url.trim()) return "BELUM ADA API";
-    return "API TIDAK TERKIRIM";
-  }, [mode, apiSourceUrls, jsonKeyMap, apiLiveData, metrics]);
+    return "PM OFFLINE";
+  }, [mode, apiSourceUrls, jsonKeyMap, apiLiveData, metrics, isPmOnline]);
 
   const isOfflineVal = useCallback((val: any) => {
-    return val === null || val === undefined || val === "BELUM ADA API" || val === "API TIDAK TERKIRIM" || val === "Gagal Polling API" || val === "GAGAL POLLING API" || val === "xx";
-  }, []);
+    return (
+      !isPmOnline ||
+      val === null ||
+      val === undefined ||
+      val === "PM OFFLINE" ||
+      val === "BELUM ADA API" ||
+      val === "API TIDAK TERKIRIM" ||
+      val === "Gagal Polling API" ||
+      val === "GAGAL POLLING API" ||
+      val === "xx"
+    );
+  }, [isPmOnline]);
 
   // Load database analytics fallback via dedicated endpoint
   const fetchTelemetry = () => {
@@ -582,27 +661,27 @@ interface HourlyTrend5sPoint {
           const isOffline = pq.pfStatus === "offline" || pq.pfStatus === "disconnected" || pq.status === false;
           setMetrics((prev) => ({
             ...prev,
-            voltage: !isOffline && pq.voltage !== undefined && pq.voltage !== null ? pq.voltage : (isOffline ? 0 : prev.voltage),
-            frequency: !isOffline && pq.freq !== undefined && pq.freq !== null ? pq.freq : (isOffline ? 0 : prev.frequency),
-            activePower: !isOffline && pq.activePower !== undefined && pq.activePower !== null ? pq.activePower : (isOffline ? 0 : prev.activePower),
-            powerFactor: !isOffline && pq.pf !== undefined && pq.pf !== null ? pq.pf : (isOffline ? 0 : prev.powerFactor),
-            reactivePower: !isOffline && pq.reactivePower !== undefined && pq.reactivePower !== null ? pq.reactivePower : (isOffline ? 0 : prev.reactivePower),
-            apparentPower: !isOffline && pq.apparentPower !== undefined && pq.apparentPower !== null ? pq.apparentPower : (isOffline ? 0 : prev.apparentPower),
-            unbalanceV: !isOffline && pq.vUnb !== undefined && pq.vUnb !== null ? pq.vUnb : (isOffline ? 0 : prev.unbalanceV),
-            unbalanceI: !isOffline && pq.iUnb !== undefined && pq.iUnb !== null ? pq.iUnb : (isOffline ? 0 : prev.unbalanceI),
-            vR: !isOffline && pq.vR !== undefined && pq.vR !== null ? pq.vR : (isOffline ? 0 : prev.vR),
-            vS: !isOffline && pq.vS !== undefined && pq.vS !== null ? pq.vS : (isOffline ? 0 : prev.vS),
-            vT: !isOffline && pq.vT !== undefined && pq.vT !== null ? pq.vT : (isOffline ? 0 : prev.vT),
-            iR: !isOffline && pq.iR !== undefined && pq.iR !== null ? pq.iR : (isOffline ? 0 : prev.iR),
-            iS: !isOffline && pq.iS !== undefined && pq.iS !== null ? pq.iS : (isOffline ? 0 : prev.iS),
-            iT: !isOffline && pq.iT !== undefined && pq.iT !== null ? pq.iT : (isOffline ? 0 : prev.iT),
-            thdV_R: !isOffline && pq.thdV_R !== undefined && pq.thdV_R !== null ? pq.thdV_R : (isOffline ? 0 : prev.thdV_R),
-            thdV_S: !isOffline && pq.thdV_S !== undefined && pq.thdV_S !== null ? pq.thdV_S : (isOffline ? 0 : prev.thdV_S),
-            thdV_T: !isOffline && pq.thdV_T !== undefined && pq.thdV_T !== null ? pq.thdV_T : (isOffline ? 0 : prev.thdV_T),
-            thdI_R: !isOffline && pq.thdI_R !== undefined && pq.thdI_R !== null ? pq.thdI_R : (isOffline ? 0 : prev.thdI_R),
-            thdI_S: !isOffline && pq.thdI_S !== undefined && pq.thdI_S !== null ? pq.thdI_S : (isOffline ? 0 : prev.thdI_S),
-            thdI_T: !isOffline && pq.thdI_T !== undefined && pq.thdI_T !== null ? pq.thdI_T : (isOffline ? 0 : prev.thdI_T),
-            isConnected: !isOffline && pq.pfStatus === "connected"
+            voltage: !isOffline && pq.voltage !== undefined && pq.voltage !== null ? pq.voltage : 0,
+            frequency: !isOffline && pq.freq !== undefined && pq.freq !== null ? pq.freq : 0,
+            activePower: !isOffline && pq.activePower !== undefined && pq.activePower !== null ? pq.activePower : 0,
+            powerFactor: !isOffline && pq.pf !== undefined && pq.pf !== null ? pq.pf : 0,
+            reactivePower: !isOffline && pq.reactivePower !== undefined && pq.reactivePower !== null ? pq.reactivePower : 0,
+            apparentPower: !isOffline && pq.apparentPower !== undefined && pq.apparentPower !== null ? pq.apparentPower : 0,
+            unbalanceV: !isOffline && pq.vUnb !== undefined && pq.vUnb !== null ? pq.vUnb : 0,
+            unbalanceI: !isOffline && pq.iUnb !== undefined && pq.iUnb !== null ? pq.iUnb : 0,
+            vR: !isOffline && pq.vR !== undefined && pq.vR !== null ? pq.vR : 0,
+            vS: !isOffline && pq.vS !== undefined && pq.vS !== null ? pq.vS : 0,
+            vT: !isOffline && pq.vT !== undefined && pq.vT !== null ? pq.vT : 0,
+            iR: !isOffline && pq.iR !== undefined && pq.iR !== null ? pq.iR : 0,
+            iS: !isOffline && pq.iS !== undefined && pq.iS !== null ? pq.iS : 0,
+            iT: !isOffline && pq.iT !== undefined && pq.iT !== null ? pq.iT : 0,
+            thdV_R: !isOffline && pq.thdV_R !== undefined && pq.thdV_R !== null ? pq.thdV_R : 0,
+            thdV_S: !isOffline && pq.thdV_S !== undefined && pq.thdV_S !== null ? pq.thdV_S : 0,
+            thdV_T: !isOffline && pq.thdV_T !== undefined && pq.thdV_T !== null ? pq.thdV_T : 0,
+            thdI_R: !isOffline && pq.thdI_R !== undefined && pq.thdI_R !== null ? pq.thdI_R : 0,
+            thdI_S: !isOffline && pq.thdI_S !== undefined && pq.thdI_S !== null ? pq.thdI_S : 0,
+            thdI_T: !isOffline && pq.thdI_T !== undefined && pq.thdI_T !== null ? pq.thdI_T : 0,
+            isConnected: !isOffline && pq.pfStatus === "connected" && pq.status !== false
           }));
         }
         const pts = payload?.points || (payload as any)?.charts?.hourlyTrend5s;
@@ -713,10 +792,22 @@ interface HourlyTrend5sPoint {
     const handleLiveUpdate = (payload: any) => {
       if (payload && payload.deviceId === config.deviceId) {
         setLoading(false);
-        const isOffline = payload.online === false || payload.status === false || payload.pqData?.pfStatus === "offline" || payload.error;
+        const isOffline = payload.online === false || payload.status === false || payload.pqData?.pfStatus === "offline" || payload.pqData?.status === false || payload.error;
         if (isOffline) {
           setMetrics((prev) => ({
             ...prev,
+            voltage: 0,
+            frequency: 0,
+            activePower: 0,
+            powerFactor: 0,
+            reactivePower: 0,
+            apparentPower: 0,
+            unbalanceV: 0,
+            unbalanceI: 0,
+            vR: 0, vS: 0, vT: 0,
+            iR: 0, iS: 0, iT: 0,
+            thdV_R: 0, thdV_S: 0, thdV_T: 0,
+            thdI_R: 0, thdI_S: 0, thdI_T: 0,
             isConnected: false
           }));
           return;
@@ -745,7 +836,7 @@ interface HourlyTrend5sPoint {
             thdI_R: pq.thdI_R !== undefined ? pq.thdI_R : prev.thdI_R,
             thdI_S: pq.thdI_S !== undefined ? pq.thdI_S : prev.thdI_S,
             thdI_T: pq.thdI_T !== undefined ? pq.thdI_T : prev.thdI_T,
-            isConnected: pq.pfStatus !== "offline" && pq.pfStatus !== "disconnected"
+            isConnected: pq.pfStatus !== "offline" && pq.pfStatus !== "disconnected" && pq.status !== false
           }));
         }
       }
@@ -803,6 +894,32 @@ interface HourlyTrend5sPoint {
   const prefix = mode === "pln" ? "pln" : mode === "fact1" ? "wf1" : "wf2";
 
   const liveMetrics = useMemo(() => {
+    if (!isPmOnline) {
+      return {
+        voltage: null,
+        frequency: null,
+        activePower: null,
+        powerFactor: null,
+        reactivePower: null,
+        apparentPower: null,
+        unbalanceV: null,
+        unbalanceI: null,
+        vR: null,
+        vS: null,
+        vT: null,
+        iR: null,
+        iS: null,
+        iT: null,
+        thdV_R: null,
+        thdV_S: null,
+        thdV_T: null,
+        thdI_R: null,
+        thdI_S: null,
+        thdI_T: null,
+        isConnected: false
+      };
+    }
+
     const hasLiveMetrics = metrics.isConnected && (metrics.voltage > 0 || metrics.frequency > 0);
 
     const pickVal = (tag: string, metricVal: any) => {
@@ -812,7 +929,7 @@ interface HourlyTrend5sPoint {
       }
       // 2. Fall back to direct API data if available
       const apiV = getApiVal(`${prefix}/${tag}`);
-      if (apiV !== "BELUM ADA API" && apiV !== "API TIDAK TERKIRIM" && apiV !== "GAGAL POLLING API" && apiV !== "Gagal Polling API" && apiV !== "xx") {
+      if (apiV !== "BELUM ADA API" && apiV !== "API TIDAK TERKIRIM" && apiV !== "GAGAL POLLING API" && apiV !== "Gagal Polling API" && apiV !== "xx" && apiV !== "PM OFFLINE") {
         return apiV;
       }
       // 3. Fall back to socket metricVal
@@ -840,13 +957,23 @@ interface HourlyTrend5sPoint {
       thdI_R: pickVal("thd_i_r", metrics.thdI_R),
       thdI_S: pickVal("thd_i_s", metrics.thdI_S),
       thdI_T: pickVal("thd_i_t", metrics.thdI_T),
-      isConnected: metrics.isConnected || (getApiVal(`${prefix}/active_power`) !== "BELUM ADA API" && getApiVal(`${prefix}/active_power`) !== "API TIDAK TERKIRIM" && getApiVal(`${prefix}/active_power`) !== "GAGAL POLLING API" && getApiVal(`${prefix}/active_power`) !== "Gagal Polling API")
+      isConnected: true
     };
-  }, [prefix, getApiVal, metrics]);
+  }, [prefix, getApiVal, metrics, isPmOnline]);
 
   const renderMetricVal = useCallback((val: any, formatFn: (v: number) => string) => {
     if (loading) {
       return <span className="h-5 w-20 bg-slate-200 dark:bg-slate-700/60 rounded-md animate-pulse inline-block align-middle" />;
+    }
+    if (!isPmOnline || val === "PM OFFLINE") {
+      return (
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-xl md:text-2xl font-black font-mono text-slate-400 dark:text-slate-600">—</span>
+          <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500 border border-rose-500/20">
+            PM MATI
+          </span>
+        </div>
+      );
     }
     if (val === "BELUM ADA API") {
       return <span className="text-red-500 text-xs font-extrabold font-mono uppercase tracking-wider">BELUM ADA API</span>;
@@ -855,27 +982,34 @@ interface HourlyTrend5sPoint {
       return <span className="text-amber-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">GAGAL POLLING API</span>;
     }
     if (val === null || val === undefined) {
-      return <span className="text-amber-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">GAGAL POLLING API</span>;
+      return (
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-xl md:text-2xl font-black font-mono text-slate-400 dark:text-slate-600">—</span>
+          <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500 border border-rose-500/20">
+            PM MATI
+          </span>
+        </div>
+      );
     }
     const num = Number(val);
     if (isNaN(num)) {
       return <span className="text-amber-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">GAGAL POLLING API</span>;
     }
     return formatFn(num);
-  }, [loading]);
+  }, [loading, isPmOnline]);
 
   const renderTableStatus = useCallback((isOffline: boolean, isNormal: boolean, overlimitLabel = "⚠ Overlimit") => {
     if (loading) {
       return <span className="inline-block w-16 h-4 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />;
     }
-    if (isOffline) {
-      return <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>;
+    if (!isPmOnline || isOffline) {
+      return <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase border bg-rose-500/10 text-rose-500 border-rose-500/20">✕ PM Mati</span>;
     }
     if (isNormal) {
       return <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>;
     }
     return <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">{overlimitLabel}</span>;
-  }, [loading]);
+  }, [loading, isPmOnline]);
 
   // Averages and stats helpers for Phase details
   const statsV = useMemo(() => {
@@ -904,6 +1038,24 @@ interface HourlyTrend5sPoint {
 
   // Radar PQ index chart data
   const radarData = useMemo(() => {
+    if (!isPmOnline) {
+      return {
+        labels: ["Voltage", "Current", "PF", "Freq", "THD-V", "THD-I"],
+        datasets: [
+          {
+            label: "Daya Aktual",
+            data: [0, 0, 0, 0, 0, 0],
+            backgroundColor: "rgba(244, 63, 94, 0.08)",
+            borderColor: "#f43f5e",
+            borderWidth: 1.5,
+            pointBackgroundColor: "#f43f5e",
+            pointBorderColor: "#fff",
+            pointHoverBackgroundColor: "#fff",
+            pointHoverBorderColor: "#f43f5e"
+          }
+        ]
+      };
+    }
     const numVoltage = isOfflineVal(liveMetrics.voltage) ? 0 : Number(liveMetrics.voltage) || 0;
     const numPf = isOfflineVal(liveMetrics.powerFactor) ? 0 : Number(liveMetrics.powerFactor) || 0;
     const numFrequency = isOfflineVal(liveMetrics.frequency) ? 0 : Number(liveMetrics.frequency) || 0;
@@ -933,9 +1085,9 @@ interface HourlyTrend5sPoint {
         }
       ]
     };
-  }, [liveMetrics, statsI.avg, statsThdV.avg, statsThdI.avg, config.voltageBase, isOfflineVal]);
+  }, [liveMetrics, statsI.avg, statsThdV.avg, statsThdI.avg, config.voltageBase, isOfflineVal, isPmOnline]);
 
-  const isConnected = !isOfflineVal(liveMetrics.voltage) || !isOfflineVal(liveMetrics.activePower);
+  const isConnected = isPmOnline && (!isOfflineVal(liveMetrics.voltage) || !isOfflineVal(liveMetrics.activePower));
   const radarOptions: any = {
     responsive: true,
     maintainAspectRatio: false,
@@ -1241,6 +1393,11 @@ interface HourlyTrend5sPoint {
               <span className="h-2 w-2 rounded-full bg-sky-500 animate-ping" />
               MEMUAT DATA...
             </span>
+          ) : !isPmOnline ? (
+            <span className="px-3 py-1.5 rounded-full text-xs font-black uppercase flex items-center gap-1.5 border bg-rose-500/15 text-rose-500 border-rose-500/30 shadow-sm">
+              <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+              ● {config.pmModel} MATI (OFFLINE)
+            </span>
           ) : (
             <span className={`px-3 py-1.5 rounded-full text-xs font-extrabold uppercase flex items-center gap-1.5 border transition-colors duration-300 ${
               isConnected
@@ -1256,6 +1413,26 @@ interface HourlyTrend5sPoint {
         </div>
       </div>
 
+      {/* ═══════════ PM OFFLINE WARNING BANNER ═══════════ */}
+      {!loading && !isPmOnline && (
+        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 dark:bg-rose-950/20 p-4 flex items-center gap-3.5 shadow-sm text-rose-600 dark:text-rose-400">
+          <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black uppercase tracking-wider">STATUS POWER METER: MATI / OFFLINE</span>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/30">Status: false</span>
+            </div>
+            <p className="text-[11px] font-medium text-rose-600/90 dark:text-rose-400/90 mt-0.5">
+              Power meter {config.pmModel} pada {config.title} terdeteksi offline / tidak aktif. Seluruh data telemetri dinonaktifkan untuk mencegah penayangan data beku (stale).
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ═══════════ SECTION A: SIX METRIC CARDS ═══════════ */}
       <section className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         {/* Tegangan */}
@@ -1270,7 +1447,7 @@ interface HourlyTrend5sPoint {
             <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
               {renderMetricVal(liveMetrics.voltage, (v) => `${v > 1000 ? (v / 1000).toFixed(2) : v.toFixed(2)} kV`)}
             </div>
-            <p className="text-[9px] text-slate-400 mt-1">Nominal: 20 kV</p>
+            <p className="text-[9px] text-slate-400 mt-1">{!isPmOnline ? <span className="text-rose-500 font-bold">PM Mati / Offline</span> : "Nominal: 20 kV"}</p>
           </div>
         </div>
 
@@ -1286,7 +1463,7 @@ interface HourlyTrend5sPoint {
             <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
               {renderMetricVal(liveMetrics.frequency, (v) => `${v.toFixed(2)} Hz`)}
             </div>
-            <p className="text-[9px] text-slate-400 mt-1">Nominal: 50 Hz</p>
+            <p className="text-[9px] text-slate-400 mt-1">{!isPmOnline ? <span className="text-rose-500 font-bold">PM Mati / Offline</span> : "Nominal: 50 Hz"}</p>
           </div>
         </div>
 
@@ -1302,7 +1479,7 @@ interface HourlyTrend5sPoint {
             <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
               {renderMetricVal(liveMetrics.activePower, (v) => `${v.toLocaleString("id-ID")} kW`)}
             </div>
-            <p className="text-[9px] text-slate-400 mt-1">Total daya aktif</p>
+            <p className="text-[9px] text-slate-400 mt-1">{!isPmOnline ? <span className="text-rose-500 font-bold">PM Mati / Offline</span> : "Total daya aktif"}</p>
           </div>
         </div>
 
@@ -1318,7 +1495,7 @@ interface HourlyTrend5sPoint {
             <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
               {renderMetricVal(liveMetrics.powerFactor, (v) => `${v.toFixed(3)} PF`)}
             </div>
-            <p className="text-[9px] text-emerald-500 font-bold mt-1">Good</p>
+            <p className="text-[9px] mt-1">{!isPmOnline ? <span className="text-rose-500 font-bold">PM Mati / Offline</span> : <span className="text-emerald-500 font-bold">Good</span>}</p>
           </div>
         </div>
 
@@ -1334,7 +1511,7 @@ interface HourlyTrend5sPoint {
             <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
               {renderMetricVal(liveMetrics.reactivePower, (v) => `${v.toLocaleString("id-ID")} kVAR`)}
             </div>
-            <p className="text-[9px] text-slate-400 mt-1">Daya reaktif</p>
+            <p className="text-[9px] text-slate-400 mt-1">{!isPmOnline ? <span className="text-rose-500 font-bold">PM Mati / Offline</span> : "Daya reaktif"}</p>
           </div>
         </div>
 
@@ -1350,15 +1527,15 @@ interface HourlyTrend5sPoint {
             <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
               {renderMetricVal(liveMetrics.apparentPower, (v) => `${v.toLocaleString("id-ID")} kVA`)}
             </div>
-            <p className="text-[9px] text-slate-400 mt-1">Daya semu</p>
+            <p className="text-[9px] text-slate-400 mt-1">{!isPmOnline ? <span className="text-rose-500 font-bold">PM Mati / Offline</span> : "Daya semu"}</p>
           </div>
         </div>
       </section>
 
       {/* ═══════════ SECTION B: POWER QUALITY INDEX & GAUGES ═══════════ */}
       <section className="grid gap-6 md:grid-cols-3">
-        <UnbalancedGauge label="Voltage Unbalanced" value={liveMetrics.unbalanceV} maxAllowed={standards.unbalanceVMax} isDark={isDark} isLoading={loading} />
-        <UnbalancedGauge label="Current Unbalanced" value={liveMetrics.unbalanceI} maxAllowed={standards.unbalanceIMax} isDark={isDark} isLoading={loading} />
+        <UnbalancedGauge label="Voltage Unbalanced" value={liveMetrics.unbalanceV} maxAllowed={standards.unbalanceVMax} isDark={isDark} isLoading={loading} isPmOnline={isPmOnline} />
+        <UnbalancedGauge label="Current Unbalanced" value={liveMetrics.unbalanceI} maxAllowed={standards.unbalanceIMax} isDark={isDark} isLoading={loading} isPmOnline={isPmOnline} />
 
         {/* Power Quality Radar Index */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
@@ -1368,6 +1545,12 @@ interface HourlyTrend5sPoint {
           </div>
           <div className="relative mt-2 flex items-center justify-center" style={{ height: 160 }}>
             <Radar data={radarData} options={radarOptions} />
+            {!loading && !isPmOnline && (
+              <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/85 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-xl z-10">
+                <span className="text-xs font-black uppercase text-rose-500 tracking-wider">PM {config.pmModel} MATI</span>
+                <span className="text-[10px] text-slate-400 mt-0.5 font-semibold">Analisis PQ Tidak Tersedia</span>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -1389,7 +1572,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.vR, (v) => `${v.toFixed(3)} kV`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vR) && Number(liveMetrics.vR) > 0 ? `${Math.min(100, (Number(liveMetrics.vR) / 24) * 100)}%` : "0%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.vR) && Number(liveMetrics.vR) > 0 ? `${Math.min(100, (Number(liveMetrics.vR) / 24) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
@@ -1399,7 +1582,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.vS, (v) => `${v.toFixed(3)} kV`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vS) && Number(liveMetrics.vS) > 0 ? `${Math.min(100, (Number(liveMetrics.vS) / 24) * 100)}%` : "0%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.vS) && Number(liveMetrics.vS) > 0 ? `${Math.min(100, (Number(liveMetrics.vS) / 24) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
@@ -1409,15 +1592,15 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.vT, (v) => `${v.toFixed(3)} kV`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vT) && Number(liveMetrics.vT) > 0 ? `${Math.min(100, (Number(liveMetrics.vT) / 24) * 100)}%` : "0%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.vT) && Number(liveMetrics.vT) > 0 ? `${Math.min(100, (Number(liveMetrics.vT) / 24) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsV.avg.toFixed(3)}</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsV.min.toFixed(3)}</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsV.max.toFixed(3)}</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsV.avg.toFixed(3)} kV`}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsV.min.toFixed(3)} kV`}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsV.max.toFixed(3)} kV`}</strong></span>
           </div>
         </div>
 
@@ -1436,7 +1619,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.iR, (v) => `${v.toFixed(1)} A`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.iR) && Number(liveMetrics.iR) > 0 ? `${Math.min(100, (Number(liveMetrics.iR) / 150) * 100)}%` : "0%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.iR) && Number(liveMetrics.iR) > 0 ? `${Math.min(100, (Number(liveMetrics.iR) / 150) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
@@ -1446,7 +1629,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.iS, (v) => `${v.toFixed(1)} A`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.iS) && Number(liveMetrics.iS) > 0 ? `${Math.min(100, (Number(liveMetrics.iS) / 150) * 100)}%` : "0%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.iS) && Number(liveMetrics.iS) > 0 ? `${Math.min(100, (Number(liveMetrics.iS) / 150) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
@@ -1456,15 +1639,15 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.iT, (v) => `${v.toFixed(1)} A`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.iT) && Number(liveMetrics.iT) > 0 ? `${Math.min(100, (Number(liveMetrics.iT) / 150) * 100)}%` : "0%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.iT) && Number(liveMetrics.iT) > 0 ? `${Math.min(100, (Number(liveMetrics.iT) / 150) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsI.avg.toFixed(1)}</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsI.min.toFixed(1)}</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsI.max.toFixed(1)}</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsI.avg.toFixed(1)} A`}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsI.min.toFixed(1)} A`}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsI.max.toFixed(1)} A`}</strong></span>
           </div>
         </div>
 
@@ -1483,7 +1666,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.thdV_R, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdV_R) && Number(liveMetrics.thdV_R) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_R) / 5) * 100)}%` : "0%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.thdV_R) && Number(liveMetrics.thdV_R) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_R) / 5) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
@@ -1493,7 +1676,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.thdV_S, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdV_S) && Number(liveMetrics.thdV_S) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_S) / 5) * 100)}%` : "0%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.thdV_S) && Number(liveMetrics.thdV_S) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_S) / 5) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
@@ -1503,15 +1686,15 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.thdV_T, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdV_T) && Number(liveMetrics.thdV_T) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_T) / 5) * 100)}%` : "0%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.thdV_T) && Number(liveMetrics.thdV_T) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_T) / 5) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdV.avg.toFixed(2)}</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdV.min.toFixed(2)}</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdV.max.toFixed(2)}</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsThdV.avg.toFixed(2)} %`}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsThdV.min.toFixed(2)} %`}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsThdV.max.toFixed(2)} %`}</strong></span>
           </div>
         </div>
 
@@ -1530,7 +1713,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.thdI_R, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdI_R) && Number(liveMetrics.thdI_R) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_R) / 8) * 100)}%` : "0%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.thdI_R) && Number(liveMetrics.thdI_R) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_R) / 8) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
@@ -1540,7 +1723,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.thdI_S, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdI_S) && Number(liveMetrics.thdI_S) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_S) / 8) * 100)}%` : "0%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.thdI_S) && Number(liveMetrics.thdI_S) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_S) / 8) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
@@ -1550,15 +1733,15 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.thdI_T, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdI_T) && Number(liveMetrics.thdI_T) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_T) / 8) * 100)}%` : "0%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.thdI_T) && Number(liveMetrics.thdI_T) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_T) / 8) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdI.avg.toFixed(2)}</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdI.min.toFixed(2)}</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdI.max.toFixed(2)}</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsThdI.avg.toFixed(2)} %`}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsThdI.min.toFixed(2)} %`}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsThdI.max.toFixed(2)} %`}</strong></span>
           </div>
         </div>
       </section>
