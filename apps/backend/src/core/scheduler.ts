@@ -119,18 +119,55 @@ let latestHvacRetainLiveState: HvacRetainLiveState = {
 
 export const getHvacRetainLiveState = (): HvacRetainLiveState => latestHvacRetainLiveState;
 
-const parsePlnApi = (data: any, ts: Date) => {
-  const isOnline = data.Status_PM8000 !== undefined ? !!data.Status_PM8000 : null;
-  if (isOnline === false) {
-    return getNullPlnRecord(ts);
+export const parseStatusBool = (val: any): boolean | null => {
+  if (val === undefined || val === null) return null;
+  if (typeof val === "boolean") return val;
+  if (typeof val === "number") return val === 1;
+  if (typeof val === "string") {
+    const s = val.trim().toLowerCase();
+    if (s === "true" || s === "1" || s === "online" || s === "connected") return true;
+    if (s === "false" || s === "0" || s === "offline" || s === "mati" || s === "disconnected") return false;
   }
-  const rawPeak = data.Peak_Demand_W ?? data.Peak_Demand_w ?? data.PeakDemand_W ?? data.peak_demand_w ?? data.Peak_Demand ?? data.peak_demand;
-  const peakDemand = (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)))
-    ? Number(rawPeak) / 1000.0 // Konversi Watt ke kW
+  return null;
+};
+
+const parsePlnApi = (data: any, ts: Date) => {
+  const rawStatus = data.Status_PM8000 ?? data.status_pm8000 ?? data.Status_PLN ?? data.Status;
+  const isOnline = parseStatusBool(rawStatus);
+  const rawActiveEnergy = data.ActiveEnergy !== undefined && data.ActiveEnergy !== null && !isNaN(Number(data.ActiveEnergy))
+    ? Number(data.ActiveEnergy)
     : null;
   const rawExportPln = data.Export_PLN ?? data.export_pln ?? data.ExportPLN ?? data.Export_Pln;
   const exportPln = (rawExportPln !== undefined && rawExportPln !== null && !isNaN(Number(rawExportPln)))
     ? Number(rawExportPln)
+    : null;
+
+  if (isOnline === false) {
+    // Real-time instantaneous values are 0 or null, BUT historical energy counter is preserved from API
+    // so database insertion never records 0 or null, avoiding false delta consumption spikes.
+    return {
+      t_stamp: ts,
+      status_pm8000: false,
+      volt_ab: null, volt_bc: null, volt_ca: null, volt_ll: null,
+      current_a: null, current_b: null, current_c: null,
+      frequency: null,
+      active_power: 0, // Instantaneous power is 0 kW when offline
+      reactive_power_total: 0,
+      apparent_power_total: 0,
+      power_factor: null,
+      voltage_unbalance: null,
+      current_unbalance: null,
+      thd_volt_a: null, thd_volt_b: null, thd_volt_c: null,
+      thd_current_a: null, thd_current_b: null, thd_current_c: null,
+      active_energy: rawActiveEnergy, // PRESERVE exact raw cumulative counter from API for DB!
+      peak_demand: null,
+      export_pln: exportPln // PRESERVE exact export reading!
+    };
+  }
+
+  const rawPeak = data.Peak_Demand_W ?? data.Peak_Demand_w ?? data.PeakDemand_W ?? data.peak_demand_w ?? data.Peak_Demand ?? data.peak_demand;
+  const peakDemand = (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)))
+    ? Number(rawPeak) / 1000.0 // Konversi Watt ke kW
     : null;
 
   return {
@@ -156,20 +193,36 @@ const parsePlnApi = (data: any, ts: Date) => {
     thd_current_a: typeof data.THD_Current_A === "number" ? data.THD_Current_A : null,
     thd_current_b: typeof data.THD_Current_B === "number" ? data.THD_Current_B : null,
     thd_current_c: typeof data.THD_Current_C === "number" ? data.THD_Current_C : null,
-    active_energy: typeof data.ActiveEnergy === "number" ? data.ActiveEnergy : null,
+    active_energy: rawActiveEnergy,
     peak_demand: peakDemand,
     export_pln: exportPln,
   };
 };
 
 const parseWfApi = (data: any, ts: Date) => {
-  const isOnline = data.Status_PM5500_WF1 !== undefined 
-    ? !!data.Status_PM5500_WF1 
-    : (data.Status_PM5500_WF2 !== undefined 
-      ? !!data.Status_PM5500_WF2 
-      : (data.Status_PM5500 !== undefined ? !!data.Status_PM5500 : null));
+  const rawStatus = data.Status_PM5500_WF1 ?? data.Status_PM5500_WF2 ?? data.Status_PM5560 ?? data.Status_PM5500 ?? data.Status;
+  const isOnline = parseStatusBool(rawStatus);
+  const rawActiveEnergy = data.ActiveEnergy !== undefined && data.ActiveEnergy !== null && !isNaN(Number(data.ActiveEnergy))
+    ? Number(data.ActiveEnergy)
+    : null;
+
   if (isOnline === false) {
-    return getNullWfRecord(ts);
+    return {
+      t_stamp: ts,
+      status_pm5500: false,
+      volt_ab: null, volt_bc: null, volt_ca: null, volt_ll: null,
+      current_a: null, current_b: null, current_c: null,
+      frequency: null,
+      active_power_total: 0,
+      reactive_power_total: 0,
+      apparent_power_total: 0,
+      power_factor: null,
+      voltage_unbalance: null,
+      current_unbalance: null,
+      thd_volt_a: null, thd_volt_b: null, thd_volt_c: null,
+      thd_current_a: null, thd_current_b: null, thd_current_c: null,
+      active_energy: rawActiveEnergy // PRESERVE exact raw cumulative counter from API for DB!
+    };
   }
   return {
     t_stamp: ts,
@@ -194,32 +247,32 @@ const parseWfApi = (data: any, ts: Date) => {
     thd_current_a: typeof data.THD_Current_A === "number" ? data.THD_Current_A : null,
     thd_current_b: typeof data.THD_Current_B === "number" ? data.THD_Current_B : null,
     thd_current_c: typeof data.THD_Current_C === "number" ? data.THD_Current_C : null,
-    active_energy: typeof data.ActiveEnergy === "number" ? data.ActiveEnergy : null,
+    active_energy: rawActiveEnergy,
   };
 };
 
 const getNullPlnRecord = (ts: Date) => ({
   t_stamp: ts,
-  status_pm8000: false,
-  volt_ab: null, volt_bc: null, volt_ca: null, volt_ll: null,
-  current_a: null, current_b: null, current_c: null,
-  frequency: null, active_power: null, reactive_power_total: null,
-  apparent_power_total: null, power_factor: null, voltage_unbalance: null,
-  current_unbalance: null, thd_volt_a: null, thd_volt_b: null,
-  thd_volt_c: null, thd_current_a: null, thd_current_b: null,
-  thd_current_c: null, active_energy: null, peak_demand: null, export_pln: null
+  status_pm8000: false as boolean | null,
+  volt_ab: null as number | null, volt_bc: null as number | null, volt_ca: null as number | null, volt_ll: null as number | null,
+  current_a: null as number | null, current_b: null as number | null, current_c: null as number | null,
+  frequency: null as number | null, active_power: 0 as number | null, reactive_power_total: 0 as number | null,
+  apparent_power_total: 0 as number | null, power_factor: null as number | null, voltage_unbalance: null as number | null,
+  current_unbalance: null as number | null, thd_volt_a: null as number | null, thd_volt_b: null as number | null,
+  thd_volt_c: null as number | null, thd_current_a: null as number | null, thd_current_b: null as number | null,
+  thd_current_c: null as number | null, active_energy: null as number | null, peak_demand: null as number | null, export_pln: null as number | null
 });
 
 const getNullWfRecord = (ts: Date) => ({
   t_stamp: ts,
-  status_pm5500: false,
-  volt_ab: null, volt_bc: null, volt_ca: null, volt_ll: null,
-  current_a: null, current_b: null, current_c: null,
-  frequency: null, active_power_total: null, reactive_power_total: null,
-  apparent_power_total: null, power_factor: null, voltage_unbalance: null,
-  current_unbalance: null, thd_volt_a: null, thd_volt_b: null,
-  thd_volt_c: null, thd_current_a: null, thd_current_b: null,
-  thd_current_c: null, active_energy: null
+  status_pm5500: false as boolean | null,
+  volt_ab: null as number | null, volt_bc: null as number | null, volt_ca: null as number | null, volt_ll: null as number | null,
+  current_a: null as number | null, current_b: null as number | null, current_c: null as number | null,
+  frequency: null as number | null, active_power_total: 0 as number | null, reactive_power_total: 0 as number | null,
+  apparent_power_total: 0 as number | null, power_factor: null as number | null, voltage_unbalance: null as number | null,
+  current_unbalance: null as number | null, thd_volt_a: null as number | null, thd_volt_b: null as number | null,
+  thd_volt_c: null as number | null, thd_current_a: null as number | null, thd_current_b: null as number | null,
+  thd_current_c: null as number | null, active_energy: null as number | null
 });
 
 const EW_GROUP_PMS: Record<string, string[]> = {
@@ -319,7 +372,7 @@ export const getWibDateTime = (d: Date = new Date()) => {
   };
 };
 
-const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>, minuteTs: Date) => {
+const insertPlnMinuteTelemetry = async (payload: any, minuteTs: Date) => {
   const pool = getPostgresPool();
   const isExactHour = minuteTs.getMinutes() === 0;
 
@@ -398,7 +451,7 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
   }
 };
 
-const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | "electric_wf2_telemetry_minute", payload: ReturnType<typeof parseWfApi>, minuteTs: Date) => {
+const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | "electric_wf2_telemetry_minute", payload: any, minuteTs: Date) => {
   const pool = getPostgresPool();
   const isExactHour = minuteTs.getMinutes() === 0;
   const mainTable = table === "electric_wf1_telemetry_minute" ? "electric_wf1_telemetry" : "electric_wf2_telemetry";
@@ -538,22 +591,22 @@ export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] =
     if (!poiObj) return;
     const num = poiId === "POI_1" ? "1" : "2";
     const status = poiObj[`Status_POI_${num}`] !== undefined ? Boolean(poiObj[`Status_POI_${num}`]) : true;
-    const volt_ab = Number(poiObj[`Volt_AB_POI_${num}`]) || null;
-    const volt_bc = Number(poiObj[`Volt_BC_POI_${num}`]) || null;
-    const volt_ca = Number(poiObj[`Volt_CA_POI_${num}`]) || null;
-    const volt_an = Number(poiObj[`Volt_AN_POI_${num}`]) || null;
-    const volt_bn = Number(poiObj[`Volt_BN_POI_${num}`]) || null;
-    const volt_cn = Number(poiObj[`Volt_CN_POI_${num}`]) || null;
-    const frequency = Number(poiObj[`Frequency_POI_${num}`]) || null;
-    let active_power = Number(poiObj[`Scale_Total_KW_POI_${num}`]) || 0;
+    const volt_ab = status ? (Number(poiObj[`Volt_AB_POI_${num}`]) || null) : null;
+    const volt_bc = status ? (Number(poiObj[`Volt_BC_POI_${num}`]) || null) : null;
+    const volt_ca = status ? (Number(poiObj[`Volt_CA_POI_${num}`]) || null) : null;
+    const volt_an = status ? (Number(poiObj[`Volt_AN_POI_${num}`]) || null) : null;
+    const volt_bn = status ? (Number(poiObj[`Volt_BN_POI_${num}`]) || null) : null;
+    const volt_cn = status ? (Number(poiObj[`Volt_CN_POI_${num}`]) || null) : null;
+    const frequency = status ? (Number(poiObj[`Frequency_POI_${num}`]) || null) : null;
+    let active_power = status ? (Number(poiObj[`Scale_Total_KW_POI_${num}`]) || 0) : 0;
     if (active_power < 0.001 && active_power > 0) active_power = 0;
     const rawPeak = poiObj[`Peak_Demand_ScaleKw_POI_${num}`] ?? poiObj[`Peak_Demand_ScaleKW_POI_${num}`];
-    const peak_demand = rawPeak !== undefined && rawPeak !== null ? Number(rawPeak) || 0 : 0;
+    const peak_demand = status && rawPeak !== undefined && rawPeak !== null ? Number(rawPeak) || 0 : 0;
     const total_kwh = Number(poiObj[`Total_KWH_POI_${num}`]) || 0;
     const total_kvarh = Number(poiObj[`Total_KVARH_POI_${num}`]) || 0;
 
     const rawPf = poiObj[`PFO_POI_${num}`] ?? poiObj[`PF0_POI_${num}`] ?? poiObj[`Power_Factor_POI_${num}`] ?? poiObj[`PF_POI_${num}`] ?? poiObj[`PowerFactor_POI_${num}`] ?? poiObj[`CosPhi_POI_${num}`];
-    let power_factor: number | null = rawPf !== undefined && rawPf !== null && !isNaN(Number(rawPf)) ? Number(rawPf) : null;
+    let power_factor: number | null = status && rawPf !== undefined && rawPf !== null && !isNaN(Number(rawPf)) ? Number(rawPf) : null;
 
     result.push({
       t_stamp: ts,
@@ -707,22 +760,56 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
       ];
       for (const sk of statusCandidates) {
         if (obj[sk] !== undefined && obj[sk] !== null) {
-          const val = obj[sk];
-          if (typeof val === "boolean") return val;
-          const num = Number(val);
-          if (!isNaN(num)) return num === 1;
-          return val === "1" || String(val).toLowerCase() === "true";
+          const parsed = parseStatusBool(obj[sk]);
+          if (parsed !== null) return parsed;
         }
       }
 
       return null;
     };
 
+    const pmStatus = getStatus();
+    const rawActiveEnergy = getVal(["ActiveEnergy", "Active_Energy", "Total_Active_Energy", "Energy_Active_Total", "KWh", "kWh", "kwh"]);
+
+    // RULE: If PM status is explicitly FALSE (mati / offline / com failure):
+    // Real-time instantaneous values are 0 or null (active_power: 0, current: null, volt: null).
+    // BUT historical cumulative energy (active_energy) MUST BE PRESERVED exactly from API so database
+    // never records 0 or null, avoiding false delta consumption spikes (e.g. 0 -> 3000 jump).
+    if (pmStatus === false) {
+      return {
+        t_stamp: ts,
+        group_id: groupId,
+        pm_id: pmId,
+        status: false,
+        volt_ab: null,
+        volt_bc: null,
+        volt_ca: null,
+        volt_ll: null,
+        current_a: null,
+        current_b: null,
+        current_c: null,
+        frequency: null,
+        active_power_total: 0,
+        reactive_power_total: 0,
+        apparent_power_total: 0,
+        power_factor: null,
+        voltage_unbalance: null,
+        current_unbalance: null,
+        thd_volt_a: null,
+        thd_volt_b: null,
+        thd_volt_c: null,
+        thd_current_a: null,
+        thd_current_b: null,
+        thd_current_c: null,
+        active_energy: rawActiveEnergy
+      };
+    }
+
     return {
       t_stamp: ts,
       group_id: groupId,
       pm_id: pmId,
-      status: getStatus(),
+      status: pmStatus,
       volt_ab: getVal(["VoltAB"]),
       volt_bc: getVal(["VoltBC"]),
       volt_ca: getVal(["VoltCA"]),
@@ -1203,6 +1290,14 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   });
 };
 const broadcastLiveTelemetryOffline = (deviceId: string) => {
+  const prevEnergy = latestIncomingTelemetry[deviceId]?.data?.totalKwh
+    ?? latestIncomingTelemetry[deviceId]?.data?.activeEnergy
+    ?? latestIncomingTelemetry[deviceId]?.data?.active_energy
+    ?? null;
+  const prevExport = latestIncomingTelemetry[deviceId]?.data?.exportPln
+    ?? latestIncomingTelemetry[deviceId]?.data?.export_pln
+    ?? null;
+
   const offlinePqData = {
     activePower: 0,
     reactivePower: 0,
@@ -1237,7 +1332,14 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
     thdI_T: null,
     voltage: null,
     status: false,
-    peakDemand: null
+    status_pm8000: false,
+    status_pm5500: false,
+    peakDemand: null,
+    totalKwh: prevEnergy,
+    activeEnergy: prevEnergy,
+    active_energy: prevEnergy,
+    exportPln: prevExport,
+    export_pln: prevExport
   };
 
   latestIncomingTelemetry[deviceId] = {
@@ -1249,6 +1351,22 @@ const broadcastLiveTelemetryOffline = (deviceId: string) => {
     },
     ts: Date.now()
   };
+
+  // Record 0 in 3-second FIFO trend so incoming charts drop to 0 rather than staying stuck or jumping
+  recordIncomingTrend3s(deviceId, {
+    voltage: 0,
+    vR: 0,
+    vS: 0,
+    vT: 0,
+    activePower: 0,
+    pR: 0,
+    pS: 0,
+    pT: 0,
+    currentA: 0,
+    currentB: 0,
+    currentC: 0
+  });
+
   const io = getSocketServer();
   if (!io) return;
   io.emit("electricity:live_update", {
@@ -1280,33 +1398,33 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
 
   const poi1 = {
     status: poi1Status,
-    activePower: p1Kw,
-    peakDemand: rawPeak1 !== undefined && rawPeak1 !== null ? (Number(rawPeak1) || 0) : 0,
+    activePower: poi1Status ? p1Kw : 0,
+    peakDemand: poi1Status && rawPeak1 !== undefined && rawPeak1 !== null ? (Number(rawPeak1) || 0) : 0,
     totalKwh: typeof p1.Total_KWH_POI_1 === "number" ? p1.Total_KWH_POI_1 : 0,
     totalKvarh: typeof p1.Total_KVARH_POI_1 === "number" ? p1.Total_KVARH_POI_1 : 0,
-    frequency: typeof p1.Frequency_POI_1 === "number" ? p1.Frequency_POI_1 : 50,
-    voltAb: typeof p1.Volt_AB_POI_1 === "number" ? p1.Volt_AB_POI_1 : 0,
-    voltBc: typeof p1.Volt_BC_POI_1 === "number" ? p1.Volt_BC_POI_1 : 0,
-    voltCa: typeof p1.Volt_CA_POI_1 === "number" ? p1.Volt_CA_POI_1 : 0,
-    voltAn: typeof p1.Volt_AN_POI_1 === "number" ? p1.Volt_AN_POI_1 : 0,
-    voltBn: typeof p1.Volt_BN_POI_1 === "number" ? p1.Volt_BN_POI_1 : 0,
-    voltCn: typeof p1.Volt_CN_POI_1 === "number" ? p1.Volt_CN_POI_1 : 0,
-    powerFactor: pf1,
+    frequency: poi1Status && typeof p1.Frequency_POI_1 === "number" ? p1.Frequency_POI_1 : null,
+    voltAb: poi1Status && typeof p1.Volt_AB_POI_1 === "number" ? p1.Volt_AB_POI_1 : null,
+    voltBc: poi1Status && typeof p1.Volt_BC_POI_1 === "number" ? p1.Volt_BC_POI_1 : null,
+    voltCa: poi1Status && typeof p1.Volt_CA_POI_1 === "number" ? p1.Volt_CA_POI_1 : null,
+    voltAn: poi1Status && typeof p1.Volt_AN_POI_1 === "number" ? p1.Volt_AN_POI_1 : null,
+    voltBn: poi1Status && typeof p1.Volt_BN_POI_1 === "number" ? p1.Volt_BN_POI_1 : null,
+    voltCn: poi1Status && typeof p1.Volt_CN_POI_1 === "number" ? p1.Volt_CN_POI_1 : null,
+    powerFactor: poi1Status ? pf1 : null,
   };
   const poi2 = {
     status: poi2Status,
-    activePower: p2Kw,
-    peakDemand: rawPeak2 !== undefined && rawPeak2 !== null ? (Number(rawPeak2) || 0) : 0,
+    activePower: poi2Status ? p2Kw : 0,
+    peakDemand: poi2Status && rawPeak2 !== undefined && rawPeak2 !== null ? (Number(rawPeak2) || 0) : 0,
     totalKwh: typeof p2.Total_KWH_POI_2 === "number" ? p2.Total_KWH_POI_2 : 0,
     totalKvarh: typeof p2.Total_KVARH_POI_2 === "number" ? p2.Total_KVARH_POI_2 : 0,
-    frequency: typeof p2.Frequency_POI_2 === "number" ? p2.Frequency_POI_2 : 50,
-    voltAb: typeof p2.Volt_AB_POI_2 === "number" ? p2.Volt_AB_POI_2 : 0,
-    voltBc: typeof p2.Volt_BC_POI_2 === "number" ? p2.Volt_BC_POI_2 : 0,
-    voltCa: typeof p2.Volt_CA_POI_2 === "number" ? p2.Volt_CA_POI_2 : 0,
-    voltAn: typeof p2.Volt_AN_POI_2 === "number" ? p2.Volt_AN_POI_2 : 0,
-    voltBn: typeof p2.Volt_BN_POI_2 === "number" ? p2.Volt_BN_POI_2 : 0,
-    voltCn: typeof p2.Volt_CN_POI_2 === "number" ? p2.Volt_CN_POI_2 : 0,
-    powerFactor: pf2,
+    frequency: poi2Status && typeof p2.Frequency_POI_2 === "number" ? p2.Frequency_POI_2 : null,
+    voltAb: poi2Status && typeof p2.Volt_AB_POI_2 === "number" ? p2.Volt_AB_POI_2 : null,
+    voltBc: poi2Status && typeof p2.Volt_BC_POI_2 === "number" ? p2.Volt_BC_POI_2 : null,
+    voltCa: poi2Status && typeof p2.Volt_CA_POI_2 === "number" ? p2.Volt_CA_POI_2 : null,
+    voltAn: poi2Status && typeof p2.Volt_AN_POI_2 === "number" ? p2.Volt_AN_POI_2 : null,
+    voltBn: poi2Status && typeof p2.Volt_BN_POI_2 === "number" ? p2.Volt_BN_POI_2 : null,
+    voltCn: poi2Status && typeof p2.Volt_CN_POI_2 === "number" ? p2.Volt_CN_POI_2 : null,
+    powerFactor: poi2Status ? pf2 : null,
   };
   return {
     t_stamp: ts,
@@ -1559,6 +1677,7 @@ export const startIncomingElectricityPolling = () => {
     CREATE TABLE IF NOT EXISTS electric_trafo_rolling_3s (
       pm_id VARCHAR(32) NOT NULL,
       t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+      status BOOLEAN DEFAULT true,
       volt_ab NUMERIC,
       volt_bc NUMERIC,
       volt_ca NUMERIC,
@@ -1570,6 +1689,7 @@ export const startIncomingElectricityPolling = () => {
       PRIMARY KEY (pm_id, t_stamp)
     );
     CREATE INDEX IF NOT EXISTS idx_trafo_rolling_3s_ts ON electric_trafo_rolling_3s (t_stamp);
+    ALTER TABLE electric_trafo_rolling_3s ADD COLUMN IF NOT EXISTS status BOOLEAN DEFAULT true;
   `).catch((err: any) => {
     logger.warn(`Failed to ensure electric_trafo_rolling_3s table: ${err.message}`);
   });
@@ -1631,17 +1751,14 @@ export const startIncomingElectricityPolling = () => {
     ]);
 
     // 1. Process PLN
-    let plnParsed: ReturnType<typeof parsePlnApi> | null = null;
+    let plnParsed: ReturnType<typeof parsePlnApi> | ReturnType<typeof getNullPlnRecord> = getNullPlnRecord(ts);
     if (plnRaw) {
       try {
-        plnParsed = parsePlnApi(plnRaw, ts);
+        const parsed = parsePlnApi(plnRaw, ts);
+        if (parsed) plnParsed = parsed;
       } catch (err: any) {
         logger.warn(`Incoming PLN parsing failed: ${err.message}`);
       }
-    }
-
-    if (!plnParsed) {
-      plnParsed = getNullPlnRecord(ts);
     }
 
     const isOnline = plnParsed.status_pm8000 !== false;
@@ -1696,17 +1813,14 @@ export const startIncomingElectricityPolling = () => {
     };
 
     // 2. Process WF1
-    let wf1Parsed: ReturnType<typeof parseWfApi> | null = null;
+    let wf1Parsed: ReturnType<typeof parseWfApi> | ReturnType<typeof getNullWfRecord> = getNullWfRecord(ts);
     if (wf1Raw) {
       try {
-        wf1Parsed = parseWfApi(wf1Raw, ts);
+        const parsed = parseWfApi(wf1Raw, ts);
+        if (parsed) wf1Parsed = parsed;
       } catch (err: any) {
         logger.warn(`Incoming WF1 parsing failed: ${err.message}`);
       }
-    }
-
-    if (!wf1Parsed) {
-      wf1Parsed = getNullWfRecord(ts);
     }
     const isWf1Online = wf1Parsed.status_pm5500 !== false;
     if (!isWf1Online) {
@@ -1748,17 +1862,14 @@ export const startIncomingElectricityPolling = () => {
     };
 
     // 3. Process WF2
-    let wf2Parsed: ReturnType<typeof parseWfApi> | null = null;
+    let wf2Parsed: ReturnType<typeof parseWfApi> | ReturnType<typeof getNullWfRecord> = getNullWfRecord(ts);
     if (wf2Raw) {
       try {
-        wf2Parsed = parseWfApi(wf2Raw, ts);
+        const parsed = parseWfApi(wf2Raw, ts);
+        if (parsed) wf2Parsed = parsed;
       } catch (err: any) {
         logger.warn(`Incoming WF2 parsing failed: ${err.message}`);
       }
-    }
-
-    if (!wf2Parsed) {
-      wf2Parsed = getNullWfRecord(ts);
     }
     const isWf2Online = wf2Parsed && wf2Parsed.status_pm5500 !== false;
     if (!isWf2Online) {
@@ -1940,21 +2051,24 @@ export const startIncomingElectricityPolling = () => {
         const placeholders: string[] = [];
         let pIdx = 1;
         for (const r of trafoRowsToInsert) {
+          const isMati = r.status === false;
           placeholders.push(
             "($" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) +
-            ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ")"
+            ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) +
+            ", $" + (pIdx++) + ")"
           );
           vals.push(
             r.pm_id.toUpperCase(),
             wibTrafo.tStampStr,
-            r.volt_ab,
-            r.volt_bc,
-            r.volt_ca,
-            r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : null,
-            r.current_a,
-            r.current_b,
-            r.current_c,
-            r.power_factor !== null ? Number(r.power_factor) : null
+            !isMati,
+            !isMati && r.volt_ab !== null ? r.volt_ab : null,
+            !isMati && r.volt_bc !== null ? r.volt_bc : null,
+            !isMati && r.volt_ca !== null ? r.volt_ca : null,
+            !isMati && r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : 0,
+            !isMati && r.current_a !== null ? r.current_a : null,
+            !isMati && r.current_b !== null ? r.current_b : null,
+            !isMati && r.current_c !== null ? r.current_c : null,
+            !isMati && r.power_factor !== null ? Number(r.power_factor) : null
           );
         }
         const purgeTrafoDate = new Date(ts.getTime() - 24 * 3600 * 1000);
@@ -1962,28 +2076,41 @@ export const startIncomingElectricityPolling = () => {
         const savedTsMs = Math.floor(ts.getTime() / 1000) * 1000;
         getPostgresPool().query(`
           INSERT INTO electric_trafo_rolling_3s (
-            pm_id, t_stamp, volt_ab, volt_bc, volt_ca,
+            pm_id, t_stamp, status, volt_ab, volt_bc, volt_ca,
             active_power_total, current_a, current_b, current_c, power_factor
           ) VALUES ${placeholders.join(", ")}
-          ON CONFLICT (pm_id, t_stamp) DO NOTHING
+          ON CONFLICT (pm_id, t_stamp) DO UPDATE SET
+            status = EXCLUDED.status,
+            volt_ab = EXCLUDED.volt_ab,
+            volt_bc = EXCLUDED.volt_bc,
+            volt_ca = EXCLUDED.volt_ca,
+            active_power_total = EXCLUDED.active_power_total,
+            current_a = EXCLUDED.current_a,
+            current_b = EXCLUDED.current_b,
+            current_c = EXCLUDED.current_c,
+            power_factor = EXCLUDED.power_factor
         `, vals).then(() => {
           if (io) {
             io.emit("electricity:trafo_3s_saved", {
               ts: savedTsMs,
               t_stamp: wibTrafo.tStampStr,
-              data: trafoRowsToInsert.map((r) => ({
-                pm_id: r.pm_id.toUpperCase(),
-                ts: savedTsMs,
-                t_stamp: wibTrafo.tStampStr,
-                volt_ab: r.volt_ab,
-                volt_bc: r.volt_bc,
-                volt_ca: r.volt_ca,
-                active_power_total: r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : null,
-                current_a: r.current_a,
-                current_b: r.current_b,
-                current_c: r.current_c,
-                power_factor: r.power_factor !== null ? Number(r.power_factor) : null
-              }))
+              data: trafoRowsToInsert.map((r) => {
+                const isMati = r.status === false;
+                return {
+                  pm_id: r.pm_id.toUpperCase(),
+                  ts: savedTsMs,
+                  t_stamp: wibTrafo.tStampStr,
+                  status: !isMati,
+                  volt_ab: !isMati ? r.volt_ab : null,
+                  volt_bc: !isMati ? r.volt_bc : null,
+                  volt_ca: !isMati ? r.volt_ca : null,
+                  active_power_total: !isMati && r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : 0,
+                  current_a: !isMati ? r.current_a : null,
+                  current_b: !isMati ? r.current_b : null,
+                  current_c: !isMati ? r.current_c : null,
+                  power_factor: !isMati && r.power_factor !== null ? Number(r.power_factor) : null
+                };
+              })
             });
           }
           return getPostgresPool().query(
@@ -2092,37 +2219,70 @@ export const startIncomingElectricityPolling = () => {
               return null;
             };
 
-            const directVal = customPm.json_key && typeof subObj[customPm.json_key] === "number" ? subObj[customPm.json_key] : null;
-            const activePower = directVal ?? getNum(["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower", "Scale_Total_KW"]);
-            const activeEnergy = getNum(["Active_Energy", "ActiveEnergy", "Energy", "total_kwh", "kWh", "Total_kWh"]);
+            const isOnline = getStatus();
+            const rawActiveEnergy = getNum(["Active_Energy", "ActiveEnergy", "Energy", "total_kwh", "kWh", "Total_kWh"]);
 
-            rec = {
-              t_stamp: ts,
-              group_id: customPm.group_id,
-              pm_id: customPm.pm_id,
-              status: getStatus(),
-              volt_ab: getNum(["Volt_AB", "VoltAB", "VR", "V_AB"]),
-              volt_bc: getNum(["Volt_BC", "VoltBC", "VS", "V_BC"]),
-              volt_ca: getNum(["Volt_CA", "VoltCA", "VT", "V_CA"]),
-              volt_ll: getNum(["Volt_LL", "VoltLL", "VLL"]),
-              current_a: getNum(["Current_A", "CurrentA", "IR", "I_A"]),
-              current_b: getNum(["Current_B", "CurrentB", "IS", "I_B"]),
-              current_c: getNum(["Current_C", "CurrentC", "IT", "I_C"]),
-              frequency: getNum(["Frequency", "Freq", "Hz"]),
-              active_power_total: activePower,
-              reactive_power_total: getNum(["Reactive_Power_Total", "Reactive_Power", "kVAR"]),
-              apparent_power_total: getNum(["Apparent_Power_Total", "Apparent_Power", "kVA"]),
-              power_factor: getNum(["Power_Factor", "PF"]),
-              voltage_unbalance: getNum(["Voltage_Unbalance"]),
-              current_unbalance: getNum(["Current_Unbalance"]),
-              thd_volt_a: getNum(["THD_Volt_A"]),
-              thd_volt_b: getNum(["THD_Volt_B"]),
-              thd_volt_c: getNum(["THD_Volt_C"]),
-              thd_current_a: getNum(["THD_Current_A"]),
-              thd_current_b: getNum(["THD_Current_B"]),
-              thd_current_c: getNum(["THD_Current_C"]),
-              active_energy: activeEnergy
-            };
+            if (isOnline === false) {
+              rec = {
+                t_stamp: ts,
+                group_id: customPm.group_id,
+                pm_id: customPm.pm_id,
+                status: false,
+                volt_ab: null,
+                volt_bc: null,
+                volt_ca: null,
+                volt_ll: null,
+                current_a: null,
+                current_b: null,
+                current_c: null,
+                frequency: null,
+                active_power_total: 0,
+                reactive_power_total: 0,
+                apparent_power_total: 0,
+                power_factor: null,
+                voltage_unbalance: null,
+                current_unbalance: null,
+                thd_volt_a: null,
+                thd_volt_b: null,
+                thd_volt_c: null,
+                thd_current_a: null,
+                thd_current_b: null,
+                thd_current_c: null,
+                active_energy: rawActiveEnergy
+              };
+            } else {
+              const directVal = customPm.json_key && typeof subObj[customPm.json_key] === "number" ? subObj[customPm.json_key] : null;
+              const activePower = directVal ?? getNum(["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower", "Scale_Total_KW"]);
+              const activeEnergy = rawActiveEnergy;
+
+              rec = {
+                t_stamp: ts,
+                group_id: customPm.group_id,
+                pm_id: customPm.pm_id,
+                status: isOnline,
+                volt_ab: getNum(["Volt_AB", "VoltAB", "VR", "V_AB"]),
+                volt_bc: getNum(["Volt_BC", "VoltBC", "VS", "V_BC"]),
+                volt_ca: getNum(["Volt_CA", "VoltCA", "VT", "V_CA"]),
+                volt_ll: getNum(["Volt_LL", "VoltLL", "VLL"]),
+                current_a: getNum(["Current_A", "CurrentA", "IR", "I_A"]),
+                current_b: getNum(["Current_B", "CurrentB", "IS", "I_B"]),
+                current_c: getNum(["Current_C", "CurrentC", "IT", "I_C"]),
+                frequency: getNum(["Frequency", "Freq", "Hz"]),
+                active_power_total: activePower,
+                reactive_power_total: getNum(["Reactive_Power_Total", "Reactive_Power", "kVAR"]),
+                apparent_power_total: getNum(["Apparent_Power_Total", "Apparent_Power", "kVA"]),
+                power_factor: getNum(["Power_Factor", "PF"]),
+                voltage_unbalance: getNum(["Voltage_Unbalance"]),
+                current_unbalance: getNum(["Current_Unbalance"]),
+                thd_volt_a: getNum(["THD_Volt_A"]),
+                thd_volt_b: getNum(["THD_Volt_B"]),
+                thd_volt_c: getNum(["THD_Volt_C"]),
+                thd_current_a: getNum(["THD_Current_A"]),
+                thd_current_b: getNum(["THD_Current_B"]),
+                thd_current_c: getNum(["THD_Current_C"]),
+                active_energy: activeEnergy
+              };
+            }
           }
 
           if (rec) {

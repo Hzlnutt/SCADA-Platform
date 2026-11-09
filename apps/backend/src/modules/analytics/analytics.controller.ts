@@ -456,32 +456,33 @@ export const getPowerMetersLatestHandler = async (
           }
           if (plnRes.rows.length > 0) {
             const pln = plnRes.rows[0];
+            const isPlnOnline = pln.status_pm8000 !== null ? !!pln.status_pm8000 : true;
             data.push({
               id: 410,
               t_stamp: pln.t_stamp,
               group_id: "ew23",
               pm_id: "PM410",
-              status: pln.status_pm8000 !== null ? !!pln.status_pm8000 : true,
-              volt_ab: pln.volt_ab ? Number(pln.volt_ab) : null,
-              volt_bc: pln.volt_bc ? Number(pln.volt_bc) : null,
-              volt_ca: pln.volt_ca ? Number(pln.volt_ca) : null,
-              volt_ll: pln.volt_ll ? Number(pln.volt_ll) : null,
-              current_a: pln.current_a ? Number(pln.current_a) : null,
-              current_b: pln.current_b ? Number(pln.current_b) : null,
-              current_c: pln.current_c ? Number(pln.current_c) : null,
-              frequency: pln.frequency ? Number(pln.frequency) : 50.0,
-              active_power_total: pln.active_power ? (Number(pln.active_power) > 10000 ? Number(pln.active_power) / 1000.0 : Number(pln.active_power)) : null,
-              reactive_power_total: pln.reactive_power_total ? (Number(pln.reactive_power_total) > 10000 ? Number(pln.reactive_power_total) / 1000.0 : Number(pln.reactive_power_total)) : null,
-              apparent_power_total: pln.apparent_power_total ? (Number(pln.apparent_power_total) > 10000 ? Number(pln.apparent_power_total) / 1000.0 : Number(pln.apparent_power_total)) : null,
-              power_factor: pln.power_factor ? Number(pln.power_factor) : null,
-              voltage_unbalance: pln.voltage_unbalance ? Number(pln.voltage_unbalance) : null,
-              current_unbalance: pln.current_unbalance ? Number(pln.current_unbalance) : null,
-              thd_volt_a: pln.thd_volt_a ? Number(pln.thd_volt_a) : null,
-              thd_volt_b: pln.thd_volt_b ? Number(pln.thd_volt_b) : null,
-              thd_volt_c: pln.thd_volt_c ? Number(pln.thd_volt_c) : null,
-              thd_current_a: pln.thd_current_a ? Number(pln.thd_current_a) : null,
-              thd_current_b: pln.thd_current_b ? Number(pln.thd_current_b) : null,
-              thd_current_c: pln.thd_current_c ? Number(pln.thd_current_c) : null,
+              status: isPlnOnline,
+              volt_ab: isPlnOnline && pln.volt_ab ? Number(pln.volt_ab) : null,
+              volt_bc: isPlnOnline && pln.volt_bc ? Number(pln.volt_bc) : null,
+              volt_ca: isPlnOnline && pln.volt_ca ? Number(pln.volt_ca) : null,
+              volt_ll: isPlnOnline && pln.volt_ll ? Number(pln.volt_ll) : null,
+              current_a: isPlnOnline && pln.current_a ? Number(pln.current_a) : null,
+              current_b: isPlnOnline && pln.current_b ? Number(pln.current_b) : null,
+              current_c: isPlnOnline && pln.current_c ? Number(pln.current_c) : null,
+              frequency: isPlnOnline && pln.frequency ? Number(pln.frequency) : (isPlnOnline ? 50.0 : null),
+              active_power_total: isPlnOnline && pln.active_power ? (Number(pln.active_power) > 10000 ? Number(pln.active_power) / 1000.0 : Number(pln.active_power)) : 0,
+              reactive_power_total: isPlnOnline && pln.reactive_power_total ? (Number(pln.reactive_power_total) > 10000 ? Number(pln.reactive_power_total) / 1000.0 : Number(pln.reactive_power_total)) : 0,
+              apparent_power_total: isPlnOnline && pln.apparent_power_total ? (Number(pln.apparent_power_total) > 10000 ? Number(pln.apparent_power_total) / 1000.0 : Number(pln.apparent_power_total)) : 0,
+              power_factor: isPlnOnline && pln.power_factor ? Number(pln.power_factor) : null,
+              voltage_unbalance: isPlnOnline && pln.voltage_unbalance ? Number(pln.voltage_unbalance) : null,
+              current_unbalance: isPlnOnline && pln.current_unbalance ? Number(pln.current_unbalance) : null,
+              thd_volt_a: isPlnOnline && pln.thd_volt_a ? Number(pln.thd_volt_a) : null,
+              thd_volt_b: isPlnOnline && pln.thd_volt_b ? Number(pln.thd_volt_b) : null,
+              thd_volt_c: isPlnOnline && pln.thd_volt_c ? Number(pln.thd_volt_c) : null,
+              thd_current_a: isPlnOnline && pln.thd_current_a ? Number(pln.thd_current_a) : null,
+              thd_current_b: isPlnOnline && pln.thd_current_b ? Number(pln.thd_current_b) : null,
+              thd_current_c: isPlnOnline && pln.thd_current_c ? Number(pln.thd_current_c) : null,
               active_energy: pln.active_energy ? Number(pln.active_energy) : null
             });
           }
@@ -501,32 +502,33 @@ export const getPowerMetersLatestHandler = async (
           `);
           if (wf1Res.rows.length > 0) {
             const wf1 = wf1Res.rows[0];
+            const isWf1Online = wf1.status_pm5500 !== null ? !!wf1.status_pm5500 : true;
             data.push({
               id: 411,
               t_stamp: wf1.t_stamp,
               group_id: "ew23",
               pm_id: "PM411",
-              status: wf1.status_pm5500 !== null ? !!wf1.status_pm5500 : true,
-              volt_ab: wf1.volt_ab ? Number(wf1.volt_ab) : null,
-              volt_bc: wf1.volt_bc ? Number(wf1.volt_bc) : null,
-              volt_ca: wf1.volt_ca ? Number(wf1.volt_ca) : null,
-              volt_ll: wf1.volt_ll ? Number(wf1.volt_ll) : null,
-              current_a: wf1.current_a ? Number(wf1.current_a) : null,
-              current_b: wf1.current_b ? Number(wf1.current_b) : null,
-              current_c: wf1.current_c ? Number(wf1.current_c) : null,
-              frequency: wf1.frequency ? Number(wf1.frequency) : 50.0,
-              active_power_total: wf1.active_power_total ? Number(wf1.active_power_total) : null,
-              reactive_power_total: wf1.reactive_power_total ? Number(wf1.reactive_power_total) : null,
-              apparent_power_total: wf1.apparent_power_total ? Number(wf1.apparent_power_total) : null,
-              power_factor: wf1.power_factor ? Number(wf1.power_factor) : null,
-              voltage_unbalance: wf1.voltage_unbalance ? Number(wf1.voltage_unbalance) : null,
-              current_unbalance: wf1.current_unbalance ? Number(wf1.current_unbalance) : null,
-              thd_volt_a: wf1.thd_volt_a ? Number(wf1.thd_volt_a) : null,
-              thd_volt_b: wf1.thd_volt_b ? Number(wf1.thd_volt_b) : null,
-              thd_volt_c: wf1.thd_volt_c ? Number(wf1.thd_volt_c) : null,
-              thd_current_a: wf1.thd_current_a ? Number(wf1.thd_current_a) : null,
-              thd_current_b: wf1.thd_current_b ? Number(wf1.thd_current_b) : null,
-              thd_current_c: wf1.thd_current_c ? Number(wf1.thd_current_c) : null,
+              status: isWf1Online,
+              volt_ab: isWf1Online && wf1.volt_ab ? Number(wf1.volt_ab) : null,
+              volt_bc: isWf1Online && wf1.volt_bc ? Number(wf1.volt_bc) : null,
+              volt_ca: isWf1Online && wf1.volt_ca ? Number(wf1.volt_ca) : null,
+              volt_ll: isWf1Online && wf1.volt_ll ? Number(wf1.volt_ll) : null,
+              current_a: isWf1Online && wf1.current_a ? Number(wf1.current_a) : null,
+              current_b: isWf1Online && wf1.current_b ? Number(wf1.current_b) : null,
+              current_c: isWf1Online && wf1.current_c ? Number(wf1.current_c) : null,
+              frequency: isWf1Online && wf1.frequency ? Number(wf1.frequency) : (isWf1Online ? 50.0 : null),
+              active_power_total: isWf1Online && wf1.active_power_total ? Number(wf1.active_power_total) : 0,
+              reactive_power_total: isWf1Online && wf1.reactive_power_total ? Number(wf1.reactive_power_total) : 0,
+              apparent_power_total: isWf1Online && wf1.apparent_power_total ? Number(wf1.apparent_power_total) : 0,
+              power_factor: isWf1Online && wf1.power_factor ? Number(wf1.power_factor) : null,
+              voltage_unbalance: isWf1Online && wf1.voltage_unbalance ? Number(wf1.voltage_unbalance) : null,
+              current_unbalance: isWf1Online && wf1.current_unbalance ? Number(wf1.current_unbalance) : null,
+              thd_volt_a: isWf1Online && wf1.thd_volt_a ? Number(wf1.thd_volt_a) : null,
+              thd_volt_b: isWf1Online && wf1.thd_volt_b ? Number(wf1.thd_volt_b) : null,
+              thd_volt_c: isWf1Online && wf1.thd_volt_c ? Number(wf1.thd_volt_c) : null,
+              thd_current_a: isWf1Online && wf1.thd_current_a ? Number(wf1.thd_current_a) : null,
+              thd_current_b: isWf1Online && wf1.thd_current_b ? Number(wf1.thd_current_b) : null,
+              thd_current_c: isWf1Online && wf1.thd_current_c ? Number(wf1.thd_current_c) : null,
               active_energy: wf1.active_energy ? Number(wf1.active_energy) : null
             });
           }
@@ -546,38 +548,57 @@ export const getPowerMetersLatestHandler = async (
           `);
           if (wf2Res.rows.length > 0) {
             const wf2 = wf2Res.rows[0];
+            const isWf2Online = wf2.status_pm5500 !== null ? !!wf2.status_pm5500 : true;
             data.push({
               id: 412,
               t_stamp: wf2.t_stamp,
               group_id: "ew23",
               pm_id: "PM412",
-              status: wf2.status_pm5500 !== null ? !!wf2.status_pm5500 : true,
-              volt_ab: wf2.volt_ab ? Number(wf2.volt_ab) : null,
-              volt_bc: wf2.volt_bc ? Number(wf2.volt_bc) : null,
-              volt_ca: wf2.volt_ca ? Number(wf2.volt_ca) : null,
-              volt_ll: wf2.volt_ll ? Number(wf2.volt_ll) : null,
-              current_a: wf2.current_a ? Number(wf2.current_a) : null,
-              current_b: wf2.current_b ? Number(wf2.current_b) : null,
-              current_c: wf2.current_c ? Number(wf2.current_c) : null,
-              frequency: wf2.frequency ? Number(wf2.frequency) : 50.0,
-              active_power_total: wf2.active_power_total ? Number(wf2.active_power_total) : null,
-              reactive_power_total: wf2.reactive_power_total ? Number(wf2.reactive_power_total) : null,
-              apparent_power_total: wf2.apparent_power_total ? Number(wf2.apparent_power_total) : null,
-              power_factor: wf2.power_factor ? Number(wf2.power_factor) : null,
-              voltage_unbalance: wf2.voltage_unbalance ? Number(wf2.voltage_unbalance) : null,
-              current_unbalance: wf2.current_unbalance ? Number(wf2.current_unbalance) : null,
-              thd_volt_a: wf2.thd_volt_a ? Number(wf2.thd_volt_a) : null,
-              thd_volt_b: wf2.thd_volt_b ? Number(wf2.thd_volt_b) : null,
-              thd_volt_c: wf2.thd_volt_c ? Number(wf2.thd_volt_c) : null,
-              thd_current_a: wf2.thd_current_a ? Number(wf2.thd_current_a) : null,
-              thd_current_b: wf2.thd_current_b ? Number(wf2.thd_current_b) : null,
-              thd_current_c: wf2.thd_current_c ? Number(wf2.thd_current_c) : null,
+              status: isWf2Online,
+              volt_ab: isWf2Online && wf2.volt_ab ? Number(wf2.volt_ab) : null,
+              volt_bc: isWf2Online && wf2.volt_bc ? Number(wf2.volt_bc) : null,
+              volt_ca: isWf2Online && wf2.volt_ca ? Number(wf2.volt_ca) : null,
+              volt_ll: isWf2Online && wf2.volt_ll ? Number(wf2.volt_ll) : null,
+              current_a: isWf2Online && wf2.current_a ? Number(wf2.current_a) : null,
+              current_b: isWf2Online && wf2.current_b ? Number(wf2.current_b) : null,
+              current_c: isWf2Online && wf2.current_c ? Number(wf2.current_c) : null,
+              frequency: isWf2Online && wf2.frequency ? Number(wf2.frequency) : (isWf2Online ? 50.0 : null),
+              active_power_total: isWf2Online && wf2.active_power_total ? Number(wf2.active_power_total) : 0,
+              reactive_power_total: isWf2Online && wf2.reactive_power_total ? Number(wf2.reactive_power_total) : 0,
+              apparent_power_total: isWf2Online && wf2.apparent_power_total ? Number(wf2.apparent_power_total) : 0,
+              power_factor: isWf2Online && wf2.power_factor ? Number(wf2.power_factor) : null,
+              voltage_unbalance: isWf2Online && wf2.voltage_unbalance ? Number(wf2.voltage_unbalance) : null,
+              current_unbalance: isWf2Online && wf2.current_unbalance ? Number(wf2.current_unbalance) : null,
+              thd_volt_a: isWf2Online && wf2.thd_volt_a ? Number(wf2.thd_volt_a) : null,
+              thd_volt_b: isWf2Online && wf2.thd_volt_b ? Number(wf2.thd_volt_b) : null,
+              thd_volt_c: isWf2Online && wf2.thd_volt_c ? Number(wf2.thd_volt_c) : null,
+              thd_current_a: isWf2Online && wf2.thd_current_a ? Number(wf2.thd_current_a) : null,
+              thd_current_b: isWf2Online && wf2.thd_current_b ? Number(wf2.thd_current_b) : null,
+              thd_current_c: isWf2Online && wf2.thd_current_c ? Number(wf2.thd_current_c) : null,
               active_energy: wf2.active_energy ? Number(wf2.active_energy) : null
             });
           }
         } catch {}
       }
     }
+
+    // Ensure all meters where status === false have measurements zeroed or nulled to avoid stale numbers
+    data = data.map((r: any) => {
+      if (r.status === false) {
+        return {
+          ...r,
+          status: false,
+          volt_ab: null, volt_bc: null, volt_ca: null, volt_ll: null,
+          current_a: null, current_b: null, current_c: null,
+          frequency: null, active_power_total: 0, reactive_power_total: 0,
+          apparent_power_total: 0, power_factor: null, voltage_unbalance: null,
+          current_unbalance: null, thd_volt_a: null, thd_volt_b: null,
+          thd_volt_c: null, thd_current_a: null, thd_current_b: null,
+          thd_current_c: null
+        };
+      }
+      return r;
+    });
     const pmOrder: Record<string, number> = {
       PM318: 10, PM319: 20, PM320: 30, PM321: 40, PM322: 50,
       PM323: 60, PM324: 70, PM325: 80, PM327: 90, PM337: 100,
@@ -660,6 +681,7 @@ export const getPowerMeterHistoryHandler = async (
           to_char(t_stamp, 'HH24:MI:SS') as label,
           (extract(epoch from (t_stamp AT TIME ZONE 'Asia/Jakarta')) * 1000)::bigint as ts,
           extract(hour from t_stamp)::int as hour,
+          status,
           volt_ab::numeric(12,2) as volt_ab,
           volt_bc::numeric(12,2) as volt_bc,
           volt_ca::numeric(12,2) as volt_ca,
@@ -680,16 +702,19 @@ export const getPowerMeterHistoryHandler = async (
       `, [target3sPmId]);
 
       if (req.query.compact === "true") {
-        const tuples = rollingDbRes.rows.map((r: any) => [
-          Number(r.ts),
-          r.volt_ab !== null ? Number(r.volt_ab) : 0,
-          r.volt_bc !== null ? Number(r.volt_bc) : 0,
-          r.volt_ca !== null ? Number(r.volt_ca) : 0,
-          r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : 0,
-          r.current_a !== null ? Number(r.current_a) : 0,
-          r.current_b !== null ? Number(r.current_b) : 0,
-          r.current_c !== null ? Number(r.current_c) : 0
-        ]);
+        const tuples = rollingDbRes.rows.map((r: any) => {
+          const isOffline = r.status === false;
+          return [
+            Number(r.ts),
+            !isOffline && r.volt_ab !== null ? Number(r.volt_ab) : 0,
+            !isOffline && r.volt_bc !== null ? Number(r.volt_bc) : 0,
+            !isOffline && r.volt_ca !== null ? Number(r.volt_ca) : 0,
+            !isOffline && r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : 0,
+            !isOffline && r.current_a !== null ? Number(r.current_a) : 0,
+            !isOffline && r.current_b !== null ? Number(r.current_b) : 0,
+            !isOffline && r.current_c !== null ? Number(r.current_c) : 0
+          ];
+        });
         return res.json({
           targetDate,
           currentHour,

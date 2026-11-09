@@ -36,18 +36,18 @@ const PowerMeterCard = memo(
     const isStandby = !isMati && !isTerputus && (Number(pm.active_power_total) <= 0.05);
     const isOnline = !isMati && !isTerputus && !isStandby;
 
-    const pKw = pm.active_power_total !== null && pm.active_power_total !== undefined && !isNaN(Number(pm.active_power_total))
+    const pKw = isMati ? 0 : (pm.active_power_total !== null && pm.active_power_total !== undefined && !isNaN(Number(pm.active_power_total))
       ? Number(pm.active_power_total)
-      : null;
-    const pf = pm.power_factor !== null && pm.power_factor !== undefined && !isNaN(Number(pm.power_factor))
+      : null);
+    const pf = isMati ? null : (pm.power_factor !== null && pm.power_factor !== undefined && !isNaN(Number(pm.power_factor))
       ? Math.abs(Number(pm.power_factor))
-      : null;
-    const vL = pm.volt_ab !== null && pm.volt_ab !== undefined
+      : null);
+    const vL = isMati ? null : (pm.volt_ab !== null && pm.volt_ab !== undefined
       ? Number(pm.volt_ab)
-      : (pm.volt_ll !== null && pm.volt_ll !== undefined ? Number(pm.volt_ll) : null);
-    const iAvg = (pm.current_a !== null || pm.current_b !== null || pm.current_c !== null)
+      : (pm.volt_ll !== null && pm.volt_ll !== undefined ? Number(pm.volt_ll) : null));
+    const iAvg = isMati ? null : ((pm.current_a !== null || pm.current_b !== null || pm.current_c !== null)
       ? ((Number(pm.current_a) || 0) + (Number(pm.current_b) || 0) + (Number(pm.current_c) || 0)) / 3
-      : null;
+      : null);
 
     return (
       <div
@@ -138,7 +138,7 @@ const PowerMeterCard = memo(
                   }`}
                   style={{ boxShadow: isOnline ? "0 0 6px #10b981" : "none" }}
                 />
-                {isOnline ? "ONLINE" : isStandby ? "STANDBY" : isMati ? "OFFLINE" : "TERPUTUS"}
+                {isOnline ? "ONLINE" : isStandby ? "STANDBY" : isMati ? "OFFLINE (MATI)" : "TERPUTUS"}
               </span>
             </div>
           </div>
@@ -164,22 +164,28 @@ const PowerMeterCard = memo(
           <div className="grid grid-cols-2 gap-2 text-xs font-mono tabular-nums">
             <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
               <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Tegangan</span>
-              <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">{vL !== null ? `${vL.toFixed(0)} V` : "—"}</span>
+              <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">
+                {isMati ? "0 V" : (vL !== null ? `${vL.toFixed(0)} V` : "—")}
+              </span>
             </div>
             <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
               <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Arus Rata2</span>
-              <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">{iAvg !== null ? `${iAvg.toFixed(1)} A` : "—"}</span>
+              <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">
+                {isMati ? "0.0 A" : (iAvg !== null ? `${iAvg.toFixed(1)} A` : "—")}
+              </span>
             </div>
             <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
               <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Power Factor</span>
-              <span className="text-xs sm:text-sm font-black text-emerald-500">{pf !== null ? pf.toFixed(2) : "—"}</span>
+              <span className="text-xs sm:text-sm font-black text-emerald-500">
+                {isMati ? "—" : (pf !== null ? pf.toFixed(2) : "—")}
+              </span>
             </div>
             <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
               <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Energi</span>
               <span className="text-xs sm:text-sm font-black text-purple-400">
-                {pm.active_energy !== null && pm.active_energy !== undefined
+                {isMati ? "—" : (pm.active_energy !== null && pm.active_energy !== undefined
                   ? Math.round(Number(pm.active_energy)).toLocaleString("id-ID")
-                  : "—"}
+                  : "—")}
               </span>
             </div>
           </div>

@@ -1072,10 +1072,12 @@ export const getElectricityAnalytics = async (
     if (rawThdIC !== null) thdIT = rawThdIC < 1.0 ? rawThdIC * 100.0 : rawThdIC;
     thdIIVal = (thdIR + thdIS + thdIT) / 3.0;
 
-    const statusVal = deviceId === "Cubicle_PLN_PM8000" ? pgPq.status_pm8000 : pgPq.status_pm5500;
-    const recordTime = new Date(pgPq.t_stamp).getTime();
+    const statusVal = deviceId === "Cubicle_PLN_PM8000"
+      ? (pgPq.status_pm8000 !== undefined ? pgPq.status_pm8000 : (pgPq.status !== undefined ? pgPq.status : null))
+      : (pgPq.status_pm5500 !== undefined ? pgPq.status_pm5500 : (pgPq.status !== undefined ? pgPq.status : null));
+    const recordTime = pgPq.t_stamp ? new Date(pgPq.t_stamp).getTime() : Date.now();
     const isStale = (Date.now() - recordTime) > 60000; // 60 seconds stale threshold
-    isConnected = (statusVal !== null ? !!statusVal : true) && !isStale;
+    isConnected = (statusVal !== null ? (statusVal !== false && Boolean(statusVal)) : true) && !isStale;
   }
 
   const vln1 = voltABVal;

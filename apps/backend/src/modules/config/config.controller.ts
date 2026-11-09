@@ -1447,28 +1447,55 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
       }
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const candidateUrls = [url];
+    if (url.includes("10.3.164.3:8088")) {
+      candidateUrls.push(url.replace("10.3.164.3:8088", "10.3.161.3:8088"));
+    } else if (url.includes("10.3.161.3:8088")) {
+      candidateUrls.push(url.replace("10.3.161.3:8088", "10.3.164.3:8088"));
+    }
 
-    const fetchOptions: RequestInit = {
-      method: reqMethod,
-      headers: {
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        ...(customHeaders || {})
-      },
-      signal: controller.signal
-    };
+    let data: any = null;
+    let apiStatus = 200;
+    let apiStatusText = "OK";
+    let lastErr: any = null;
 
-    const apiRes = await fetch(url, fetchOptions);
-    clearTimeout(timeoutId);
+    for (const candUrl of candidateUrls) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
 
-    if (!apiRes.ok) {
+        const fetchOptions: RequestInit = {
+          method: reqMethod,
+          headers: {
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            ...(customHeaders || {})
+          },
+          signal: controller.signal
+        };
+
+        const apiRes = await fetch(candUrl, fetchOptions);
+        clearTimeout(timeoutId);
+
+        if (apiRes.ok) {
+          data = await apiRes.json();
+          apiStatus = apiRes.status;
+          apiStatusText = apiRes.statusText;
+          break;
+        } else {
+          apiStatus = apiRes.status;
+          apiStatusText = apiRes.statusText;
+        }
+      } catch (err: any) {
+        lastErr = err;
+      }
+    }
+
+    if (data !== null) {
       const result = {
-        success: false,
-        status: apiRes.status,
-        statusText: apiRes.statusText,
-        data: null,
+        success: true,
+        status: apiStatus,
+        data,
         ts: now
       };
       if (reqMethod === "GET") apiProxyCache.set(url, result);
@@ -1476,15 +1503,17 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
       return;
     }
 
-    const data = await apiRes.json();
     const result = {
-      success: true,
-      status: apiRes.status,
-      data,
+      success: false,
+      status: apiStatus || 0,
+      statusText: apiStatusText,
+      error: lastErr ? (lastErr.name === "AbortError" ? "Request timed out" : lastErr.message) : "Failed to fetch from candidate URLs",
+      data: null,
       ts: now
     };
     if (reqMethod === "GET") apiProxyCache.set(url, result);
     res.json(result);
+    return;
   } catch (err: any) {
     const result = {
       success: false,

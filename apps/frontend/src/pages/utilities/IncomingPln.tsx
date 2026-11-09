@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { usePageActive } from "../../hooks/usePageActive";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Line, Radar } from "react-chartjs-2";
+import { Chart as ChartJS } from "chart.js";
 import "../../components/charts/chartjs";
 import { getJson, postJson } from "../../services/api.client";
 import { getSocket } from "../../services/socket.service";
@@ -150,30 +151,53 @@ function UnbalancedGauge({
   );
 }
 
+function parseBoolStatus(val: any): boolean | null {
+  if (val === undefined || val === null) return null;
+  if (typeof val === "boolean") return val;
+  if (typeof val === "number") return val !== 0;
+  if (typeof val === "string") {
+    const s = val.trim().toLowerCase();
+    if (s === "false" || s === "0" || s === "offline" || s === "mati" || s === "disconnected") return false;
+    if (s === "true" || s === "1" || s === "online" || s === "connected") return true;
+  }
+  return Boolean(val);
+}
+
 function checkDeviceStatus(data: any, currentMode: "pln" | "fact1" | "fact2"): boolean | null {
   if (!data || typeof data !== "object") return null;
+
+  const tryKeys = (keys: string[]): boolean | null => {
+    for (const k of keys) {
+      if (data[k] !== undefined) {
+        const parsed = parseBoolStatus(data[k]);
+        if (parsed !== null) return parsed;
+      }
+    }
+    return null;
+  };
+
   if (currentMode === "pln") {
-    if (data.Status_PM8000 !== undefined) return Boolean(data.Status_PM8000);
-    if (data.status_pm8000 !== undefined) return Boolean(data.status_pm8000);
+    const res = tryKeys(["Status_PM8000", "status_pm8000", "Status_PM800", "status_pm800", "Status_PLN", "status_pln"]);
+    if (res !== null) return res;
   } else if (currentMode === "fact1") {
-    if (data.Status_PM5500_WF1 !== undefined) return Boolean(data.Status_PM5500_WF1);
-    if (data.status_pm5500_wf1 !== undefined) return Boolean(data.status_pm5500_wf1);
-    if (data.Status_PM5560 !== undefined) return Boolean(data.Status_PM5560);
-    if (data.status_pm5560 !== undefined) return Boolean(data.status_pm5560);
-    if (data.Status_PM5500 !== undefined) return Boolean(data.Status_PM5500);
-    if (data.status_pm5500 !== undefined) return Boolean(data.status_pm5500);
+    const res = tryKeys([
+      "Status_PM5500_WF1", "status_pm5500_wf1",
+      "Status_PM5560", "status_pm5560",
+      "Status_PM5500", "status_pm5500",
+      "Status_WF1", "status_wf1"
+    ]);
+    if (res !== null) return res;
   } else if (currentMode === "fact2") {
-    if (data.Status_PM5500_WF2 !== undefined) return Boolean(data.Status_PM5500_WF2);
-    if (data.status_pm5500_wf2 !== undefined) return Boolean(data.status_pm5500_wf2);
-    if (data.Status_PM5500 !== undefined) return Boolean(data.Status_PM5500);
-    if (data.status_pm5500 !== undefined) return Boolean(data.status_pm5500);
-    if (data.Status_PM5500_WF1 !== undefined) return Boolean(data.Status_PM5500_WF1);
+    const res = tryKeys([
+      "Status_PM5500_WF2", "status_pm5500_wf2",
+      "Status_PM5500", "status_pm5500",
+      "Status_PM5500_WF1", "Status_PM5560",
+      "Status_WF2", "status_wf2"
+    ]);
+    if (res !== null) return res;
   }
-  if (data.status !== undefined) return Boolean(data.status);
-  if (data.Status !== undefined) return Boolean(data.Status);
-  if (data.online !== undefined) return Boolean(data.online);
-  if (data.Connected !== undefined) return Boolean(data.Connected);
-  return null;
+
+  return tryKeys(["status", "Status", "online", "Online", "connected", "Connected"]);
 }
 
 /* ═══════════ MAIN COMPONENT ═══════════ */
@@ -407,7 +431,15 @@ export default function IncomingPln() {
   });
 
   const isPmOnline = useMemo(() => {
-    // 1. Direct raw API check (e.g. Status_PM8000: false from 10.3.164.3)
+    // 1. Check all payloads currently in apiLiveData for an explicit offline status (e.g. Status_PM8000: false)
+    for (const payload of Object.values(apiLiveData)) {
+      if (payload && typeof payload === "object") {
+        const st = checkDeviceStatus(payload, mode);
+        if (st === false) return false;
+      }
+    }
+
+    // 2. Direct default URL check
     const defaultUrl = DEFAULT_API_URLS[mode] || "";
     const activeUrl = Object.keys(apiLiveData).find(u => u && apiLiveData[u]) || defaultUrl;
     const directPayload = apiLiveData[activeUrl] || apiLiveData[defaultUrl];
@@ -417,10 +449,10 @@ export default function IncomingPln() {
       if (directSt === true) return true;
     }
 
-    // 2. If API poll explicitly failed for this URL
+    // 3. If API poll explicitly failed for this URL
     if (directPayload === null && !metrics.isConnected) return false;
 
-    // 3. Fallback to metrics socket / REST telemetry status
+    // 4. Fallback to metrics socket / REST telemetry status
     return metrics.isConnected;
   }, [mode, apiLiveData, metrics.isConnected]);
 
@@ -463,6 +495,234 @@ interface HourlyTrend5sPoint {
 
   const lastTrendHourRef = useRef<number>(-1);
   const [zoomTrend, setZoomTrend] = useState<"voltage" | "power" | null>(null);
+  const [zoomIndexRange, setZoomIndexRange] = useState<{ min: number; max: number } | null>(null);
+  const [zoomRangeY, setZoomRangeY] = useState<{ min: number; max: number } | null>(null);
+  const zoomIndexRangeRef = useRef(zoomIndexRange);
+  zoomIndexRangeRef.current = zoomIndexRange;
+  const zoomRangeYRef = useRef(zoomRangeY);
+  zoomRangeYRef.current = zoomRangeY;
+
+  const zoomChartRef = useRef<ChartJS<"line"> | null>(null);
+  const zoomContainerRef = useRef<HTMLDivElement>(null);
+
+  const zoomDragRef = useRef<{
+    isDragging: boolean;
+    mode: "body-pan" | "y-axis" | null;
+    startX: number;
+    startY: number;
+    initMinIdx: number;
+    initMaxIdx: number;
+    initMinY: number;
+    initMaxY: number;
+  }>({
+    isDragging: false,
+    mode: null,
+    startX: 0,
+    startY: 0,
+    initMinIdx: 0,
+    initMaxIdx: 0,
+    initMinY: 0,
+    initMaxY: 0,
+  });
+
+  useEffect(() => {
+    setZoomIndexRange(null);
+    setZoomRangeY(null);
+  }, [zoomTrend, mode]);
+
+  // TradingView Style Chart Navigation for Incoming PLN Modal:
+  // - LMB Drag: Pan time slice (or stretch vertical scale on left Y-axis)
+  // - Mouse Wheel: Zoom time window on body; Zoom vertical height on left Y-axis
+  // - Double Click: Reset to Full Auto-Fit View
+  useEffect(() => {
+    if (!zoomTrend) return;
+    const container = zoomContainerRef.current;
+    if (!container) return;
+
+    const getChartMetrics = () => {
+      const chart = zoomChartRef.current;
+      const canvas = chart?.canvas;
+      const rect = canvas ? canvas.getBoundingClientRect() : container.getBoundingClientRect();
+      const chartArea = chart?.chartArea ?? {
+        left: 65,
+        right: rect.width - 20,
+        top: 30,
+        bottom: rect.height - 30,
+        width: rect.width - 85,
+        height: rect.height - 60,
+      };
+      return { chart, canvas, rect, chartArea };
+    };
+
+    const handleMouseMoveHover = (e: MouseEvent) => {
+      if (zoomDragRef.current.isDragging) return;
+      const { canvas, rect, chartArea } = getChartMetrics();
+      if (!canvas) return;
+      const mouseX = e.clientX - rect.left;
+      if (mouseX < chartArea.left) {
+        canvas.style.cursor = "ns-resize";
+        canvas.title = "Scroll atau drag vertikal untuk mengatur tinggi/skala Y";
+      } else {
+        canvas.style.cursor = "grab";
+        canvas.title = "Hold LMB lalu geser untuk navigasi; Scroll untuk zoom waktu";
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const { chart, rect, chartArea } = getChartMetrics();
+      const mouseX = e.clientX - rect.left;
+      const isYAxisZone = mouseX < chartArea.left;
+      const totalPoints = rollingTrendData.labels.length;
+      if (totalPoints <= 1) return;
+
+      if (isYAxisZone) {
+        setZoomRangeY((prevY) => {
+          const curMin = prevY ? prevY.min : (chart?.scales?.y?.min ?? (zoomTrend === "voltage" ? 18 : 0));
+          const curMax = prevY ? prevY.max : (chart?.scales?.y?.max ?? (zoomTrend === "voltage" ? 23 : 1500));
+          const span = Math.max(0.1, curMax - curMin);
+
+          const mouseY = e.clientY - rect.top;
+          const ratioY = Math.max(0, Math.min(1, (chartArea.bottom - mouseY) / Math.max(1, chartArea.height)));
+          const anchorVal = curMin + ratioY * span;
+
+          const factor = e.deltaY < 0 ? 0.85 : 1.18;
+          const newSpan = Math.max(0.2, span * factor);
+          const newMin = anchorVal - ratioY * newSpan;
+          const newMax = newMin + newSpan;
+          return { min: newMin, max: newMax };
+        });
+      } else {
+        setZoomIndexRange((prevRange) => {
+          const curMin = prevRange ? prevRange.min : 0;
+          const curMax = prevRange ? prevRange.max : totalPoints;
+          const span = Math.max(5, curMax - curMin);
+          const factor = e.deltaY < 0 ? 0.82 : 1.22;
+          let newSpan = span * factor;
+          newSpan = Math.max(5, Math.min(totalPoints, newSpan));
+
+          const plotLeft = chartArea.left;
+          const plotWidth = Math.max(10, chartArea.width);
+          const ratio = Math.max(0, Math.min(1, (mouseX - plotLeft) / plotWidth));
+          const centerIdx = curMin + ratio * span;
+
+          const newMin = Math.max(0, centerIdx - ratio * newSpan);
+          const newMax = Math.min(totalPoints, newMin + newSpan);
+          return { min: newMin, max: newMax };
+        });
+      }
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      const { chart, canvas, rect, chartArea } = getChartMetrics();
+      const mouseX = e.clientX - rect.left;
+      const isYAxisZone = mouseX < chartArea.left;
+      const totalPoints = rollingTrendData.labels.length;
+
+      const curMinIdx = zoomIndexRangeRef.current ? zoomIndexRangeRef.current.min : 0;
+      const curMaxIdx = zoomIndexRangeRef.current ? zoomIndexRangeRef.current.max : totalPoints;
+      const curMinY = zoomRangeYRef.current ? zoomRangeYRef.current.min : (chart?.scales?.y?.min ?? (zoomTrend === "voltage" ? 18 : 0));
+      const curMaxY = zoomRangeYRef.current ? zoomRangeYRef.current.max : (chart?.scales?.y?.max ?? (zoomTrend === "voltage" ? 23 : 1500));
+
+      zoomDragRef.current = {
+        isDragging: true,
+        mode: isYAxisZone ? "y-axis" : "body-pan",
+        startX: e.clientX,
+        startY: e.clientY,
+        initMinIdx: curMinIdx,
+        initMaxIdx: curMaxIdx,
+        initMinY: curMinY,
+        initMaxY: curMaxY,
+      };
+
+      if (canvas) {
+        canvas.style.cursor = isYAxisZone ? "ns-resize" : "grabbing";
+      }
+    };
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (!zoomDragRef.current.isDragging) return;
+      const { chartArea } = getChartMetrics();
+      const { mode, startX, startY, initMinIdx, initMaxIdx, initMinY, initMaxY } = zoomDragRef.current;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const totalPoints = rollingTrendData.labels.length;
+
+      if (mode === "body-pan") {
+        const plotWidth = Math.max(10, chartArea.width);
+        const spanIdx = initMaxIdx - initMinIdx;
+        const ptsPerPixel = spanIdx / plotWidth;
+        const shift = dx * ptsPerPixel;
+        let newMin = initMinIdx - shift;
+        let newMax = initMaxIdx - shift;
+        if (newMin < 0) {
+          newMax -= newMin;
+          newMin = 0;
+        }
+        if (newMax > totalPoints) {
+          newMin -= (newMax - totalPoints);
+          newMax = totalPoints;
+          if (newMin < 0) newMin = 0;
+        }
+        setZoomIndexRange({ min: newMin, max: newMax });
+
+        if (zoomRangeYRef.current) {
+          const plotHeight = Math.max(10, chartArea.height);
+          const spanY = initMaxY - initMinY;
+          const yPerPixel = spanY / plotHeight;
+          const shiftY = dy * yPerPixel;
+          setZoomRangeY({ min: initMinY + shiftY, max: initMaxY + shiftY });
+        }
+      } else if (mode === "y-axis") {
+        const { rect } = getChartMetrics();
+        const plotHeight = Math.max(10, chartArea.height);
+        const spanY = Math.max(0.1, initMaxY - initMinY);
+        const scaleMultiplier = Math.exp((dy / Math.max(50, plotHeight)) * 1.5);
+        const newSpan = Math.max(0.1, spanY * scaleMultiplier);
+        const initMouseY = startY - rect.top;
+        const anchorRatio = Math.max(0, Math.min(1, (chartArea.bottom - initMouseY) / Math.max(1, chartArea.height)));
+        const anchorVal = initMinY + anchorRatio * spanY;
+        const newMin = anchorVal - anchorRatio * newSpan;
+        const newMax = newMin + newSpan;
+        setZoomRangeY({ min: newMin, max: newMax });
+      }
+    };
+
+    const handleWindowMouseUp = (e: MouseEvent) => {
+      if (zoomDragRef.current.isDragging) {
+        zoomDragRef.current.isDragging = false;
+        const { canvas, rect, chartArea } = getChartMetrics();
+        if (canvas) {
+          const mouseX = e.clientX - rect.left;
+          canvas.style.cursor = mouseX < chartArea.left ? "ns-resize" : "grab";
+        }
+      }
+    };
+
+    const handleDoubleClick = () => {
+      setZoomIndexRange(null);
+      setZoomRangeY(null);
+    };
+
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    container.addEventListener("mousemove", handleMouseMoveHover);
+    container.addEventListener("mousedown", handleMouseDown);
+    container.addEventListener("dblclick", handleDoubleClick);
+    window.addEventListener("mousemove", handleWindowMouseMove);
+    window.addEventListener("mouseup", handleWindowMouseUp);
+
+    return () => {
+      container.removeEventListener("wheel", handleWheel);
+      container.removeEventListener("mousemove", handleMouseMoveHover);
+      container.removeEventListener("mousedown", handleMouseDown);
+      container.removeEventListener("dblclick", handleDoubleClick);
+      window.removeEventListener("mousemove", handleWindowMouseMove);
+      window.removeEventListener("mouseup", handleWindowMouseUp);
+    };
+  }, [zoomTrend, rollingTrendData.labels.length]);
 
   useEffect(() => {
     if (!zoomTrend) return;
@@ -1238,6 +1498,113 @@ interface HourlyTrend5sPoint {
     };
   }, [rollingTrendData, isDark]);
 
+  // Sliced datasets for Modal Zoom with dynamic TradingView Navigation
+  const modalRollingTrendData = useMemo(() => {
+    const total = rollingTrendData.labels.length;
+    let startIdx = 0;
+    let endIdx = total;
+
+    if (zoomIndexRange !== null && total > 0) {
+      startIdx = Math.max(0, Math.min(total - 5, Math.round(zoomIndexRange.min)));
+      endIdx = Math.min(total, Math.max(startIdx + 5, Math.round(zoomIndexRange.max)));
+    }
+
+    const labels = rollingTrendData.labels.slice(startIdx, endIdx);
+    const vRData = rollingTrendData.vRData.slice(startIdx, endIdx);
+    const vSData = rollingTrendData.vSData.slice(startIdx, endIdx);
+    const vTData = rollingTrendData.vTData.slice(startIdx, endIdx);
+    const activePowerData = rollingTrendData.activePowerData.slice(startIdx, endIdx);
+    const startLabel = labels[0]?.substring(0, 5) || "--:--";
+    const endLabel = labels[labels.length - 1]?.substring(0, 5) || "--:--";
+    const rangeLabel = `${startLabel} - ${endLabel}`;
+
+    return {
+      labels,
+      vRData,
+      vSData,
+      vTData,
+      activePowerData,
+      rangeLabel,
+      isCustom: zoomIndexRange !== null || zoomRangeY !== null
+    };
+  }, [rollingTrendData, zoomIndexRange, zoomRangeY]);
+
+  const modalVoltageTrendData = useMemo(() => {
+    return {
+      labels: modalRollingTrendData.labels,
+      datasets: [
+        {
+          label: "Fasa R (kV)",
+          data: modalRollingTrendData.vRData,
+          borderColor: "#f43f5e",
+          backgroundColor: "rgba(244, 63, 94, 0.05)",
+          fill: false,
+          tension: 0.2,
+          borderWidth: 1.8,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointBackgroundColor: "#f43f5e",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          spanGaps: true
+        },
+        {
+          label: "Fasa S (kV)",
+          data: modalRollingTrendData.vSData,
+          borderColor: "#f59e0b",
+          backgroundColor: "rgba(245, 158, 11, 0.05)",
+          fill: false,
+          tension: 0.2,
+          borderWidth: 1.8,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointBackgroundColor: "#f59e0b",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          spanGaps: true
+        },
+        {
+          label: "Fasa T (kV)",
+          data: modalRollingTrendData.vTData,
+          borderColor: "#3b82f6",
+          backgroundColor: "rgba(59, 130, 246, 0.05)",
+          fill: false,
+          tension: 0.2,
+          borderWidth: 1.8,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointBackgroundColor: "#3b82f6",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          spanGaps: true
+        }
+      ]
+    };
+  }, [modalRollingTrendData, isDark]);
+
+  const modalActivePowerTrendData = useMemo(() => {
+    return {
+      labels: modalRollingTrendData.labels,
+      datasets: [
+        {
+          label: "Active Power (kW)",
+          data: modalRollingTrendData.activePowerData,
+          borderColor: "#10b981",
+          backgroundColor: "rgba(16, 185, 129, 0.08)",
+          fill: true,
+          tension: 0.2,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointBackgroundColor: "#10b981",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          spanGaps: true
+        }
+      ]
+    };
+  }, [modalRollingTrendData, isDark]);
+
   const lineOptions = (unit: "kV" | "kW", isPower: boolean = false, isModal: boolean = false) => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -1307,7 +1674,8 @@ interface HourlyTrend5sPoint {
           maxTicksLimit: isModal ? 25 : 13,
           autoSkip: true,
           callback: function (val: any, index: number): string {
-            const raw = (this as any)?.getLabelForValue ? (this as any).getLabelForValue(val) : rollingTrendData.labels[index];
+            const activeLabels = isModal ? modalRollingTrendData.labels : rollingTrendData.labels;
+            const raw = (this as any)?.getLabelForValue ? (this as any).getLabelForValue(val) : activeLabels[index];
             if (typeof raw === "string" && raw.length >= 5) {
               return isModal && raw.length >= 8 ? raw : raw.substring(0, 5);
             }
@@ -1317,6 +1685,8 @@ interface HourlyTrend5sPoint {
       },
       y: {
         beginAtZero: false,
+        min: isModal && zoomRangeY ? zoomRangeY.min : undefined,
+        max: isModal && zoomRangeY ? zoomRangeY.max : undefined,
         grace: isPower ? "10%" : "5%",
         grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
         ticks: {
@@ -1794,12 +2164,12 @@ interface HourlyTrend5sPoint {
           onClick={() => setZoomTrend(null)}
         >
           <div
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col space-y-4 overflow-hidden"
-            style={{ width: "90vw", maxWidth: "1480px", height: "85vh", maxHeight: "86vh", padding: "1.25rem 1.5rem" }}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col space-y-3 overflow-hidden"
+            style={{ width: "95vw", maxWidth: "1560px", height: "88vh", maxHeight: "90vh", padding: "1.25rem 1.5rem" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className={`text-base font-bold uppercase tracking-wider ${
@@ -1811,13 +2181,36 @@ interface HourlyTrend5sPoint {
                     {config.title}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 mt-2">
-                  <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
-                    Rentang: {rollingTrendData.rangeLabel} (Rolling 3s Window)
+                <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                  <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                    Rentang: {modalRollingTrendData.rangeLabel}
                   </span>
-                  <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                    • Resolusi 3 Detik (Database Historikal Real-Time)
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                    • Resolusi 3 Detik (Rolling 1 Jam)
                   </span>
+                  {modalRollingTrendData.isCustom ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
+                        Interactive View (Zoom / Pan)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setZoomIndexRange(null);
+                          setZoomRangeY(null);
+                        }}
+                        className="px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                        title="Reset ke Tampilan Live Auto-Fit (atau Klik Ganda di Grafik)"
+                      >
+                        ↺ Reset
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Live Stream
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1836,34 +2229,45 @@ interface HourlyTrend5sPoint {
               </div>
             </div>
 
-            {/* Modal Body: Large Chart Height */}
-            <div className="relative w-full flex-1 min-h-[420px] sm:min-h-[460px]">
-              {zoomTrend === "voltage" ? (
-                <Line data={voltageTrendData} options={lineOptions("kV", false, true)} />
-              ) : (
-                <Line data={activePowerTrendData} options={lineOptions("kW", true, true)} />
-              )}
+            {/* Modal Body: Full Responsive TradingView Canvas (NO BUTTON BARS, NO OVERFLOW SCROLLBAR) */}
+            <div
+              ref={zoomContainerRef}
+              className="relative w-full flex-1 min-h-[420px] sm:min-h-[460px] overflow-hidden rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 p-2 select-none"
+            >
+              <div className="w-full h-full min-h-[420px]">
+                {zoomTrend === "voltage" ? (
+                  <Line ref={zoomChartRef} data={modalVoltageTrendData} options={lineOptions("kV", false, true)} />
+                ) : (
+                  <Line ref={zoomChartRef} data={modalActivePowerTrendData} options={lineOptions("kW", true, true)} />
+                )}
+              </div>
             </div>
 
-            {/* Modal Footer: Quick Stats */}
-            <div className="flex flex-wrap items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-3 text-xs">
-              {zoomTrend === "voltage" && voltageStats ? (
-                <div className="flex flex-wrap items-center gap-4 text-slate-600 dark:text-slate-300">
-                  <span>Terkini: <strong className="text-rose-500">R: {voltageStats.latestR.toFixed(3)} kV</strong> | <strong className="text-amber-500">S: {voltageStats.latestS.toFixed(3)} kV</strong> | <strong className="text-blue-500">T: {voltageStats.latestT.toFixed(3)} kV</strong></span>
-                  <span>• Rata-rata 1 Jam: <strong className="font-mono text-slate-800 dark:text-white">{voltageStats.avg.toFixed(3)} kV</strong></span>
-                  <span>• Min: <strong className="font-mono">{voltageStats.min.toFixed(3)} kV</strong> | Max: <strong className="font-mono">{voltageStats.max.toFixed(3)} kV</strong></span>
-                </div>
-              ) : zoomTrend === "power" && powerStats ? (
-                <div className="flex flex-wrap items-center gap-4 text-slate-600 dark:text-slate-300">
-                  <span>Terkini: <strong className="text-emerald-500 font-mono font-bold">{powerStats.latest.toFixed(1)} kW</strong></span>
-                  <span>• Rata-rata 1 Jam: <strong className="font-mono text-slate-800 dark:text-white">{powerStats.avg.toFixed(1)} kW</strong></span>
-                  <span>• Peak (Beban Puncak): <strong className="font-mono text-amber-500">{powerStats.max.toFixed(1)} kW</strong></span>
-                  <span>• Min: <strong className="font-mono">{powerStats.min.toFixed(1)} kW</strong></span>
-                </div>
-              ) : (
-                <span className="text-slate-400">Data telemetri tersinkronisasi per 3 detik.</span>
-              )}
-              <span className="text-[11px] text-slate-400">Tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] border border-slate-200 dark:border-slate-700">ESC</kbd> untuk menutup</span>
+            {/* Modal Footer: Quick Stats & TradingView Tips */}
+            <div className="flex flex-wrap items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-2.5 text-xs gap-3">
+              <div className="flex flex-wrap items-center gap-4 text-slate-600 dark:text-slate-300">
+                {zoomTrend === "voltage" && voltageStats ? (
+                  <>
+                    <span>Terkini: <strong className="text-rose-500">R: {voltageStats.latestR.toFixed(3)} kV</strong> | <strong className="text-amber-500">S: {voltageStats.latestS.toFixed(3)} kV</strong> | <strong className="text-blue-500">T: {voltageStats.latestT.toFixed(3)} kV</strong></span>
+                    <span>• Rata-rata 1 Jam: <strong className="font-mono text-slate-800 dark:text-white">{voltageStats.avg.toFixed(3)} kV</strong></span>
+                    <span>• Min: <strong className="font-mono">{voltageStats.min.toFixed(3)} kV</strong> | Max: <strong className="font-mono">{voltageStats.max.toFixed(3)} kV</strong></span>
+                  </>
+                ) : zoomTrend === "power" && powerStats ? (
+                  <>
+                    <span>Terkini: <strong className="text-emerald-500 font-mono font-bold">{powerStats.latest.toFixed(1)} kW</strong></span>
+                    <span>• Rata-rata 1 Jam: <strong className="font-mono text-slate-800 dark:text-white">{powerStats.avg.toFixed(1)} kW</strong></span>
+                    <span>• Peak (Beban Puncak): <strong className="font-mono text-amber-500">{powerStats.max.toFixed(1)} kW</strong></span>
+                    <span>• Min: <strong className="font-mono">{powerStats.min.toFixed(1)} kW</strong></span>
+                  </>
+                ) : (
+                  <span className="text-slate-400">Data telemetri tersinkronisasi per 3 detik.</span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                <span className="hidden sm:inline">🖱️ <b>Hold LMB</b> geser • <b>Scroll</b> zoom waktu • <b>Scroll sumbu kiri</b> atur tinggi • <b>Klik ganda</b> reset</span>
+                <span>•</span>
+                <span>Tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] border border-slate-200 dark:border-slate-700">ESC</kbd> untuk menutup</span>
+              </div>
             </div>
           </div>
         </div>

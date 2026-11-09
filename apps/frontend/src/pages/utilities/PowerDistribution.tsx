@@ -165,6 +165,35 @@ function mapPmToTransformer(
 ): TransformerData {
   if (!pm) return initialTx;
 
+  // RULE: If PM status is FALSE (mati / offline / com failure),
+  // do NOT display stuck cached values or fallback mock numbers.
+  // Set all electrical values to null / 0 to display factual and real conditions.
+  if (pm.status === false) {
+    return {
+      ...initialTx,
+      status: "offline",
+      activePowerKw: 0,
+      reactivePowerKvar: 0,
+      apparentPowerKva: 0,
+      powerFactor: null,
+      frequencyHz: null,
+      voltageInKv: null,
+      voltageOutL2L: null,
+      voltageOutL2N: null,
+      voltAb: null,
+      voltBc: null,
+      voltCa: null,
+      currentR: null,
+      currentS: null,
+      currentT: null,
+      thdVoltage: null,
+      thdCurrent: null,
+      voltageUnbalance: null,
+      currentUnbalance: null,
+      kwh: pm.active_energy !== null && pm.active_energy !== undefined ? Number(pm.active_energy) : initialTx.kwh
+    };
+  }
+
   const rawActive = pm.active_power_total !== null && pm.active_power_total !== undefined && !isNaN(Number(pm.active_power_total))
     ? Number(Number(pm.active_power_total).toFixed(1))
     : null;
@@ -613,14 +642,15 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
     const targetPmId = pmId.toUpperCase();
 
     const appendModalPoint = (pm: any, fallbackTs?: number) => {
-      const v1 = pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : 0;
-      const v2 = pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : 0;
-      const v3 = pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : 0;
-      const c1 = pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : 0;
-      const c2 = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
-      const c3 = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
-      const p = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
-      if (v1 <= 0 && p <= 0 && c1 <= 0) return;
+      const isMati = pm.status === false;
+      const v1 = !isMati && pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : 0;
+      const v2 = !isMati && pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : 0;
+      const v3 = !isMati && pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : 0;
+      const c1 = !isMati && pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : 0;
+      const c2 = !isMati && pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
+      const c3 = !isMati && pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
+      const p = !isMati && pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
+      if (!isMati && v1 <= 0 && p <= 0 && c1 <= 0) return;
 
       const s = modalSeriesRef.current;
       const lastX = s.vAb.length > 0 ? s.vAb[s.vAb.length - 1].x : 0;
@@ -2697,6 +2727,44 @@ export default function PowerDistribution() {
   const [bottomVoltageMode, setBottomVoltageMode] = useState<"380v" | "230v">("380v");
   const [bottomZoomChart, setBottomZoomChart] = useState<"voltage" | "power" | "current" | null>(null);
 
+  // TradingView Interactive Pan & Zoom States for Modal Chart
+  const [modalRangeX, setModalRangeX] = useState<{ min: number; max: number } | null>(null);
+  const [modalRangeY, setModalRangeY] = useState<{ min: number; max: number } | null>(null);
+  const modalRangeXRef = useRef(modalRangeX);
+  modalRangeXRef.current = modalRangeX;
+  const modalRangeYRef = useRef(modalRangeY);
+  modalRangeYRef.current = modalRangeY;
+
+  const modalChartRef = useRef<ChartJS<"line"> | null>(null);
+  const modalChartContainerRef = useRef<HTMLDivElement>(null);
+
+  const modalDragRef = useRef<{
+    isDragging: boolean;
+    mode: "body-pan" | "y-axis" | null;
+    startX: number;
+    startY: number;
+    initMinX: number;
+    initMaxX: number;
+    initMinY: number;
+    initMaxY: number;
+  }>({
+    isDragging: false,
+    mode: null,
+    startX: 0,
+    startY: 0,
+    initMinX: 0,
+    initMaxX: 0,
+    initMinY: 0,
+    initMaxY: 0,
+  });
+
+  const modalActiveWindow = useMemo(() => {
+    const max = modalRangeX ? modalRangeX.max : bottomTickMs;
+    const min = modalRangeX ? modalRangeX.min : bottomTickMs - 24 * 3600 * 1000;
+    const duration = Math.max(1000, max - min);
+    return { min, max, duration, isCustom: modalRangeX !== null || modalRangeY !== null };
+  }, [modalRangeX, modalRangeY, bottomTickMs]);
+
   const bottomSeriesRef = useRef<{
     vAb: { x: number; y: number }[];
     vBc: { x: number; y: number }[];
@@ -2841,14 +2909,15 @@ export default function PowerDistribution() {
     const targetPmId = (TRAFO_PM_MAP[bottomTxId]?.pmId || bottomTxId).toUpperCase();
 
     const appendBottomPoint = (pm: any, fallbackTs?: number) => {
-      const v1 = pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : 0;
-      const v2 = pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : 0;
-      const v3 = pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : 0;
-      const c1 = pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : 0;
-      const c2 = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
-      const c3 = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
-      const p = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
-      if (v1 <= 0 && p <= 0 && c1 <= 0) return;
+      const isMati = pm.status === false;
+      const v1 = !isMati && pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : 0;
+      const v2 = !isMati && pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : 0;
+      const v3 = !isMati && pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : 0;
+      const c1 = !isMati && pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : 0;
+      const c2 = !isMati && pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
+      const c3 = !isMati && pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
+      const p = !isMati && pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
+      if (!isMati && v1 <= 0 && p <= 0 && c1 <= 0) return;
 
       const s = bottomSeriesRef.current;
       const lastX = s.vAb.length > 0 ? s.vAb[s.vAb.length - 1].x : 0;
@@ -3078,6 +3147,382 @@ export default function PowerDistribution() {
   }), [lineChartOptions, isDark]);
 
   const currentChartOptions = multiLineChartOptions;
+
+  // Dedicated dynamic options for modal chart with TradingView time window zooming and ticks
+  const modalChartOptions = useMemo(() => {
+    const { min, max, duration } = modalActiveWindow;
+    let tickCount = 8;
+    if (duration <= 60 * 1000) tickCount = 4;
+    else if (duration <= 15 * 60 * 1000) tickCount = 6;
+    else if (duration <= 60 * 60 * 1000) tickCount = 6;
+    else if (duration <= 6 * 3600 * 1000) tickCount = 6;
+    else tickCount = 8;
+
+    const step = (max - min) / tickCount;
+
+    const defaultYMax = bottomZoomChart === "voltage"
+      ? (bottomVoltageMode === "380v" ? 450 : 260)
+      : undefined;
+
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false as const,
+      parsing: false as const,
+      normalized: true,
+      plugins: {
+        legend: {
+          display: true,
+          position: "top" as const,
+          labels: {
+            boxWidth: 10,
+            boxHeight: 10,
+            usePointStyle: true,
+            pointStyle: "circle",
+            color: isDark ? "#94a3b8" : "#475569",
+            font: { size: 10.5, weight: 700 as const },
+            padding: 10
+          }
+        },
+        tooltip: {
+          mode: "index" as const,
+          intersect: false,
+          backgroundColor: isDark ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.98)",
+          titleColor: isDark ? "#f8fafc" : "#0f172a",
+          bodyColor: isDark ? "#cbd5e1" : "#334155",
+          borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.1)",
+          borderWidth: 1,
+          padding: 8,
+          callbacks: {
+            title: formatWibTooltipTitle,
+          },
+        },
+      },
+      scales: {
+        x: {
+          type: "linear" as const,
+          min,
+          max,
+          afterBuildTicks: (axis: any) => {
+            if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return;
+            const ticks: { value: number }[] = [];
+            for (let i = 0; i <= tickCount; i++) {
+              ticks.push({ value: Math.round(min + i * step) });
+            }
+            axis.ticks = ticks;
+          },
+          grid: { color: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)" },
+          ticks: {
+            color: isDark ? "#94a3b8" : "#64748b",
+            font: { size: 9.5, weight: 600 as const },
+            maxRotation: 0,
+            autoSkip: false,
+            callback: (val: any) => formatWibTick(Number(val)),
+          },
+        },
+        y: {
+          min: modalRangeY ? modalRangeY.min : (bottomZoomChart === "voltage" ? undefined : 0),
+          max: modalRangeY ? modalRangeY.max : defaultYMax,
+          grid: { color: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)" },
+          ticks: {
+            color: isDark ? "#94a3b8" : "#64748b",
+            font: { size: 9.5, weight: 600 as const },
+          },
+        },
+      },
+    };
+  }, [isDark, modalActiveWindow, modalRangeY, bottomZoomChart, bottomVoltageMode, formatWibTick, formatWibTooltipTitle]);
+
+  // Reset custom zoom ranges when switching modal target or closing
+  useEffect(() => {
+    setModalRangeX(null);
+    setModalRangeY(null);
+  }, [bottomZoomChart, bottomVoltageMode, bottomTxId]);
+
+  // TradingView Style Chart Navigation:
+  // - LMB Drag: Free Pan on canvas body (or vertical scale on left Y-axis)
+  // - Mouse Wheel: Horizontal Zoom on body; Vertical Height Zoom on left Y-axis ticks
+  // - Double Click: Reset to Full Auto-Fit View
+  useEffect(() => {
+    if (!bottomZoomChart) return;
+    const container = modalChartContainerRef.current;
+    if (!container) return;
+
+    const getChartMetrics = () => {
+      const chart = modalChartRef.current;
+      const canvas = chart?.canvas;
+      const rect = canvas ? canvas.getBoundingClientRect() : container.getBoundingClientRect();
+      const chartArea = chart?.chartArea ?? {
+        left: 65,
+        right: rect.width - 20,
+        top: 30,
+        bottom: rect.height - 30,
+        width: rect.width - 85,
+        height: rect.height - 60,
+      };
+      return { chart, canvas, rect, chartArea };
+    };
+
+    const handleMouseMoveHover = (e: MouseEvent) => {
+      if (modalDragRef.current.isDragging) return;
+      const { canvas, rect, chartArea } = getChartMetrics();
+      if (!canvas) return;
+      const mouseX = e.clientX - rect.left;
+      if (mouseX < chartArea.left) {
+        canvas.style.cursor = "ns-resize";
+        canvas.title = "Scroll atau drag vertikal untuk mengatur tinggi/skala Y";
+      } else {
+        canvas.style.cursor = "grab";
+        canvas.title = "Hold LMB lalu geser untuk navigasi; Scroll untuk zoom waktu";
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const { chart, rect, chartArea } = getChartMetrics();
+      const mouseX = e.clientX - rect.left;
+      const isYAxisZone = mouseX < chartArea.left;
+
+      if (isYAxisZone) {
+        // Vertical Height Zoom (Scale Y-Axis) anchored at cursor value
+        setModalRangeY((prevY) => {
+          const yScale = chart?.scales?.y;
+          const curMin = prevY ? prevY.min : (yScale?.min ?? (bottomZoomChart === "voltage" ? (bottomVoltageMode === "380v" ? 360 : 210) : 0));
+          const curMax = prevY ? prevY.max : (yScale?.max ?? (bottomZoomChart === "voltage" ? (bottomVoltageMode === "380v" ? 430 : 250) : 50));
+          const span = Math.max(0.2, curMax - curMin);
+
+          const mouseY = e.clientY - rect.top;
+          const ratioY = Math.max(0, Math.min(1, (chartArea.bottom - mouseY) / Math.max(1, chartArea.height)));
+          const anchorVal = curMin + ratioY * span;
+
+          const factor = e.deltaY < 0 ? 0.85 : 1.18;
+          const newSpan = Math.max(0.5, span * factor);
+          const newMin = anchorVal - ratioY * newSpan;
+          const newMax = newMin + newSpan;
+          return { min: newMin, max: newMax };
+        });
+      } else {
+        // Horizontal Time Zoom (Expand / Narrow Time Window)
+        setModalRangeX((prevX) => {
+          const curMin = prevX ? prevX.min : (bottomTickMs - 24 * 3600 * 1000);
+          const curMax = prevX ? prevX.max : bottomTickMs;
+          const span = Math.max(1000, curMax - curMin);
+          const factor = e.deltaY < 0 ? 0.82 : 1.22;
+          let newSpan = span * factor;
+          // Clamp between 15 seconds (fine zoom) and 72 hours
+          newSpan = Math.max(15 * 1000, Math.min(72 * 3600 * 1000, newSpan));
+
+          const plotLeft = chartArea.left;
+          const plotWidth = Math.max(10, chartArea.width);
+          const ratio = Math.max(0, Math.min(1, (mouseX - plotLeft) / plotWidth));
+          const mouseTime = curMin + ratio * span;
+
+          const newMin = mouseTime - ratio * newSpan;
+          const newMax = newMin + newSpan;
+          return { min: newMin, max: newMax };
+        });
+      }
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return; // Left Mouse Button only
+      const { chart, canvas, rect, chartArea } = getChartMetrics();
+      const mouseX = e.clientX - rect.left;
+      const isYAxisZone = mouseX < chartArea.left;
+
+      const yScale = chart?.scales?.y;
+      const curMinX = modalRangeXRef.current ? modalRangeXRef.current.min : (bottomTickMs - 24 * 3600 * 1000);
+      const curMaxX = modalRangeXRef.current ? modalRangeXRef.current.max : bottomTickMs;
+      const curMinY = modalRangeYRef.current
+        ? modalRangeYRef.current.min
+        : (yScale?.min ?? (bottomZoomChart === "voltage" ? (bottomVoltageMode === "380v" ? 360 : 210) : 0));
+      const curMaxY = modalRangeYRef.current
+        ? modalRangeYRef.current.max
+        : (yScale?.max ?? (bottomZoomChart === "voltage" ? (bottomVoltageMode === "380v" ? 430 : 250) : 50));
+
+      modalDragRef.current = {
+        isDragging: true,
+        mode: isYAxisZone ? "y-axis" : "body-pan",
+        startX: e.clientX,
+        startY: e.clientY,
+        initMinX: curMinX,
+        initMaxX: curMaxX,
+        initMinY: curMinY,
+        initMaxY: curMaxY,
+      };
+
+      if (canvas) {
+        canvas.style.cursor = isYAxisZone ? "ns-resize" : "grabbing";
+      }
+    };
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (!modalDragRef.current.isDragging) return;
+      const { chartArea } = getChartMetrics();
+      const { mode, startX, startY, initMinX, initMaxX, initMinY, initMaxY } = modalDragRef.current;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if (mode === "body-pan") {
+        const plotWidth = Math.max(10, chartArea.width);
+        const spanX = initMaxX - initMinX;
+        const msPerPixel = spanX / plotWidth;
+        const shiftX = dx * msPerPixel;
+        setModalRangeX({
+          min: initMinX - shiftX,
+          max: initMaxX - shiftX,
+        });
+
+        // Vertical panning if Y is also custom scaled
+        if (modalRangeYRef.current) {
+          const plotHeight = Math.max(10, chartArea.height);
+          const spanY = initMaxY - initMinY;
+          const yPerPixel = spanY / plotHeight;
+          const shiftY = dy * yPerPixel;
+          setModalRangeY({
+            min: initMinY + shiftY,
+            max: initMaxY + shiftY,
+          });
+        }
+      } else if (mode === "y-axis") {
+        // Dragging vertically on Y-axis (TradingView style scale drag)
+        const { rect } = getChartMetrics();
+        const plotHeight = Math.max(10, chartArea.height);
+        const spanY = Math.max(0.5, initMaxY - initMinY);
+        // Drag UP (dy < 0): expands height (shrink span)
+        // Drag DOWN (dy > 0): squashes height (expand span)
+        const scaleMultiplier = Math.exp((dy / Math.max(50, plotHeight)) * 1.5);
+        const newSpan = Math.max(0.5, spanY * scaleMultiplier);
+        const initMouseY = startY - rect.top;
+        const anchorRatio = Math.max(0, Math.min(1, (chartArea.bottom - initMouseY) / Math.max(1, chartArea.height)));
+        const anchorVal = initMinY + anchorRatio * spanY;
+        const newMin = anchorVal - anchorRatio * newSpan;
+        const newMax = newMin + newSpan;
+        setModalRangeY({
+          min: newMin,
+          max: newMax,
+        });
+      }
+    };
+
+    const handleWindowMouseUp = (e: MouseEvent) => {
+      if (modalDragRef.current.isDragging) {
+        modalDragRef.current.isDragging = false;
+        const { canvas, rect, chartArea } = getChartMetrics();
+        if (canvas) {
+          const mouseX = e.clientX - rect.left;
+          canvas.style.cursor = mouseX < chartArea.left ? "ns-resize" : "grab";
+        }
+      }
+    };
+
+    const handleDoubleClick = () => {
+      setModalRangeX(null);
+      setModalRangeY(null);
+    };
+
+    // Touch handlers for mobile / tablet
+    let touchStartDist = 0;
+    let touchStartSpanX = 0;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const { chart } = getChartMetrics();
+        const curMinX = modalRangeXRef.current ? modalRangeXRef.current.min : (bottomTickMs - 24 * 3600 * 1000);
+        const curMaxX = modalRangeXRef.current ? modalRangeXRef.current.max : bottomTickMs;
+        const curMinY = modalRangeYRef.current ? modalRangeYRef.current.min : 0;
+        const fallbackMaxY = bottomZoomChart === "voltage"
+          ? (bottomVoltageMode === "380v" ? 450 : 260)
+          : (chart?.scales?.y?.max || 50);
+        const curMaxY = modalRangeYRef.current ? modalRangeYRef.current.max : fallbackMaxY;
+
+        modalDragRef.current = {
+          isDragging: true,
+          mode: "body-pan",
+          startX: touch.clientX,
+          startY: touch.clientY,
+          initMinX: curMinX,
+          initMaxX: curMaxX,
+          initMinY: curMinY,
+          initMaxY: curMaxY,
+        };
+      } else if (e.touches.length === 2) {
+        modalDragRef.current.isDragging = false;
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        touchStartDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const curMinX = modalRangeXRef.current ? modalRangeXRef.current.min : (bottomTickMs - 24 * 3600 * 1000);
+        const curMaxX = modalRangeXRef.current ? modalRangeXRef.current.max : bottomTickMs;
+        touchStartSpanX = curMaxX - curMinX;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 1 && modalDragRef.current.isDragging) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const { chartArea } = getChartMetrics();
+        const { startX, initMinX, initMaxX } = modalDragRef.current;
+        const dx = touch.clientX - startX;
+        const plotWidth = Math.max(10, chartArea.width);
+        const spanX = initMaxX - initMinX;
+        const msPerPixel = spanX / plotWidth;
+        const shiftX = dx * msPerPixel;
+        setModalRangeX({
+          min: initMinX - shiftX,
+          max: initMaxX - shiftX,
+        });
+      } else if (e.touches.length === 2 && touchStartDist > 0) {
+        e.preventDefault();
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const curDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        if (curDist > 10) {
+          const scale = touchStartDist / curDist;
+          const newSpan = Math.max(15 * 1000, Math.min(72 * 3600 * 1000, touchStartSpanX * scale));
+          const curMinX = modalRangeXRef.current ? modalRangeXRef.current.min : (bottomTickMs - 24 * 3600 * 1000);
+          const curMaxX = modalRangeXRef.current ? modalRangeXRef.current.max : bottomTickMs;
+          const center = (curMinX + curMaxX) / 2;
+          setModalRangeX({
+            min: center - newSpan / 2,
+            max: center + newSpan / 2,
+          });
+        }
+      }
+    };
+
+    const handleTouchEnd = () => {
+      modalDragRef.current.isDragging = false;
+      touchStartDist = 0;
+    };
+
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    container.addEventListener("mousemove", handleMouseMoveHover);
+    container.addEventListener("mousedown", handleMouseDown);
+    container.addEventListener("dblclick", handleDoubleClick);
+    container.addEventListener("touchstart", handleTouchStart, { passive: false });
+    container.addEventListener("touchmove", handleTouchMove, { passive: false });
+    container.addEventListener("touchend", handleTouchEnd);
+    container.addEventListener("touchcancel", handleTouchEnd);
+    window.addEventListener("mousemove", handleWindowMouseMove);
+    window.addEventListener("mouseup", handleWindowMouseUp);
+
+    return () => {
+      container.removeEventListener("wheel", handleWheel);
+      container.removeEventListener("mousemove", handleMouseMoveHover);
+      container.removeEventListener("mousedown", handleMouseDown);
+      container.removeEventListener("dblclick", handleDoubleClick);
+      container.removeEventListener("touchstart", handleTouchStart);
+      container.removeEventListener("touchmove", handleTouchMove);
+      container.removeEventListener("touchend", handleTouchEnd);
+      container.removeEventListener("touchcancel", handleTouchEnd);
+      window.removeEventListener("mousemove", handleWindowMouseMove);
+      window.removeEventListener("mouseup", handleWindowMouseUp);
+    };
+  }, [bottomZoomChart, bottomVoltageMode, bottomTickMs]);
 
   // Load threshold config from Postgres
   useEffect(() => {
@@ -3959,12 +4404,12 @@ export default function PowerDistribution() {
           onClick={() => setBottomZoomChart(null)}
         >
           <div
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col space-y-4 overflow-hidden"
-            style={{ width: "90vw", maxWidth: "1480px", height: "85vh", maxHeight: "86vh", padding: "1.25rem 1.5rem" }}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col space-y-3 overflow-hidden"
+            style={{ width: "95vw", maxWidth: "1560px", height: "88vh", maxHeight: "90vh", padding: "1.25rem 1.5rem" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-bold text-slate-800 dark:text-white uppercase tracking-wide">
@@ -3978,23 +4423,46 @@ export default function PowerDistribution() {
                     {bottomTx?.factory === 1 ? "F1" : "F2"} {bottomTx?.name}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 mt-2">
-                  <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
-                    Rentang: 24 Jam Terakhir (Rolling Sliding Window)
+                <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                  <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                    Waktu: {formatWibTick(modalActiveWindow.min)} - {formatWibTick(modalActiveWindow.max)} WIB
                   </span>
-                  <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                    • Resolusi 3 Detik (Real-Time Buffer & Historikal)
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                    • Resolusi 3 Detik (Historikal & Live Buffer)
                   </span>
+                  {modalActiveWindow.isCustom ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
+                        Interactive View (Zoom / Pan)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModalRangeX(null);
+                          setModalRangeY(null);
+                        }}
+                        className="px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                        title="Reset ke Tampilan Live Auto-Fit (atau Klik Ganda di Grafik)"
+                      >
+                        ↺ Reset
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Live Stream
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 {bottomZoomChart === "voltage" && (
                   <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
                     <button
                       type="button"
                       onClick={() => setBottomVoltageMode("380v")}
-                      className={`px-2.5 py-1 text-xs font-bold rounded transition-all ${
+                      className={`px-2.5 py-1 text-xs font-bold rounded transition-all cursor-pointer ${
                         bottomVoltageMode === "380v"
                           ? "bg-white dark:bg-slate-700 text-amber-500 shadow-sm"
                           : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -4005,7 +4473,7 @@ export default function PowerDistribution() {
                     <button
                       type="button"
                       onClick={() => setBottomVoltageMode("230v")}
-                      className={`px-2.5 py-1 text-xs font-bold rounded transition-all ${
+                      className={`px-2.5 py-1 text-xs font-bold rounded transition-all cursor-pointer ${
                         bottomVoltageMode === "230v"
                           ? "bg-white dark:bg-slate-700 text-cyan-500 shadow-sm"
                           : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -4029,19 +4497,38 @@ export default function PowerDistribution() {
               </div>
             </div>
 
-            {/* Modal Body: Large Chart */}
-            <div className="relative w-full flex-1 min-h-[420px] sm:min-h-[460px]">
-              {bottomZoomChart === "voltage" ? (
-                <Line data={voltageTrendChart} options={multiLineChartOptions} />
-              ) : bottomZoomChart === "power" ? (
-                <Line data={powerTrendChart} options={lineChartOptions} />
-              ) : (
-                <Line data={currentTrendChart} options={currentChartOptions} />
-              )}
+            {/* Modal Body: Full Responsive TradingView Canvas (NO BUTTON BARS, NO OVERFLOW SCROLLBAR) */}
+            <div
+              ref={modalChartContainerRef}
+              className="relative w-full flex-1 min-h-[420px] sm:min-h-[460px] overflow-hidden rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 p-2 select-none"
+            >
+              <div className="w-full h-full min-h-[420px]">
+                {bottomZoomChart === "voltage" ? (
+                  <Line ref={modalChartRef} data={voltageTrendChart} options={modalChartOptions} />
+                ) : bottomZoomChart === "power" ? (
+                  <Line ref={modalChartRef} data={powerTrendChart} options={modalChartOptions} />
+                ) : (
+                  <Line ref={modalChartRef} data={currentTrendChart} options={modalChartOptions} />
+                )}
+              </div>
             </div>
 
-            <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-3 text-xs text-slate-400">
-              <span>{t("electricity.syncNote")}</span>
+            {/* Modal Footer: Guidance info like TradingView */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800/80 pt-2.5 text-xs text-slate-400">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Polling 3s
+                </span>
+                <span>•</span>
+                <span className="hidden sm:inline">🖱️ <b>Hold LMB</b> geser kanvas bebas</span>
+                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline"><b>Scroll mouse</b> zoom waktu (lebar)</span>
+                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline"><b>Scroll / drag sumbu kiri</b> atur tinggi grafik</span>
+                <span className="hidden sm:inline">•</span>
+                <span><b>Klik ganda</b> untuk reset</span>
+              </div>
               <span className="text-[11px]">Tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] border border-slate-200 dark:border-slate-700">ESC</kbd> untuk menutup</span>
             </div>
           </div>
