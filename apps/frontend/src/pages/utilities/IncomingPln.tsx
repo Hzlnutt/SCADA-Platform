@@ -460,15 +460,6 @@ interface HourlyTrend5sPoint {
     } catch (e) {}
     return [];
   });
-  const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
-
-  // 3-second clock ticker to keep rolling sliding window advancing smoothly in real time
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 3000);
-    return () => clearInterval(timer);
-  }, []);
 
   const lastTrendHourRef = useRef<number>(-1);
   const [zoomTrend, setZoomTrend] = useState<"voltage" | "power" | null>(null);
@@ -485,7 +476,9 @@ interface HourlyTrend5sPoint {
   }, [zoomTrend]);
 
   const voltageStats = useMemo(() => {
-    const oneHourAgo = Date.now() - 3600 * 1000;
+    if (!hourlyTrend5s || hourlyTrend5s.length === 0) return null;
+    const latestTs = Number(hourlyTrend5s[hourlyTrend5s.length - 1]?.ts) || Date.now();
+    const oneHourAgo = latestTs - 3600 * 1000;
     const pts = hourlyTrend5s.filter(p => p.ts && Number(p.ts) >= oneHourAgo && ((p.voltage !== undefined && p.voltage > 0) || (p.vR !== undefined && p.vR > 0)));
     if (pts.length === 0) return null;
     const latest = pts[pts.length - 1];
@@ -505,7 +498,9 @@ interface HourlyTrend5sPoint {
   }, [hourlyTrend5s]);
 
   const powerStats = useMemo(() => {
-    const oneHourAgo = Date.now() - 3600 * 1000;
+    if (!hourlyTrend5s || hourlyTrend5s.length === 0) return null;
+    const latestTs = Number(hourlyTrend5s[hourlyTrend5s.length - 1]?.ts) || Date.now();
+    const oneHourAgo = latestTs - 3600 * 1000;
     const pts = hourlyTrend5s.filter(p => p.ts && Number(p.ts) >= oneHourAgo && typeof p.activePower === "number");
     if (pts.length === 0) return null;
     const latest = pts[pts.length - 1];
@@ -689,30 +684,27 @@ interface HourlyTrend5sPoint {
           const currentHour = typeof payload?.hour === "number" ? payload.hour : trendHour;
           setTrendHour(currentHour);
           lastTrendHourRef.current = currentHour;
-          if (pts.length > 0) {
-            const latestServerTs = Number(pts[pts.length - 1]?.ts) || 0;
-            if (latestServerTs > 0) {
-              setCurrentTime(latestServerTs);
-            }
-          }
           setHourlyTrend5s((prev) => {
-            const refNow = pts.length > 0 && Number(pts[pts.length - 1]?.ts) ? Number(pts[pts.length - 1].ts) : Date.now();
-            const oneHourAgo = refNow - 3600 * 1000;
             const map = new Map<number, any>();
-            for (const p of prev) {
-              if (p.ts && Number(p.ts) >= oneHourAgo) {
+            for (const p of pts) {
+              if (p && p.ts) {
                 const bucket = Math.round(Number(p.ts) / 3000) * 3000;
                 map.set(bucket, p);
               }
             }
-            for (const p of pts) {
-              if (p.ts && Number(p.ts) >= oneHourAgo) {
+            for (const p of prev) {
+              if (p && p.ts) {
                 const bucket = Math.round(Number(p.ts) / 3000) * 3000;
-                map.set(bucket, p);
+                if (!map.has(bucket) || (Number(p.ts) > (Number(pts[pts.length - 1]?.ts) || 0))) {
+                  map.set(bucket, p);
+                }
               }
             }
             const merged = Array.from(map.values()).sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
-            const trimmed = merged.length > 1200 ? merged.slice(merged.length - 1200) : merged;
+            const maxTs = merged[merged.length - 1]?.ts || Date.now();
+            const oneHourAgo = maxTs - 3600 * 1000;
+            const filtered = merged.filter((p) => (Number(p.ts) || 0) >= oneHourAgo);
+            const trimmed = filtered.length > 1200 ? filtered.slice(filtered.length - 1200) : filtered;
             try {
               localStorage.setItem(`incoming_trend_1h_${config.deviceId}`, JSON.stringify(trimmed));
             } catch (e) {}
@@ -845,27 +837,24 @@ interface HourlyTrend5sPoint {
     const handleTrend3s = (payload: any) => {
       if (payload && payload.deviceId === config.deviceId && payload.point) {
         const pt = payload.point;
-        if (pt.ts) {
-          setCurrentTime(pt.ts);
-        }
         const currentHour = typeof payload.hour === "number" ? payload.hour : trendHour;
         setTrendHour(currentHour);
         lastTrendHourRef.current = currentHour;
 
         setHourlyTrend5s((prev) => {
-          const nowMs = pt.ts || Date.now();
-          const oneHourAgo = nowMs - 3600 * 1000;
-          // Strictly discard points older than 1 hour (rolling FIFO window)
-          const filtered = prev.filter((p) => p.ts && Number(p.ts) >= oneHourAgo);
-          // Deduplicate if within same 3s bucket
-          const ptBucket = Math.round((pt.ts || nowMs) / 3000) * 3000;
-          const lastP = filtered[filtered.length - 1];
-          if (lastP && lastP.ts && Math.round(lastP.ts / 3000) * 3000 === ptBucket) {
-            filtered[filtered.length - 1] = pt;
-            return [...filtered];
+          const ptTs = Number(pt.ts) || Date.now();
+          const ptBucket = Math.round(ptTs / 3000) * 3000;
+          const updated = [...prev];
+          const lastP = updated[updated.length - 1];
+          if (lastP && lastP.ts && Math.round(Number(lastP.ts) / 3000) * 3000 === ptBucket) {
+            updated[updated.length - 1] = pt;
+          } else {
+            updated.push(pt);
           }
-          const updated = [...filtered, pt];
-          const trimmed = updated.length > 1200 ? updated.slice(updated.length - 1200) : updated;
+          const latestTs = Number(updated[updated.length - 1]?.ts) || ptTs;
+          const oneHourAgo = latestTs - 3600 * 1000;
+          const filtered = updated.filter((p) => (Number(p.ts) || 0) >= oneHourAgo);
+          const trimmed = filtered.length > 1200 ? filtered.slice(filtered.length - 1200) : filtered;
           try {
             localStorage.setItem(`incoming_trend_1h_${config.deviceId}`, JSON.stringify(trimmed));
           } catch (e) {}
@@ -1107,27 +1096,23 @@ interface HourlyTrend5sPoint {
     }
   };
 
-  // Continuous 1-Hour Rolling 3-Second Window (Strictly Fixed 1-Hour Window: 1200 slots * 3s = 3600s = 60 min)
-  const SLOTS_COUNT = 1200;
-  const STEP_MS = 3000;
-
+  // Continuous 1-Hour Rolling 3-Second Window (FIFO window derived directly from telemetry stream)
   const rollingTrendData = useMemo(() => {
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const now = currentTime;
-    const currentSlotTs = Math.floor(now / STEP_MS) * STEP_MS;
-    const oneHourAgoTs = currentSlotTs - (SLOTS_COUNT - 1) * STEP_MS;
-
-    const map = new Map<number, HourlyTrend5sPoint>();
-    const timeStrMap = new Map<string, HourlyTrend5sPoint>();
-    for (const p of hourlyTrend5s) {
-      if (p.time) {
-        timeStrMap.set(p.time, p);
-      }
-      if (p.ts && p.ts >= oneHourAgoTs - 9000 && p.ts <= currentSlotTs + 9000) {
-        const bucket = Math.round(p.ts / STEP_MS) * STEP_MS;
-        map.set(bucket, p);
-      }
+    if (!hourlyTrend5s || hourlyTrend5s.length === 0) {
+      return {
+        labels: [],
+        vRData: [],
+        vSData: [],
+        vTData: [],
+        activePowerData: [],
+        rangeLabel: "--:-- - --:--"
+      };
     }
+
+    // Sort strictly chronological
+    const sorted = [...hourlyTrend5s].sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
+    // Keep strictly up to 1200 points (1 hour at 3s intervals)
+    const windowPoints = sorted.length > 1200 ? sorted.slice(sorted.length - 1200) : sorted;
 
     const labels: string[] = [];
     const vRData: (number | null)[] = [];
@@ -1135,48 +1120,34 @@ interface HourlyTrend5sPoint {
     const vTData: (number | null)[] = [];
     const activePowerData: (number | null)[] = [];
 
-    for (let i = 0; i < SLOTS_COUNT; i++) {
-      const slotTs = oneHourAgoTs + i * STEP_MS;
-      const d = new Date(slotTs);
+    for (let i = 0; i < windowPoints.length; i++) {
+      const pt = windowPoints[i];
+      const prevPt = i > 0 ? windowPoints[i - 1] : null;
 
-      let timeStr = "";
-      try {
-        const parts = new Intl.DateTimeFormat("en-GB", {
-          timeZone: "Asia/Jakarta",
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false
-        }).formatToParts(d);
-        const hr = parts.find(p => p.type === "hour")?.value || "00";
-        const mi = parts.find(p => p.type === "minute")?.value || "00";
-        const sc = parts.find(p => p.type === "second")?.value || "00";
-        timeStr = `${hr}:${mi}:${sc}`;
-      } catch {
-        timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-      }
-      labels.push(timeStr);
-
-      const pt = map.get(slotTs) || timeStrMap.get(timeStr);
-      if (pt) {
-        const vr = pt.vR !== undefined && pt.vR > 0 ? pt.vR : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
-        const vs = pt.vS !== undefined && pt.vS > 0 ? pt.vS : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
-        const vt = pt.vT !== undefined && pt.vT > 0 ? pt.vT : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
-        vRData.push(vr !== null ? Number(vr.toFixed(3)) : null);
-        vSData.push(vs !== null ? Number(vs.toFixed(3)) : null);
-        vTData.push(vt !== null ? Number(vt.toFixed(3)) : null);
-        const ap = typeof pt.activePower === "number" ? Math.abs(Number(pt.activePower.toFixed(1))) : null;
-        activePowerData.push(ap);
-      } else {
+      // If there is an actual data outage gap (> 15 seconds) between consecutive records, insert a break
+      if (prevPt && pt.ts && prevPt.ts && (Number(pt.ts) - Number(prevPt.ts) > 15000)) {
+        labels.push("");
         vRData.push(null);
         vSData.push(null);
         vTData.push(null);
         activePowerData.push(null);
       }
+
+      labels.push(pt.time || "");
+
+      const vr = pt.vR !== undefined && pt.vR > 0 ? pt.vR : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
+      const vs = pt.vS !== undefined && pt.vS > 0 ? pt.vS : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
+      const vt = pt.vT !== undefined && pt.vT > 0 ? pt.vT : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
+      vRData.push(vr !== null ? Number(vr.toFixed(3)) : null);
+      vSData.push(vs !== null ? Number(vs.toFixed(3)) : null);
+      vTData.push(vt !== null ? Number(vt.toFixed(3)) : null);
+
+      const ap = typeof pt.activePower === "number" ? Math.abs(Number(pt.activePower.toFixed(1))) : null;
+      activePowerData.push(ap);
     }
 
-    const startLabel = labels[0]?.substring(0, 5) || "--:--";
-    const endLabel = labels[labels.length - 1]?.substring(0, 5) || "--:--";
+    const startLabel = windowPoints[0]?.time?.substring(0, 5) || "--:--";
+    const endLabel = windowPoints[windowPoints.length - 1]?.time?.substring(0, 5) || "--:--";
     const rangeLabel = `${startLabel} - ${endLabel}`;
 
     return {
@@ -1187,7 +1158,7 @@ interface HourlyTrend5sPoint {
       activePowerData,
       rangeLabel
     };
-  }, [hourlyTrend5s, currentTime]);
+  }, [hourlyTrend5s]);
 
   // 1-Hour Rolling 5-Second Line Trend Data - 3 Lines (Fasa R, S, T)
   const voltageTrendData = useMemo(() => {

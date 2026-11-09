@@ -2375,7 +2375,25 @@ export const getIncomingHourlyTrendHandler = async (req: Request, res: Response,
   try {
     const { deviceId } = req.query;
     const dev = typeof deviceId === "string" ? deviceId : "Cubicle_PLN_PM8000";
-    const points = await getIncomingTrend1hFromDb(dev);
+    const dbPoints = await getIncomingTrend1hFromDb(dev);
+    const memTrend = getIncomingHourlyTrend(dev);
+    const memPoints = memTrend?.points || [];
+
+    // Merge DB points and live memory points seamlessly so real-time stream is never truncated
+    const bucketMap = new Map<number, any>();
+    for (const p of dbPoints) {
+      if (p.ts) {
+        const bucket = Math.round(Number(p.ts) / 3000) * 3000;
+        bucketMap.set(bucket, p);
+      }
+    }
+    for (const p of memPoints) {
+      if (p.ts) {
+        const bucket = Math.round(Number(p.ts) / 3000) * 3000;
+        bucketMap.set(bucket, p);
+      }
+    }
+    const points = Array.from(bucketMap.values()).sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
     const wib = getWibDateTime(new Date());
     const telemetry = getLatestIncomingTelemetry(dev);
     res.json({ success: true, data: { hour: wib.hour, points, telemetry } });
