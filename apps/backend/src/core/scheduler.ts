@@ -142,29 +142,6 @@ const parsePlnApi = (data: any, ts: Date) => {
     ? Number(rawExportPln)
     : null;
 
-  if (isOnline === false) {
-    // Real-time instantaneous values are 0 or null, BUT historical energy counter is preserved from API
-    // so database insertion never records 0 or null, avoiding false delta consumption spikes.
-    return {
-      t_stamp: ts,
-      status_pm8000: false,
-      volt_ab: null, volt_bc: null, volt_ca: null, volt_ll: null,
-      current_a: null, current_b: null, current_c: null,
-      frequency: null,
-      active_power: 0, // Instantaneous power is 0 kW when offline
-      reactive_power_total: 0,
-      apparent_power_total: 0,
-      power_factor: null,
-      voltage_unbalance: null,
-      current_unbalance: null,
-      thd_volt_a: null, thd_volt_b: null, thd_volt_c: null,
-      thd_current_a: null, thd_current_b: null, thd_current_c: null,
-      active_energy: rawActiveEnergy, // PRESERVE exact raw cumulative counter from API for DB!
-      peak_demand: null,
-      export_pln: exportPln // PRESERVE exact export reading!
-    };
-  }
-
   const rawPeak = data.Peak_Demand_W ?? data.Peak_Demand_w ?? data.PeakDemand_W ?? data.peak_demand_w ?? data.Peak_Demand ?? data.peak_demand;
   const peakDemand = (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)))
     ? Number(rawPeak) / 1000.0 // Konversi Watt ke kW
@@ -206,24 +183,6 @@ const parseWfApi = (data: any, ts: Date) => {
     ? Number(data.ActiveEnergy)
     : null;
 
-  if (isOnline === false) {
-    return {
-      t_stamp: ts,
-      status_pm5500: false,
-      volt_ab: null, volt_bc: null, volt_ca: null, volt_ll: null,
-      current_a: null, current_b: null, current_c: null,
-      frequency: null,
-      active_power_total: 0,
-      reactive_power_total: 0,
-      apparent_power_total: 0,
-      power_factor: null,
-      voltage_unbalance: null,
-      current_unbalance: null,
-      thd_volt_a: null, thd_volt_b: null, thd_volt_c: null,
-      thd_current_a: null, thd_current_b: null, thd_current_c: null,
-      active_energy: rawActiveEnergy // PRESERVE exact raw cumulative counter from API for DB!
-    };
-  }
   return {
     t_stamp: ts,
     status_pm5500: isOnline,
@@ -769,41 +728,6 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
     };
 
     const pmStatus = getStatus();
-    const rawActiveEnergy = getVal(["ActiveEnergy", "Active_Energy", "Total_Active_Energy", "Energy_Active_Total", "KWh", "kWh", "kwh"]);
-
-    // RULE: If PM status is explicitly FALSE (mati / offline / com failure):
-    // Real-time instantaneous values are 0 or null (active_power: 0, current: null, volt: null).
-    // BUT historical cumulative energy (active_energy) MUST BE PRESERVED exactly from API so database
-    // never records 0 or null, avoiding false delta consumption spikes (e.g. 0 -> 3000 jump).
-    if (pmStatus === false) {
-      return {
-        t_stamp: ts,
-        group_id: groupId,
-        pm_id: pmId,
-        status: false,
-        volt_ab: null,
-        volt_bc: null,
-        volt_ca: null,
-        volt_ll: null,
-        current_a: null,
-        current_b: null,
-        current_c: null,
-        frequency: null,
-        active_power_total: 0,
-        reactive_power_total: 0,
-        apparent_power_total: 0,
-        power_factor: null,
-        voltage_unbalance: null,
-        current_unbalance: null,
-        thd_volt_a: null,
-        thd_volt_b: null,
-        thd_volt_c: null,
-        thd_current_a: null,
-        thd_current_b: null,
-        thd_current_c: null,
-        active_energy: rawActiveEnergy
-      };
-    }
 
     return {
       t_stamp: ts,
@@ -818,7 +742,7 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
       current_b: getVal(["Current_B"]),
       current_c: getVal(["Current_C"]),
       frequency: getVal(["Frequency"]),
-      active_power_total: getVal(["Active_Power_Total", "Active_Power"]),
+      active_power_total: getVal(["Active_Power_Total", "Active_Power", "ActivePower", "KW", "kW", "kw", "Power", "Power_Total"]),
       reactive_power_total: getVal(["Reactive_Power_Total", "Reactive_Power"]),
       apparent_power_total: getVal(["Apparent_Power_Total", "Apparent_Power"]),
       power_factor: getVal(["Power_Factor", "PF"]),
@@ -830,7 +754,7 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
       thd_current_a: getVal(["THD_Current_A"]),
       thd_current_b: getVal(["THD_Current_B"]),
       thd_current_c: getVal(["THD_Current_C"]),
-      active_energy: getVal(["ActiveEnergy", "Active_Energy"])
+      active_energy: getVal(["ActiveEnergy", "Active_Energy", "Total_Active_Energy", "Energy_Active_Total", "KWh", "kWh", "kwh"])
     };
   };
 
@@ -2051,7 +1975,6 @@ export const startIncomingElectricityPolling = () => {
         const placeholders: string[] = [];
         let pIdx = 1;
         for (const r of trafoRowsToInsert) {
-          const isMati = r.status === false;
           placeholders.push(
             "($" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) +
             ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) +
@@ -2060,15 +1983,15 @@ export const startIncomingElectricityPolling = () => {
           vals.push(
             r.pm_id.toUpperCase(),
             wibTrafo.tStampStr,
-            !isMati,
-            !isMati && r.volt_ab !== null ? r.volt_ab : null,
-            !isMati && r.volt_bc !== null ? r.volt_bc : null,
-            !isMati && r.volt_ca !== null ? r.volt_ca : null,
-            !isMati && r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : 0,
-            !isMati && r.current_a !== null ? r.current_a : null,
-            !isMati && r.current_b !== null ? r.current_b : null,
-            !isMati && r.current_c !== null ? r.current_c : null,
-            !isMati && r.power_factor !== null ? Number(r.power_factor) : null
+            r.status !== false,
+            r.volt_ab !== null ? r.volt_ab : null,
+            r.volt_bc !== null ? r.volt_bc : null,
+            r.volt_ca !== null ? r.volt_ca : null,
+            r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : 0,
+            r.current_a !== null ? r.current_a : null,
+            r.current_b !== null ? r.current_b : null,
+            r.current_c !== null ? r.current_c : null,
+            r.power_factor !== null ? Number(r.power_factor) : null
           );
         }
         const purgeTrafoDate = new Date(ts.getTime() - 24 * 3600 * 1000);
@@ -2095,20 +2018,19 @@ export const startIncomingElectricityPolling = () => {
               ts: savedTsMs,
               t_stamp: wibTrafo.tStampStr,
               data: trafoRowsToInsert.map((r) => {
-                const isMati = r.status === false;
                 return {
                   pm_id: r.pm_id.toUpperCase(),
                   ts: savedTsMs,
                   t_stamp: wibTrafo.tStampStr,
-                  status: !isMati,
-                  volt_ab: !isMati ? r.volt_ab : null,
-                  volt_bc: !isMati ? r.volt_bc : null,
-                  volt_ca: !isMati ? r.volt_ca : null,
-                  active_power_total: !isMati && r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : 0,
-                  current_a: !isMati ? r.current_a : null,
-                  current_b: !isMati ? r.current_b : null,
-                  current_c: !isMati ? r.current_c : null,
-                  power_factor: !isMati && r.power_factor !== null ? Number(r.power_factor) : null
+                  status: r.status !== false,
+                  volt_ab: r.volt_ab,
+                  volt_bc: r.volt_bc,
+                  volt_ca: r.volt_ca,
+                  active_power_total: r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : 0,
+                  current_a: r.current_a,
+                  current_b: r.current_b,
+                  current_c: r.current_c,
+                  power_factor: r.power_factor !== null ? Number(r.power_factor) : null
                 };
               })
             });
@@ -2221,68 +2143,37 @@ export const startIncomingElectricityPolling = () => {
 
             const isOnline = getStatus();
             const rawActiveEnergy = getNum(["Active_Energy", "ActiveEnergy", "Energy", "total_kwh", "kWh", "Total_kWh"]);
+            const directVal = customPm.json_key && typeof subObj[customPm.json_key] === "number" ? subObj[customPm.json_key] : null;
+            const activePower = directVal ?? getNum(["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower", "Scale_Total_KW"]);
+            const activeEnergy = rawActiveEnergy;
 
-            if (isOnline === false) {
-              rec = {
-                t_stamp: ts,
-                group_id: customPm.group_id,
-                pm_id: customPm.pm_id,
-                status: false,
-                volt_ab: null,
-                volt_bc: null,
-                volt_ca: null,
-                volt_ll: null,
-                current_a: null,
-                current_b: null,
-                current_c: null,
-                frequency: null,
-                active_power_total: 0,
-                reactive_power_total: 0,
-                apparent_power_total: 0,
-                power_factor: null,
-                voltage_unbalance: null,
-                current_unbalance: null,
-                thd_volt_a: null,
-                thd_volt_b: null,
-                thd_volt_c: null,
-                thd_current_a: null,
-                thd_current_b: null,
-                thd_current_c: null,
-                active_energy: rawActiveEnergy
-              };
-            } else {
-              const directVal = customPm.json_key && typeof subObj[customPm.json_key] === "number" ? subObj[customPm.json_key] : null;
-              const activePower = directVal ?? getNum(["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower", "Scale_Total_KW"]);
-              const activeEnergy = rawActiveEnergy;
-
-              rec = {
-                t_stamp: ts,
-                group_id: customPm.group_id,
-                pm_id: customPm.pm_id,
-                status: isOnline,
-                volt_ab: getNum(["Volt_AB", "VoltAB", "VR", "V_AB"]),
-                volt_bc: getNum(["Volt_BC", "VoltBC", "VS", "V_BC"]),
-                volt_ca: getNum(["Volt_CA", "VoltCA", "VT", "V_CA"]),
-                volt_ll: getNum(["Volt_LL", "VoltLL", "VLL"]),
-                current_a: getNum(["Current_A", "CurrentA", "IR", "I_A"]),
-                current_b: getNum(["Current_B", "CurrentB", "IS", "I_B"]),
-                current_c: getNum(["Current_C", "CurrentC", "IT", "I_C"]),
-                frequency: getNum(["Frequency", "Freq", "Hz"]),
-                active_power_total: activePower,
-                reactive_power_total: getNum(["Reactive_Power_Total", "Reactive_Power", "kVAR"]),
-                apparent_power_total: getNum(["Apparent_Power_Total", "Apparent_Power", "kVA"]),
-                power_factor: getNum(["Power_Factor", "PF"]),
-                voltage_unbalance: getNum(["Voltage_Unbalance"]),
-                current_unbalance: getNum(["Current_Unbalance"]),
-                thd_volt_a: getNum(["THD_Volt_A"]),
-                thd_volt_b: getNum(["THD_Volt_B"]),
-                thd_volt_c: getNum(["THD_Volt_C"]),
-                thd_current_a: getNum(["THD_Current_A"]),
-                thd_current_b: getNum(["THD_Current_B"]),
-                thd_current_c: getNum(["THD_Current_C"]),
-                active_energy: activeEnergy
-              };
-            }
+            rec = {
+              t_stamp: ts,
+              group_id: customPm.group_id,
+              pm_id: customPm.pm_id,
+              status: isOnline,
+              volt_ab: getNum(["Volt_AB", "VoltAB", "VR", "V_AB"]),
+              volt_bc: getNum(["Volt_BC", "VoltBC", "VS", "V_BC"]),
+              volt_ca: getNum(["Volt_CA", "VoltCA", "VT", "V_CA"]),
+              volt_ll: getNum(["Volt_LL", "VoltLL", "VLL"]),
+              current_a: getNum(["Current_A", "CurrentA", "IR", "I_A"]),
+              current_b: getNum(["Current_B", "CurrentB", "IS", "I_B"]),
+              current_c: getNum(["Current_C", "CurrentC", "IT", "I_C"]),
+              frequency: getNum(["Frequency", "Freq", "Hz"]),
+              active_power_total: activePower,
+              reactive_power_total: getNum(["Reactive_Power_Total", "Reactive_Power", "kVAR"]),
+              apparent_power_total: getNum(["Apparent_Power_Total", "Apparent_Power", "kVA"]),
+              power_factor: getNum(["Power_Factor", "PF"]),
+              voltage_unbalance: getNum(["Voltage_Unbalance"]),
+              current_unbalance: getNum(["Current_Unbalance"]),
+              thd_volt_a: getNum(["THD_Volt_A"]),
+              thd_volt_b: getNum(["THD_Volt_B"]),
+              thd_volt_c: getNum(["THD_Volt_C"]),
+              thd_current_a: getNum(["THD_Current_A"]),
+              thd_current_b: getNum(["THD_Current_B"]),
+              thd_current_c: getNum(["THD_Current_C"]),
+              active_energy: activeEnergy
+            };
           }
 
           if (rec) {

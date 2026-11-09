@@ -168,12 +168,6 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
   });
 
   const fmt = (v: number | null | undefined, unit = "", decimals = 2) => {
-    if (isMati) {
-      if (unit === "kW" || unit === "kVAR" || unit === "kVA") return `0.0 ${unit}`.trim();
-      if (unit === "V" || unit === "A") return `0 ${unit}`.trim();
-      if (unit === "%") return `0.00 %`;
-      return "—";
-    }
     if (v === null || v === undefined) return "—";
     return `${Number(v).toFixed(decimals)} ${unit}`.trim();
   };
@@ -256,18 +250,7 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
           </div>
         </div>
 
-        {/* Offline Warning Banner */}
-        {isMati && (
-          <div className="mx-6 mt-4 p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-3 text-rose-600 dark:text-rose-400 shadow-xs">
-            <span className="text-xl shrink-0">⚠️</span>
-            <div className="text-xs">
-              <span className="font-extrabold uppercase block tracking-wider">Status PM: MATI / OFFLINE (Komunikasi Terputus)</span>
-              <span className="font-medium text-slate-600 dark:text-slate-300">
-                Power meter tidak aktif di lapangan. Semua pembacaan kelistrikan di-reset ke 0 / null untuk menyajikan data faktual aktual (menghindari stuck data terakhir dari gateway).
-              </span>
-            </div>
-          </div>
-        )}
+
 
         {/* Quick KPI Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-800/10">
@@ -292,7 +275,7 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
           <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 shadow-sm">
             <span className="text-[10px] font-extrabold uppercase text-slate-400 block mb-0.5">Active Energy</span>
             <div className="text-lg font-extrabold font-mono text-purple-500">
-              {!isMati && pm.active_energy !== null && pm.active_energy !== undefined
+              {pm.active_energy !== null && pm.active_energy !== undefined
                 ? `${Math.round(Number(pm.active_energy)).toLocaleString("id-ID")} kWh`
                 : "—"}
             </div>
@@ -395,7 +378,7 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
                   <div className="col-span-2 flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
                     <span className="text-slate-400">Active Energy:</span>
                     <span className="font-bold text-purple-400">
-                      {!isMati && pm.active_energy !== null && pm.active_energy !== undefined
+                      {pm.active_energy !== null && pm.active_energy !== undefined
                         ? `${Math.round(Number(pm.active_energy)).toLocaleString("id-ID")} kWh`
                         : "—"}
                     </span>

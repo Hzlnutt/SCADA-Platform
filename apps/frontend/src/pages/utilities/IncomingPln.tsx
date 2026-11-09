@@ -64,7 +64,7 @@ function UnbalancedGauge({
   isLoading?: boolean;
   isPmOnline?: boolean;
 }) {
-  const isDead = !isPmOnline || value === "PM OFFLINE";
+  const isDead = value === "PM OFFLINE";
   const isOffline = isDead || value === null || value === undefined || (typeof value === "string" && (value.includes("API") || value === "xx" || value.includes("TIDAK")));
   const numVal = isOffline ? 0 : Number(value) || 0;
   
@@ -792,11 +792,6 @@ interface HourlyTrend5sPoint {
     const jsonKey = jsonKeyMap[tagKey] || DEFAULT_JSON_KEYS[rawKey] || rawKey;
 
     if (url && apiLiveData[url]) {
-      const epStatus = checkDeviceStatus(apiLiveData[url], mode);
-      if (epStatus === false) {
-        return "PM OFFLINE";
-      }
-
       let val = apiLiveData[url][jsonKey];
       if (val === undefined && rawKey === "active_power") {
         val = apiLiveData[url]["Active_Power_Total"] ?? apiLiveData[url]["active_power_total"] ?? apiLiveData[url]["Active_Power"];

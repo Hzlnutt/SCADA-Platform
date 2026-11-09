@@ -703,16 +703,15 @@ export const getPowerMeterHistoryHandler = async (
 
       if (req.query.compact === "true") {
         const tuples = rollingDbRes.rows.map((r: any) => {
-          const isOffline = r.status === false;
           return [
             Number(r.ts),
-            !isOffline && r.volt_ab !== null ? Number(r.volt_ab) : 0,
-            !isOffline && r.volt_bc !== null ? Number(r.volt_bc) : 0,
-            !isOffline && r.volt_ca !== null ? Number(r.volt_ca) : 0,
-            !isOffline && r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : 0,
-            !isOffline && r.current_a !== null ? Number(r.current_a) : 0,
-            !isOffline && r.current_b !== null ? Number(r.current_b) : 0,
-            !isOffline && r.current_c !== null ? Number(r.current_c) : 0
+            r.volt_ab !== null ? Number(r.volt_ab) : 0,
+            r.volt_bc !== null ? Number(r.volt_bc) : 0,
+            r.volt_ca !== null ? Number(r.volt_ca) : 0,
+            r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : 0,
+            r.current_a !== null ? Number(r.current_a) : 0,
+            r.current_b !== null ? Number(r.current_b) : 0,
+            r.current_c !== null ? Number(r.current_c) : 0
           ];
         });
         return res.json({

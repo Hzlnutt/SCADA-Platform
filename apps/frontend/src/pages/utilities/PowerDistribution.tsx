@@ -165,35 +165,6 @@ function mapPmToTransformer(
 ): TransformerData {
   if (!pm) return initialTx;
 
-  // RULE: If PM status is FALSE (mati / offline / com failure),
-  // do NOT display stuck cached values or fallback mock numbers.
-  // Set all electrical values to null / 0 to display factual and real conditions.
-  if (pm.status === false) {
-    return {
-      ...initialTx,
-      status: "offline",
-      activePowerKw: 0,
-      reactivePowerKvar: 0,
-      apparentPowerKva: 0,
-      powerFactor: null,
-      frequencyHz: null,
-      voltageInKv: null,
-      voltageOutL2L: null,
-      voltageOutL2N: null,
-      voltAb: null,
-      voltBc: null,
-      voltCa: null,
-      currentR: null,
-      currentS: null,
-      currentT: null,
-      thdVoltage: null,
-      thdCurrent: null,
-      voltageUnbalance: null,
-      currentUnbalance: null,
-      kwh: pm.active_energy !== null && pm.active_energy !== undefined ? Number(pm.active_energy) : initialTx.kwh
-    };
-  }
-
   const rawActive = pm.active_power_total !== null && pm.active_power_total !== undefined && !isNaN(Number(pm.active_power_total))
     ? Number(Number(pm.active_power_total).toFixed(1))
     : null;
@@ -642,15 +613,14 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
     const targetPmId = pmId.toUpperCase();
 
     const appendModalPoint = (pm: any, fallbackTs?: number) => {
-      const isMati = pm.status === false;
-      const v1 = !isMati && pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : 0;
-      const v2 = !isMati && pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : 0;
-      const v3 = !isMati && pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : 0;
-      const c1 = !isMati && pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : 0;
-      const c2 = !isMati && pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
-      const c3 = !isMati && pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
-      const p = !isMati && pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
-      if (!isMati && v1 <= 0 && p <= 0 && c1 <= 0) return;
+      const v1 = pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : 0;
+      const v2 = pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : 0;
+      const v3 = pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : 0;
+      const c1 = pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : 0;
+      const c2 = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
+      const c3 = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
+      const p = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
+      if (v1 <= 0 && p <= 0 && c1 <= 0) return;
 
       const s = modalSeriesRef.current;
       const lastX = s.vAb.length > 0 ? s.vAb[s.vAb.length - 1].x : 0;
@@ -2909,15 +2879,14 @@ export default function PowerDistribution() {
     const targetPmId = (TRAFO_PM_MAP[bottomTxId]?.pmId || bottomTxId).toUpperCase();
 
     const appendBottomPoint = (pm: any, fallbackTs?: number) => {
-      const isMati = pm.status === false;
-      const v1 = !isMati && pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : 0;
-      const v2 = !isMati && pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : 0;
-      const v3 = !isMati && pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : 0;
-      const c1 = !isMati && pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : 0;
-      const c2 = !isMati && pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
-      const c3 = !isMati && pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
-      const p = !isMati && pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
-      if (!isMati && v1 <= 0 && p <= 0 && c1 <= 0) return;
+      const v1 = pm.volt_ab !== undefined && pm.volt_ab !== null ? Number(Number(pm.volt_ab).toFixed(1)) : 0;
+      const v2 = pm.volt_bc !== undefined && pm.volt_bc !== null ? Number(Number(pm.volt_bc).toFixed(1)) : 0;
+      const v3 = pm.volt_ca !== undefined && pm.volt_ca !== null ? Number(Number(pm.volt_ca).toFixed(1)) : 0;
+      const c1 = pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : 0;
+      const c2 = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
+      const c3 = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
+      const p = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
+      if (v1 <= 0 && p <= 0 && c1 <= 0) return;
 
       const s = bottomSeriesRef.current;
       const lastX = s.vAb.length > 0 ? s.vAb[s.vAb.length - 1].x : 0;
