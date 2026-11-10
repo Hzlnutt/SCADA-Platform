@@ -165,7 +165,7 @@ export const getIncomingTrend1hFromDb = async (deviceId: string): Promise<Incomi
     const bucketMap = new Map<number, IncomingTrend5sPoint>();
     for (const row of res.rows) {
       const rawTs = row.t_stamp instanceof Date ? row.t_stamp.getTime() : new Date(row.t_stamp).getTime();
-      const bucketTs = Math.round(rawTs / 5000) * 5000;
+      const bucketTs = Math.round(rawTs / 3000) * 3000;
       const wibBucket = getWibDateTime(new Date(bucketTs));
       const timeStr = wibBucket.timeStr;
 
@@ -519,7 +519,7 @@ export const getElectricityAnalytics = async (
       const res = await pool.query(`
         SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
           t_stamp::text AS ts_text, 
-          ${energyCol}::float AS value
+          CASE WHEN ${energyCol} <= 0 THEN NULL ELSE ${energyCol}::float END AS value
         FROM ${tableName}
         WHERE t_stamp >= $1 AND t_stamp <= $2 AND poi_id = $3
           AND ${energyCol} IS NOT NULL
@@ -663,12 +663,24 @@ export const getElectricityAnalytics = async (
     const timeDiffMs = currDateObj.getTime() - prevDateObj.getTime();
 
     let diff = 0;
+    // Sesuai aturan: data sebelumnya dan data saat ini harus tidak 0 dan tidak null baru bisa dihitung selisihnya
     // Only calculate diff if consecutive records are consecutive hours (<= 90 minutes)
-    // If there is a gap or power meter was offline (null in between or on reconnect), do not assume consumption -> diff = 0
-    if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal)) {
+    // If there is a gap or power meter was offline / uninitialized (0 or null in between), do not assume consumption -> diff = 0
+    if (
+      currVal !== null &&
+      prevVal !== null &&
+      !isNaN(currVal) &&
+      !isNaN(prevVal) &&
+      currVal > 0 &&
+      prevVal > 0
+    ) {
       if (timeDiffMs <= 90 * 60 * 1000) {
         diff = currVal - prevVal;
         if (diff < 0) diff = 0; // Guard against resets or anomalies
+        // Filter lonjakan anomali baseline meter awal untuk Solar POI (kapasitas 1,7 MWp -> max 2000 kWh per jam)
+        if (poiFilter && diff > 2000) {
+          diff = 0;
+        }
       }
     }
 
@@ -1024,14 +1036,23 @@ export const getElectricityAnalytics = async (
     currentBVal = pgPq.current_b !== null ? Number(pgPq.current_b) : currentBVal;
     currentCVal = pgPq.current_c !== null ? Number(pgPq.current_c) : currentCVal;
     
-    // Normalize unbalances if they are in decimal form (e.g. 0.0054 -> 0.54%)
+    // Normalize unbalances if they are in decimal form (e.g. 0.0054 -> 0.54% for PLN, already in % for WF1/WF2)
+    const isPln = deviceId === "Cubicle_PLN_PM8000";
     const rawVUnb = pgPq.voltage_unbalance !== null ? Number(pgPq.voltage_unbalance) : null;
     if (rawVUnb !== null) {
-      vUnbVal = rawVUnb < 1.0 ? rawVUnb * 100.0 : rawVUnb;
+      if (isPln) {
+        vUnbVal = rawVUnb < 0.1 ? rawVUnb * 100.0 : rawVUnb;
+      } else {
+        vUnbVal = rawVUnb < 0.05 ? rawVUnb * 100.0 : rawVUnb;
+      }
     }
     const rawIUnb = pgPq.current_unbalance !== null ? Number(pgPq.current_unbalance) : null;
     if (rawIUnb !== null) {
-      iUnbVal = rawIUnb < 1.0 ? rawIUnb * 100.0 : rawIUnb;
+      if (isPln) {
+        iUnbVal = rawIUnb < 0.1 ? rawIUnb * 100.0 : rawIUnb;
+      } else {
+        iUnbVal = rawIUnb < 0.05 ? rawIUnb * 100.0 : rawIUnb;
+      }
     }
 
     // Normalize THDs (e.g. 0.0187 -> 1.87%)
@@ -1051,10 +1072,12 @@ export const getElectricityAnalytics = async (
     if (rawThdIC !== null) thdIT = rawThdIC < 1.0 ? rawThdIC * 100.0 : rawThdIC;
     thdIIVal = (thdIR + thdIS + thdIT) / 3.0;
 
-    const statusVal = deviceId === "Cubicle_PLN_PM8000" ? pgPq.status_pm8000 : pgPq.status_pm5500;
-    const recordTime = new Date(pgPq.t_stamp).getTime();
+    const statusVal = deviceId === "Cubicle_PLN_PM8000"
+      ? (pgPq.status_pm8000 !== undefined ? pgPq.status_pm8000 : (pgPq.status !== undefined ? pgPq.status : null))
+      : (pgPq.status_pm5500 !== undefined ? pgPq.status_pm5500 : (pgPq.status !== undefined ? pgPq.status : null));
+    const recordTime = pgPq.t_stamp ? new Date(pgPq.t_stamp).getTime() : Date.now();
     const isStale = (Date.now() - recordTime) > 60000; // 60 seconds stale threshold
-    isConnected = (statusVal !== null ? !!statusVal : true) && !isStale;
+    isConnected = (statusVal !== null ? (statusVal !== false && Boolean(statusVal)) : true) && !isStale;
   }
 
   const vln1 = voltABVal;
@@ -1104,40 +1127,40 @@ export const getElectricityAnalytics = async (
       currentHour: getWibDateTime(new Date()).hour
     },
     pqData: {
-      activePower: Number(activePowerVal.toFixed(1)),
-      activePowerTs: maxDiff > 0 && peakDemandTs ? peakDemandTs.toISOString() : null,
-      peakDemand: peakDemandVal !== null ? Number(peakDemandVal.toFixed(2)) : null,
-      reactivePower: Number(reactivePowerVal.toFixed(1)),
-      apparentPower: Number(apparentPowerVal.toFixed(1)),
-      pf: pfVal !== null ? Number(pfVal.toFixed(3)) : null,
+      activePower: isConnected ? Number(activePowerVal.toFixed(1)) : 0,
+      activePowerTs: isConnected && maxDiff > 0 && peakDemandTs ? peakDemandTs.toISOString() : null,
+      peakDemand: isConnected && peakDemandVal !== null ? Number(peakDemandVal.toFixed(2)) : null,
+      reactivePower: isConnected ? Number(reactivePowerVal.toFixed(1)) : 0,
+      apparentPower: isConnected ? Number(apparentPowerVal.toFixed(1)) : 0,
+      pf: isConnected && pfVal !== null ? Number(pfVal.toFixed(3)) : null,
       pfStatus: isConnected ? "connected" : "offline",
-      freq: Number(freqVal.toFixed(2)),
-      vUnb: Number(vUnbVal.toFixed(2)),
-      iUnb: Number(iUnbVal.toFixed(2)),
-      thdV: Number(thdVVVal.toFixed(2)),
-      thdI: Number(thdIIVal.toFixed(2)),
-      vll1: Number(voltABVal.toFixed(2)),
-      vll2: Number(voltBCVal.toFixed(2)),
-      vll3: Number(voltCAVal.toFixed(2)),
-      vln1: Number(vln1.toFixed(2)),
-      vln2: Number(vln2.toFixed(2)),
-      vln3: Number(vln3.toFixed(2)),
-      current1: Number(currentAVal.toFixed(1)),
-      current2: Number(currentBVal.toFixed(1)),
-      current3: Number(currentCVal.toFixed(1)),
-      vR: Number(vln1.toFixed(3)),
-      vS: Number(vln2.toFixed(3)),
-      vT: Number(vln3.toFixed(3)),
-      iR: Number(currentAVal.toFixed(1)),
-      iS: Number(currentBVal.toFixed(1)),
-      iT: Number(currentCVal.toFixed(1)),
-      thdV_R: Number(thdVR.toFixed(2)),
-      thdV_S: Number(thdVS.toFixed(2)),
-      thdV_T: Number(thdVT.toFixed(2)),
-      thdI_R: Number(thdIR.toFixed(2)),
-      thdI_S: Number(thdIS.toFixed(2)),
-      thdI_T: Number(thdIT.toFixed(2)),
-      voltage: Number(voltLAvg.toFixed(2))
+      freq: isConnected ? Number(freqVal.toFixed(2)) : 0,
+      vUnb: isConnected ? Number(vUnbVal.toFixed(2)) : 0,
+      iUnb: isConnected ? Number(iUnbVal.toFixed(2)) : 0,
+      thdV: isConnected ? Number(thdVVVal.toFixed(2)) : 0,
+      thdI: isConnected ? Number(thdIIVal.toFixed(2)) : 0,
+      vll1: isConnected ? Number(voltABVal.toFixed(2)) : 0,
+      vll2: isConnected ? Number(voltBCVal.toFixed(2)) : 0,
+      vll3: isConnected ? Number(voltCAVal.toFixed(2)) : 0,
+      vln1: isConnected ? Number(vln1.toFixed(2)) : 0,
+      vln2: isConnected ? Number(vln2.toFixed(2)) : 0,
+      vln3: isConnected ? Number(vln3.toFixed(2)) : 0,
+      current1: isConnected ? Number(currentAVal.toFixed(1)) : 0,
+      current2: isConnected ? Number(currentBVal.toFixed(1)) : 0,
+      current3: isConnected ? Number(currentCVal.toFixed(1)) : 0,
+      vR: isConnected ? Number(vln1.toFixed(3)) : 0,
+      vS: isConnected ? Number(vln2.toFixed(3)) : 0,
+      vT: isConnected ? Number(vln3.toFixed(3)) : 0,
+      iR: isConnected ? Number(currentAVal.toFixed(1)) : 0,
+      iS: isConnected ? Number(currentBVal.toFixed(1)) : 0,
+      iT: isConnected ? Number(currentCVal.toFixed(1)) : 0,
+      thdV_R: isConnected ? Number(thdVR.toFixed(2)) : 0,
+      thdV_S: isConnected ? Number(thdVS.toFixed(2)) : 0,
+      thdV_T: isConnected ? Number(thdVT.toFixed(2)) : 0,
+      thdI_R: isConnected ? Number(thdIR.toFixed(2)) : 0,
+      thdI_S: isConnected ? Number(thdIS.toFixed(2)) : 0,
+      thdI_T: isConnected ? Number(thdIT.toFixed(2)) : 0,
+      voltage: isConnected ? Number(voltLAvg.toFixed(2)) : 0
     }
   };
 };

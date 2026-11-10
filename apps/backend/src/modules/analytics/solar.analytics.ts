@@ -124,10 +124,10 @@ export const getSolarAnalytics = async (
     const res = await pool.query(`
       SELECT 
         to_char(t_stamp, 'YYYY-MM-DD HH24:00:00') as ts_text,
-        MAX(CASE WHEN poi_id = 'POI_1' THEN total_kwh END)::float as poi_1,
-        MAX(CASE WHEN poi_id = 'POI_2' THEN total_kwh END)::float as poi_2,
-        (COALESCE(MAX(CASE WHEN poi_id = 'POI_1' THEN total_kwh END), 0) + 
-         COALESCE(MAX(CASE WHEN poi_id = 'POI_2' THEN total_kwh END), 0))::float as total
+        NULLIF(MAX(CASE WHEN poi_id = 'POI_1' THEN total_kwh END)::float, 0) as poi_1,
+        NULLIF(MAX(CASE WHEN poi_id = 'POI_2' THEN total_kwh END)::float, 0) as poi_2,
+        (COALESCE(NULLIF(MAX(CASE WHEN poi_id = 'POI_1' THEN total_kwh END), 0), 0) + 
+         COALESCE(NULLIF(MAX(CASE WHEN poi_id = 'POI_2' THEN total_kwh END), 0), 0))::float as total
       FROM electric_plts_telemetry
       WHERE t_stamp >= $1 AND t_stamp <= $2
       GROUP BY ts_text
@@ -177,12 +177,12 @@ export const getSolarAnalytics = async (
     const timeDiffHours = Math.max(1, Math.round(timeDiffMs / (3600 * 1000)));
 
     let diffPoi1 = 0;
-    if (curr.poi_1 !== null && prev.poi_1 !== null && timeDiffMs <= 24 * 60 * 60 * 1000) {
+    if (curr.poi_1 !== null && prev.poi_1 !== null && curr.poi_1 > 0 && prev.poi_1 > 0 && timeDiffMs <= 24 * 60 * 60 * 1000) {
       diffPoi1 = Math.max(0, curr.poi_1 - prev.poi_1);
     }
 
     let diffPoi2 = 0;
-    if (curr.poi_2 !== null && prev.poi_2 !== null && timeDiffMs <= 24 * 60 * 60 * 1000) {
+    if (curr.poi_2 !== null && prev.poi_2 !== null && curr.poi_2 > 0 && prev.poi_2 > 0 && timeDiffMs <= 24 * 60 * 60 * 1000) {
       diffPoi2 = Math.max(0, curr.poi_2 - prev.poi_2);
     }
 
@@ -192,7 +192,7 @@ export const getSolarAnalytics = async (
     if (diffPoi2 > maxPoiKwh) diffPoi2 = 0;
 
     let diffTot = 0;
-    if (curr.total !== null && prev.total !== null && timeDiffMs <= 24 * 60 * 60 * 1000) {
+    if (curr.total !== null && prev.total !== null && curr.total > 0 && prev.total > 0 && timeDiffMs <= 24 * 60 * 60 * 1000) {
       diffTot = Math.max(0, curr.total - prev.total);
       if (diffTot > maxPoiKwh * 2) diffTot = diffPoi1 + diffPoi2;
     } else {

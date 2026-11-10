@@ -162,7 +162,7 @@ export default function Approvals() {
           ) : maintenance.length === 0 ? (
             <div className="text-sm text-slate-400">No pending approvals found.</div>
           ) : (
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[550px] text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Date</th>
@@ -223,7 +223,7 @@ export default function Approvals() {
           ) : shiftReports.length === 0 ? (
             <div className="text-sm text-slate-400">No pending approvals found.</div>
           ) : (
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[550px] text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Date</th>
@@ -286,7 +286,7 @@ export default function Approvals() {
           ) : passwordRequests.length === 0 ? (
             <div className="text-sm text-slate-400">Tidak ada permohonan ganti password yang menunggu persetujuan.</div>
           ) : (
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[550px] text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Tanggal Pengajuan</th>

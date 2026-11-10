@@ -229,10 +229,13 @@ export async function getElectricityExportData(params: ElectricityExportParams):
       const prevE = prev.active_energy !== null && prev.active_energy !== undefined ? Number(prev.active_energy) : null;
 
       let deltaKwh = 0;
-      if (currE !== null && prevE !== null && currE >= prevE) {
+      if (currE !== null && prevE !== null && currE >= prevE && currE > 0 && prevE > 0) {
         deltaKwh = currE - prevE;
-      } else {
+        if (isSolar && deltaKwh > 2000) deltaKwh = 0;
+      } else if (!isSolar) {
         deltaKwh = Number(curr.active_power) || 0;
+      } else {
+        deltaKwh = 0;
       }
       deltaKwh = Math.max(0, deltaKwh);
 

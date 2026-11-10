@@ -18,6 +18,9 @@ export interface EquipmentDisplayItem {
     subArea?: string;
     is_new_pm?: boolean;
     registered_at?: string;
+    row?: number;
+    span?: string;
+    align?: "left" | "center" | "right" | "full";
   };
   sort_order: number;
   enabled: boolean;

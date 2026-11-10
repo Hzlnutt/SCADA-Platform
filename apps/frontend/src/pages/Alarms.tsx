@@ -302,8 +302,8 @@ export default function Alarms() {
         ) : activeList.length === 0 ? (
           <div className="text-sm text-slate-400">No active alarms.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full min-w-[620px] text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Alarm</th>

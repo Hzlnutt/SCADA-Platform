@@ -501,7 +501,7 @@ export default function HvacLayout({
   return (
     <div className="flex flex-col h-full w-full gap-4 p-4 bg-slate-50/50 dark:bg-slate-950/50 rounded-xl transition-all duration-300">
       {/* TOP BAR */}
-      <div className="flex justify-between items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-sm dark:shadow-2xl transition-all duration-300">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-sm dark:shadow-2xl transition-all duration-300">
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-extrabold text-slate-800 dark:text-white tracking-wide">
@@ -535,7 +535,7 @@ export default function HvacLayout({
             (currentStatus === "Running" ? "ON" : currentStatus === "Maintenance" ? "IDLE" : "OFF");
 
           return (
-            <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-950 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-slate-50 dark:bg-slate-950 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
               {/* MODE */}
               <div className="flex flex-col items-center px-1">
                 <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono uppercase tracking-wider font-semibold">
@@ -641,7 +641,7 @@ export default function HvacLayout({
       {/* MAIN AREA */}
       <div className="flex flex-col xl:flex-row gap-4 flex-1 min-h-0">
         <div className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 relative flex items-center justify-center p-2 min-h-[450px] xl:min-h-0 shadow-sm transition-all duration-300 overflow-hidden">
-          <div className="w-full h-full flex items-center justify-center overflow-hidden">
+          <div className="w-full h-full flex items-center justify-center overflow-x-auto overflow-y-auto scrollbar-thin">
             {diagramComponent}
           </div>
         </div>

@@ -427,11 +427,11 @@ export default function AdminPanel() {
           <p className="mt-1 text-xs text-slate-400">
             View existing members, assign roles, or delete users.
           </p>
-          <div className="mt-4 overflow-x-auto max-h-[350px] overflow-y-auto pr-1">
+          <div className="mt-4 overflow-x-auto max-h-[350px] overflow-y-auto pr-1 scrollbar-thin">
             {usersLoading ? (
               <div className="text-sm text-slate-400">Loading users...</div>
             ) : (
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full min-w-[520px] text-left text-xs border-collapse">
                 <thead className="text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 bg-slate-950 z-10 border-b border-slate-800 pb-2">
                   <tr>
                     <th className="px-3 py-2">Name</th>
@@ -492,13 +492,13 @@ export default function AdminPanel() {
         <div className="text-xs font-bold uppercase tracking-[0.2em] text-[#1f6fb5]">
           Correct Maintenance Records
         </div>
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 overflow-x-auto scrollbar-thin">
           {maintenanceLoading ? (
             <div className="text-sm text-slate-400">Loading data...</div>
           ) : maintenanceRecords.length === 0 ? (
             <div className="text-sm text-slate-400">No data available.</div>
           ) : (
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full min-w-[650px] text-left text-xs border-collapse">
               <thead className="text-[10px] uppercase tracking-wider text-slate-500 font-bold border-b border-slate-800">
                 <tr>
                   <th className="px-3 py-2">Date</th>
@@ -708,13 +708,13 @@ export default function AdminPanel() {
         <div className="text-xs font-bold uppercase tracking-[0.2em] text-[#1f6fb5]">
           Correct Shift Reports
         </div>
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 overflow-x-auto scrollbar-thin">
           {shiftLoading ? (
             <div className="text-sm text-slate-400">Loading data...</div>
           ) : shiftReports.length === 0 ? (
             <div className="text-sm text-slate-400">No data available.</div>
           ) : (
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full min-w-[650px] text-left text-xs border-collapse">
               <thead className="text-[10px] uppercase tracking-wider text-slate-500 font-bold border-b border-slate-800">
                 <tr>
                   <th className="px-3 py-2">Date</th>

@@ -361,7 +361,7 @@ export default function MachineShiftReport() {
               No shift reports submitted yet.
             </div>
           ) : (
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[700px] text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Date</th>

@@ -5,6 +5,7 @@ import { useAuthStore } from "../../store/auth.store";
 import { getJson } from "../../services/api.client";
 import { canAccessConfigAndAudit } from "../../utils/roles";
 import { useTranslation } from "../../i18n/useTranslation";
+import { useSystemStore } from "../../store/system.store";
 
 const IconDashboard = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -83,6 +84,9 @@ const IconChevron = ({ open }: { open: boolean }) => (
 export const Sidebar = () => {
   const { t } = useTranslation();
   const role = useAuthStore((state) => state.user?.role ?? "user");
+  const mobileSidebarOpen = useSystemStore((state) => state.mobileSidebarOpen);
+  const setMobileSidebarOpen = useSystemStore((state) => state.setMobileSidebarOpen);
+
   const isAdmin = role === "admin";
   const canApprove =
     role === "team_head" ||
@@ -145,8 +149,8 @@ export const Sidebar = () => {
   const hvacWf2u1Group = machineGroups.find((g) => g.id === "hvac-wf2u1");
   const hvacWf2u2Group = machineGroups.find((g) => g.id === "hvac-wf2u2");
 
-  return (
-    <aside className="sticky top-0 hidden h-screen w-[260px] shrink-0 flex-col border-r border-[#acd3ff] dark:border-slate-800 bg-[#eaf4ff] dark:bg-slate-900 px-4 py-5 text-[#002b5c] dark:text-slate-100 lg:flex overflow-y-auto scrollbar-thin transition-colors duration-300">
+  const renderContent = () => (
+    <>
       {/* Brand logo */}
       <div className="mb-7 flex items-center gap-3">
         <div className="flex h-9 items-center justify-center rounded-lg bg-white px-2 shadow-[0_6px_16px_rgba(31,111,181,0.18)]">
@@ -390,6 +394,53 @@ export const Sidebar = () => {
           <span className="font-mono font-bold text-[#002b5c] dark:text-emerald-400 text-[11px]">{netInfo.clientIp}</span>
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop Sidebar (lg+) */}
+      <aside className="sticky top-0 hidden h-screen w-[260px] shrink-0 flex-col border-r border-[#acd3ff] dark:border-slate-800 bg-[#eaf4ff] dark:bg-slate-900 px-4 py-5 text-[#002b5c] dark:text-slate-100 lg:flex overflow-y-auto scrollbar-thin transition-colors duration-300">
+        {renderContent()}
+      </aside>
+
+      {/* Mobile / Tablet Overlay Drawer (<lg) */}
+      {mobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex animate-in fade-in duration-200">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+
+          {/* Drawer container */}
+          <aside
+            className="relative z-10 flex h-full w-[280px] max-w-[85vw] flex-col border-r border-[#acd3ff] dark:border-slate-800 bg-[#eaf4ff] dark:bg-slate-900 px-4 py-5 text-[#002b5c] dark:text-slate-100 overflow-y-auto shadow-2xl transition-transform"
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest("a")) {
+                setMobileSidebarOpen(false);
+              }
+            }}
+          >
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#acd3ff]/50 dark:border-slate-800">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-[#1f6fb5] dark:text-sky-400">
+                Menu SCADA
+              </span>
+              <button
+                type="button"
+                onClick={() => setMobileSidebarOpen(false)}
+                className="p-1 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-sky-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                aria-label="Tutup Menu"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {renderContent()}
+          </aside>
+        </div>
+      )}
+    </>
   );
 };

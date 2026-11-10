@@ -1253,7 +1253,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-3 rounded-full border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/80 px-3 py-1.5 text-xs transition-colors duration-300">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-xl sm:rounded-full border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950/80 px-3 py-1.5 text-xs transition-colors duration-300">
               {([
                 { key: "electricity" as const, label: "Electricity", color: "#2f8ae5" },
                 { key: "gas" as const, label: "Gas", color: "#f4c542" },

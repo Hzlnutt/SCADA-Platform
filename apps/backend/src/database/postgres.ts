@@ -785,6 +785,7 @@ export const ensurePostgresTables = async () => {
       CREATE TABLE IF NOT EXISTS electric_trafo_rolling_3s (
         pm_id VARCHAR(32) NOT NULL,
         t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        status BOOLEAN DEFAULT true,
         volt_ab NUMERIC,
         volt_bc NUMERIC,
         volt_ca NUMERIC,

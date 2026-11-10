@@ -285,6 +285,44 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
     return previousData;
   }, [previousData, daysInMonth]);
 
+  // Dynamic scale ceiling calculation based on peak value in the card
+  // Provides clean, proportional headroom (e.g. 12 -> 15) so small values are clearly visible
+  const dynamicMax = useMemo(() => {
+    let peak = 0;
+    if (selectorType === "all") {
+      const curStacks = (currentBreakdown || []).map((b) => (Number(b.pln) || 0) + (Number(b.poi1) || 0) + (Number(b.poi2) || 0));
+      const prevStacks = showPrevious
+        ? (previousBreakdown || []).map((b) => (Number(b.pln) || 0) + (Number(b.poi1) || 0) + (Number(b.poi2) || 0))
+        : [];
+      peak = Math.max(0, ...curStacks, ...prevStacks);
+    } else {
+      const curVals = paddedCurrentData.map((v) => Number(v) || 0);
+      const prevVals = showPrevious ? paddedPreviousData.map((v) => Number(v) || 0) : [];
+      peak = Math.max(0, ...curVals, ...prevVals);
+    }
+
+    if (peak <= 0 || !isFinite(peak)) return 5;
+
+    // Headroom target: ~20% to 25% above peak data point (e.g. 12 * 1.25 = 15.0 -> exactly 0-15)
+    const target = peak * 1.25;
+    const exponent = Math.floor(Math.log10(target));
+    const magnitude = Math.pow(10, exponent);
+    const normalized = target / magnitude;
+
+    // Standard engineering scale steps: 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 8, 10
+    const steps = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 8, 10];
+    let chosenStep = 10;
+    for (const s of steps) {
+      if (s >= normalized) {
+        chosenStep = s;
+        break;
+      }
+    }
+
+    const calculatedMax = chosenStep * magnitude;
+    return Number(calculatedMax.toPrecision(4));
+  }, [selectorType, currentBreakdown, previousBreakdown, showPrevious, paddedCurrentData, paddedPreviousData]);
+
   const data = useMemo(() => {
     const barPct = isZoomed ? 0.68 : 0.55;
     const catPct = isZoomed ? 0.88 : 0.8;
@@ -293,6 +331,58 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
     if (selectorType === "all") {
       const plnData = (currentBreakdown || []).map((b) => b.pln || 0);
       const solarData = (currentBreakdown || []).map((b) => (b.poi1 || 0) + (b.poi2 || 0));
+
+      const plnPrevData = (previousBreakdown || []).map((b) => b.pln || 0);
+      const solarPrevData = (previousBreakdown || []).map((b) => (b.poi1 || 0) + (b.poi2 || 0));
+      const hasPrevBreakdown = plnPrevData.some((v) => v > 0) || solarPrevData.some((v) => v > 0);
+
+      const paddedPlnPrev = plnPrevData.length < daysInMonth
+        ? [...plnPrevData, ...new Array(daysInMonth - plnPrevData.length).fill(0)]
+        : plnPrevData;
+      const paddedSolarPrev = solarPrevData.length < daysInMonth
+        ? [...solarPrevData, ...new Array(daysInMonth - solarPrevData.length).fill(0)]
+        : solarPrevData;
+
+      const prevDatasets = showPrevious
+        ? hasPrevBreakdown
+          ? [
+              {
+                label: prevMonthName ? `PLN Grid (${prevMonthName})` : "PLN Bulan Lalu",
+                data: paddedPlnPrev,
+                backgroundColor: "rgba(249, 115, 22, 0.85)",
+                hoverBackgroundColor: "rgba(234, 88, 12, 1)",
+                borderWidth: 0,
+                borderRadius: { topLeft: 0, topRight: 0, bottomLeft: barRadius, bottomRight: barRadius },
+                stack: "previous",
+                barPercentage: barPct,
+                categoryPercentage: catPct
+              },
+              {
+                label: prevMonthName ? `Solar PLTS (${prevMonthName})` : "Solar Bulan Lalu",
+                data: paddedSolarPrev,
+                backgroundColor: "rgba(52, 211, 153, 0.85)",
+                hoverBackgroundColor: "rgba(16, 185, 129, 1)",
+                borderWidth: 0,
+                borderRadius: { topLeft: barRadius, topRight: barRadius, bottomLeft: 0, bottomRight: 0 },
+                stack: "previous",
+                barPercentage: barPct,
+                categoryPercentage: catPct
+              }
+            ]
+          : [
+              {
+                label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
+                data: paddedPreviousData,
+                backgroundColor: "rgba(239, 68, 68, 0.75)",
+                hoverBackgroundColor: "rgba(220, 38, 38, 1)",
+                borderWidth: 0,
+                borderRadius: barRadius,
+                stack: "previous",
+                barPercentage: barPct,
+                categoryPercentage: catPct
+              }
+            ]
+        : [];
 
       return {
         labels: dayLabels,
@@ -319,17 +409,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             barPercentage: barPct,
             categoryPercentage: catPct
           },
-          ...(showPrevious ? [{
-            label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
-            data: paddedPreviousData,
-            backgroundColor: "rgba(239, 68, 68, 0.75)",
-            hoverBackgroundColor: "rgba(220, 38, 38, 1)",
-            borderWidth: 0,
-            borderRadius: barRadius,
-            stack: "previous",
-            barPercentage: barPct,
-            categoryPercentage: catPct
-          }] : [])
+          ...prevDatasets
         ]
       };
     }
@@ -361,7 +441,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         }] : [])
       ]
     };
-  }, [dayLabels, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, showPrevious, isZoomed]);
+  }, [dayLabels, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, showPrevious, isZoomed, daysInMonth]);
 
   const options: any = useMemo(() => ({
     responsive: true,
@@ -420,10 +500,17 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             const val = Number(ctx.parsed.y || 0);
             const idx = ctx.dataIndex;
             const curVal = Number(paddedCurrentData[idx] || 0);
+            const prevVal = Number(paddedPreviousData[idx] || 0);
 
-            if (selectorType === "all" && ctx.dataset.stack === "current" && curVal > 0) {
-              const pct = Math.round((val / curVal) * 100);
-              return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh (${pct}%)`;
+            if (selectorType === "all") {
+              if (ctx.dataset.stack === "current" && curVal > 0) {
+                const pct = Math.round((val / curVal) * 100);
+                return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh (${pct}%)`;
+              }
+              if (ctx.dataset.stack === "previous" && prevVal > 0) {
+                const pct = Math.round((val / prevVal) * 100);
+                return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh (${pct}%)`;
+              }
             }
             return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`;
           },
@@ -437,9 +524,16 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             if (selectorType === "all") {
               const b = currentBreakdown?.[idx];
               if (b && (b.poi1 > 0 || b.poi2 > 0)) {
-                lines.push(`• Rincian PLTS: POI-1 ${b.poi1.toLocaleString("id-ID", { maximumFractionDigits: 2 })} | POI-2 ${b.poi2.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`);
+                lines.push(`• Rincian PLTS Bulan Ini: POI-1 ${b.poi1.toLocaleString("id-ID", { maximumFractionDigits: 2 })} | POI-2 ${b.poi2.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`);
               }
-              lines.push(`Total Konsumsi: ${curVal.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`);
+              const pb = previousBreakdown?.[idx];
+              if (pb && (pb.poi1 > 0 || pb.poi2 > 0)) {
+                lines.push(`• Rincian PLTS ${prevMonthName || "Bln Lalu"}: POI-1 ${pb.poi1.toLocaleString("id-ID", { maximumFractionDigits: 2 })} | POI-2 ${pb.poi2.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`);
+              }
+              lines.push(`Total Konsumsi Bulan Ini: ${curVal.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`);
+              if (prevVal > 0) {
+                lines.push(`Total Konsumsi ${prevMonthName || "Bln Lalu"}: ${prevVal.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`);
+              }
             }
 
             if (prevVal > 0) {
@@ -502,10 +596,11 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
       y: {
         stacked: true,
         beginAtZero: true,
-        suggestedMax: 10,
-        grace: "15%",
+        min: 0,
+        max: dynamicMax,
         grid: { color: isDark ? "rgba(51, 65, 85, 0.4)" : "rgba(203, 213, 225, 0.5)" },
         ticks: {
+          maxTicksLimit: isZoomed ? 10 : 6,
           color: isDark ? "rgba(203, 213, 225, 0.85)" : "rgba(51, 65, 85, 0.85)",
           font: {
             size: isZoomed ? 12 : 9,
@@ -516,6 +611,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           callback: (v: number) => {
             if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
             if (Number.isInteger(v)) return `${v}`;
+            if (v < 0.1 && v > 0) return `${Number(v.toFixed(3))}`;
             return `${Number(v.toFixed(2))}`;
           }
         },
@@ -530,7 +626,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         } : {})
       }
     }
-  }), [isDark, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, solarRate, pvRate, isZoomed, dayLabels]);
+  }), [isDark, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, solarRate, pvRate, isZoomed, dayLabels, dynamicMax]);
 
   return <Bar data={data} options={options} />;
 });
@@ -602,11 +698,11 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   }, [currTotalKwh, currentData]);
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm h-full flex-1 flex flex-col justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-3 min-h-[64px]">
         {/* Top-Left: Title and Total kWh */}
-        <div className="flex flex-col">
-          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">{title}</h4>
+        <div className="flex flex-col min-h-[50px] justify-between">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 line-clamp-2" title={title}>{title}</h4>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-base font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400">
               {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">kWh</span>
@@ -1426,19 +1522,42 @@ const SectionHEquipment = memo(function SectionHEquipment({
         configKey: item.config_key,
         sortOrder: item.sort_order ?? 0,
         category: catKey,
-        categoryLabel: catEntry.label
+        categoryLabel: catEntry.label,
+        span: val.span || "auto",
+        align: val.align || "full",
+        row: typeof val.row === "number" ? val.row : undefined
       });
     }
 
-    // Sort items within each category by sortOrder
-    const groups: Array<{ key: string; label: string; items: any[] }> = [];
+    // Sort items within each category and partition into auto-adjusting rows
+    const groups: Array<{ key: string; label: string; items: any[]; rows: Array<{ rowIdx: number; items: any[] }> }> = [];
     for (const [key, val] of catMap.entries()) {
       val.items.sort((a, b) => a.sortOrder - b.sortOrder);
       if (STANDARD_CATEGORIES.some((sc) => sc.key === key) || val.items.length > 0 || customCategoryKeys.some((cc) => cc.key === key)) {
+        // Group items into rows
+        const rowMap = new Map<number, any[]>();
+        val.items.forEach((item, idx) => {
+          const r = typeof item.row === "number" ? item.row : Math.floor(idx / 4);
+          item.row = r;
+          if (!rowMap.has(r)) rowMap.set(r, []);
+          rowMap.get(r)!.push(item);
+        });
+
+        const sortedRowKeys = Array.from(rowMap.keys()).sort((a, b) => a - b);
+        const rows = sortedRowKeys.map((rKey, newRowIdx) => {
+          const rowItems = rowMap.get(rKey)!;
+          rowItems.forEach((it) => { it.row = newRowIdx; });
+          return {
+            rowIdx: newRowIdx,
+            items: rowItems
+          };
+        });
+
         groups.push({
           key,
           label: val.label,
-          items: val.items
+          items: val.items,
+          rows
         });
       }
     }
@@ -1452,13 +1571,44 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
   // Edit Position handlers
   const handleStartEditPosition = () => {
-    const currentItems = (hasLoadedConfig && configuredItems.length > 0)
+    const currentBase = (hasLoadedConfig && configuredItems.length > 0)
       ? [...configuredItems]
       : [...ALL_DEFAULT_ITEMS];
-    setDraftConfiguredItems(currentItems);
+
+    const initialDraft: any[] = [];
+    let order = 1;
+    categoryGroups.forEach((cg) => {
+      cg.rows.forEach((row, rowIdx) => {
+        row.items.forEach((item) => {
+          const existing = currentBase.find((it) => it.config_key.toLowerCase() === item.configKey.toLowerCase());
+          if (existing) {
+            initialDraft.push({
+              ...existing,
+              sort_order: order++,
+              value: {
+                ...(existing.value || {}),
+                category: cg.key,
+                categoryLabel: cg.label,
+                row: rowIdx,
+                span: item.span || existing.value?.span || "full",
+                align: item.align || existing.value?.align || "center"
+              }
+            });
+          }
+        });
+      });
+    });
+
+    currentBase.forEach((it) => {
+      if (!initialDraft.some((d) => d.config_key.toLowerCase() === it.config_key.toLowerCase())) {
+        initialDraft.push({ ...it, sort_order: order++ });
+      }
+    });
+
+    setDraftConfiguredItems(initialDraft);
     setHasUnsavedChanges(false);
     setIsEditPositionMode(true);
-    setDragToast("Mode Atur Posisi Aktif: Kartu bergoyang menandakan dapat digerakkan. Tarik kartu atau gunakan tombol arah untuk mengatur tata letak.");
+    setDragToast("Mode Atur Posisi Aktif: Tarik kartu untuk memindahkan (kiri/kanan untuk sisip, tengah untuk tukar posisi).");
     setTimeout(() => setDragToast(null), 4000);
   };
 
@@ -1484,6 +1634,9 @@ const SectionHEquipment = memo(function SectionHEquipment({
         label: it.label,
         category: it.value?.category || "custom",
         categoryLabel: it.value?.categoryLabel || "Kustom",
+        row: typeof it.value?.row === "number" ? it.value.row : 0,
+        span: it.value?.span || "full",
+        align: it.value?.align || "center",
         sort_order: idx + 1
       }));
 
@@ -1513,91 +1666,57 @@ const SectionHEquipment = memo(function SectionHEquipment({
     }
   };
 
-  // Direct 1-Click Move Handlers
-  const handleMoveCardDirection = (configKey: string, direction: "left" | "right") => {
+  // Single Card Layout Handlers (Span / Width and Alignment)
+  const handleSetCardSpan = (configKey: string, span: "1" | "2" | "3" | "full") => {
     const currentItems = draftConfiguredItems.length > 0
       ? [...draftConfiguredItems]
       : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
     const idx = currentItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
     if (idx === -1) return;
 
-    const currentCat = currentItems[idx].value?.category || "custom";
-
-    if (direction === "left") {
-      let swapIdx = -1;
-      for (let i = idx - 1; i >= 0; i--) {
-        if ((currentItems[i].value?.category || "custom") === currentCat) {
-          swapIdx = i;
-          break;
-        }
-      }
-      if (swapIdx !== -1) {
-        const temp = currentItems[swapIdx];
-        currentItems[swapIdx] = currentItems[idx];
-        currentItems[idx] = temp;
-      }
-    } else {
-      let swapIdx = -1;
-      for (let i = idx + 1; i < currentItems.length; i++) {
-        if ((currentItems[i].value?.category || "custom") === currentCat) {
-          swapIdx = i;
-          break;
-        }
-      }
-      if (swapIdx !== -1) {
-        const temp = currentItems[swapIdx];
-        currentItems[swapIdx] = currentItems[idx];
-        currentItems[idx] = temp;
-      }
-    }
-
-    const reindexed = currentItems.map((it, i) => ({
-      ...it,
-      sort_order: i + 1
-    }));
-
-    setDraftConfiguredItems(reindexed);
-    setHasUnsavedChanges(true);
-  };
-
-  const handleQuickMoveCategory = (configKey: string, newCatKey: string) => {
-    const currentItems = draftConfiguredItems.length > 0
-      ? [...draftConfiguredItems]
-      : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
-    const idx = currentItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
-    if (idx === -1) return;
-
-    const targetGroup = categoryGroups.find((g) => g.key === newCatKey);
-    const targetLabel = targetGroup ? targetGroup.label : newCatKey;
-
-    const [item] = currentItems.splice(idx, 1);
-    const updated = {
-      ...item,
+    currentItems[idx] = {
+      ...currentItems[idx],
       value: {
-        ...(item.value || {}),
-        category: newCatKey,
-        categoryLabel: targetLabel
+        ...(currentItems[idx].value || {}),
+        span
       }
     };
 
-    const lastInTargetCat = currentItems
-      .map((it, i) => ({ it, i }))
-      .filter(({ it }) => (it.value?.category || "custom") === newCatKey);
-
-    let insertIdx = currentItems.length;
-    if (lastInTargetCat.length > 0) {
-      insertIdx = lastInTargetCat[lastInTargetCat.length - 1].i + 1;
-    }
-    currentItems.splice(insertIdx, 0, updated);
-
-    const reindexed = currentItems.map((it, i) => ({
-      ...it,
-      sort_order: i + 1
-    }));
-
-    setDraftConfiguredItems(reindexed);
+    setDraftConfiguredItems([...currentItems]);
     setHasUnsavedChanges(true);
-    setDragToast(`✓ Memindahkan '${item.label}' ke kategori ${targetLabel.toUpperCase()}`);
+    const spanLabels: Record<string, string> = {
+      "1": "1 Kolom (25%)",
+      "2": "2 Kolom (50%)",
+      "3": "3 Kolom (75%)",
+      "full": "Penuh (4 Kolom / 100%)"
+    };
+    setDragToast(`✓ Ukuran kartu: ${spanLabels[span] || span}`);
+    setTimeout(() => setDragToast(null), 3000);
+  };
+
+  const handleSetCardAlign = (configKey: string, align: "left" | "center" | "right") => {
+    const currentItems = draftConfiguredItems.length > 0
+      ? [...draftConfiguredItems]
+      : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
+    const idx = currentItems.findIndex((i) => i.config_key.toLowerCase() === configKey.toLowerCase());
+    if (idx === -1) return;
+
+    currentItems[idx] = {
+      ...currentItems[idx],
+      value: {
+        ...(currentItems[idx].value || {}),
+        align
+      }
+    };
+
+    setDraftConfiguredItems([...currentItems]);
+    setHasUnsavedChanges(true);
+    const alignLabels: Record<string, string> = {
+      left: "Rata Kiri",
+      center: "Rata Tengah",
+      right: "Rata Kanan"
+    };
+    setDragToast(`✓ Posisi kartu tunggal: ${alignLabels[align] || align}`);
     setTimeout(() => setDragToast(null), 3000);
   };
 
@@ -1652,7 +1771,8 @@ const SectionHEquipment = memo(function SectionHEquipment({
     const relX = e.clientX - rect.left;
     const ratio = relX / Math.max(rect.width, 1);
 
-    let action: "insert-left" | "swap" | "insert-right" = "swap";
+    // Kiri < 30% -> Sisipkan di kiri; Kanan > 70% -> Sisipkan di kanan; Tengah 30%-70% -> Tukar posisi (Swap)
+    let action: "insert-left" | "insert-right" | "swap";
     if (ratio < 0.30) {
       action = "insert-left";
     } else if (ratio > 0.70) {
@@ -1678,88 +1798,247 @@ const SectionHEquipment = memo(function SectionHEquipment({
       ? [...draftConfiguredItems]
       : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
 
-    const sourceIdx = currentItems.findIndex((i) => i.config_key.toLowerCase() === sourceKey.toLowerCase());
-    const targetIdx = currentItems.findIndex((i) => i.config_key.toLowerCase() === targetConfigKey.toLowerCase());
+    // Build the visual rows map from current categoryGroups:
+    let sourceCatKey: string | null = null;
+    let sourceRowIdx = -1;
+    let sourceColIdx = -1;
 
-    if (sourceIdx === -1 || targetIdx === -1) {
+    let targetActualCatKey = targetCategoryKey;
+    let targetRowIdx = -1;
+    let targetColIdx = -1;
+
+    const catRowsMap = new Map<string, string[][]>();
+    categoryGroups.forEach((cg) => {
+      const rows = cg.rows.map((r) => r.items.map((it) => it.configKey));
+      catRowsMap.set(cg.key, rows);
+
+      rows.forEach((rCards, rIdx) => {
+        rCards.forEach((cKey, cIdx) => {
+          if (cKey.toLowerCase() === sourceKey.toLowerCase()) {
+            sourceCatKey = cg.key;
+            sourceRowIdx = rIdx;
+            sourceColIdx = cIdx;
+          }
+          if (cKey.toLowerCase() === targetConfigKey.toLowerCase()) {
+            targetActualCatKey = cg.key;
+            targetRowIdx = rIdx;
+            targetColIdx = cIdx;
+          }
+        });
+      });
+    });
+
+    if (!sourceCatKey || sourceRowIdx === -1 || targetRowIdx === -1) {
       handleDragEnd();
       return;
     }
 
-    const targetGroup = categoryGroups.find((g) => g.key === targetCategoryKey);
-    const targetCategoryLabel = targetGroup ? targetGroup.label : targetCategoryKey;
+    const sRows = catRowsMap.get(sourceCatKey)!;
+    const tRows = catRowsMap.get(targetActualCatKey)!;
 
-    const newItems = [...currentItems];
-    const action = dragAction || "swap";
+    const targetItemMeta = currentItems.find((it) => it.config_key.toLowerCase() === targetConfigKey.toLowerCase());
+    const targetTitle = targetItemMeta?.label || targetConfigKey;
+
+    const action = dragAction || "insert-right";
 
     if (action === "swap") {
-      // Menukar langsung posisi dua kartu
-      const sourceItem = { ...newItems[sourceIdx] };
-      const targetItem = { ...newItems[targetIdx] };
+      const temp = sRows[sourceRowIdx][sourceColIdx];
+      sRows[sourceRowIdx][sourceColIdx] = tRows[targetRowIdx][targetColIdx];
+      tRows[targetRowIdx][targetColIdx] = temp;
+      setDragToast(`✓ Menukar posisi '${sourceTitle}' dengan '${targetTitle}'`);
+    } else {
+      // Sisipkan di kiri atau kanan target
+      sRows[sourceRowIdx].splice(sourceColIdx, 1);
 
-      const sourceCat = sourceItem.value?.category || "custom";
-      const sourceCatLabel = sourceItem.value?.categoryLabel || "Kustom";
-      const targetCat = targetItem.value?.category || targetCategoryKey;
-      const targetCatLabel = targetItem.value?.categoryLabel || targetCategoryLabel;
+      // Re-find targetColIdx in tRows[targetRowIdx] because splicing in same row might shift index
+      const curTargetColIdx = tRows[targetRowIdx].findIndex(
+        (k) => k.toLowerCase() === targetConfigKey.toLowerCase()
+      );
 
-      sourceItem.value = {
-        ...(sourceItem.value || {}),
-        category: targetCat,
-        categoryLabel: targetCatLabel
-      };
-
-      targetItem.value = {
-        ...(targetItem.value || {}),
-        category: sourceCat,
-        categoryLabel: sourceCatLabel
-      };
-
-      newItems[sourceIdx] = targetItem;
-      newItems[targetIdx] = sourceItem;
-
-      setDragToast(`✓ Menukar posisi '${sourceTitle}' ⇄ '${targetItem.label}'`);
-    } else if (action === "insert-left") {
-      // Sisipkan di sebelah kiri kartu target tanpa menukar item lainnya
-      const [sourceItem] = newItems.splice(sourceIdx, 1);
-      const updatedSource = {
-        ...sourceItem,
-        value: {
-          ...(sourceItem.value || {}),
-          category: targetCategoryKey,
-          categoryLabel: targetCategoryLabel
-        }
-      };
-
-      const newTargetIdx = newItems.findIndex((i) => i.config_key.toLowerCase() === targetConfigKey.toLowerCase());
-      newItems.splice(newTargetIdx, 0, updatedSource);
-
-      setDragToast(`✓ Menyisipkan '${sourceTitle}' di sebelah kiri '${newItems[newTargetIdx + 1]?.label}'`);
-    } else if (action === "insert-right") {
-      // Sisipkan di sebelah kanan kartu target tanpa menukar item lainnya
-      const [sourceItem] = newItems.splice(sourceIdx, 1);
-      const updatedSource = {
-        ...sourceItem,
-        value: {
-          ...(sourceItem.value || {}),
-          category: targetCategoryKey,
-          categoryLabel: targetCategoryLabel
-        }
-      };
-
-      const newTargetIdx = newItems.findIndex((i) => i.config_key.toLowerCase() === targetConfigKey.toLowerCase());
-      newItems.splice(newTargetIdx + 1, 0, updatedSource);
-
-      setDragToast(`✓ Menyisipkan '${sourceTitle}' di sebelah kanan '${newItems[newTargetIdx]?.label}'`);
+      if (curTargetColIdx !== -1) {
+        const insertIdx = action === "insert-left" ? curTargetColIdx : curTargetColIdx + 1;
+        tRows[targetRowIdx].splice(insertIdx, 0, sourceKey);
+        setDragToast(
+          `✓ Memindahkan '${sourceTitle}' ke sebelah ${action === "insert-left" ? "kiri" : "kanan"} '${targetTitle}' (Ukuran baris otomatis menyesuaikan)`
+        );
+      }
     }
 
-    const reindexed = newItems.map((it, idx) => ({
-      ...it,
-      sort_order: idx + 1
-    }));
+    // Flatten rows back to draftConfiguredItems
+    const nextDraft: any[] = [];
+    let counter = 1;
 
-    setDraftConfiguredItems(reindexed);
+    categoryGroups.forEach((cg) => {
+      const catKey = cg.key;
+      const rows = catRowsMap.get(catKey) || [];
+      const nonEmptyRows = rows.filter((r) => r.length > 0);
+
+      nonEmptyRows.forEach((rowCards, newRowIdx) => {
+        rowCards.forEach((cKey) => {
+          const item = currentItems.find((it) => it.config_key.toLowerCase() === cKey.toLowerCase());
+          if (item) {
+            nextDraft.push({
+              ...item,
+              sort_order: counter++,
+              value: {
+                ...(item.value || {}),
+                category: catKey,
+                categoryLabel: cg.label,
+                row: newRowIdx
+              }
+            });
+          }
+        });
+      });
+    });
+
+    setDraftConfiguredItems(nextDraft);
     setHasUnsavedChanges(true);
     handleDragEnd();
+    setTimeout(() => setDragToast(null), 3500);
+  };
+
+  const handleDropOnNewRow = (categoryKey: string) => {
+    if (!draggedItem || !isEditPositionMode) return;
+    const { configKey: sourceKey, title: sourceTitle } = draggedItem;
+
+    const currentItems = draftConfiguredItems.length > 0
+      ? [...draftConfiguredItems]
+      : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
+
+    const catRowsMap = new Map<string, string[][]>();
+    let sourceCatKey: string | null = null;
+    let sourceRowIdx = -1;
+    let sourceColIdx = -1;
+
+    categoryGroups.forEach((cg) => {
+      const rows = cg.rows.map((r) => r.items.map((it) => it.configKey));
+      catRowsMap.set(cg.key, rows);
+
+      rows.forEach((rCards, rIdx) => {
+        rCards.forEach((cKey, cIdx) => {
+          if (cKey.toLowerCase() === sourceKey.toLowerCase()) {
+            sourceCatKey = cg.key;
+            sourceRowIdx = rIdx;
+            sourceColIdx = cIdx;
+          }
+        });
+      });
+    });
+
+    if (!sourceCatKey || sourceRowIdx === -1) {
+      handleDragEnd();
+      return;
+    }
+
+    const sRows = catRowsMap.get(sourceCatKey)!;
+    sRows[sourceRowIdx].splice(sourceColIdx, 1);
+
+    const tRows = catRowsMap.get(categoryKey) || [];
+    tRows.push([sourceKey]);
+    catRowsMap.set(categoryKey, tRows);
+
+    const nextDraft: any[] = [];
+    let counter = 1;
+
+    categoryGroups.forEach((cg) => {
+      const catKey = cg.key;
+      const rows = catRowsMap.get(catKey) || [];
+      const nonEmptyRows = rows.filter((r) => r.length > 0);
+
+      nonEmptyRows.forEach((rowCards, newRowIdx) => {
+        rowCards.forEach((cKey) => {
+          const item = currentItems.find((it) => it.config_key.toLowerCase() === cKey.toLowerCase());
+          if (item) {
+            nextDraft.push({
+              ...item,
+              sort_order: counter++,
+              value: {
+                ...(item.value || {}),
+                category: catKey,
+                categoryLabel: cg.label,
+                row: newRowIdx
+              }
+            });
+          }
+        });
+      });
+    });
+
+    setDraftConfiguredItems(nextDraft);
+    setHasUnsavedChanges(true);
+    handleDragEnd();
+    setDragToast(`✓ Memindahkan '${sourceTitle}' ke baris baru di bawah`);
+    setTimeout(() => setDragToast(null), 3500);
+  };
+
+  const handleMoveCardToNewRow = (configKey: string, categoryKey: string) => {
+    const currentItems = draftConfiguredItems.length > 0
+      ? [...draftConfiguredItems]
+      : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
+
+    const catRowsMap = new Map<string, string[][]>();
+    let sourceCatKey: string | null = null;
+    let sourceRowIdx = -1;
+    let sourceColIdx = -1;
+
+    categoryGroups.forEach((cg) => {
+      const rows = cg.rows.map((r) => r.items.map((it) => it.configKey));
+      catRowsMap.set(cg.key, rows);
+
+      rows.forEach((rCards, rIdx) => {
+        rCards.forEach((cKey, cIdx) => {
+          if (cKey.toLowerCase() === configKey.toLowerCase()) {
+            sourceCatKey = cg.key;
+            sourceRowIdx = rIdx;
+            sourceColIdx = cIdx;
+          }
+        });
+      });
+    });
+
+    if (!sourceCatKey || sourceRowIdx === -1) return;
+
+    const sRows = catRowsMap.get(sourceCatKey)!;
+    sRows[sourceRowIdx].splice(sourceColIdx, 1);
+
+    const tRows = catRowsMap.get(categoryKey) || [];
+    tRows.push([configKey]);
+    catRowsMap.set(categoryKey, tRows);
+
+    const itemMeta = currentItems.find((it) => it.config_key.toLowerCase() === configKey.toLowerCase());
+    const itemTitle = itemMeta?.label || configKey;
+
+    const nextDraft: any[] = [];
+    let counter = 1;
+
+    categoryGroups.forEach((cg) => {
+      const catKey = cg.key;
+      const rows = catRowsMap.get(catKey) || [];
+      const nonEmptyRows = rows.filter((r) => r.length > 0);
+
+      nonEmptyRows.forEach((rowCards, newRowIdx) => {
+        rowCards.forEach((cKey) => {
+          const item = currentItems.find((it) => it.config_key.toLowerCase() === cKey.toLowerCase());
+          if (item) {
+            nextDraft.push({
+              ...item,
+              sort_order: counter++,
+              value: {
+                ...(item.value || {}),
+                category: catKey,
+                categoryLabel: cg.label,
+                row: newRowIdx
+              }
+            });
+          }
+        });
+      });
+    });
+
+    setDraftConfiguredItems(nextDraft);
+    setHasUnsavedChanges(true);
+    setDragToast(`✓ Memindahkan '${itemTitle}' ke baris baru di bawah`);
     setTimeout(() => setDragToast(null), 3500);
   };
 
@@ -1773,42 +2052,73 @@ const SectionHEquipment = memo(function SectionHEquipment({
       ? [...draftConfiguredItems]
       : ((hasLoadedConfig && configuredItems.length > 0) ? [...configuredItems] : [...ALL_DEFAULT_ITEMS]);
 
-    const sourceIdx = currentItems.findIndex((i) => i.config_key.toLowerCase() === sourceKey.toLowerCase());
-    if (sourceIdx === -1) {
+    const catRowsMap = new Map<string, string[][]>();
+    let sourceCatKey: string | null = null;
+    let sourceRowIdx = -1;
+    let sourceColIdx = -1;
+
+    categoryGroups.forEach((cg) => {
+      const rows = cg.rows.map((r) => r.items.map((it) => it.configKey));
+      catRowsMap.set(cg.key, rows);
+
+      rows.forEach((rCards, rIdx) => {
+        rCards.forEach((cKey, cIdx) => {
+          if (cKey.toLowerCase() === sourceKey.toLowerCase()) {
+            sourceCatKey = cg.key;
+            sourceRowIdx = rIdx;
+            sourceColIdx = cIdx;
+          }
+        });
+      });
+    });
+
+    if (!sourceCatKey || sourceRowIdx === -1) {
       handleDragEnd();
       return;
     }
 
+    const sRows = catRowsMap.get(sourceCatKey)!;
+    sRows[sourceRowIdx].splice(sourceColIdx, 1);
+
+    const tRows = catRowsMap.get(categoryKey) || [];
+    if (tRows.length === 0 || tRows[tRows.length - 1].length >= 4) {
+      tRows.push([sourceKey]);
+    } else {
+      tRows[tRows.length - 1].push(sourceKey);
+    }
+    catRowsMap.set(categoryKey, tRows);
+
     const targetGroup = categoryGroups.find((g) => g.key === categoryKey);
     const targetCategoryLabel = targetGroup ? targetGroup.label : categoryKey;
 
-    const newItems = [...currentItems];
-    const [sourceItem] = newItems.splice(sourceIdx, 1);
-    const updatedSource = {
-      ...sourceItem,
-      value: {
-        ...(sourceItem.value || {}),
-        category: categoryKey,
-        categoryLabel: targetCategoryLabel
-      }
-    };
+    const nextDraft: any[] = [];
+    let counter = 1;
 
-    const lastInTargetCat = newItems
-      .map((it, idx) => ({ it, idx }))
-      .filter(({ it }) => (it.value?.category || "custom") === categoryKey);
+    categoryGroups.forEach((cg) => {
+      const catKey = cg.key;
+      const rows = catRowsMap.get(catKey) || [];
+      const nonEmptyRows = rows.filter((r) => r.length > 0);
 
-    let insertIdx = newItems.length;
-    if (lastInTargetCat.length > 0) {
-      insertIdx = lastInTargetCat[lastInTargetCat.length - 1].idx + 1;
-    }
-    newItems.splice(insertIdx, 0, updatedSource);
+      nonEmptyRows.forEach((rowCards, newRowIdx) => {
+        rowCards.forEach((cKey) => {
+          const item = currentItems.find((it) => it.config_key.toLowerCase() === cKey.toLowerCase());
+          if (item) {
+            nextDraft.push({
+              ...item,
+              sort_order: counter++,
+              value: {
+                ...(item.value || {}),
+                category: catKey,
+                categoryLabel: cg.label,
+                row: newRowIdx
+              }
+            });
+          }
+        });
+      });
+    });
 
-    const reindexed = newItems.map((it, idx) => ({
-      ...it,
-      sort_order: idx + 1
-    }));
-
-    setDraftConfiguredItems(reindexed);
+    setDraftConfiguredItems(nextDraft);
     setHasUnsavedChanges(true);
     handleDragEnd();
     setDragToast(`✓ Memindahkan '${sourceTitle}' ke kategori ${targetCategoryLabel.toUpperCase()}`);
@@ -1875,13 +2185,18 @@ const SectionHEquipment = memo(function SectionHEquipment({
     setTimeout(() => setDragToast(null), 3500);
   };
 
-  // Helper for responsive grid column count per category
-  const getCategoryGridClass = (catKey: string, itemCount: number) => {
-    if (catKey === "boiler" && itemCount <= 2) return "grid gap-6 md:grid-cols-2";
-    if (catKey === "chiller" || catKey === "hvac_wh") return "grid gap-6 md:grid-cols-2 lg:grid-cols-4";
-    if (catKey === "cubicles") return "grid gap-6 md:grid-cols-3";
-    return "grid gap-6 md:grid-cols-2 lg:grid-cols-3";
+  // Helper for responsive grid column count per row of cards
+  // 1 card in row -> 1 column full width (100%)
+  // 2 cards in row -> 2 columns (50% each)
+  // 3 cards in row -> 3 columns (33.33% each)
+  // 4 cards in row -> 4 columns (25% each)
+  const getRowGridClass = (itemCount: number) => {
+    if (itemCount <= 1) return "w-full";
+    if (itemCount === 2) return "grid gap-6 grid-cols-1 md:grid-cols-2";
+    if (itemCount === 3) return "grid gap-6 grid-cols-1 md:grid-cols-3";
+    return "grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4";
   };
+  const getCategoryGridClass = (_catKey: string, itemCount: number) => getRowGridClass(itemCount);
 
   // Dynamic state from database batch endpoint
   const [batchData, setBatchData] = useState<Record<string, {
@@ -1953,9 +2268,11 @@ const SectionHEquipment = memo(function SectionHEquipment({
   }, [fetchEquipmentBatch, currentYear, currentMonthIdx, isEditPositionMode, loadConfiguredItems]);
 
   const renderCard = (
-    item: { title: string; seriesKey: string; pmId: string; configKey: string },
+    item: { title: string; seriesKey: string; pmId: string; configKey: string; span?: string; align?: "left" | "center" | "right" | "full"; row?: number },
     categoryKey: string,
-    cardIndex: number
+    cardIndex: number,
+    rowIndex: number = 0,
+    rowTotalCount: number = 1
   ) => {
     const itemData = batchData[item.pmId] || batchData[item.seriesKey.toLowerCase()] || batchData[item.title.toLowerCase()];
     const current = itemData?.current || [];
@@ -1964,9 +2281,25 @@ const SectionHEquipment = memo(function SectionHEquipment({
     const isBeingDragged = draggedItem?.configKey.toLowerCase() === item.configKey.toLowerCase();
     const isDropTarget = activeDropConfigKey?.toLowerCase() === item.configKey.toLowerCase();
 
+    // Calm, non-dizzying gentle float in edit mode (zero rotation, soft sky ring)
     const wobbleClass = (isEditPositionMode && !isBeingDragged)
-      ? (cardIndex % 2 === 0 ? "animate-card-wobble-even" : "animate-card-wobble-odd")
+      ? "animate-card-gentle-float ring-2 ring-sky-400/50 border border-dashed border-sky-400 dark:border-sky-500 rounded-2xl shadow-sm"
       : "";
+
+    const isSingleInRow = rowTotalCount === 1;
+    const span = item.span || "full";
+    const align = item.align || "center";
+
+    // Card width inside container: if single in row, respects span setting; otherwise spans full grid column
+    const cardWidthClass = isSingleInRow
+      ? span === "1"
+        ? "w-full sm:w-1/2 lg:w-1/4"
+        : span === "2"
+        ? "w-full sm:w-2/3 lg:w-1/2"
+        : span === "3"
+        ? "w-full lg:w-3/4"
+        : "w-full"
+      : "w-full";
 
     return (
       <div
@@ -1979,7 +2312,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
           e.stopPropagation();
           handleDropOnCard(categoryKey, item.configKey);
         }}
-        className={`relative group transition-all duration-150 ${wobbleClass} ${
+        className={`relative group transition-all duration-150 h-full min-h-[460px] flex flex-col justify-between ${cardWidthClass} ${wobbleClass} ${
           isBeingDragged
             ? "opacity-30 scale-95 ring-2 ring-sky-500 rounded-2xl cursor-grabbing"
             : isDropTarget
@@ -1992,7 +2325,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
         {/* Drop Indicators: Insert Left, Insert Right, or Swap */}
         {isDropTarget && dragAction === "insert-left" && (
           <div className="absolute inset-y-0 -left-2 w-3 bg-sky-500 rounded-l-xl shadow-[0_0_16px_rgba(14,165,233,0.9)] z-40 flex items-center justify-center animate-pulse pointer-events-none">
-            <div className="bg-sky-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-lg whitespace-nowrap -translate-x-full mr-1 flex items-center gap-1">
+            <div className="bg-sky-600 text-white text-[10px] font-black px-2.5 py-1 rounded-md shadow-lg whitespace-nowrap -translate-x-full mr-1 flex items-center gap-1">
               <span>←</span> Sisipkan di Kiri
             </div>
           </div>
@@ -2000,17 +2333,16 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
         {isDropTarget && dragAction === "insert-right" && (
           <div className="absolute inset-y-0 -right-2 w-3 bg-sky-500 rounded-r-xl shadow-[0_0_16px_rgba(14,165,233,0.9)] z-40 flex items-center justify-center animate-pulse pointer-events-none">
-            <div className="bg-sky-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-lg whitespace-nowrap translate-x-full ml-1 flex items-center gap-1">
+            <div className="bg-sky-600 text-white text-[10px] font-black px-2.5 py-1 rounded-md shadow-lg whitespace-nowrap translate-x-full ml-1 flex items-center gap-1">
               Sisipkan di Kanan <span>→</span>
             </div>
           </div>
         )}
 
         {isDropTarget && dragAction === "swap" && (
-          <div className="absolute inset-0 bg-amber-500/20 ring-4 ring-amber-500 border-2 border-amber-400 rounded-2xl z-30 flex items-center justify-center backdrop-blur-[2px] animate-in fade-in duration-150 pointer-events-none">
-            <div className="bg-amber-600 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-xl flex items-center gap-2 border border-amber-300">
-              <span className="text-base">⇄</span>
-              <span>Tukar Posisi dengan {item.title}</span>
+          <div className="absolute inset-0 bg-amber-500/15 dark:bg-amber-400/15 border-2 border-amber-500 rounded-2xl z-40 flex items-center justify-center pointer-events-none shadow-[0_0_20px_rgba(245,158,11,0.5)]">
+            <div className="bg-amber-600 text-white text-xs font-black px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-1.5 animate-bounce">
+              <span>🔄</span> Tukar Posisi dengan Kartu Ini
             </div>
           </div>
         )}
@@ -2019,7 +2351,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
         {isSeniorUnitHead && isEditPositionMode && (
           <div
             className="absolute top-3 right-3 z-30 flex items-center gap-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md shadow-sky-500/30 px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-grab active:cursor-grabbing select-none hover:scale-105 transition-transform"
-            title="Tahan dan tarik kartu ini untuk memindahkan posisi"
+            title="Tahan dan tarik kartu ini untuk memindahkan atau menukar posisi"
           >
             <span className="text-xs">⋮⋮</span>
             <span className="text-[9px] uppercase tracking-wider font-extrabold hidden sm:inline">Pindahkan</span>
@@ -2035,51 +2367,63 @@ const SectionHEquipment = memo(function SectionHEquipment({
           prevMonthName={compMonthLabel}
         />
 
-        {/* In-Card Quick Controls: Move Left, Move Right, and Category Selection */}
-        {isSeniorUnitHead && isEditPositionMode && (
-          <div className="p-2.5 bg-slate-50/90 dark:bg-slate-800/90 border-t border-slate-200 dark:border-slate-700/80 rounded-b-2xl flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleMoveCardDirection(item.configKey, "left");
-                }}
-                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
-                title="Geser ke Kiri (Tukar dengan item sebelum)"
-              >
-                <span>◀</span>
-                <span className="text-[10px]">Kiri</span>
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleMoveCardDirection(item.configKey, "right");
-                }}
-                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-600 transition flex items-center gap-1 cursor-pointer active:scale-95"
-                title="Geser ke Kanan (Tukar dengan item sesudah)"
-              >
-                <span className="text-[10px]">Kanan</span>
-                <span>▶</span>
-              </button>
+        {/* In-Card Layout Controls: ONLY rendered when Edit Position Mode is active AND only 1 card is in this row */}
+        {isSeniorUnitHead && isEditPositionMode && isSingleInRow && (
+          <div className="p-2.5 bg-slate-50/95 dark:bg-slate-800/95 border-t border-slate-200 dark:border-slate-700/80 rounded-b-2xl flex flex-wrap items-center justify-between gap-2 text-xs min-h-[46px]">
+            {/* Ukuran Kolom (1, 2, 3, atau Penuh) */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] text-slate-400 font-bold">Ukuran:</span>
+              {[
+                { key: "1", label: "1 Kolom" },
+                { key: "2", label: "2 Kolom" },
+                { key: "3", label: "3 Kolom" },
+                { key: "full", label: "Penuh (4 Kolom)" }
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSetCardSpan(item.configKey, opt.key as any);
+                  }}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
+                    (span === opt.key || (!item.span && opt.key === "full"))
+                      ? "bg-sky-500 text-white shadow-xs"
+                      : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-slate-400 font-semibold hidden sm:inline">Kategori:</span>
-              <select
-                value={categoryKey}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  handleQuickMoveCategory(item.configKey, e.target.value);
-                }}
-                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-bold border border-slate-300 dark:border-slate-600 focus:outline-none cursor-pointer"
-              >
-                {categoryGroups.map((cg) => (
-                  <option key={cg.key} value={cg.key}>{cg.label}</option>
+            {/* Posisi Alignment (Kiri, Tengah, Kanan) - hanya jika ukuran bukan penuh */}
+            {span !== "full" && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] text-slate-400 font-bold">Posisi:</span>
+                {[
+                  { key: "left", label: "Kiri" },
+                  { key: "center", label: "Tengah" },
+                  { key: "right", label: "Kanan" }
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSetCardAlign(item.configKey, opt.key as any);
+                    }}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
+                      (align === opt.key || (!item.align && opt.key === "center"))
+                        ? "bg-indigo-500 text-white shadow-xs"
+                        : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
                 ))}
-              </select>
-            </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2088,23 +2432,15 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
   return (
     <div className="space-y-8 relative">
-      {/* CSS Wobble Animation when Edit Position Mode is Active */}
+      {/* Gentle, non-dizzying float animation when Edit Position Mode is Active */}
       <style>{`
-        @keyframes scadaCardWobbleEven {
-          0% { transform: rotate(-0.55deg) translateY(-0.5px); }
-          50% { transform: rotate(0.55deg) translateY(0.5px); }
-          100% { transform: rotate(-0.55deg) translateY(-0.5px); }
+        @keyframes scadaCardGentleFloat {
+          0% { transform: translateY(0px); }
+          50% { transform: translateY(-3px); }
+          100% { transform: translateY(0px); }
         }
-        @keyframes scadaCardWobbleOdd {
-          0% { transform: rotate(0.55deg) translateY(0.5px); }
-          50% { transform: rotate(-0.55deg) translateY(-0.5px); }
-          100% { transform: rotate(0.55deg) translateY(0.5px); }
-        }
-        .animate-card-wobble-even {
-          animation: scadaCardWobbleEven 0.35s ease-in-out infinite alternate;
-        }
-        .animate-card-wobble-odd {
-          animation: scadaCardWobbleOdd 0.38s ease-in-out infinite alternate;
+        .animate-card-gentle-float {
+          animation: scadaCardGentleFloat 2.2s ease-in-out infinite;
         }
       `}</style>
 
@@ -2411,10 +2747,54 @@ const SectionHEquipment = memo(function SectionHEquipment({
                 )}
               </div>
 
-              {/* Cards Grid or Empty Dropzone */}
+              {/* Cards Rendered in Auto-Adjusting Rows (1->100%, 2->50%, 3->33.3%, 4->25%) */}
               {cat.items.length > 0 ? (
-                <div className={getCategoryGridClass(cat.key, cat.items.length)}>
-                  {cat.items.map((item, idx) => renderCard(item, cat.key, idx))}
+                <div className="space-y-6">
+                  {cat.rows.map((row) => {
+                    const isSingle = row.items.length === 1;
+                    if (isSingle) {
+                      const item = row.items[0];
+                      const align = item.align || "center";
+                      const justifyClass = align === "left" ? "justify-start" : align === "right" ? "justify-end" : "justify-center";
+                      return (
+                        <div key={row.rowIdx} className={`w-full flex items-stretch ${justifyClass}`}>
+                          {renderCard(item, cat.key, 0, row.rowIdx, 1)}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div
+                        key={row.rowIdx}
+                        className={getRowGridClass(row.items.length)}
+                      >
+                        {row.items.map((item, idx) => renderCard(item, cat.key, idx, row.rowIdx, row.items.length))}
+                      </div>
+                    );
+                  })}
+                  {isSeniorUnitHead && isEditPositionMode && (
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.dataTransfer.dropEffect = "move";
+                      }}
+                      onDrop={(e) => {
+                        e.stopPropagation();
+                        handleDropOnNewRow(cat.key);
+                      }}
+                      onClick={() => {
+                        if (cat.items.length > 0) {
+                          const lastItem = cat.items[cat.items.length - 1];
+                          handleMoveCardToNewRow(lastItem.configKey, cat.key);
+                        }
+                      }}
+                      className="border-2 border-dashed border-sky-300/60 dark:border-slate-700 hover:border-sky-500 hover:bg-sky-500/5 rounded-2xl p-3 text-center transition flex items-center justify-center gap-2 text-xs font-bold text-sky-600 dark:text-sky-400 cursor-pointer"
+                      title="Tarik kartu ke sini atau klik untuk membuat baris baru di bawahnya"
+                    >
+                      <span className="text-sm font-black">+</span>
+                      <span>Tarik kartu ke sini untuk membuat Baris Baru (atau Klik untuk pindah kartu terakhir)</span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div
@@ -2506,6 +2886,8 @@ export default function Electricity() {
 
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
+  const socketStatus = useSystemStore((state) => state.socketStatus);
+  const isGatewayOffline = socketStatus === "disconnected";
 
   const wbpRate = useConfigStore((state) => state.wbpRate);
   const lwbpRate = useConfigStore((state) => state.lwbpRate);
@@ -2632,7 +3014,9 @@ export default function Electricity() {
     const solarDailyMap: Record<string, { poi1: number; poi2: number }> = {};
     (solarData?.charts?.daily || []).forEach((d: any) => {
       if (d.day) {
-        solarDailyMap[d.day] = { poi1: d.poi1 || 0, poi2: d.poi2 || 0 };
+        const p1 = (d.poi1 && d.poi1 < 20000) ? d.poi1 : 0;
+        const p2 = (d.poi2 && d.poi2 < 20000) ? d.poi2 : 0;
+        solarDailyMap[d.day] = { poi1: p1, poi2: p2 };
       }
     });
 
@@ -2664,11 +3048,13 @@ export default function Electricity() {
       if (!isCurr && !isPrev) return;
 
       const plnVal = typeof d.pln === "number" ? d.pln : (cubicleSelector === "all" ? (plnDailyMap[d.day]?.value || 0) : d.value || 0);
-      const poi1Val = typeof d.poi1 === "number" ? d.poi1 : (solarDailyMap[d.day]?.poi1 || 0);
-      const poi2Val = typeof d.poi2 === "number" ? d.poi2 : (solarDailyMap[d.day]?.poi2 || 0);
+      const rawPoi1 = typeof d.poi1 === "number" ? d.poi1 : (solarDailyMap[d.day]?.poi1 || 0);
+      const rawPoi2 = typeof d.poi2 === "number" ? d.poi2 : (solarDailyMap[d.day]?.poi2 || 0);
+      const poi1Val = (rawPoi1 && rawPoi1 < 20000) ? rawPoi1 : 0;
+      const poi2Val = (rawPoi2 && rawPoi2 < 20000) ? rawPoi2 : 0;
       const totalVal = cubicleSelector === "all"
-        ? (typeof d.pln === "number" ? d.value : (plnVal + poi1Val + poi2Val))
-        : (d.value || 0);
+        ? (plnVal + poi1Val + poi2Val)
+        : (cubicleSelector === "poi1" ? poi1Val : cubicleSelector === "poi2" ? poi2Val : (d.value || 0));
 
       const entry: DayDetail = {
         val: totalVal,
@@ -3017,35 +3403,47 @@ export default function Electricity() {
               }
               // Extract PLN
               if (url.includes("electric_pln")) {
-                if (res.data.Active_Power !== undefined) {
-                  let plnKw = Number(res.data.Active_Power) || 0;
-                  if (plnKw > 10000) plnKw = plnKw / 1000.0;
-                  setLivePGridKw(Math.max(0, plnKw));
-                }
-                if (res.data.Power_Factor !== undefined && res.data.Power_Factor !== null) {
-                  const pfNum = Math.abs(Number(res.data.Power_Factor));
-                  if (!isNaN(pfNum)) {
-                    setLivePf(pfNum);
-                    setPfStatus(res.data.Status_PM8000 !== false ? "connected" : "offline");
+                const isPlnOnline = res.data.Status_PM8000 !== false && res.data.status_pm8000 !== false;
+                if (!isPlnOnline) {
+                  setLivePGridKw(null);
+                  setPfStatus("offline");
+                } else {
+                  if (res.data.Active_Power !== undefined) {
+                    let plnKw = Number(res.data.Active_Power) || 0;
+                    if (plnKw > 10000) plnKw = plnKw / 1000.0;
+                    setLivePGridKw(Math.max(0, plnKw));
                   }
-                }
-                const rawPeak = res.data.Peak_Demand_W ?? res.data.Peak_Demand_w ?? res.data.PeakDemand_W ?? res.data.peak_demand_w ?? res.data.Peak_Demand ?? res.data.peak_demand;
-                if (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak))) {
-                  setLivePeakDemandKw(Number(rawPeak) / 1000.0);
+                  if (res.data.Power_Factor !== undefined && res.data.Power_Factor !== null) {
+                    const pfNum = Math.abs(Number(res.data.Power_Factor));
+                    if (!isNaN(pfNum)) {
+                      setLivePf(pfNum);
+                      setPfStatus("connected");
+                    }
+                  }
+                  const rawPeak = res.data.Peak_Demand_W ?? res.data.Peak_Demand_w ?? res.data.PeakDemand_W ?? res.data.peak_demand_w ?? res.data.Peak_Demand ?? res.data.peak_demand;
+                  if (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak))) {
+                    setLivePeakDemandKw(Number(rawPeak) / 1000.0);
+                  }
                 }
               }
               // Extract WF1
-              if (url.includes("electric_wf1") && res.data.Active_Power_Total !== undefined) {
-                setLiveWf1Kw(Math.max(0, Number(res.data.Active_Power_Total) || 0));
-                if (res.data.Status_PM5500_WF1 !== undefined) {
-                  setLiveWf1Status(Boolean(res.data.Status_PM5500_WF1));
+              if (url.includes("electric_wf1")) {
+                const isWf1Online = res.data.Status_PM5500_WF1 !== false && res.data.Status_PM5560 !== false && res.data.Status_PM5500 !== false;
+                setLiveWf1Status(isWf1Online);
+                if (!isWf1Online) {
+                  setLiveWf1Kw(null);
+                } else if (res.data.Active_Power_Total !== undefined) {
+                  setLiveWf1Kw(Math.max(0, Number(res.data.Active_Power_Total) || 0));
                 }
               }
               // Extract WF2
-              if (url.includes("electric_wf2") && res.data.Active_Power_Total !== undefined) {
-                setLiveWf2Kw(Math.max(0, Number(res.data.Active_Power_Total) || 0));
-                if (res.data.Status_PM5500_WF1 !== undefined) {
-                  setLiveWf2Status(Boolean(res.data.Status_PM5500_WF1));
+              if (url.includes("electric_wf2")) {
+                const isWf2Online = res.data.Status_PM5500_WF2 !== false && res.data.Status_PM5500 !== false && res.data.Status_PM5500_WF1 !== false;
+                setLiveWf2Status(isWf2Online);
+                if (!isWf2Online) {
+                  setLiveWf2Kw(null);
+                } else if (res.data.Active_Power_Total !== undefined) {
+                  setLiveWf2Kw(Math.max(0, Number(res.data.Active_Power_Total) || 0));
                 }
               }
               // Extract PLTS if this is plts url
@@ -3147,7 +3545,7 @@ export default function Electricity() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 60000); // 60s fallback polling (WebSocket handles real-time updates)
+    const interval = setInterval(fetchActiveApiData, 3000); // 3s active fallback polling ensures telemetry numbers never freeze
 
     const socket = getSocket();
     const handlePltsLive = (payload: any) => {
@@ -3194,10 +3592,13 @@ export default function Electricity() {
 
   const getApiVal = useCallback((tagKey: string): any => {
     if (tagKey === "pln/power_factor") {
+      const plnApi = apiLiveData[DEFAULT_PLN_API_URL];
+      if (plnApi?.Status_PM8000 === false || plnApi?.status_pm8000 === false) {
+        return null;
+      }
       if (livePf !== null && livePf !== undefined && !isNaN(Number(livePf))) {
         return Math.abs(Number(livePf));
       }
-      const plnApi = apiLiveData[DEFAULT_PLN_API_URL];
       if (plnApi && plnApi.Power_Factor !== undefined && plnApi.Power_Factor !== null) {
         const num = Number(plnApi.Power_Factor);
         if (!isNaN(num)) return Math.abs(num);
@@ -3209,6 +3610,15 @@ export default function Electricity() {
     const isWf2Tag = tagKey.startsWith("wf2/");
     const url = apiSourceUrls[tagKey] || (isPlnTag ? DEFAULT_PLN_API_URL : isWf1Tag ? DEFAULT_WF1_API_URL : isWf2Tag ? DEFAULT_WF2_API_URL : "");
     const rawJsonKey = jsonKeyMap[tagKey] || ((isPlnTag || isWf1Tag || isWf2Tag) ? DEFAULT_PLN_JSON_KEYS[tagKey] : undefined) || tagKey.split("/")[1];
+
+    if (url && apiLiveData[url]) {
+      const plnOff = (isPlnTag || url.includes("electric_pln")) && (apiLiveData[url]?.Status_PM8000 === false || apiLiveData[url]?.status_pm8000 === false);
+      const wf1Off = (isWf1Tag || url.includes("electric_wf1")) && (apiLiveData[url]?.Status_PM5500_WF1 === false || apiLiveData[url]?.Status_PM5560 === false || apiLiveData[url]?.Status_PM5500 === false);
+      const wf2Off = (isWf2Tag || url.includes("electric_wf2")) && (apiLiveData[url]?.Status_PM5500_WF2 === false || apiLiveData[url]?.Status_PM5500 === false || apiLiveData[url]?.Status_PM5500_WF1 === false);
+      if (plnOff || wf1Off || wf2Off) {
+        return null;
+      }
+    }
 
     if (url && apiLiveData[url] && rawJsonKey) {
       let val = apiLiveData[url][rawJsonKey] ?? 
@@ -4474,22 +4884,22 @@ export default function Electricity() {
   const rawPGridVal = livePGridKw !== null && livePGridKw !== undefined
     ? livePGridKw
     : (apiPlnVal !== null ? apiPlnVal : (summaryData?.pln?.activePower ?? null));
-  const isPlnOffline = !isLiveLoading && rawPGridVal === null;
-  const pGridNum = rawPGridVal !== null ? Math.max(0, rawPGridVal) : null;
+  const isPlnOffline = isGatewayOffline || (!isLiveLoading && rawPGridVal === null);
+  const pGridNum = (rawPGridVal !== null && !isGatewayOffline) ? Math.max(0, rawPGridVal) : null;
 
   const hasPoi1Data = pltsLive.poi1.status === true || (typeof pltsLive.poi1.active_power === "number" && pltsLive.poi1.active_power > 0) || solarLive?.poi1?.status === true;
-  const isPoi1Offline = !isLiveLoading && !hasPoi1Data && (pltsLive.poi1.status === false || solarLive?.poi1?.status === false);
+  const isPoi1Offline = isGatewayOffline || (!isLiveLoading && !hasPoi1Data && (pltsLive.poi1.status === false || solarLive?.poi1?.status === false));
   const hasPoi2Data = pltsLive.poi2.status === true || (typeof pltsLive.poi2.active_power === "number" && pltsLive.poi2.active_power > 0) || solarLive?.poi2?.status === true;
-  const isPoi2Offline = !isLiveLoading && !hasPoi2Data && (pltsLive.poi2.status === false || solarLive?.poi2?.status === false);
-  const poi1Kw = !isPoi1Offline ? Math.max(0, pltsLive.poi1.active_power || solarLive?.poi1?.activePower || 0) : null;
-  const poi2Kw = !isPoi2Offline ? Math.max(0, pltsLive.poi2.active_power || solarLive?.poi2?.activePower || 0) : null;
-  const isSolarOffline = !isLiveLoading && isPoi1Offline && isPoi2Offline;
-  const totalSolarKw = (!isSolarOffline && (poi1Kw !== null || poi2Kw !== null)) ? ((poi1Kw ?? 0) + (poi2Kw ?? 0)) : null;
+  const isPoi2Offline = isGatewayOffline || (!isLiveLoading && !hasPoi2Data && (pltsLive.poi2.status === false || solarLive?.poi2?.status === false));
+  const poi1Kw = (!isPoi1Offline && !isGatewayOffline) ? Math.max(0, pltsLive.poi1.active_power || solarLive?.poi1?.activePower || 0) : null;
+  const poi2Kw = (!isPoi2Offline && !isGatewayOffline) ? Math.max(0, pltsLive.poi2.active_power || solarLive?.poi2?.activePower || 0) : null;
+  const isSolarOffline = isGatewayOffline || (!isLiveLoading && isPoi1Offline && isPoi2Offline);
+  const totalSolarKw = (!isSolarOffline && !isGatewayOffline && (poi1Kw !== null || poi2Kw !== null)) ? ((poi1Kw ?? 0) + (poi2Kw ?? 0)) : null;
 
   const gensetRunning = Number(getCleanNum(getApiVal("electricity/genset_running"))) || 0;
   const pGensetNum = gensetRunning === 1 ? 850 : gensetRunning > 1 ? 1850 : 0;
 
-  const totalPlantLoadKw = !isLiveLoading && (pGridNum !== null || totalSolarKw !== null || pGensetNum > 0)
+  const totalPlantLoadKw = !isLiveLoading && !isGatewayOffline && (pGridNum !== null || totalSolarKw !== null || pGensetNum > 0)
     ? (pGridNum ?? 0) + (totalSolarKw ?? 0) + pGensetNum
     : null;
 
@@ -4545,11 +4955,13 @@ export default function Electricity() {
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold font-mono border ${
                   isLiveLoading
                     ? isDark ? 'bg-blue-400/10 text-blue-300 border-blue-400/20 animate-pulse' : 'bg-blue-600/10 text-blue-700 border-blue-600/20 animate-pulse'
+                    : isGatewayOffline
+                    ? isDark ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-500/15 text-rose-700 border-rose-500/30'
                     : isPlnOffline
                     ? isDark ? 'bg-amber-400/20 text-amber-300 border-amber-400/30' : 'bg-amber-500/15 text-amber-700 border-amber-500/30'
                     : isDark ? 'bg-blue-400/20 text-blue-200 border-blue-400/30' : 'bg-blue-600/10 text-blue-700 border-blue-600/20'
                 }`}>
-                  {isLiveLoading ? "POLLING..." : isPlnOffline ? "OFFLINE" : `${gridPct.toFixed(1)}% Load`}
+                  {isLiveLoading ? "POLLING..." : isGatewayOffline ? "GATEWAY OFFLINE" : isPlnOffline ? "OFFLINE" : `${gridPct.toFixed(1)}% Load`}
                 </span>
                 <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-blue-600/10 text-blue-700'} flex items-center justify-center`}><IconGrid /></div>
               </div>
@@ -4557,6 +4969,8 @@ export default function Electricity() {
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-blue-950'}`}>
               {isLiveLoading ? (
                 <div className="h-9 w-32 bg-blue-400/20 dark:bg-blue-300/20 rounded-lg animate-pulse" />
+              ) : isGatewayOffline ? (
+                <span className="text-xl text-rose-500 dark:text-rose-400 font-bold font-mono">Gateway Offline</span>
               ) : isPlnOffline ? (
                 <span className="text-xl text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
               ) : (
@@ -4570,6 +4984,8 @@ export default function Electricity() {
               <span>Fact 1: <strong className={isDark ? 'text-white' : 'text-blue-950'}>
                 {isLiveLoading ? (
                   <span className="inline-block h-3 w-14 bg-blue-300/30 rounded animate-pulse align-middle" />
+                ) : isGatewayOffline ? (
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isFact1Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -4579,6 +4995,8 @@ export default function Electricity() {
               <span>Fact 2: <strong className={isDark ? 'text-white' : 'text-blue-950'}>
                 {isLiveLoading ? (
                   <span className="inline-block h-3 w-14 bg-blue-300/30 rounded animate-pulse align-middle" />
+                ) : isGatewayOffline ? (
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isFact2Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -4605,11 +5023,13 @@ export default function Electricity() {
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold font-mono border ${
                   isLiveLoading
                     ? isDark ? 'bg-emerald-400/10 text-emerald-300 border-emerald-400/20 animate-pulse' : 'bg-emerald-600/10 text-emerald-700 border-emerald-600/20 animate-pulse'
+                    : isGatewayOffline
+                    ? isDark ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-500/15 text-rose-700 border-rose-500/30'
                     : isSolarOffline
                     ? isDark ? 'bg-amber-400/20 text-amber-300 border-amber-400/30' : 'bg-amber-500/15 text-amber-700 border-amber-500/30'
                     : isDark ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30' : 'bg-emerald-600/10 text-emerald-700 border-emerald-600/20'
                 }`}>
-                  {isLiveLoading ? "POLLING..." : isSolarOffline ? "OFFLINE" : `${solarPct.toFixed(1)}% Load`}
+                  {isLiveLoading ? "POLLING..." : isGatewayOffline ? "GATEWAY OFFLINE" : isSolarOffline ? "OFFLINE" : `${solarPct.toFixed(1)}% Load`}
                 </span>
                 <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-emerald-600/10 text-emerald-700'} flex items-center justify-center`}><IconSolar /></div>
               </div>
@@ -4617,6 +5037,8 @@ export default function Electricity() {
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-emerald-950'}`}>
               {isLiveLoading ? (
                 <div className="h-9 w-32 bg-emerald-400/20 dark:bg-emerald-300/20 rounded-lg animate-pulse" />
+              ) : isGatewayOffline ? (
+                <span className="text-xl text-rose-500 dark:text-rose-400 font-bold font-mono">Gateway Offline</span>
               ) : isSolarOffline ? (
                 <span className="text-xl text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
               ) : (
@@ -4630,6 +5052,8 @@ export default function Electricity() {
               <span>POI-1: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
                 {isLiveLoading ? (
                   <span className="inline-block h-3 w-14 bg-emerald-300/30 rounded animate-pulse align-middle" />
+                ) : isGatewayOffline ? (
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isPoi1Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -4639,6 +5063,8 @@ export default function Electricity() {
               <span>POI-2: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
                 {isLiveLoading ? (
                   <span className="inline-block h-3 w-14 bg-emerald-300/30 rounded animate-pulse align-middle" />
+                ) : isGatewayOffline ? (
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isPoi2Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -4721,6 +5147,8 @@ export default function Electricity() {
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-cyan-950'}`}>
               {isLiveLoading ? (
                 <div className="h-9 w-36 bg-cyan-400/20 dark:bg-cyan-300/20 rounded-lg animate-pulse" />
+              ) : isGatewayOffline ? (
+                <span className="text-xl text-rose-500 dark:text-rose-400 font-bold font-mono">Gateway Offline</span>
               ) : totalPlantLoadKw === null || (isPlnOffline && isSolarOffline && pGensetNum === 0) ? (
                 <span className="text-xl text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
               ) : (
@@ -4734,6 +5162,8 @@ export default function Electricity() {
               <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>
                 {isLiveLoading ? (
                   <span className="inline-block h-3 w-14 bg-cyan-300/30 rounded animate-pulse align-middle" />
+                ) : isGatewayOffline ? (
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isPlnOffline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -4743,6 +5173,8 @@ export default function Electricity() {
               <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>
                 {isLiveLoading ? (
                   <span className="inline-block h-3 w-14 bg-cyan-300/30 rounded animate-pulse align-middle" />
+                ) : isGatewayOffline ? (
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isSolarOffline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -4947,42 +5379,46 @@ export default function Electricity() {
           <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
           <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-blue-500">PLN — Incoming Grid</h3>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 items-stretch">
           {/* Estimasi Biaya */}
-          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition">
-            <div className="flex items-center justify-between">
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Estimasi Biaya</span>
               <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500"><IconMoney /></div>
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {summaryLoading && !summaryData ? "..." : formatCurrency(cardSummary.totalCost)}
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+            <div className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 truncate">
               {summaryLoading && !summaryData ? "" : `${cardSummary.totalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
             </div>
           </div>
 
           {/* Beban LWBP */}
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">Beban LWBP</span>
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">Beban LWBP</span>
+            </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
               {summaryLoading && !summaryData ? "..." : `${cardSummary.lwbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-blue-500">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.lwbpCost)}</div>
+            <div className="mt-1 text-[10px] font-semibold text-blue-500 truncate">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.lwbpCost)}</div>
           </div>
 
           {/* Beban WBP */}
-          <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30 p-4 hover:border-rose-400 transition">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">Beban WBP</span>
+          <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30 p-4 hover:border-rose-400 transition h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">Beban WBP</span>
+            </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
               {summaryLoading && !summaryData ? "..." : `${cardSummary.wbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-rose-500">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.wbpCost)}</div>
+            <div className="mt-1 text-[10px] font-semibold text-rose-500 truncate">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.wbpCost)}</div>
           </div>
 
           {/* PF / Power Factor */}
-          <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 dark:bg-purple-950/30 p-4 hover:border-purple-400 transition">
-            <div className="flex items-center justify-between">
+          <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 dark:bg-purple-950/30 p-4 hover:border-purple-400 transition h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">PF</span>
               <span 
                 className={`h-2 w-2 rounded-full ${pfStatus === "connected" && (livePf !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== null)) ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} 
@@ -5000,18 +5436,18 @@ export default function Electricity() {
               })()}
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-              <span>Stabilitas beban listrik</span>
+              <span className="truncate">Stabilitas beban listrik</span>
               {pfStatus === "connected" && (livePf !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== null)) ? (
-                <span className="text-[9px] font-semibold text-emerald-500 font-mono">1s Live</span>
+                <span className="text-[9px] font-semibold text-emerald-500 font-mono shrink-0">1s Live</span>
               ) : (
-                <span className="text-[9px] font-semibold text-amber-500 font-mono">Gagal Polling API</span>
+                <span className="text-[9px] font-semibold text-amber-500 font-mono shrink-0">Gagal Polling API</span>
               )}
             </div>
           </div>
 
           {/* Peak Demand */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition">
-            <div className="flex items-center justify-between">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">Peak Demand</span>
               <span 
                 className={`h-2 w-2 rounded-full ${pfStatus === "connected" && (livePeakDemandKw !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== null)) ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} 
@@ -5029,11 +5465,11 @@ export default function Electricity() {
               })()}
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-              <span>Estimasi beban puncak</span>
+              <span className="truncate">Estimasi beban puncak</span>
               {pfStatus === "connected" && (livePeakDemandKw !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== null)) ? (
-                <span className="text-[9px] font-semibold text-emerald-500 font-mono">1s Live</span>
+                <span className="text-[9px] font-semibold text-emerald-500 font-mono shrink-0">1s Live</span>
               ) : (
-                <span className="text-[9px] font-semibold text-amber-500 font-mono">Gagal Polling API</span>
+                <span className="text-[9px] font-semibold text-amber-500 font-mono shrink-0">Gagal Polling API</span>
               )}
             </div>
           </div>
@@ -5042,11 +5478,11 @@ export default function Electricity() {
       </div>
 
       {/* ═══════════ SECTION C: PLN TREND + DONUT ═══════════ */}
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <section className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition-opacity duration-150 ${isFilterPending ? "opacity-75" : "opacity-100"}`}>
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div className="flex flex-col">
-              <div className="flex items-center gap-3">
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr] items-stretch">
+        <section className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between h-full min-h-[440px] transition-opacity duration-150 ${isFilterPending ? "opacity-75" : "opacity-100"}`}>
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Trend Panel Distribusi</h3>
                 {cardSummary.totalKwh > 0 && (
                   <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 rounded-lg">
@@ -5054,15 +5490,15 @@ export default function Electricity() {
                   </span>
                 )}
                 {isFilterPending && (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-0.5 rounded-lg animate-pulse">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-lg animate-pulse">
                     <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-ping" />
                     Memuat...
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Beban Incoming PLN — data historis (WBP & LWBP).</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">Beban Incoming PLN — data historis (WBP & LWBP).</p>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
+            <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2">
               {(range === "ytd" || range === "day" || range === "month") && (
                 <select
                   value={selectedYear}
@@ -5142,19 +5578,19 @@ export default function Electricity() {
               </div>
             </div>
           </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
-            <div style={{ height: 256 }}>
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[260px] flex flex-col justify-center">
+            <div className="h-[260px] w-full">
               <Bar data={stackedBarData} options={stackedBarOptions} />
             </div>
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between h-full min-h-[440px]">
           <div>
             <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Distribusi Beban</h3>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Perbandingan konsumsi WBP vs LWBP.</p>
           </div>
-          <div className="my-6 flex justify-center">
+          <div className="my-auto py-4 flex justify-center">
             <DonutChart 
               segments={donutSegments} 
               size={150} 
@@ -5162,7 +5598,7 @@ export default function Electricity() {
               centerLabel={donutSegments[0]?.value > 0 ? `WBP ${donutSegments[0].value}%` : `LWBP 100%`} 
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 mt-auto">
             {donutSegments.map((item) => (
               <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5 last:border-0 last:pb-0">
                 <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
@@ -5190,30 +5626,30 @@ export default function Electricity() {
             {isSolarOffline ? "GAGAL POLLING API" : "ONLINE"}
           </span>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 items-stretch">
           {/* Estimasi Biaya PV */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
-            <div className="flex items-center justify-between">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Estimasi Biaya PV</span>
               <div className="h-6 w-6 rounded bg-amber-500/10 flex items-center justify-center text-amber-500"><IconMoney /></div>
             </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
+            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {formatCurrency(solarFilteredMetrics.pvCost)}
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+            <div className="mt-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 truncate" title={`${formatNumber(solarFilteredMetrics.totalKwh)} kWh (${solarFilteredMetrics.periodLabel})`}>
               {formatNumber(solarFilteredMetrics.totalKwh)} kWh ({solarFilteredMetrics.periodLabel})
             </div>
           </div>
 
           {/* POI-1 */}
-          <div className={`rounded-xl border p-4 transition-all ${
+          <div className={`rounded-xl border p-4 h-full flex flex-col justify-between min-h-[116px] transition-all ${
             isPoi1Offline
               ? "border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30"
               : solarLive?.poi1?.status === false
               ? "border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30"
               : "border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30"
           }`}>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between min-h-[24px]">
               <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
                 isPoi1Offline
                   ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
@@ -5231,10 +5667,16 @@ export default function Electricity() {
                   : "bg-emerald-500"
               }`} />
             </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
+            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {formatNumber(solarFilteredMetrics.poi1Kwh)} kWh
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+            <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 truncate" title={
+              isPoi1Offline
+                ? "Status: GAGAL POLLING API"
+                : solarLive?.poi1?.status === false
+                ? "Status: TIDAK AKTIF"
+                : `${solarFilteredMetrics.periodLabel}${solarLive?.poi1?.voltAb ? ` • ${solarLive.poi1.voltAb.toFixed(1)} V` : ""}`
+            }>
               {isPoi1Offline
                 ? "Status: GAGAL POLLING API"
                 : solarLive?.poi1?.status === false
@@ -5244,23 +5686,28 @@ export default function Electricity() {
           </div>
 
           {/* Peak Demand (POI-1) */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-1)</span>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-1)</span>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase">Max</span>
+            </div>
+            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {formatNumber(solarFilteredMetrics.poi1PeakDemand)} kW
             </div>
-            <div className="mt-1 text-[10px] text-slate-400">Puncak beban {solarFilteredMetrics.periodLabel}</div>
+            <div className="mt-1 text-[10px] text-slate-400 truncate" title={`Puncak beban ${solarFilteredMetrics.periodLabel}`}>
+              Puncak beban {solarFilteredMetrics.periodLabel}
+            </div>
           </div>
 
           {/* POI-2 */}
-          <div className={`rounded-xl border p-4 transition-all ${
+          <div className={`rounded-xl border p-4 h-full flex flex-col justify-between min-h-[116px] transition-all ${
             isPoi2Offline
               ? "border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30"
               : solarLive?.poi2?.status === false
               ? "border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30"
               : "border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30"
           }`}>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between min-h-[24px]">
               <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
                 isPoi2Offline
                   ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
@@ -5278,10 +5725,16 @@ export default function Electricity() {
                   : "bg-emerald-500"
               }`} />
             </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
+            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {formatNumber(solarFilteredMetrics.poi2Kwh)} kWh
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+            <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 truncate" title={
+              isPoi2Offline
+                ? "Status: GAGAL POLLING API"
+                : solarLive?.poi2?.status === false
+                ? "Status: TIDAK AKTIF"
+                : `${solarFilteredMetrics.periodLabel}${solarLive?.poi2?.voltAb ? ` • ${solarLive.poi2.voltAb.toFixed(1)} V` : ""}`
+            }>
               {isPoi2Offline
                 ? "Status: GAGAL POLLING API"
                 : solarLive?.poi2?.status === false
@@ -5291,21 +5744,26 @@ export default function Electricity() {
           </div>
 
           {/* Peak Demand (POI-2) */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-2)</span>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-2)</span>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase">Max</span>
+            </div>
+            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {formatNumber(solarFilteredMetrics.poi2PeakDemand)} kW
             </div>
-            <div className="mt-1 text-[10px] text-slate-400">Puncak beban {solarFilteredMetrics.periodLabel}</div>
+            <div className="mt-1 text-[10px] text-slate-400 truncate" title={`Puncak beban ${solarFilteredMetrics.periodLabel}`}>
+              Puncak beban {solarFilteredMetrics.periodLabel}
+            </div>
           </div>
         </div>
       </div>
 
       {/* ═══════════ SECTION E: SOLAR PANEL CHART + DONUT ═══════════ */}
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <section className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between transition-opacity duration-150 ${isSolarFilterPending ? "opacity-75" : "opacity-100"}`}>
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div className="flex flex-wrap items-center gap-3">
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr] items-stretch">
+        <section className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between h-full min-h-[440px] transition-opacity duration-150 ${isSolarFilterPending ? "opacity-75" : "opacity-100"}`}>
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Trend Produksi Solar Panel (PLTS)</h3>
@@ -5353,7 +5811,7 @@ export default function Electricity() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
+            <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2">
               {/* Year / Month / Date Pickers */}
               {(solarRange === "ytd" || solarRange === "day" || solarRange === "month") && (
                 <select
@@ -5440,14 +5898,14 @@ export default function Electricity() {
               </div>
             </div>
           </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[256px]">
-            <div style={{ height: 256 }}>
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[260px] flex flex-col justify-center">
+            <div className="h-[260px] w-full">
               <Bar data={solarBarData} options={solarBarOptions} />
             </div>
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between h-full min-h-[440px]">
           <div>
             <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Distribusi Beban PLTS</h3>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Perbandingan produksi POI-1 vs POI-2.</p>
@@ -5478,7 +5936,7 @@ export default function Electricity() {
 
             return (
               <>
-                <div className="my-6 flex justify-center">
+                <div className="my-auto py-4 flex justify-center">
                   <DonutChart 
                     segments={segments} 
                     size={150} 
@@ -5487,7 +5945,7 @@ export default function Electricity() {
                     centerLabelSize="text-[11px]" 
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 mt-auto">
                   {solarShowPoi1 && (
                     <div className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5">
                       <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">

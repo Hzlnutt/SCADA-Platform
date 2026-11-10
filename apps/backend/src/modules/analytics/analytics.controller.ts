@@ -10,7 +10,7 @@ import { getPostgresPool } from "../../database/postgres";
 import { defaultWaterConfig } from "../config/config.controller";
 import { calculateWaterCost } from "../../utils/water";
 import { getElectricityExportData, generateElectricityExcelWorkbook } from "./electricity.export";
-import { getIncomingHourlyTrend, getLatestIncomingTelemetry, getLatestEwGroupTelemetry, getSyncedNow, getWibDateTime } from "../../core/scheduler";
+import { getIncomingHourlyTrend, getLatestIncomingTelemetry, getLatestEwGroupTelemetry, getLatestEwLiveRecords, getSyncedNow, getWibDateTime } from "../../core/scheduler";
 import { getIncomingTrend1hFromDb } from "./electricity.analytics";
 
 export const getAnalyticsSummaryHandler = async (
@@ -84,6 +84,15 @@ export const getElectricityAnalyticsHandler = async (
 
     if (electricityAnalyticsInflight.has(cacheKey)) {
       const data = await electricityAnalyticsInflight.get(cacheKey);
+      const livePq = getLatestIncomingTelemetry(deviceId);
+      if (livePq && livePq.pqData) {
+        return res.json({
+          data: {
+            ...data,
+            pqData: livePq.pqData
+          }
+        });
+      }
       return res.json({ data });
     }
 
@@ -102,6 +111,15 @@ export const getElectricityAnalyticsHandler = async (
 
     electricityAnalyticsInflight.set(cacheKey, queryPromise);
     const data = await queryPromise;
+    const livePq = getLatestIncomingTelemetry(deviceId);
+    if (livePq && livePq.pqData) {
+      return res.json({
+        data: {
+          ...data,
+          pqData: livePq.pqData
+        }
+      });
+    }
     res.json({ data });
   } catch (err) {
     next(err);
@@ -400,6 +418,11 @@ export const getPowerMetersLatestHandler = async (
 ) => {
   try {
     const group = ((req.query.group as string) || "ew23").toLowerCase();
+    const live = getLatestEwLiveRecords(group);
+    if (live && live.length > 0) {
+      return res.json({ data: live });
+    }
+
     const pool = getPostgresPool();
 
     const dbRes = await pool.query(`
@@ -428,6 +451,7 @@ export const getPowerMetersLatestHandler = async (
           }
           if (plnRes.rows.length > 0) {
             const pln = plnRes.rows[0];
+            const isPlnOnline = pln.status_pm8000 !== null ? !!pln.status_pm8000 : true;
             data.push({
               id: 410,
               t_stamp: pln.t_stamp,
@@ -473,6 +497,7 @@ export const getPowerMetersLatestHandler = async (
           `);
           if (wf1Res.rows.length > 0) {
             const wf1 = wf1Res.rows[0];
+            const isWf1Online = wf1.status_pm5500 !== null ? !!wf1.status_pm5500 : true;
             data.push({
               id: 411,
               t_stamp: wf1.t_stamp,
@@ -518,6 +543,7 @@ export const getPowerMetersLatestHandler = async (
           `);
           if (wf2Res.rows.length > 0) {
             const wf2 = wf2Res.rows[0];
+            const isWf2Online = wf2.status_pm5500 !== null ? !!wf2.status_pm5500 : true;
             data.push({
               id: 412,
               t_stamp: wf2.t_stamp,
@@ -576,7 +602,6 @@ export const getPowerMetersLatestHandler = async (
       }
       data = Array.from(mergedMap.values());
     }
-
     const pmOrder: Record<string, number> = {
       PM318: 10, PM319: 20, PM320: 30, PM321: 40, PM322: 50,
       PM323: 60, PM324: 70, PM325: 80, PM327: 90, PM337: 100,
@@ -669,6 +694,7 @@ export const getPowerMeterHistoryHandler = async (
           to_char(t_stamp, 'HH24:MI:SS') as label,
           (extract(epoch from (t_stamp AT TIME ZONE 'Asia/Jakarta')) * 1000)::bigint as ts,
           extract(hour from t_stamp)::int as hour,
+          status,
           volt_ab::numeric(12,2) as volt_ab,
           volt_bc::numeric(12,2) as volt_bc,
           volt_ca::numeric(12,2) as volt_ca,
@@ -1962,6 +1988,30 @@ export async function computeEquipmentMonthlyBatch(
   return queryPromise;
 }
 
+export function getPmMaxHourlyKwh(pmId: string): number {
+  const id = (pmId || "").toUpperCase();
+  if (id === "PM410") return 3500;
+  if (id === "PM411" || id === "PM412") return 2500;
+
+  // Distribution Panels (MDP, PUTR, MCC)
+  if (["PM132", "PM133", "PM135", "PM136", "PM139", "PM175", "PM201", "PM202", "PM210", "PM327", "PM337"].includes(id)) {
+    return 1000;
+  }
+
+  // Large Chillers, HVAC & Compressors (100kW - 300kW)
+  if (["PM185", "PM205", "PM226", "PM229", "PM271", "PM319", "PM272", "PM209", "PM274", "PM180", "PM214"].includes(id)) {
+    return 500;
+  }
+
+  // Medium equipment (Boiler, Heaters, Air Compressors, AHU: 30 - 75 kW)
+  if (["PM140", "PM151", "PM153", "PM177", "PM178", "PM179", "PM182", "PM183", "PM184", "PM203", "PM211", "PM212", "PM213", "PM215", "PM288", "PM291", "PM318", "PM320", "PM321", "PM322", "PM323", "PM324", "PM325"].includes(id)) {
+    return 200;
+  }
+
+  // Pumps, Fans, Lighting, Warehouses, Labs (PM134, PM152, PM154, PM176, PM181, PM206, PM273, PM292, etc.)
+  return 100;
+}
+
 async function doComputeEquipmentMonthlyBatch(
   currentMonth: string,
   comparisonMonth: string
@@ -1992,6 +2042,7 @@ async function doComputeEquipmentMonthlyBatch(
       UPPER(pm_id) as pm_id,
       t_stamp,
       active_energy::float as value,
+      active_power_total::float as power,
       status
     FROM electric_pm_telemetry
     WHERE t_stamp >= $1 AND t_stamp <= $2
@@ -2008,6 +2059,7 @@ async function doComputeEquipmentMonthlyBatch(
         'PM410' as pm_id,
         t_stamp,
         active_energy::float as value,
+        active_power::float as power,
         status_pm8000 as status
       FROM electric_pln_telemetry
       WHERE t_stamp >= $1 AND t_stamp <= $2
@@ -2018,6 +2070,7 @@ async function doComputeEquipmentMonthlyBatch(
         'PM411' as pm_id,
         t_stamp,
         active_energy::float as value,
+        active_power_total::float as power,
         status_pm5500 as status
       FROM electric_wf1_telemetry
       WHERE t_stamp >= $1 AND t_stamp <= $2
@@ -2028,6 +2081,7 @@ async function doComputeEquipmentMonthlyBatch(
         'PM412' as pm_id,
         t_stamp,
         active_energy::float as value,
+        active_power_total::float as power,
         status_pm5500 as status
       FROM electric_wf2_telemetry
       WHERE t_stamp >= $1 AND t_stamp <= $2
@@ -2046,6 +2100,7 @@ async function doComputeEquipmentMonthlyBatch(
           UPPER(pm_id) as pm_id,
           t_stamp,
           active_energy::float as value,
+          active_power_total::float as power,
           status
         FROM electric_pm_telemetry_minute
         WHERE active_energy IS NOT NULL
@@ -2056,9 +2111,9 @@ async function doComputeEquipmentMonthlyBatch(
       minuteRows = pmMinRes.rows;
 
       const [plnMin, wf1Min, wf2Min] = await Promise.all([
-        pool.query(`SELECT 'PM410' as pm_id, t_stamp, active_energy::float as value, status_pm8000 as status FROM electric_pln_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`),
-        pool.query(`SELECT 'PM411' as pm_id, t_stamp, active_energy::float as value, status_pm5500 as status FROM electric_wf1_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`),
-        pool.query(`SELECT 'PM412' as pm_id, t_stamp, active_energy::float as value, status_pm5500 as status FROM electric_wf2_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`)
+        pool.query(`SELECT 'PM410' as pm_id, t_stamp, active_energy::float as value, active_power::float as power, status_pm8000 as status FROM electric_pln_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`),
+        pool.query(`SELECT 'PM411' as pm_id, t_stamp, active_energy::float as value, active_power_total::float as power, status_pm5500 as status FROM electric_wf1_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`),
+        pool.query(`SELECT 'PM412' as pm_id, t_stamp, active_energy::float as value, active_power_total::float as power, status_pm5500 as status FROM electric_wf2_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`)
       ]);
       minuteRows.push(...plnMin.rows, ...wf1Min.rows, ...wf2Min.rows);
     } catch (e: any) {
@@ -2067,13 +2122,14 @@ async function doComputeEquipmentMonthlyBatch(
   }
 
   // Group records by pm_id
-  const pmRecords = new Map<string, { ts: Date; value: number | null; status?: boolean }[]>();
+  const pmRecords = new Map<string, { ts: Date; value: number | null; power: number | null; status?: boolean }[]>();
   const addRow = (row: any) => {
     const id = row.pm_id;
     if (!pmRecords.has(id)) pmRecords.set(id, []);
     pmRecords.get(id)!.push({
       ts: new Date(row.t_stamp),
       value: row.value !== null ? Number(row.value) : null,
+      power: row.power !== null && row.power !== undefined ? Number(row.power) : null,
       status: row.status !== false
     });
   };
@@ -2093,6 +2149,7 @@ async function doComputeEquipmentMonthlyBatch(
         list.push({
           ts: mTs,
           value: Number(mRow.value),
+          power: mRow.power !== null && mRow.power !== undefined ? Number(mRow.power) : null,
           status: mRow.status !== false
         });
       }
@@ -2157,6 +2214,7 @@ async function doComputeEquipmentMonthlyBatch(
 
     const currDaily = new Array(daysInCurr).fill(0);
     const compDaily = new Array(daysInComp).fill(0);
+    let consecutiveStaleCount = 0;
 
     for (let i = 1; i < records.length; i++) {
       const prev = records[i - 1];
@@ -2166,11 +2224,35 @@ async function doComputeEquipmentMonthlyBatch(
       const timeDiffMs = curr.ts.getTime() - prev.ts.getTime();
 
       let diff = 0;
-      if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal)) {
+      // Sesuai aturan: data sebelumnya dan data saat ini harus bernilai (> 0 dan tidak null)
+      if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal) && currVal > 0 && prevVal > 0) {
         if (timeDiffMs <= 90 * 60 * 1000) {
-          diff = currVal - prevVal;
-          if (diff < 0 || diff > 20000) diff = 0;
+          const rawDiff = currVal - prevVal;
+          const maxKwh = getPmMaxHourlyKwh(pmId);
+          const powerEst = (curr.power !== null && curr.power !== undefined && !isNaN(curr.power) && curr.power >= 0) ? curr.power : 0;
+
+          // Validasi fisik kelistrikan:
+          // 1. rawDiff tidak boleh negatif (counter reset / register flip -> diff = 0)
+          // 2. rawDiff tidak boleh melebihi kapasitas fisik motor/panel (maxKwh)
+          // 3. Jika sensor sebelumnya beku/stale (>= 4 jam), lonjakan saat tersambung kembali adalah akumulasi multi-jam/multi-hari, bukan 1 jam
+          // 4. Jika powerEst terbaca, rawDiff tidak boleh melonjak drastis melebihi kapasitas (maks 4x powerEst + 30)
+          if (rawDiff >= 0 && rawDiff <= maxKwh) {
+            if (consecutiveStaleCount >= 4) {
+              diff = 0; // Filter lonjakan rekoneksi sensor setelah offline
+            } else if (powerEst > 0 && rawDiff > Math.max(powerEst * 4, 30)) {
+              diff = 0; // Filter lonjakan anomali register meter
+            } else {
+              diff = rawDiff;
+            }
+          }
         }
+      }
+
+      // Lacak apakah nilai active_energy beku/identik
+      if (currVal !== null && prevVal !== null && currVal === prevVal) {
+        consecutiveStaleCount++;
+      } else {
+        consecutiveStaleCount = 0;
       }
 
       // Date string in WIB (GMT+7)
@@ -2373,7 +2455,25 @@ export const getIncomingHourlyTrendHandler = async (req: Request, res: Response,
   try {
     const { deviceId } = req.query;
     const dev = typeof deviceId === "string" ? deviceId : "Cubicle_PLN_PM8000";
-    const points = await getIncomingTrend1hFromDb(dev);
+    const dbPoints = await getIncomingTrend1hFromDb(dev);
+    const memTrend = getIncomingHourlyTrend(dev);
+    const memPoints = memTrend?.points || [];
+
+    // Merge DB points and live memory points seamlessly so real-time stream is never truncated
+    const bucketMap = new Map<number, any>();
+    for (const p of dbPoints) {
+      if (p.ts) {
+        const bucket = Math.round(Number(p.ts) / 3000) * 3000;
+        bucketMap.set(bucket, p);
+      }
+    }
+    for (const p of memPoints) {
+      if (p.ts) {
+        const bucket = Math.round(Number(p.ts) / 3000) * 3000;
+        bucketMap.set(bucket, p);
+      }
+    }
+    const points = Array.from(bucketMap.values()).sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
     const wib = getWibDateTime(new Date());
     const telemetry = getLatestIncomingTelemetry(dev);
     res.json({ success: true, data: { hour: wib.hour, points, telemetry } });

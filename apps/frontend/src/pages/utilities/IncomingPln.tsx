@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { usePageActive } from "../../hooks/usePageActive";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Line, Radar } from "react-chartjs-2";
+import { Chart as ChartJS } from "chart.js";
 import "../../components/charts/chartjs";
 import { getJson, postJson } from "../../services/api.client";
 import { getSocket } from "../../services/socket.service";
@@ -53,15 +54,18 @@ function UnbalancedGauge({
   value,
   maxAllowed,
   isDark,
-  isLoading = false
+  isLoading = false,
+  isPmOnline = true
 }: {
   label: string;
-  value: number | string;
+  value: number | string | null | undefined;
   maxAllowed: number;
   isDark: boolean;
   isLoading?: boolean;
+  isPmOnline?: boolean;
 }) {
-  const isOffline = typeof value === "string" && (value.includes("API") || value === "xx" || value.includes("xx") || value.includes("TIDAK"));
+  const isDead = value === "PM OFFLINE";
+  const isOffline = isDead || value === null || value === undefined || (typeof value === "string" && (value.includes("API") || value === "xx" || value.includes("TIDAK")));
   const numVal = isOffline ? 0 : Number(value) || 0;
   
   const percentage = Math.min(100, (numVal / maxAllowed) * 100);
@@ -106,6 +110,11 @@ function UnbalancedGauge({
         <div className="absolute bottom-2 text-center flex flex-col items-center justify-center w-full px-1">
           {isLoading ? (
             <span className="h-6 w-16 bg-slate-200 dark:bg-slate-700/60 rounded-md animate-pulse inline-block" />
+          ) : isDead ? (
+            <div className="flex flex-col items-center">
+              <span className="text-2xl font-black font-mono text-slate-400 dark:text-slate-600 leading-none">—</span>
+              <span className="text-[9px] font-black uppercase text-rose-500 tracking-wider mt-0.5">PM MATI</span>
+            </div>
           ) : isOffline ? (
             <span className="text-[9px] font-bold font-mono text-amber-500 uppercase leading-none text-center select-none break-all">{value === "BELUM ADA API" ? "BELUM ADA API" : "GAGAL POLLING API"}</span>
           ) : (
@@ -120,6 +129,10 @@ function UnbalancedGauge({
       {isLoading ? (
         <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-sky-500/10 border border-sky-500/20 text-[10px] font-extrabold uppercase text-sky-500 animate-pulse tracking-wider">
           MEMUAT DATA...
+        </div>
+      ) : isDead ? (
+        <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-rose-500/10 border border-rose-500/25 text-[10px] font-black uppercase text-rose-500 tracking-wider">
+          ✕ PM MATI (OFFLINE)
         </div>
       ) : isOffline ? (
         <div className="w-full mt-4 py-1.5 rounded-lg text-center bg-amber-500/10 border border-amber-500/20 text-[10px] font-extrabold uppercase text-amber-500 tracking-wider">
@@ -138,10 +151,61 @@ function UnbalancedGauge({
   );
 }
 
+function parseBoolStatus(val: any): boolean | null {
+  if (val === undefined || val === null) return null;
+  if (typeof val === "boolean") return val;
+  if (typeof val === "number") return val !== 0;
+  if (typeof val === "string") {
+    const s = val.trim().toLowerCase();
+    if (s === "false" || s === "0" || s === "offline" || s === "mati" || s === "disconnected") return false;
+    if (s === "true" || s === "1" || s === "online" || s === "connected") return true;
+  }
+  return Boolean(val);
+}
+
+function checkDeviceStatus(data: any, currentMode: "pln" | "fact1" | "fact2"): boolean | null {
+  if (!data || typeof data !== "object") return null;
+
+  const tryKeys = (keys: string[]): boolean | null => {
+    for (const k of keys) {
+      if (data[k] !== undefined) {
+        const parsed = parseBoolStatus(data[k]);
+        if (parsed !== null) return parsed;
+      }
+    }
+    return null;
+  };
+
+  if (currentMode === "pln") {
+    const res = tryKeys(["Status_PM8000", "status_pm8000", "Status_PM800", "status_pm800", "Status_PLN", "status_pln"]);
+    if (res !== null) return res;
+  } else if (currentMode === "fact1") {
+    const res = tryKeys([
+      "Status_PM5500_WF1", "status_pm5500_wf1",
+      "Status_PM5560", "status_pm5560",
+      "Status_PM5500", "status_pm5500",
+      "Status_WF1", "status_wf1"
+    ]);
+    if (res !== null) return res;
+  } else if (currentMode === "fact2") {
+    const res = tryKeys([
+      "Status_PM5500_WF2", "status_pm5500_wf2",
+      "Status_PM5500", "status_pm5500",
+      "Status_PM5500_WF1", "Status_PM5560",
+      "Status_WF2", "status_wf2"
+    ]);
+    if (res !== null) return res;
+  }
+
+  return tryKeys(["status", "Status", "online", "Online", "connected", "Connected"]);
+}
+
 /* ═══════════ MAIN COMPONENT ═══════════ */
 export default function IncomingPln() {
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
+  const socketStatus = useSystemStore((state) => state.socketStatus);
+  const isGatewayOffline = socketStatus === "disconnected";
   const location = useLocation();
 
   // Standards configuration state
@@ -225,6 +289,7 @@ export default function IncomingPln() {
         title: "Incoming Fact-1 20 kV — Feeder WF1",
         connectedLabel: "FACT-1 CONNECTED",
         deviceId: "Feeder_WF1_PM5560",
+        pmModel: "PM5560",
         activePowerBase: 0,
         voltageBase: 0,
         pfBase: 0,
@@ -239,6 +304,7 @@ export default function IncomingPln() {
         title: "Incoming Fact-2 20 kV — Feeder WF2",
         connectedLabel: "FACT-2 CONNECTED",
         deviceId: "Feeder_WF2_PM5500",
+        pmModel: "PM5500",
         activePowerBase: 0,
         voltageBase: 0,
         pfBase: 0,
@@ -253,6 +319,7 @@ export default function IncomingPln() {
       title: "Incoming PLN 20 kV — Sumber Utama",
       connectedLabel: "PLN CONNECTED",
       deviceId: "Cubicle_PLN_PM8000",
+      pmModel: "PM8000",
       activePowerBase: 0,
       voltageBase: 0,
       pfBase: 0,
@@ -365,6 +432,35 @@ export default function IncomingPln() {
     isConnected: true
   });
 
+  const isPmOnline = useMemo(() => {
+    // 0. If gateway is disconnected, mark PM as offline immediately
+    if (isGatewayOffline) return false;
+
+    // 1. Check all payloads currently in apiLiveData for an explicit offline status (e.g. Status_PM8000: false)
+    for (const payload of Object.values(apiLiveData)) {
+      if (payload && typeof payload === "object") {
+        const st = checkDeviceStatus(payload, mode);
+        if (st === false) return false;
+      }
+    }
+
+    // 2. Direct default URL check
+    const defaultUrl = DEFAULT_API_URLS[mode] || "";
+    const activeUrl = Object.keys(apiLiveData).find(u => u && apiLiveData[u]) || defaultUrl;
+    const directPayload = apiLiveData[activeUrl] || apiLiveData[defaultUrl];
+    if (directPayload) {
+      const directSt = checkDeviceStatus(directPayload, mode);
+      if (directSt === false) return false;
+      if (directSt === true) return true;
+    }
+
+    // 3. If API poll explicitly failed for this URL
+    if (directPayload === null && !metrics.isConnected) return false;
+
+    // 4. Fallback to metrics socket / REST telemetry status
+    return metrics.isConnected;
+  }, [mode, apiLiveData, metrics.isConnected, isGatewayOffline]);
+
 interface HourlyTrend5sPoint {
   time: string;
   hour: number;
@@ -401,18 +497,301 @@ interface HourlyTrend5sPoint {
     } catch (e) {}
     return [];
   });
-  const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
 
-  // 5-second clock ticker to keep rolling sliding window advancing smoothly in real time
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 5000);
-    return () => clearInterval(timer);
-  }, []);
+  // Continuous 1-Hour Rolling 3-Second Window (FIFO window derived directly from telemetry stream)
+  const rollingTrendData = useMemo(() => {
+    if (!hourlyTrend5s || hourlyTrend5s.length === 0) {
+      return {
+        labels: [],
+        vRData: [],
+        vSData: [],
+        vTData: [],
+        activePowerData: [],
+        rangeLabel: "--:-- - --:--"
+      };
+    }
+
+    // Sort strictly chronological
+    const sorted = [...hourlyTrend5s].sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
+    // Keep strictly up to 1200 points (1 hour at 3s intervals)
+    const windowPoints = sorted.length > 1200 ? sorted.slice(sorted.length - 1200) : sorted;
+
+    const labels: string[] = [];
+    const vRData: (number | null)[] = [];
+    const vSData: (number | null)[] = [];
+    const vTData: (number | null)[] = [];
+    const activePowerData: (number | null)[] = [];
+
+    for (let i = 0; i < windowPoints.length; i++) {
+      const pt = windowPoints[i];
+      const prevPt = i > 0 ? windowPoints[i - 1] : null;
+
+      // If there is an actual data outage gap (> 15 seconds) between consecutive records, insert a break
+      if (prevPt && pt.ts && prevPt.ts && (Number(pt.ts) - Number(prevPt.ts) > 15000)) {
+        labels.push("");
+        vRData.push(null);
+        vSData.push(null);
+        vTData.push(null);
+        activePowerData.push(null);
+      }
+
+      labels.push(pt.time || "");
+
+      const vr = pt.vR !== undefined && pt.vR > 0 ? pt.vR : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
+      const vs = pt.vS !== undefined && pt.vS > 0 ? pt.vS : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
+      const vt = pt.vT !== undefined && pt.vT > 0 ? pt.vT : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
+      vRData.push(vr !== null ? Number(vr.toFixed(3)) : null);
+      vSData.push(vs !== null ? Number(vs.toFixed(3)) : null);
+      vTData.push(vt !== null ? Number(vt.toFixed(3)) : null);
+
+      const ap = typeof pt.activePower === "number" ? Math.abs(Number(pt.activePower.toFixed(1))) : null;
+      activePowerData.push(ap);
+    }
+
+    const startLabel = windowPoints[0]?.time?.substring(0, 5) || "--:--";
+    const endLabel = windowPoints[windowPoints.length - 1]?.time?.substring(0, 5) || "--:--";
+    const rangeLabel = `${startLabel} - ${endLabel}`;
+
+    return {
+      labels,
+      vRData,
+      vSData,
+      vTData,
+      activePowerData,
+      rangeLabel
+    };
+  }, [hourlyTrend5s]);
 
   const lastTrendHourRef = useRef<number>(-1);
   const [zoomTrend, setZoomTrend] = useState<"voltage" | "power" | null>(null);
+  const [zoomIndexRange, setZoomIndexRange] = useState<{ min: number; max: number } | null>(null);
+  const [zoomRangeY, setZoomRangeY] = useState<{ min: number; max: number } | null>(null);
+  const zoomIndexRangeRef = useRef(zoomIndexRange);
+  zoomIndexRangeRef.current = zoomIndexRange;
+  const zoomRangeYRef = useRef(zoomRangeY);
+  zoomRangeYRef.current = zoomRangeY;
+
+  const zoomChartRef = useRef<ChartJS<"line"> | null>(null);
+  const zoomContainerRef = useRef<HTMLDivElement>(null);
+
+  const zoomDragRef = useRef<{
+    isDragging: boolean;
+    mode: "body-pan" | "y-axis" | null;
+    startX: number;
+    startY: number;
+    initMinIdx: number;
+    initMaxIdx: number;
+    initMinY: number;
+    initMaxY: number;
+  }>({
+    isDragging: false,
+    mode: null,
+    startX: 0,
+    startY: 0,
+    initMinIdx: 0,
+    initMaxIdx: 0,
+    initMinY: 0,
+    initMaxY: 0,
+  });
+
+  useEffect(() => {
+    setZoomIndexRange(null);
+    setZoomRangeY(null);
+  }, [zoomTrend, mode]);
+
+  // TradingView Style Chart Navigation for Incoming PLN Modal:
+  // - LMB Drag: Pan time slice (or stretch vertical scale on left Y-axis)
+  // - Mouse Wheel: Zoom time window on body; Zoom vertical height on left Y-axis
+  // - Double Click: Reset to Full Auto-Fit View
+  useEffect(() => {
+    if (!zoomTrend) return;
+    const container = zoomContainerRef.current;
+    if (!container) return;
+
+    const getChartMetrics = () => {
+      const chart = zoomChartRef.current;
+      const canvas = chart?.canvas;
+      const rect = canvas ? canvas.getBoundingClientRect() : container.getBoundingClientRect();
+      const chartArea = chart?.chartArea ?? {
+        left: 65,
+        right: rect.width - 20,
+        top: 30,
+        bottom: rect.height - 30,
+        width: rect.width - 85,
+        height: rect.height - 60,
+      };
+      return { chart, canvas, rect, chartArea };
+    };
+
+    const handleMouseMoveHover = (e: MouseEvent) => {
+      if (zoomDragRef.current.isDragging) return;
+      const { canvas, rect, chartArea } = getChartMetrics();
+      if (!canvas) return;
+      const mouseX = e.clientX - rect.left;
+      if (mouseX < chartArea.left) {
+        canvas.style.cursor = "ns-resize";
+        canvas.title = "Scroll atau drag vertikal untuk mengatur tinggi/skala Y";
+      } else {
+        canvas.style.cursor = "grab";
+        canvas.title = "Hold LMB lalu geser untuk navigasi; Scroll untuk zoom waktu";
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const { chart, rect, chartArea } = getChartMetrics();
+      const mouseX = e.clientX - rect.left;
+      const isYAxisZone = mouseX < chartArea.left;
+      const totalPoints = rollingTrendData.labels.length;
+      if (totalPoints <= 1) return;
+
+      if (isYAxisZone) {
+        setZoomRangeY((prevY) => {
+          const curMin = prevY ? prevY.min : (chart?.scales?.y?.min ?? (zoomTrend === "voltage" ? 18 : 0));
+          const curMax = prevY ? prevY.max : (chart?.scales?.y?.max ?? (zoomTrend === "voltage" ? 23 : 1500));
+          const span = Math.max(0.1, curMax - curMin);
+
+          const mouseY = e.clientY - rect.top;
+          const ratioY = Math.max(0, Math.min(1, (chartArea.bottom - mouseY) / Math.max(1, chartArea.height)));
+          const anchorVal = curMin + ratioY * span;
+
+          const factor = e.deltaY < 0 ? 0.85 : 1.18;
+          const newSpan = Math.max(0.2, span * factor);
+          const newMin = anchorVal - ratioY * newSpan;
+          const newMax = newMin + newSpan;
+          return { min: newMin, max: newMax };
+        });
+      } else {
+        setZoomIndexRange((prevRange) => {
+          const curMin = prevRange ? prevRange.min : 0;
+          const curMax = prevRange ? prevRange.max : totalPoints;
+          const span = Math.max(5, curMax - curMin);
+          const factor = e.deltaY < 0 ? 0.82 : 1.22;
+          let newSpan = span * factor;
+          newSpan = Math.max(5, Math.min(totalPoints, newSpan));
+
+          const plotLeft = chartArea.left;
+          const plotWidth = Math.max(10, chartArea.width);
+          const ratio = Math.max(0, Math.min(1, (mouseX - plotLeft) / plotWidth));
+          const centerIdx = curMin + ratio * span;
+
+          const newMin = Math.max(0, centerIdx - ratio * newSpan);
+          const newMax = Math.min(totalPoints, newMin + newSpan);
+          return { min: newMin, max: newMax };
+        });
+      }
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      const { chart, canvas, rect, chartArea } = getChartMetrics();
+      const mouseX = e.clientX - rect.left;
+      const isYAxisZone = mouseX < chartArea.left;
+      const totalPoints = rollingTrendData.labels.length;
+
+      const curMinIdx = zoomIndexRangeRef.current ? zoomIndexRangeRef.current.min : 0;
+      const curMaxIdx = zoomIndexRangeRef.current ? zoomIndexRangeRef.current.max : totalPoints;
+      const curMinY = zoomRangeYRef.current ? zoomRangeYRef.current.min : (chart?.scales?.y?.min ?? (zoomTrend === "voltage" ? 18 : 0));
+      const curMaxY = zoomRangeYRef.current ? zoomRangeYRef.current.max : (chart?.scales?.y?.max ?? (zoomTrend === "voltage" ? 23 : 1500));
+
+      zoomDragRef.current = {
+        isDragging: true,
+        mode: isYAxisZone ? "y-axis" : "body-pan",
+        startX: e.clientX,
+        startY: e.clientY,
+        initMinIdx: curMinIdx,
+        initMaxIdx: curMaxIdx,
+        initMinY: curMinY,
+        initMaxY: curMaxY,
+      };
+
+      if (canvas) {
+        canvas.style.cursor = isYAxisZone ? "ns-resize" : "grabbing";
+      }
+    };
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (!zoomDragRef.current.isDragging) return;
+      const { chartArea } = getChartMetrics();
+      const { mode, startX, startY, initMinIdx, initMaxIdx, initMinY, initMaxY } = zoomDragRef.current;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const totalPoints = rollingTrendData.labels.length;
+
+      if (mode === "body-pan") {
+        const plotWidth = Math.max(10, chartArea.width);
+        const spanIdx = initMaxIdx - initMinIdx;
+        const ptsPerPixel = spanIdx / plotWidth;
+        const shift = dx * ptsPerPixel;
+        let newMin = initMinIdx - shift;
+        let newMax = initMaxIdx - shift;
+        if (newMin < 0) {
+          newMax -= newMin;
+          newMin = 0;
+        }
+        if (newMax > totalPoints) {
+          newMin -= (newMax - totalPoints);
+          newMax = totalPoints;
+          if (newMin < 0) newMin = 0;
+        }
+        setZoomIndexRange({ min: newMin, max: newMax });
+
+        if (zoomRangeYRef.current) {
+          const plotHeight = Math.max(10, chartArea.height);
+          const spanY = initMaxY - initMinY;
+          const yPerPixel = spanY / plotHeight;
+          const shiftY = dy * yPerPixel;
+          setZoomRangeY({ min: initMinY + shiftY, max: initMaxY + shiftY });
+        }
+      } else if (mode === "y-axis") {
+        const { rect } = getChartMetrics();
+        const plotHeight = Math.max(10, chartArea.height);
+        const spanY = Math.max(0.1, initMaxY - initMinY);
+        const scaleMultiplier = Math.exp((dy / Math.max(50, plotHeight)) * 1.5);
+        const newSpan = Math.max(0.1, spanY * scaleMultiplier);
+        const initMouseY = startY - rect.top;
+        const anchorRatio = Math.max(0, Math.min(1, (chartArea.bottom - initMouseY) / Math.max(1, chartArea.height)));
+        const anchorVal = initMinY + anchorRatio * spanY;
+        const newMin = anchorVal - anchorRatio * newSpan;
+        const newMax = newMin + newSpan;
+        setZoomRangeY({ min: newMin, max: newMax });
+      }
+    };
+
+    const handleWindowMouseUp = (e: MouseEvent) => {
+      if (zoomDragRef.current.isDragging) {
+        zoomDragRef.current.isDragging = false;
+        const { canvas, rect, chartArea } = getChartMetrics();
+        if (canvas) {
+          const mouseX = e.clientX - rect.left;
+          canvas.style.cursor = mouseX < chartArea.left ? "ns-resize" : "grab";
+        }
+      }
+    };
+
+    const handleDoubleClick = () => {
+      setZoomIndexRange(null);
+      setZoomRangeY(null);
+    };
+
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    container.addEventListener("mousemove", handleMouseMoveHover);
+    container.addEventListener("mousedown", handleMouseDown);
+    container.addEventListener("dblclick", handleDoubleClick);
+    window.addEventListener("mousemove", handleWindowMouseMove);
+    window.addEventListener("mouseup", handleWindowMouseUp);
+
+    return () => {
+      container.removeEventListener("wheel", handleWheel);
+      container.removeEventListener("mousemove", handleMouseMoveHover);
+      container.removeEventListener("mousedown", handleMouseDown);
+      container.removeEventListener("dblclick", handleDoubleClick);
+      window.removeEventListener("mousemove", handleWindowMouseMove);
+      window.removeEventListener("mouseup", handleWindowMouseUp);
+    };
+  }, [zoomTrend, rollingTrendData.labels.length]);
 
   useEffect(() => {
     if (!zoomTrend) return;
@@ -426,7 +805,9 @@ interface HourlyTrend5sPoint {
   }, [zoomTrend]);
 
   const voltageStats = useMemo(() => {
-    const oneHourAgo = Date.now() - 3600 * 1000;
+    if (!hourlyTrend5s || hourlyTrend5s.length === 0) return null;
+    const latestTs = Number(hourlyTrend5s[hourlyTrend5s.length - 1]?.ts) || Date.now();
+    const oneHourAgo = latestTs - 3600 * 1000;
     const pts = hourlyTrend5s.filter(p => p.ts && Number(p.ts) >= oneHourAgo && ((p.voltage !== undefined && p.voltage > 0) || (p.vR !== undefined && p.vR > 0)));
     if (pts.length === 0) return null;
     const latest = pts[pts.length - 1];
@@ -446,7 +827,9 @@ interface HourlyTrend5sPoint {
   }, [hourlyTrend5s]);
 
   const powerStats = useMemo(() => {
-    const oneHourAgo = Date.now() - 3600 * 1000;
+    if (!hourlyTrend5s || hourlyTrend5s.length === 0) return null;
+    const latestTs = Number(hourlyTrend5s[hourlyTrend5s.length - 1]?.ts) || Date.now();
+    const oneHourAgo = latestTs - 3600 * 1000;
     const pts = hourlyTrend5s.filter(p => p.ts && Number(p.ts) >= oneHourAgo && typeof p.activePower === "number");
     if (pts.length === 0) return null;
     const latest = pts[pts.length - 1];
@@ -467,6 +850,11 @@ interface HourlyTrend5sPoint {
   const [events, setEvents] = useState(MOCK_EVENTS);
 
   const getApiVal = useCallback((tagKey: string) => {
+    // If PM is detected offline, NEVER return stale / cached values
+    if (!isPmOnline) {
+      return "PM OFFLINE";
+    }
+
     const rawKey = tagKey.includes("/") ? tagKey.split("/")[1] : tagKey;
     const defaultUrl = DEFAULT_API_URLS[mode] || "";
     const url = apiSourceUrls[tagKey] || defaultUrl;
@@ -505,9 +893,25 @@ interface HourlyTrend5sPoint {
         if ((rawKey === "voltage" || rawKey === "v_r" || rawKey === "v_s" || rawKey === "v_t") && typeof val === "number" && val > 1000) {
           val = val / 1000.0;
         }
-        // Unbalances & THD (convert decimal 0.0055 to %)
-        if ((rawKey.startsWith("unbalance_") || rawKey.startsWith("thd_")) && typeof val === "number" && val < 1.0) {
-          val = val * 100.0;
+        // Unbalances & THD (convert decimal 0.0055 to % for PLN, preserve % for WF1/WF2)
+        if (rawKey.startsWith("unbalance_v")) {
+          if (mode === "pln" && typeof val === "number" && val < 0.1) {
+            val = val * 100.0;
+          } else if (typeof val === "number" && val < 0.05) {
+            val = val * 100.0;
+          }
+        } else if (rawKey.startsWith("unbalance_i")) {
+          if (mode === "pln" && typeof val === "number" && val < 0.1) {
+            val = val * 100.0;
+          } else if (typeof val === "number" && val < 0.05) {
+            val = val * 100.0;
+          }
+        } else if (rawKey.startsWith("thd_")) {
+          if (mode === "pln" && typeof val === "number" && val < 1.0) {
+            val = val * 100.0;
+          } else if (typeof val === "number" && val < 0.05) {
+            val = val * 100.0;
+          }
         }
         // Power factor convert negative to positive
         if (rawKey === "power_factor" && typeof val === "number") {
@@ -519,7 +923,7 @@ interface HourlyTrend5sPoint {
 
     // If direct live API poll is unavailable for this URL, fallback to backend WebSocket/telemetry metrics first
     if (url && apiLiveData[url] === null && (!metrics || !metrics.isConnected)) {
-      return "GAGAL POLLING API";
+      return "PM OFFLINE";
     }
 
     // Fallback to metrics from backend WebSocket
@@ -547,12 +951,22 @@ interface HourlyTrend5sPoint {
     }
 
     if (!url.trim()) return "BELUM ADA API";
-    return "API TIDAK TERKIRIM";
-  }, [mode, apiSourceUrls, jsonKeyMap, apiLiveData, metrics]);
+    return "PM OFFLINE";
+  }, [mode, apiSourceUrls, jsonKeyMap, apiLiveData, metrics, isPmOnline]);
 
   const isOfflineVal = useCallback((val: any) => {
-    return val === null || val === undefined || val === "BELUM ADA API" || val === "API TIDAK TERKIRIM" || val === "Gagal Polling API" || val === "GAGAL POLLING API" || val === "xx";
-  }, []);
+    return (
+      !isPmOnline ||
+      val === null ||
+      val === undefined ||
+      val === "PM OFFLINE" ||
+      val === "BELUM ADA API" ||
+      val === "API TIDAK TERKIRIM" ||
+      val === "Gagal Polling API" ||
+      val === "GAGAL POLLING API" ||
+      val === "xx"
+    );
+  }, [isPmOnline]);
 
   // Load database analytics fallback via dedicated endpoint
   const fetchTelemetry = () => {
@@ -566,27 +980,27 @@ interface HourlyTrend5sPoint {
           const isOffline = pq.pfStatus === "offline" || pq.pfStatus === "disconnected" || pq.status === false;
           setMetrics((prev) => ({
             ...prev,
-            voltage: !isOffline && pq.voltage !== undefined && pq.voltage !== null ? pq.voltage : (isOffline ? 0 : prev.voltage),
-            frequency: !isOffline && pq.freq !== undefined && pq.freq !== null ? pq.freq : (isOffline ? 0 : prev.frequency),
-            activePower: !isOffline && pq.activePower !== undefined && pq.activePower !== null ? pq.activePower : (isOffline ? 0 : prev.activePower),
-            powerFactor: !isOffline && pq.pf !== undefined && pq.pf !== null ? pq.pf : (isOffline ? 0 : prev.powerFactor),
-            reactivePower: !isOffline && pq.reactivePower !== undefined && pq.reactivePower !== null ? pq.reactivePower : (isOffline ? 0 : prev.reactivePower),
-            apparentPower: !isOffline && pq.apparentPower !== undefined && pq.apparentPower !== null ? pq.apparentPower : (isOffline ? 0 : prev.apparentPower),
-            unbalanceV: !isOffline && pq.vUnb !== undefined && pq.vUnb !== null ? pq.vUnb : (isOffline ? 0 : prev.unbalanceV),
-            unbalanceI: !isOffline && pq.iUnb !== undefined && pq.iUnb !== null ? pq.iUnb : (isOffline ? 0 : prev.unbalanceI),
-            vR: !isOffline && pq.vR !== undefined && pq.vR !== null ? pq.vR : (isOffline ? 0 : prev.vR),
-            vS: !isOffline && pq.vS !== undefined && pq.vS !== null ? pq.vS : (isOffline ? 0 : prev.vS),
-            vT: !isOffline && pq.vT !== undefined && pq.vT !== null ? pq.vT : (isOffline ? 0 : prev.vT),
-            iR: !isOffline && pq.iR !== undefined && pq.iR !== null ? pq.iR : (isOffline ? 0 : prev.iR),
-            iS: !isOffline && pq.iS !== undefined && pq.iS !== null ? pq.iS : (isOffline ? 0 : prev.iS),
-            iT: !isOffline && pq.iT !== undefined && pq.iT !== null ? pq.iT : (isOffline ? 0 : prev.iT),
-            thdV_R: !isOffline && pq.thdV_R !== undefined && pq.thdV_R !== null ? pq.thdV_R : (isOffline ? 0 : prev.thdV_R),
-            thdV_S: !isOffline && pq.thdV_S !== undefined && pq.thdV_S !== null ? pq.thdV_S : (isOffline ? 0 : prev.thdV_S),
-            thdV_T: !isOffline && pq.thdV_T !== undefined && pq.thdV_T !== null ? pq.thdV_T : (isOffline ? 0 : prev.thdV_T),
-            thdI_R: !isOffline && pq.thdI_R !== undefined && pq.thdI_R !== null ? pq.thdI_R : (isOffline ? 0 : prev.thdI_R),
-            thdI_S: !isOffline && pq.thdI_S !== undefined && pq.thdI_S !== null ? pq.thdI_S : (isOffline ? 0 : prev.thdI_S),
-            thdI_T: !isOffline && pq.thdI_T !== undefined && pq.thdI_T !== null ? pq.thdI_T : (isOffline ? 0 : prev.thdI_T),
-            isConnected: !isOffline && pq.pfStatus === "connected"
+            voltage: !isOffline && pq.voltage !== undefined && pq.voltage !== null ? pq.voltage : 0,
+            frequency: !isOffline && pq.freq !== undefined && pq.freq !== null ? pq.freq : 0,
+            activePower: !isOffline && pq.activePower !== undefined && pq.activePower !== null ? pq.activePower : 0,
+            powerFactor: !isOffline && pq.pf !== undefined && pq.pf !== null ? pq.pf : 0,
+            reactivePower: !isOffline && pq.reactivePower !== undefined && pq.reactivePower !== null ? pq.reactivePower : 0,
+            apparentPower: !isOffline && pq.apparentPower !== undefined && pq.apparentPower !== null ? pq.apparentPower : 0,
+            unbalanceV: !isOffline && pq.vUnb !== undefined && pq.vUnb !== null ? pq.vUnb : 0,
+            unbalanceI: !isOffline && pq.iUnb !== undefined && pq.iUnb !== null ? pq.iUnb : 0,
+            vR: !isOffline && pq.vR !== undefined && pq.vR !== null ? pq.vR : 0,
+            vS: !isOffline && pq.vS !== undefined && pq.vS !== null ? pq.vS : 0,
+            vT: !isOffline && pq.vT !== undefined && pq.vT !== null ? pq.vT : 0,
+            iR: !isOffline && pq.iR !== undefined && pq.iR !== null ? pq.iR : 0,
+            iS: !isOffline && pq.iS !== undefined && pq.iS !== null ? pq.iS : 0,
+            iT: !isOffline && pq.iT !== undefined && pq.iT !== null ? pq.iT : 0,
+            thdV_R: !isOffline && pq.thdV_R !== undefined && pq.thdV_R !== null ? pq.thdV_R : 0,
+            thdV_S: !isOffline && pq.thdV_S !== undefined && pq.thdV_S !== null ? pq.thdV_S : 0,
+            thdV_T: !isOffline && pq.thdV_T !== undefined && pq.thdV_T !== null ? pq.thdV_T : 0,
+            thdI_R: !isOffline && pq.thdI_R !== undefined && pq.thdI_R !== null ? pq.thdI_R : 0,
+            thdI_S: !isOffline && pq.thdI_S !== undefined && pq.thdI_S !== null ? pq.thdI_S : 0,
+            thdI_T: !isOffline && pq.thdI_T !== undefined && pq.thdI_T !== null ? pq.thdI_T : 0,
+            isConnected: !isOffline && pq.pfStatus === "connected" && pq.status !== false
           }));
         }
         const pts = payload?.points || (payload as any)?.charts?.hourlyTrend5s;
@@ -594,30 +1008,27 @@ interface HourlyTrend5sPoint {
           const currentHour = typeof payload?.hour === "number" ? payload.hour : trendHour;
           setTrendHour(currentHour);
           lastTrendHourRef.current = currentHour;
-          if (pts.length > 0) {
-            const latestServerTs = Number(pts[pts.length - 1]?.ts) || 0;
-            if (latestServerTs > 0) {
-              setCurrentTime(latestServerTs);
-            }
-          }
           setHourlyTrend5s((prev) => {
-            const refNow = pts.length > 0 && Number(pts[pts.length - 1]?.ts) ? Number(pts[pts.length - 1].ts) : Date.now();
-            const oneHourAgo = refNow - 3600 * 1000;
             const map = new Map<number, any>();
-            for (const p of prev) {
-              if (p.ts && Number(p.ts) >= oneHourAgo) {
-                const bucket = Math.round(Number(p.ts) / 5000) * 5000;
+            for (const p of pts) {
+              if (p && p.ts) {
+                const bucket = Math.round(Number(p.ts) / 3000) * 3000;
                 map.set(bucket, p);
               }
             }
-            for (const p of pts) {
-              if (p.ts && Number(p.ts) >= oneHourAgo) {
-                const bucket = Math.round(Number(p.ts) / 5000) * 5000;
-                map.set(bucket, p);
+            for (const p of prev) {
+              if (p && p.ts) {
+                const bucket = Math.round(Number(p.ts) / 3000) * 3000;
+                if (!map.has(bucket) || (Number(p.ts) > (Number(pts[pts.length - 1]?.ts) || 0))) {
+                  map.set(bucket, p);
+                }
               }
             }
             const merged = Array.from(map.values()).sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
-            const trimmed = merged.length > 720 ? merged.slice(merged.length - 720) : merged;
+            const maxTs = merged[merged.length - 1]?.ts || Date.now();
+            const oneHourAgo = maxTs - 3600 * 1000;
+            const filtered = merged.filter((p) => (Number(p.ts) || 0) >= oneHourAgo);
+            const trimmed = filtered.length > 1200 ? filtered.slice(filtered.length - 1200) : filtered;
             try {
               localStorage.setItem(`incoming_trend_1h_${config.deviceId}`, JSON.stringify(trimmed));
             } catch (e) {}
@@ -697,10 +1108,22 @@ interface HourlyTrend5sPoint {
     const handleLiveUpdate = (payload: any) => {
       if (payload && payload.deviceId === config.deviceId) {
         setLoading(false);
-        const isOffline = payload.online === false || payload.status === false || payload.pqData?.pfStatus === "offline" || payload.error;
+        const isOffline = payload.online === false || payload.status === false || payload.pqData?.pfStatus === "offline" || payload.pqData?.status === false || payload.error;
         if (isOffline) {
           setMetrics((prev) => ({
             ...prev,
+            voltage: 0,
+            frequency: 0,
+            activePower: 0,
+            powerFactor: 0,
+            reactivePower: 0,
+            apparentPower: 0,
+            unbalanceV: 0,
+            unbalanceI: 0,
+            vR: 0, vS: 0, vT: 0,
+            iR: 0, iS: 0, iT: 0,
+            thdV_R: 0, thdV_S: 0, thdV_T: 0,
+            thdI_R: 0, thdI_S: 0, thdI_T: 0,
             isConnected: false
           }));
           return;
@@ -712,7 +1135,7 @@ interface HourlyTrend5sPoint {
             voltage: pq.voltage !== undefined ? pq.voltage : prev.voltage,
             frequency: pq.freq !== undefined ? pq.freq : prev.frequency,
             activePower: pq.activePower !== undefined ? pq.activePower : prev.activePower,
-            powerFactor: pq.pf !== undefined && pq.pf !== null ? pq.pf : prev.powerFactor,
+            powerFactor: pq.pf !== undefined && pq.pf !== null ? Math.abs(pq.pf) : prev.powerFactor,
             reactivePower: pq.reactivePower !== undefined ? pq.reactivePower : prev.reactivePower,
             apparentPower: pq.apparentPower !== undefined ? pq.apparentPower : prev.apparentPower,
             unbalanceV: pq.vUnb !== undefined ? pq.vUnb : prev.unbalanceV,
@@ -729,36 +1152,33 @@ interface HourlyTrend5sPoint {
             thdI_R: pq.thdI_R !== undefined ? pq.thdI_R : prev.thdI_R,
             thdI_S: pq.thdI_S !== undefined ? pq.thdI_S : prev.thdI_S,
             thdI_T: pq.thdI_T !== undefined ? pq.thdI_T : prev.thdI_T,
-            isConnected: pq.pfStatus === "connected"
+            isConnected: pq.pfStatus !== "offline" && pq.pfStatus !== "disconnected" && pq.status !== false
           }));
         }
       }
     };
 
-    const handleTrend5s = (payload: any) => {
+    const handleTrend3s = (payload: any) => {
       if (payload && payload.deviceId === config.deviceId && payload.point) {
         const pt = payload.point;
-        if (pt.ts) {
-          setCurrentTime(pt.ts);
-        }
         const currentHour = typeof payload.hour === "number" ? payload.hour : trendHour;
         setTrendHour(currentHour);
         lastTrendHourRef.current = currentHour;
 
         setHourlyTrend5s((prev) => {
-          const nowMs = pt.ts || Date.now();
-          const oneHourAgo = nowMs - 3600 * 1000;
-          // Strictly discard points older than 1 hour (rolling FIFO window)
-          const filtered = prev.filter((p) => p.ts && Number(p.ts) >= oneHourAgo);
-          // Deduplicate if within same 5s bucket
-          const ptBucket = Math.round((pt.ts || nowMs) / 5000) * 5000;
-          const lastP = filtered[filtered.length - 1];
-          if (lastP && lastP.ts && Math.round(lastP.ts / 5000) * 5000 === ptBucket) {
-            filtered[filtered.length - 1] = pt;
-            return [...filtered];
+          const ptTs = Number(pt.ts) || Date.now();
+          const ptBucket = Math.round(ptTs / 3000) * 3000;
+          const updated = [...prev];
+          const lastP = updated[updated.length - 1];
+          if (lastP && lastP.ts && Math.round(Number(lastP.ts) / 3000) * 3000 === ptBucket) {
+            updated[updated.length - 1] = pt;
+          } else {
+            updated.push(pt);
           }
-          const updated = [...filtered, pt];
-          const trimmed = updated.length > 720 ? updated.slice(updated.length - 720) : updated;
+          const latestTs = Number(updated[updated.length - 1]?.ts) || ptTs;
+          const oneHourAgo = latestTs - 3600 * 1000;
+          const filtered = updated.filter((p) => (Number(p.ts) || 0) >= oneHourAgo);
+          const trimmed = filtered.length > 1200 ? filtered.slice(filtered.length - 1200) : filtered;
           try {
             localStorage.setItem(`incoming_trend_1h_${config.deviceId}`, JSON.stringify(trimmed));
           } catch (e) {}
@@ -774,24 +1194,58 @@ interface HourlyTrend5sPoint {
     socket.on("electricity:minute_update", handleMinuteUpdate);
     socket.on("historian:minute_update", handleMinuteUpdate);
     socket.on("electricity:live_update", handleLiveUpdate);
-    socket.on("electricity:trend_5s", handleTrend5s);
+    socket.on("electricity:trend_3s", handleTrend3s);
 
     return () => {
       socket.off("electricity:minute_update", handleMinuteUpdate);
       socket.off("historian:minute_update", handleMinuteUpdate);
       socket.off("electricity:live_update", handleLiveUpdate);
-      socket.off("electricity:trend_5s", handleTrend5s);
+      socket.off("electricity:trend_3s", handleTrend3s);
     };
   }, [config.deviceId]);
 
   const prefix = mode === "pln" ? "pln" : mode === "fact1" ? "wf1" : "wf2";
 
   const liveMetrics = useMemo(() => {
+    if (!isPmOnline) {
+      return {
+        voltage: null,
+        frequency: null,
+        activePower: null,
+        powerFactor: null,
+        reactivePower: null,
+        apparentPower: null,
+        unbalanceV: null,
+        unbalanceI: null,
+        vR: null,
+        vS: null,
+        vT: null,
+        iR: null,
+        iS: null,
+        iT: null,
+        thdV_R: null,
+        thdV_S: null,
+        thdV_T: null,
+        thdI_R: null,
+        thdI_S: null,
+        thdI_T: null,
+        isConnected: false
+      };
+    }
+
+    const hasLiveMetrics = metrics.isConnected && (metrics.voltage > 0 || metrics.frequency > 0);
+
     const pickVal = (tag: string, metricVal: any) => {
+      // 1. Prioritize real-time 1-second WebSocket telemetry stream when available
+      if (hasLiveMetrics && metricVal !== undefined && metricVal !== null) {
+        return metricVal;
+      }
+      // 2. Fall back to direct API data if available
       const apiV = getApiVal(`${prefix}/${tag}`);
-      if (apiV !== "BELUM ADA API" && apiV !== "API TIDAK TERKIRIM" && apiV !== "GAGAL POLLING API" && apiV !== "Gagal Polling API" && apiV !== "xx") {
+      if (apiV !== "BELUM ADA API" && apiV !== "API TIDAK TERKIRIM" && apiV !== "GAGAL POLLING API" && apiV !== "Gagal Polling API" && apiV !== "xx" && apiV !== "PM OFFLINE") {
         return apiV;
       }
+      // 3. Fall back to socket metricVal
       return metricVal;
     };
 
@@ -816,13 +1270,23 @@ interface HourlyTrend5sPoint {
       thdI_R: pickVal("thd_i_r", metrics.thdI_R),
       thdI_S: pickVal("thd_i_s", metrics.thdI_S),
       thdI_T: pickVal("thd_i_t", metrics.thdI_T),
-      isConnected: metrics.isConnected || (getApiVal(`${prefix}/active_power`) !== "BELUM ADA API" && getApiVal(`${prefix}/active_power`) !== "API TIDAK TERKIRIM" && getApiVal(`${prefix}/active_power`) !== "GAGAL POLLING API" && getApiVal(`${prefix}/active_power`) !== "Gagal Polling API")
+      isConnected: true
     };
-  }, [prefix, getApiVal, metrics]);
+  }, [prefix, getApiVal, metrics, isPmOnline]);
 
   const renderMetricVal = useCallback((val: any, formatFn: (v: number) => string) => {
     if (loading) {
       return <span className="h-5 w-20 bg-slate-200 dark:bg-slate-700/60 rounded-md animate-pulse inline-block align-middle" />;
+    }
+    if (!isPmOnline || val === "PM OFFLINE") {
+      return (
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-xl md:text-2xl font-black font-mono text-slate-400 dark:text-slate-600">—</span>
+          <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500 border border-rose-500/20">
+            PM MATI
+          </span>
+        </div>
+      );
     }
     if (val === "BELUM ADA API") {
       return <span className="text-red-500 text-xs font-extrabold font-mono uppercase tracking-wider">BELUM ADA API</span>;
@@ -831,27 +1295,34 @@ interface HourlyTrend5sPoint {
       return <span className="text-amber-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">GAGAL POLLING API</span>;
     }
     if (val === null || val === undefined) {
-      return <span className="text-amber-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">GAGAL POLLING API</span>;
+      return (
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-xl md:text-2xl font-black font-mono text-slate-400 dark:text-slate-600">—</span>
+          <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500 border border-rose-500/20">
+            PM MATI
+          </span>
+        </div>
+      );
     }
     const num = Number(val);
     if (isNaN(num)) {
       return <span className="text-amber-500 text-[10px] font-extrabold font-mono uppercase tracking-wider">GAGAL POLLING API</span>;
     }
     return formatFn(num);
-  }, [loading]);
+  }, [loading, isPmOnline]);
 
   const renderTableStatus = useCallback((isOffline: boolean, isNormal: boolean, overlimitLabel = "⚠ Overlimit") => {
     if (loading) {
       return <span className="inline-block w-16 h-4 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />;
     }
-    if (isOffline) {
-      return <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-slate-500/10 text-slate-400 border-slate-500/20">Offline</span>;
+    if (!isPmOnline || isOffline) {
+      return <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase border bg-rose-500/10 text-rose-500 border-rose-500/20">✕ PM Mati</span>;
     }
     if (isNormal) {
       return <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">✓ Normal</span>;
     }
     return <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold border bg-red-500/10 text-red-500 border-red-500/20">{overlimitLabel}</span>;
-  }, [loading]);
+  }, [loading, isPmOnline]);
 
   // Averages and stats helpers for Phase details
   const statsV = useMemo(() => {
@@ -880,6 +1351,24 @@ interface HourlyTrend5sPoint {
 
   // Radar PQ index chart data
   const radarData = useMemo(() => {
+    if (!isPmOnline) {
+      return {
+        labels: ["Voltage", "Current", "PF", "Freq", "THD-V", "THD-I"],
+        datasets: [
+          {
+            label: "Daya Aktual",
+            data: [0, 0, 0, 0, 0, 0],
+            backgroundColor: "rgba(244, 63, 94, 0.08)",
+            borderColor: "#f43f5e",
+            borderWidth: 1.5,
+            pointBackgroundColor: "#f43f5e",
+            pointBorderColor: "#fff",
+            pointHoverBackgroundColor: "#fff",
+            pointHoverBorderColor: "#f43f5e"
+          }
+        ]
+      };
+    }
     const numVoltage = isOfflineVal(liveMetrics.voltage) ? 0 : Number(liveMetrics.voltage) || 0;
     const numPf = isOfflineVal(liveMetrics.powerFactor) ? 0 : Number(liveMetrics.powerFactor) || 0;
     const numFrequency = isOfflineVal(liveMetrics.frequency) ? 0 : Number(liveMetrics.frequency) || 0;
@@ -909,9 +1398,9 @@ interface HourlyTrend5sPoint {
         }
       ]
     };
-  }, [liveMetrics, statsI.avg, statsThdV.avg, statsThdI.avg, config.voltageBase, isOfflineVal]);
+  }, [liveMetrics, statsI.avg, statsThdV.avg, statsThdI.avg, config.voltageBase, isOfflineVal, isPmOnline]);
 
-  const isConnected = !isOfflineVal(liveMetrics.voltage) || !isOfflineVal(liveMetrics.activePower);
+  const isConnected = isPmOnline && (!isOfflineVal(liveMetrics.voltage) || !isOfflineVal(liveMetrics.activePower));
   const radarOptions: any = {
     responsive: true,
     maintainAspectRatio: false,
@@ -930,88 +1419,6 @@ interface HourlyTrend5sPoint {
       }
     }
   };
-
-  // Continuous 1-Hour Rolling 5-Second Window (Strictly Fixed 1-Hour Window: 720 slots * 5s = 3600s = 60 min)
-  const SLOTS_COUNT = 720;
-  const STEP_MS = 5000;
-
-  const rollingTrendData = useMemo(() => {
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const now = currentTime;
-    const currentSlotTs = Math.floor(now / STEP_MS) * STEP_MS;
-    const oneHourAgoTs = currentSlotTs - (SLOTS_COUNT - 1) * STEP_MS;
-
-    const map = new Map<number, HourlyTrend5sPoint>();
-    const timeStrMap = new Map<string, HourlyTrend5sPoint>();
-    for (const p of hourlyTrend5s) {
-      if (p.time) {
-        timeStrMap.set(p.time, p);
-      }
-      if (p.ts && p.ts >= oneHourAgoTs - 15000 && p.ts <= currentSlotTs + 15000) {
-        const bucket = Math.round(p.ts / STEP_MS) * STEP_MS;
-        map.set(bucket, p);
-      }
-    }
-
-    const labels: string[] = [];
-    const vRData: (number | null)[] = [];
-    const vSData: (number | null)[] = [];
-    const vTData: (number | null)[] = [];
-    const activePowerData: (number | null)[] = [];
-
-    for (let i = 0; i < SLOTS_COUNT; i++) {
-      const slotTs = oneHourAgoTs + i * STEP_MS;
-      const d = new Date(slotTs);
-
-      let timeStr = "";
-      try {
-        const parts = new Intl.DateTimeFormat("en-GB", {
-          timeZone: "Asia/Jakarta",
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false
-        }).formatToParts(d);
-        const hr = parts.find(p => p.type === "hour")?.value || "00";
-        const mi = parts.find(p => p.type === "minute")?.value || "00";
-        const sc = parts.find(p => p.type === "second")?.value || "00";
-        timeStr = `${hr}:${mi}:${sc}`;
-      } catch {
-        timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-      }
-      labels.push(timeStr);
-
-      const pt = map.get(slotTs) || timeStrMap.get(timeStr);
-      if (pt) {
-        const vr = pt.vR !== undefined && pt.vR > 0 ? pt.vR : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
-        const vs = pt.vS !== undefined && pt.vS > 0 ? pt.vS : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
-        const vt = pt.vT !== undefined && pt.vT > 0 ? pt.vT : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
-        vRData.push(vr !== null ? Number(vr.toFixed(3)) : null);
-        vSData.push(vs !== null ? Number(vs.toFixed(3)) : null);
-        vTData.push(vt !== null ? Number(vt.toFixed(3)) : null);
-        const ap = typeof pt.activePower === "number" ? Math.abs(Number(pt.activePower.toFixed(1))) : null;
-        activePowerData.push(ap);
-      } else {
-        vRData.push(null);
-        vSData.push(null);
-        vTData.push(null);
-        activePowerData.push(null);
-      }
-    }
-
-    const startLabel = labels[0]?.substring(0, 5) || "--:--";
-    const endLabel = labels[labels.length - 1]?.substring(0, 5) || "--:--";
-    const rangeLabel = `${startLabel} - ${endLabel}`;
-
-    return {
-      labels,
-      vRData,
-      vSData,
-      vTData,
-      activePowerData,
-      rangeLabel
-    };
-  }, [hourlyTrend5s, currentTime]);
 
   // 1-Hour Rolling 5-Second Line Trend Data - 3 Lines (Fasa R, S, T)
   const voltageTrendData = useMemo(() => {
@@ -1091,6 +1498,113 @@ interface HourlyTrend5sPoint {
     };
   }, [rollingTrendData, isDark]);
 
+  // Sliced datasets for Modal Zoom with dynamic TradingView Navigation
+  const modalRollingTrendData = useMemo(() => {
+    const total = rollingTrendData.labels.length;
+    let startIdx = 0;
+    let endIdx = total;
+
+    if (zoomIndexRange !== null && total > 0) {
+      startIdx = Math.max(0, Math.min(total - 5, Math.round(zoomIndexRange.min)));
+      endIdx = Math.min(total, Math.max(startIdx + 5, Math.round(zoomIndexRange.max)));
+    }
+
+    const labels = rollingTrendData.labels.slice(startIdx, endIdx);
+    const vRData = rollingTrendData.vRData.slice(startIdx, endIdx);
+    const vSData = rollingTrendData.vSData.slice(startIdx, endIdx);
+    const vTData = rollingTrendData.vTData.slice(startIdx, endIdx);
+    const activePowerData = rollingTrendData.activePowerData.slice(startIdx, endIdx);
+    const startLabel = labels[0]?.substring(0, 5) || "--:--";
+    const endLabel = labels[labels.length - 1]?.substring(0, 5) || "--:--";
+    const rangeLabel = `${startLabel} - ${endLabel}`;
+
+    return {
+      labels,
+      vRData,
+      vSData,
+      vTData,
+      activePowerData,
+      rangeLabel,
+      isCustom: zoomIndexRange !== null || zoomRangeY !== null
+    };
+  }, [rollingTrendData, zoomIndexRange, zoomRangeY]);
+
+  const modalVoltageTrendData = useMemo(() => {
+    return {
+      labels: modalRollingTrendData.labels,
+      datasets: [
+        {
+          label: "Fasa R (kV)",
+          data: modalRollingTrendData.vRData,
+          borderColor: "#f43f5e",
+          backgroundColor: "rgba(244, 63, 94, 0.05)",
+          fill: false,
+          tension: 0.2,
+          borderWidth: 1.8,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointBackgroundColor: "#f43f5e",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          spanGaps: true
+        },
+        {
+          label: "Fasa S (kV)",
+          data: modalRollingTrendData.vSData,
+          borderColor: "#f59e0b",
+          backgroundColor: "rgba(245, 158, 11, 0.05)",
+          fill: false,
+          tension: 0.2,
+          borderWidth: 1.8,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointBackgroundColor: "#f59e0b",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          spanGaps: true
+        },
+        {
+          label: "Fasa T (kV)",
+          data: modalRollingTrendData.vTData,
+          borderColor: "#3b82f6",
+          backgroundColor: "rgba(59, 130, 246, 0.05)",
+          fill: false,
+          tension: 0.2,
+          borderWidth: 1.8,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointBackgroundColor: "#3b82f6",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          spanGaps: true
+        }
+      ]
+    };
+  }, [modalRollingTrendData, isDark]);
+
+  const modalActivePowerTrendData = useMemo(() => {
+    return {
+      labels: modalRollingTrendData.labels,
+      datasets: [
+        {
+          label: "Active Power (kW)",
+          data: modalRollingTrendData.activePowerData,
+          borderColor: "#10b981",
+          backgroundColor: "rgba(16, 185, 129, 0.08)",
+          fill: true,
+          tension: 0.2,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointBackgroundColor: "#10b981",
+          pointBorderColor: isDark ? "#0f172a" : "#ffffff",
+          pointBorderWidth: 1.5,
+          spanGaps: true
+        }
+      ]
+    };
+  }, [modalRollingTrendData, isDark]);
+
   const lineOptions = (unit: "kV" | "kW", isPower: boolean = false, isModal: boolean = false) => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -1160,7 +1674,8 @@ interface HourlyTrend5sPoint {
           maxTicksLimit: isModal ? 25 : 13,
           autoSkip: true,
           callback: function (val: any, index: number): string {
-            const raw = (this as any)?.getLabelForValue ? (this as any).getLabelForValue(val) : rollingTrendData.labels[index];
+            const activeLabels = isModal ? modalRollingTrendData.labels : rollingTrendData.labels;
+            const raw = (this as any)?.getLabelForValue ? (this as any).getLabelForValue(val) : activeLabels[index];
             if (typeof raw === "string" && raw.length >= 5) {
               return isModal && raw.length >= 8 ? raw : raw.substring(0, 5);
             }
@@ -1170,6 +1685,8 @@ interface HourlyTrend5sPoint {
       },
       y: {
         beginAtZero: false,
+        min: isModal && zoomRangeY ? zoomRangeY.min : undefined,
+        max: isModal && zoomRangeY ? zoomRangeY.max : undefined,
         grace: isPower ? "10%" : "5%",
         grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
         ticks: {
@@ -1190,12 +1707,12 @@ interface HourlyTrend5sPoint {
   return (
     <div className="space-y-6">
       {/* HEADER SECTION */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <PageHeader
           title={config.title}
           description={`Monitoring real-time parameter kelistrikan ${config.title} - Update setiap 3 detik`}
         />
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {canAccessConfig && (
             <>
               <button
@@ -1217,6 +1734,11 @@ interface HourlyTrend5sPoint {
               <span className="h-2 w-2 rounded-full bg-sky-500 animate-ping" />
               MEMUAT DATA...
             </span>
+          ) : !isPmOnline ? (
+            <span className="px-3 py-1.5 rounded-full text-xs font-black uppercase flex items-center gap-1.5 border bg-rose-500/15 text-rose-500 border-rose-500/30 shadow-sm">
+              <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+              ● {config.pmModel} MATI (OFFLINE)
+            </span>
           ) : (
             <span className={`px-3 py-1.5 rounded-full text-xs font-extrabold uppercase flex items-center gap-1.5 border transition-colors duration-300 ${
               isConnected
@@ -1232,6 +1754,26 @@ interface HourlyTrend5sPoint {
         </div>
       </div>
 
+      {/* ═══════════ PM OFFLINE WARNING BANNER ═══════════ */}
+      {!loading && !isPmOnline && (
+        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 dark:bg-rose-950/20 p-4 flex items-center gap-3.5 shadow-sm text-rose-600 dark:text-rose-400">
+          <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black uppercase tracking-wider">STATUS POWER METER: MATI / OFFLINE</span>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/30">Status: false</span>
+            </div>
+            <p className="text-[11px] font-medium text-rose-600/90 dark:text-rose-400/90 mt-0.5">
+              Power meter {config.pmModel} pada {config.title} terdeteksi offline / tidak aktif. Seluruh data telemetri dinonaktifkan untuk mencegah penayangan data beku (stale).
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ═══════════ SECTION A: SIX METRIC CARDS ═══════════ */}
       <section className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         {/* Tegangan */}
@@ -1246,7 +1788,7 @@ interface HourlyTrend5sPoint {
             <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
               {renderMetricVal(liveMetrics.voltage, (v) => `${v > 1000 ? (v / 1000).toFixed(2) : v.toFixed(2)} kV`)}
             </div>
-            <p className="text-[9px] text-slate-400 mt-1">Nominal: 20 kV</p>
+            <p className="text-[9px] text-slate-400 mt-1">{!isPmOnline ? <span className="text-rose-500 font-bold">PM Mati / Offline</span> : "Nominal: 20 kV"}</p>
           </div>
         </div>
 
@@ -1262,7 +1804,7 @@ interface HourlyTrend5sPoint {
             <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
               {renderMetricVal(liveMetrics.frequency, (v) => `${v.toFixed(2)} Hz`)}
             </div>
-            <p className="text-[9px] text-slate-400 mt-1">Nominal: 50 Hz</p>
+            <p className="text-[9px] text-slate-400 mt-1">{!isPmOnline ? <span className="text-rose-500 font-bold">PM Mati / Offline</span> : "Nominal: 50 Hz"}</p>
           </div>
         </div>
 
@@ -1278,7 +1820,7 @@ interface HourlyTrend5sPoint {
             <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
               {renderMetricVal(liveMetrics.activePower, (v) => `${v.toLocaleString("id-ID")} kW`)}
             </div>
-            <p className="text-[9px] text-slate-400 mt-1">Total daya aktif</p>
+            <p className="text-[9px] text-slate-400 mt-1">{!isPmOnline ? <span className="text-rose-500 font-bold">PM Mati / Offline</span> : "Total daya aktif"}</p>
           </div>
         </div>
 
@@ -1294,7 +1836,7 @@ interface HourlyTrend5sPoint {
             <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
               {renderMetricVal(liveMetrics.powerFactor, (v) => `${v.toFixed(3)} PF`)}
             </div>
-            <p className="text-[9px] text-emerald-500 font-bold mt-1">Good</p>
+            <p className="text-[9px] mt-1">{!isPmOnline ? <span className="text-rose-500 font-bold">PM Mati / Offline</span> : <span className="text-emerald-500 font-bold">Good</span>}</p>
           </div>
         </div>
 
@@ -1310,7 +1852,7 @@ interface HourlyTrend5sPoint {
             <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
               {renderMetricVal(liveMetrics.reactivePower, (v) => `${v.toLocaleString("id-ID")} kVAR`)}
             </div>
-            <p className="text-[9px] text-slate-400 mt-1">Daya reaktif</p>
+            <p className="text-[9px] text-slate-400 mt-1">{!isPmOnline ? <span className="text-rose-500 font-bold">PM Mati / Offline</span> : "Daya reaktif"}</p>
           </div>
         </div>
 
@@ -1326,15 +1868,15 @@ interface HourlyTrend5sPoint {
             <div className="text-base md:text-xl font-extrabold font-mono text-slate-800 dark:text-white">
               {renderMetricVal(liveMetrics.apparentPower, (v) => `${v.toLocaleString("id-ID")} kVA`)}
             </div>
-            <p className="text-[9px] text-slate-400 mt-1">Daya semu</p>
+            <p className="text-[9px] text-slate-400 mt-1">{!isPmOnline ? <span className="text-rose-500 font-bold">PM Mati / Offline</span> : "Daya semu"}</p>
           </div>
         </div>
       </section>
 
       {/* ═══════════ SECTION B: POWER QUALITY INDEX & GAUGES ═══════════ */}
       <section className="grid gap-6 md:grid-cols-3">
-        <UnbalancedGauge label="Voltage Unbalanced" value={liveMetrics.unbalanceV} maxAllowed={standards.unbalanceVMax} isDark={isDark} isLoading={loading} />
-        <UnbalancedGauge label="Current Unbalanced" value={liveMetrics.unbalanceI} maxAllowed={standards.unbalanceIMax} isDark={isDark} isLoading={loading} />
+        <UnbalancedGauge label="Voltage Unbalanced" value={liveMetrics.unbalanceV} maxAllowed={standards.unbalanceVMax} isDark={isDark} isLoading={loading} isPmOnline={isPmOnline} />
+        <UnbalancedGauge label="Current Unbalanced" value={liveMetrics.unbalanceI} maxAllowed={standards.unbalanceIMax} isDark={isDark} isLoading={loading} isPmOnline={isPmOnline} />
 
         {/* Power Quality Radar Index */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
@@ -1344,6 +1886,12 @@ interface HourlyTrend5sPoint {
           </div>
           <div className="relative mt-2 flex items-center justify-center" style={{ height: 160 }}>
             <Radar data={radarData} options={radarOptions} />
+            {!loading && !isPmOnline && (
+              <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/85 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-xl z-10">
+                <span className="text-xs font-black uppercase text-rose-500 tracking-wider">PM {config.pmModel} MATI</span>
+                <span className="text-[10px] text-slate-400 mt-0.5 font-semibold">Analisis PQ Tidak Tersedia</span>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -1365,7 +1913,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.vR, (v) => `${v.toFixed(3)} kV`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vR) && Number(liveMetrics.vR) > 0 ? `${Math.min(100, (Number(liveMetrics.vR) / 24) * 100)}%` : "0%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.vR) && Number(liveMetrics.vR) > 0 ? `${Math.min(100, (Number(liveMetrics.vR) / 24) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
@@ -1375,7 +1923,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.vS, (v) => `${v.toFixed(3)} kV`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vS) && Number(liveMetrics.vS) > 0 ? `${Math.min(100, (Number(liveMetrics.vS) / 24) * 100)}%` : "0%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.vS) && Number(liveMetrics.vS) > 0 ? `${Math.min(100, (Number(liveMetrics.vS) / 24) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
@@ -1385,15 +1933,15 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.vT, (v) => `${v.toFixed(3)} kV`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.vT) && Number(liveMetrics.vT) > 0 ? `${Math.min(100, (Number(liveMetrics.vT) / 24) * 100)}%` : "0%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.vT) && Number(liveMetrics.vT) > 0 ? `${Math.min(100, (Number(liveMetrics.vT) / 24) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsV.avg.toFixed(3)}</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsV.min.toFixed(3)}</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsV.max.toFixed(3)}</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsV.avg.toFixed(3)} kV`}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsV.min.toFixed(3)} kV`}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsV.max.toFixed(3)} kV`}</strong></span>
           </div>
         </div>
 
@@ -1412,7 +1960,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.iR, (v) => `${v.toFixed(1)} A`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.iR) && Number(liveMetrics.iR) > 0 ? `${Math.min(100, (Number(liveMetrics.iR) / 150) * 100)}%` : "0%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.iR) && Number(liveMetrics.iR) > 0 ? `${Math.min(100, (Number(liveMetrics.iR) / 150) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
@@ -1422,7 +1970,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.iS, (v) => `${v.toFixed(1)} A`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.iS) && Number(liveMetrics.iS) > 0 ? `${Math.min(100, (Number(liveMetrics.iS) / 150) * 100)}%` : "0%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.iS) && Number(liveMetrics.iS) > 0 ? `${Math.min(100, (Number(liveMetrics.iS) / 150) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
@@ -1432,15 +1980,15 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.iT, (v) => `${v.toFixed(1)} A`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.iT) && Number(liveMetrics.iT) > 0 ? `${Math.min(100, (Number(liveMetrics.iT) / 150) * 100)}%` : "0%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.iT) && Number(liveMetrics.iT) > 0 ? `${Math.min(100, (Number(liveMetrics.iT) / 150) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsI.avg.toFixed(1)}</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsI.min.toFixed(1)}</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsI.max.toFixed(1)}</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsI.avg.toFixed(1)} A`}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsI.min.toFixed(1)} A`}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsI.max.toFixed(1)} A`}</strong></span>
           </div>
         </div>
 
@@ -1459,7 +2007,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.thdV_R, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdV_R) && Number(liveMetrics.thdV_R) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_R) / 5) * 100)}%` : "0%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.thdV_R) && Number(liveMetrics.thdV_R) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_R) / 5) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
@@ -1469,7 +2017,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.thdV_S, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdV_S) && Number(liveMetrics.thdV_S) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_S) / 5) * 100)}%` : "0%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.thdV_S) && Number(liveMetrics.thdV_S) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_S) / 5) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
@@ -1479,15 +2027,15 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.thdV_T, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdV_T) && Number(liveMetrics.thdV_T) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_T) / 5) * 100)}%` : "0%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.thdV_T) && Number(liveMetrics.thdV_T) > 0 ? `${Math.min(100, (Number(liveMetrics.thdV_T) / 5) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdV.avg.toFixed(2)}</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdV.min.toFixed(2)}</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdV.max.toFixed(2)}</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsThdV.avg.toFixed(2)} %`}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsThdV.min.toFixed(2)} %`}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsThdV.max.toFixed(2)} %`}</strong></span>
           </div>
         </div>
 
@@ -1506,7 +2054,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.thdI_R, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdI_R) && Number(liveMetrics.thdI_R) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_R) / 8) * 100)}%` : "0%" }} />
+                <div className="h-full bg-rose-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.thdI_R) && Number(liveMetrics.thdI_R) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_R) / 8) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* S */}
@@ -1516,7 +2064,7 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.thdI_S, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdI_S) && Number(liveMetrics.thdI_S) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_S) / 8) * 100)}%` : "0%" }} />
+                <div className="h-full bg-amber-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.thdI_S) && Number(liveMetrics.thdI_S) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_S) / 8) * 100)}%` : "0%" }} />
               </div>
             </div>
             {/* T */}
@@ -1526,15 +2074,15 @@ interface HourlyTrend5sPoint {
                 <span className="font-mono">{renderMetricVal(liveMetrics.thdI_T, (v) => `${v.toFixed(2)} %`)}</span>
               </div>
               <div className="h-2 w-full rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: !isOfflineVal(liveMetrics.thdI_T) && Number(liveMetrics.thdI_T) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_T) / 8) * 100)}%` : "0%" }} />
+                <div className="h-full bg-blue-500 rounded transition-all duration-500" style={{ width: isPmOnline && !isOfflineVal(liveMetrics.thdI_T) && Number(liveMetrics.thdI_T) > 0 ? `${Math.min(100, (Number(liveMetrics.thdI_T) / 8) * 100)}%` : "0%" }} />
               </div>
             </div>
           </div>
 
           <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdI.avg.toFixed(2)}</strong></span>
-            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdI.min.toFixed(2)}</strong></span>
-            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : statsThdI.max.toFixed(2)}</strong></span>
+            <span>AVG: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsThdI.avg.toFixed(2)} %`}</strong></span>
+            <span>MIN: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsThdI.min.toFixed(2)} %`}</strong></span>
+            <span>MAX: <strong className="text-slate-700 dark:text-slate-300">{loading ? <span className="inline-block w-8 h-2.5 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse align-middle" /> : !isPmOnline ? "—" : `${statsThdI.max.toFixed(2)} %`}</strong></span>
           </div>
         </div>
       </section>
@@ -1544,10 +2092,10 @@ interface HourlyTrend5sPoint {
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400">Trend Tegangan 1 Jam (kV) — Rolling 5s</h4>
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-500 dark:text-amber-400">Trend Tegangan 1 Jam (kV) — Rolling 3s</h4>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  {rollingTrendData.rangeLabel} (Rolling 5s)
+                  {rollingTrendData.rangeLabel} (Rolling 3s)
                 </span>
                 <button
                   type="button"
@@ -1568,10 +2116,10 @@ interface HourlyTrend5sPoint {
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400">Trend Daya Aktif 1 Jam (kW) — Rolling 5s</h4>
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500 dark:text-emerald-400">Trend Daya Aktif 1 Jam (kW) — Rolling 3s</h4>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  {rollingTrendData.rangeLabel} (Rolling 5s)
+                  {rollingTrendData.rangeLabel} (Rolling 3s)
                 </span>
                 <button
                   type="button"
@@ -1616,30 +2164,53 @@ interface HourlyTrend5sPoint {
           onClick={() => setZoomTrend(null)}
         >
           <div
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col space-y-4 overflow-hidden"
-            style={{ width: "90vw", maxWidth: "1480px", height: "85vh", maxHeight: "86vh", padding: "1.25rem 1.5rem" }}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col space-y-3 overflow-hidden"
+            style={{ width: "95vw", maxWidth: "1560px", height: "88vh", maxHeight: "90vh", padding: "1.25rem 1.5rem" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className={`text-base font-bold uppercase tracking-wider ${
                     zoomTrend === "voltage" ? "text-amber-500 dark:text-amber-400" : "text-emerald-500 dark:text-emerald-400"
                   }`}>
-                    {zoomTrend === "voltage" ? "Trend Tegangan 1 Jam (kV) — Rolling 5s" : "Trend Daya Aktif 1 Jam (kW) — Rolling 5s"}
+                    {zoomTrend === "voltage" ? "Trend Tegangan 1 Jam (kV) — Rolling 3s" : "Trend Daya Aktif 1 Jam (kW) — Rolling 3s"}
                   </h3>
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
                     {config.title}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 mt-2">
-                  <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
-                    Rentang: {rollingTrendData.rangeLabel} (Rolling 5s Window)
+                <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                  <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                    Rentang: {modalRollingTrendData.rangeLabel}
                   </span>
-                  <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                    • Resolusi 5 Detik (Database Historikal Real-Time)
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                    • Resolusi 3 Detik (Rolling 1 Jam)
                   </span>
+                  {modalRollingTrendData.isCustom ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
+                        Interactive View (Zoom / Pan)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setZoomIndexRange(null);
+                          setZoomRangeY(null);
+                        }}
+                        className="px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                        title="Reset ke Tampilan Live Auto-Fit (atau Klik Ganda di Grafik)"
+                      >
+                        ↺ Reset
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Live Stream
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1658,34 +2229,45 @@ interface HourlyTrend5sPoint {
               </div>
             </div>
 
-            {/* Modal Body: Large Chart Height */}
-            <div className="relative w-full flex-1 min-h-[420px] sm:min-h-[460px]">
-              {zoomTrend === "voltage" ? (
-                <Line data={voltageTrendData} options={lineOptions("kV", false, true)} />
-              ) : (
-                <Line data={activePowerTrendData} options={lineOptions("kW", true, true)} />
-              )}
+            {/* Modal Body: Full Responsive TradingView Canvas (NO BUTTON BARS, NO OVERFLOW SCROLLBAR) */}
+            <div
+              ref={zoomContainerRef}
+              className="relative w-full flex-1 min-h-[420px] sm:min-h-[460px] overflow-hidden rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 p-2 select-none"
+            >
+              <div className="w-full h-full min-h-[420px]">
+                {zoomTrend === "voltage" ? (
+                  <Line ref={zoomChartRef} data={modalVoltageTrendData} options={lineOptions("kV", false, true)} />
+                ) : (
+                  <Line ref={zoomChartRef} data={modalActivePowerTrendData} options={lineOptions("kW", true, true)} />
+                )}
+              </div>
             </div>
 
-            {/* Modal Footer: Quick Stats */}
-            <div className="flex flex-wrap items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-3 text-xs">
-              {zoomTrend === "voltage" && voltageStats ? (
-                <div className="flex flex-wrap items-center gap-4 text-slate-600 dark:text-slate-300">
-                  <span>Terkini: <strong className="text-rose-500">R: {voltageStats.latestR.toFixed(3)} kV</strong> | <strong className="text-amber-500">S: {voltageStats.latestS.toFixed(3)} kV</strong> | <strong className="text-blue-500">T: {voltageStats.latestT.toFixed(3)} kV</strong></span>
-                  <span>• Rata-rata 1 Jam: <strong className="font-mono text-slate-800 dark:text-white">{voltageStats.avg.toFixed(3)} kV</strong></span>
-                  <span>• Min: <strong className="font-mono">{voltageStats.min.toFixed(3)} kV</strong> | Max: <strong className="font-mono">{voltageStats.max.toFixed(3)} kV</strong></span>
-                </div>
-              ) : zoomTrend === "power" && powerStats ? (
-                <div className="flex flex-wrap items-center gap-4 text-slate-600 dark:text-slate-300">
-                  <span>Terkini: <strong className="text-emerald-500 font-mono font-bold">{powerStats.latest.toFixed(1)} kW</strong></span>
-                  <span>• Rata-rata 1 Jam: <strong className="font-mono text-slate-800 dark:text-white">{powerStats.avg.toFixed(1)} kW</strong></span>
-                  <span>• Peak (Beban Puncak): <strong className="font-mono text-amber-500">{powerStats.max.toFixed(1)} kW</strong></span>
-                  <span>• Min: <strong className="font-mono">{powerStats.min.toFixed(1)} kW</strong></span>
-                </div>
-              ) : (
-                <span className="text-slate-400">Data telemetri tersinkronisasi per 5 detik.</span>
-              )}
-              <span className="text-[11px] text-slate-400">Tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] border border-slate-200 dark:border-slate-700">ESC</kbd> untuk menutup</span>
+            {/* Modal Footer: Quick Stats & TradingView Tips */}
+            <div className="flex flex-wrap items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-2.5 text-xs gap-3">
+              <div className="flex flex-wrap items-center gap-4 text-slate-600 dark:text-slate-300">
+                {zoomTrend === "voltage" && voltageStats ? (
+                  <>
+                    <span>Terkini: <strong className="text-rose-500">R: {voltageStats.latestR.toFixed(3)} kV</strong> | <strong className="text-amber-500">S: {voltageStats.latestS.toFixed(3)} kV</strong> | <strong className="text-blue-500">T: {voltageStats.latestT.toFixed(3)} kV</strong></span>
+                    <span>• Rata-rata 1 Jam: <strong className="font-mono text-slate-800 dark:text-white">{voltageStats.avg.toFixed(3)} kV</strong></span>
+                    <span>• Min: <strong className="font-mono">{voltageStats.min.toFixed(3)} kV</strong> | Max: <strong className="font-mono">{voltageStats.max.toFixed(3)} kV</strong></span>
+                  </>
+                ) : zoomTrend === "power" && powerStats ? (
+                  <>
+                    <span>Terkini: <strong className="text-emerald-500 font-mono font-bold">{powerStats.latest.toFixed(1)} kW</strong></span>
+                    <span>• Rata-rata 1 Jam: <strong className="font-mono text-slate-800 dark:text-white">{powerStats.avg.toFixed(1)} kW</strong></span>
+                    <span>• Peak (Beban Puncak): <strong className="font-mono text-amber-500">{powerStats.max.toFixed(1)} kW</strong></span>
+                    <span>• Min: <strong className="font-mono">{powerStats.min.toFixed(1)} kW</strong></span>
+                  </>
+                ) : (
+                  <span className="text-slate-400">Data telemetri tersinkronisasi per 3 detik.</span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                <span className="hidden sm:inline">🖱️ <b>Hold LMB</b> geser • <b>Scroll</b> zoom waktu • <b>Scroll sumbu kiri</b> atur tinggi • <b>Klik ganda</b> reset</span>
+                <span>•</span>
+                <span>Tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] border border-slate-200 dark:border-slate-700">ESC</kbd> untuk menutup</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1700,8 +2282,8 @@ interface HourlyTrend5sPoint {
           <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ringkasan Parameter {config.title}</h4>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full table-fixed text-left text-xs border-collapse">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full min-w-[560px] table-fixed text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
                 <th className="pb-3 px-3 w-[28%] min-w-[160px]">Parameter</th>
@@ -1909,7 +2491,7 @@ interface HourlyTrend5sPoint {
               </div>
 
               {/* Power Limits */}
-              <div className="grid grid-cols-3 gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
                 <div>
                   <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Max Active Power (kW)</label>
                   <input
@@ -1946,7 +2528,7 @@ interface HourlyTrend5sPoint {
               </div>
 
               {/* Power Factor & Unbalance */}
-              <div className="grid grid-cols-3 gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
                 <div>
                   <label className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">Min PF</label>
                   <input

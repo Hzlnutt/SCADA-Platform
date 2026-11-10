@@ -105,7 +105,7 @@ function TankLiquidIndicator({ percentage, height = 120, label, color = "sky" }:
 // Sub-page nav tabs component
 function WaterSubNav() {
   return (
-    <div className="flex border-b border-slate-200 dark:border-slate-800 mb-6">
+    <div className="flex border-b border-slate-200 dark:border-slate-800 mb-6 overflow-x-auto scrollbar-thin whitespace-nowrap">
       <Link
         to="/air"
         className="border-b-2 border-cyan-500 px-4 py-2.5 text-xs font-extrabold text-cyan-600 dark:text-cyan-400 tracking-wider uppercase transition-all duration-200"
@@ -1125,8 +1125,8 @@ export default function WaterOverview() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full min-w-[620px] text-left text-xs border-collapse">
             <thead>
               <tr className={`border-b ${isDark ? "border-slate-800" : "border-slate-200"} text-[10px] font-extrabold uppercase tracking-wider text-slate-500`}>
                 <th className="py-2.5 px-3">Jalur</th>

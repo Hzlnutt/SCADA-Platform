@@ -210,8 +210,8 @@ export default function UtilityConfig() {
 
           <div className="space-y-6">
             {/* Table of Tariff History */}
-            <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800">
-              <table className="w-full border-collapse text-left text-xs">
+            <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800 scrollbar-thin">
+              <table className="w-full min-w-[480px] border-collapse text-left text-xs">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 font-bold border-b border-slate-100 dark:border-slate-800">
                     <th className="p-3">Berlaku Mulai</th>
@@ -502,8 +502,8 @@ export default function UtilityConfig() {
               </h4>
 
               {gasCategories.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800">
-                  <table className="w-full border-collapse text-left text-xs">
+                <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800 scrollbar-thin">
+                  <table className="w-full min-w-[480px] border-collapse text-left text-xs">
                     <thead>
                       <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 font-bold border-b border-slate-100 dark:border-slate-800">
                         <th className="p-3">Nama Kategori</th>

@@ -315,12 +315,11 @@ export default function ElectricityReport() {
       />
 
       {/* Main Content: Sidebar + Table */}
-      <div className="flex gap-5" style={{ minHeight: 600 }}>
+      <div className="flex flex-col lg:flex-row gap-5" style={{ minHeight: 600 }}>
 
-        {/* ── Left Sidebar ── */}
+        {/* ── Left Sidebar (Stacks horizontally on mobile/tablet) ── */}
         <div
-          className="flex-shrink-0 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
-          style={{ width: 220 }}
+          className="flex-shrink-0 w-full lg:w-[220px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
         >
           {/* Sidebar Header */}
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/20 flex items-center gap-2">
@@ -333,7 +332,7 @@ export default function ElectricityReport() {
           </div>
 
           {/* Category List */}
-          <div className="p-3 space-y-1.5">
+          <div className="p-3 flex flex-row flex-wrap lg:flex-col gap-1.5 overflow-x-auto">
             {reportTabs.map((tab) => (
               <div
                 key={tab.key}
@@ -356,7 +355,7 @@ export default function ElectricityReport() {
         </div>
 
         {/* ── Right Content Area ── */}
-        <div className="flex-1 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden flex flex-col">
+        <div className="flex-1 min-w-0 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden flex flex-col">
 
           {/* Filter Bar */}
           <div

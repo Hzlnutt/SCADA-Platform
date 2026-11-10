@@ -376,11 +376,11 @@ export default function Thresholds() {
             <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
               Thresholds Summary
             </div>
-            <div className="mt-4 overflow-x-auto">
+            <div className="mt-4 overflow-x-auto scrollbar-thin">
               {thresholds.length === 0 ? (
                 <div className="text-sm text-slate-400">No threshold configurations defined.</div>
               ) : (
-                <table className="w-full text-left text-sm">
+                <table className="w-full min-w-[500px] text-left text-sm">
                   <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">
                     <tr>
                       <th className="px-3 py-2">Group</th>

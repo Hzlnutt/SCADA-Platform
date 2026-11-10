@@ -47,8 +47,8 @@ export const MachineTabs = ({
     const customTabs = customTabsMap[currentUnitId] || [];
 
     return (
-      <div className="mb-4 border-b border-[#acd3ff]">
-        <nav className="flex flex-wrap gap-1 overflow-x-auto">
+      <div className="mb-4 border-b border-[#acd3ff] dark:border-slate-800">
+        <nav className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin whitespace-nowrap py-1">
           {/* Tab Dashboard */}
           <NavItem to={basePath} label="Dashboard" tone="tabs" end />
 
@@ -77,8 +77,8 @@ export const MachineTabs = ({
 
   // ── Mode standar (non‑HVAC) ──────────────────────────────────────
   return (
-    <div className="mb-4 border-b border-[#acd3ff]">
-      <nav className="flex flex-wrap gap-1 overflow-x-auto">
+    <div className="mb-4 border-b border-[#acd3ff] dark:border-slate-800">
+      <nav className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin whitespace-nowrap py-1">
         <NavItem to={basePath} label="Dashboard" tone="tabs" end />
         <NavItem
           to={`${basePath}/pid-diagram`}

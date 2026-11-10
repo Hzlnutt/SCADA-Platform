@@ -293,7 +293,7 @@ export default function MachineAuditTrail() {
             </p>
           )}
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full min-w-[650px] text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-450 dark:text-slate-500">
                   <th className="pb-2 px-2">Parameter</th>
@@ -333,7 +333,7 @@ export default function MachineAuditTrail() {
               <span className="text-[10px] font-medium text-slate-400">({diffs.length} item diubah)</span>
             </h4>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full min-w-[500px] text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-450 dark:text-slate-500 font-bold">
                     <th className="pb-2 px-2">Komponen / Parameter</th>
@@ -423,7 +423,7 @@ export default function MachineAuditTrail() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full min-w-[650px] text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800 text-[10px] uppercase tracking-wider text-[#47729f] dark:text-slate-500 font-bold">
                   <th className="pb-3 px-3">Waktu (WIB)</th>
