@@ -840,7 +840,10 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
       current_a: getVal(["Current_A"]),
       current_b: getVal(["Current_B"]),
       current_c: getVal(["Current_C"]),
-      frequency: getVal(["Frequency"]),
+      frequency: (() => {
+        const f = getVal(["Frequency"]);
+        return (f !== null && f >= 40 && f <= 65) ? f : null;
+      })(),
       active_power_total: pTot,
       reactive_power_total: qTot,
       apparent_power_total: sTot,

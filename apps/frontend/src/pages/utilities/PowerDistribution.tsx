@@ -1668,12 +1668,28 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
             {factoryLabel} — {tx.capacityKva} kVA
           </span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-bold text-slate-400">LOAD:</span>
-          <span className="text-[9px] font-extrabold text-amber-500">
-            {NO_REALTIME_API}
-          </span>
-        </div>
+        {(() => {
+          const loadPct = tx.apparentPowerKva && tx.capacityKva
+            ? Math.round((tx.apparentPowerKva / tx.capacityKva) * 100)
+            : (tx.activePowerKw && tx.capacityKva ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null);
+          const loadColor = loadPct !== null
+            ? (loadPct <= 70 ? "#10b981" : loadPct <= 85 ? "#eab308" : "#ef4444")
+            : "#f59e0b";
+          return (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-slate-400">LOAD:</span>
+              {loadPct !== null ? (
+                <span className="text-[11px] font-mono font-extrabold" style={{ color: loadColor }}>
+                  {loadPct}%
+                </span>
+              ) : (
+                <span className="text-[9px] font-extrabold text-amber-500">
+                  {NO_REALTIME_API}
+                </span>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Parameters Grid */}
@@ -2081,10 +2097,10 @@ export default function PowerDistribution() {
           plnKw: plnRes?.data?.pqData?.activePower !== undefined ? parsePowerVal(plnRes.data.pqData.activePower, prev.plnKw) : prev.plnKw,
           plnPf: decodePf(plnRes?.data?.pqData?.pf !== undefined ? plnRes.data.pqData.pf : prev.plnPf),
           wf1Kw: wf1Res?.data?.pqData?.activePower !== undefined ? parsePowerVal(wf1Res.data.pqData.activePower, prev.wf1Kw) : prev.wf1Kw,
-          wf1Pf: wf1Res?.data?.pqData?.pf !== undefined ? wf1Res.data.pqData.pf : prev.wf1Pf,
+          wf1Pf: decodePf(wf1Res?.data?.pqData?.pf !== undefined ? wf1Res.data.pqData.pf : prev.wf1Pf),
           wf1Volt: toKv(wf1Res?.data?.pqData?.vll1 ?? wf1Res?.data?.pqData?.voltage) ?? prev.wf1Volt,
           wf2Kw: wf2Res?.data?.pqData?.activePower !== undefined ? parsePowerVal(wf2Res.data.pqData.activePower, prev.wf2Kw) : prev.wf2Kw,
-          wf2Pf: wf2Res?.data?.pqData?.pf !== undefined ? wf2Res.data.pqData.pf : prev.wf2Pf,
+          wf2Pf: decodePf(wf2Res?.data?.pqData?.pf !== undefined ? wf2Res.data.pqData.pf : prev.wf2Pf),
           wf2Volt: toKv(wf2Res?.data?.pqData?.vll1 ?? wf2Res?.data?.pqData?.voltage) ?? prev.wf2Volt,
         }));
         setLoadingSld(false);
@@ -2112,7 +2128,7 @@ export default function PowerDistribution() {
           return {
             ...prev,
             wf1Kw: parsePowerVal(payload.pqData.activePower, prev.wf1Kw),
-            wf1Pf: payload.pqData.pf !== undefined ? payload.pqData.pf : prev.wf1Pf,
+            wf1Pf: decodePf(payload.pqData.pf !== undefined ? payload.pqData.pf : prev.wf1Pf),
             wf1Volt: toKv(payload.pqData.vll1 ?? payload.pqData.voltage) ?? prev.wf1Volt
           };
         }
@@ -2120,7 +2136,7 @@ export default function PowerDistribution() {
           return {
             ...prev,
             wf2Kw: parsePowerVal(payload.pqData.activePower, prev.wf2Kw),
-            wf2Pf: payload.pqData.pf !== undefined ? payload.pqData.pf : prev.wf2Pf,
+            wf2Pf: decodePf(payload.pqData.pf !== undefined ? payload.pqData.pf : prev.wf2Pf),
             wf2Volt: toKv(payload.pqData.vll1 ?? payload.pqData.voltage) ?? prev.wf2Volt
           };
         }
@@ -2157,9 +2173,9 @@ export default function PowerDistribution() {
           if (res?.data) {
             setSolarData({
               poi1Kw: res.data.poi1?.activePower !== undefined ? res.data.poi1.activePower : null,
-              poi1Pf: res.data.poi1?.powerFactor !== undefined ? res.data.poi1.powerFactor : null,
+              poi1Pf: decodePf(res.data.poi1?.powerFactor !== undefined ? res.data.poi1.powerFactor : null),
               poi2Kw: res.data.poi2?.activePower !== undefined ? res.data.poi2.activePower : null,
-              poi2Pf: res.data.poi2?.powerFactor !== undefined ? res.data.poi2.powerFactor : null,
+              poi2Pf: decodePf(res.data.poi2?.powerFactor !== undefined ? res.data.poi2.powerFactor : null),
             });
           }
         })
@@ -3395,11 +3411,21 @@ export default function PowerDistribution() {
                   </div>
                   
                   {/* Load indicator */}
-                  <div className="pt-1 border-t border-slate-200 dark:border-slate-700/60">
-                    <div className="text-[6.5px] font-bold text-center text-amber-500 leading-tight">
-                      {loadingSld ? "..." : `LOAD: ${NO_REALTIME_API}`}
-                    </div>
-                  </div>
+                  {(() => {
+                    const txLoadPct = tx.apparentPowerKva && tx.capacityKva 
+                      ? Math.round((tx.apparentPowerKva / tx.capacityKva) * 100) 
+                      : (tx.activePowerKw && tx.capacityKva ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null);
+                    const txLoadColor = txLoadPct !== null
+                      ? (txLoadPct <= loadConfig.safeMax ? "#10b981" : txLoadPct <= loadConfig.cautionMax ? "#eab308" : "#ef4444")
+                      : "#f59e0b";
+                    return (
+                      <div className="pt-1 border-t border-slate-200 dark:border-slate-700/60">
+                        <div className="text-[7px] font-extrabold text-center leading-tight" style={{ color: txLoadColor }}>
+                          {loadingSld ? "..." : (txLoadPct !== null ? `LOAD: ${txLoadPct}%` : `LOAD: ${NO_REALTIME_API}`)}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* 400V/230V Label Box */}
@@ -3462,11 +3488,21 @@ export default function PowerDistribution() {
                   </div>
 
                   {/* Load indicator */}
-                  <div className="pt-1 border-t border-slate-200 dark:border-slate-700/60">
-                    <div className="text-[6.5px] font-bold text-center text-amber-500 leading-tight">
-                      {loadingSld ? "..." : `LOAD: ${NO_REALTIME_API}`}
-                    </div>
-                  </div>
+                  {(() => {
+                    const txLoadPct = tx.apparentPowerKva && tx.capacityKva 
+                      ? Math.round((tx.apparentPowerKva / tx.capacityKva) * 100) 
+                      : (tx.activePowerKw && tx.capacityKva ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null);
+                    const txLoadColor = txLoadPct !== null
+                      ? (txLoadPct <= loadConfig.safeMax ? "#10b981" : txLoadPct <= loadConfig.cautionMax ? "#eab308" : "#ef4444")
+                      : "#f59e0b";
+                    return (
+                      <div className="pt-1 border-t border-slate-200 dark:border-slate-700/60">
+                        <div className="text-[7px] font-extrabold text-center leading-tight" style={{ color: txLoadColor }}>
+                          {loadingSld ? "..." : (txLoadPct !== null ? `LOAD: ${txLoadPct}%` : `LOAD: ${NO_REALTIME_API}`)}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* 400V/230V Label Box */}
