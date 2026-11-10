@@ -74,9 +74,9 @@ const TAGS: TagOption[] = [
   { id: "pm337", label: "F2 MCC BP 7 (PM337)", factory: "f2" },
 
   // ─── Incoming Cubicles ───
-  { id: "pm411", label: "incoming cubicle pln (PM411)", factory: "all" },
-  { id: "pm412", label: "incoming cubicle WF1 (PM412)", factory: "f1" },
-  { id: "pm410", label: "incoming cubicle WF2 (PM410)", factory: "f2" },
+  { id: "pm410", label: "incoming cubicle pln (PM410)", factory: "all" },
+  { id: "pm411", label: "incoming cubicle WF1 (PM411)", factory: "f1" },
+  { id: "pm412", label: "incoming cubicle WF2 (PM412)", factory: "f2" },
 ];
 
 const COLUMNS: Record<ReportCategory, { key: string; label: string; unit?: string }[]> = {

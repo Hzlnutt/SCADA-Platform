@@ -770,23 +770,68 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
 
     const pmStatus = getStatus();
 
+    const vAb = getVal(["VoltAB"]);
+    const vBc = getVal(["VoltBC"]);
+    const vCa = getVal(["VoltCA"]);
+    let vLl = getVal(["Volt_LL", "VoltLL"]);
+    if (vLl !== null && vLl < 50) {
+      vLl = null; // Sanitize mismapped unbalance register (e.g. PM288)
+    }
+
+    let pTot = getVal(["Active_Power_Total", "Active_Power", "ActivePower", "KW", "kW", "kw", "Power", "Power_Total"]);
+    let qTot = getVal(["Reactive_Power_Total", "Reactive_Power"]);
+    let sTot = getVal(["Apparent_Power_Total", "Apparent_Power"]);
+
+    // Scale Watts to kW if needed
+    if (pTot !== null && Math.abs(pTot) > 10000 && Math.abs(pTot) < 50000000) {
+      pTot = +(pTot / 1000.0).toFixed(3);
+    }
+    if (qTot !== null && Math.abs(qTot) > 10000 && Math.abs(qTot) < 50000000) {
+      qTot = +(qTot / 1000.0).toFixed(3);
+    }
+    if (sTot !== null) {
+      if (sTot > 100000) {
+        sTot = null; // Sanitize float register corruption (e.g. 4.57e18)
+      } else if (sTot > 10000) {
+        sTot = +(sTot / 1000.0).toFixed(3);
+      }
+    }
+
+    let pf = getVal(["Power_Factor", "PF"]);
+    if (pf !== null && Math.abs(pf) > 1.0) {
+      pf = null;
+    }
+
+    let ae = getVal(["ActiveEnergy", "Active_Energy", "Total_Active_Energy", "Energy_Active_Total", "KWh", "kWh", "kwh"]);
+    if (ae !== null) {
+      if (ae > 100000000) {
+        ae = null; // Sanitize overflow / corrupt registers
+      } else {
+        const normId = pmId.toUpperCase();
+        const MWH_METERS = new Set(["PM201", "PM202", "PM206", "PM214", "PM321", "PM325", "PM134", "PM135", "PM136", "PM139"]);
+        if (MWH_METERS.has(normId) && ae < 50000) {
+          ae = +(ae * 1000.0).toFixed(3);
+        }
+      }
+    }
+
     return {
       t_stamp: ts,
       group_id: groupId,
       pm_id: pmId,
       status: pmStatus,
-      volt_ab: getVal(["VoltAB"]),
-      volt_bc: getVal(["VoltBC"]),
-      volt_ca: getVal(["VoltCA"]),
-      volt_ll: getVal(["Volt_LL", "VoltLL"]),
+      volt_ab: vAb,
+      volt_bc: vBc,
+      volt_ca: vCa,
+      volt_ll: vLl,
       current_a: getVal(["Current_A"]),
       current_b: getVal(["Current_B"]),
       current_c: getVal(["Current_C"]),
       frequency: getVal(["Frequency"]),
-      active_power_total: getVal(["Active_Power_Total", "Active_Power", "ActivePower", "KW", "kW", "kw", "Power", "Power_Total"]),
-      reactive_power_total: getVal(["Reactive_Power_Total", "Reactive_Power"]),
-      apparent_power_total: getVal(["Apparent_Power_Total", "Apparent_Power"]),
-      power_factor: getVal(["Power_Factor", "PF"]),
+      active_power_total: pTot,
+      reactive_power_total: qTot,
+      apparent_power_total: sTot,
+      power_factor: pf,
       voltage_unbalance: getVal(["Volatage_Unbalance", "Voltage_Unbalance"]),
       current_unbalance: getVal(["Current_Umbalance", "Current_Unbalance"]),
       thd_volt_a: getVal(["THD_Volt_A"]),
@@ -795,7 +840,7 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
       thd_current_a: getVal(["THD_Current_A"]),
       thd_current_b: getVal(["THD_Current_B"]),
       thd_current_c: getVal(["THD_Current_C"]),
-      active_energy: getVal(["ActiveEnergy", "Active_Energy", "Total_Active_Energy", "Energy_Active_Total", "KWh", "kWh", "kwh"])
+      active_energy: ae
     };
   };
 
