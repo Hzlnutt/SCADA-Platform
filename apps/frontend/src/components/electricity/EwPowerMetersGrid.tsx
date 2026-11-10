@@ -12,6 +12,18 @@ type Props = {
 
 const NO_REALTIME_API = "API Realtime Belum Tersedia";
 
+const decodePf = (val: number | null | undefined): number | null => {
+  if (val === null || val === undefined || isNaN(Number(val))) return null;
+  let pf = Number(val);
+  if (Math.abs(pf) > 2.0) return null;
+  if (pf > 1.0 && pf <= 2.0) pf = 2.0 - pf;
+  else if (pf < -1.0 && pf >= -2.0) pf = -2.0 - pf;
+  pf = Math.abs(pf);
+  if (pf > 1.0) pf = 1.0;
+  return Number(pf.toFixed(3));
+};
+
+
 export function EwPowerMetersGrid({
   powerMeters,
   isDark,
@@ -100,7 +112,8 @@ export function EwPowerMetersGrid({
               const info = getPmInfo(pm.pm_id);
               const isOnline = pm.status !== false;
               const hasActivePower = pm.active_power_total !== null && pm.active_power_total !== undefined;
-              const hasPf = pm.power_factor !== null && pm.power_factor !== undefined;
+              const decodedPf = decodePf(pm.power_factor);
+              const hasPf = decodedPf !== null;
               const hasVoltLl = pm.volt_ll !== null && pm.volt_ll !== undefined;
               const hasEnergy = pm.active_energy !== null && pm.active_energy !== undefined;
 
@@ -185,7 +198,7 @@ export function EwPowerMetersGrid({
                         <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Power Factor</span>
                         {hasPf ? (
                           <span className="font-extrabold text-emerald-500">
-                            {Number(pm.power_factor).toFixed(2)}
+                            {decodedPf!.toFixed(2)}
                           </span>
                         ) : (
                           <span className="font-sans text-[8px] font-bold text-amber-500 leading-tight">

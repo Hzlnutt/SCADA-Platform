@@ -160,6 +160,18 @@ const TRAFO_PM_MAP: Record<string, { pmId: string; group: string; name: string; 
 
 const NO_REALTIME_API = "API Realtime Belum Tersedia";
 
+const decodePf = (val: number | null | undefined): number | null => {
+  if (val === null || val === undefined || isNaN(Number(val))) return null;
+  let pf = Number(val);
+  if (Math.abs(pf) > 2.0) return null;
+  if (pf > 1.0 && pf <= 2.0) pf = 2.0 - pf;
+  else if (pf < -1.0 && pf >= -2.0) pf = -2.0 - pf;
+  pf = Math.abs(pf);
+  if (pf > 1.0) pf = 1.0;
+  return Number(pf.toFixed(3));
+};
+
+
 function mapPmToTransformer(
   initialTx: TransformerData,
   pm?: ElectricPmItem
@@ -1675,7 +1687,7 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
           <ParamCell label="Reactive Power" value={tx.reactivePowerKvar !== null ? `${tx.reactivePowerKvar} kVAR` : NO_REALTIME_API} warn={tx.reactivePowerKvar === null} />
           <ParamCell label="Apparent Power" value={tx.apparentPowerKva !== null ? `${tx.apparentPowerKva} kVA` : NO_REALTIME_API} warn={tx.apparentPowerKva === null} />
           
-          <ParamCell label="Power Factor" value={tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : NO_REALTIME_API} warn={tx.powerFactor === null} />
+          <ParamCell label="Power Factor" value={tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API} warn={tx.powerFactor === null} />
           <ParamCell label="Frequency" value={tx.frequencyHz !== null ? `${tx.frequencyHz.toFixed(2)} Hz` : NO_REALTIME_API} warn={tx.frequencyHz === null} />
           <ParamCell label="Temperature" value={tx.tempCc !== null ? `${tx.tempCc.toFixed(1)} °C` : NO_REALTIME_API} warn={tx.tempCc === null || tx.tempCc > 60} />
 
@@ -1906,7 +1918,7 @@ function SldMiniCard({ tx, onClick, loadConfig, isLoading = false }: { tx: Trans
             {hasData ? `${tx.activePowerKw} kW` : "— kW"}
           </div>
           <div className="text-[9px] font-bold text-slate-500">
-            PF: <span className="font-mono text-slate-400">{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"}</span>
+            PF: <span className="font-mono text-slate-400">{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : "—"}</span>
           </div>
         </div>
       )}
@@ -2067,7 +2079,7 @@ export default function PowerDistribution() {
         ]);
         setIncomingData(prev => ({
           plnKw: plnRes?.data?.pqData?.activePower !== undefined ? parsePowerVal(plnRes.data.pqData.activePower, prev.plnKw) : prev.plnKw,
-          plnPf: plnRes?.data?.pqData?.pf !== undefined ? plnRes.data.pqData.pf : prev.plnPf,
+          plnPf: decodePf(plnRes?.data?.pqData?.pf !== undefined ? plnRes.data.pqData.pf : prev.plnPf),
           wf1Kw: wf1Res?.data?.pqData?.activePower !== undefined ? parsePowerVal(wf1Res.data.pqData.activePower, prev.wf1Kw) : prev.wf1Kw,
           wf1Pf: wf1Res?.data?.pqData?.pf !== undefined ? wf1Res.data.pqData.pf : prev.wf1Pf,
           wf1Volt: toKv(wf1Res?.data?.pqData?.vll1 ?? wf1Res?.data?.pqData?.voltage) ?? prev.wf1Volt,
@@ -2093,7 +2105,7 @@ export default function PowerDistribution() {
           return {
             ...prev,
             plnKw: parsePowerVal(payload.pqData.activePower, prev.plnKw),
-            plnPf: payload.pqData.pf !== undefined ? payload.pqData.pf : prev.plnPf
+            plnPf: decodePf(payload.pqData.pf !== undefined ? payload.pqData.pf : prev.plnPf)
           };
         }
         if (payload.deviceId === "Feeder_WF1_PM5560") {
@@ -3170,7 +3182,7 @@ export default function PowerDistribution() {
                   <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
                   <span className={`font-bold ${incomingData.plnPf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
-                    {incomingData.plnPf !== null ? incomingData.plnPf.toFixed(3) : NO_REALTIME_API}
+                    {decodePf(incomingData.plnPf) !== null ? decodePf(incomingData.plnPf)!.toFixed(3) : NO_REALTIME_API}
                   </span>
                 )}
               </div>
@@ -3376,7 +3388,7 @@ export default function PowerDistribution() {
                           {hasData ? `${tx.activePowerKw} kW` : NO_REALTIME_API}
                         </div>
                         <div className="text-[8px] text-slate-400 leading-tight">
-                          PF: <span className={`font-bold ${tx.powerFactor === null ? "text-[6.5px] text-amber-500" : ""}`}>{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : NO_REALTIME_API}</span>
+                          PF: <span className={`font-bold ${tx.powerFactor === null ? "text-[6.5px] text-amber-500" : ""}`}>{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API}</span>
                         </div>
                       </>
                     )}
@@ -3443,7 +3455,7 @@ export default function PowerDistribution() {
                           {hasData ? `${tx.activePowerKw} kW` : NO_REALTIME_API}
                         </div>
                         <div className="text-[8px] text-slate-400 leading-tight">
-                          PF: <span className={`font-bold ${tx.powerFactor === null ? "text-[6.5px] text-amber-500" : ""}`}>{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : NO_REALTIME_API}</span>
+                          PF: <span className={`font-bold ${tx.powerFactor === null ? "text-[6.5px] text-amber-500" : ""}`}>{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API}</span>
                         </div>
                       </>
                     )}

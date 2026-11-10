@@ -469,7 +469,7 @@ export const getPowerMetersLatestHandler = async (
               active_power_total: pln.active_power !== null && pln.active_power !== undefined ? (Math.abs(Number(pln.active_power)) > 10000 ? Number(pln.active_power) / 1000.0 : Number(pln.active_power)) : null,
               reactive_power_total: pln.reactive_power_total !== null && pln.reactive_power_total !== undefined ? (Math.abs(Number(pln.reactive_power_total)) > 10000 ? Number(pln.reactive_power_total) / 1000.0 : Number(pln.reactive_power_total)) : null,
               apparent_power_total: pln.apparent_power_total !== null && pln.apparent_power_total !== undefined ? (Math.abs(Number(pln.apparent_power_total)) > 10000 ? Number(pln.apparent_power_total) / 1000.0 : Number(pln.apparent_power_total)) : null,
-              power_factor: pln.power_factor !== null && pln.power_factor !== undefined ? Number(pln.power_factor) : null,
+              power_factor: pln.power_factor !== null && pln.power_factor !== undefined ? Math.abs(Number(pln.power_factor)) : null,
               voltage_unbalance: pln.voltage_unbalance !== null && pln.voltage_unbalance !== undefined ? Number(pln.voltage_unbalance) : null,
               current_unbalance: pln.current_unbalance !== null && pln.current_unbalance !== undefined ? Number(pln.current_unbalance) : null,
               thd_volt_a: pln.thd_volt_a !== null && pln.thd_volt_a !== undefined ? Number(pln.thd_volt_a) : null,
@@ -515,7 +515,7 @@ export const getPowerMetersLatestHandler = async (
               active_power_total: wf1.active_power_total !== null && wf1.active_power_total !== undefined ? Number(wf1.active_power_total) : null,
               reactive_power_total: wf1.reactive_power_total !== null && wf1.reactive_power_total !== undefined ? Number(wf1.reactive_power_total) : null,
               apparent_power_total: wf1.apparent_power_total !== null && wf1.apparent_power_total !== undefined ? Number(wf1.apparent_power_total) : null,
-              power_factor: wf1.power_factor !== null && wf1.power_factor !== undefined ? Number(wf1.power_factor) : null,
+              power_factor: wf1.power_factor !== null && wf1.power_factor !== undefined ? Math.abs(Number(wf1.power_factor)) : null,
               voltage_unbalance: wf1.voltage_unbalance !== null && wf1.voltage_unbalance !== undefined ? Number(wf1.voltage_unbalance) : null,
               current_unbalance: wf1.current_unbalance !== null && wf1.current_unbalance !== undefined ? Number(wf1.current_unbalance) : null,
               thd_volt_a: wf1.thd_volt_a !== null && wf1.thd_volt_a !== undefined ? Number(wf1.thd_volt_a) : null,
@@ -561,7 +561,7 @@ export const getPowerMetersLatestHandler = async (
               active_power_total: wf2.active_power_total !== null && wf2.active_power_total !== undefined ? Number(wf2.active_power_total) : null,
               reactive_power_total: wf2.reactive_power_total !== null && wf2.reactive_power_total !== undefined ? Number(wf2.reactive_power_total) : null,
               apparent_power_total: wf2.apparent_power_total !== null && wf2.apparent_power_total !== undefined ? Number(wf2.apparent_power_total) : null,
-              power_factor: wf2.power_factor !== null && wf2.power_factor !== undefined ? Number(wf2.power_factor) : null,
+              power_factor: wf2.power_factor !== null && wf2.power_factor !== undefined ? Math.abs(Number(wf2.power_factor)) : null,
               voltage_unbalance: wf2.voltage_unbalance !== null && wf2.voltage_unbalance !== undefined ? Number(wf2.voltage_unbalance) : null,
               current_unbalance: wf2.current_unbalance !== null && wf2.current_unbalance !== undefined ? Number(wf2.current_unbalance) : null,
               thd_volt_a: wf2.thd_volt_a !== null && wf2.thd_volt_a !== undefined ? Number(wf2.thd_volt_a) : null,
@@ -1269,7 +1269,7 @@ export const getPowerMeterHistoryHandler = async (
             curSlot.volt_ca = Number(liveRec.volt_ca).toFixed(2);
           }
           if (liveRec.power_factor !== null && liveRec.power_factor !== undefined) {
-            curSlot.power_factor = Number(liveRec.power_factor).toFixed(3);
+            curSlot.power_factor = Number(Math.abs(Number(liveRec.power_factor))).toFixed(3);
           }
           if (liveRec.active_energy !== null && liveRec.active_energy !== undefined) {
             curSlot.active_energy = Number(liveRec.active_energy).toFixed(2);
@@ -1470,7 +1470,7 @@ export const getElectricityReportHandler = async (
             AVG(CASE WHEN active_power_total >= 0 AND active_power_total < 10000 THEN active_power_total ELSE NULL END) as kw,
             AVG(CASE WHEN reactive_power_total IS NOT NULL AND ABS(reactive_power_total) < 10000 THEN reactive_power_total ELSE NULL END) as kvar,
             AVG(CASE WHEN apparent_power_total IS NOT NULL AND apparent_power_total >= 0 AND apparent_power_total < 10000 THEN apparent_power_total ELSE NULL END) as kva,
-            AVG(CASE WHEN power_factor IS NOT NULL AND ABS(power_factor) <= 1.0 AND power_factor != 0 THEN power_factor ELSE NULL END) as pf,
+            AVG(CASE WHEN power_factor IS NOT NULL AND ABS(power_factor) <= 1.0 AND power_factor != 0 THEN ABS(power_factor) ELSE NULL END) as pf,
             AVG(CASE WHEN frequency >= 40 AND frequency <= 65 THEN frequency ELSE NULL END) as freq,
             MAX(active_energy) as max_e,
             MIN(active_energy) as min_e
@@ -1603,7 +1603,7 @@ export const getElectricityReportHandler = async (
               AVG(CASE WHEN active_power_total > 10000 THEN active_power_total / 1000.0 ELSE active_power_total END) as kw,
               AVG(CASE WHEN reactive_power_total > 10000 THEN reactive_power_total / 1000.0 ELSE reactive_power_total END) as kvar,
               AVG(CASE WHEN apparent_power_total > 100000 THEN NULL WHEN apparent_power_total > 10000 THEN apparent_power_total / 1000.0 ELSE apparent_power_total END) as kva,
-              AVG(CASE WHEN power_factor IS NOT NULL AND ABS(power_factor) <= 1.0 AND power_factor != 0 THEN power_factor ELSE NULL END) as pf,
+              AVG(CASE WHEN power_factor IS NOT NULL AND ABS(power_factor) <= 1.0 AND power_factor != 0 THEN ABS(power_factor) ELSE NULL END) as pf,
               AVG(frequency) as freq,
               MAX(active_energy) as max_e,
               MIN(active_energy) as min_e

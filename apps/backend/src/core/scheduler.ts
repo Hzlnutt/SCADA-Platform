@@ -119,6 +119,22 @@ let latestHvacRetainLiveState: HvacRetainLiveState = {
 
 export const getHvacRetainLiveState = (): HvacRetainLiveState => latestHvacRetainLiveState;
 
+
+export const normalizePowerFactor = (raw: any): number | null => {
+  if (raw === undefined || raw === null || isNaN(Number(raw))) return null;
+  let val = Number(raw);
+  // Rejection of register overflow / corrupted values
+  if (Math.abs(val) > 2.0) return null;
+  // Schneider 4-quadrant IEC 62053 Capacitive (Quadrant 4) decode:
+  // In capacitive mode (leading), PM registers store (2.0 - PF)
+  if (val > 1.0 && val <= 2.0) val = 2.0 - val;
+  else if (val < -1.0 && val >= -2.0) val = -2.0 - val;
+  // Standard signed load/generator convention to scalar magnitude:
+  val = Math.abs(val);
+  if (val > 1.0) val = 1.0;
+  return +val.toFixed(3);
+};
+
 export const parseStatusBool = (val: any): boolean | null => {
   if (val === undefined || val === null) return null;
   if (typeof val === "boolean") return val;
@@ -161,7 +177,7 @@ const parsePlnApi = (data: any, ts: Date) => {
     active_power: typeof data.Active_Power === "number" ? data.Active_Power : null,
     reactive_power_total: typeof data.Reactive_Power_Total === "number" ? data.Reactive_Power_Total : null,
     apparent_power_total: typeof data.Apparent_Power_Total === "number" ? data.Apparent_Power_Total : null,
-    power_factor: typeof data.Power_Factor === "number" ? data.Power_Factor : null,
+    power_factor: normalizePowerFactor(data.Power_Factor),
     voltage_unbalance: typeof data.Volatage_Unbalance === "number" ? data.Volatage_Unbalance : null,
     current_unbalance: typeof data.Current_Umbalance === "number" ? data.Current_Umbalance : null,
     thd_volt_a: typeof data.THD_Volt_A === "number" ? data.THD_Volt_A : null,
@@ -197,7 +213,7 @@ const parseWfApi = (data: any, ts: Date) => {
     active_power_total: typeof data.Active_Power_Total === "number" ? data.Active_Power_Total : null,
     reactive_power_total: typeof data.Reactive_Power_Total === "number" ? data.Reactive_Power_Total : null,
     apparent_power_total: typeof data.Apparent_Power_Total === "number" ? data.Apparent_Power_Total : null,
-    power_factor: typeof data.Power_Factor === "number" ? data.Power_Factor : null,
+    power_factor: normalizePowerFactor(data.Power_Factor),
     voltage_unbalance: typeof data.Volatage_Unbalance === "number" ? data.Volatage_Unbalance : null,
     current_unbalance: typeof data.Current_Umbalance === "number" ? data.Current_Umbalance : null,
     thd_volt_a: typeof data.THD_Volt_A === "number" ? data.THD_Volt_A : null,
@@ -606,7 +622,7 @@ export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] =
     const total_kvarh = Number(poiObj[`Total_KVARH_POI_${num}`]) || 0;
 
     const rawPf = poiObj[`PFO_POI_${num}`] ?? poiObj[`PF0_POI_${num}`] ?? poiObj[`Power_Factor_POI_${num}`] ?? poiObj[`PF_POI_${num}`] ?? poiObj[`PowerFactor_POI_${num}`] ?? poiObj[`CosPhi_POI_${num}`];
-    let power_factor: number | null = status && rawPf !== undefined && rawPf !== null && !isNaN(Number(rawPf)) ? Number(rawPf) : null;
+    let power_factor: number | null = status ? normalizePowerFactor(rawPf) : null;
 
     result.push({
       t_stamp: ts,
@@ -797,10 +813,7 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
       }
     }
 
-    let pf = getVal(["Power_Factor", "PF"]);
-    if (pf !== null && Math.abs(pf) > 1.0) {
-      pf = null;
-    }
+    let pf = normalizePowerFactor(getVal(["Power_Factor", "PF"]));
 
     let ae = getVal(["ActiveEnergy", "Active_Energy", "Total_Active_Energy", "Energy_Active_Total", "KWh", "kWh", "kwh"]);
     if (ae !== null) {
@@ -2288,7 +2301,7 @@ export const startIncomingElectricityPolling = () => {
               active_power_total: activePower,
               reactive_power_total: getNum(["Reactive_Power_Total", "Reactive_Power", "kVAR"]),
               apparent_power_total: getNum(["Apparent_Power_Total", "Apparent_Power", "kVA"]),
-              power_factor: getNum(["Power_Factor", "PF"]),
+              power_factor: normalizePowerFactor(getNum(["Power_Factor", "PF"])),
               voltage_unbalance: getNum(["Voltage_Unbalance"]),
               current_unbalance: getNum(["Current_Unbalance"]),
               thd_volt_a: getNum(["THD_Volt_A"]),
@@ -2404,8 +2417,8 @@ const rollupMonthlyForMonth = async (yearMonth: string) => {
       MAX(active_power) as active_power_peak,
       AVG(volt_ll) as volt_ll_avg,
       AVG((current_a + current_b + current_c) / 3.0) as current_avg,
-      AVG(power_factor) as power_factor_avg,
-      MIN(power_factor) as power_factor_min,
+      AVG(CASE WHEN power_factor IS NOT NULL AND ABS(power_factor) <= 1.0 THEN ABS(power_factor) ELSE NULL END) as power_factor_avg,
+      MIN(CASE WHEN power_factor IS NOT NULL AND ABS(power_factor) <= 1.0 THEN ABS(power_factor) ELSE NULL END) as power_factor_min,
       AVG(frequency) as frequency_avg
     FROM electric_pln_telemetry
     WHERE t_stamp >= $1 AND t_stamp < $2
@@ -2444,8 +2457,8 @@ const rollupMonthlyForMonth = async (yearMonth: string) => {
       MAX(active_power_total) as active_power_peak,
       AVG(volt_ll) as volt_ll_avg,
       AVG((current_a + current_b + current_c) / 3.0) as current_avg,
-      AVG(power_factor) as power_factor_avg,
-      MIN(power_factor) as power_factor_min,
+      AVG(CASE WHEN power_factor IS NOT NULL AND ABS(power_factor) <= 1.0 THEN ABS(power_factor) ELSE NULL END) as power_factor_avg,
+      MIN(CASE WHEN power_factor IS NOT NULL AND ABS(power_factor) <= 1.0 THEN ABS(power_factor) ELSE NULL END) as power_factor_min,
       AVG(frequency) as frequency_avg
     FROM electric_wf1_telemetry
     WHERE t_stamp >= $1 AND t_stamp < $2
@@ -2484,8 +2497,8 @@ const rollupMonthlyForMonth = async (yearMonth: string) => {
       MAX(active_power_total) as active_power_peak,
       AVG(volt_ll) as volt_ll_avg,
       AVG((current_a + current_b + current_c) / 3.0) as current_avg,
-      AVG(power_factor) as power_factor_avg,
-      MIN(power_factor) as power_factor_min,
+      AVG(CASE WHEN power_factor IS NOT NULL AND ABS(power_factor) <= 1.0 THEN ABS(power_factor) ELSE NULL END) as power_factor_avg,
+      MIN(CASE WHEN power_factor IS NOT NULL AND ABS(power_factor) <= 1.0 THEN ABS(power_factor) ELSE NULL END) as power_factor_min,
       AVG(frequency) as frequency_avg
     FROM electric_wf2_telemetry
     WHERE t_stamp >= $1 AND t_stamp < $2

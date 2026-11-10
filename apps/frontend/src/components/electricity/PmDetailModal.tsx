@@ -168,6 +168,24 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
     }
   });
 
+
+  const decodePf = (v: number | null | undefined): number | null => {
+    if (v === null || v === undefined || isNaN(Number(v))) return null;
+    let val = Number(v);
+    if (Math.abs(val) > 2.0) return null;
+    if (val > 1.0 && val <= 2.0) val = 2.0 - val;
+    else if (val < -1.0 && val >= -2.0) val = -2.0 - val;
+    val = Math.abs(val);
+    if (val > 1.0) val = 1.0;
+    return Number(val.toFixed(3));
+  };
+
+  const fmtPf = (v: number | null | undefined) => {
+    const pf = decodePf(v);
+    if (pf === null) return NO_REALTIME_API;
+    return pf.toFixed(3);
+  };
+
   const fmt = (v: number | null | undefined, unit = "", decimals = 2) => {
     if (v === null || v === undefined) return NO_REALTIME_API;
     return `${Number(v).toFixed(decimals)} ${unit}`.trim();
@@ -262,13 +280,13 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
           <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 shadow-sm">
             <span className="text-[10px] font-extrabold uppercase text-slate-400 block mb-0.5">Power Factor</span>
             <div className={`${pm.power_factor !== null && pm.power_factor !== undefined ? "text-lg font-mono text-emerald-500" : "text-[11px] text-amber-500"} font-extrabold`}>
-              {fmt(pm.power_factor, "", 3)}
+              {fmtPf(pm.power_factor)}
             </div>
           </div>
           <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 shadow-sm">
-            <span className="text-[10px] font-extrabold uppercase text-slate-400 block mb-0.5">Arus Rata-rata</span>
-            <div className="text-[11px] font-extrabold text-amber-500">
-              {NO_REALTIME_API}
+            <span className="text-[10px] font-extrabold uppercase text-slate-400 block mb-0.5">Apparent Power</span>
+            <div className={`${pm.apparent_power_total !== null && pm.apparent_power_total !== undefined ? "text-lg font-mono text-amber-500" : "text-[11px] text-amber-500"} font-extrabold`}>
+              {fmt(pm.apparent_power_total, "kVA", 1)}
             </div>
           </div>
           <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 shadow-sm">
@@ -372,7 +390,7 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
                   </div>
                   <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
                     <span className="text-slate-400 shrink-0">Power Factor:</span>
-                    <span className="font-bold text-emerald-400 text-right">{fmt(pm.power_factor, "", 3)}</span>
+                    <span className="font-bold text-emerald-400 text-right">{fmtPf(pm.power_factor)}</span>
                   </div>
                   <div className="col-span-2 flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
                     <span className="text-slate-400 shrink-0">Active Energy:</span>
