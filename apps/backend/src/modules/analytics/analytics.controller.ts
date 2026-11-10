@@ -10,7 +10,7 @@ import { getPostgresPool } from "../../database/postgres";
 import { defaultWaterConfig } from "../config/config.controller";
 import { calculateWaterCost } from "../../utils/water";
 import { getElectricityExportData, generateElectricityExcelWorkbook } from "./electricity.export";
-import { getIncomingHourlyTrend, getLatestIncomingTelemetry, getWibDateTime } from "../../core/scheduler";
+import { getIncomingHourlyTrend, getLatestIncomingTelemetry, getLatestEwGroupTelemetry, getSyncedNow, getWibDateTime } from "../../core/scheduler";
 import { getIncomingTrend1hFromDb } from "./electricity.analytics";
 
 export const getAnalyticsSummaryHandler = async (
@@ -75,6 +75,10 @@ export const getElectricityAnalyticsHandler = async (
     }
     const cached = electricityAnalyticsCache.get(cacheKey);
     if (!force && cached && cached.expiresAt > now) {
+      const liveIncoming = getLatestIncomingTelemetry(deviceId);
+      if (liveIncoming?.pqData) {
+        return res.json({ data: { ...cached.data, pqData: liveIncoming.pqData } });
+      }
       return res.json({ data: cached.data });
     }
 
@@ -430,27 +434,27 @@ export const getPowerMetersLatestHandler = async (
               group_id: "ew23",
               pm_id: "PM410",
               status: pln.status_pm8000 !== null ? !!pln.status_pm8000 : true,
-              volt_ab: pln.volt_ab ? Number(pln.volt_ab) : null,
-              volt_bc: pln.volt_bc ? Number(pln.volt_bc) : null,
-              volt_ca: pln.volt_ca ? Number(pln.volt_ca) : null,
-              volt_ll: pln.volt_ll ? Number(pln.volt_ll) : null,
-              current_a: pln.current_a ? Number(pln.current_a) : null,
-              current_b: pln.current_b ? Number(pln.current_b) : null,
-              current_c: pln.current_c ? Number(pln.current_c) : null,
-              frequency: pln.frequency ? Number(pln.frequency) : 50.0,
-              active_power_total: pln.active_power ? (Number(pln.active_power) > 10000 ? Number(pln.active_power) / 1000.0 : Number(pln.active_power)) : null,
-              reactive_power_total: pln.reactive_power_total ? (Number(pln.reactive_power_total) > 10000 ? Number(pln.reactive_power_total) / 1000.0 : Number(pln.reactive_power_total)) : null,
-              apparent_power_total: pln.apparent_power_total ? (Number(pln.apparent_power_total) > 10000 ? Number(pln.apparent_power_total) / 1000.0 : Number(pln.apparent_power_total)) : null,
-              power_factor: pln.power_factor ? Number(pln.power_factor) : null,
-              voltage_unbalance: pln.voltage_unbalance ? Number(pln.voltage_unbalance) : null,
-              current_unbalance: pln.current_unbalance ? Number(pln.current_unbalance) : null,
-              thd_volt_a: pln.thd_volt_a ? Number(pln.thd_volt_a) : null,
-              thd_volt_b: pln.thd_volt_b ? Number(pln.thd_volt_b) : null,
-              thd_volt_c: pln.thd_volt_c ? Number(pln.thd_volt_c) : null,
-              thd_current_a: pln.thd_current_a ? Number(pln.thd_current_a) : null,
-              thd_current_b: pln.thd_current_b ? Number(pln.thd_current_b) : null,
-              thd_current_c: pln.thd_current_c ? Number(pln.thd_current_c) : null,
-              active_energy: pln.active_energy ? Number(pln.active_energy) : null
+              volt_ab: pln.volt_ab !== null && pln.volt_ab !== undefined ? Number(pln.volt_ab) : null,
+              volt_bc: pln.volt_bc !== null && pln.volt_bc !== undefined ? Number(pln.volt_bc) : null,
+              volt_ca: pln.volt_ca !== null && pln.volt_ca !== undefined ? Number(pln.volt_ca) : null,
+              volt_ll: pln.volt_ll !== null && pln.volt_ll !== undefined ? Number(pln.volt_ll) : null,
+              current_a: pln.current_a !== null && pln.current_a !== undefined ? Number(pln.current_a) : null,
+              current_b: pln.current_b !== null && pln.current_b !== undefined ? Number(pln.current_b) : null,
+              current_c: pln.current_c !== null && pln.current_c !== undefined ? Number(pln.current_c) : null,
+              frequency: pln.frequency !== null && pln.frequency !== undefined ? Number(pln.frequency) : null,
+              active_power_total: pln.active_power !== null && pln.active_power !== undefined ? (Math.abs(Number(pln.active_power)) > 10000 ? Number(pln.active_power) / 1000.0 : Number(pln.active_power)) : null,
+              reactive_power_total: pln.reactive_power_total !== null && pln.reactive_power_total !== undefined ? (Math.abs(Number(pln.reactive_power_total)) > 10000 ? Number(pln.reactive_power_total) / 1000.0 : Number(pln.reactive_power_total)) : null,
+              apparent_power_total: pln.apparent_power_total !== null && pln.apparent_power_total !== undefined ? (Math.abs(Number(pln.apparent_power_total)) > 10000 ? Number(pln.apparent_power_total) / 1000.0 : Number(pln.apparent_power_total)) : null,
+              power_factor: pln.power_factor !== null && pln.power_factor !== undefined ? Number(pln.power_factor) : null,
+              voltage_unbalance: pln.voltage_unbalance !== null && pln.voltage_unbalance !== undefined ? Number(pln.voltage_unbalance) : null,
+              current_unbalance: pln.current_unbalance !== null && pln.current_unbalance !== undefined ? Number(pln.current_unbalance) : null,
+              thd_volt_a: pln.thd_volt_a !== null && pln.thd_volt_a !== undefined ? Number(pln.thd_volt_a) : null,
+              thd_volt_b: pln.thd_volt_b !== null && pln.thd_volt_b !== undefined ? Number(pln.thd_volt_b) : null,
+              thd_volt_c: pln.thd_volt_c !== null && pln.thd_volt_c !== undefined ? Number(pln.thd_volt_c) : null,
+              thd_current_a: pln.thd_current_a !== null && pln.thd_current_a !== undefined ? Number(pln.thd_current_a) : null,
+              thd_current_b: pln.thd_current_b !== null && pln.thd_current_b !== undefined ? Number(pln.thd_current_b) : null,
+              thd_current_c: pln.thd_current_c !== null && pln.thd_current_c !== undefined ? Number(pln.thd_current_c) : null,
+              active_energy: pln.active_energy !== null && pln.active_energy !== undefined ? Number(pln.active_energy) : null
             });
           }
         } catch {}
@@ -475,27 +479,27 @@ export const getPowerMetersLatestHandler = async (
               group_id: "ew23",
               pm_id: "PM411",
               status: wf1.status_pm5500 !== null ? !!wf1.status_pm5500 : true,
-              volt_ab: wf1.volt_ab ? Number(wf1.volt_ab) : null,
-              volt_bc: wf1.volt_bc ? Number(wf1.volt_bc) : null,
-              volt_ca: wf1.volt_ca ? Number(wf1.volt_ca) : null,
-              volt_ll: wf1.volt_ll ? Number(wf1.volt_ll) : null,
-              current_a: wf1.current_a ? Number(wf1.current_a) : null,
-              current_b: wf1.current_b ? Number(wf1.current_b) : null,
-              current_c: wf1.current_c ? Number(wf1.current_c) : null,
-              frequency: wf1.frequency ? Number(wf1.frequency) : 50.0,
-              active_power_total: wf1.active_power_total ? Number(wf1.active_power_total) : null,
-              reactive_power_total: wf1.reactive_power_total ? Number(wf1.reactive_power_total) : null,
-              apparent_power_total: wf1.apparent_power_total ? Number(wf1.apparent_power_total) : null,
-              power_factor: wf1.power_factor ? Number(wf1.power_factor) : null,
-              voltage_unbalance: wf1.voltage_unbalance ? Number(wf1.voltage_unbalance) : null,
-              current_unbalance: wf1.current_unbalance ? Number(wf1.current_unbalance) : null,
-              thd_volt_a: wf1.thd_volt_a ? Number(wf1.thd_volt_a) : null,
-              thd_volt_b: wf1.thd_volt_b ? Number(wf1.thd_volt_b) : null,
-              thd_volt_c: wf1.thd_volt_c ? Number(wf1.thd_volt_c) : null,
-              thd_current_a: wf1.thd_current_a ? Number(wf1.thd_current_a) : null,
-              thd_current_b: wf1.thd_current_b ? Number(wf1.thd_current_b) : null,
-              thd_current_c: wf1.thd_current_c ? Number(wf1.thd_current_c) : null,
-              active_energy: wf1.active_energy ? Number(wf1.active_energy) : null
+              volt_ab: wf1.volt_ab !== null && wf1.volt_ab !== undefined ? Number(wf1.volt_ab) : null,
+              volt_bc: wf1.volt_bc !== null && wf1.volt_bc !== undefined ? Number(wf1.volt_bc) : null,
+              volt_ca: wf1.volt_ca !== null && wf1.volt_ca !== undefined ? Number(wf1.volt_ca) : null,
+              volt_ll: wf1.volt_ll !== null && wf1.volt_ll !== undefined ? Number(wf1.volt_ll) : null,
+              current_a: wf1.current_a !== null && wf1.current_a !== undefined ? Number(wf1.current_a) : null,
+              current_b: wf1.current_b !== null && wf1.current_b !== undefined ? Number(wf1.current_b) : null,
+              current_c: wf1.current_c !== null && wf1.current_c !== undefined ? Number(wf1.current_c) : null,
+              frequency: wf1.frequency !== null && wf1.frequency !== undefined ? Number(wf1.frequency) : null,
+              active_power_total: wf1.active_power_total !== null && wf1.active_power_total !== undefined ? Number(wf1.active_power_total) : null,
+              reactive_power_total: wf1.reactive_power_total !== null && wf1.reactive_power_total !== undefined ? Number(wf1.reactive_power_total) : null,
+              apparent_power_total: wf1.apparent_power_total !== null && wf1.apparent_power_total !== undefined ? Number(wf1.apparent_power_total) : null,
+              power_factor: wf1.power_factor !== null && wf1.power_factor !== undefined ? Number(wf1.power_factor) : null,
+              voltage_unbalance: wf1.voltage_unbalance !== null && wf1.voltage_unbalance !== undefined ? Number(wf1.voltage_unbalance) : null,
+              current_unbalance: wf1.current_unbalance !== null && wf1.current_unbalance !== undefined ? Number(wf1.current_unbalance) : null,
+              thd_volt_a: wf1.thd_volt_a !== null && wf1.thd_volt_a !== undefined ? Number(wf1.thd_volt_a) : null,
+              thd_volt_b: wf1.thd_volt_b !== null && wf1.thd_volt_b !== undefined ? Number(wf1.thd_volt_b) : null,
+              thd_volt_c: wf1.thd_volt_c !== null && wf1.thd_volt_c !== undefined ? Number(wf1.thd_volt_c) : null,
+              thd_current_a: wf1.thd_current_a !== null && wf1.thd_current_a !== undefined ? Number(wf1.thd_current_a) : null,
+              thd_current_b: wf1.thd_current_b !== null && wf1.thd_current_b !== undefined ? Number(wf1.thd_current_b) : null,
+              thd_current_c: wf1.thd_current_c !== null && wf1.thd_current_c !== undefined ? Number(wf1.thd_current_c) : null,
+              active_energy: wf1.active_energy !== null && wf1.active_energy !== undefined ? Number(wf1.active_energy) : null
             });
           }
         } catch {}
@@ -520,32 +524,59 @@ export const getPowerMetersLatestHandler = async (
               group_id: "ew23",
               pm_id: "PM412",
               status: wf2.status_pm5500 !== null ? !!wf2.status_pm5500 : true,
-              volt_ab: wf2.volt_ab ? Number(wf2.volt_ab) : null,
-              volt_bc: wf2.volt_bc ? Number(wf2.volt_bc) : null,
-              volt_ca: wf2.volt_ca ? Number(wf2.volt_ca) : null,
-              volt_ll: wf2.volt_ll ? Number(wf2.volt_ll) : null,
-              current_a: wf2.current_a ? Number(wf2.current_a) : null,
-              current_b: wf2.current_b ? Number(wf2.current_b) : null,
-              current_c: wf2.current_c ? Number(wf2.current_c) : null,
-              frequency: wf2.frequency ? Number(wf2.frequency) : 50.0,
-              active_power_total: wf2.active_power_total ? Number(wf2.active_power_total) : null,
-              reactive_power_total: wf2.reactive_power_total ? Number(wf2.reactive_power_total) : null,
-              apparent_power_total: wf2.apparent_power_total ? Number(wf2.apparent_power_total) : null,
-              power_factor: wf2.power_factor ? Number(wf2.power_factor) : null,
-              voltage_unbalance: wf2.voltage_unbalance ? Number(wf2.voltage_unbalance) : null,
-              current_unbalance: wf2.current_unbalance ? Number(wf2.current_unbalance) : null,
-              thd_volt_a: wf2.thd_volt_a ? Number(wf2.thd_volt_a) : null,
-              thd_volt_b: wf2.thd_volt_b ? Number(wf2.thd_volt_b) : null,
-              thd_volt_c: wf2.thd_volt_c ? Number(wf2.thd_volt_c) : null,
-              thd_current_a: wf2.thd_current_a ? Number(wf2.thd_current_a) : null,
-              thd_current_b: wf2.thd_current_b ? Number(wf2.thd_current_b) : null,
-              thd_current_c: wf2.thd_current_c ? Number(wf2.thd_current_c) : null,
-              active_energy: wf2.active_energy ? Number(wf2.active_energy) : null
+              volt_ab: wf2.volt_ab !== null && wf2.volt_ab !== undefined ? Number(wf2.volt_ab) : null,
+              volt_bc: wf2.volt_bc !== null && wf2.volt_bc !== undefined ? Number(wf2.volt_bc) : null,
+              volt_ca: wf2.volt_ca !== null && wf2.volt_ca !== undefined ? Number(wf2.volt_ca) : null,
+              volt_ll: wf2.volt_ll !== null && wf2.volt_ll !== undefined ? Number(wf2.volt_ll) : null,
+              current_a: wf2.current_a !== null && wf2.current_a !== undefined ? Number(wf2.current_a) : null,
+              current_b: wf2.current_b !== null && wf2.current_b !== undefined ? Number(wf2.current_b) : null,
+              current_c: wf2.current_c !== null && wf2.current_c !== undefined ? Number(wf2.current_c) : null,
+              frequency: wf2.frequency !== null && wf2.frequency !== undefined ? Number(wf2.frequency) : null,
+              active_power_total: wf2.active_power_total !== null && wf2.active_power_total !== undefined ? Number(wf2.active_power_total) : null,
+              reactive_power_total: wf2.reactive_power_total !== null && wf2.reactive_power_total !== undefined ? Number(wf2.reactive_power_total) : null,
+              apparent_power_total: wf2.apparent_power_total !== null && wf2.apparent_power_total !== undefined ? Number(wf2.apparent_power_total) : null,
+              power_factor: wf2.power_factor !== null && wf2.power_factor !== undefined ? Number(wf2.power_factor) : null,
+              voltage_unbalance: wf2.voltage_unbalance !== null && wf2.voltage_unbalance !== undefined ? Number(wf2.voltage_unbalance) : null,
+              current_unbalance: wf2.current_unbalance !== null && wf2.current_unbalance !== undefined ? Number(wf2.current_unbalance) : null,
+              thd_volt_a: wf2.thd_volt_a !== null && wf2.thd_volt_a !== undefined ? Number(wf2.thd_volt_a) : null,
+              thd_volt_b: wf2.thd_volt_b !== null && wf2.thd_volt_b !== undefined ? Number(wf2.thd_volt_b) : null,
+              thd_volt_c: wf2.thd_volt_c !== null && wf2.thd_volt_c !== undefined ? Number(wf2.thd_volt_c) : null,
+              thd_current_a: wf2.thd_current_a !== null && wf2.thd_current_a !== undefined ? Number(wf2.thd_current_a) : null,
+              thd_current_b: wf2.thd_current_b !== null && wf2.thd_current_b !== undefined ? Number(wf2.thd_current_b) : null,
+              thd_current_c: wf2.thd_current_c !== null && wf2.thd_current_c !== undefined ? Number(wf2.thd_current_c) : null,
+              active_energy: wf2.active_energy !== null && wf2.active_energy !== undefined ? Number(wf2.active_energy) : null
             });
           }
         } catch {}
       }
     }
+    // Overlay 1-second real-time in-memory records from Ignition API polling so 1s HTTP requests always get live data
+    const liveRecords = getLatestEwGroupTelemetry(group);
+    if (liveRecords.length > 0) {
+      const mergedMap = new Map<string, any>();
+      for (const row of data) {
+        if (row?.pm_id) {
+          mergedMap.set(String(row.pm_id).toUpperCase().trim(), row);
+        }
+      }
+      for (const liveRec of liveRecords) {
+        if (!liveRec?.pm_id) continue;
+        const upId = String(liveRec.pm_id).toUpperCase().trim();
+        const existing = mergedMap.get(upId);
+        // If live record has real measurements or no existing DB row, overlay live values
+        const hasLiveMeasure =
+          liveRec.volt_ab !== null ||
+          liveRec.volt_ll !== null ||
+          liveRec.active_power_total !== null ||
+          liveRec.current_a !== null ||
+          liveRec.active_energy !== null;
+        if (hasLiveMeasure || !existing) {
+          mergedMap.set(upId, existing ? { ...existing, ...liveRec } : liveRec);
+        }
+      }
+      data = Array.from(mergedMap.values());
+    }
+
     const pmOrder: Record<string, number> = {
       PM318: 10, PM319: 20, PM320: 30, PM321: 40, PM322: 50,
       PM323: 60, PM324: 70, PM325: 80, PM327: 90, PM337: 100,
@@ -603,15 +634,16 @@ export const getPowerMeterHistoryHandler = async (
       "F2_PUTRNEW": "PM327",
     };
     const pmId = trafoAliasMap[rawPmId] || rawPmId;
-    const nowWib = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
-    const todayWibStr = nowWib.toISOString().slice(0, 10);
+    const syncedNow = getSyncedNow();
+    const wibNow = getWibDateTime(syncedNow);
+    const todayWibStr = wibNow.dateStr;
     const targetDate = (req.query.date as string) || todayWibStr;
     const isToday = targetDate === todayWibStr;
 
     // Use client's local laptop hour if provided, else default to server's Jakarta hour
     const clientHour = req.query.hour !== undefined ? parseInt(req.query.hour as string, 10) : undefined;
     const currentHour = isToday
-      ? (Number.isInteger(clientHour) && clientHour! >= 0 && clientHour! <= 23 ? clientHour! : nowWib.getHours())
+      ? (Number.isInteger(clientHour) && clientHour! >= 0 && clientHour! <= 23 ? clientHour! : wibNow.hour)
       : 23;
 
     const pool = getPostgresPool();
@@ -621,6 +653,15 @@ export const getPowerMeterHistoryHandler = async (
       if (target3sPmId === "PM8000" || target3sPmId === "CUBICLE_PLN_PM8000") target3sPmId = "PM410";
       if (target3sPmId === "PM5560" || target3sPmId === "PM5560_WF1" || target3sPmId === "FEEDER_WF1_PM5560") target3sPmId = "PM411";
       if (target3sPmId === "PM5560_WF2" || target3sPmId === "PM5500" || target3sPmId === "FEEDER_WF2_PM5500") target3sPmId = "PM412";
+
+      // Bound upper timestamp strictly to real current WIB time (never allow future timestamps from clock-skewed servers)
+      const clientTsParam = Number(req.query._t);
+      const effectiveNowMs =
+        Number.isFinite(clientTsParam) && Math.abs(clientTsParam - syncedNow.getTime()) < 300000
+          ? Math.min(syncedNow.getTime(), clientTsParam)
+          : syncedNow.getTime();
+      const maxWibStr = getWibDateTime(new Date(effectiveNowMs)).tStampStr;
+      const minWibStr = getWibDateTime(new Date(effectiveNowMs - 24 * 3600 * 1000)).tStampStr;
 
       const rollingDbRes = await pool.query(`
         SELECT
@@ -634,18 +675,19 @@ export const getPowerMeterHistoryHandler = async (
           NULL::numeric(12,2) as volt_rn,
           NULL::numeric(12,2) as volt_sn,
           NULL::numeric(12,2) as volt_tn,
-          ABS(active_power_total)::numeric(12,2) as active_power_total,
+          active_power_total::numeric(12,2) as active_power_total,
           current_a::numeric(12,2) as current_a,
           current_b::numeric(12,2) as current_b,
           current_c::numeric(12,2) as current_c,
-          (COALESCE(current_a, 0) + COALESCE(current_b, 0) + COALESCE(current_c, 0))::numeric(12,2) as current_total,
+          NULL::numeric(12,2) as current_total,
           power_factor::numeric(12,3) as power_factor,
           t_stamp
         FROM electric_trafo_rolling_3s
         WHERE UPPER(pm_id) = $1
-          AND t_stamp >= (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '24 hours'
+          AND t_stamp >= $2::timestamp
+          AND t_stamp <= $3::timestamp
         ORDER BY t_stamp ASC
-      `, [target3sPmId]);
+      `, [target3sPmId, minWibStr, maxWibStr]);
 
       if (req.query.compact === "true") {
         const tuples = rollingDbRes.rows.map((r: any) => [
@@ -653,7 +695,7 @@ export const getPowerMeterHistoryHandler = async (
           r.volt_ab !== null ? Number(r.volt_ab) : 0,
           r.volt_bc !== null ? Number(r.volt_bc) : 0,
           r.volt_ca !== null ? Number(r.volt_ca) : 0,
-          r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : 0,
+          r.active_power_total !== null ? Number(r.active_power_total) : 0,
           r.current_a !== null ? Number(r.current_a) : 0,
           r.current_b !== null ? Number(r.current_b) : 0,
           r.current_c !== null ? Number(r.current_c) : 0
@@ -687,7 +729,7 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
@@ -708,7 +750,7 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
@@ -808,7 +850,7 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
@@ -829,7 +871,7 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
@@ -929,7 +971,7 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
@@ -950,7 +992,7 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
@@ -1051,7 +1093,7 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
@@ -1073,7 +1115,7 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
@@ -1167,10 +1209,54 @@ export const getPowerMeterHistoryHandler = async (
       `, [pmId, targetDate, currentHour]);
     }
 
+    const rows = dbRes.rows;
+    if (isToday) {
+      let targetLivePmId = pmId.toUpperCase();
+      if (targetLivePmId === "PM8000" || targetLivePmId === "CUBICLE_PLN_PM8000") targetLivePmId = "PM410";
+      if (targetLivePmId === "PM5560" || targetLivePmId === "PM5560_WF1" || targetLivePmId === "FEEDER_WF1_PM5560") targetLivePmId = "PM411";
+      if (targetLivePmId === "PM5560_WF2" || targetLivePmId === "PM5500" || targetLivePmId === "FEEDER_WF2_PM5500") targetLivePmId = "PM412";
+
+      const liveAll = getLatestEwGroupTelemetry("all");
+      const liveRec = liveAll.find((r) => String(r.pm_id || "").toUpperCase().trim() === targetLivePmId);
+      if (liveRec) {
+        const curSlot = rows.find((r: any) => Number(r.hour) === currentHour);
+        if (curSlot) {
+          if (liveRec.active_power_total !== null && liveRec.active_power_total !== undefined) {
+            curSlot.active_power_total = Number(liveRec.active_power_total).toFixed(2);
+          }
+          if (liveRec.current_a !== null && liveRec.current_a !== undefined) {
+            curSlot.current_a = Number(liveRec.current_a).toFixed(2);
+          }
+          if (liveRec.current_b !== null && liveRec.current_b !== undefined) {
+            curSlot.current_b = Number(liveRec.current_b).toFixed(2);
+          }
+          if (liveRec.current_c !== null && liveRec.current_c !== undefined) {
+            curSlot.current_c = Number(liveRec.current_c).toFixed(2);
+          }
+          if (liveRec.volt_ab !== null && liveRec.volt_ab !== undefined) {
+            curSlot.volt_ab = Number(liveRec.volt_ab).toFixed(2);
+          }
+          if (liveRec.volt_bc !== null && liveRec.volt_bc !== undefined) {
+            curSlot.volt_bc = Number(liveRec.volt_bc).toFixed(2);
+          }
+          if (liveRec.volt_ca !== null && liveRec.volt_ca !== undefined) {
+            curSlot.volt_ca = Number(liveRec.volt_ca).toFixed(2);
+          }
+          if (liveRec.power_factor !== null && liveRec.power_factor !== undefined) {
+            curSlot.power_factor = Number(liveRec.power_factor).toFixed(3);
+          }
+          if (liveRec.active_energy !== null && liveRec.active_energy !== undefined) {
+            curSlot.active_energy = Number(liveRec.active_energy).toFixed(2);
+          }
+          curSlot.t_stamp = liveRec.t_stamp || syncedNow;
+        }
+      }
+    }
+
     res.json({
       targetDate,
       currentHour,
-      data: dbRes.rows
+      data: rows
     });
   } catch (err) {
     next(err);

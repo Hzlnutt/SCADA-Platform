@@ -10,6 +10,8 @@ type Props = {
   title?: string;
 };
 
+const NO_REALTIME_API = "API Realtime Belum Tersedia";
+
 export function EwPowerMetersGrid({
   powerMeters,
   isDark,
@@ -18,10 +20,10 @@ export function EwPowerMetersGrid({
 }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPmId, setSelectedPmId] = useState<string | null>(null);
-const selectedPm = useMemo(
-  () => powerMeters.find((p) => p.pm_id === selectedPmId) ?? null,
-  [powerMeters, selectedPmId]
-);
+  const selectedPm = useMemo(
+    () => powerMeters.find((p) => p.pm_id === selectedPmId) ?? null,
+    [powerMeters, selectedPmId]
+  );
 
   const filtered = useMemo(() => {
     return [...powerMeters]
@@ -38,7 +40,6 @@ const selectedPm = useMemo(
       .sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
   }, [powerMeters, searchTerm]);
 
-  const totalKw = powerMeters.reduce((sum, pm) => sum + (Number(pm.active_power_total) || 0), 0);
   const onlineCount = powerMeters.filter((pm) => pm.status !== false).length;
 
   return (
@@ -68,8 +69,8 @@ const selectedPm = useMemo(
           {/* Quick Total Load Badge */}
           <div className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm flex items-center gap-2">
             <span className="text-[10px] font-extrabold uppercase text-slate-400">Total Beban:</span>
-            <span className="text-xs font-extrabold font-mono text-sky-500">
-              {totalKw.toFixed(1)} <span className="text-[10px] font-bold text-slate-400">kW</span>
+            <span className="text-[10px] font-extrabold text-amber-500">
+              {NO_REALTIME_API}
             </span>
           </div>
 
@@ -98,10 +99,10 @@ const selectedPm = useMemo(
             {filtered.map((pm) => {
               const info = getPmInfo(pm.pm_id);
               const isOnline = pm.status !== false;
-              const pKw = Number(pm.active_power_total) || 0;
-              const pf = Math.abs(Number(pm.power_factor) || 0);
-              const vL = Number(pm.volt_ab) || Number(pm.volt_ll) || 0;
-              const iAvg = ((Number(pm.current_a) || 0) + (Number(pm.current_b) || 0) + (Number(pm.current_c) || 0)) / 3;
+              const hasActivePower = pm.active_power_total !== null && pm.active_power_total !== undefined;
+              const hasPf = pm.power_factor !== null && pm.power_factor !== undefined;
+              const hasVoltLl = pm.volt_ll !== null && pm.volt_ll !== undefined;
+              const hasEnergy = pm.active_energy !== null && pm.active_energy !== undefined;
 
               return (
                 <div
@@ -146,31 +147,63 @@ const selectedPm = useMemo(
                       <span className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">
                         Active Power
                       </span>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-lg font-black font-mono text-sky-500 tracking-tight">
-                          {pKw.toFixed(1)}
+                      {hasActivePower ? (
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-lg font-black font-mono text-sky-500 tracking-tight">
+                            {Number(pm.active_power_total).toFixed(1)}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-400">kW</span>
+                        </div>
+                      ) : (
+                        <span className="text-[9px] font-bold text-amber-500 leading-tight block">
+                          {NO_REALTIME_API}
                         </span>
-                        <span className="text-[10px] font-bold text-slate-400">kW</span>
-                      </div>
+                      )}
                     </div>
 
                     {/* Secondary Metrics */}
                     <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
                       <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
                         <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Tegangan</span>
-                        <span className="font-extrabold text-slate-700 dark:text-slate-200">{vL.toFixed(0)} V</span>
+                        {hasVoltLl ? (
+                          <span className="font-extrabold text-slate-700 dark:text-slate-200">
+                            {Number(pm.volt_ll).toFixed(0)} V
+                          </span>
+                        ) : (
+                          <span className="font-sans text-[8px] font-bold text-amber-500 leading-tight">
+                            {NO_REALTIME_API}
+                          </span>
+                        )}
                       </div>
                       <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
                         <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Arus Rata2</span>
-                        <span className="font-extrabold text-slate-700 dark:text-slate-200">{iAvg.toFixed(1)} A</span>
+                        <span className="font-sans text-[8px] font-bold text-amber-500 leading-tight">
+                          {NO_REALTIME_API}
+                        </span>
                       </div>
                       <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
                         <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Power Factor</span>
-                        <span className="font-extrabold text-emerald-500">{pf.toFixed(2)}</span>
+                        {hasPf ? (
+                          <span className="font-extrabold text-emerald-500">
+                            {Number(pm.power_factor).toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="font-sans text-[8px] font-bold text-amber-500 leading-tight">
+                            {NO_REALTIME_API}
+                          </span>
+                        )}
                       </div>
                       <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
                         <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Energi</span>
-                        <span className="font-extrabold text-purple-400">{pm.active_energy !== null && pm.active_energy !== undefined ? Math.round(Number(pm.active_energy)).toLocaleString("id-ID") : "—"}</span>
+                        {hasEnergy ? (
+                          <span className="font-extrabold text-purple-400">
+                            {Math.round(Number(pm.active_energy)).toLocaleString("id-ID")}
+                          </span>
+                        ) : (
+                          <span className="font-sans text-[8px] font-bold text-amber-500 leading-tight">
+                            {NO_REALTIME_API}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

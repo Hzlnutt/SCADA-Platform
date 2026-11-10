@@ -260,7 +260,48 @@ const getNullEwRecords = (ts: Date, groupId: string): ElectricPmRecord[] => {
   }));
 };
 
-export const formatMinuteString = (d: Date = new Date()): string => {
+let serverClockOffsetMs = 0;
+let lastClockCalibrationMs = 0;
+
+export const getSyncedNow = (): Date => {
+  return new Date(Date.now() + serverClockOffsetMs);
+};
+
+export const calibrateServerClockOffset = async (): Promise<void> => {
+  const urls = [
+    "https://www.google.com",
+    "https://cloudflare.com",
+    "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln"
+  ];
+  for (const url of urls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const t0 = Date.now();
+      const res = await fetch(url, { method: "HEAD", signal: controller.signal }).catch(() =>
+        fetch(url, { signal: controller.signal })
+      );
+      const t1 = Date.now();
+      clearTimeout(timeoutId);
+      const dateHeader = res?.headers?.get("date");
+      if (dateHeader) {
+        const remoteMs = Date.parse(dateHeader);
+        if (Number.isFinite(remoteMs)) {
+          const midLocalMs = Math.round((t0 + t1) / 2);
+          const diffMs = remoteMs - midLocalMs;
+          // Apply offset if system clock is skewed by more than 5 seconds (e.g. +69s on utility.widatra.com)
+          serverClockOffsetMs = Math.abs(diffMs) > 5000 ? diffMs : 0;
+          lastClockCalibrationMs = Date.now();
+          return;
+        }
+      }
+    } catch {
+      // Try next time source
+    }
+  }
+};
+
+export const formatMinuteString = (d: Date = getSyncedNow()): string => {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Jakarta",
     year: "numeric",
@@ -281,7 +322,7 @@ export const formatMinuteString = (d: Date = new Date()): string => {
   return `${yr}-${mo}-${dy} ${hr}:${mi}:00`;
 };
 
-export const getWibDateTime = (d: Date = new Date()) => {
+export const getWibDateTime = (d: Date = getSyncedNow()) => {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Jakarta",
     year: "numeric",
@@ -332,8 +373,8 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
       voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
       thd_current_a, thd_current_b, thd_current_c, active_energy, export_pln
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL,
-      $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+      $24, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
     )
     ON CONFLICT (t_stamp) DO UPDATE SET
       status_pm8000 = EXCLUDED.status_pm8000,
@@ -348,7 +389,7 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
       active_power = EXCLUDED.active_power,
       reactive_power_total = EXCLUDED.reactive_power_total,
       apparent_power_total = EXCLUDED.apparent_power_total,
-      power_factor = NULL,
+      power_factor = EXCLUDED.power_factor,
       voltage_unbalance = EXCLUDED.voltage_unbalance,
       current_unbalance = EXCLUDED.current_unbalance,
       thd_volt_a = EXCLUDED.thd_volt_a,
@@ -364,7 +405,7 @@ const insertPlnMinuteTelemetry = async (payload: ReturnType<typeof parsePlnApi>,
     payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power,
     payload.reactive_power_total, payload.apparent_power_total,
     payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
-    payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy, payload.export_pln
+    payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy, payload.export_pln, payload.power_factor
   ]).catch((err) => {
     logger.warn(`Failed to insert PLN minute telemetry: ${err.message}`);
   });
@@ -412,8 +453,8 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
       voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
       thd_current_a, thd_current_b, thd_current_c, active_energy
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL,
-      $14, $15, $16, $17, $18, $19, $20, $21, $22
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+      $23, $14, $15, $16, $17, $18, $19, $20, $21, $22
     )
     ON CONFLICT (t_stamp) DO UPDATE SET
       status_pm5500 = EXCLUDED.status_pm5500,
@@ -428,7 +469,7 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
       active_power_total = EXCLUDED.active_power_total,
       reactive_power_total = EXCLUDED.reactive_power_total,
       apparent_power_total = EXCLUDED.apparent_power_total,
-      power_factor = NULL,
+      power_factor = EXCLUDED.power_factor,
       voltage_unbalance = EXCLUDED.voltage_unbalance,
       current_unbalance = EXCLUDED.current_unbalance,
       thd_volt_a = EXCLUDED.thd_volt_a,
@@ -443,7 +484,7 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
     payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power_total,
     payload.reactive_power_total, payload.apparent_power_total,
     payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
-    payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy
+    payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy, payload.power_factor
   ]).catch((err) => {
     logger.warn(`Failed to insert WF minute telemetry to ${table}: ${err.message}`);
   });
@@ -590,7 +631,7 @@ const insertPltsMinuteTelemetry = async (records: ElectricPltsRecord[], minuteTs
       await pool.query(`
         INSERT INTO electric_plts_telemetry_minute (
           t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh, power_factor
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         ON CONFLICT (t_stamp, poi_id) DO UPDATE SET
           status = EXCLUDED.status,
           volt_ab = EXCLUDED.volt_ab,
@@ -603,9 +644,9 @@ const insertPltsMinuteTelemetry = async (records: ElectricPltsRecord[], minuteTs
           active_power = EXCLUDED.active_power,
           total_kwh = EXCLUDED.total_kwh,
           total_kvarh = EXCLUDED.total_kvarh,
-          power_factor = NULL;
+          power_factor = EXCLUDED.power_factor;
       `, [
-        minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power ?? null, r.total_kwh ?? null, r.total_kvarh ?? null
+        minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power ?? null, r.total_kwh ?? null, r.total_kvarh ?? null, r.power_factor ?? null
       ]);
 
       // Polling per jam: at the exact hour mark (:00:00), save sampled hourly power factor & telemetry directly to electric_plts_telemetry
@@ -859,18 +900,55 @@ const insertPmMinuteTelemetryBatch = async (records: ElectricPmRecord[], minuteT
   }
 };
 
+const latestEwGroupTelemetry: Record<string, { data: ElectricPmRecord[]; ts: number }> = {};
+
+export const getLatestEwGroupTelemetry = (groupId: string): ElectricPmRecord[] => {
+  const g = groupId.toLowerCase();
+  const now = Date.now();
+  if (g === "all") {
+    const combined: ElectricPmRecord[] = [];
+    for (const key of ["ew21", "ew22", "ew23", "custom_pm"]) {
+      const entry = latestEwGroupTelemetry[key];
+      if (entry && now - entry.ts < 15000) {
+        combined.push(...entry.data);
+      }
+    }
+    return combined;
+  }
+  const res: ElectricPmRecord[] = [];
+  const mainEntry = latestEwGroupTelemetry[g];
+  if (mainEntry && now - mainEntry.ts < 15000) {
+    res.push(...mainEntry.data);
+  }
+  const customEntry = latestEwGroupTelemetry["custom_pm"];
+  if (customEntry && now - customEntry.ts < 15000) {
+    for (const r of customEntry.data) {
+      if ((r.group_id || "").toLowerCase() === g) {
+        res.push(r);
+      }
+    }
+  }
+  return res;
+};
+
 const broadcastEwLiveTelemetry = (groupId: string, records: ElectricPmRecord[]) => {
+  const syncedTs = getSyncedNow();
+  latestEwGroupTelemetry[groupId.toLowerCase()] = {
+    data: records,
+    ts: Date.now()
+  };
+
   const io = getSocketServer();
   if (!io) return;
 
   io.emit(`electricity:${groupId}_live`, {
     groupId,
-    t_stamp: new Date(),
+    t_stamp: syncedTs,
     data: records
   });
   io.emit("electricity:pm_live_update", {
     groupId,
-    t_stamp: new Date(),
+    t_stamp: syncedTs,
     data: records
   });
 };
@@ -1257,7 +1335,7 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
     peakDemand: rawPeak1 !== undefined && rawPeak1 !== null ? (Number(rawPeak1) || 0) : 0,
     totalKwh: typeof p1.Total_KWH_POI_1 === "number" ? p1.Total_KWH_POI_1 : 0,
     totalKvarh: typeof p1.Total_KVARH_POI_1 === "number" ? p1.Total_KVARH_POI_1 : 0,
-    frequency: typeof p1.Frequency_POI_1 === "number" ? p1.Frequency_POI_1 : 50,
+    frequency: typeof p1.Frequency_POI_1 === "number" ? p1.Frequency_POI_1 : null,
     voltAb: typeof p1.Volt_AB_POI_1 === "number" ? p1.Volt_AB_POI_1 : 0,
     voltBc: typeof p1.Volt_BC_POI_1 === "number" ? p1.Volt_BC_POI_1 : 0,
     voltCa: typeof p1.Volt_CA_POI_1 === "number" ? p1.Volt_CA_POI_1 : 0,
@@ -1272,7 +1350,7 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
     peakDemand: rawPeak2 !== undefined && rawPeak2 !== null ? (Number(rawPeak2) || 0) : 0,
     totalKwh: typeof p2.Total_KWH_POI_2 === "number" ? p2.Total_KWH_POI_2 : 0,
     totalKvarh: typeof p2.Total_KVARH_POI_2 === "number" ? p2.Total_KVARH_POI_2 : 0,
-    frequency: typeof p2.Frequency_POI_2 === "number" ? p2.Frequency_POI_2 : 50,
+    frequency: typeof p2.Frequency_POI_2 === "number" ? p2.Frequency_POI_2 : null,
     voltAb: typeof p2.Volt_AB_POI_2 === "number" ? p2.Volt_AB_POI_2 : 0,
     voltBc: typeof p2.Volt_BC_POI_2 === "number" ? p2.Volt_BC_POI_2 : 0,
     voltCa: typeof p2.Volt_CA_POI_2 === "number" ? p2.Volt_CA_POI_2 : 0,
@@ -1547,9 +1625,14 @@ export const startIncomingElectricityPolling = () => {
     logger.warn(`Failed to ensure electric_trafo_rolling_3s table: ${err.message}`);
   });
 
+  calibrateServerClockOffset().catch(() => {});
+
   const poll = async () => {
     const startTime = Date.now();
-    const ts = new Date();
+    if (startTime - lastClockCalibrationMs > 10 * 60 * 1000) {
+      calibrateServerClockOffset().catch(() => {});
+    }
+    const ts = getSyncedNow();
     const currentMinuteStr = formatMinuteString(ts);
     const isNewMinute = currentMinuteStr !== lastElectricityMinuteStr;
     if (isNewMinute) {
@@ -1881,7 +1964,7 @@ export const startIncomingElectricityPolling = () => {
 
     // 7a. Persist 3-second rolling 24-hour FIFO telemetry for Distribution Transformers
     const wibTrafo = getWibDateTime(ts);
-    if (wibTrafo.second % 3 === 0 && wibTrafo.tStampStr !== lastTrafo3sTimestampStr) {
+    if (wibTrafo.tStampStr !== lastTrafo3sTimestampStr) {
       lastTrafo3sTimestampStr = wibTrafo.tStampStr;
       const trafoTargetIds = new Set([
         "PM139", "PM136", "PM135", "PM133", "PM201", "PM202", "PM327",
@@ -1914,14 +1997,14 @@ export const startIncomingElectricityPolling = () => {
             r.volt_ab,
             r.volt_bc,
             r.volt_ca,
-            r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : null,
+            r.active_power_total !== null ? Number(r.active_power_total) : null,
             r.current_a,
             r.current_b,
             r.current_c,
             r.power_factor !== null ? Number(r.power_factor) : null
           );
         }
-        const purgeTrafoDate = new Date(ts.getTime() - 24 * 3600 * 1000);
+        const purgeTrafoDate = new Date(ts.getTime() - (24 * 3600 + 300) * 1000);
         const purgeTrafoWib = getWibDateTime(purgeTrafoDate);
         const savedTsMs = Math.floor(ts.getTime() / 1000) * 1000;
         getPostgresPool().query(`
@@ -1929,7 +2012,15 @@ export const startIncomingElectricityPolling = () => {
             pm_id, t_stamp, volt_ab, volt_bc, volt_ca,
             active_power_total, current_a, current_b, current_c, power_factor
           ) VALUES ${placeholders.join(", ")}
-          ON CONFLICT (pm_id, t_stamp) DO NOTHING
+          ON CONFLICT (pm_id, t_stamp) DO UPDATE SET
+            volt_ab = EXCLUDED.volt_ab,
+            volt_bc = EXCLUDED.volt_bc,
+            volt_ca = EXCLUDED.volt_ca,
+            active_power_total = EXCLUDED.active_power_total,
+            current_a = EXCLUDED.current_a,
+            current_b = EXCLUDED.current_b,
+            current_c = EXCLUDED.current_c,
+            power_factor = EXCLUDED.power_factor
         `, vals).then(() => {
           if (io) {
             io.emit("electricity:trafo_3s_saved", {
@@ -1942,7 +2033,7 @@ export const startIncomingElectricityPolling = () => {
                 volt_ab: r.volt_ab,
                 volt_bc: r.volt_bc,
                 volt_ca: r.volt_ca,
-                active_power_total: r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : null,
+                active_power_total: r.active_power_total !== null ? Number(r.active_power_total) : null,
                 current_a: r.current_a,
                 current_b: r.current_b,
                 current_c: r.current_c,
