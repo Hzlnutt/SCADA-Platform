@@ -3543,7 +3543,7 @@ export default function Electricity() {
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 60000); // 60s fallback polling (WebSocket handles real-time updates)
+    const interval = setInterval(fetchActiveApiData, 3000); // 3s active fallback polling ensures telemetry numbers never freeze
 
     const socket = getSocket();
     const handlePltsLive = (payload: any) => {
@@ -5355,42 +5355,46 @@ export default function Electricity() {
           <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
           <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-blue-500">PLN — Incoming Grid</h3>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 items-stretch">
           {/* Estimasi Biaya */}
-          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition">
-            <div className="flex items-center justify-between">
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Estimasi Biaya</span>
               <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500"><IconMoney /></div>
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {summaryLoading && !summaryData ? "..." : formatCurrency(cardSummary.totalCost)}
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+            <div className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 truncate">
               {summaryLoading && !summaryData ? "" : `${cardSummary.totalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
             </div>
           </div>
 
           {/* Beban LWBP */}
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">Beban LWBP</span>
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">Beban LWBP</span>
+            </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
               {summaryLoading && !summaryData ? "..." : `${cardSummary.lwbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-blue-500">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.lwbpCost)}</div>
+            <div className="mt-1 text-[10px] font-semibold text-blue-500 truncate">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.lwbpCost)}</div>
           </div>
 
           {/* Beban WBP */}
-          <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30 p-4 hover:border-rose-400 transition">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">Beban WBP</span>
+          <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30 p-4 hover:border-rose-400 transition h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">Beban WBP</span>
+            </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
               {summaryLoading && !summaryData ? "..." : `${cardSummary.wbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-rose-500">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.wbpCost)}</div>
+            <div className="mt-1 text-[10px] font-semibold text-rose-500 truncate">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.wbpCost)}</div>
           </div>
 
           {/* PF / Power Factor */}
-          <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 dark:bg-purple-950/30 p-4 hover:border-purple-400 transition">
-            <div className="flex items-center justify-between">
+          <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 dark:bg-purple-950/30 p-4 hover:border-purple-400 transition h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">PF</span>
               <span 
                 className={`h-2 w-2 rounded-full ${pfStatus === "connected" && (livePf !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== null)) ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} 
@@ -5408,18 +5412,18 @@ export default function Electricity() {
               })()}
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-              <span>Stabilitas beban listrik</span>
+              <span className="truncate">Stabilitas beban listrik</span>
               {pfStatus === "connected" && (livePf !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== null)) ? (
-                <span className="text-[9px] font-semibold text-emerald-500 font-mono">1s Live</span>
+                <span className="text-[9px] font-semibold text-emerald-500 font-mono shrink-0">1s Live</span>
               ) : (
-                <span className="text-[9px] font-semibold text-amber-500 font-mono">Gagal Polling API</span>
+                <span className="text-[9px] font-semibold text-amber-500 font-mono shrink-0">Gagal Polling API</span>
               )}
             </div>
           </div>
 
           {/* Peak Demand */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition">
-            <div className="flex items-center justify-between">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">Peak Demand</span>
               <span 
                 className={`h-2 w-2 rounded-full ${pfStatus === "connected" && (livePeakDemandKw !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== null)) ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} 
@@ -5437,11 +5441,11 @@ export default function Electricity() {
               })()}
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-              <span>Estimasi beban puncak</span>
+              <span className="truncate">Estimasi beban puncak</span>
               {pfStatus === "connected" && (livePeakDemandKw !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== null)) ? (
-                <span className="text-[9px] font-semibold text-emerald-500 font-mono">1s Live</span>
+                <span className="text-[9px] font-semibold text-emerald-500 font-mono shrink-0">1s Live</span>
               ) : (
-                <span className="text-[9px] font-semibold text-amber-500 font-mono">Gagal Polling API</span>
+                <span className="text-[9px] font-semibold text-amber-500 font-mono shrink-0">Gagal Polling API</span>
               )}
             </div>
           </div>
@@ -5450,11 +5454,11 @@ export default function Electricity() {
       </div>
 
       {/* ═══════════ SECTION C: PLN TREND + DONUT ═══════════ */}
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <section className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm transition-opacity duration-150 ${isFilterPending ? "opacity-75" : "opacity-100"}`}>
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div className="flex flex-col">
-              <div className="flex items-center gap-3">
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr] items-stretch">
+        <section className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between h-full min-h-[440px] transition-opacity duration-150 ${isFilterPending ? "opacity-75" : "opacity-100"}`}>
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Trend Panel Distribusi</h3>
                 {cardSummary.totalKwh > 0 && (
                   <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 rounded-lg">
@@ -5462,15 +5466,15 @@ export default function Electricity() {
                   </span>
                 )}
                 {isFilterPending && (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-0.5 rounded-lg animate-pulse">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-lg animate-pulse">
                     <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-ping" />
                     Memuat...
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Beban Incoming PLN — data historis (WBP & LWBP).</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">Beban Incoming PLN — data historis (WBP & LWBP).</p>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
+            <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2">
               {(range === "ytd" || range === "day" || range === "month") && (
                 <select
                   value={selectedYear}
@@ -5550,19 +5554,19 @@ export default function Electricity() {
               </div>
             </div>
           </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80">
-            <div style={{ height: 256 }}>
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[260px] flex flex-col justify-center">
+            <div className="h-[260px] w-full">
               <Bar data={stackedBarData} options={stackedBarOptions} />
             </div>
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between h-full min-h-[440px]">
           <div>
             <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Distribusi Beban</h3>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Perbandingan konsumsi WBP vs LWBP.</p>
           </div>
-          <div className="my-6 flex justify-center">
+          <div className="my-auto py-4 flex justify-center">
             <DonutChart 
               segments={donutSegments} 
               size={150} 
@@ -5570,7 +5574,7 @@ export default function Electricity() {
               centerLabel={donutSegments[0]?.value > 0 ? `WBP ${donutSegments[0].value}%` : `LWBP 100%`} 
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 mt-auto">
             {donutSegments.map((item) => (
               <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5 last:border-0 last:pb-0">
                 <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
@@ -5598,30 +5602,30 @@ export default function Electricity() {
             {isSolarOffline ? "GAGAL POLLING API" : "ONLINE"}
           </span>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 items-stretch">
           {/* Estimasi Biaya PV */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
-            <div className="flex items-center justify-between">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Estimasi Biaya PV</span>
               <div className="h-6 w-6 rounded bg-amber-500/10 flex items-center justify-center text-amber-500"><IconMoney /></div>
             </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
+            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {formatCurrency(solarFilteredMetrics.pvCost)}
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+            <div className="mt-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 truncate" title={`${formatNumber(solarFilteredMetrics.totalKwh)} kWh (${solarFilteredMetrics.periodLabel})`}>
               {formatNumber(solarFilteredMetrics.totalKwh)} kWh ({solarFilteredMetrics.periodLabel})
             </div>
           </div>
 
           {/* POI-1 */}
-          <div className={`rounded-xl border p-4 transition-all ${
+          <div className={`rounded-xl border p-4 h-full flex flex-col justify-between min-h-[116px] transition-all ${
             isPoi1Offline
               ? "border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30"
               : solarLive?.poi1?.status === false
               ? "border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30"
               : "border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30"
           }`}>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between min-h-[24px]">
               <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
                 isPoi1Offline
                   ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
@@ -5639,10 +5643,16 @@ export default function Electricity() {
                   : "bg-emerald-500"
               }`} />
             </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
+            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {formatNumber(solarFilteredMetrics.poi1Kwh)} kWh
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+            <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 truncate" title={
+              isPoi1Offline
+                ? "Status: GAGAL POLLING API"
+                : solarLive?.poi1?.status === false
+                ? "Status: TIDAK AKTIF"
+                : `${solarFilteredMetrics.periodLabel}${solarLive?.poi1?.voltAb ? ` • ${solarLive.poi1.voltAb.toFixed(1)} V` : ""}`
+            }>
               {isPoi1Offline
                 ? "Status: GAGAL POLLING API"
                 : solarLive?.poi1?.status === false
@@ -5652,23 +5662,28 @@ export default function Electricity() {
           </div>
 
           {/* Peak Demand (POI-1) */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-1)</span>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-1)</span>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase">Max</span>
+            </div>
+            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {formatNumber(solarFilteredMetrics.poi1PeakDemand)} kW
             </div>
-            <div className="mt-1 text-[10px] text-slate-400">Puncak beban {solarFilteredMetrics.periodLabel}</div>
+            <div className="mt-1 text-[10px] text-slate-400 truncate" title={`Puncak beban ${solarFilteredMetrics.periodLabel}`}>
+              Puncak beban {solarFilteredMetrics.periodLabel}
+            </div>
           </div>
 
           {/* POI-2 */}
-          <div className={`rounded-xl border p-4 transition-all ${
+          <div className={`rounded-xl border p-4 h-full flex flex-col justify-between min-h-[116px] transition-all ${
             isPoi2Offline
               ? "border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30"
               : solarLive?.poi2?.status === false
               ? "border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30"
               : "border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30"
           }`}>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between min-h-[24px]">
               <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
                 isPoi2Offline
                   ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
@@ -5686,10 +5701,16 @@ export default function Electricity() {
                   : "bg-emerald-500"
               }`} />
             </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
+            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {formatNumber(solarFilteredMetrics.poi2Kwh)} kWh
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+            <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 truncate" title={
+              isPoi2Offline
+                ? "Status: GAGAL POLLING API"
+                : solarLive?.poi2?.status === false
+                ? "Status: TIDAK AKTIF"
+                : `${solarFilteredMetrics.periodLabel}${solarLive?.poi2?.voltAb ? ` • ${solarLive.poi2.voltAb.toFixed(1)} V` : ""}`
+            }>
               {isPoi2Offline
                 ? "Status: GAGAL POLLING API"
                 : solarLive?.poi2?.status === false
@@ -5699,21 +5720,26 @@ export default function Electricity() {
           </div>
 
           {/* Peak Demand (POI-2) */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-2)</span>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 h-full flex flex-col justify-between min-h-[116px]">
+            <div className="flex items-center justify-between min-h-[24px]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-2)</span>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase">Max</span>
+            </div>
+            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {formatNumber(solarFilteredMetrics.poi2PeakDemand)} kW
             </div>
-            <div className="mt-1 text-[10px] text-slate-400">Puncak beban {solarFilteredMetrics.periodLabel}</div>
+            <div className="mt-1 text-[10px] text-slate-400 truncate" title={`Puncak beban ${solarFilteredMetrics.periodLabel}`}>
+              Puncak beban {solarFilteredMetrics.periodLabel}
+            </div>
           </div>
         </div>
       </div>
 
       {/* ═══════════ SECTION E: SOLAR PANEL CHART + DONUT ═══════════ */}
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <section className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between transition-opacity duration-150 ${isSolarFilterPending ? "opacity-75" : "opacity-100"}`}>
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div className="flex flex-wrap items-center gap-3">
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr] items-stretch">
+        <section className={`rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between h-full min-h-[440px] transition-opacity duration-150 ${isSolarFilterPending ? "opacity-75" : "opacity-100"}`}>
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Trend Produksi Solar Panel (PLTS)</h3>
@@ -5761,7 +5787,7 @@ export default function Electricity() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
+            <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2">
               {/* Year / Month / Date Pickers */}
               {(solarRange === "ytd" || solarRange === "day" || solarRange === "month") && (
                 <select
@@ -5848,14 +5874,14 @@ export default function Electricity() {
               </div>
             </div>
           </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[256px]">
-            <div style={{ height: 256 }}>
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[260px] flex flex-col justify-center">
+            <div className="h-[260px] w-full">
               <Bar data={solarBarData} options={solarBarOptions} />
             </div>
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
+        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between h-full min-h-[440px]">
           <div>
             <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Distribusi Beban PLTS</h3>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Perbandingan produksi POI-1 vs POI-2.</p>
@@ -5886,7 +5912,7 @@ export default function Electricity() {
 
             return (
               <>
-                <div className="my-6 flex justify-center">
+                <div className="my-auto py-4 flex justify-center">
                   <DonutChart 
                     segments={segments} 
                     size={150} 
@@ -5895,7 +5921,7 @@ export default function Electricity() {
                     centerLabelSize="text-[11px]" 
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 mt-auto">
                   {solarShowPoi1 && (
                     <div className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5">
                       <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">

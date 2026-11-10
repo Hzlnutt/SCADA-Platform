@@ -8,7 +8,12 @@ export const getSocket = () => {
     const prodFallback = typeof window !== "undefined" ? window.location.origin : "";
     const baseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? devFallback : prodFallback);
     socket = io(baseUrl, {
-      transports: ["websocket"],
+      transports: ["polling", "websocket"],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 10000,
       path: "/socket.io"
     });
   }
