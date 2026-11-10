@@ -40,9 +40,17 @@ export class ErrorBoundary extends Component<Props, State> {
           <h3 className="text-base font-bold text-slate-800 dark:text-white mb-1">
             Terjadi Kendala Tampilan
           </h3>
-          <p className="text-xs text-slate-600 dark:text-slate-400 max-w-md mb-4">
+          <p className="text-xs text-slate-600 dark:text-slate-400 max-w-md mb-3">
             Komponen ini mengalami error saat memuat data. Silakan muat ulang atau coba kembali.
           </p>
+          {this.state.error && (
+            <details className="mb-4 text-left w-full max-w-md text-[11px] font-mono bg-red-100/70 dark:bg-red-950/40 text-red-700 dark:text-red-300 p-2.5 rounded-xl border border-red-200 dark:border-red-900/40">
+              <summary className="cursor-pointer font-bold select-none">Detail Error Teknis</summary>
+              <div className="mt-1.5 whitespace-pre-wrap break-all overflow-x-auto text-[10px]">
+                {this.state.error.message}
+              </div>
+            </details>
+          )}
           <div className="flex items-center gap-3">
             <button
               onClick={() => this.setState({ hasError: false, error: null })}

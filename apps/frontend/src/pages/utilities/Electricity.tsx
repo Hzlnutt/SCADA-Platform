@@ -2886,6 +2886,8 @@ export default function Electricity() {
 
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
+  const socketStatus = useSystemStore((state) => state.socketStatus);
+  const isGatewayOffline = socketStatus === "disconnected";
 
   const wbpRate = useConfigStore((state) => state.wbpRate);
   const lwbpRate = useConfigStore((state) => state.lwbpRate);
@@ -4882,22 +4884,22 @@ export default function Electricity() {
   const rawPGridVal = livePGridKw !== null && livePGridKw !== undefined
     ? livePGridKw
     : (apiPlnVal !== null ? apiPlnVal : (summaryData?.pln?.activePower ?? null));
-  const isPlnOffline = !isLiveLoading && rawPGridVal === null;
-  const pGridNum = rawPGridVal !== null ? Math.max(0, rawPGridVal) : null;
+  const isPlnOffline = isGatewayOffline || (!isLiveLoading && rawPGridVal === null);
+  const pGridNum = (rawPGridVal !== null && !isGatewayOffline) ? Math.max(0, rawPGridVal) : null;
 
   const hasPoi1Data = pltsLive.poi1.status === true || (typeof pltsLive.poi1.active_power === "number" && pltsLive.poi1.active_power > 0) || solarLive?.poi1?.status === true;
-  const isPoi1Offline = !isLiveLoading && !hasPoi1Data && (pltsLive.poi1.status === false || solarLive?.poi1?.status === false);
+  const isPoi1Offline = isGatewayOffline || (!isLiveLoading && !hasPoi1Data && (pltsLive.poi1.status === false || solarLive?.poi1?.status === false));
   const hasPoi2Data = pltsLive.poi2.status === true || (typeof pltsLive.poi2.active_power === "number" && pltsLive.poi2.active_power > 0) || solarLive?.poi2?.status === true;
-  const isPoi2Offline = !isLiveLoading && !hasPoi2Data && (pltsLive.poi2.status === false || solarLive?.poi2?.status === false);
-  const poi1Kw = !isPoi1Offline ? Math.max(0, pltsLive.poi1.active_power || solarLive?.poi1?.activePower || 0) : null;
-  const poi2Kw = !isPoi2Offline ? Math.max(0, pltsLive.poi2.active_power || solarLive?.poi2?.activePower || 0) : null;
-  const isSolarOffline = !isLiveLoading && isPoi1Offline && isPoi2Offline;
-  const totalSolarKw = (!isSolarOffline && (poi1Kw !== null || poi2Kw !== null)) ? ((poi1Kw ?? 0) + (poi2Kw ?? 0)) : null;
+  const isPoi2Offline = isGatewayOffline || (!isLiveLoading && !hasPoi2Data && (pltsLive.poi2.status === false || solarLive?.poi2?.status === false));
+  const poi1Kw = (!isPoi1Offline && !isGatewayOffline) ? Math.max(0, pltsLive.poi1.active_power || solarLive?.poi1?.activePower || 0) : null;
+  const poi2Kw = (!isPoi2Offline && !isGatewayOffline) ? Math.max(0, pltsLive.poi2.active_power || solarLive?.poi2?.activePower || 0) : null;
+  const isSolarOffline = isGatewayOffline || (!isLiveLoading && isPoi1Offline && isPoi2Offline);
+  const totalSolarKw = (!isSolarOffline && !isGatewayOffline && (poi1Kw !== null || poi2Kw !== null)) ? ((poi1Kw ?? 0) + (poi2Kw ?? 0)) : null;
 
   const gensetRunning = Number(getCleanNum(getApiVal("electricity/genset_running"))) || 0;
   const pGensetNum = gensetRunning === 1 ? 850 : gensetRunning > 1 ? 1850 : 0;
 
-  const totalPlantLoadKw = !isLiveLoading && (pGridNum !== null || totalSolarKw !== null || pGensetNum > 0)
+  const totalPlantLoadKw = !isLiveLoading && !isGatewayOffline && (pGridNum !== null || totalSolarKw !== null || pGensetNum > 0)
     ? (pGridNum ?? 0) + (totalSolarKw ?? 0) + pGensetNum
     : null;
 
@@ -4953,11 +4955,13 @@ export default function Electricity() {
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold font-mono border ${
                   isLiveLoading
                     ? isDark ? 'bg-blue-400/10 text-blue-300 border-blue-400/20 animate-pulse' : 'bg-blue-600/10 text-blue-700 border-blue-600/20 animate-pulse'
+                    : isGatewayOffline
+                    ? isDark ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-500/15 text-rose-700 border-rose-500/30'
                     : isPlnOffline
                     ? isDark ? 'bg-amber-400/20 text-amber-300 border-amber-400/30' : 'bg-amber-500/15 text-amber-700 border-amber-500/30'
                     : isDark ? 'bg-blue-400/20 text-blue-200 border-blue-400/30' : 'bg-blue-600/10 text-blue-700 border-blue-600/20'
                 }`}>
-                  {isLiveLoading ? "POLLING..." : isPlnOffline ? "OFFLINE" : `${gridPct.toFixed(1)}% Load`}
+                  {isLiveLoading ? "POLLING..." : isGatewayOffline ? "GATEWAY OFFLINE" : isPlnOffline ? "OFFLINE" : `${gridPct.toFixed(1)}% Load`}
                 </span>
                 <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-blue-600/10 text-blue-700'} flex items-center justify-center`}><IconGrid /></div>
               </div>
@@ -4965,6 +4969,8 @@ export default function Electricity() {
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-blue-950'}`}>
               {isLiveLoading ? (
                 <div className="h-9 w-32 bg-blue-400/20 dark:bg-blue-300/20 rounded-lg animate-pulse" />
+              ) : isGatewayOffline ? (
+                <span className="text-xl text-rose-500 dark:text-rose-400 font-bold font-mono">Gateway Offline</span>
               ) : isPlnOffline ? (
                 <span className="text-xl text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
               ) : (
@@ -4978,6 +4984,8 @@ export default function Electricity() {
               <span>Fact 1: <strong className={isDark ? 'text-white' : 'text-blue-950'}>
                 {isLiveLoading ? (
                   <span className="inline-block h-3 w-14 bg-blue-300/30 rounded animate-pulse align-middle" />
+                ) : isGatewayOffline ? (
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isFact1Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -4987,6 +4995,8 @@ export default function Electricity() {
               <span>Fact 2: <strong className={isDark ? 'text-white' : 'text-blue-950'}>
                 {isLiveLoading ? (
                   <span className="inline-block h-3 w-14 bg-blue-300/30 rounded animate-pulse align-middle" />
+                ) : isGatewayOffline ? (
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isFact2Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -5013,11 +5023,13 @@ export default function Electricity() {
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold font-mono border ${
                   isLiveLoading
                     ? isDark ? 'bg-emerald-400/10 text-emerald-300 border-emerald-400/20 animate-pulse' : 'bg-emerald-600/10 text-emerald-700 border-emerald-600/20 animate-pulse'
+                    : isGatewayOffline
+                    ? isDark ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-500/15 text-rose-700 border-rose-500/30'
                     : isSolarOffline
                     ? isDark ? 'bg-amber-400/20 text-amber-300 border-amber-400/30' : 'bg-amber-500/15 text-amber-700 border-amber-500/30'
                     : isDark ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30' : 'bg-emerald-600/10 text-emerald-700 border-emerald-600/20'
                 }`}>
-                  {isLiveLoading ? "POLLING..." : isSolarOffline ? "OFFLINE" : `${solarPct.toFixed(1)}% Load`}
+                  {isLiveLoading ? "POLLING..." : isGatewayOffline ? "GATEWAY OFFLINE" : isSolarOffline ? "OFFLINE" : `${solarPct.toFixed(1)}% Load`}
                 </span>
                 <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-emerald-600/10 text-emerald-700'} flex items-center justify-center`}><IconSolar /></div>
               </div>
@@ -5025,6 +5037,8 @@ export default function Electricity() {
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-emerald-950'}`}>
               {isLiveLoading ? (
                 <div className="h-9 w-32 bg-emerald-400/20 dark:bg-emerald-300/20 rounded-lg animate-pulse" />
+              ) : isGatewayOffline ? (
+                <span className="text-xl text-rose-500 dark:text-rose-400 font-bold font-mono">Gateway Offline</span>
               ) : isSolarOffline ? (
                 <span className="text-xl text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
               ) : (
@@ -5038,6 +5052,8 @@ export default function Electricity() {
               <span>POI-1: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
                 {isLiveLoading ? (
                   <span className="inline-block h-3 w-14 bg-emerald-300/30 rounded animate-pulse align-middle" />
+                ) : isGatewayOffline ? (
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isPoi1Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -5047,6 +5063,8 @@ export default function Electricity() {
               <span>POI-2: <strong className={isDark ? 'text-white' : 'text-emerald-950'}>
                 {isLiveLoading ? (
                   <span className="inline-block h-3 w-14 bg-emerald-300/30 rounded animate-pulse align-middle" />
+                ) : isGatewayOffline ? (
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isPoi2Offline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -5129,6 +5147,8 @@ export default function Electricity() {
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-cyan-950'}`}>
               {isLiveLoading ? (
                 <div className="h-9 w-36 bg-cyan-400/20 dark:bg-cyan-300/20 rounded-lg animate-pulse" />
+              ) : isGatewayOffline ? (
+                <span className="text-xl text-rose-500 dark:text-rose-400 font-bold font-mono">Gateway Offline</span>
               ) : totalPlantLoadKw === null || (isPlnOffline && isSolarOffline && pGensetNum === 0) ? (
                 <span className="text-xl text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
               ) : (
@@ -5142,6 +5162,8 @@ export default function Electricity() {
               <span>P Grid: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>
                 {isLiveLoading ? (
                   <span className="inline-block h-3 w-14 bg-cyan-300/30 rounded animate-pulse align-middle" />
+                ) : isGatewayOffline ? (
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isPlnOffline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (
@@ -5151,6 +5173,8 @@ export default function Electricity() {
               <span>P Solar: <strong className={isDark ? 'text-white' : 'text-cyan-950'}>
                 {isLiveLoading ? (
                   <span className="inline-block h-3 w-14 bg-cyan-300/30 rounded animate-pulse align-middle" />
+                ) : isGatewayOffline ? (
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isSolarOffline ? (
                   <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
                 ) : (

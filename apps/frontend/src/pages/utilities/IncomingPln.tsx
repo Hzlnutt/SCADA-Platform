@@ -204,6 +204,8 @@ function checkDeviceStatus(data: any, currentMode: "pln" | "fact1" | "fact2"): b
 export default function IncomingPln() {
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
+  const socketStatus = useSystemStore((state) => state.socketStatus);
+  const isGatewayOffline = socketStatus === "disconnected";
   const location = useLocation();
 
   // Standards configuration state
@@ -431,6 +433,9 @@ export default function IncomingPln() {
   });
 
   const isPmOnline = useMemo(() => {
+    // 0. If gateway is disconnected, mark PM as offline immediately
+    if (isGatewayOffline) return false;
+
     // 1. Check all payloads currently in apiLiveData for an explicit offline status (e.g. Status_PM8000: false)
     for (const payload of Object.values(apiLiveData)) {
       if (payload && typeof payload === "object") {
@@ -454,7 +459,7 @@ export default function IncomingPln() {
 
     // 4. Fallback to metrics socket / REST telemetry status
     return metrics.isConnected;
-  }, [mode, apiLiveData, metrics.isConnected]);
+  }, [mode, apiLiveData, metrics.isConnected, isGatewayOffline]);
 
 interface HourlyTrend5sPoint {
   time: string;
@@ -492,6 +497,70 @@ interface HourlyTrend5sPoint {
     } catch (e) {}
     return [];
   });
+
+  // Continuous 1-Hour Rolling 3-Second Window (FIFO window derived directly from telemetry stream)
+  const rollingTrendData = useMemo(() => {
+    if (!hourlyTrend5s || hourlyTrend5s.length === 0) {
+      return {
+        labels: [],
+        vRData: [],
+        vSData: [],
+        vTData: [],
+        activePowerData: [],
+        rangeLabel: "--:-- - --:--"
+      };
+    }
+
+    // Sort strictly chronological
+    const sorted = [...hourlyTrend5s].sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
+    // Keep strictly up to 1200 points (1 hour at 3s intervals)
+    const windowPoints = sorted.length > 1200 ? sorted.slice(sorted.length - 1200) : sorted;
+
+    const labels: string[] = [];
+    const vRData: (number | null)[] = [];
+    const vSData: (number | null)[] = [];
+    const vTData: (number | null)[] = [];
+    const activePowerData: (number | null)[] = [];
+
+    for (let i = 0; i < windowPoints.length; i++) {
+      const pt = windowPoints[i];
+      const prevPt = i > 0 ? windowPoints[i - 1] : null;
+
+      // If there is an actual data outage gap (> 15 seconds) between consecutive records, insert a break
+      if (prevPt && pt.ts && prevPt.ts && (Number(pt.ts) - Number(prevPt.ts) > 15000)) {
+        labels.push("");
+        vRData.push(null);
+        vSData.push(null);
+        vTData.push(null);
+        activePowerData.push(null);
+      }
+
+      labels.push(pt.time || "");
+
+      const vr = pt.vR !== undefined && pt.vR > 0 ? pt.vR : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
+      const vs = pt.vS !== undefined && pt.vS > 0 ? pt.vS : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
+      const vt = pt.vT !== undefined && pt.vT > 0 ? pt.vT : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
+      vRData.push(vr !== null ? Number(vr.toFixed(3)) : null);
+      vSData.push(vs !== null ? Number(vs.toFixed(3)) : null);
+      vTData.push(vt !== null ? Number(vt.toFixed(3)) : null);
+
+      const ap = typeof pt.activePower === "number" ? Math.abs(Number(pt.activePower.toFixed(1))) : null;
+      activePowerData.push(ap);
+    }
+
+    const startLabel = windowPoints[0]?.time?.substring(0, 5) || "--:--";
+    const endLabel = windowPoints[windowPoints.length - 1]?.time?.substring(0, 5) || "--:--";
+    const rangeLabel = `${startLabel} - ${endLabel}`;
+
+    return {
+      labels,
+      vRData,
+      vSData,
+      vTData,
+      activePowerData,
+      rangeLabel
+    };
+  }, [hourlyTrend5s]);
 
   const lastTrendHourRef = useRef<number>(-1);
   const [zoomTrend, setZoomTrend] = useState<"voltage" | "power" | null>(null);
@@ -1350,70 +1419,6 @@ interface HourlyTrend5sPoint {
       }
     }
   };
-
-  // Continuous 1-Hour Rolling 3-Second Window (FIFO window derived directly from telemetry stream)
-  const rollingTrendData = useMemo(() => {
-    if (!hourlyTrend5s || hourlyTrend5s.length === 0) {
-      return {
-        labels: [],
-        vRData: [],
-        vSData: [],
-        vTData: [],
-        activePowerData: [],
-        rangeLabel: "--:-- - --:--"
-      };
-    }
-
-    // Sort strictly chronological
-    const sorted = [...hourlyTrend5s].sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
-    // Keep strictly up to 1200 points (1 hour at 3s intervals)
-    const windowPoints = sorted.length > 1200 ? sorted.slice(sorted.length - 1200) : sorted;
-
-    const labels: string[] = [];
-    const vRData: (number | null)[] = [];
-    const vSData: (number | null)[] = [];
-    const vTData: (number | null)[] = [];
-    const activePowerData: (number | null)[] = [];
-
-    for (let i = 0; i < windowPoints.length; i++) {
-      const pt = windowPoints[i];
-      const prevPt = i > 0 ? windowPoints[i - 1] : null;
-
-      // If there is an actual data outage gap (> 15 seconds) between consecutive records, insert a break
-      if (prevPt && pt.ts && prevPt.ts && (Number(pt.ts) - Number(prevPt.ts) > 15000)) {
-        labels.push("");
-        vRData.push(null);
-        vSData.push(null);
-        vTData.push(null);
-        activePowerData.push(null);
-      }
-
-      labels.push(pt.time || "");
-
-      const vr = pt.vR !== undefined && pt.vR > 0 ? pt.vR : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
-      const vs = pt.vS !== undefined && pt.vS > 0 ? pt.vS : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
-      const vt = pt.vT !== undefined && pt.vT > 0 ? pt.vT : (pt.voltage && pt.voltage > 0 ? pt.voltage : null);
-      vRData.push(vr !== null ? Number(vr.toFixed(3)) : null);
-      vSData.push(vs !== null ? Number(vs.toFixed(3)) : null);
-      vTData.push(vt !== null ? Number(vt.toFixed(3)) : null);
-
-      const ap = typeof pt.activePower === "number" ? Math.abs(Number(pt.activePower.toFixed(1))) : null;
-      activePowerData.push(ap);
-    }
-
-    const startLabel = windowPoints[0]?.time?.substring(0, 5) || "--:--";
-    const endLabel = windowPoints[windowPoints.length - 1]?.time?.substring(0, 5) || "--:--";
-    const rangeLabel = `${startLabel} - ${endLabel}`;
-
-    return {
-      labels,
-      vRData,
-      vSData,
-      vTData,
-      activePowerData,
-      rangeLabel
-    };
-  }, [hourlyTrend5s]);
 
   // 1-Hour Rolling 5-Second Line Trend Data - 3 Lines (Fasa R, S, T)
   const voltageTrendData = useMemo(() => {

@@ -115,8 +115,11 @@ export const AppRouter = () => {
             <Route path="listrik">
               <Route index element={<Electricity />} />
               <Route path="incoming-pln" element={<IncomingPln />} />
+              <Route path="incoming_pln" element={<Navigate to="/listrik/incoming-pln" replace />} />
               <Route path="incoming-fact-1" element={<IncomingPln />} />
+              <Route path="incoming_fact_1" element={<Navigate to="/listrik/incoming-fact-1" replace />} />
               <Route path="incoming-fact-2" element={<IncomingPln />} />
+              <Route path="incoming_fact_2" element={<Navigate to="/listrik/incoming-fact-2" replace />} />
               <Route path="distribusi" element={<PowerDistribution />} />
               <Route path="report" element={<ElectricityReport />} />
             </Route>
