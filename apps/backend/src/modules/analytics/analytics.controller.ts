@@ -712,20 +712,24 @@ export const getPowerMeterHistoryHandler = async (
         WHERE UPPER(pm_id) = $1
           AND t_stamp >= $2::timestamp
           AND t_stamp <= $3::timestamp
+          AND status IS NOT FALSE
+          AND (volt_ab IS NULL OR volt_ab > 50)
         ORDER BY t_stamp ASC
       `, [target3sPmId, minWibStr, maxWibStr]);
 
       if (req.query.compact === "true") {
-        const tuples = rollingDbRes.rows.map((r: any) => [
-          Number(r.ts),
-          r.volt_ab !== null ? Number(r.volt_ab) : 0,
-          r.volt_bc !== null ? Number(r.volt_bc) : 0,
-          r.volt_ca !== null ? Number(r.volt_ca) : 0,
-          r.active_power_total !== null ? Number(r.active_power_total) : 0,
-          r.current_a !== null ? Number(r.current_a) : 0,
-          r.current_b !== null ? Number(r.current_b) : 0,
-          r.current_c !== null ? Number(r.current_c) : 0
-        ]);
+        const tuples = rollingDbRes.rows
+          .filter((r: any) => r.status !== false && (r.volt_ab === null || Number(r.volt_ab) > 50))
+          .map((r: any) => [
+            Number(r.ts),
+            r.volt_ab !== null ? Number(r.volt_ab) : 0,
+            r.volt_bc !== null ? Number(r.volt_bc) : 0,
+            r.volt_ca !== null ? Number(r.volt_ca) : 0,
+            r.active_power_total !== null ? Number(r.active_power_total) : 0,
+            r.current_a !== null ? Number(r.current_a) : 0,
+            r.current_b !== null ? Number(r.current_b) : 0,
+            r.current_c !== null ? Number(r.current_c) : 0
+          ]);
         return res.json({
           targetDate,
           currentHour,

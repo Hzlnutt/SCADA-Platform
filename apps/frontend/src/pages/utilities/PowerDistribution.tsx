@@ -1407,11 +1407,7 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
                   </button>
                 </div>
               )}
-              {activeTab === "ampere" && (
-                <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                  Ampere Total (A): {NO_REALTIME_API}
-                </span>
-              )}
+
             </div>
 
             {/* Chart View */}
@@ -3818,9 +3814,7 @@ export default function PowerDistribution() {
             <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">{t("electricity.ampereRecord")}</h4>
-                <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                  Ampere Total (A): {NO_REALTIME_API}
-                </span>
+
               </div>
               <div className="flex items-center gap-2">
                 {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
@@ -3882,11 +3876,7 @@ export default function PowerDistribution() {
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 font-bold">
                     {bottomTx?.factory === 1 ? "F1" : "F2"} {bottomTx?.name}
                   </span>
-                  {bottomZoomChart === "current" && (
-                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold">
-                      Ampere Total (A): {NO_REALTIME_API}
-                    </span>
-                  )}
+
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-2">
                   <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">

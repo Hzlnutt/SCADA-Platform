@@ -2107,7 +2107,9 @@ export const startIncomingElectricityPolling = () => {
       for (const rec of allParsedForTrafo) {
         const upId = (rec.pm_id || "").toUpperCase();
         if (trafoTargetIds.has(upId) && !seenTrafoIds.has(upId)) {
-          if (rec.volt_ab !== null || rec.active_power_total !== null || rec.current_a !== null) {
+          // Guard against transient Modbus timeout dropouts (status === false or volt_ab dropping to 0)
+          const isValidOnline = rec.status !== false && (rec.volt_ab === null || rec.volt_ab > 50);
+          if (isValidOnline && (rec.volt_ab !== null || rec.active_power_total !== null || rec.current_a !== null)) {
             seenTrafoIds.add(upId);
             trafoRowsToInsert.push(rec);
           }

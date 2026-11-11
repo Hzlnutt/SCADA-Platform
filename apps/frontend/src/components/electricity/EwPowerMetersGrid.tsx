@@ -78,14 +78,6 @@ export function EwPowerMetersGrid({
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Quick Total Load Badge */}
-          <div className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm flex items-center gap-2">
-            <span className="text-[10px] font-extrabold uppercase text-slate-400">Total Beban:</span>
-            <span className="text-[10px] font-extrabold text-amber-500">
-              {NO_REALTIME_API}
-            </span>
-          </div>
-
           {/* Search Input */}
           <div className="relative">
             <input
@@ -114,7 +106,9 @@ export function EwPowerMetersGrid({
               const hasActivePower = pm.active_power_total !== null && pm.active_power_total !== undefined;
               const decodedPf = decodePf(pm.power_factor);
               const hasPf = decodedPf !== null;
-              const hasVoltLl = pm.volt_ll !== null && pm.volt_ll !== undefined;
+              const displayVolt = (pm.volt_ll !== null && pm.volt_ll !== undefined) ? pm.volt_ll : (pm.volt_ab !== null && pm.volt_ab !== undefined ? pm.volt_ab : (pm.volt_bc ?? pm.volt_ca));
+              const hasVolt = displayVolt !== null && displayVolt !== undefined && Number(displayVolt) > 50;
+              const hasApparent = pm.apparent_power_total !== null && pm.apparent_power_total !== undefined;
               const hasEnergy = pm.active_energy !== null && pm.active_energy !== undefined;
 
               return (
@@ -178,9 +172,9 @@ export function EwPowerMetersGrid({
                     <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
                       <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
                         <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Tegangan</span>
-                        {hasVoltLl ? (
+                        {hasVolt ? (
                           <span className="font-extrabold text-slate-700 dark:text-slate-200">
-                            {Number(pm.volt_ll).toFixed(0)} V
+                            {Number(displayVolt).toFixed(0)} V
                           </span>
                         ) : (
                           <span className="font-sans text-[8px] font-bold text-amber-500 leading-tight">
@@ -189,10 +183,16 @@ export function EwPowerMetersGrid({
                         )}
                       </div>
                       <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
-                        <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Arus Rata2</span>
-                        <span className="font-sans text-[8px] font-bold text-amber-500 leading-tight">
-                          {NO_REALTIME_API}
-                        </span>
+                        <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Daya Semu</span>
+                        {hasApparent ? (
+                          <span className="font-extrabold text-amber-500">
+                            {Number(pm.apparent_power_total).toFixed(1)} kVA
+                          </span>
+                        ) : (
+                          <span className="font-sans text-[8px] font-bold text-amber-500 leading-tight">
+                            {NO_REALTIME_API}
+                          </span>
+                        )}
                       </div>
                       <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
                         <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Power Factor</span>
