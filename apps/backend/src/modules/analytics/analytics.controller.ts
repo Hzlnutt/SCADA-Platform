@@ -714,12 +714,17 @@ export const getPowerMeterHistoryHandler = async (
           AND t_stamp <= $3::timestamp
           AND status IS NOT FALSE
           AND (volt_ab IS NULL OR volt_ab > 50)
+          AND (volt_bc IS NULL OR volt_bc > 50)
+          AND (volt_ca IS NULL OR volt_ca > 50)
         ORDER BY t_stamp ASC
       `, [target3sPmId, minWibStr, maxWibStr]);
 
       if (req.query.compact === "true") {
         const tuples = rollingDbRes.rows
-          .filter((r: any) => r.status !== false && (r.volt_ab === null || Number(r.volt_ab) > 50))
+          .filter((r: any) => r.status !== false
+            && (r.volt_ab === null || Number(r.volt_ab) > 50)
+            && (r.volt_bc === null || Number(r.volt_bc) > 50)
+            && (r.volt_ca === null || Number(r.volt_ca) > 50))
           .map((r: any) => [
             Number(r.ts),
             r.volt_ab !== null ? Number(r.volt_ab) : 0,
