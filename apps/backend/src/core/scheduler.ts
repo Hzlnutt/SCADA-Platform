@@ -514,7 +514,7 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
     payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power_total,
     payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
     payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
-    payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy, payload.power_factor
+    payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy
   ]).catch((err) => {
     logger.warn(`Failed to insert WF minute telemetry to ${table}: ${err.message}`);
   });
