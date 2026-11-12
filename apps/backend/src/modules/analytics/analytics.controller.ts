@@ -2138,7 +2138,7 @@ async function doComputeEquipmentMonthlyBatch(
     WHERE t_stamp >= $1 AND t_stamp <= $2
       AND UPPER(pm_id) NOT IN ('PM410', 'PM411', 'PM412')
       AND active_energy IS NOT NULL
-    ORDER BY UPPER(pm_id), date_trunc('hour', t_stamp) ASC, t_stamp DESC
+    ORDER BY UPPER(pm_id), date_trunc('hour', t_stamp) ASC, t_stamp ASC
   `;
 
   // 2. Fetch Cubicle telemetries
@@ -2153,7 +2153,7 @@ async function doComputeEquipmentMonthlyBatch(
         status_pm8000 as status
       FROM electric_pln_telemetry
       WHERE t_stamp >= $1 AND t_stamp <= $2
-      ORDER BY date_trunc('hour', t_stamp) ASC, t_stamp DESC
+      ORDER BY date_trunc('hour', t_stamp) ASC, t_stamp ASC
     `, [fromQueryVal, toQueryVal]),
     pool.query(`
       SELECT DISTINCT ON (date_trunc('hour', t_stamp))
@@ -2164,7 +2164,7 @@ async function doComputeEquipmentMonthlyBatch(
         status_pm5500 as status
       FROM electric_wf1_telemetry
       WHERE t_stamp >= $1 AND t_stamp <= $2
-      ORDER BY date_trunc('hour', t_stamp) ASC, t_stamp DESC
+      ORDER BY date_trunc('hour', t_stamp) ASC, t_stamp ASC
     `, [fromQueryVal, toQueryVal]),
     pool.query(`
       SELECT DISTINCT ON (date_trunc('hour', t_stamp))
@@ -2175,7 +2175,7 @@ async function doComputeEquipmentMonthlyBatch(
         status_pm5500 as status
       FROM electric_wf2_telemetry
       WHERE t_stamp >= $1 AND t_stamp <= $2
-      ORDER BY date_trunc('hour', t_stamp) ASC, t_stamp DESC
+      ORDER BY date_trunc('hour', t_stamp) ASC, t_stamp ASC
     `, [fromQueryVal, toQueryVal])
   ]);
 
@@ -2318,7 +2318,7 @@ async function doComputeEquipmentMonthlyBatch(
         if (timeDiffMs <= 90 * 60 * 1000) {
           const rawDiff = currVal - prevVal;
           // Perhitungan aktual murni tanpa manipulasi/threshold sintetis:
-          if (rawDiff >= 0) {
+          if (rawDiff >= 0 && rawDiff < 10000) {
             diff = rawDiff;
           }
         }

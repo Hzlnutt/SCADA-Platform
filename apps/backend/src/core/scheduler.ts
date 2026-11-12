@@ -2872,37 +2872,7 @@ export const runElectricityRollupAndCleanup = async () => {
       }
     }
 
-    // Ensure any missing PLN hourly records are automatically backfilled from physical meter PM410
-    try {
-      await pool.query(`
-        INSERT INTO electric_pln_telemetry (
-          t_stamp, status_pm8000, volt_ab, volt_bc, volt_ca, volt_ll,
-          current_a, current_b, current_c, frequency, active_power,
-          reactive_power_total, apparent_power_total, power_factor,
-          voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
-          thd_current_a, thd_current_b, thd_current_c, active_energy,
-          export_pln
-        )
-        SELECT 
-          pm.t_stamp, pm.status, pm.volt_ab, pm.volt_bc, pm.volt_ca, pm.volt_ll,
-          pm.current_a, pm.current_b, pm.current_c, pm.frequency, 
-          CASE WHEN pm.active_power_total IS NOT NULL THEN pm.active_power_total * 1000.0 ELSE NULL END,
-          CASE WHEN pm.reactive_power_total IS NOT NULL THEN pm.reactive_power_total * 1000.0 ELSE NULL END,
-          CASE WHEN pm.apparent_power_total IS NOT NULL THEN pm.apparent_power_total * 1000.0 ELSE NULL END,
-          pm.power_factor, pm.voltage_unbalance, pm.current_unbalance,
-          pm.thd_volt_a, pm.thd_volt_b, pm.thd_volt_c,
-          pm.thd_current_a, pm.thd_current_b, pm.thd_current_c, pm.active_energy,
-          5137.509765625
-        FROM electric_pm_telemetry pm
-        LEFT JOIN electric_pln_telemetry pln ON pm.t_stamp = pln.t_stamp
-        WHERE pm.pm_id = 'PM410'
-          AND pln.t_stamp IS NULL
-          AND pm.active_energy IS NOT NULL;
-      `);
-    } catch (syncErr: any) {
-      logger.warn(`Failed to auto-sync missing PLN hourly rows from PM410: ${syncErr.message}`);
-    }
-
+    // PLN hourly records are kept 100% pure from electric_pln_telemetry
     // 2. Backfill completed hours from electric_wf1_telemetry_minute ONLY IF missing from electric_wf1_telemetry
     const wf1Buckets = await pool.query(`
       SELECT 

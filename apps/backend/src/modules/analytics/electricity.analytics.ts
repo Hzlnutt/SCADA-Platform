@@ -780,96 +780,20 @@ export const getElectricityAnalytics = async (
         FROM ${tableName}
         WHERE t_stamp >= $1 AND t_stamp <= $2 AND poi_id = $3
           AND ${energyCol} IS NOT NULL
-        ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
+        ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
       `, [fromQueryVal, toQueryVal, poiFilter]);
       hourlyRecords = res.rows;
-
-      // Append hourly boundaries from minute table if available and querying today/future
-      if (to >= new Date()) {
-        try {
-          const lastTsStr = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "").split(".")[0] : "";
-          if (lastTsStr) {
-            const boundaries = await pool.query(`
-              SELECT DISTINCT ON (date_trunc('hour', t_stamp))
-                date_trunc('hour', t_stamp)::text AS ts_text,
-                ${energyCol}::float AS value
-              FROM electric_plts_telemetry_minute
-              WHERE poi_id = $1 AND t_stamp >= $2::timestamp + INTERVAL '1 hour' AND t_stamp <= $3 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 2
-              ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
-            `, [poiFilter, lastTsStr, toQueryVal]);
-            for (const b of boundaries.rows) {
-              hourlyRecords.push(b);
-            }
-          } else {
-            const minAll = await pool.query(`
-              SELECT DISTINCT ON (date_trunc('hour', t_stamp))
-                date_trunc('hour', t_stamp)::text AS ts_text,
-                ${energyCol}::float AS value
-              FROM electric_plts_telemetry_minute
-              WHERE poi_id = $1 AND t_stamp >= $2 AND t_stamp <= $3 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 2
-              ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
-            `, [poiFilter, fromQueryVal, toQueryVal]);
-            hourlyRecords = minAll.rows;
-          }
-        } catch {}
-      }
     } else {
-      let queryStr = `
+      const res = await pool.query(`
         SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
           t_stamp::text AS ts_text, 
           CASE WHEN ${energyCol} <= 0 THEN NULL ELSE ${energyCol}::float END AS value
         FROM ${tableName}
         WHERE t_stamp >= $1 AND t_stamp <= $2
-        ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
-      `;
-      if (tableName === "electric_pln_telemetry") {
-        queryStr = `
-          SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
-            t_stamp::text AS ts_text, 
-            CASE WHEN active_energy <= 0 THEN NULL ELSE active_energy::float END AS value
-          FROM (
-            SELECT t_stamp, active_energy FROM electric_pln_telemetry WHERE t_stamp >= $1 AND t_stamp <= $2 AND active_energy > 0
-            UNION ALL
-            SELECT t_stamp, active_energy FROM electric_pm_telemetry WHERE pm_id = 'PM410' AND t_stamp >= $1 AND t_stamp <= $2 AND active_energy > 0
-          ) pln_src
-          ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
-        `;
-      }
-      const res = await pool.query(queryStr, [fromQueryVal, toQueryVal]);
+          AND ${energyCol} IS NOT NULL
+        ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
+      `, [fromQueryVal, toQueryVal]);
       hourlyRecords = res.rows;
-
-      // Append hourly boundaries from minute table if available and querying today/future
-      if (to >= new Date()) {
-        try {
-          const minuteTable = tableName === "electric_pln_telemetry" ? "electric_pln_telemetry_minute"
-            : tableName === "electric_wf1_telemetry" ? "electric_wf1_telemetry_minute"
-            : "electric_wf2_telemetry_minute";
-          const lastTsStr = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "").split(".")[0] : "";
-          if (lastTsStr) {
-            const boundaries = await pool.query(`
-              SELECT DISTINCT ON (date_trunc('hour', t_stamp))
-                date_trunc('hour', t_stamp)::text AS ts_text,
-                CASE WHEN ${energyCol} <= 0 THEN NULL ELSE ${energyCol}::float END AS value
-              FROM ${minuteTable}
-              WHERE t_stamp >= $1::timestamp + INTERVAL '1 hour' AND t_stamp <= $2 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 2
-              ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
-            `, [lastTsStr, toQueryVal]);
-            for (const b of boundaries.rows) {
-              hourlyRecords.push(b);
-            }
-          } else {
-            const minAll = await pool.query(`
-              SELECT DISTINCT ON (date_trunc('hour', t_stamp))
-                date_trunc('hour', t_stamp)::text AS ts_text,
-                CASE WHEN ${energyCol} <= 0 THEN NULL ELSE ${energyCol}::float END AS value
-              FROM ${minuteTable}
-              WHERE t_stamp >= $1 AND t_stamp <= $2 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 2
-              ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
-            `, [fromQueryVal, toQueryVal]);
-            hourlyRecords = minAll.rows;
-          }
-        } catch {}
-      }
     }
   } catch (err) {
     console.warn("PostgreSQL query failed for electricity analytics, falling back:", err);
