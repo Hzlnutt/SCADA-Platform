@@ -12,6 +12,10 @@ export type ElectricPmItem = {
   volt_bc: number | null;
   volt_ca: number | null;
   volt_ll: number | null;
+  volt_an?: number | null;
+  volt_bn?: number | null;
+  volt_cn?: number | null;
+  volt_ln?: number | null;
   current_a: number | null;
   current_b: number | null;
   current_c: number | null;
@@ -38,6 +42,8 @@ type Props = {
   isDark: boolean;
 };
 
+const NO_REALTIME_API = "API Realtime Belum Tersedia";
+
 export function PmDetailModal({ pm, onClose, isDark }: Props) {
   const [activeTab, setActiveTab] = useState<"params" | "trend">("params");
   const [historyData, setHistoryData] = useState<any[]>([]);
@@ -62,14 +68,13 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
   useEffect(() => {
     if (!pm) return;
     fetchHistory(true);
-    const interval = setInterval(() => fetchHistory(false), 10000);
+    const interval = setInterval(() => fetchHistory(false), 1000);
     return () => clearInterval(interval);
   }, [pm?.pm_id]);
 
   if (!pm) return null;
 
-  const isMati = pm.status === false;
-  const isOnline = pm.status === true;
+  const isOnline = pm.status !== false;
 
   // Chart configuration for today's 24-hour progressive history (00:00 to 23:00)
   const fallbackLabels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
@@ -167,8 +172,26 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
     }
   });
 
+
+  const decodePf = (v: number | null | undefined): number | null => {
+    if (v === null || v === undefined || isNaN(Number(v))) return null;
+    let val = Number(v);
+    if (Math.abs(val) > 2.0) return null;
+    if (val > 1.0 && val <= 2.0) val = 2.0 - val;
+    else if (val < -1.0 && val >= -2.0) val = -2.0 - val;
+    val = Math.abs(val);
+    if (val > 1.0) val = 1.0;
+    return Number(val.toFixed(3));
+  };
+
+  const fmtPf = (v: number | null | undefined) => {
+    const pf = decodePf(v);
+    if (pf === null) return NO_REALTIME_API;
+    return pf.toFixed(3);
+  };
+
   const fmt = (v: number | null | undefined, unit = "", decimals = 2) => {
-    if (v === null || v === undefined) return "—";
+    if (v === null || v === undefined) return NO_REALTIME_API;
     return `${Number(v).toFixed(decimals)} ${unit}`.trim();
   };
 
@@ -207,7 +230,7 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
                       isOnline ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
                     }`}
                   />
-                  {isOnline ? "Live Online" : isMati ? "Offline (Mati)" : "Offline"}
+                  {isOnline ? "Live Online" : "Offline"}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-medium mt-0.5">
@@ -250,34 +273,32 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
           </div>
         </div>
 
-
-
         {/* Quick KPI Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-800/10">
           <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 shadow-sm">
             <span className="text-[10px] font-extrabold uppercase text-slate-400 block mb-0.5">Active Power</span>
-            <div className="text-lg font-extrabold font-mono text-sky-500">
+            <div className={`${pm.active_power_total !== null && pm.active_power_total !== undefined ? "text-lg font-mono text-sky-500" : "text-[11px] text-amber-500"} font-extrabold`}>
               {fmt(pm.active_power_total, "kW", 1)}
             </div>
           </div>
           <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 shadow-sm">
             <span className="text-[10px] font-extrabold uppercase text-slate-400 block mb-0.5">Power Factor</span>
-            <div className="text-lg font-extrabold font-mono text-emerald-500">
-              {fmt(pm.power_factor, "", 3)}
+            <div className={`${pm.power_factor !== null && pm.power_factor !== undefined ? "text-lg font-mono text-emerald-500" : "text-[11px] text-amber-500"} font-extrabold`}>
+              {fmtPf(pm.power_factor)}
             </div>
           </div>
           <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 shadow-sm">
-            <span className="text-[10px] font-extrabold uppercase text-slate-400 block mb-0.5">Arus Rata-rata</span>
-            <div className="text-lg font-extrabold font-mono text-amber-500">
-              {fmt(((Number(pm.current_a || 0) + Number(pm.current_b || 0) + Number(pm.current_c || 0)) / 3), "A", 1)}
+            <span className="text-[10px] font-extrabold uppercase text-slate-400 block mb-0.5">Apparent Power</span>
+            <div className={`${pm.apparent_power_total !== null && pm.apparent_power_total !== undefined ? "text-lg font-mono text-amber-500" : "text-[11px] text-amber-500"} font-extrabold`}>
+              {fmt(pm.apparent_power_total, "kVA", 1)}
             </div>
           </div>
           <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 shadow-sm">
             <span className="text-[10px] font-extrabold uppercase text-slate-400 block mb-0.5">Active Energy</span>
-            <div className="text-lg font-extrabold font-mono text-purple-500">
+            <div className={`${pm.active_energy !== null && pm.active_energy !== undefined ? "text-lg font-mono text-purple-500" : "text-[11px] text-amber-500"} font-extrabold`}>
               {pm.active_energy !== null && pm.active_energy !== undefined
                 ? `${Math.round(Number(pm.active_energy)).toLocaleString("id-ID")} kWh`
-                : "—"}
+                : NO_REALTIME_API}
             </div>
           </div>
         </div>
@@ -295,25 +316,41 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
                   <span className="text-[10px] font-mono text-slate-400 font-bold">V AC</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Volt A-B:</span>
-                    <span className="font-bold text-slate-800 dark:text-white">{fmt(pm.volt_ab, "V")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Volt A-B:</span>
+                    <span className="font-bold text-slate-800 dark:text-white text-right">{fmt(pm.volt_ab, "V")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Volt B-C:</span>
-                    <span className="font-bold text-slate-800 dark:text-white">{fmt(pm.volt_bc, "V")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Volt B-C:</span>
+                    <span className="font-bold text-slate-800 dark:text-white text-right">{fmt(pm.volt_bc, "V")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Volt C-A:</span>
-                    <span className="font-bold text-slate-800 dark:text-white">{fmt(pm.volt_ca, "V")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Volt C-A:</span>
+                    <span className="font-bold text-slate-800 dark:text-white text-right">{fmt(pm.volt_ca, "V")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Volt L-L:</span>
-                    <span className="font-bold text-slate-800 dark:text-white">{fmt(pm.volt_ll, "V")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Volt L-L:</span>
+                    <span className={`font-bold text-right ${pm.volt_ll !== null && pm.volt_ll !== undefined ? "text-slate-800 dark:text-white" : "text-[10px] font-sans text-amber-500"}`}>{fmt(pm.volt_ll, "V")}</span>
                   </div>
-                  <div className="col-span-2 flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Voltage Unbalance:</span>
-                    <span className="font-bold text-amber-500">{fmt(pm.voltage_unbalance, "%")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Volt A-N:</span>
+                    <span className={`font-bold text-right ${pm.volt_an !== null && pm.volt_an !== undefined ? "text-slate-800 dark:text-white" : "text-[10px] font-sans text-amber-500"}`}>{fmt(pm.volt_an, "V")}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Volt B-N:</span>
+                    <span className={`font-bold text-right ${pm.volt_bn !== null && pm.volt_bn !== undefined ? "text-slate-800 dark:text-white" : "text-[10px] font-sans text-amber-500"}`}>{fmt(pm.volt_bn, "V")}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Volt C-N:</span>
+                    <span className={`font-bold text-right ${pm.volt_cn !== null && pm.volt_cn !== undefined ? "text-slate-800 dark:text-white" : "text-[10px] font-sans text-amber-500"}`}>{fmt(pm.volt_cn, "V")}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Volt L-N:</span>
+                    <span className={`font-bold text-right ${pm.volt_ln !== null && pm.volt_ln !== undefined ? "text-slate-800 dark:text-white" : "text-[10px] font-sans text-amber-500"}`}>{fmt(pm.volt_ln, "V")}</span>
+                  </div>
+                  <div className="col-span-2 flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Voltage Unbalance:</span>
+                    <span className={`font-bold text-right ${pm.voltage_unbalance !== null && pm.voltage_unbalance !== undefined ? "text-amber-500" : "text-[10px] font-sans text-amber-500"}`}>{fmt(pm.voltage_unbalance, "%")}</span>
                   </div>
                 </div>
               </div>
@@ -327,25 +364,25 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
                   <span className="text-[10px] font-mono text-slate-400 font-bold">Ampere</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Current Phase A:</span>
-                    <span className="font-bold text-rose-400">{fmt(pm.current_a, "A")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Current Phase A:</span>
+                    <span className="font-bold text-rose-400 text-right">{fmt(pm.current_a, "A")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Current Phase B:</span>
-                    <span className="font-bold text-amber-400">{fmt(pm.current_b, "A")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Current Phase B:</span>
+                    <span className="font-bold text-amber-400 text-right">{fmt(pm.current_b, "A")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Current Phase C:</span>
-                    <span className="font-bold text-emerald-400">{fmt(pm.current_c, "A")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Current Phase C:</span>
+                    <span className="font-bold text-emerald-400 text-right">{fmt(pm.current_c, "A")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Current Unbalance:</span>
-                    <span className="font-bold text-amber-500">{fmt(pm.current_unbalance, "%")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Current Unbalance:</span>
+                    <span className={`font-bold text-right ${pm.current_unbalance !== null && pm.current_unbalance !== undefined ? "text-amber-500" : "text-[10px] font-sans text-amber-500"}`}>{fmt(pm.current_unbalance, "%")}</span>
                   </div>
-                  <div className="col-span-2 flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Frekuensi:</span>
-                    <span className="font-bold text-sky-400">{fmt(pm.frequency, "Hz")}</span>
+                  <div className="col-span-2 flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Frekuensi:</span>
+                    <span className="font-bold text-sky-400 text-right">{fmt(pm.frequency, "Hz")}</span>
                   </div>
                 </div>
               </div>
@@ -359,28 +396,28 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
                   <span className="text-[10px] font-mono text-slate-400 font-bold">Power</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Active Power Total:</span>
-                    <span className="font-bold text-sky-400">{fmt(pm.active_power_total, "kW")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Active Power Total:</span>
+                    <span className="font-bold text-sky-400 text-right">{fmt(pm.active_power_total, "kW")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Reactive Power Total:</span>
-                    <span className="font-bold text-slate-800 dark:text-white">{fmt(pm.reactive_power_total, "kVAR")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Reactive Power Total:</span>
+                    <span className="font-bold text-slate-800 dark:text-white text-right">{fmt(pm.reactive_power_total, "kVAR")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Apparent Power Total:</span>
-                    <span className="font-bold text-slate-800 dark:text-white">{fmt(pm.apparent_power_total, "kVA")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Apparent Power Total:</span>
+                    <span className="font-bold text-slate-800 dark:text-white text-right">{fmt(pm.apparent_power_total, "kVA")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Power Factor:</span>
-                    <span className="font-bold text-emerald-400">{fmt(pm.power_factor, "", 3)}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Power Factor:</span>
+                    <span className="font-bold text-emerald-400 text-right">{fmtPf(pm.power_factor)}</span>
                   </div>
-                  <div className="col-span-2 flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">Active Energy:</span>
-                    <span className="font-bold text-purple-400">
+                  <div className="col-span-2 flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Active Energy:</span>
+                    <span className="font-bold text-purple-400 text-right">
                       {pm.active_energy !== null && pm.active_energy !== undefined
                         ? `${Math.round(Number(pm.active_energy)).toLocaleString("id-ID")} kWh`
-                        : "—"}
+                        : NO_REALTIME_API}
                     </span>
                   </div>
                 </div>
@@ -395,29 +432,29 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
                   <span className="text-[10px] font-mono text-slate-400 font-bold">Kualitas Daya</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">THD Volt A:</span>
-                    <span className="font-bold text-slate-800 dark:text-white">{fmt(pm.thd_volt_a, "%")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">THD Volt A:</span>
+                    <span className="font-bold text-slate-800 dark:text-white text-right">{fmt(pm.thd_volt_a, "%")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">THD Volt B:</span>
-                    <span className="font-bold text-slate-800 dark:text-white">{fmt(pm.thd_volt_b, "%")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">THD Volt B:</span>
+                    <span className="font-bold text-slate-800 dark:text-white text-right">{fmt(pm.thd_volt_b, "%")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">THD Volt C:</span>
-                    <span className="font-bold text-slate-800 dark:text-white">{fmt(pm.thd_volt_c, "%")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">THD Volt C:</span>
+                    <span className="font-bold text-slate-800 dark:text-white text-right">{fmt(pm.thd_volt_c, "%")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">THD Current A:</span>
-                    <span className="font-bold text-slate-800 dark:text-white">{fmt(pm.thd_current_a, "%")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">THD Current A:</span>
+                    <span className="font-bold text-slate-800 dark:text-white text-right">{fmt(pm.thd_current_a, "%")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">THD Current B:</span>
-                    <span className="font-bold text-slate-800 dark:text-white">{fmt(pm.thd_current_b, "%")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">THD Current B:</span>
+                    <span className="font-bold text-slate-800 dark:text-white text-right">{fmt(pm.thd_current_b, "%")}</span>
                   </div>
-                  <div className="flex justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                    <span className="text-slate-400">THD Current C:</span>
-                    <span className="font-bold text-slate-800 dark:text-white">{fmt(pm.thd_current_c, "%")}</span>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">THD Current C:</span>
+                    <span className="font-bold text-slate-800 dark:text-white text-right">{fmt(pm.thd_current_c, "%")}</span>
                   </div>
                 </div>
               </div>

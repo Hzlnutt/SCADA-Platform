@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef, useCallback, memo } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { usePageActive } from "../../hooks/usePageActive";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Line, Bar } from "react-chartjs-2";
@@ -7,11 +7,12 @@ import { useSystemStore } from "../../store/system.store";
 import { getJson, postJson } from "../../services/api.client";
 import { getSocket } from "../../services/socket.service";
 import { useAuthStore } from "../../store/auth.store";
-import { canAccessConfigAndAudit, isSeniorUnitHeadOrAdmin } from "../../utils/roles";
+import { canAccessConfigAndAudit } from "../../utils/roles";
 import { EwPowerMetersGrid } from "../../components/electricity/EwPowerMetersGrid";
 import type { ElectricPmItem } from "../../components/electricity/PmDetailModal";
 import { getPmSortIndex } from "../../data/pmMapping";
 import { useTranslation } from "../../i18n/useTranslation";
+import { useConfigStore } from "../../store/config.store";
 
 /* ═══════════ DETAILED COVERED DIRECTORY ═══════════ */
 const COVERED_EQUIPMENT: Record<string, { group?: string; breaker: string; load: string; label: string }[]> = {
@@ -124,6 +125,9 @@ type TransformerData = {
   voltageInKv: number | null;
   voltageOutL2L: number | null;
   voltageOutL2N: number | null;
+  voltAn?: number | null;
+  voltBn?: number | null;
+  voltCn?: number | null;
   voltAb?: number | null;
   voltBc?: number | null;
   voltCa?: number | null;
@@ -158,120 +162,80 @@ const TRAFO_PM_MAP: Record<string, { pmId: string; group: string; name: string; 
   "putr-new":{ pmId: "PM327", group: "ew23", name: "PUTR-New", factory: 2, capacityKva: 1600 },
 };
 
+const NO_REALTIME_API = "API Realtime Belum Tersedia";
+
+const decodePf = (val: number | null | undefined): number | null => {
+  if (val === null || val === undefined || isNaN(Number(val))) return null;
+  let pf = Number(val);
+  if (Math.abs(pf) > 2.0) return null;
+  if (pf > 1.0 && pf <= 2.0) pf = 2.0 - pf;
+  else if (pf < -1.0 && pf >= -2.0) pf = -2.0 - pf;
+  pf = Math.abs(pf);
+  if (pf > 1.0) pf = 1.0;
+  return Number(pf.toFixed(3));
+};
+
+
 function mapPmToTransformer(
   initialTx: TransformerData,
   pm?: ElectricPmItem,
-  incomingKv: number | null = null
+  incomingVolts?: { wf1Volt: number | null; wf2Volt: number | null }
 ): TransformerData {
   if (!pm) return initialTx;
 
-  const rawActive = pm.active_power_total !== null && pm.active_power_total !== undefined && !isNaN(Number(pm.active_power_total))
+  const activePowerKw = pm.active_power_total !== null && pm.active_power_total !== undefined
     ? Number(Number(pm.active_power_total).toFixed(1))
     : null;
-  const activePowerKw = rawActive;
-
-  const rawReactive = pm.reactive_power_total !== null && pm.reactive_power_total !== undefined && !isNaN(Number(pm.reactive_power_total))
+  const reactivePowerKvar = pm.reactive_power_total !== null && pm.reactive_power_total !== undefined
     ? Number(Number(pm.reactive_power_total).toFixed(1))
     : null;
-  const reactivePowerKvar = rawReactive;
-
-  const rawApparent = pm.apparent_power_total !== null && pm.apparent_power_total !== undefined && !isNaN(Number(pm.apparent_power_total))
+  const apparentPowerKva = pm.apparent_power_total !== null && pm.apparent_power_total !== undefined
     ? Number(Number(pm.apparent_power_total).toFixed(1))
     : null;
-  const apparentPowerKva = rawApparent;
 
-  const rawPf = pm.power_factor !== null && pm.power_factor !== undefined && !isNaN(Number(pm.power_factor))
+  const powerFactor = pm.power_factor !== null && pm.power_factor !== undefined
     ? Number(pm.power_factor)
     : null;
-  const powerFactor = rawPf !== null ? Math.min(1.0, Math.abs(rawPf)) : null;
 
-  const rawFreq = pm.frequency !== null && pm.frequency !== undefined && !isNaN(Number(pm.frequency))
+  const frequencyHz = pm.frequency !== null && pm.frequency !== undefined
     ? Number(Number(pm.frequency).toFixed(2))
     : null;
-  const frequencyHz = rawFreq;
 
-  const vAb = pm.volt_ab !== null && pm.volt_ab !== undefined && !isNaN(Number(pm.volt_ab)) ? Number(pm.volt_ab) : null;
-  const vBc = pm.volt_bc !== null && pm.volt_bc !== undefined && !isNaN(Number(pm.volt_bc)) ? Number(pm.volt_bc) : null;
-  const vCa = pm.volt_ca !== null && pm.volt_ca !== undefined && !isNaN(Number(pm.volt_ca)) ? Number(pm.volt_ca) : null;
+  const vAb = pm.volt_ab !== null && pm.volt_ab !== undefined ? Number(pm.volt_ab) : null;
+  const vBc = pm.volt_bc !== null && pm.volt_bc !== undefined ? Number(pm.volt_bc) : null;
+  const vCa = pm.volt_ca !== null && pm.volt_ca !== undefined ? Number(pm.volt_ca) : null;
 
-  let voltageOutL2L: number | null = null;
-  if (vAb && vBc && vCa && vAb > 0 && vBc > 0 && vCa > 0) {
-    voltageOutL2L = Number(((vAb + vBc + vCa) / 3).toFixed(1));
-  } else if (pm.volt_ll !== null && pm.volt_ll !== undefined && Number(pm.volt_ll) > 0) {
-    voltageOutL2L = Number(Number(pm.volt_ll).toFixed(1));
-  } else if (vAb && vAb > 0) {
-    voltageOutL2L = Number(vAb.toFixed(1));
-  }
-  if (voltageOutL2L === null || voltageOutL2L === 0) {
-    voltageOutL2L = initialTx.voltageOutL2L;
-  }
+  const vAn = pm.volt_an !== null && pm.volt_an !== undefined ? Number(pm.volt_an) : null;
+  const vBn = pm.volt_bn !== null && pm.volt_bn !== undefined ? Number(pm.volt_bn) : null;
+  const vCn = pm.volt_cn !== null && pm.volt_cn !== undefined ? Number(pm.volt_cn) : null;
 
-  const voltageOutL2N = voltageOutL2L ? Number((voltageOutL2L / Math.sqrt(3)).toFixed(1)) : initialTx.voltageOutL2N;
-
-  const curA = pm.current_a !== null && pm.current_a !== undefined && !isNaN(Number(pm.current_a)) ? Number(Number(pm.current_a).toFixed(1)) : null;
-  const curB = pm.current_b !== null && pm.current_b !== undefined && !isNaN(Number(pm.current_b)) ? Number(Number(pm.current_b).toFixed(1)) : null;
-  const curC = pm.current_c !== null && pm.current_c !== undefined && !isNaN(Number(pm.current_c)) ? Number(Number(pm.current_c).toFixed(1)) : null;
-
-  const currentR = curA !== null ? curA : initialTx.currentR;
-  const currentS = curB !== null ? curB : initialTx.currentS;
-  const currentT = curC !== null ? curC : initialTx.currentT;
-
-  const thdVa = pm.thd_volt_a !== null && pm.thd_volt_a !== undefined && !isNaN(Number(pm.thd_volt_a)) ? Number(pm.thd_volt_a) : null;
-  const thdVb = pm.thd_volt_b !== null && pm.thd_volt_b !== undefined && !isNaN(Number(pm.thd_volt_b)) ? Number(pm.thd_volt_b) : null;
-  const thdVc = pm.thd_volt_c !== null && pm.thd_volt_c !== undefined && !isNaN(Number(pm.thd_volt_c)) ? Number(pm.thd_volt_c) : null;
-
-  let thdVoltage: number | null = null;
-  const validThdVs = [thdVa, thdVb, thdVc].filter((v): v is number => v !== null && v >= 0 && v < 50);
-  if (validThdVs.length > 0) {
-    thdVoltage = Number((validThdVs.reduce((a, b) => a + b, 0) / validThdVs.length).toFixed(2));
-  } else {
-    thdVoltage = initialTx.thdVoltage;
-  }
-
-  const thdIa = pm.thd_current_a !== null && pm.thd_current_a !== undefined && !isNaN(Number(pm.thd_current_a)) ? Number(pm.thd_current_a) : null;
-  const thdIb = pm.thd_current_b !== null && pm.thd_current_b !== undefined && !isNaN(Number(pm.thd_current_b)) ? Number(pm.thd_current_b) : null;
-  const thdIc = pm.thd_current_c !== null && pm.thd_current_c !== undefined && !isNaN(Number(pm.thd_current_c)) ? Number(pm.thd_current_c) : null;
-
-  let thdCurrent: number | null = null;
-  const validThdIs = [thdIa, thdIb, thdIc].filter((v): v is number => v !== null && v >= 0 && v < 50);
-  if (validThdIs.length > 0) {
-    thdCurrent = Number((validThdIs.reduce((a, b) => a + b, 0) / validThdIs.length).toFixed(2));
-  } else {
-    thdCurrent = initialTx.thdCurrent;
-  }
-
-  let vUnb = pm.voltage_unbalance !== null && pm.voltage_unbalance !== undefined && !isNaN(Number(pm.voltage_unbalance)) ? Number(pm.voltage_unbalance) : null;
-  if (vUnb === null && vAb && vBc && vCa && voltageOutL2L) {
-    const maxDev = Math.max(Math.abs(vAb - voltageOutL2L), Math.abs(vBc - voltageOutL2L), Math.abs(vCa - voltageOutL2L));
-    vUnb = Number(((maxDev / voltageOutL2L) * 100).toFixed(2));
-  }
-  if (vUnb === null) vUnb = initialTx.voltageUnbalance ?? null;
-
-  let iUnb = pm.current_unbalance !== null && pm.current_unbalance !== undefined && !isNaN(Number(pm.current_unbalance)) ? Number(pm.current_unbalance) : null;
-  if (iUnb === null && currentR && currentS && currentT) {
-    const avgI = (currentR + currentS + currentT) / 3;
-    if (avgI > 0) {
-      const maxDevI = Math.max(Math.abs(currentR - avgI), Math.abs(currentS - avgI), Math.abs(currentT - avgI));
-      iUnb = Number(((maxDevI / avgI) * 100).toFixed(2));
-    }
-  }
-  if (iUnb === null) iUnb = initialTx.currentUnbalance ?? null;
-
-  const rawKwh = pm.active_energy !== null && pm.active_energy !== undefined && !isNaN(Number(pm.active_energy))
-    ? Number(Number(pm.active_energy).toFixed(0))
+  const voltageOutL2L = pm.volt_ll !== null && pm.volt_ll !== undefined
+    ? Number(Number(pm.volt_ll).toFixed(1))
     : null;
-  const kwh = rawKwh !== null && rawKwh > 0 ? rawKwh : initialTx.kwh;
 
-  let status: "online" | "warning" | "offline" = "offline";
-  if (pm.status === false) {
-    status = "offline";
-  } else if (pm.status === true) {
-    status = (activePowerKw !== null && activePowerKw > 0.05) ? "online" : "warning";
-  } else {
-    status = (activePowerKw !== null && activePowerKw > 0) ? "online" : "offline";
-  }
+  const voltageOutL2N = pm.volt_ln !== null && pm.volt_ln !== undefined
+    ? Number(Number(pm.volt_ln).toFixed(1))
+    : null;
 
-  const resolvedIncomingKv = incomingKv ?? initialTx.voltageInKv;
+  const currentR = pm.current_a !== null && pm.current_a !== undefined ? Number(Number(pm.current_a).toFixed(1)) : null;
+  const currentS = pm.current_b !== null && pm.current_b !== undefined ? Number(Number(pm.current_b).toFixed(1)) : null;
+  const currentT = pm.current_c !== null && pm.current_c !== undefined ? Number(Number(pm.current_c).toFixed(1)) : null;
+
+  const thdVa = pm.thd_volt_a !== null && pm.thd_volt_a !== undefined ? Number(pm.thd_volt_a) : null;
+  const thdVb = pm.thd_volt_b !== null && pm.thd_volt_b !== undefined ? Number(pm.thd_volt_b) : null;
+  const thdVc = pm.thd_volt_c !== null && pm.thd_volt_c !== undefined ? Number(pm.thd_volt_c) : null;
+
+  const thdIa = pm.thd_current_a !== null && pm.thd_current_a !== undefined ? Number(pm.thd_current_a) : null;
+  const thdIb = pm.thd_current_b !== null && pm.thd_current_b !== undefined ? Number(pm.thd_current_b) : null;
+  const thdIc = pm.thd_current_c !== null && pm.thd_current_c !== undefined ? Number(pm.thd_current_c) : null;
+
+  const vUnb = pm.voltage_unbalance !== null && pm.voltage_unbalance !== undefined ? Number(pm.voltage_unbalance) : null;
+  const iUnb = pm.current_unbalance !== null && pm.current_unbalance !== undefined ? Number(pm.current_unbalance) : null;
+
+  const kwh = pm.active_energy !== null && pm.active_energy !== undefined ? Number(Number(pm.active_energy).toFixed(0)) : null;
+  const isOnline = pm.status !== null && pm.status !== undefined
+    ? Boolean(pm.status)
+    : ((activePowerKw !== null && activePowerKw !== undefined) || (vAb !== null && vAb > 100));
 
   return {
     ...initialTx,
@@ -280,69 +244,32 @@ function mapPmToTransformer(
     apparentPowerKva,
     powerFactor,
     frequencyHz,
-    voltageInKv: resolvedIncomingKv,
+    voltageInKv: initialTx.factory === 1 ? (incomingVolts?.wf1Volt ?? initialTx.voltageInKv) : (incomingVolts?.wf2Volt ?? initialTx.voltageInKv),
     voltageOutL2L,
     voltageOutL2N,
-    voltAb: vAb ?? initialTx.voltAb,
-    voltBc: vBc ?? initialTx.voltBc,
-    voltCa: vCa ?? initialTx.voltCa,
+    voltAn: vAn,
+    voltBn: vBn,
+    voltCn: vCn,
+    voltAb: vAb,
+    voltBc: vBc,
+    voltCa: vCa,
     currentR,
     currentS,
     currentT,
-    thdVoltage,
-    thdCurrent,
-    thdVoltA: thdVa && thdVa < 50 ? thdVa : (thdVoltage ?? initialTx.thdVoltA),
-    thdVoltB: thdVb && thdVb < 50 ? thdVb : (thdVoltage ?? initialTx.thdVoltB),
-    thdVoltC: thdVc && thdVc < 50 ? thdVc : (thdVoltage ?? initialTx.thdVoltC),
-    thdCurrentA: thdIa && thdIa < 50 ? thdIa : (thdCurrent ?? initialTx.thdCurrentA),
-    thdCurrentB: thdIb && thdIb < 50 ? thdIb : (thdCurrent ?? initialTx.thdCurrentB),
-    thdCurrentC: thdIc && thdIc < 50 ? thdIc : (thdCurrent ?? initialTx.thdCurrentC),
+    thdVoltage: null,
+    thdCurrent: null,
+    thdVoltA: thdVa,
+    thdVoltB: thdVb,
+    thdVoltC: thdVc,
+    thdCurrentA: thdIa,
+    thdCurrentB: thdIb,
+    thdCurrentC: thdIc,
     voltageUnbalance: vUnb,
     currentUnbalance: iUnb,
-    tempCc: null, // No physical temperature sensors installed on transformers
+    tempCc: null,
     kwh,
-    status,
+    status: isOnline ? "online" : "offline",
   };
-}
-
-function isTransformerEqual(a: TransformerData, b: TransformerData): boolean {
-  if (a === b) return true;
-  return (
-    a.id === b.id &&
-    a.name === b.name &&
-    a.factory === b.factory &&
-    a.capacityKva === b.capacityKva &&
-    a.activePowerKw === b.activePowerKw &&
-    a.reactivePowerKvar === b.reactivePowerKvar &&
-    a.apparentPowerKva === b.apparentPowerKva &&
-    a.powerFactor === b.powerFactor &&
-    a.frequencyHz === b.frequencyHz &&
-    a.voltageInKv === b.voltageInKv &&
-    a.voltageOutL2L === b.voltageOutL2L &&
-    a.voltageOutL2N === b.voltageOutL2N &&
-    a.voltAb === b.voltAb &&
-    a.voltBc === b.voltBc &&
-    a.voltCa === b.voltCa &&
-    a.currentR === b.currentR &&
-    a.currentS === b.currentS &&
-    a.currentT === b.currentT &&
-    a.thdVoltage === b.thdVoltage &&
-    a.thdCurrent === b.thdCurrent &&
-    a.thdVoltA === b.thdVoltA &&
-    a.thdVoltB === b.thdVoltB &&
-    a.thdVoltC === b.thdVoltC &&
-    a.thdCurrentA === b.thdCurrentA &&
-    a.thdCurrentB === b.thdCurrentB &&
-    a.thdCurrentC === b.thdCurrentC &&
-    a.voltageUnbalance === b.voltageUnbalance &&
-    a.currentUnbalance === b.currentUnbalance &&
-    a.kwh === b.kwh &&
-    a.status === b.status &&
-    a.vectorGroup === b.vectorGroup &&
-    a.impedance === b.impedance &&
-    a.year === b.year &&
-    a.manufacturer === b.manufacturer
-  );
 }
 
 /* ═══════════ INITIAL TRANSFORMER DATA (EMPTY TELEMETRY) ═══════════ */
@@ -398,24 +325,609 @@ const TARIF_PER_KWH = 1035.78; // Industrial I-3 tariff in IDR
 const formatCurrencyIDR = (v: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(v);
 
-export interface TrafoLayoutConfig {
-  id: string;
-  factory: number;
-  row?: number;
-  span?: "1" | "full";
-  align?: "left" | "center" | "right";
-  sortOrder?: number;
-}
-
-const DEFAULT_TRAFO_LAYOUT: TrafoLayoutConfig[] = [
-  { id: "mdp-1.1", factory: 1, row: 0, span: "1", align: "center", sortOrder: 1 },
-  { id: "mdp-1.2", factory: 1, row: 0, span: "1", align: "center", sortOrder: 2 },
-  { id: "mdp-2", factory: 1, row: 1, span: "1", align: "center", sortOrder: 3 },
-  { id: "mdp-3", factory: 1, row: 1, span: "1", align: "center", sortOrder: 4 },
-  { id: "putr-1", factory: 2, row: 0, span: "1", align: "center", sortOrder: 5 },
-  { id: "putr-2", factory: 2, row: 0, span: "1", align: "center", sortOrder: 6 },
-  { id: "putr-new", factory: 2, row: 1, span: "full", align: "center", sortOrder: 7 },
+/* ═══════════ TRADINGVIEW-STYLE INTERACTIVE CHART (ZOOM & 2D FREEVIEW) ═══════════ */
+const TV_PRESETS: { key: string; label: string; spanMs: number }[] = [
+  { key: "1m", label: "1M", spanMs: 60 * 1000 },
+  { key: "5m", label: "5M", spanMs: 5 * 60 * 1000 },
+  { key: "15m", label: "15M", spanMs: 15 * 60 * 1000 },
+  { key: "1h", label: "1J", spanMs: 60 * 60 * 1000 },
+  { key: "6h", label: "6J", spanMs: 6 * 3600 * 1000 },
+  { key: "24h", label: "24J", spanMs: 24 * 3600 * 1000 },
 ];
+
+type TradingViewChartProps = {
+  data: {
+    datasets: {
+      label: string;
+      data: { x: number; y: number }[];
+      borderColor: string;
+      backgroundColor: string;
+      borderWidth?: number;
+      tension?: number;
+      fill?: boolean;
+      pointRadius?: number;
+      pointHoverRadius?: number;
+    }[];
+  };
+  options: any;
+  defaultRange: { min: number; max: number };
+  isDark: boolean;
+  resetKey?: string;
+};
+
+function TradingViewChart({ data, options, defaultRange, isDark, resetKey }: TradingViewChartProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<any>(null);
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const defaultRangeRef = useRef(defaultRange);
+  defaultRangeRef.current = defaultRange;
+
+  const viewRef = useRef<{
+    isFreeview: boolean;
+    liveSpanMs: number;
+    minX: number;
+    maxX: number;
+    yLocked: boolean;
+    minY: number | undefined;
+    maxY: number | undefined;
+  }>({
+    isFreeview: false,
+    liveSpanMs: 24 * 3600 * 1000,
+    minX: defaultRange.min,
+    maxX: defaultRange.max,
+    yLocked: false,
+    minY: undefined,
+    maxY: undefined,
+  });
+
+  const crosshairRef = useRef<{ x: number; y: number; active: boolean }>({
+    x: 0,
+    y: 0,
+    active: false,
+  });
+
+  const [uiState, setUiState] = useState<{
+    isFreeview: boolean;
+    yLocked: boolean;
+    activePreset: string;
+    spanMs: number;
+  }>({
+    isFreeview: false,
+    yLocked: false,
+    activePreset: "24h",
+    spanMs: 24 * 3600 * 1000,
+  });
+
+  const computeAutoY = useCallback((minX: number, maxX: number): { min: number; max: number } | undefined => {
+    const datasets = dataRef.current?.datasets || [];
+    let minVal = Infinity;
+    let maxVal = -Infinity;
+    for (let d = 0; d < datasets.length; d++) {
+      const pts = datasets[d]?.data;
+      if (!Array.isArray(pts)) continue;
+      for (let i = 0; i < pts.length; i++) {
+        const pt = pts[i];
+        if (!pt || pt.x < minX || pt.x > maxX) continue;
+        const y = Number(pt.y);
+        if (!Number.isFinite(y)) continue;
+        if (y < minVal) minVal = y;
+        if (y > maxVal) maxVal = y;
+      }
+    }
+    if (!Number.isFinite(minVal) || !Number.isFinite(maxVal)) return undefined;
+    const span = maxVal - minVal;
+    const pad = span > 0.5 ? span * 0.15 : Math.max(Math.abs(maxVal) * 0.02, 1);
+    const computedMin = minVal >= 0 ? Math.max(0, Number((minVal - pad).toFixed(2))) : Number((minVal - pad).toFixed(2));
+    const computedMax = Number((maxVal + pad).toFixed(2));
+    return { min: computedMin, max: computedMax > computedMin ? computedMax : computedMin + 1 };
+  }, []);
+
+  const syncChartInstance = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart || !chart.options?.scales) return;
+    const v = viewRef.current;
+    chart.options.scales.x.min = v.minX;
+    chart.options.scales.x.max = v.maxX;
+    if (v.yLocked && v.minY !== undefined && v.maxY !== undefined) {
+      chart.options.scales.y.min = v.minY;
+      chart.options.scales.y.max = v.maxY;
+    } else {
+      const autoY = computeAutoY(v.minX, v.maxX);
+      v.minY = autoY?.min;
+      v.maxY = autoY?.max;
+      chart.options.scales.y.min = autoY?.min;
+      chart.options.scales.y.max = autoY?.max;
+    }
+    const spanX = v.maxX - v.minX;
+    const dynamicRadius = spanX <= 2 * 60 * 1000 ? 2.5 : spanX <= 10 * 60 * 1000 ? 1.5 : 0;
+    if (Array.isArray(chart.data?.datasets)) {
+      chart.data.datasets.forEach((ds: any) => {
+        ds.pointRadius = dynamicRadius;
+      });
+    }
+    chart.update("none");
+  }, [computeAutoY]);
+
+  // Reset view when switching transformer or tab
+  useEffect(() => {
+    const dr = defaultRangeRef.current;
+    viewRef.current = {
+      isFreeview: false,
+      liveSpanMs: 24 * 3600 * 1000,
+      minX: dr.min,
+      maxX: dr.max,
+      yLocked: false,
+      minY: undefined,
+      maxY: undefined,
+    };
+    setUiState({
+      isFreeview: false,
+      yLocked: false,
+      activePreset: "24h",
+      spanMs: 24 * 3600 * 1000,
+    });
+  }, [resetKey]);
+
+  // Keep live window rolling when NOT in freeview mode
+  if (!viewRef.current.isFreeview) {
+    viewRef.current.maxX = defaultRange.max;
+    viewRef.current.minX = Math.max(defaultRange.min, defaultRange.max - viewRef.current.liveSpanMs);
+    if (!viewRef.current.yLocked) {
+      const autoY = computeAutoY(viewRef.current.minX, viewRef.current.maxX);
+      viewRef.current.minY = autoY?.min;
+      viewRef.current.maxY = autoY?.max;
+    }
+  } else if (!viewRef.current.yLocked) {
+    const autoY = computeAutoY(viewRef.current.minX, viewRef.current.maxX);
+    viewRef.current.minY = autoY?.min;
+    viewRef.current.maxY = autoY?.max;
+  }
+
+  const handleResetLive = useCallback(() => {
+    const dr = defaultRangeRef.current;
+    viewRef.current = {
+      isFreeview: false,
+      liveSpanMs: 24 * 3600 * 1000,
+      minX: dr.min,
+      maxX: dr.max,
+      yLocked: false,
+      minY: undefined,
+      maxY: undefined,
+    };
+    setUiState({
+      isFreeview: false,
+      yLocked: false,
+      activePreset: "24h",
+      spanMs: 24 * 3600 * 1000,
+    });
+    syncChartInstance();
+  }, [syncChartInstance]);
+
+  const handleSelectPreset = useCallback((presetKey: string, spanMs: number) => {
+    const dr = defaultRangeRef.current;
+    viewRef.current.isFreeview = false;
+    viewRef.current.liveSpanMs = spanMs;
+    viewRef.current.maxX = dr.max;
+    viewRef.current.minX = Math.max(dr.min, dr.max - spanMs);
+    viewRef.current.yLocked = false;
+    setUiState({
+      isFreeview: false,
+      yLocked: false,
+      activePreset: presetKey,
+      spanMs,
+    });
+    syncChartInstance();
+  }, [syncChartInstance]);
+
+  const handleStepZoom = useCallback((factor: number) => {
+    const v = viewRef.current;
+    const dr = defaultRangeRef.current;
+    const curSpan = Math.max(15000, v.maxX - v.minX);
+    const newSpan = Math.max(15000, Math.min(24 * 3600 * 1000, curSpan * factor));
+    const center = (v.minX + v.maxX) / 2;
+    let newMinX = center - newSpan / 2;
+    let newMaxX = center + newSpan / 2;
+    if (newMaxX > dr.max + newSpan * 0.05) {
+      newMaxX = dr.max + newSpan * 0.05;
+      newMinX = newMaxX - newSpan;
+    }
+    if (newMinX < dr.min - newSpan * 0.05) {
+      newMinX = dr.min - newSpan * 0.05;
+      newMaxX = newMinX + newSpan;
+    }
+    v.isFreeview = true;
+    v.minX = newMinX;
+    v.maxX = newMaxX;
+    setUiState((prev) => ({
+      ...prev,
+      isFreeview: true,
+      activePreset: "custom",
+      spanMs: newSpan,
+    }));
+    syncChartInstance();
+  }, [syncChartInstance]);
+
+  const handleToggleAutoY = useCallback(() => {
+    const v = viewRef.current;
+    v.yLocked = false;
+    setUiState((prev) => ({ ...prev, yLocked: false }));
+    syncChartInstance();
+  }, [syncChartInstance]);
+
+  // Native non-passive Wheel Zoom + Mouse/Touch 2D Freeview Drag
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      const chart = chartRef.current;
+      if (!chart || !chart.chartArea) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const rect = chart.canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const area = chart.chartArea;
+      const v = viewRef.current;
+      const dr = defaultRangeRef.current;
+
+      const isOverYAxis = mouseX < area.left;
+      const zoomFactor = e.deltaY < 0 ? 0.80 : 1.25;
+
+      if (isOverYAxis || e.altKey) {
+        // Zoom Y-axis around cursor Y
+        const curMinY = chart.scales.y.min;
+        const curMaxY = chart.scales.y.max;
+        const spanY = Math.max(0.1, curMaxY - curMinY);
+        const ratioY = 1 - Math.max(0, Math.min(1, (mouseY - area.top) / Math.max(1, area.bottom - area.top)));
+        const anchorY = curMinY + ratioY * spanY;
+        const newSpanY = Math.max(0.2, Math.min(100000, spanY * zoomFactor));
+        v.yLocked = true;
+        v.isFreeview = true;
+        v.minY = Number((anchorY - ratioY * newSpanY).toFixed(2));
+        v.maxY = Number((v.minY + newSpanY).toFixed(2));
+        setUiState((prev) => ({ ...prev, isFreeview: true, yLocked: true }));
+        syncChartInstance();
+        return;
+      }
+
+      // Zoom X-axis anchored at mouse cursor X (TradingView style)
+      const ratioX = Math.max(0, Math.min(1, (mouseX - area.left) / Math.max(1, area.right - area.left)));
+      const curSpanX = Math.max(15000, v.maxX - v.minX);
+      const anchorX = v.minX + ratioX * curSpanX;
+      const newSpanX = Math.max(15000, Math.min(24 * 3600 * 1000, curSpanX * zoomFactor));
+
+      let newMinX = anchorX - ratioX * newSpanX;
+      let newMaxX = newMinX + newSpanX;
+
+      const maxBound = dr.max + newSpanX * 0.08;
+      const minBound = dr.min - newSpanX * 0.08;
+      if (newMaxX > maxBound) {
+        newMaxX = maxBound;
+        newMinX = newMaxX - newSpanX;
+      }
+      if (newMinX < minBound) {
+        newMinX = minBound;
+        newMaxX = newMinX + newSpanX;
+      }
+
+      v.isFreeview = true;
+      v.minX = newMinX;
+      v.maxX = newMaxX;
+
+      // If Shift or Ctrl is held, also zoom Y-axis around cursor Y
+      if (e.shiftKey || e.ctrlKey) {
+        const curMinY = chart.scales.y.min;
+        const curMaxY = chart.scales.y.max;
+        const spanY = Math.max(0.1, curMaxY - curMinY);
+        const ratioY = 1 - Math.max(0, Math.min(1, (mouseY - area.top) / Math.max(1, area.bottom - area.top)));
+        const anchorY = curMinY + ratioY * spanY;
+        const newSpanY = Math.max(0.2, Math.min(100000, spanY * zoomFactor));
+        v.yLocked = true;
+        v.minY = Number((anchorY - ratioY * newSpanY).toFixed(2));
+        v.maxY = Number((v.minY + newSpanY).toFixed(2));
+      }
+
+      setUiState({
+        isFreeview: true,
+        yLocked: v.yLocked,
+        activePreset: "custom",
+        spanMs: newSpanX,
+      });
+      syncChartInstance();
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [syncChartInstance]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const chart = chartRef.current;
+    if (!chart || !chart.chartArea) return;
+
+    const rect = chart.canvas.getBoundingClientRect();
+    const startMouseX = e.clientX - rect.left;
+    const startMouseY = e.clientY - rect.top;
+    const area = chart.chartArea;
+    const v = viewRef.current;
+    const dr = defaultRangeRef.current;
+
+    const startClientX = e.clientX;
+    const startClientY = e.clientY;
+    const startMinX = v.minX;
+    const startMaxX = v.maxX;
+    const startSpanX = Math.max(15000, startMaxX - startMinX);
+    const startMinY = Number.isFinite(chart.scales.y?.min) ? chart.scales.y.min : (v.minY ?? 0);
+    const startMaxY = Number.isFinite(chart.scales.y?.max) ? chart.scales.y.max : (v.maxY ?? 100);
+    const startSpanY = Math.max(0.1, startMaxY - startMinY);
+
+    const dragMode: "pan" | "scaleY" | "scaleX" =
+      startMouseX < area.left ? "scaleY" : startMouseY > area.bottom ? "scaleX" : "pan";
+
+    const onMouseMove = (moveEvt: MouseEvent) => {
+      const dx = moveEvt.clientX - startClientX;
+      const dy = moveEvt.clientY - startClientY;
+      if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+
+      const plotW = Math.max(1, area.right - area.left);
+      const plotH = Math.max(1, area.bottom - area.top);
+
+      if (dragMode === "scaleY") {
+        const scaleFactor = Math.max(0.2, Math.min(5, 1 + (dy / plotH) * 1.5));
+        const centerY = (startMinY + startMaxY) / 2;
+        const newSpanY = Math.max(0.2, startSpanY * scaleFactor);
+        v.isFreeview = true;
+        v.yLocked = true;
+        v.minY = Number((centerY - newSpanY / 2).toFixed(2));
+        v.maxY = Number((centerY + newSpanY / 2).toFixed(2));
+        setUiState((prev) => ({ ...prev, isFreeview: true, yLocked: true }));
+        syncChartInstance();
+        return;
+      }
+
+      if (dragMode === "scaleX") {
+        const scaleFactor = Math.max(0.2, Math.min(5, 1 - (dx / plotW) * 1.5));
+        const newSpanX = Math.max(15000, Math.min(24 * 3600 * 1000, startSpanX * scaleFactor));
+        v.isFreeview = true;
+        v.minX = startMaxX - newSpanX;
+        v.maxX = startMaxX;
+        setUiState((prev) => ({ ...prev, isFreeview: true, activePreset: "custom", spanMs: newSpanX }));
+        syncChartInstance();
+        return;
+      }
+
+      // 2D Freeview Pan (Horizontal X + Vertical Y)
+      const timeDelta = -(dx / plotW) * startSpanX;
+      let newMinX = startMinX + timeDelta;
+      let newMaxX = startMaxX + timeDelta;
+
+      const maxBound = dr.max + startSpanX * 0.25;
+      const minBound = dr.min - startSpanX * 0.25;
+      if (newMaxX > maxBound) {
+        newMaxX = maxBound;
+        newMinX = newMaxX - startSpanX;
+      }
+      if (newMinX < minBound) {
+        newMinX = minBound;
+        newMaxX = newMinX + startSpanX;
+      }
+
+      v.isFreeview = true;
+      v.minX = newMinX;
+      v.maxX = newMaxX;
+
+      if (Math.abs(dy) > 4 || v.yLocked) {
+        const valDelta = (dy / plotH) * startSpanY;
+        v.yLocked = true;
+        v.minY = Number((startMinY + valDelta).toFixed(2));
+        v.maxY = Number((startMaxY + valDelta).toFixed(2));
+      }
+
+      setUiState((prev) => ({
+        ...prev,
+        isFreeview: true,
+        yLocked: v.yLocked,
+        activePreset: "custom",
+        spanMs: startSpanX,
+      }));
+      syncChartInstance();
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, [syncChartInstance]);
+
+  const handleMouseMoveCrosshair = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const chart = chartRef.current;
+    if (!chart || !chart.chartArea) return;
+    const rect = chart.canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const area = chart.chartArea;
+    if (x >= area.left && x <= area.right && y >= area.top && y <= area.bottom) {
+      crosshairRef.current = { x, y, active: true };
+    } else {
+      crosshairRef.current.active = false;
+    }
+  }, []);
+
+  const handleMouseLeaveCrosshair = useCallback(() => {
+    crosshairRef.current.active = false;
+    if (chartRef.current) chartRef.current.draw();
+  }, []);
+
+  const crosshairPlugin = useMemo(() => ({
+    id: "tvCrosshair",
+    afterDraw: (chart: any) => {
+      const ch = crosshairRef.current;
+      if (!ch.active || !chart.chartArea) return;
+      const { ctx, chartArea: area, scales } = chart;
+      if (ch.x < area.left || ch.x > area.right || ch.y < area.top || ch.y > area.bottom) return;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = isDark ? "rgba(148, 163, 184, 0.45)" : "rgba(71, 85, 105, 0.45)";
+
+      // Vertical line
+      ctx.moveTo(ch.x, area.top);
+      ctx.lineTo(ch.x, area.bottom);
+      // Horizontal line
+      ctx.moveTo(area.left, ch.y);
+      ctx.lineTo(area.right, ch.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Y-axis value pill on left
+      if (scales?.y) {
+        const yVal = scales.y.getValueForPixel(ch.y);
+        if (Number.isFinite(yVal)) {
+          const label = Number(yVal).toFixed(1);
+          ctx.font = "bold 9px monospace";
+          const tw = ctx.measureText(label).width + 8;
+          const th = 15;
+          const bx = Math.max(0, area.left - tw - 2);
+          const by = Math.max(area.top, Math.min(area.bottom - th, ch.y - th / 2));
+          ctx.fillStyle = isDark ? "#0284c7" : "#0369a1";
+          ctx.beginPath();
+          ctx.roundRect(bx, by, tw, th, 3);
+          ctx.fill();
+          ctx.fillStyle = "#ffffff";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(label, bx + tw / 2, by + th / 2);
+        }
+      }
+      ctx.restore();
+    }
+  }), [isDark]);
+
+  const mergedOptions = useMemo(() => {
+    const v = viewRef.current;
+    return {
+      ...options,
+      scales: {
+        ...options.scales,
+        x: {
+          ...options.scales?.x,
+          min: v.minX,
+          max: v.maxX,
+        },
+        y: {
+          ...options.scales?.y,
+          min: v.minY,
+          max: v.maxY,
+        },
+      },
+    };
+  }, [options, defaultRange, uiState]);
+
+  const formatSpanLabel = (ms: number) => {
+    if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+    if (ms < 3600000) return `${Math.round(ms / 60000)}m`;
+    return `${(ms / 3600000).toFixed(ms % 3600000 === 0 ? 0 : 1)}h`;
+  };
+
+  return (
+    <div className="w-full h-full flex flex-col select-none">
+      {/* TradingView Compact Toolbar */}
+      <div className="flex items-center justify-between gap-1.5 pb-1.5 flex-wrap shrink-0">
+        <div className="flex items-center gap-1 flex-wrap">
+          <div className="inline-flex items-center bg-slate-200/70 dark:bg-slate-800/80 p-0.5 rounded-md border border-slate-300/60 dark:border-slate-700/70">
+            {TV_PRESETS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => handleSelectPreset(p.key, p.spanMs)}
+                className={`px-1.5 py-0.5 text-[9px] font-extrabold font-mono rounded transition-all cursor-pointer ${
+                  !uiState.isFreeview && uiState.activePreset === p.key
+                    ? "bg-sky-500 text-white shadow-sm"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+                title={`Tampilkan rentang ${p.label} terakhir (Live)`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="inline-flex items-center gap-0.5 bg-slate-200/70 dark:bg-slate-800/80 p-0.5 rounded-md border border-slate-300/60 dark:border-slate-700/70">
+            <button
+              type="button"
+              onClick={() => handleStepZoom(0.75)}
+              className="px-1.5 py-0.5 text-[10px] font-extrabold font-mono text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded transition cursor-pointer"
+              title="Zoom In (Atau Scroll Roda Mouse ke Atas)"
+            >
+              ＋
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStepZoom(1.35)}
+              className="px-1.5 py-0.5 text-[10px] font-extrabold font-mono text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded transition cursor-pointer"
+              title="Zoom Out (Atau Scroll Roda Mouse ke Bawah)"
+            >
+              －
+            </button>
+          </div>
+
+          {uiState.yLocked && (
+            <button
+              type="button"
+              onClick={handleToggleAutoY}
+              className="px-1.5 py-0.5 rounded text-[9px] font-extrabold font-mono bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/25 transition cursor-pointer"
+              title="Kembalikan skala sumbu Y ke Auto-Fit"
+            >
+              Auto Y
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <span className="hidden sm:inline text-[9px] text-slate-400 dark:text-slate-500 font-medium">
+            Scroll: Zoom • Drag: Freeview • 2x Klik: Reset
+          </span>
+          {uiState.isFreeview || uiState.activePreset !== "24h" || uiState.yLocked ? (
+            <button
+              type="button"
+              onClick={handleResetLive}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border border-amber-500/30 transition cursor-pointer"
+              title="Kembalikan ke tampilan Live 24 Jam"
+            >
+              <span>✋ Freeview ({formatSpanLabel(uiState.spanMs)})</span>
+              <span className="underline ml-0.5">⟳ Reset Live</span>
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Live 24J
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Interactive Chart Canvas Container */}
+      <div
+        ref={containerRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMoveCrosshair}
+        onMouseLeave={handleMouseLeaveCrosshair}
+        onDoubleClick={handleResetLive}
+        className="relative flex-1 min-h-0 w-full cursor-grab active:cursor-grabbing"
+      >
+        <Line ref={chartRef} data={data} options={mergedOptions} plugins={[crosshairPlugin]} />
+      </div>
+    </div>
+  );
+}
 
 /* ═══════════ DETAILED HISTORICAL MODAL ═══════════ */
 type ModalProps = {
@@ -451,7 +963,7 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
 
   const tabs = [
     { key: "voltage" as const, label: "Voltage Record" },
-    { key: "ampere" as const, label: "Ampere Record (Total & 3 Fasa)" },
+    { key: "ampere" as const, label: "Ampere Record (3 Fasa R, S, T)" },
     { key: "power" as const, label: "kW Total (Daya Aktif)" },
   ];
 
@@ -488,7 +1000,7 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
   };
 
   const [modalPointCount, setModalPointCount] = useState(0);
-  const [modalTickMs, setModalTickMs] = useState<number>(() => Math.floor(Date.now() / 3000) * 3000);
+  const [modalTickMs, setModalTickMs] = useState<number>(() => Math.floor(Date.now() / 1000) * 1000);
   const [loadingModalHistory, setLoadingModalHistory] = useState(true);
   const [modalVoltageType, setModalVoltageType] = useState<"380v" | "230v">("380v");
 
@@ -547,17 +1059,20 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
 
     getJson<{ tuples?: number[][]; data?: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?rolling=true&compact=true&_t=${Date.now()}`)
       .then((res) => {
-        const tuples = res?.tuples;
-        if (Array.isArray(tuples) && tuples.length > 0) {
+        const rawTuples = res?.tuples;
+        if (Array.isArray(rawTuples) && rawTuples.length > 0) {
+          const maxClientMs = Date.now() + 2000;
+          const tuples = rawTuples.filter((row) => Number(row[0]) <= maxClientMs);
+          if (tuples.length === 0) return;
           const n = tuples.length;
           const vAb = new Array(n);
           const vBc = new Array(n);
           const vCa = new Array(n);
-          const vRn = new Array(n);
-          const vSn = new Array(n);
-          const vTn = new Array(n);
+          const vRn: { x: number; y: number }[] = [];
+          const vSn: { x: number; y: number }[] = [];
+          const vTn: { x: number; y: number }[] = [];
           const kw = new Array(n);
-          const iTot = new Array(n);
+          const iTot: { x: number; y: number }[] = [];
           const iR = new Array(n);
           const iS = new Array(n);
           const iT = new Array(n);
@@ -572,17 +1087,19 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
             const c1 = Number(row[5]) || 0;
             const c2 = Number(row[6]) || 0;
             const c3 = Number(row[7]) || 0;
+            const vrn = (row[8] !== null && row[8] !== undefined && Number(row[8]) > 50) ? Number(row[8]) : null;
+            const vsn = (row[9] !== null && row[9] !== undefined && Number(row[9]) > 50) ? Number(row[9]) : null;
+            const vtn = (row[10] !== null && row[10] !== undefined && Number(row[10]) > 50) ? Number(row[10]) : null;
             vAb[i] = { x, y: v1 };
             vBc[i] = { x, y: v2 };
             vCa[i] = { x, y: v3 };
-            vRn[i] = { x, y: Number((v1 / 1.7320508).toFixed(1)) };
-            vSn[i] = { x, y: Number((v2 / 1.7320508).toFixed(1)) };
-            vTn[i] = { x, y: Number((v3 / 1.7320508).toFixed(1)) };
             kw[i] = { x, y: p };
             iR[i] = { x, y: c1 };
             iS[i] = { x, y: c2 };
             iT[i] = { x, y: c3 };
-            iTot[i] = { x, y: Number((c1 + c2 + c3).toFixed(1)) };
+            if (vrn !== null) vRn.push({ x, y: vrn });
+            if (vsn !== null) vSn.push({ x, y: vsn });
+            if (vtn !== null) vTn.push({ x, y: vtn });
           }
 
           modalSeriesRef.current = { vAb, vBc, vCa, vRn, vSn, vTn, kw, iTot, iR, iS, iT };
@@ -595,15 +1112,15 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
           const lc3 = Number(last[7]) || 0;
           latestModalLiveRef.current = {
             vAb: lv1, vBc: lv2, vCa: lv3,
-            vRn: Number((lv1 / 1.7320508).toFixed(1)),
-            vSn: Number((lv2 / 1.7320508).toFixed(1)),
-            vTn: Number((lv3 / 1.7320508).toFixed(1)),
+            vRn: (last[8] !== null && last[8] !== undefined) ? Number(last[8]) : 0,
+            vSn: (last[9] !== null && last[9] !== undefined) ? Number(last[9]) : 0,
+            vTn: (last[10] !== null && last[10] !== undefined) ? Number(last[10]) : 0,
             kw: Number(last[4]) || 0,
             iR: lc1, iS: lc2, iT: lc3,
-            iTot: Number((lc1 + lc2 + lc3).toFixed(1))
+            iTot: 0
           };
           setModalPointCount(n);
-          setModalTickMs(Number(last[0]) || Math.floor(Date.now() / 3000) * 3000);
+          setModalTickMs(Number(last[0]) || Math.floor(Date.now() / 1000) * 1000);
         }
       })
       .catch((err) => console.error("Failed to load modal trafo history:", err))
@@ -619,13 +1136,13 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
       const c1 = pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : 0;
       const c2 = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
       const c3 = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
-      const p = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
+      const p = pm.active_power_total !== undefined && pm.active_power_total !== null ? Number(Number(pm.active_power_total).toFixed(2)) : 0;
       if (v1 <= 0 && p <= 0 && c1 <= 0) return;
 
       const s = modalSeriesRef.current;
       const lastX = s.vAb.length > 0 ? s.vAb[s.vAb.length - 1].x : 0;
       const rawX = Number(pm.ts) || fallbackTs || Date.now();
-      if (rawX - lastX < 2500) return;
+      if (rawX - lastX < 800) return;
       const nextX = rawX;
       const cutoff = nextX - 24 * 3600 * 1000;
 
@@ -639,11 +1156,13 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
       pushAndShift(s.vAb, v1);
       pushAndShift(s.vBc, v2);
       pushAndShift(s.vCa, v3);
-      pushAndShift(s.vRn, Number((v1 / 1.7320508).toFixed(1)));
-      pushAndShift(s.vSn, Number((v2 / 1.7320508).toFixed(1)));
-      pushAndShift(s.vTn, Number((v3 / 1.7320508).toFixed(1)));
+      const vrn = pm.volt_an !== undefined && pm.volt_an !== null ? Number(Number(pm.volt_an).toFixed(1)) : 0;
+      const vsn = pm.volt_bn !== undefined && pm.volt_bn !== null ? Number(Number(pm.volt_bn).toFixed(1)) : 0;
+      const vtn = pm.volt_cn !== undefined && pm.volt_cn !== null ? Number(Number(pm.volt_cn).toFixed(1)) : 0;
+      if (vrn > 50) pushAndShift(s.vRn, vrn);
+      if (vsn > 50) pushAndShift(s.vSn, vsn);
+      if (vtn > 50) pushAndShift(s.vTn, vtn);
       pushAndShift(s.kw, p);
-      pushAndShift(s.iTot, Number((c1 + c2 + c3).toFixed(1)));
       pushAndShift(s.iR, c1);
       pushAndShift(s.iS, c2);
       pushAndShift(s.iT, c3);
@@ -711,16 +1230,6 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
     if (activeTab === "ampere") {
       return {
         datasets: [
-          {
-            label: "Ampere Total (A)",
-            data: s.iTot,
-            borderColor: "#8b5cf6",
-            backgroundColor: "transparent",
-            borderWidth: 1.8,
-            tension: 0,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-          },
           {
             label: "Phase R (A)",
             data: s.iR,
@@ -924,21 +1433,35 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
                   </button>
                 </div>
               )}
+
             </div>
 
             {/* Chart View */}
             <div className="relative flex-1 flex flex-col p-4 border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 rounded-2xl overflow-hidden" style={{ minHeight: 280, height: "100%" }}>
-              {loadingModalHistory ? (
+              {activeTab === "voltage" && modalVoltageType === "230v" && (modalSeriesRef.current.vRn.length === 0 && modalSeriesRef.current.vSn.length === 0) ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-amber-500/30 bg-amber-500/5 rounded-xl">
+                  <span className="text-xs font-extrabold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 max-w-sm">
+                    Tag tegangan 230V (L-N) belum tersedia dari API Power Meter ({transformer.name}).
+                  </p>
+                </div>
+              ) : loadingModalHistory ? (
                 <div className="flex-1 flex items-center justify-center text-xs text-sky-500 font-bold gap-2">
                   <span className="animate-spin">⏳</span> Memuat riwayat telemetri...
                 </div>
               ) : modalPointCount > 0 ? (
                 <div className="w-full h-full min-h-[240px]">
-                  <Line data={chartData} options={modalChartOptions} />
+                  <TradingViewChart
+                    data={chartData}
+                    options={modalChartOptions}
+                    defaultRange={modalWindowRange}
+                    isDark={isDark}
+                    resetKey={`${transformer.id}-${activeTab}-${modalVoltageType}`}
+                  />
                 </div>
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-6">
-                  <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA HISTORIS BELUM TERSEDIA</span>
+                  <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
                   <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 max-w-sm">
                     Belum ada rekaman histori hari ini untuk {transformer.name}.
                   </p>
@@ -1126,368 +1649,227 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
 }
 
 /* ═══════════ TRANSFORMER DETAIL CARD (Section B) ═══════════ */
-const TransformerDetailCard = React.memo(
-  function TransformerDetailCard({
-    tx,
-    factoryLabel,
-    loadConfig,
-    isEditMode,
-    isBeingDragged,
-    isDropTarget,
-    dragAction,
-    isSingleInRow,
-    span,
-    align,
-    onSetSpan,
-    onSetAlign,
-    onDragStart,
-    onDragEnd,
-    onDragOver,
-    onDrop
-  }: {
-    tx: TransformerData;
-    factoryLabel: string;
-    loadConfig: { safeMax: number; cautionMax: number };
-    isEditMode?: boolean;
-    isBeingDragged?: boolean;
-    isDropTarget?: boolean;
-    dragAction?: "insert-left" | "insert-right" | "swap" | null;
-    isSingleInRow?: boolean;
-    span?: "1" | "full";
-    align?: "left" | "center" | "right";
-    onSetSpan?: (span: "1" | "full") => void;
-    onSetAlign?: (align: "left" | "center" | "right") => void;
-    onDragStart?: (e: React.DragEvent) => void;
-    onDragEnd?: () => void;
-    onDragOver?: (e: React.DragEvent) => void;
-    onDrop?: () => void;
-  }) {
-    const hasData = tx.activePowerKw !== null && tx.activePowerKw !== undefined;
-    const loadPct = hasData && tx.capacityKva && tx.activePowerKw !== null ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null;
-    
-    // Dynamic load colors based on Postgres threshold configs
-    const loadColor = loadPct !== null 
-      ? (loadPct <= loadConfig.safeMax ? "#10b981" : loadPct <= loadConfig.cautionMax ? "#eab308" : "#ef4444")
-      : "#94a3b8";
+function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; factoryLabel: string; loadConfig: { safeMax: number; cautionMax: number } }) {
+  const hasData = tx.activePowerKw !== null && tx.activePowerKw !== undefined;
 
-    // Voltages per phase for display
-    const vR_400 = tx.voltAb !== null && tx.voltAb !== undefined ? `${tx.voltAb.toFixed(1)}` : (tx.voltageOutL2L !== null ? `${tx.voltageOutL2L.toFixed(1)}` : "—");
-    const vS_400 = tx.voltBc !== null && tx.voltBc !== undefined ? `${tx.voltBc.toFixed(1)}` : (tx.voltageOutL2L !== null ? `${tx.voltageOutL2L.toFixed(1)}` : "—");
-    const vT_400 = tx.voltCa !== null && tx.voltCa !== undefined ? `${tx.voltCa.toFixed(1)}` : (tx.voltageOutL2L !== null ? `${tx.voltageOutL2L.toFixed(1)}` : "—");
+  const has400V =
+    tx.voltAb !== null && tx.voltAb !== undefined &&
+    tx.voltBc !== null && tx.voltBc !== undefined &&
+    tx.voltCa !== null && tx.voltCa !== undefined;
 
-    const vR_230 = tx.voltAb ? `${(tx.voltAb / Math.sqrt(3)).toFixed(1)}` : (tx.voltageOutL2N !== null ? `${tx.voltageOutL2N.toFixed(1)}` : "—");
-    const vS_230 = tx.voltBc ? `${(tx.voltBc / Math.sqrt(3)).toFixed(1)}` : (tx.voltageOutL2N !== null ? `${tx.voltageOutL2N.toFixed(1)}` : "—");
-    const vT_230 = tx.voltCa ? `${(tx.voltCa / Math.sqrt(3)).toFixed(1)}` : (tx.voltageOutL2N !== null ? `${tx.voltageOutL2N.toFixed(1)}` : "—");
+  const hasThdV =
+    tx.thdVoltA !== null && tx.thdVoltA !== undefined &&
+    tx.thdVoltB !== null && tx.thdVoltB !== undefined &&
+    tx.thdVoltC !== null && tx.thdVoltC !== undefined;
 
-    // THD per phase
-    const thdv_R = tx.thdVoltA !== null && tx.thdVoltA !== undefined ? tx.thdVoltA.toFixed(2) : (tx.thdVoltage !== null ? tx.thdVoltage.toFixed(2) : "—");
-    const thdv_S = tx.thdVoltB !== null && tx.thdVoltB !== undefined ? tx.thdVoltB.toFixed(2) : (tx.thdVoltage !== null ? tx.thdVoltage.toFixed(2) : "—");
-    const thdv_T = tx.thdVoltC !== null && tx.thdVoltC !== undefined ? tx.thdVoltC.toFixed(2) : (tx.thdVoltage !== null ? tx.thdVoltage.toFixed(2) : "—");
+  const hasThdI =
+    tx.thdCurrentA !== null && tx.thdCurrentA !== undefined &&
+    tx.thdCurrentB !== null && tx.thdCurrentB !== undefined &&
+    tx.thdCurrentC !== null && tx.thdCurrentC !== undefined;
 
-    const thdi_R = tx.thdCurrentA !== null && tx.thdCurrentA !== undefined ? tx.thdCurrentA.toFixed(2) : (tx.thdCurrent !== null ? tx.thdCurrent.toFixed(2) : "—");
-    const thdi_S = tx.thdCurrentB !== null && tx.thdCurrentB !== undefined ? tx.thdCurrentB.toFixed(2) : (tx.thdCurrent !== null ? tx.thdCurrent.toFixed(2) : "—");
-    const thdi_T = tx.thdCurrentC !== null && tx.thdCurrentC !== undefined ? tx.thdCurrentC.toFixed(2) : (tx.thdCurrent !== null ? tx.thdCurrent.toFixed(2) : "—");
+  const hasCurrent =
+    tx.currentR !== null && tx.currentR !== undefined &&
+    tx.currentS !== null && tx.currentS !== undefined &&
+    tx.currentT !== null && tx.currentT !== undefined;
 
-    return (
-      <div
-        draggable={isEditMode}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-        onDragOver={onDragOver}
-        onDrop={onDrop}
-        className={`rounded-2xl border transition-all duration-150 bg-white dark:bg-slate-900 shadow-sm overflow-hidden relative flex flex-col justify-between ${
-          isBeingDragged
-            ? "opacity-30 scale-95 ring-2 ring-sky-500 rounded-2xl cursor-grabbing"
-            : isDropTarget
-            ? "scale-[1.01] rounded-2xl"
-            : isEditMode
-            ? "ring-1 ring-sky-400/40 hover:ring-sky-500 rounded-2xl cursor-grab active:cursor-grabbing shadow-md"
-            : "border-slate-200 dark:border-slate-800"
-        }`}
-      >
-        {/* Drop Indicators: Insert Left, Insert Right, or Swap */}
-        {isDropTarget && dragAction === "insert-left" && (
-          <div className="absolute inset-y-0 -left-2 w-3 bg-sky-500 rounded-l-xl shadow-[0_0_16px_rgba(14,165,233,0.9)] z-40 flex items-center justify-center animate-pulse pointer-events-none">
-            <div className="bg-sky-600 text-white text-[10px] font-black px-2.5 py-1 rounded-md shadow-lg whitespace-nowrap -translate-x-full mr-1 flex items-center gap-1">
-              <span>←</span> Sisipkan di Kiri
+  const storeLwbpRate = useConfigStore((state) => state.lwbpRate);
+  const effectiveRate = typeof storeLwbpRate === "number" && storeLwbpRate > 0 ? storeLwbpRate : TARIF_PER_KWH;
+  const estimatedCost = tx.kwh !== null ? tx.kwh * effectiveRate : null;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+      {/* Card Header */}
+      <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2.5">
+          <span
+            className="rounded-full"
+            style={{
+              width: 8, height: 8,
+              backgroundColor: hasData ? (tx.status === "online" ? "#10b981" : "#f59e0b") : "#94a3b8",
+              boxShadow: hasData ? "0 0 6px #10b981" : "none",
+            }}
+          />
+          <span className="text-sm font-extrabold text-slate-800 dark:text-white">{tx.name}</span>
+          <span className="px-2 py-0.5 rounded text-[8px] font-extrabold bg-sky-500/10 text-sky-500 border border-sky-500/20 uppercase">
+            {factoryLabel} — {tx.capacityKva} kVA
+          </span>
+        </div>
+        {(() => {
+          const loadPct = tx.apparentPowerKva && tx.capacityKva
+            ? Math.round((tx.apparentPowerKva / tx.capacityKva) * 100)
+            : (tx.activePowerKw && tx.capacityKva ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null);
+          const loadColor = loadPct !== null
+            ? (loadPct <= 70 ? "#10b981" : loadPct <= 85 ? "#eab308" : "#ef4444")
+            : "#f59e0b";
+          return (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-slate-400">LOAD:</span>
+              {loadPct !== null ? (
+                <span className="text-[11px] font-mono font-extrabold" style={{ color: loadColor }}>
+                  {loadPct}%
+                </span>
+              ) : (
+                <span className="text-[9px] font-extrabold text-amber-500">
+                  {NO_REALTIME_API}
+                </span>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })()}
+      </div>
 
-        {isDropTarget && dragAction === "insert-right" && (
-          <div className="absolute inset-y-0 -right-2 w-3 bg-sky-500 rounded-r-xl shadow-[0_0_16px_rgba(14,165,233,0.9)] z-40 flex items-center justify-center animate-pulse pointer-events-none">
-            <div className="bg-sky-600 text-white text-[10px] font-black px-2.5 py-1 rounded-md shadow-lg whitespace-nowrap translate-x-full ml-1 flex items-center gap-1">
-              Sisipkan di Kanan <span>→</span>
-            </div>
-          </div>
-        )}
+      {/* Parameters Grid */}
+      <div className="p-5">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 16px" }} className="text-xs">
+          <ParamCell label="Input Voltage" value={tx.voltageInKv !== null ? `${tx.voltageInKv.toFixed(2)} kV` : NO_REALTIME_API} warn={tx.voltageInKv === null} />
+          <ParamCell label="Output Volt 400V" value={has400V ? `R:${tx.voltAb!.toFixed(1)} S:${tx.voltBc!.toFixed(1)} T:${tx.voltCa!.toFixed(1)} V` : NO_REALTIME_API} warn={!has400V} />
+          <ParamCell 
+            label="Output Volt 230V" 
+            value={
+              (tx.voltAn !== null && tx.voltAn !== undefined && tx.voltBn !== null && tx.voltBn !== undefined && tx.voltCn !== null && tx.voltCn !== undefined)
+                ? `R:${tx.voltAn.toFixed(0)} S:${tx.voltBn.toFixed(0)} T:${tx.voltCn.toFixed(0)} V`
+                : (tx.voltageOutL2N !== null && tx.voltageOutL2N !== undefined)
+                  ? `${tx.voltageOutL2N.toFixed(1)} V`
+                  : NO_REALTIME_API
+            } 
+            warn={tx.voltAn === null && tx.voltageOutL2N === null} 
+          />
+          
+          <ParamCell label="Active Power" value={tx.activePowerKw !== null ? `${tx.activePowerKw} kW` : NO_REALTIME_API} accent={hasData} warn={tx.activePowerKw === null} />
+          <ParamCell label="Reactive Power" value={tx.reactivePowerKvar !== null ? `${tx.reactivePowerKvar} kVAR` : NO_REALTIME_API} warn={tx.reactivePowerKvar === null} />
+          <ParamCell label="Apparent Power" value={tx.apparentPowerKva !== null ? `${tx.apparentPowerKva} kVA` : NO_REALTIME_API} warn={tx.apparentPowerKva === null} />
+          
+          <ParamCell label="Power Factor" value={tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API} warn={tx.powerFactor === null} />
+          <ParamCell label="Frequency" value={tx.frequencyHz !== null ? `${tx.frequencyHz.toFixed(2)} Hz` : NO_REALTIME_API} warn={tx.frequencyHz === null} />
+          <ParamCell label="Temperature" value={tx.tempCc !== null ? `${tx.tempCc.toFixed(1)} °C` : NO_REALTIME_API} warn={tx.tempCc === null || tx.tempCc > 60} />
 
-        {isDropTarget && dragAction === "swap" && (
-          <div className="absolute inset-0 bg-amber-500/15 dark:bg-amber-400/15 border-2 border-amber-500 rounded-2xl z-40 flex items-center justify-center pointer-events-none shadow-[0_0_20px_rgba(245,158,11,0.5)]">
-            <div className="bg-amber-600 text-white text-xs font-black px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-1.5 animate-bounce">
-              <span>🔄</span> Tukar Posisi dengan Kartu Ini
-            </div>
-          </div>
-        )}
+          <ParamCell label="Impedance" value={`${tx.impedance ?? 4.5} %`} />
+          <ParamCell label="Vector Group" value={tx.vectorGroup ?? "Dyn11"} />
+          <ParamCell label="Mfg / Year" value={`${tx.manufacturer ?? "Schneider"} (${tx.year ?? "2021"})`} />
+        </div>
 
-        {/* Card Header */}
-        <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span
-              className="rounded-full shrink-0"
-              style={{
-                width: 9, height: 9,
-                backgroundColor: tx.activePowerKw === null ? "#94a3b8" : (tx.status === "online" ? "#10b981" : (tx.activePowerKw === 0 ? "#ef4444" : "#f59e0b")),
-                boxShadow: tx.status === "online" ? "0 0 6px #10b981" : "none",
-              }}
-            />
-            <span className="text-base font-black text-slate-800 dark:text-white tracking-wide">{tx.name}</span>
-            <span className="px-2.5 py-0.5 rounded text-[10px] font-black bg-sky-500/10 text-sky-500 border border-sky-500/20 uppercase tracking-wider">
-              {factoryLabel} — {tx.capacityKva} kVA
-            </span>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 ${
-                tx.status === "online"
-                  ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                  : tx.activePowerKw === 0
-                  ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
-                  : tx.activePowerKw === null
-                  ? "bg-slate-500/10 text-slate-400 border border-slate-500/20"
-                  : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${
-                tx.status === "online" ? "bg-emerald-500" : (tx.activePowerKw === 0 ? "bg-rose-500" : (tx.activePowerKw === null ? "bg-slate-400" : "bg-amber-500"))
-              }`} />
-              {tx.status === "online"
-                ? "Online"
-                : tx.activePowerKw === 0
-                ? "Offline"
-                : tx.activePowerKw === null
-                ? "Terputus"
-                : "Standby"}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            {isEditMode ? (
-              <div
-                className="flex items-center gap-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md shadow-sky-500/30 px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-grab active:cursor-grabbing select-none hover:scale-105 transition-transform"
-                title="Tahan dan tarik kartu ini untuk memindahkan atau menukar posisi"
-              >
-                <span className="text-xs">⋮⋮</span>
-                <span className="text-[9px] uppercase tracking-wider font-extrabold hidden sm:inline">Pindahkan</span>
+        {/* Current & THD Section */}
+        <div
+          className="mt-4 p-3.5 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-slate-800/60 space-y-2.5"
+        >
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-[9px] text-slate-400 uppercase font-extrabold tracking-wider">Arus Per Fasa (A)</span>
+            {hasCurrent ? (
+              <div className="font-mono font-bold text-slate-600 dark:text-slate-300">
+                R: <span className="mr-2">{tx.currentR!.toFixed(1)}</span>
+                S: <span className="mr-2">{tx.currentS!.toFixed(1)}</span>
+                T: <span>{tx.currentT!.toFixed(1)}</span>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-400">LOAD</span>
-                <div className="flex items-center gap-1.5">
-                  <div
-                    className="rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800"
-                    style={{ width: 70, height: 8 }}
-                  >
-                    <div
-                      className="h-full rounded-full transition-[width] duration-300 ease-out"
-                      style={{ width: `${loadPct ? Math.min(100, loadPct) : 0}%`, backgroundColor: loadColor }}
-                    />
-                  </div>
-                  <span className="text-xs font-black font-mono tabular-nums text-slate-600 dark:text-slate-300">
-                    {loadPct !== null ? `${loadPct}%` : "—%"}
-                  </span>
-                </div>
-              </div>
+              <span className="text-[9px] font-bold text-amber-500">{NO_REALTIME_API}</span>
             )}
           </div>
-        </div>
 
-        {/* Parameters Grid */}
-        <div className="p-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4.5">
-            <ParamCell label="Input Voltage" value={tx.voltageInKv !== null ? `${tx.voltageInKv.toFixed(2)} kV` : "—"} />
-            <ParamCell label="Output Volt 400V" value={tx.voltageOutL2L !== null ? `R:${vR_400} S:${vS_400} T:${vT_400} V` : "R: —  S: —  T: — V"} />
-            <ParamCell label="Output Volt 230V" value={tx.voltageOutL2N !== null ? `R:${vR_230} S:${vS_230} T:${vT_230} V` : "R: —  S: —  T: — V"} />
-            
-            <ParamCell
-              label="Active Power"
-              value={tx.activePowerKw !== null ? `${tx.activePowerKw.toLocaleString("id-ID")} kW` : "—"}
-              accent={tx.activePowerKw !== null && tx.activePowerKw > 0}
-              warn={tx.activePowerKw === 0}
-            />
-            <ParamCell label="Reactive Power" value={tx.reactivePowerKvar !== null ? `${tx.reactivePowerKvar} kVAR` : "—"} />
-            <ParamCell label="Apparent Power" value={tx.apparentPowerKva !== null ? `${tx.apparentPowerKva} kVA` : "—"} />
-            
-            <ParamCell label="Power Factor" value={tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : "—"} />
-            <ParamCell label="Frequency" value={tx.frequencyHz !== null ? `${tx.frequencyHz.toFixed(2)} Hz` : "—"} />
-            <ParamCell label="Temperature" value={tx.tempCc !== null ? `${tx.tempCc.toFixed(1)} °C` : "—"} warn={tx.tempCc !== null && tx.tempCc > 60} />
-
-            <ParamCell label="Impedance" value={`${tx.impedance ?? 4.5} %`} />
-            <ParamCell label="Vector Group" value={tx.vectorGroup ?? "Dyn11"} />
-            <ParamCell label="Mfg / Year" value={`${tx.manufacturer ?? "Schneider"} (${tx.year ?? "2021"})`} />
-          </div>
-
-          {/* Current & THD Section */}
-          <div
-            className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800/60 space-y-3"
-          >
-            <div className="flex flex-wrap justify-between items-center gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400 uppercase font-black tracking-wider">Arus Per Fasa (A)</span>
-              <div className="font-mono tabular-nums font-bold text-xs sm:text-sm text-slate-700 dark:text-slate-200">
-                R: <span className="font-black text-rose-500 mr-2">{tx.currentR !== null ? Math.round(tx.currentR) : "—"}</span>
-                S: <span className="font-black text-amber-500 mr-2">{tx.currentS !== null ? Math.round(tx.currentS) : "—"}</span>
-                T: <span className="font-black text-blue-500">{tx.currentT !== null ? Math.round(tx.currentT) : "—"}</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-800/60">
-              <div>
-                <span className="text-[11px] text-slate-400 uppercase block font-black tracking-wider mb-1">THDV Per Fasa (%)</span>
-                <div className="font-mono tabular-nums font-bold text-xs sm:text-sm text-slate-700 dark:text-slate-200">
-                  R:<span className="mr-1.5">{thdv_R}</span>
-                  S:<span className="mr-1.5">{thdv_S}</span>
-                  T:<span>{thdv_T}</span>
+          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/40 text-xs">
+            <div>
+              <span className="text-[9px] text-slate-400 uppercase block font-extrabold tracking-wider mb-0.5">THDV Per Fasa (%)</span>
+              {hasThdV ? (
+                <div className="font-mono font-bold text-slate-600 dark:text-slate-300">
+                  R:<span className="mr-1">{tx.thdVoltA!.toFixed(2)}</span>
+                  S:<span className="mr-1">{tx.thdVoltB!.toFixed(2)}</span>
+                  T:<span>{tx.thdVoltC!.toFixed(2)}</span>
                 </div>
-              </div>
-              <div>
-                <span className="text-[11px] text-slate-400 uppercase block font-black tracking-wider mb-1">THDi Per Fasa (%)</span>
-                <div className="font-mono tabular-nums font-bold text-xs sm:text-sm text-slate-700 dark:text-slate-200">
-                  R:<span className="mr-1.5">{thdi_R}</span>
-                  S:<span className="mr-1.5">{thdi_S}</span>
-                  T:<span>{thdi_T}</span>
-                </div>
-              </div>
+              ) : (
+                <span className="text-[9px] font-bold text-amber-500">{NO_REALTIME_API}</span>
+              )}
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-800/60 text-xs font-bold text-slate-500">
-              <div>
-                <span>Voltage Unbalanced: </span>
-                <span className="text-slate-700 dark:text-slate-200 font-mono tabular-nums font-black text-xs sm:text-sm ml-1">
-                  {tx.voltageUnbalance !== null && tx.voltageUnbalance !== undefined ? `${tx.voltageUnbalance.toFixed(2)} %` : "—"}
-                </span>
-              </div>
-              <div>
-                <span>Current Unbalanced: </span>
-                <span className="text-slate-700 dark:text-slate-200 font-mono tabular-nums font-black text-xs sm:text-sm ml-1">
-                  {tx.currentUnbalance !== null && tx.currentUnbalance !== undefined ? `${tx.currentUnbalance.toFixed(2)} %` : "—"}
-                </span>
-              </div>
+            <div>
+              <span className="text-[9px] text-slate-400 uppercase block font-extrabold tracking-wider mb-0.5">THDi Per Fasa (%)</span>
+              {hasThdI ? (
+                <div className="font-mono font-bold text-slate-600 dark:text-slate-300">
+                  R:<span className="mr-1">{tx.thdCurrentA!.toFixed(2)}</span>
+                  S:<span className="mr-1">{tx.thdCurrentB!.toFixed(2)}</span>
+                  T:<span>{tx.thdCurrentC!.toFixed(2)}</span>
+                </div>
+              ) : (
+                <span className="text-[9px] font-bold text-amber-500">{NO_REALTIME_API}</span>
+              )}
             </div>
           </div>
 
-          {/* Cost & kWh */}
-          <div
-            className="mt-4 pt-3.5 border-t border-slate-100 dark:border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-4 items-center"
-          >
+          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/40 text-[10px] font-bold text-slate-500">
             <div>
-              <span className="text-[11px] text-slate-400 uppercase block font-black tracking-wider mb-0.5">Total Konsumsi</span>
-              <span className="text-sm sm:text-base font-black text-slate-800 dark:text-white font-mono tabular-nums">
-                {tx.kwh !== null ? tx.kwh.toLocaleString("id-ID") : "—"} <span className="text-xs text-slate-400 font-bold">kWh</span>
-              </span>
+              <span>Voltage Unbalanced: </span>
+              {tx.voltageUnbalance !== null && tx.voltageUnbalance !== undefined ? (
+                <span className="text-slate-600 dark:text-slate-300 font-mono font-bold">
+                  {tx.voltageUnbalance.toFixed(2)} %
+                </span>
+              ) : (
+                <span className="text-[9px] font-bold text-amber-500">{NO_REALTIME_API}</span>
+              )}
             </div>
             <div>
-              <span className="text-[11px] text-slate-400 uppercase block font-black tracking-wider mb-0.5">Estimasi Cost</span>
-              <span className="text-sm sm:text-base font-black text-slate-800 dark:text-white font-mono tabular-nums">
-                {tx.kwh !== null ? formatCurrencyIDR(tx.kwh * TARIF_PER_KWH) : "Rp —"}
-              </span>
+              <span>Current Unbalanced: </span>
+              {tx.currentUnbalance !== null && tx.currentUnbalance !== undefined ? (
+                <span className="text-slate-600 dark:text-slate-300 font-mono font-bold">
+                  {tx.currentUnbalance.toFixed(2)} %
+                </span>
+              ) : (
+                <span className="text-[9px] font-bold text-amber-500">{NO_REALTIME_API}</span>
+              )}
             </div>
           </div>
         </div>
 
-        {/* In-Card Layout Controls: ONLY rendered when Edit Position Mode is active AND only 1 card is in this row */}
-        {isEditMode && isSingleInRow && (
-          <div className="p-2.5 bg-slate-50/95 dark:bg-slate-800/95 border-t border-slate-200 dark:border-slate-700/80 rounded-b-2xl flex flex-wrap items-center justify-between gap-2 text-xs min-h-[46px]">
-            {/* Ukuran Kolom (1 Kolom atau Penuh) */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] text-slate-400 font-bold">Ukuran:</span>
-              {[
-                { key: "1", label: "1 Kolom" },
-                { key: "full", label: "Penuh (2 Kolom)" }
-              ].map((opt) => (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSetSpan?.(opt.key as any);
-                  }}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
-                    (span === opt.key || (!span && opt.key === "full"))
-                      ? "bg-sky-500 text-white shadow-xs"
-                      : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Posisi Alignment (Kiri, Tengah, Kanan) - hanya jika ukuran bukan penuh */}
-            {span !== "full" && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-slate-400 font-bold">Posisi:</span>
-                {[
-                  { key: "left", label: "Kiri" },
-                  { key: "center", label: "Tengah" },
-                  { key: "right", label: "Kanan" }
-                ].map((opt) => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSetAlign?.(opt.key as any);
-                    }}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
-                      (align === opt.key || (!align && opt.key === "center"))
-                        ? "bg-sky-500 text-white shadow-xs"
-                        : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+        {/* Cost & kWh */}
+        <div
+          className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80"
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "center" }}
+        >
+          <div>
+            <span className="text-[9px] text-slate-400 uppercase block font-bold">Total Konsumsi</span>
+            {tx.kwh !== null ? (
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200 font-mono">
+                {tx.kwh.toLocaleString("id-ID")} <span className="text-[9px] text-slate-400 font-bold">kWh</span>
+              </span>
+            ) : (
+              <span className="text-[9px] font-bold text-amber-500">{NO_REALTIME_API}</span>
             )}
           </div>
-        )}
+          <div>
+            <span className="text-[9px] text-slate-400 uppercase block font-bold">Estimasi Cost</span>
+            {estimatedCost !== null ? (
+              <span
+                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono"
+                title={`Kalkulasi: ${tx.kwh?.toLocaleString("id-ID")} kWh × Rp ${effectiveRate.toLocaleString("id-ID")}/kWh (Tarif Industri)`}
+              >
+                {formatCurrencyIDR(estimatedCost)}
+              </span>
+            ) : (
+              <span className="text-[9px] font-bold text-amber-500">
+                {NO_REALTIME_API}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
-    );
-  },
-  (prev, next) => {
-    return (
-      isTransformerEqual(prev.tx, next.tx) &&
-      prev.factoryLabel === next.factoryLabel &&
-      prev.isEditMode === next.isEditMode &&
-      prev.isBeingDragged === next.isBeingDragged &&
-      prev.isDropTarget === next.isDropTarget &&
-      prev.dragAction === next.dragAction &&
-      prev.isSingleInRow === next.isSingleInRow &&
-      prev.span === next.span &&
-      prev.align === next.align &&
-      prev.loadConfig.safeMax === next.loadConfig.safeMax &&
-      prev.loadConfig.cautionMax === next.loadConfig.cautionMax
-    );
-  }
-);
+    </div>
+  );
+}
 
-const ParamCell = React.memo(function ParamCell({ label, value, accent, warn }: { label: string; value: string; accent?: boolean; warn?: boolean }) {
+function ParamCell({ label, value, accent, warn }: { label: string; value: string; accent?: boolean; warn?: boolean }) {
   return (
     <div>
-      <span className="text-[10px] sm:text-[11px] text-slate-400 dark:text-slate-400 uppercase tracking-wider block font-bold mb-0.5">
-        {label}
-      </span>
-      <span className={`font-black font-mono tabular-nums text-xs sm:text-sm ${
-        accent ? "text-emerald-500" :
+      <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-bold">{label}</span>
+      <span className={`font-bold font-mono text-[10px] ${
+        accent ? "text-emerald-500 font-extrabold" :
         warn ? "text-amber-500" :
-        "text-slate-800 dark:text-slate-100"
+        "text-slate-800 dark:text-slate-200"
       }`}>
         {value}
       </span>
     </div>
   );
-});
+}
 
 /* ═══════════ SLD SCALED CANVAS (RESPONSIVE) ═══════════ */
 const SLD_DESIGN_W = 1200;
-const SLD_DESIGN_H = 620;
+const SLD_DESIGN_H = 665;
 
 function SldScaledCanvas({ children }: { children: React.ReactNode }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1501,9 +1883,8 @@ function SldScaledCanvas({ children }: { children: React.ReactNode }) {
     const padding = 32;
     const availableWidth = el.clientWidth - padding;
     if (availableWidth > 0) {
-      // Responsive scale: fits cleanly on desktop (scale >= 1), and on mobile/tablets caps minimum scale at 0.78 so text stays large and readable with horizontal scroll
-      const calculatedScale = availableWidth >= SLD_DESIGN_W ? availableWidth / SLD_DESIGN_W : Math.max(availableWidth / SLD_DESIGN_W, 0.78);
-      setScale(calculatedScale);
+      const s = availableWidth / SLD_DESIGN_W;
+      setScale(s);
     }
   }, []);
 
@@ -1526,34 +1907,29 @@ function SldScaledCanvas({ children }: { children: React.ReactNode }) {
     };
   }, [measure]);
 
-  const scaledWidth = Math.max(SLD_DESIGN_W * scale + 32, 300);
-  const scaledHeight = SLD_DESIGN_H * scale + 36;
-
   return (
-    <div className="w-full overflow-x-auto overflow-y-hidden custom-scrollbar">
-      <div 
-        ref={containerRef} 
-        style={{ 
-          minWidth: `${scaledWidth}px`,
-          height: `${scaledHeight}px`,
-          padding: "16px", 
-          boxSizing: "border-box",
-          position: "relative"
+    <div 
+      ref={containerRef} 
+      className="w-full overflow-hidden" 
+      style={{ 
+        padding: "16px", 
+        boxSizing: "border-box",
+        height: SLD_DESIGN_H * scale + 32, // design height scaled + padding
+        position: "relative"
+      }}
+    >
+      <div
+        style={{
+          width: SLD_DESIGN_W,
+          height: SLD_DESIGN_H,
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+          position: "absolute",
+          top: 16,
+          left: 16
         }}
       >
-        <div
-          style={{
-            width: SLD_DESIGN_W,
-            height: SLD_DESIGN_H,
-            transform: `scale(${scale})`,
-            transformOrigin: "top left",
-            position: "absolute",
-            top: 16,
-            left: 16
-          }}
-        >
-          {children}
-        </div>
+        {children}
       </div>
     </div>
   );
@@ -1603,7 +1979,7 @@ function SldMiniCard({ tx, onClick, loadConfig, isLoading = false }: { tx: Trans
             {hasData ? `${tx.activePowerKw} kW` : "— kW"}
           </div>
           <div className="text-[9px] font-bold text-slate-500">
-            PF: <span className="font-mono text-slate-400">{tx.powerFactor !== null ? tx.powerFactor.toFixed(3) : "—"}</span>
+            PF: <span className="font-mono text-slate-400">{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : "—"}</span>
           </div>
         </div>
       )}
@@ -1647,117 +2023,6 @@ function SldMiniCard({ tx, onClick, loadConfig, isLoading = false }: { tx: Trans
     </div>
   );
 }
-
-/* ═══════════ SLD TRANSFORMER CARD COMPONENT (MEMOIZED) ═══════════ */
-const SldTransformerCard = React.memo(
-  function SldTransformerCard({
-    tx,
-    isFirst,
-    isDark,
-    loadingSld,
-    onClick,
-    cardLeft,
-    width = 100,
-  }: {
-    tx: TransformerData;
-    isFirst: boolean;
-    isDark: boolean;
-    loadingSld: boolean;
-    onClick: () => void;
-    cardLeft: number;
-    width?: number;
-  }) {
-    const hasData = tx.activePowerKw !== null && tx.activePowerKw !== undefined;
-    const loadPct = hasData && tx.capacityKva && tx.activePowerKw !== null ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null;
-
-    return (
-      <div className="absolute z-10" style={{ left: cardLeft, top: 358, width }}>
-        <div
-          onClick={onClick}
-          className={`rounded-2xl border p-2.5 text-center cursor-pointer transition-shadow duration-150 hover:shadow-lg ${
-            isFirst
-              ? "bg-slate-900 border-slate-700 text-white"
-              : isDark
-                ? "bg-slate-800/90 border-slate-700 text-slate-200"
-                : "bg-slate-100/95 border-slate-300 text-slate-800"
-          }`}
-        >
-          <div className={`text-xs font-black ${isFirst ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
-            {tx.capacityKva} kVA
-          </div>
-          <div className="flex items-center justify-center gap-1.5 mt-0.5">
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{
-                backgroundColor: tx.activePowerKw === null ? "#94a3b8" : (tx.status === "online" ? "#10b981" : (tx.activePowerKw === 0 ? "#ef4444" : "#f59e0b")),
-                boxShadow: tx.status === "online" ? "0 0 6px #10b981" : "none",
-              }}
-            />
-            <span className={`text-[10.5px] font-black tracking-wider uppercase ${isFirst ? "text-slate-300" : "text-slate-700 dark:text-slate-300"}`}>
-              {tx.name}
-            </span>
-          </div>
-          <div className="mt-1 text-[9px] text-slate-400 font-bold uppercase">Active Power</div>
-          {loadingSld ? (
-            <div className="my-1 space-y-1">
-              <div className="h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded mx-auto" />
-              <div className="h-2 w-10 bg-slate-300 dark:bg-slate-700 rounded mx-auto" />
-            </div>
-          ) : (
-            <>
-              <div className={`text-xs font-black font-mono tabular-nums ${
-                tx.activePowerKw !== null && tx.activePowerKw > 0
-                  ? (isFirst ? "text-sky-400" : "text-slate-800 dark:text-slate-100")
-                  : (tx.activePowerKw === 0 ? "text-rose-500" : "text-slate-400")
-              }`}>
-                {tx.activePowerKw !== null ? `${tx.activePowerKw.toLocaleString("id-ID")} kW` : "—"}
-              </div>
-              <div className="text-[9px] text-slate-400 font-bold">
-                PF: <span className="font-black font-mono tabular-nums">{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : "—"}</span>
-              </div>
-            </>
-          )}
-          
-          {/* Load progress bar */}
-          <div className="mt-1.5 pt-1 border-t border-slate-200 dark:border-slate-700/60">
-            <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-[width] duration-300 ease-out ${loadingSld ? "bg-slate-300 dark:bg-slate-500 w-1/3" : "bg-slate-300 dark:bg-slate-600"}`}
-                style={{ width: loadingSld ? "33%" : `${loadPct ? Math.min(100, loadPct) : 0}%` }}
-              />
-            </div>
-            <div className="text-[8.5px] font-black text-center mt-0.5 text-slate-400 font-mono tabular-nums">
-              {loadingSld ? "..." : (loadPct !== null ? `${loadPct}%` : "—%")}
-            </div>
-          </div>
-        </div>
-
-        {/* 400V/230V Label Box */}
-        <div className="mt-1 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/90 dark:bg-slate-800 text-[9px] font-black text-slate-700 dark:text-slate-300 tracking-wider">
-          400V / 230V
-        </div>
-
-        {/* Detail Button */}
-        <button
-          onClick={onClick}
-          className="w-full mt-1 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200 hover:bg-sky-500 hover:text-white dark:bg-slate-700 dark:hover:bg-sky-600 text-[10px] font-black text-slate-700 dark:text-slate-200 transition-colors shadow-sm cursor-pointer"
-        >
-          Detail
-        </button>
-      </div>
-    );
-  },
-  (prev, next) => {
-    return (
-      isTransformerEqual(prev.tx, next.tx) &&
-      prev.isFirst === next.isFirst &&
-      prev.isDark === next.isDark &&
-      prev.loadingSld === next.loadingSld &&
-      prev.cardLeft === next.cardLeft &&
-      prev.width === next.width
-    );
-  }
-);
 
 /* ═══════════ SLD CONNECTOR COMPONENTS ═══════════ */
 function VerticalLine({ height = 24, color = "currentColor" }: { height?: number; color?: string }) {
@@ -1830,27 +2095,21 @@ export default function PowerDistribution() {
   const [incomingData, setIncomingData] = useState<{
     plnKw: number | null;
     plnPf: number | null;
-    plnOnline: boolean;
     wf1Kw: number | null;
     wf1Pf: number | null;
     wf1Volt: number | null;
-    wf1Online: boolean;
     wf2Kw: number | null;
     wf2Pf: number | null;
     wf2Volt: number | null;
-    wf2Online: boolean;
   }>({
     plnKw: null,
     plnPf: null,
-    plnOnline: true,
     wf1Kw: null,
     wf1Pf: null,
     wf1Volt: null,
-    wf1Online: true,
     wf2Kw: null,
     wf2Pf: null,
     wf2Volt: null,
-    wf2Online: true,
   });
 
   const incomingDataRef = useRef(incomingData);
@@ -1858,49 +2117,24 @@ export default function PowerDistribution() {
     incomingDataRef.current = incomingData;
   }, [incomingData]);
 
+  // Sync 20 kV feeder voltages to transformer cards
+  useEffect(() => {
+    if (!incomingData.wf1Volt && !incomingData.wf2Volt) return;
+    setTelemetryTransformers(prev => prev.map(tx => ({
+      ...tx,
+      voltageInKv: tx.factory === 1 ? (incomingData.wf1Volt ?? tx.voltageInKv) : (incomingData.wf2Volt ?? tx.voltageInKv)
+    })));
+  }, [incomingData.wf1Volt, incomingData.wf2Volt]);
+
   const toKv = (v: number | null | undefined): number | null => {
     if (v === null || v === undefined || isNaN(Number(v))) return null;
     const num = Number(v);
     return num > 100 ? Number((num / 1000).toFixed(2)) : Number(num.toFixed(2));
   };
 
-  const safeActivePower = (val: any, prev: number | null): number | null => {
-    if (val === undefined || val === null || isNaN(Number(val))) return null;
-    const num = Number(val);
-    if (num > 0 && num < 1.0 && prev !== null && prev > 10.0) {
-      return Number((num * 1000).toFixed(1));
-    }
-    return Number(num.toFixed(1));
-  };
-
-  const safePf = (val: any, _prev: number | null): number | null => {
-    if (val === undefined || val === null || isNaN(Number(val))) return null;
-    const num = Math.abs(Number(val));
-    return Number(Math.min(1.0, num).toFixed(3));
-  };
-
-  const safeVolt = (val: number | null, _prev: number | null): number | null => {
-    if (val === null || val === undefined || isNaN(val)) return null;
-    return val;
-  };
-
-  const isIncomingEqual = (
-    a: typeof incomingData,
-    b: typeof incomingData
-  ): boolean => {
-    return (
-      a.plnKw === b.plnKw &&
-      a.plnPf === b.plnPf &&
-      a.plnOnline === b.plnOnline &&
-      a.wf1Kw === b.wf1Kw &&
-      a.wf1Pf === b.wf1Pf &&
-      a.wf1Volt === b.wf1Volt &&
-      a.wf1Online === b.wf1Online &&
-      a.wf2Kw === b.wf2Kw &&
-      a.wf2Pf === b.wf2Pf &&
-      a.wf2Volt === b.wf2Volt &&
-      a.wf2Online === b.wf2Online
-    );
+  const parsePowerVal = (val: any, prev: number | null): number | null => {
+    if (val === undefined || val === null || isNaN(Number(val))) return prev;
+    return Number(Number(val).toFixed(1));
   };
 
   // Fetch incoming telemetries for PLN, Fact-1, Fact-2
@@ -1913,26 +2147,16 @@ export default function PowerDistribution() {
           getJson<{ data: any }>("/analytics/electricity?deviceId=Feeder_WF1_PM5560"),
           getJson<{ data: any }>("/analytics/electricity?deviceId=Feeder_WF2_PM5500"),
         ]);
-        const isPlnOn = plnRes?.data?.status !== false && plnRes?.data?.pqData?.pfStatus !== "offline";
-        const isWf1On = wf1Res?.data?.status !== false && wf1Res?.data?.pqData?.pfStatus !== "offline";
-        const isWf2On = wf2Res?.data?.status !== false && wf2Res?.data?.pqData?.pfStatus !== "offline";
-
-        setIncomingData(prev => {
-          const next = {
-            plnKw: !isPlnOn ? null : (plnRes?.data?.pqData?.activePower !== undefined ? safeActivePower(plnRes.data.pqData.activePower, prev.plnKw) : prev.plnKw),
-            plnPf: !isPlnOn ? null : (plnRes?.data?.pqData?.pf !== undefined ? safePf(plnRes.data.pqData.pf, prev.plnPf) : prev.plnPf),
-            plnOnline: isPlnOn,
-            wf1Kw: !isWf1On ? null : (wf1Res?.data?.pqData?.activePower !== undefined ? safeActivePower(wf1Res.data.pqData.activePower, prev.wf1Kw) : prev.wf1Kw),
-            wf1Pf: !isWf1On ? null : (wf1Res?.data?.pqData?.pf !== undefined ? safePf(wf1Res.data.pqData.pf, prev.wf1Pf) : prev.wf1Pf),
-            wf1Volt: !isWf1On ? null : safeVolt(toKv(wf1Res?.data?.pqData?.vll1 ?? wf1Res?.data?.pqData?.voltage), prev.wf1Volt),
-            wf1Online: isWf1On,
-            wf2Kw: !isWf2On ? null : (wf2Res?.data?.pqData?.activePower !== undefined ? safeActivePower(wf2Res.data.pqData.activePower, prev.wf2Kw) : prev.wf2Kw),
-            wf2Pf: !isWf2On ? null : (wf2Res?.data?.pqData?.pf !== undefined ? safePf(wf2Res.data.pqData.pf, prev.wf2Pf) : prev.wf2Pf),
-            wf2Volt: !isWf2On ? null : safeVolt(toKv(wf2Res?.data?.pqData?.vll1 ?? wf2Res?.data?.pqData?.voltage), prev.wf2Volt),
-            wf2Online: isWf2On,
-          };
-          return isIncomingEqual(prev, next) ? prev : next;
-        });
+        setIncomingData(prev => ({
+          plnKw: plnRes?.data?.pqData?.activePower !== undefined ? parsePowerVal(plnRes.data.pqData.activePower, prev.plnKw) : prev.plnKw,
+          plnPf: decodePf(plnRes?.data?.pqData?.pf !== undefined ? plnRes.data.pqData.pf : prev.plnPf),
+          wf1Kw: wf1Res?.data?.pqData?.activePower !== undefined ? parsePowerVal(wf1Res.data.pqData.activePower, prev.wf1Kw) : prev.wf1Kw,
+          wf1Pf: decodePf(wf1Res?.data?.pqData?.pf !== undefined ? wf1Res.data.pqData.pf : prev.wf1Pf),
+          wf1Volt: toKv(wf1Res?.data?.pqData?.vll1 ?? wf1Res?.data?.pqData?.voltage) ?? prev.wf1Volt,
+          wf2Kw: wf2Res?.data?.pqData?.activePower !== undefined ? parsePowerVal(wf2Res.data.pqData.activePower, prev.wf2Kw) : prev.wf2Kw,
+          wf2Pf: decodePf(wf2Res?.data?.pqData?.pf !== undefined ? wf2Res.data.pqData.pf : prev.wf2Pf),
+          wf2Volt: toKv(wf2Res?.data?.pqData?.vll1 ?? wf2Res?.data?.pqData?.voltage) ?? prev.wf2Volt,
+        }));
         setLoadingSld(false);
       } catch (err) {
         console.error("Failed to load incoming telemetries for SLD:", err);
@@ -1945,26 +2169,32 @@ export default function PowerDistribution() {
     const socket = getSocket();
     const handleIncomingLive = (payload: any) => {
       if (!payload || !payload.deviceId || !payload.pqData) return;
-      const isOnline = payload.status !== false && payload.online !== false && payload.pqData?.pfStatus !== "offline";
       setLoadingSld(false);
       setIncomingData(prev => {
-        const next = { ...prev };
         if (payload.deviceId === "Cubicle_PLN_PM8000") {
-          next.plnOnline = isOnline;
-          next.plnKw = !isOnline ? null : safeActivePower(payload.pqData.activePower, prev.plnKw);
-          next.plnPf = !isOnline ? null : safePf(payload.pqData.pf, prev.plnPf);
-        } else if (payload.deviceId === "Feeder_WF1_PM5560") {
-          next.wf1Online = isOnline;
-          next.wf1Kw = !isOnline ? null : safeActivePower(payload.pqData.activePower, prev.wf1Kw);
-          next.wf1Pf = !isOnline ? null : safePf(payload.pqData.pf, prev.wf1Pf);
-          next.wf1Volt = !isOnline ? null : safeVolt(toKv(payload.pqData.vll1 ?? payload.pqData.voltage), prev.wf1Volt);
-        } else if (payload.deviceId === "Feeder_WF2_PM5500") {
-          next.wf2Online = isOnline;
-          next.wf2Kw = !isOnline ? null : safeActivePower(payload.pqData.activePower, prev.wf2Kw);
-          next.wf2Pf = !isOnline ? null : safePf(payload.pqData.pf, prev.wf2Pf);
-          next.wf2Volt = !isOnline ? null : safeVolt(toKv(payload.pqData.vll1 ?? payload.pqData.voltage), prev.wf2Volt);
+          return {
+            ...prev,
+            plnKw: parsePowerVal(payload.pqData.activePower, prev.plnKw),
+            plnPf: decodePf(payload.pqData.pf !== undefined ? payload.pqData.pf : prev.plnPf)
+          };
         }
-        return isIncomingEqual(prev, next) ? prev : next;
+        if (payload.deviceId === "Feeder_WF1_PM5560") {
+          return {
+            ...prev,
+            wf1Kw: parsePowerVal(payload.pqData.activePower, prev.wf1Kw),
+            wf1Pf: decodePf(payload.pqData.pf !== undefined ? payload.pqData.pf : prev.wf1Pf),
+            wf1Volt: toKv(payload.pqData.vll1 ?? payload.pqData.voltage) ?? prev.wf1Volt
+          };
+        }
+        if (payload.deviceId === "Feeder_WF2_PM5500") {
+          return {
+            ...prev,
+            wf2Kw: parsePowerVal(payload.pqData.activePower, prev.wf2Kw),
+            wf2Pf: decodePf(payload.pqData.pf !== undefined ? payload.pqData.pf : prev.wf2Pf),
+            wf2Volt: toKv(payload.pqData.vll1 ?? payload.pqData.voltage) ?? prev.wf2Volt
+          };
+        }
+        return prev;
       });
     };
 
@@ -1988,18 +2218,6 @@ export default function PowerDistribution() {
     poi2Pf: null,
   });
 
-  const isSolarEqual = (
-    a: typeof solarData,
-    b: typeof solarData
-  ): boolean => {
-    return (
-      a.poi1Kw === b.poi1Kw &&
-      a.poi1Pf === b.poi1Pf &&
-      a.poi2Kw === b.poi2Kw &&
-      a.poi2Pf === b.poi2Pf
-    );
-  };
-
   // Fetch solar telemetries for SLD
   useEffect(() => {
     if (!isPageActive) return;
@@ -2007,14 +2225,11 @@ export default function PowerDistribution() {
       getJson<{ data: any }>("/analytics/solar/latest")
         .then((res) => {
           if (res?.data) {
-            setSolarData(prev => {
-              const next = {
-                poi1Kw: res.data.poi1?.activePower !== undefined ? safeActivePower(res.data.poi1.activePower, prev.poi1Kw) : prev.poi1Kw,
-                poi1Pf: res.data.poi1?.powerFactor !== undefined ? safePf(res.data.poi1.powerFactor, prev.poi1Pf) : prev.poi1Pf,
-                poi2Kw: res.data.poi2?.activePower !== undefined ? safeActivePower(res.data.poi2.activePower, prev.poi2Kw) : prev.poi2Kw,
-                poi2Pf: res.data.poi2?.powerFactor !== undefined ? safePf(res.data.poi2.powerFactor, prev.poi2Pf) : prev.poi2Pf,
-              };
-              return isSolarEqual(prev, next) ? prev : next;
+            setSolarData({
+              poi1Kw: res.data.poi1?.activePower !== undefined ? res.data.poi1.activePower : null,
+              poi1Pf: decodePf(res.data.poi1?.powerFactor !== undefined ? res.data.poi1.powerFactor : null),
+              poi2Kw: res.data.poi2?.activePower !== undefined ? res.data.poi2.activePower : null,
+              poi2Pf: decodePf(res.data.poi2?.powerFactor !== undefined ? res.data.poi2.powerFactor : null),
             });
           }
         })
@@ -2027,15 +2242,12 @@ export default function PowerDistribution() {
     const socket = getSocket();
     const handleSolarLive = (payload: any) => {
       if (!payload) return;
-      setSolarData(prev => {
-        const next = {
-          poi1Kw: payload.poi1?.activePower !== undefined ? safeActivePower(payload.poi1.activePower, prev.poi1Kw) : prev.poi1Kw,
-          poi1Pf: payload.poi1?.powerFactor !== undefined ? safePf(payload.poi1.powerFactor, prev.poi1Pf) : prev.poi1Pf,
-          poi2Kw: payload.poi2?.activePower !== undefined ? safeActivePower(payload.poi2.activePower, prev.poi2Kw) : prev.poi2Kw,
-          poi2Pf: payload.poi2?.powerFactor !== undefined ? safePf(payload.poi2.powerFactor, prev.poi2Pf) : prev.poi2Pf,
-        };
-        return isSolarEqual(prev, next) ? prev : next;
-      });
+      setSolarData(prev => ({
+        poi1Kw: payload.poi1?.activePower !== undefined ? payload.poi1.activePower : prev.poi1Kw,
+        poi1Pf: payload.poi1?.powerFactor !== undefined ? payload.poi1.powerFactor : prev.poi1Pf,
+        poi2Kw: payload.poi2?.activePower !== undefined ? payload.poi2.activePower : prev.poi2Kw,
+        poi2Pf: payload.poi2?.powerFactor !== undefined ? payload.poi2.powerFactor : prev.poi2Pf,
+      }));
     };
 
     socket.on("electricity:solar_live", handleSolarLive);
@@ -2047,21 +2259,6 @@ export default function PowerDistribution() {
       socket.off("solar:live_update", handleSolarLive);
     };
   }, [isPageActive]);
-
-  // Sync transformer incoming voltage whenever wf1Volt or wf2Volt updates
-  useEffect(() => {
-    if (incomingData.wf1Volt === null && incomingData.wf2Volt === null) return;
-    setTelemetryTransformers((prevTrafos) => {
-      let anyChanged = false;
-      const nextTrafos = prevTrafos.map((tx) => {
-        const kv = tx.factory === 1 ? incomingData.wf1Volt : incomingData.wf2Volt;
-        if (tx.voltageInKv === kv) return tx;
-        anyChanged = true;
-        return { ...tx, voltageInKv: kv };
-      });
-      return anyChanged ? nextTrafos : prevTrafos;
-    });
-  }, [incomingData.wf1Volt, incomingData.wf2Volt]);
 
   // Fetch and sync power meter records for all 7 transformers
   useEffect(() => {
@@ -2078,23 +2275,15 @@ export default function PowerDistribution() {
             }
           });
 
-          setTelemetryTransformers((prevTrafos) => {
-            let anyChanged = false;
-            const nextTrafos = prevTrafos.map((tx) => {
+          setTelemetryTransformers((prevTrafos) =>
+            prevTrafos.map((tx) => {
               const mapping = TRAFO_PM_MAP[tx.id];
               if (!mapping) return tx;
               const pmRecord = pmMap.get(mapping.pmId.toUpperCase());
               if (!pmRecord) return tx;
-              const incomingKv = tx.factory === 1 ? incomingDataRef.current.wf1Volt : incomingDataRef.current.wf2Volt;
-              const updated = mapPmToTransformer(tx, pmRecord, incomingKv);
-              if (isTransformerEqual(tx, updated)) {
-                return tx;
-              }
-              anyChanged = true;
-              return updated;
-            });
-            return anyChanged ? nextTrafos : prevTrafos;
-          });
+              return mapPmToTransformer(tx, pmRecord, incomingDataRef.current);
+            })
+          );
           setLoadingSld(false);
         }
       } catch (err) {
@@ -2106,7 +2295,11 @@ export default function PowerDistribution() {
     const interval = setInterval(fetchTrafoTelemetries, 1000);
 
     const socket = getSocket();
+    let lastLivePmUpdate = 0;
     const handlePmUpdate = (payload: { groupId: string; data: ElectricPmItem[] }) => {
+      const now = Date.now();
+      if (now - lastLivePmUpdate < 800) return; // 1-second display polling cadence
+      lastLivePmUpdate = now;
       if (!payload || !Array.isArray(payload.data)) return;
       setLoadingSld(false);
       const pmMap = new Map<string, ElectricPmItem>();
@@ -2116,92 +2309,34 @@ export default function PowerDistribution() {
         }
       });
 
-      setTelemetryTransformers((prevTrafos) => {
-        let anyChanged = false;
-        const nextTrafos = prevTrafos.map((tx) => {
+      setTelemetryTransformers((prevTrafos) =>
+        prevTrafos.map((tx) => {
           const mapping = TRAFO_PM_MAP[tx.id];
           if (!mapping) return tx;
           const pmRecord = pmMap.get(mapping.pmId.toUpperCase());
           if (!pmRecord) return tx;
-          const incomingKv = tx.factory === 1 ? incomingDataRef.current.wf1Volt : incomingDataRef.current.wf2Volt;
-          const updated = mapPmToTransformer(tx, pmRecord, incomingKv);
-          if (isTransformerEqual(tx, updated)) {
-            return tx;
-          }
-          anyChanged = true;
-          return updated;
-        });
-        return anyChanged ? nextTrafos : prevTrafos;
-      });
+          return mapPmToTransformer(tx, pmRecord, incomingDataRef.current);
+        })
+      );
     };
 
     socket.on("electricity:pm_live_update", handlePmUpdate);
+    socket.on("electricity:ew21_live", handlePmUpdate);
+    socket.on("electricity:ew22_live", handlePmUpdate);
+    socket.on("electricity:ew23_live", handlePmUpdate);
 
     return () => {
       clearInterval(interval);
       socket.off("electricity:pm_live_update", handlePmUpdate);
+      socket.off("electricity:ew21_live", handlePmUpdate);
+      socket.off("electricity:ew22_live", handlePmUpdate);
+      socket.off("electricity:ew23_live", handlePmUpdate);
     };
   }, [isPageActive]);
 
   // Sub-Distribution Power Meters (EW23, EW21, EW22)
   const [selectedEwGroup, setSelectedEwGroup] = useState<"ew23" | "ew21" | "ew22">("ew23");
   const [ewPowerMeters, setEwPowerMeters] = useState<ElectricPmItem[]>([]);
-
-  const updateEwPowerMetersList = (prev: ElectricPmItem[], incomingData: ElectricPmItem[]): ElectricPmItem[] => {
-    if (prev.length === 0) {
-      return [...incomingData].sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
-    }
-    const incMap = new Map<string, ElectricPmItem>();
-    for (const item of incomingData) {
-      if (item?.pm_id) incMap.set(item.pm_id.toUpperCase(), item);
-    }
-    let anyChanged = false;
-    const nextList: ElectricPmItem[] = [];
-    for (const p of prev) {
-      if (!p?.pm_id) continue;
-      const upId = p.pm_id.toUpperCase();
-      const inc = incMap.get(upId);
-      if (!inc) {
-        nextList.push(p);
-        continue;
-      }
-      const isSame = (
-        p.active_power_total === inc.active_power_total &&
-        p.power_factor === inc.power_factor &&
-        p.volt_ab === inc.volt_ab &&
-        p.current_a === inc.current_a &&
-        p.current_b === inc.current_b &&
-        p.current_c === inc.current_c &&
-        p.active_energy === inc.active_energy &&
-        p.status === inc.status
-      );
-      if (isSame) {
-        nextList.push(p);
-      } else {
-        anyChanged = true;
-        nextList.push({
-          ...p,
-          ...inc,
-          active_power_total: inc.active_power_total !== undefined && inc.active_power_total !== null ? inc.active_power_total : p.active_power_total,
-          power_factor: inc.power_factor !== undefined && inc.power_factor !== null ? inc.power_factor : p.power_factor,
-          volt_ab: inc.volt_ab !== undefined && inc.volt_ab !== null ? inc.volt_ab : p.volt_ab,
-          current_a: inc.current_a !== undefined && inc.current_a !== null ? inc.current_a : p.current_a,
-          current_b: inc.current_b !== undefined && inc.current_b !== null ? inc.current_b : p.current_b,
-          current_c: inc.current_c !== undefined && inc.current_c !== null ? inc.current_c : p.current_c,
-          active_energy: inc.active_energy !== undefined && inc.active_energy !== null ? inc.active_energy : p.active_energy,
-          status: inc.status !== undefined && inc.status !== null ? inc.status : p.status,
-        });
-      }
-    }
-    for (const inc of incomingData) {
-      if (inc?.pm_id && !prev.some(p => p.pm_id?.toUpperCase() === inc.pm_id.toUpperCase())) {
-        nextList.push(inc);
-        anyChanged = true;
-      }
-    }
-    if (!anyChanged) return prev;
-    return nextList.sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
-  };
 
   // Fetch initial EW power meters and listen to live socket updates
   useEffect(() => {
@@ -2210,8 +2345,31 @@ export default function PowerDistribution() {
       if (!isPageActive) return;
       getJson<{ data: ElectricPmItem[] }>(`/analytics/electricity/power-meters?group=${selectedEwGroup}&_t=${Date.now()}`)
         .then((res) => {
-          if (active && res?.data && Array.isArray(res.data)) {
-            setEwPowerMeters((prev) => updateEwPowerMetersList(prev, res.data));
+          if (active && res?.data) {
+            setEwPowerMeters((prev) => {
+              if (prev.length === 0) {
+                return [...res.data].sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
+              }
+              const map = new Map<string, ElectricPmItem>();
+              for (const item of res.data) {
+                if (item?.pm_id) map.set(item.pm_id.toUpperCase(), item);
+              }
+              for (const prevItem of prev) {
+                if (!prevItem?.pm_id) continue;
+                const upId = prevItem.pm_id.toUpperCase();
+                const existing = map.get(upId);
+                if (existing) {
+                  const prevTime = prevItem.t_stamp ? new Date(prevItem.t_stamp).getTime() : 0;
+                  const newTime = existing.t_stamp ? new Date(existing.t_stamp).getTime() : 0;
+                  if (prevTime >= newTime) {
+                    map.set(upId, { ...existing, ...prevItem });
+                  }
+                } else {
+                  map.set(upId, prevItem);
+                }
+              }
+              return Array.from(map.values()).sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
+            });
           }
         })
         .catch((err) => console.error("Failed to load EW power meters:", err));
@@ -2227,25 +2385,43 @@ export default function PowerDistribution() {
       const isRelevant = targetGroup === selectedEwGroup || targetGroup === "custom_pm" || !targetGroup;
       if (!isRelevant) return;
 
-      const filteredData = payload.data.filter((incoming) => {
-        if (!incoming?.pm_id) return false;
-        if (targetGroup === "custom_pm" && incoming.group_id && incoming.group_id.toLowerCase() !== selectedEwGroup) {
-          return false;
+      setEwPowerMeters((prev) => {
+        if (prev.length === 0) {
+          const sorted = [...payload.data]
+            .filter((p) => !p.group_id || p.group_id.toLowerCase() === selectedEwGroup || targetGroup !== "custom_pm")
+            .sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
+          return sorted;
         }
-        return true;
+        const map = new Map<string, ElectricPmItem>();
+        for (const p of prev) {
+          if (p?.pm_id) map.set(p.pm_id.toUpperCase(), p);
+        }
+        let updated = false;
+        for (const incoming of payload.data) {
+          if (!incoming?.pm_id) continue;
+          if (targetGroup === "custom_pm" && incoming.group_id && incoming.group_id.toLowerCase() !== selectedEwGroup) {
+            continue;
+          }
+          const upId = incoming.pm_id.toUpperCase();
+          const existing = map.get(upId);
+          map.set(upId, existing ? { ...existing, ...incoming } : incoming);
+          updated = true;
+        }
+        if (!updated) return prev;
+        return Array.from(map.values()).sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
       });
-
-      setEwPowerMeters((prev) => updateEwPowerMetersList(prev, filteredData));
     };
 
     socket.on(`electricity:${selectedEwGroup}_live`, handleLiveUpdate);
     socket.on("electricity:custom_pm_live", handleLiveUpdate);
+    socket.on("electricity:pm_live_update", handleLiveUpdate);
 
     return () => {
       active = false;
       clearInterval(interval);
       socket.off(`electricity:${selectedEwGroup}_live`, handleLiveUpdate);
       socket.off("electricity:custom_pm_live", handleLiveUpdate);
+      socket.off("electricity:pm_live_update", handleLiveUpdate);
     };
   }, [selectedEwGroup, isPageActive]);
 
@@ -2255,10 +2431,13 @@ export default function PowerDistribution() {
   // Merge specs into transformers
   const transformers = useMemo(() => {
     return telemetryTransformers.map(tx => {
+      const incomingVolt = tx.factory === 1 ? incomingData.wf1Volt : incomingData.wf2Volt;
+      const effectiveVoltageInKv = incomingVolt ?? tx.voltageInKv;
       const spec = customSpecs[tx.id];
       if (spec) {
         return {
           ...tx,
+          voltageInKv: effectiveVoltageInKv,
           capacityKva: spec.capacityKva || tx.capacityKva,
           vectorGroup: spec.vectorGroup || "Dyn11",
           impedance: spec.impedance || 4.5,
@@ -2268,13 +2447,19 @@ export default function PowerDistribution() {
       }
       return {
         ...tx,
+        voltageInKv: effectiveVoltageInKv,
         vectorGroup: "Dyn11",
         impedance: 4.5,
         year: "2021",
         manufacturer: "Schneider"
       };
     });
-  }, [telemetryTransformers, customSpecs]);
+  }, [telemetryTransformers, customSpecs, incomingData.wf1Volt, incomingData.wf2Volt]);
+
+  const fetchRates = useConfigStore((state) => state.fetchRates);
+  useEffect(() => {
+    fetchRates();
+  }, [fetchRates]);
 
   // Load specs & coverage from database on mount
   useEffect(() => {
@@ -2344,341 +2529,6 @@ export default function PowerDistribution() {
 
   const role = useAuthStore((state) => state.user?.role ?? "user");
   const canAccessConfig = canAccessConfigAndAudit(role);
-  const canEditPosition = isSeniorUnitHeadOrAdmin(role);
-
-  // Detail Transformator Custom Layout State (Senior Unit Head & Admin)
-  const [isEditingTrafoPos, setIsEditingTrafoPos] = useState(false);
-  const [trafoLayoutConfigs, setTrafoLayoutConfigs] = useState<TrafoLayoutConfig[]>(() => {
-    try {
-      const savedLayout = localStorage.getItem("scada_trafo_detail_layout_v2");
-      if (savedLayout) {
-        const parsed = JSON.parse(savedLayout);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-      const savedOrder = localStorage.getItem("scada_trafo_detail_order_v1");
-      if (savedOrder) {
-        const parsedOrder = JSON.parse(savedOrder);
-        if (Array.isArray(parsedOrder) && parsedOrder.length > 0) {
-          return DEFAULT_TRAFO_LAYOUT.map(item => {
-            const idx = parsedOrder.indexOf(item.id);
-            return {
-              ...item,
-              sortOrder: idx !== -1 ? idx + 1 : item.sortOrder
-            };
-          }).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-        }
-      }
-    } catch (e) {}
-    return DEFAULT_TRAFO_LAYOUT;
-  });
-
-  const [draftTrafoLayoutConfigs, setDraftTrafoLayoutConfigs] = useState<TrafoLayoutConfig[]>([]);
-  const [trafoToast, setTrafoToast] = useState<string | null>(null);
-  const [draggedTrafo, setDraggedTrafo] = useState<{ id: string; factory: number; name: string } | null>(null);
-  const [activeDropTxId, setActiveDropTxId] = useState<string | null>(null);
-  const [activeDropFactory, setActiveDropFactory] = useState<number | null>(null);
-  const [dragAction, setDragAction] = useState<"insert-left" | "insert-right" | "swap" | null>(null);
-
-  const trafoGroups = useMemo(() => {
-    const activeConfigs = isEditingTrafoPos && draftTrafoLayoutConfigs.length > 0
-      ? draftTrafoLayoutConfigs
-      : trafoLayoutConfigs;
-
-    const txMap = new Map(transformers.map(t => [t.id, t]));
-
-    const buildFactoryRows = (factoryNum: number) => {
-      const fConfigs = activeConfigs
-        .filter(c => c.factory === factoryNum)
-        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-
-      const rowMap = new Map<number, TrafoLayoutConfig[]>();
-      fConfigs.forEach((item, idx) => {
-        const r = typeof item.row === "number" ? item.row : Math.floor(idx / 2);
-        item.row = r;
-        if (!rowMap.has(r)) rowMap.set(r, []);
-        rowMap.get(r)!.push(item);
-      });
-
-      const sortedRowKeys = Array.from(rowMap.keys()).sort((a, b) => a - b);
-      const rows = sortedRowKeys.map((rKey, newRowIdx) => {
-        const rowItems = rowMap.get(rKey)!;
-        rowItems.forEach(it => { it.row = newRowIdx; });
-        return {
-          rowIdx: newRowIdx,
-          items: rowItems
-            .map(c => ({
-              ...c,
-              tx: txMap.get(c.id) || transformers.find(t => t.id === c.id)!
-            }))
-            .filter(it => Boolean(it.tx))
-        };
-      }).filter(r => r.items.length > 0);
-
-      return { rows, count: fConfigs.length };
-    };
-
-    const f1 = buildFactoryRows(1);
-    const f2 = buildFactoryRows(2);
-
-    return [
-      { key: 1, label: "Factory 1", rows: f1.rows, count: f1.count },
-      { key: 2, label: "Factory 2", rows: f2.rows, count: f2.count },
-    ];
-  }, [isEditingTrafoPos, draftTrafoLayoutConfigs, trafoLayoutConfigs, transformers]);
-
-  const handleStartEditTrafoPos = () => {
-    setDraftTrafoLayoutConfigs(JSON.parse(JSON.stringify(trafoLayoutConfigs)));
-    setIsEditingTrafoPos(true);
-  };
-
-  const handleCancelEditTrafoPos = () => {
-    setIsEditingTrafoPos(false);
-    setDraftTrafoLayoutConfigs([]);
-    setDraggedTrafo(null);
-    setActiveDropTxId(null);
-    setActiveDropFactory(null);
-    setDragAction(null);
-  };
-
-  const handleSaveTrafoPos = () => {
-    setTrafoLayoutConfigs(draftTrafoLayoutConfigs);
-    try {
-      localStorage.setItem("scada_trafo_detail_layout_v2", JSON.stringify(draftTrafoLayoutConfigs));
-      const orderIds = draftTrafoLayoutConfigs.map(c => c.id);
-      localStorage.setItem("scada_trafo_detail_order_v1", JSON.stringify(orderIds));
-    } catch (e) {}
-    setIsEditingTrafoPos(false);
-    setTrafoToast("✓ Posisi kartu Transformator berhasil disimpan!");
-    setTimeout(() => setTrafoToast(null), 3000);
-  };
-
-  const handleTrafoDragStart = (e: React.DragEvent, txId: string, factory: number, name: string) => {
-    if (!canEditPosition || !isEditingTrafoPos) return;
-    setDraggedTrafo({ id: txId, factory, name });
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", txId);
-  };
-
-  const handleTrafoDragEnd = () => {
-    setDraggedTrafo(null);
-    setActiveDropTxId(null);
-    setActiveDropFactory(null);
-    setDragAction(null);
-  };
-
-  const handleTrafoDragOverFactory = (e: React.DragEvent, factory: number) => {
-    if (!draggedTrafo || !isEditingTrafoPos) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    if (activeDropFactory !== factory) {
-      setActiveDropFactory(factory);
-    }
-  };
-
-  const handleTrafoDragOverCard = (e: React.DragEvent, factory: number, targetTxId: string) => {
-    if (!draggedTrafo || !isEditingTrafoPos) return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = "move";
-
-    if (activeDropFactory !== factory) setActiveDropFactory(factory);
-
-    if (draggedTrafo.id.toLowerCase() === targetTxId.toLowerCase()) {
-      setActiveDropTxId(null);
-      setDragAction(null);
-      return;
-    }
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const relX = e.clientX - rect.left;
-    const ratio = relX / Math.max(rect.width, 1);
-
-    let action: "insert-left" | "insert-right" | "swap";
-    if (ratio < 0.30) {
-      action = "insert-left";
-    } else if (ratio > 0.70) {
-      action = "insert-right";
-    } else {
-      action = "swap";
-    }
-
-    setActiveDropTxId(targetTxId);
-    setDragAction(action);
-  };
-
-  const handleTrafoDropOnCard = (targetFactory: number, targetTxId: string) => {
-    if (!draggedTrafo || !isEditingTrafoPos) return;
-    const { id: sourceId, name: sourceName } = draggedTrafo;
-    if (sourceId.toLowerCase() === targetTxId.toLowerCase()) {
-      handleTrafoDragEnd();
-      return;
-    }
-
-    const currentConfigs = draftTrafoLayoutConfigs.length > 0 ? [...draftTrafoLayoutConfigs] : [...trafoLayoutConfigs];
-    const targetName = transformers.find(t => t.id === targetTxId)?.name || targetTxId;
-
-    // Build rows map per factory
-    const factoryRowsMap = new Map<number, string[][]>();
-    trafoGroups.forEach(g => {
-      factoryRowsMap.set(g.key, g.rows.map(r => r.items.map(it => it.id)));
-    });
-
-    let sourceFactory: number | null = null;
-    let sourceRowIdx = -1;
-    let sourceColIdx = -1;
-    let targetRowIdx = -1;
-    let targetColIdx = -1;
-
-    factoryRowsMap.forEach((rows, fKey) => {
-      rows.forEach((rowCards, rIdx) => {
-        rowCards.forEach((cId, cIdx) => {
-          if (cId.toLowerCase() === sourceId.toLowerCase()) {
-            sourceFactory = fKey;
-            sourceRowIdx = rIdx;
-            sourceColIdx = cIdx;
-          }
-          if (cId.toLowerCase() === targetTxId.toLowerCase()) {
-            targetRowIdx = rIdx;
-            targetColIdx = cIdx;
-          }
-        });
-      });
-    });
-
-    if (sourceFactory === null || sourceRowIdx === -1 || targetRowIdx === -1) {
-      handleTrafoDragEnd();
-      return;
-    }
-
-    const sRows = factoryRowsMap.get(sourceFactory)!;
-    const tRows = factoryRowsMap.get(targetFactory)!;
-    const action = dragAction || "insert-right";
-
-    if (action === "swap") {
-      const temp = sRows[sourceRowIdx][sourceColIdx];
-      sRows[sourceRowIdx][sourceColIdx] = tRows[targetRowIdx][targetColIdx];
-      tRows[targetRowIdx][targetColIdx] = temp;
-      setTrafoToast(`✓ Menukar posisi '${sourceName}' dengan '${targetName}'`);
-    } else {
-      sRows[sourceRowIdx].splice(sourceColIdx, 1);
-      const curTargetColIdx = tRows[targetRowIdx].findIndex(k => k.toLowerCase() === targetTxId.toLowerCase());
-      if (curTargetColIdx !== -1) {
-        const insertIdx = action === "insert-left" ? curTargetColIdx : curTargetColIdx + 1;
-        tRows[targetRowIdx].splice(insertIdx, 0, sourceId);
-        setTrafoToast(`✓ Memindahkan '${sourceName}' ke sebelah ${action === "insert-left" ? "kiri" : "kanan"} '${targetName}'`);
-      }
-    }
-
-    // Flatten back to nextDraft
-    const nextDraft: TrafoLayoutConfig[] = [];
-    let sortCounter = 1;
-
-    [1, 2].forEach(fKey => {
-      const rows = factoryRowsMap.get(fKey) || [];
-      const nonEmptyRows = rows.filter(r => r.length > 0);
-      nonEmptyRows.forEach((rowCards, newRowIdx) => {
-        rowCards.forEach(cId => {
-          const existing = currentConfigs.find(it => it.id.toLowerCase() === cId.toLowerCase());
-          nextDraft.push({
-            id: cId,
-            factory: fKey,
-            row: newRowIdx,
-            span: existing?.span || "1",
-            align: existing?.align || "center",
-            sortOrder: sortCounter++
-          });
-        });
-      });
-    });
-
-    setDraftTrafoLayoutConfigs(nextDraft);
-    handleTrafoDragEnd();
-    setTimeout(() => setTrafoToast(null), 3000);
-  };
-
-  const handleDropOnNewRow = (factory: number) => {
-    if (!draggedTrafo || !isEditingTrafoPos) return;
-    const { id: sourceId, name: sourceName } = draggedTrafo;
-
-    const currentConfigs = draftTrafoLayoutConfigs.length > 0 ? [...draftTrafoLayoutConfigs] : [...trafoLayoutConfigs];
-    const factoryRowsMap = new Map<number, string[][]>();
-    trafoGroups.forEach(g => {
-      factoryRowsMap.set(g.key, g.rows.map(r => r.items.map(it => it.id)));
-    });
-
-    let sourceFactory: number | null = null;
-    let sourceRowIdx = -1;
-    let sourceColIdx = -1;
-
-    factoryRowsMap.forEach((rows, fKey) => {
-      rows.forEach((rowCards, rIdx) => {
-        rowCards.forEach((cId, cIdx) => {
-          if (cId.toLowerCase() === sourceId.toLowerCase()) {
-            sourceFactory = fKey;
-            sourceRowIdx = rIdx;
-            sourceColIdx = cIdx;
-          }
-        });
-      });
-    });
-
-    if (sourceFactory === null || sourceRowIdx === -1) {
-      handleTrafoDragEnd();
-      return;
-    }
-
-    const sRows = factoryRowsMap.get(sourceFactory)!;
-    sRows[sourceRowIdx].splice(sourceColIdx, 1);
-
-    const tRows = factoryRowsMap.get(factory)!;
-    tRows.push([sourceId]);
-
-    const nextDraft: TrafoLayoutConfig[] = [];
-    let sortCounter = 1;
-
-    [1, 2].forEach(fKey => {
-      const rows = factoryRowsMap.get(fKey) || [];
-      const nonEmptyRows = rows.filter(r => r.length > 0);
-      nonEmptyRows.forEach((rowCards, newRowIdx) => {
-        rowCards.forEach(cId => {
-          const existing = currentConfigs.find(it => it.id.toLowerCase() === cId.toLowerCase());
-          nextDraft.push({
-            id: cId,
-            factory: fKey,
-            row: newRowIdx,
-            span: rowCards.length === 1 ? (existing?.span || "full") : "1",
-            align: existing?.align || "center",
-            sortOrder: sortCounter++
-          });
-        });
-      });
-    });
-
-    setDraftTrafoLayoutConfigs(nextDraft);
-    setTrafoToast(`✓ Memindahkan '${sourceName}' ke baris baru di Factory ${factory}`);
-    handleTrafoDragEnd();
-    setTimeout(() => setTrafoToast(null), 3000);
-  };
-
-  const handleSetCardSpan = (txId: string, span: "1" | "full") => {
-    const list = (draftTrafoLayoutConfigs.length > 0 ? draftTrafoLayoutConfigs : trafoLayoutConfigs).map(c => {
-      if (c.id === txId) {
-        return { ...c, span };
-      }
-      return c;
-    });
-    setDraftTrafoLayoutConfigs(list);
-  };
-
-  const handleSetCardAlign = (txId: string, align: "left" | "center" | "right") => {
-    const list = (draftTrafoLayoutConfigs.length > 0 ? draftTrafoLayoutConfigs : trafoLayoutConfigs).map(c => {
-      if (c.id === txId) {
-        return { ...c, align };
-      }
-      return c;
-    });
-    setDraftTrafoLayoutConfigs(list);
-  };
 
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
@@ -2690,50 +2540,12 @@ export default function PowerDistribution() {
     return transformers.find(t => t.id === bottomTxId) || transformers[0];
   }, [transformers, bottomTxId]);
 
-  // Section C Historical records state (24-Hour Rolling Window with Consistent 3-Second Polling & FIFO)
+  // Section C Historical records state (24-Hour Rolling Window with Consistent 1-Second Polling & FIFO)
   const [bottomPointCount, setBottomPointCount] = useState(0);
-  const [bottomTickMs, setBottomTickMs] = useState<number>(() => Math.floor(Date.now() / 3000) * 3000);
+  const [bottomTickMs, setBottomTickMs] = useState<number>(() => Math.floor(Date.now() / 1000) * 1000);
   const [loadingBottomHistory, setLoadingBottomHistory] = useState(false);
   const [bottomVoltageMode, setBottomVoltageMode] = useState<"380v" | "230v">("380v");
   const [bottomZoomChart, setBottomZoomChart] = useState<"voltage" | "power" | "current" | null>(null);
-
-  // TradingView Interactive Pan & Zoom States for Modal Chart
-  const [modalRangeX, setModalRangeX] = useState<{ min: number; max: number } | null>(null);
-  const [modalRangeY, setModalRangeY] = useState<{ min: number; max: number } | null>(null);
-  const modalRangeXRef = useRef(modalRangeX);
-  modalRangeXRef.current = modalRangeX;
-  const modalRangeYRef = useRef(modalRangeY);
-  modalRangeYRef.current = modalRangeY;
-
-  const modalChartRef = useRef<ChartJS<"line"> | null>(null);
-  const modalChartContainerRef = useRef<HTMLDivElement>(null);
-
-  const modalDragRef = useRef<{
-    isDragging: boolean;
-    mode: "body-pan" | "y-axis" | null;
-    startX: number;
-    startY: number;
-    initMinX: number;
-    initMaxX: number;
-    initMinY: number;
-    initMaxY: number;
-  }>({
-    isDragging: false,
-    mode: null,
-    startX: 0,
-    startY: 0,
-    initMinX: 0,
-    initMaxX: 0,
-    initMinY: 0,
-    initMaxY: 0,
-  });
-
-  const modalActiveWindow = useMemo(() => {
-    const max = modalRangeX ? modalRangeX.max : bottomTickMs;
-    const min = modalRangeX ? modalRangeX.min : bottomTickMs - 24 * 3600 * 1000;
-    const duration = Math.max(1000, max - min);
-    return { min, max, duration, isCustom: modalRangeX !== null || modalRangeY !== null };
-  }, [modalRangeX, modalRangeY, bottomTickMs]);
 
   const bottomSeriesRef = useRef<{
     vAb: { x: number; y: number }[];
@@ -2809,17 +2621,20 @@ export default function PowerDistribution() {
     const fetchBottomHistory = () => {
       getJson<{ tuples?: number[][]; data?: any[] }>(`/analytics/electricity/power-meters/${pmId}/history?rolling=true&compact=true&_t=${Date.now()}`)
         .then((res) => {
-          const tuples = res?.tuples;
-          if (Array.isArray(tuples) && tuples.length > 0) {
+          const rawTuples = res?.tuples;
+          if (Array.isArray(rawTuples) && rawTuples.length > 0) {
+            const maxClientMs = Date.now() + 2000;
+            const tuples = rawTuples.filter((row) => Number(row[0]) <= maxClientMs);
+            if (tuples.length === 0) return;
             const n = tuples.length;
             const vAb = new Array(n);
             const vBc = new Array(n);
             const vCa = new Array(n);
-            const vRn = new Array(n);
-            const vSn = new Array(n);
-            const vTn = new Array(n);
+            const vRn: { x: number; y: number }[] = [];
+            const vSn: { x: number; y: number }[] = [];
+            const vTn: { x: number; y: number }[] = [];
             const kw = new Array(n);
-            const iTot = new Array(n);
+            const iTot: { x: number; y: number }[] = [];
             const iR = new Array(n);
             const iS = new Array(n);
             const iT = new Array(n);
@@ -2834,17 +2649,19 @@ export default function PowerDistribution() {
               const c1 = Number(row[5]) || 0;
               const c2 = Number(row[6]) || 0;
               const c3 = Number(row[7]) || 0;
+              const vrn = (row[8] !== null && row[8] !== undefined && Number(row[8]) > 50) ? Number(row[8]) : null;
+              const vsn = (row[9] !== null && row[9] !== undefined && Number(row[9]) > 50) ? Number(row[9]) : null;
+              const vtn = (row[10] !== null && row[10] !== undefined && Number(row[10]) > 50) ? Number(row[10]) : null;
               vAb[i] = { x, y: v1 };
               vBc[i] = { x, y: v2 };
               vCa[i] = { x, y: v3 };
-              vRn[i] = { x, y: Number((v1 / 1.7320508).toFixed(1)) };
-              vSn[i] = { x, y: Number((v2 / 1.7320508).toFixed(1)) };
-              vTn[i] = { x, y: Number((v3 / 1.7320508).toFixed(1)) };
               kw[i] = { x, y: p };
               iR[i] = { x, y: c1 };
               iS[i] = { x, y: c2 };
               iT[i] = { x, y: c3 };
-              iTot[i] = { x, y: Number((c1 + c2 + c3).toFixed(1)) };
+              if (vrn !== null) vRn.push({ x, y: vrn });
+              if (vsn !== null) vSn.push({ x, y: vsn });
+              if (vtn !== null) vTn.push({ x, y: vtn });
             }
 
             bottomSeriesRef.current = { vAb, vBc, vCa, vRn, vSn, vTn, kw, iTot, iR, iS, iT };
@@ -2857,22 +2674,22 @@ export default function PowerDistribution() {
             const lc3 = Number(last[7]) || 0;
             latestBottomLiveRef.current = {
               vAb: lv1, vBc: lv2, vCa: lv3,
-              vRn: Number((lv1 / 1.7320508).toFixed(1)),
-              vSn: Number((lv2 / 1.7320508).toFixed(1)),
-              vTn: Number((lv3 / 1.7320508).toFixed(1)),
+              vRn: (last[8] !== null && last[8] !== undefined) ? Number(last[8]) : 0,
+              vSn: (last[9] !== null && last[9] !== undefined) ? Number(last[9]) : 0,
+              vTn: (last[10] !== null && last[10] !== undefined) ? Number(last[10]) : 0,
               kw: Number(last[4]) || 0,
               iR: lc1, iS: lc2, iT: lc3,
-              iTot: Number((lc1 + lc2 + lc3).toFixed(1))
+              iTot: 0
             };
             setBottomPointCount(n);
-            setBottomTickMs(Number(last[0]) || Math.floor(Date.now() / 3000) * 3000);
+            setBottomTickMs(Number(last[0]) || Math.floor(Date.now() / 1000) * 1000);
           }
         })
         .catch((err) => console.error("Failed to load bottom trafo history:", err))
         .finally(() => setLoadingBottomHistory(false));
     };
 
-    // Fetch initial 24h 3-second rolling history once; subsequent 3-second updates stream via WebSocket
+    // Fetch initial 24h 1-second rolling history once; subsequent 1-second updates stream via WebSocket
     fetchBottomHistory();
 
     const socket = getSocket();
@@ -2885,13 +2702,13 @@ export default function PowerDistribution() {
       const c1 = pm.current_a !== undefined && pm.current_a !== null ? Number(Number(pm.current_a).toFixed(1)) : 0;
       const c2 = pm.current_b !== undefined && pm.current_b !== null ? Number(Number(pm.current_b).toFixed(1)) : 0;
       const c3 = pm.current_c !== undefined && pm.current_c !== null ? Number(Number(pm.current_c).toFixed(1)) : 0;
-      const p = pm.active_power_total !== undefined && pm.active_power_total !== null ? Math.abs(Number(Number(pm.active_power_total).toFixed(2))) : 0;
+      const p = pm.active_power_total !== undefined && pm.active_power_total !== null ? Number(Number(pm.active_power_total).toFixed(2)) : 0;
       if (v1 <= 0 && p <= 0 && c1 <= 0) return;
 
       const s = bottomSeriesRef.current;
       const lastX = s.vAb.length > 0 ? s.vAb[s.vAb.length - 1].x : 0;
       const rawX = Number(pm.ts) || fallbackTs || Date.now();
-      if (rawX - lastX < 2500) return;
+      if (rawX - lastX < 800) return;
       const nextX = rawX;
       const cutoff = nextX - 24 * 3600 * 1000;
 
@@ -2905,11 +2722,13 @@ export default function PowerDistribution() {
       pushAndShift(s.vAb, v1);
       pushAndShift(s.vBc, v2);
       pushAndShift(s.vCa, v3);
-      pushAndShift(s.vRn, Number((v1 / 1.7320508).toFixed(1)));
-      pushAndShift(s.vSn, Number((v2 / 1.7320508).toFixed(1)));
-      pushAndShift(s.vTn, Number((v3 / 1.7320508).toFixed(1)));
+      const vrn = pm.volt_an !== undefined && pm.volt_an !== null ? Number(Number(pm.volt_an).toFixed(1)) : 0;
+      const vsn = pm.volt_bn !== undefined && pm.volt_bn !== null ? Number(Number(pm.volt_bn).toFixed(1)) : 0;
+      const vtn = pm.volt_cn !== undefined && pm.volt_cn !== null ? Number(Number(pm.volt_cn).toFixed(1)) : 0;
+      if (vrn > 50) pushAndShift(s.vRn, vrn);
+      if (vsn > 50) pushAndShift(s.vSn, vsn);
+      if (vtn > 50) pushAndShift(s.vTn, vtn);
       pushAndShift(s.kw, p);
-      pushAndShift(s.iTot, Number((c1 + c2 + c3).toFixed(1)));
       pushAndShift(s.iR, c1);
       pushAndShift(s.iS, c2);
       pushAndShift(s.iT, c3);
@@ -2918,7 +2737,7 @@ export default function PowerDistribution() {
       setBottomTickMs(nextX);
     };
 
-    // Auto-refresh immediately when a new 3-second batch is saved into electric_trafo_rolling_3s in PostgreSQL
+    // Auto-refresh immediately when a new 1-second batch is saved into electric_trafo_rolling_3s in PostgreSQL
     const handleTrafo3sSaved = (payload: any) => {
       if (!payload || !Array.isArray(payload.data)) return;
       const pm = payload.data.find((item: any) => String(item.pm_id).toUpperCase() === targetPmId);
@@ -3001,16 +2820,6 @@ export default function PowerDistribution() {
     const s = bottomSeriesRef.current;
     return {
       datasets: [
-        {
-          label: "Ampere Total (A)",
-          data: s.iTot,
-          borderColor: "#8b5cf6",
-          backgroundColor: "transparent",
-          borderWidth: 1.8,
-          tension: 0,
-          pointRadius: 0,
-          pointHoverRadius: 4,
-        },
         {
           label: "Fasa R (A)",
           data: s.iR,
@@ -3117,382 +2926,6 @@ export default function PowerDistribution() {
 
   const currentChartOptions = multiLineChartOptions;
 
-  // Dedicated dynamic options for modal chart with TradingView time window zooming and ticks
-  const modalChartOptions = useMemo(() => {
-    const { min, max, duration } = modalActiveWindow;
-    let tickCount = 8;
-    if (duration <= 60 * 1000) tickCount = 4;
-    else if (duration <= 15 * 60 * 1000) tickCount = 6;
-    else if (duration <= 60 * 60 * 1000) tickCount = 6;
-    else if (duration <= 6 * 3600 * 1000) tickCount = 6;
-    else tickCount = 8;
-
-    const step = (max - min) / tickCount;
-
-    const defaultYMax = bottomZoomChart === "voltage"
-      ? (bottomVoltageMode === "380v" ? 450 : 260)
-      : undefined;
-
-    return {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false as const,
-      parsing: false as const,
-      normalized: true,
-      plugins: {
-        legend: {
-          display: true,
-          position: "top" as const,
-          labels: {
-            boxWidth: 10,
-            boxHeight: 10,
-            usePointStyle: true,
-            pointStyle: "circle",
-            color: isDark ? "#94a3b8" : "#475569",
-            font: { size: 10.5, weight: 700 as const },
-            padding: 10
-          }
-        },
-        tooltip: {
-          mode: "index" as const,
-          intersect: false,
-          backgroundColor: isDark ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.98)",
-          titleColor: isDark ? "#f8fafc" : "#0f172a",
-          bodyColor: isDark ? "#cbd5e1" : "#334155",
-          borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.1)",
-          borderWidth: 1,
-          padding: 8,
-          callbacks: {
-            title: formatWibTooltipTitle,
-          },
-        },
-      },
-      scales: {
-        x: {
-          type: "linear" as const,
-          min,
-          max,
-          afterBuildTicks: (axis: any) => {
-            if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return;
-            const ticks: { value: number }[] = [];
-            for (let i = 0; i <= tickCount; i++) {
-              ticks.push({ value: Math.round(min + i * step) });
-            }
-            axis.ticks = ticks;
-          },
-          grid: { color: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)" },
-          ticks: {
-            color: isDark ? "#94a3b8" : "#64748b",
-            font: { size: 9.5, weight: 600 as const },
-            maxRotation: 0,
-            autoSkip: false,
-            callback: (val: any) => formatWibTick(Number(val)),
-          },
-        },
-        y: {
-          min: modalRangeY ? modalRangeY.min : (bottomZoomChart === "voltage" ? undefined : 0),
-          max: modalRangeY ? modalRangeY.max : defaultYMax,
-          grid: { color: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)" },
-          ticks: {
-            color: isDark ? "#94a3b8" : "#64748b",
-            font: { size: 9.5, weight: 600 as const },
-          },
-        },
-      },
-    };
-  }, [isDark, modalActiveWindow, modalRangeY, bottomZoomChart, bottomVoltageMode, formatWibTick, formatWibTooltipTitle]);
-
-  // Reset custom zoom ranges when switching modal target or closing
-  useEffect(() => {
-    setModalRangeX(null);
-    setModalRangeY(null);
-  }, [bottomZoomChart, bottomVoltageMode, bottomTxId]);
-
-  // TradingView Style Chart Navigation:
-  // - LMB Drag: Free Pan on canvas body (or vertical scale on left Y-axis)
-  // - Mouse Wheel: Horizontal Zoom on body; Vertical Height Zoom on left Y-axis ticks
-  // - Double Click: Reset to Full Auto-Fit View
-  useEffect(() => {
-    if (!bottomZoomChart) return;
-    const container = modalChartContainerRef.current;
-    if (!container) return;
-
-    const getChartMetrics = () => {
-      const chart = modalChartRef.current;
-      const canvas = chart?.canvas;
-      const rect = canvas ? canvas.getBoundingClientRect() : container.getBoundingClientRect();
-      const chartArea = chart?.chartArea ?? {
-        left: 65,
-        right: rect.width - 20,
-        top: 30,
-        bottom: rect.height - 30,
-        width: rect.width - 85,
-        height: rect.height - 60,
-      };
-      return { chart, canvas, rect, chartArea };
-    };
-
-    const handleMouseMoveHover = (e: MouseEvent) => {
-      if (modalDragRef.current.isDragging) return;
-      const { canvas, rect, chartArea } = getChartMetrics();
-      if (!canvas) return;
-      const mouseX = e.clientX - rect.left;
-      if (mouseX < chartArea.left) {
-        canvas.style.cursor = "ns-resize";
-        canvas.title = "Scroll atau drag vertikal untuk mengatur tinggi/skala Y";
-      } else {
-        canvas.style.cursor = "grab";
-        canvas.title = "Hold LMB lalu geser untuk navigasi; Scroll untuk zoom waktu";
-      }
-    };
-
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const { chart, rect, chartArea } = getChartMetrics();
-      const mouseX = e.clientX - rect.left;
-      const isYAxisZone = mouseX < chartArea.left;
-
-      if (isYAxisZone) {
-        // Vertical Height Zoom (Scale Y-Axis) anchored at cursor value
-        setModalRangeY((prevY) => {
-          const yScale = chart?.scales?.y;
-          const curMin = prevY ? prevY.min : (yScale?.min ?? (bottomZoomChart === "voltage" ? (bottomVoltageMode === "380v" ? 360 : 210) : 0));
-          const curMax = prevY ? prevY.max : (yScale?.max ?? (bottomZoomChart === "voltage" ? (bottomVoltageMode === "380v" ? 430 : 250) : 50));
-          const span = Math.max(0.2, curMax - curMin);
-
-          const mouseY = e.clientY - rect.top;
-          const ratioY = Math.max(0, Math.min(1, (chartArea.bottom - mouseY) / Math.max(1, chartArea.height)));
-          const anchorVal = curMin + ratioY * span;
-
-          const factor = e.deltaY < 0 ? 0.85 : 1.18;
-          const newSpan = Math.max(0.5, span * factor);
-          const newMin = anchorVal - ratioY * newSpan;
-          const newMax = newMin + newSpan;
-          return { min: newMin, max: newMax };
-        });
-      } else {
-        // Horizontal Time Zoom (Expand / Narrow Time Window)
-        setModalRangeX((prevX) => {
-          const curMin = prevX ? prevX.min : (bottomTickMs - 24 * 3600 * 1000);
-          const curMax = prevX ? prevX.max : bottomTickMs;
-          const span = Math.max(1000, curMax - curMin);
-          const factor = e.deltaY < 0 ? 0.82 : 1.22;
-          let newSpan = span * factor;
-          // Clamp between 15 seconds (fine zoom) and 72 hours
-          newSpan = Math.max(15 * 1000, Math.min(72 * 3600 * 1000, newSpan));
-
-          const plotLeft = chartArea.left;
-          const plotWidth = Math.max(10, chartArea.width);
-          const ratio = Math.max(0, Math.min(1, (mouseX - plotLeft) / plotWidth));
-          const mouseTime = curMin + ratio * span;
-
-          const newMin = mouseTime - ratio * newSpan;
-          const newMax = newMin + newSpan;
-          return { min: newMin, max: newMax };
-        });
-      }
-    };
-
-    const handleMouseDown = (e: MouseEvent) => {
-      if (e.button !== 0) return; // Left Mouse Button only
-      const { chart, canvas, rect, chartArea } = getChartMetrics();
-      const mouseX = e.clientX - rect.left;
-      const isYAxisZone = mouseX < chartArea.left;
-
-      const yScale = chart?.scales?.y;
-      const curMinX = modalRangeXRef.current ? modalRangeXRef.current.min : (bottomTickMs - 24 * 3600 * 1000);
-      const curMaxX = modalRangeXRef.current ? modalRangeXRef.current.max : bottomTickMs;
-      const curMinY = modalRangeYRef.current
-        ? modalRangeYRef.current.min
-        : (yScale?.min ?? (bottomZoomChart === "voltage" ? (bottomVoltageMode === "380v" ? 360 : 210) : 0));
-      const curMaxY = modalRangeYRef.current
-        ? modalRangeYRef.current.max
-        : (yScale?.max ?? (bottomZoomChart === "voltage" ? (bottomVoltageMode === "380v" ? 430 : 250) : 50));
-
-      modalDragRef.current = {
-        isDragging: true,
-        mode: isYAxisZone ? "y-axis" : "body-pan",
-        startX: e.clientX,
-        startY: e.clientY,
-        initMinX: curMinX,
-        initMaxX: curMaxX,
-        initMinY: curMinY,
-        initMaxY: curMaxY,
-      };
-
-      if (canvas) {
-        canvas.style.cursor = isYAxisZone ? "ns-resize" : "grabbing";
-      }
-    };
-
-    const handleWindowMouseMove = (e: MouseEvent) => {
-      if (!modalDragRef.current.isDragging) return;
-      const { chartArea } = getChartMetrics();
-      const { mode, startX, startY, initMinX, initMaxX, initMinY, initMaxY } = modalDragRef.current;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-
-      if (mode === "body-pan") {
-        const plotWidth = Math.max(10, chartArea.width);
-        const spanX = initMaxX - initMinX;
-        const msPerPixel = spanX / plotWidth;
-        const shiftX = dx * msPerPixel;
-        setModalRangeX({
-          min: initMinX - shiftX,
-          max: initMaxX - shiftX,
-        });
-
-        // Vertical panning if Y is also custom scaled
-        if (modalRangeYRef.current) {
-          const plotHeight = Math.max(10, chartArea.height);
-          const spanY = initMaxY - initMinY;
-          const yPerPixel = spanY / plotHeight;
-          const shiftY = dy * yPerPixel;
-          setModalRangeY({
-            min: initMinY + shiftY,
-            max: initMaxY + shiftY,
-          });
-        }
-      } else if (mode === "y-axis") {
-        // Dragging vertically on Y-axis (TradingView style scale drag)
-        const { rect } = getChartMetrics();
-        const plotHeight = Math.max(10, chartArea.height);
-        const spanY = Math.max(0.5, initMaxY - initMinY);
-        // Drag UP (dy < 0): expands height (shrink span)
-        // Drag DOWN (dy > 0): squashes height (expand span)
-        const scaleMultiplier = Math.exp((dy / Math.max(50, plotHeight)) * 1.5);
-        const newSpan = Math.max(0.5, spanY * scaleMultiplier);
-        const initMouseY = startY - rect.top;
-        const anchorRatio = Math.max(0, Math.min(1, (chartArea.bottom - initMouseY) / Math.max(1, chartArea.height)));
-        const anchorVal = initMinY + anchorRatio * spanY;
-        const newMin = anchorVal - anchorRatio * newSpan;
-        const newMax = newMin + newSpan;
-        setModalRangeY({
-          min: newMin,
-          max: newMax,
-        });
-      }
-    };
-
-    const handleWindowMouseUp = (e: MouseEvent) => {
-      if (modalDragRef.current.isDragging) {
-        modalDragRef.current.isDragging = false;
-        const { canvas, rect, chartArea } = getChartMetrics();
-        if (canvas) {
-          const mouseX = e.clientX - rect.left;
-          canvas.style.cursor = mouseX < chartArea.left ? "ns-resize" : "grab";
-        }
-      }
-    };
-
-    const handleDoubleClick = () => {
-      setModalRangeX(null);
-      setModalRangeY(null);
-    };
-
-    // Touch handlers for mobile / tablet
-    let touchStartDist = 0;
-    let touchStartSpanX = 0;
-
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 1) {
-        const touch = e.touches[0];
-        const { chart } = getChartMetrics();
-        const curMinX = modalRangeXRef.current ? modalRangeXRef.current.min : (bottomTickMs - 24 * 3600 * 1000);
-        const curMaxX = modalRangeXRef.current ? modalRangeXRef.current.max : bottomTickMs;
-        const curMinY = modalRangeYRef.current ? modalRangeYRef.current.min : 0;
-        const fallbackMaxY = bottomZoomChart === "voltage"
-          ? (bottomVoltageMode === "380v" ? 450 : 260)
-          : (chart?.scales?.y?.max || 50);
-        const curMaxY = modalRangeYRef.current ? modalRangeYRef.current.max : fallbackMaxY;
-
-        modalDragRef.current = {
-          isDragging: true,
-          mode: "body-pan",
-          startX: touch.clientX,
-          startY: touch.clientY,
-          initMinX: curMinX,
-          initMaxX: curMaxX,
-          initMinY: curMinY,
-          initMaxY: curMaxY,
-        };
-      } else if (e.touches.length === 2) {
-        modalDragRef.current.isDragging = false;
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
-        touchStartDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-        const curMinX = modalRangeXRef.current ? modalRangeXRef.current.min : (bottomTickMs - 24 * 3600 * 1000);
-        const curMaxX = modalRangeXRef.current ? modalRangeXRef.current.max : bottomTickMs;
-        touchStartSpanX = curMaxX - curMinX;
-      }
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 1 && modalDragRef.current.isDragging) {
-        e.preventDefault();
-        const touch = e.touches[0];
-        const { chartArea } = getChartMetrics();
-        const { startX, initMinX, initMaxX } = modalDragRef.current;
-        const dx = touch.clientX - startX;
-        const plotWidth = Math.max(10, chartArea.width);
-        const spanX = initMaxX - initMinX;
-        const msPerPixel = spanX / plotWidth;
-        const shiftX = dx * msPerPixel;
-        setModalRangeX({
-          min: initMinX - shiftX,
-          max: initMaxX - shiftX,
-        });
-      } else if (e.touches.length === 2 && touchStartDist > 0) {
-        e.preventDefault();
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
-        const curDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-        if (curDist > 10) {
-          const scale = touchStartDist / curDist;
-          const newSpan = Math.max(15 * 1000, Math.min(72 * 3600 * 1000, touchStartSpanX * scale));
-          const curMinX = modalRangeXRef.current ? modalRangeXRef.current.min : (bottomTickMs - 24 * 3600 * 1000);
-          const curMaxX = modalRangeXRef.current ? modalRangeXRef.current.max : bottomTickMs;
-          const center = (curMinX + curMaxX) / 2;
-          setModalRangeX({
-            min: center - newSpan / 2,
-            max: center + newSpan / 2,
-          });
-        }
-      }
-    };
-
-    const handleTouchEnd = () => {
-      modalDragRef.current.isDragging = false;
-      touchStartDist = 0;
-    };
-
-    container.addEventListener("wheel", handleWheel, { passive: false });
-    container.addEventListener("mousemove", handleMouseMoveHover);
-    container.addEventListener("mousedown", handleMouseDown);
-    container.addEventListener("dblclick", handleDoubleClick);
-    container.addEventListener("touchstart", handleTouchStart, { passive: false });
-    container.addEventListener("touchmove", handleTouchMove, { passive: false });
-    container.addEventListener("touchend", handleTouchEnd);
-    container.addEventListener("touchcancel", handleTouchEnd);
-    window.addEventListener("mousemove", handleWindowMouseMove);
-    window.addEventListener("mouseup", handleWindowMouseUp);
-
-    return () => {
-      container.removeEventListener("wheel", handleWheel);
-      container.removeEventListener("mousemove", handleMouseMoveHover);
-      container.removeEventListener("mousedown", handleMouseDown);
-      container.removeEventListener("dblclick", handleDoubleClick);
-      container.removeEventListener("touchstart", handleTouchStart);
-      container.removeEventListener("touchmove", handleTouchMove);
-      container.removeEventListener("touchend", handleTouchEnd);
-      container.removeEventListener("touchcancel", handleTouchEnd);
-      window.removeEventListener("mousemove", handleWindowMouseMove);
-      window.removeEventListener("mouseup", handleWindowMouseUp);
-    };
-  }, [bottomZoomChart, bottomVoltageMode, bottomTickMs]);
-
   // Load threshold config from Postgres
   useEffect(() => {
     getJson<{ data: any[] }>("/config/electricity?configType=load_thresholds")
@@ -3534,30 +2967,47 @@ export default function PowerDistribution() {
     }
   };
 
-  const totalLoadKw = useMemo(() => {
-    const sumIncoming = (incomingData.wf1Kw || 0) + (incomingData.wf2Kw || 0);
-    return sumIncoming > 0 ? sumIncoming : (incomingData.plnKw || 0);
-  }, [incomingData]);
-
   const totalCapacityKva = useMemo(() => {
     return transformers.reduce((sum, tx) => sum + tx.capacityKva, 0);
   }, [transformers]);
 
-  const orderedTransformers = useMemo(() => {
-    const activeConfigs = isEditingTrafoPos && draftTrafoLayoutConfigs.length > 0
-      ? draftTrafoLayoutConfigs
-      : trafoLayoutConfigs;
+  const factory1 = transformers.filter(tx => tx.factory === 1);
+  const factory2 = transformers.filter(tx => tx.factory === 2);
 
-    const orderMap = new Map(activeConfigs.map((c, idx) => [c.id, idx]));
-    return [...transformers].sort((a, b) => {
-      const idxA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999;
-      const idxB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999;
-      return idxA - idxB;
-    });
-  }, [transformers, isEditingTrafoPos, draftTrafoLayoutConfigs, trafoLayoutConfigs]);
+  const totalSolarKw = useMemo(() => {
+    if (solarData.poi1Kw === null && solarData.poi2Kw === null) return null;
+    return Number(((solarData.poi1Kw || 0) + (solarData.poi2Kw || 0)).toFixed(1));
+  }, [solarData.poi1Kw, solarData.poi2Kw]);
 
-  const factory1 = orderedTransformers.filter(tx => tx.factory === 1);
-  const factory2 = orderedTransformers.filter(tx => tx.factory === 2);
+  const f1TotalCapacityKva = useMemo(() => {
+    return factory1.reduce((sum, tx) => sum + tx.capacityKva, 0);
+  }, [factory1]);
+
+  const f1TotalKw = useMemo(() => {
+    const valid = factory1.filter(tx => tx.activePowerKw !== null && tx.activePowerKw !== undefined);
+    if (valid.length === 0) return null;
+    return Number(valid.reduce((sum, tx) => sum + Number(tx.activePowerKw || 0), 0).toFixed(1));
+  }, [factory1]);
+
+  const f2TotalCapacityKva = useMemo(() => {
+    return factory2.reduce((sum, tx) => sum + tx.capacityKva, 0);
+  }, [factory2]);
+
+  const f2TotalKw = useMemo(() => {
+    const valid = factory2.filter(tx => tx.activePowerKw !== null && tx.activePowerKw !== undefined);
+    if (valid.length === 0) return null;
+    return Number(valid.reduce((sum, tx) => sum + Number(tx.activePowerKw || 0), 0).toFixed(1));
+  }, [factory2]);
+
+  const systemTotalKw = useMemo(() => {
+    if (incomingData.plnKw !== null && incomingData.plnKw !== undefined && incomingData.plnKw > 0) {
+      return incomingData.plnKw;
+    }
+    if (f1TotalKw !== null || f2TotalKw !== null) {
+      return Number(((f1TotalKw || 0) + (f2TotalKw || 0)).toFixed(1));
+    }
+    return null;
+  }, [incomingData.plnKw, f1TotalKw, f2TotalKw]);
 
   const activeLineColor = isDark ? "#06b6d4" : "#3b82f6";
 
@@ -3582,9 +3032,13 @@ export default function PowerDistribution() {
             <span className="text-[10px] font-extrabold uppercase text-slate-400">{t("electricity.totalLoad")}</span>
             {loadingSld ? (
               <span className="inline-block h-5 w-20 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />
-            ) : (
+            ) : systemTotalKw !== null ? (
               <span className="text-base font-extrabold font-mono text-slate-800 dark:text-white">
-                {totalLoadKw > 0 ? `${totalLoadKw.toLocaleString("id-ID")} kW` : "— kW"}
+                {systemTotalKw.toLocaleString("id-ID")} <span className="text-xs text-slate-400 font-bold">kW</span>
+              </span>
+            ) : (
+              <span className="text-xs font-extrabold text-amber-500">
+                {NO_REALTIME_API}
               </span>
             )}
           </div>
@@ -3646,9 +3100,9 @@ export default function PowerDistribution() {
             </defs>
 
             {/* --- AUXILIARY POWER ROUTING --- */}
-            {/* 1. Genset Natural Gas (Center 95, 242) -> Channels down X=175 between MDP-1.1 & MDP-1.2, feeds MDP-1.2 (183, 415) and bridges over MDP-1.2 feeder to MDP-2 (293, 415) */}
+            {/* 1. Genset Natural Gas (Center 105, 242) -> Channels down X=165 between MDP-1.1 & MDP-1.2, feeds MDP-1.2 (173, 415) and bridges over MDP-1.2 feeder (220) to MDP-2 (283, 415) */}
             <path
-              d="M 95 242 L 95 252 L 175 252 L 175 415"
+              d="M 105 242 L 105 253 L 165 253 L 165 415"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
@@ -3656,15 +3110,15 @@ export default function PowerDistribution() {
             />
             {/* Arrowhead into left side of MDP-1.2 */}
             <path
-              d="M 175 415 L 183 415"
+              d="M 165 415 L 173 415"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
               markerEnd="url(#arrow-green)"
             />
-            {/* Branch from X=175 to MDP-2 at X=285 with jumper bridge arc over MDP-1.2 feeder (X=230) */}
+            {/* Branch from X=165 to MDP-2 at X=275 with jumper bridge arc over MDP-1.2 feeder (X=220) */}
             <path
-              d="M 175 345 L 223 345 A 7 7 0 0 1 237 345 L 285 345 L 285 415"
+              d="M 165 345 L 213 345 A 7 7 0 0 1 227 345 L 275 345 L 275 415"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
@@ -3672,85 +3126,105 @@ export default function PowerDistribution() {
             />
             {/* Arrowhead on second branch into left side of MDP-2 */}
             <path
-              d="M 285 415 L 293 415"
+              d="M 275 415 L 283 415"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
               markerEnd="url(#arrow-green)"
             />
             {/* Branch junction circle */}
-            <circle cx="175" cy="345" r="3" fill="#10b981" />
+            <circle cx="165" cy="345" r="3" fill="#10b981" />
 
-            {/* 2. Solar PV POI-1 (Center 475, 242) -> Steps to X=517, feeds right side of MDP-3 (497, 415) */}
+            {/* 2. Solar PV POI-1 (Center 445, 242) -> Steps to X=505, feeds right side of MDP-3 (487, 415) */}
             <path
-              d="M 475 242 L 475 252 L 517 252 L 517 415"
+              d="M 445 242 L 445 253 L 505 253 L 505 415"
               fill="none"
               stroke="#ef4444"
               strokeWidth="2"
               strokeDasharray="3 3"
             />
             <path
-              d="M 517 415 L 497 415"
+              d="M 505 415 L 487 415"
               fill="none"
               stroke="#ef4444"
               strokeWidth="2"
               markerEnd="url(#arrow-red)"
             />
 
-            {/* 3. Solar PV POI-2 (Center 950, 242) -> Centered departure, steps to channel X=975 between PUTR-2 & PUTR-NEW, feeds right side of PUTR-2 (965, 415) */}
+            {/* 3. Solar PV POI-2 (Center 930, 242) -> Steps to channel X=988 between PUTR-2 & PUTR-NEW, feeds right side of PUTR-2 (975, 415) */}
             <path
-              d="M 950 242 L 950 252 L 975 252 L 975 415"
+              d="M 930 242 L 930 253 L 988 253 L 988 415"
               fill="none"
               stroke="#ef4444"
               strokeWidth="2"
               strokeDasharray="3 3"
             />
             <path
-              d="M 975 415 L 965 415"
+              d="M 988 415 L 975 415"
               fill="none"
               stroke="#ef4444"
               strokeWidth="2"
               markerEnd="url(#arrow-red)"
             />
 
-            {/* 4. Genset Diesel Fuel (Center 1105, 242) -> Straight down along right side, feeds right side of PUTR-NEW (1085, 415) */}
+            {/* 4. Genset Diesel Fuel (Center 1095, 242) -> Steps to X=1118 along right side, feeds right side of PUTR-NEW (1100, 415) */}
             <path
-              d="M 1105 242 L 1105 415"
+              d="M 1095 242 L 1095 253 L 1118 253 L 1118 415"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
               strokeDasharray="4 3"
             />
             <path
-              d="M 1105 415 L 1085 415"
+              d="M 1118 415 L 1100 415"
               fill="none"
               stroke="#10b981"
               strokeWidth="2"
               markerEnd="url(#arrow-green)"
             />
 
-            {/* Main PLN line down and split symmetrically to Factory 1 (285) & Factory 2 (795) */}
-            <path d="M 600 114 L 600 134 M 285 134 L 795 134" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            {/* Main PLN line down (X=505) and split symmetrically to Factory 1 (275) & Factory 2 (760) */}
+            <path d="M 505 110 L 505 126 M 275 126 L 760 126" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <circle cx="505" cy="126" r="3" fill={activeLineColor} />
             
             {/* Feeder line into Incoming Fact-1 */}
-            <path d="M 285 134 L 285 150" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <path d="M 275 126 L 275 150" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
             
             {/* Feeder line into Incoming Fact-2 */}
-            <path d="M 795 134 L 795 150" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <path d="M 760 126 L 760 150" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+
+            {/* Total Solar PV line down (X=695) with bridge over PLN line (Y=126) and split to POI-1 (445) & POI-2 (930) */}
+            <path
+              d="M 695 110 L 695 119 A 7 7 0 0 1 695 133 L 695 139"
+              fill="none"
+              stroke="#f97316"
+              strokeWidth="2"
+              strokeDasharray="4 3"
+            />
+            <path
+              d="M 445 139 L 753 139 A 7 7 0 0 1 767 139 L 930 139"
+              fill="none"
+              stroke="#f97316"
+              strokeWidth="2"
+              strokeDasharray="4 3"
+            />
+            <path d="M 445 139 L 445 152" fill="none" stroke="#f97316" strokeWidth="2" strokeDasharray="3 2" />
+            <path d="M 930 139 L 930 152" fill="none" stroke="#f97316" strokeWidth="2" strokeDasharray="3 2" />
+            <circle cx="695" cy="139" r="3" fill="#f97316" />
 
             {/* Blue lines from Incoming Feeders down to Yellow Busbars */}
-            <path d="M 285 246 L 285 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
-            <path d="M 795 246 L 795 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <path d="M 275 246 L 275 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
+            <path d="M 760 246 L 760 265" fill="none" stroke={activeLineColor} strokeWidth="2.5" />
 
             {/* Busbars: Thick Yellow Lines with Ambient Glow (Rendered IN FRONT of auxiliary lines) */}
-            {/* Factory 1 Busbar (Centered at X = 285, Width = 430) */}
-            <path d="M 70 265 L 500 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
+            {/* Factory 1 Busbar (Centered at X = 275, Width = 430) */}
+            <path d="M 60 265 L 490 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
 
-            {/* Factory 2 Busbar (Centered at X = 915, Width = 350) */}
-            <path d="M 741 265 L 1089 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
+            {/* Factory 2 Busbar (Centered at X = 925, Width = 360) */}
+            <path d="M 745 265 L 1105 265" fill="none" stroke="#eab308" strokeWidth="6.5" strokeLinecap="round" style={{ filter: "drop-shadow(0 2px 4px rgba(234,179,8,0.35))" }} />
 
-            {/* Factory 1: 4 Symmetrical Transformer Branches (Centers: 120, 230, 340, 450) */}
-            {[120, 230, 340, 450].map((x) => (
+            {/* Factory 1: 4 Symmetrical Transformer Branches (Centers: 110, 220, 330, 440) */}
+            {[110, 220, 330, 440].map((x) => (
               <g key={x}>
                 <path d={`M ${x} 265 L ${x} 288`} fill="none" stroke={activeLineColor} strokeWidth="2" />
                 {/* Transformer Dual Circles with Voltage Text */}
@@ -3762,8 +3236,8 @@ export default function PowerDistribution() {
               </g>
             ))}
 
-            {/* Factory 2: 3 Symmetrical Transformer Branches (Centers: 795, 915, 1035) */}
-            {[795, 915, 1035].map((x) => (
+            {/* Factory 2: 3 Symmetrical Transformer Branches (Centers: 800, 925, 1050) */}
+            {[800, 925, 1050].map((x) => (
               <g key={x}>
                 <path d={`M ${x} 265 L ${x} 288`} fill="none" stroke={activeLineColor} strokeWidth="2" />
                 {/* Transformer Dual Circles with Voltage Text */}
@@ -3774,243 +3248,441 @@ export default function PowerDistribution() {
                 <path d={`M ${x} 331 L ${x} 360`} fill="none" stroke={activeLineColor} strokeWidth="2" />
               </g>
             ))}
+
+            {/* Collector bracket lines for Total MDP (Factory 1: 110, 220, 330, 440 -> Center 275) */}
+            {[110, 220, 330, 440].map((x) => (
+              <path key={`f1-tot-${x}`} d={`M ${x} 538 L ${x} 549`} fill="none" stroke={activeLineColor} strokeWidth="1.8" opacity="0.85" />
+            ))}
+            <path d="M 110 549 L 440 549 M 275 549 L 275 560" fill="none" stroke={activeLineColor} strokeWidth="2" opacity="0.9" />
+            <circle cx="275" cy="549" r="2.5" fill={activeLineColor} />
+
+            {/* Collector bracket lines for Total PUTR (Factory 2: 800, 925, 1050 -> Center 925) */}
+            {[800, 925, 1050].map((x) => (
+              <path key={`f2-tot-${x}`} d={`M ${x} 538 L ${x} 549`} fill="none" stroke="#10b981" strokeWidth="1.8" opacity="0.85" />
+            ))}
+            <path d="M 800 549 L 1050 549 M 925 549 L 925 560" fill="none" stroke="#10b981" strokeWidth="2" opacity="0.9" />
+            <circle cx="925" cy="549" r="2.5" fill="#10b981" />
           </svg>
 
           {/* 2. ABSOLUTE CARDS LAYOUT */}
-          {/* Main PLN card at top center (X = 600) */}
-          <div className="absolute z-30" style={{ left: 495, top: 10 }}>
-            <div className={`text-center px-4 py-2.5 w-[210px] h-[112px] flex flex-col justify-center rounded-2xl border shadow-md transition-shadow duration-150 ${
-              isDark ? "bg-blue-950/50 border-blue-500/50 text-white" : "bg-blue-50/95 border-blue-300 text-slate-800"
+          {/* Main PLN card at top left-center (Center X = 505) */}
+          <div className="absolute z-30" style={{ left: 420, top: 14 }}>
+            <div className={`text-center px-3 py-2 w-[170px] h-[96px] flex flex-col justify-center rounded-2xl border shadow-md transition duration-300 ${
+              isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
             }`}>
-              <div className="text-sm leading-tight font-black text-blue-600 dark:text-blue-400 tracking-wide">PLN-21 kV</div>
-              <div className="text-xs leading-tight font-extrabold text-blue-700 dark:text-blue-300 mt-0.5">5,540 kVA</div>
-              <div className="text-[10px] leading-tight font-bold text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wider">
+              <div className="text-xs leading-tight font-black text-blue-600 dark:text-blue-400 tracking-wide">PLN-21 kV</div>
+              <div className="text-[11px] leading-tight font-extrabold text-blue-700 dark:text-blue-300">5,540 kVa</div>
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3.5 w-20 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
-                ) : !incomingData.plnOnline ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/25 my-0.5">
-                    ● PM MATI
-                  </span>
+                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
-                  <span className={`text-sm font-black font-mono tabular-nums ${
-                    incomingData.plnKw !== null && incomingData.plnKw > 0
-                      ? "text-slate-800 dark:text-slate-100"
-                      : (incomingData.plnKw === 0 ? "text-rose-500" : "text-slate-400")
-                  }`}>
-                    {incomingData.plnKw !== null ? `${incomingData.plnKw.toLocaleString("id-ID")} kW` : "—"}
+                  <span className={`font-extrabold ${incomingData.plnKw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
+                    {incomingData.plnKw !== null ? `${incomingData.plnKw.toLocaleString("id-ID")} kW` : NO_REALTIME_API}
                   </span>
                 )}
               </div>
-              <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
+              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
-                  <span className="inline-block h-3 w-10 bg-slate-300 dark:bg-slate-700 rounded align-middle" />
-                ) : !incomingData.plnOnline ? (
-                  <span className="font-bold text-rose-500/80 text-[10px]">OFFLINE</span>
+                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
-                  <span className="font-black font-mono tabular-nums">{incomingData.plnPf !== null ? Math.abs(incomingData.plnPf).toFixed(3) : "—"}</span>
+                  <span className={`font-bold ${incomingData.plnPf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
+                    {decodePf(incomingData.plnPf) !== null ? decodePf(incomingData.plnPf)!.toFixed(3) : NO_REALTIME_API}
+                  </span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* ═══════════ FACTORY 1 SOURCES (Left Wing, Center = 285) ═══════════ */}
-          {/* 1. Genset Natural Gas (Outer Left) */}
-          <div className="absolute z-30" style={{ left: 22, top: 148 }}>
-            <div className={`px-3 py-2 w-[145px] h-[100px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition-shadow duration-150 ${
-              isDark ? "bg-orange-950/40 border-orange-500/40 text-orange-200" : "bg-orange-50/95 border-orange-200 text-slate-800"
+          {/* Total Solar PV card at top right-center (Center X = 695) */}
+          <div className="absolute z-30" style={{ left: 610, top: 14 }}>
+            <div className={`text-center px-3 py-2 w-[170px] h-[96px] flex flex-col justify-center rounded-2xl border shadow-md transition duration-300 ${
+              isDark ? "bg-orange-950/35 border-orange-500/40 text-orange-100" : "bg-orange-50/95 border-orange-300 text-slate-800"
             }`}>
-              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400">Genset</div>
-              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400">Natural Gas</div>
-              <div className="text-xs leading-tight font-bold text-slate-700 dark:text-slate-200 mt-1 font-mono tabular-nums">1,350 kVA</div>
-              <div className="text-[9px] leading-tight text-slate-400 mt-1 font-mono font-bold">Belum Ada Sensor</div>
-            </div>
-          </div>
-
-          {/* 2. Incoming Fact-1 (Center F1) */}
-          <div className="absolute z-30" style={{ left: 208, top: 146 }}>
-            <div className={`px-3 py-2 w-[155px] h-[104px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition-shadow duration-150 ${
-              isDark ? "bg-blue-950/50 border-blue-500/50 text-white" : "bg-blue-50/95 border-blue-300 text-slate-800"
-            }`}>
-              <div className="text-xs leading-tight font-black text-blue-600 dark:text-blue-400 uppercase tracking-wide">Incoming Fact-1</div>
-              <div className="text-[10px] leading-tight font-bold text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wider">
+              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400 tracking-wide">TOTAL SOLAR PV</div>
+              <div className="text-[10px] leading-tight font-extrabold text-orange-700 dark:text-orange-300">POI-1 + POI-2</div>
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-1">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
-                ) : !incomingData.wf1Online ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/25 my-0.5">
-                    ● PM MATI
-                  </span>
+                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
-                  <span className={`text-xs sm:text-sm font-black font-mono tabular-nums ${
-                    incomingData.wf1Kw !== null && incomingData.wf1Kw > 0
-                      ? "text-slate-800 dark:text-slate-100"
-                      : (incomingData.wf1Kw === 0 ? "text-rose-500" : "text-slate-400")
-                  }`}>
-                    {incomingData.wf1Kw !== null ? `${incomingData.wf1Kw.toLocaleString("id-ID")} kW` : "—"}
+                  <span className={`text-[11px] font-extrabold ${totalSolarKw !== null ? "font-mono text-slate-800 dark:text-slate-100" : "text-[7px] text-amber-500"}`}>
+                    {totalSolarKw !== null ? `${totalSolarKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
                   </span>
-                )}
-              </div>
-              <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
-                PF : {loadingSld ? (
-                  <span className="inline-block h-3 w-10 bg-slate-300 dark:bg-slate-700 rounded align-middle" />
-                ) : !incomingData.wf1Online ? (
-                  <span className="font-bold text-rose-500/80 text-[10px]">OFFLINE</span>
-                ) : (
-                  <span className="font-black font-mono tabular-nums">{incomingData.wf1Pf !== null ? Math.abs(incomingData.wf1Pf).toFixed(3) : "—"}</span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* 3. Solar PV POI-1 (Inner Left) */}
-          <div className="absolute z-30" style={{ left: 402, top: 148 }}>
-            <div className={`px-3 py-2 w-[145px] h-[100px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition-shadow duration-150 ${
-              isDark ? "bg-orange-950/40 border-orange-500/40 text-orange-200" : "bg-orange-50/95 border-orange-200 text-slate-800"
+          {/* ═══════════ FACTORY 1 SOURCES (Left Wing, Symmetrical around Center = 275) ═══════════ */}
+          {/* 1. Genset Natural Gas (Outer Left, Center = 105) */}
+          <div className="absolute z-30" style={{ left: 40, top: 152 }}>
+            <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
             }`}>
-              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400 uppercase tracking-wide">Solar PV POI-1</div>
-              <div className="text-[10px] leading-tight font-bold text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wider">
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Genset</div>
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Natural Gas</div>
+              <div className="text-[10px] leading-tight font-bold text-slate-600 dark:text-slate-300 mt-0.5">1350 kVa</div>
+              <div className="text-[7.5px] leading-tight text-amber-500 mt-1 font-bold">{NO_REALTIME_API}</div>
+            </div>
+          </div>
+
+          {/* 2. Incoming Fact-1 (Center F1, Center = 275) */}
+          <div className="absolute z-30" style={{ left: 205, top: 150 }}>
+            <div className={`px-2.5 py-1.5 w-[140px] h-[96px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
+            }`}>
+              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Incoming</div>
+              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Fact-1</div>
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
+                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
-                  <span className={`text-xs font-black font-mono tabular-nums ${
-                    solarData.poi1Kw !== null && solarData.poi1Kw > 0
-                      ? "text-slate-800 dark:text-slate-100"
-                      : (solarData.poi1Kw === 0 ? "text-amber-500" : "text-slate-400")
-                  }`}>
-                    {solarData.poi1Kw !== null ? `${solarData.poi1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "—"}
+                  <span className={`font-extrabold ${incomingData.wf1Kw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
+                    {incomingData.wf1Kw !== null ? `${incomingData.wf1Kw.toLocaleString("id-ID")} kW` : NO_REALTIME_API}
                   </span>
                 )}
               </div>
-              <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
+              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
-                  <span className="inline-block h-3 w-8 bg-slate-300 dark:bg-slate-700 rounded align-middle" />
+                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
-                  <span className="font-black font-mono tabular-nums">{solarData.poi1Pf !== null ? Math.abs(solarData.poi1Pf).toFixed(2) : "—"}</span>
+                  <span className={`font-bold ${incomingData.wf1Pf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
+                    {incomingData.wf1Pf !== null ? incomingData.wf1Pf.toFixed(3) : NO_REALTIME_API}
+                  </span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* ═══════════ FACTORY 2 SOURCES (Right Wing) ═══════════ */}
-          {/* 1. Incoming Fact-2 (Left F2, Center = 795) */}
-          <div className="absolute z-30" style={{ left: 718, top: 146 }}>
-            <div className={`px-3 py-2 w-[155px] h-[104px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition-shadow duration-150 ${
-              isDark ? "bg-blue-950/50 border-blue-500/50 text-white" : "bg-blue-50/95 border-blue-300 text-slate-800"
+          {/* 3. Solar PV POI-1 (Inner Left, Center = 445) */}
+          <div className="absolute z-30" style={{ left: 380, top: 152 }}>
+            <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
             }`}>
-              <div className="text-xs leading-tight font-black text-blue-600 dark:text-blue-400 uppercase tracking-wide">Incoming Fact-2</div>
-              <div className="text-[10px] leading-tight font-bold text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wider">
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">POI-1</div>
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
-                ) : !incomingData.wf2Online ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/25 my-0.5">
-                    ● PM MATI
-                  </span>
+                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
-                  <span className={`text-xs sm:text-sm font-black font-mono tabular-nums ${
-                    incomingData.wf2Kw !== null && incomingData.wf2Kw > 0
-                      ? "text-slate-800 dark:text-slate-100"
-                      : (incomingData.wf2Kw === 0 ? "text-rose-500" : "text-slate-400")
-                  }`}>
-                    {incomingData.wf2Kw !== null ? `${incomingData.wf2Kw.toLocaleString("id-ID")} kW` : "—"}
+                  <span className={`font-extrabold ${solarData.poi1Kw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
+                    {solarData.poi1Kw !== null ? `${solarData.poi1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
                   </span>
                 )}
               </div>
-              <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
+              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
-                  <span className="inline-block h-3 w-10 bg-slate-300 dark:bg-slate-700 rounded align-middle" />
-                ) : !incomingData.wf2Online ? (
-                  <span className="font-bold text-rose-500/80 text-[10px]">OFFLINE</span>
+                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
-                  <span className="font-black font-mono tabular-nums">{incomingData.wf2Pf !== null ? Math.abs(incomingData.wf2Pf).toFixed(3) : "—"}</span>
+                  <span className={`font-bold ${solarData.poi1Pf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
+                    {solarData.poi1Pf !== null ? solarData.poi1Pf.toFixed(2) : NO_REALTIME_API}
+                  </span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* 2. Solar PV POI-2 (Center F2, Center = 950) */}
-          <div className="absolute z-30" style={{ left: 885, top: 148 }}>
-            <div className={`px-3 py-2 w-[145px] h-[100px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition-shadow duration-150 ${
-              isDark ? "bg-orange-950/40 border-orange-500/40 text-orange-200" : "bg-orange-50/95 border-orange-200 text-slate-800"
+          {/* ═══════════ FACTORY 2 SOURCES (Right Wing, Symmetrical around Center = 925) ═══════════ */}
+          {/* 1. Incoming Fact-2 (Left F2, Center = 760) */}
+          <div className="absolute z-30" style={{ left: 690, top: 150 }}>
+            <div className={`px-2.5 py-1.5 w-[140px] h-[96px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
             }`}>
-              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400 uppercase tracking-wide">Solar PV POI-2</div>
-              <div className="text-[10px] leading-tight font-bold text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wider">
+              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Incoming</div>
+              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Fact-2</div>
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
                 {loadingSld ? (
-                  <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded my-0.5" />
+                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
                 ) : (
-                  <span className={`text-xs font-black font-mono tabular-nums ${
-                    solarData.poi2Kw !== null && solarData.poi2Kw > 0
-                      ? "text-slate-800 dark:text-slate-100"
-                      : (solarData.poi2Kw === 0 ? "text-amber-500" : "text-slate-400")
-                  }`}>
-                    {solarData.poi2Kw !== null ? `${solarData.poi2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : "—"}
+                  <span className={`font-extrabold ${incomingData.wf2Kw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
+                    {incomingData.wf2Kw !== null ? `${incomingData.wf2Kw.toLocaleString("id-ID")} kW` : NO_REALTIME_API}
                   </span>
                 )}
               </div>
-              <div className="text-xs leading-tight font-bold text-slate-600 dark:text-slate-300 mt-1">
+              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
-                  <span className="inline-block h-3 w-8 bg-slate-300 dark:bg-slate-700 rounded align-middle" />
+                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
                 ) : (
-                  <span className="font-black font-mono tabular-nums">{solarData.poi2Pf !== null ? Math.abs(solarData.poi2Pf).toFixed(2) : "—"}</span>
+                  <span className={`font-bold ${incomingData.wf2Pf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
+                    {incomingData.wf2Pf !== null ? incomingData.wf2Pf.toFixed(3) : NO_REALTIME_API}
+                  </span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* 3. Genset Diesel Fuel (Outer Right, Center = 1105) */}
-          <div className="absolute z-30" style={{ left: 1038, top: 148 }}>
-            <div className={`px-3 py-2 w-[145px] h-[100px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition-shadow duration-150 ${
-              isDark ? "bg-orange-950/40 border-orange-500/40 text-orange-200" : "bg-orange-50/95 border-orange-200 text-slate-800"
+          {/* 2. Solar PV POI-2 (Center F2, Center = 930) */}
+          <div className="absolute z-30" style={{ left: 865, top: 152 }}>
+            <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
             }`}>
-              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400">Genset</div>
-              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400">Diesel Fuel</div>
-              <div className="text-xs leading-tight font-bold text-slate-700 dark:text-slate-200 mt-1 font-mono tabular-nums">1,000 kVA</div>
-              <div className="text-[9px] leading-tight text-slate-400 mt-1 font-mono font-bold">Belum Ada Sensor</div>
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">POI-2</div>
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                Active Power <br />
+                {loadingSld ? (
+                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                ) : (
+                  <span className={`font-extrabold ${solarData.poi2Kw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
+                    {solarData.poi2Kw !== null ? `${solarData.poi2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
+                  </span>
+                )}
+              </div>
+              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                PF : {loadingSld ? (
+                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                ) : (
+                  <span className={`font-bold ${solarData.poi2Pf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
+                    {solarData.poi2Pf !== null ? solarData.poi2Pf.toFixed(2) : NO_REALTIME_API}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* ═══════════ FACTORY 1 TRANSFORMER CARDS (4 Units) ═══════════ */}
+          {/* 3. Genset Diesel Fuel (Outer Right, Center = 1095) */}
+          <div className="absolute z-30" style={{ left: 1030, top: 152 }}>
+            <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
+              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
+            }`}>
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Genset</div>
+              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Diesel Fuel</div>
+              <div className="text-[10px] leading-tight font-bold text-slate-600 dark:text-slate-300 mt-0.5">1000 kVa</div>
+              <div className="text-[7.5px] leading-tight text-amber-500 mt-1 font-bold">{NO_REALTIME_API}</div>
+            </div>
+          </div>
+
+          {/* ═══════════ FACTORY 1 TRANSFORMER CARDS (4 Units: Centers 110, 220, 330, 440) ═══════════ */}
           {factory1.map((tx, idx) => {
-            const cardLeft = 70 + idx * 110;
+            const cardLeft = 63 + idx * 110;
+            const hasData = tx.activePowerKw !== null;
             return (
-              <SldTransformerCard
-                key={tx.id}
-                tx={tx}
-                isFirst={idx === 0}
-                isDark={isDark}
-                loadingSld={loadingSld}
-                onClick={() => setSelectedTx(tx)}
-                cardLeft={cardLeft}
-                width={100}
-              />
+              <div key={tx.id} className="absolute z-30" style={{ left: cardLeft, top: 360, width: 94 }}>
+                <div
+                  onClick={() => setSelectedTx(tx)}
+                  className={`rounded-2xl border p-2.5 h-[118px] flex flex-col justify-between text-center cursor-pointer transition-all duration-300 hover:shadow-lg ${
+                    idx === 0
+                      ? "bg-slate-900 border-slate-700 text-white"
+                      : isDark
+                        ? "bg-slate-800/80 border-slate-700 text-slate-200"
+                        : "bg-slate-100/90 border-slate-300 text-slate-800"
+                  }`}
+                >
+                  <div>
+                    <div className={`text-[11px] font-black leading-tight ${idx === 0 ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
+                      {tx.capacityKva} kVa
+                    </div>
+                    <div className={`text-[9px] font-black tracking-wider uppercase leading-tight ${idx === 0 ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
+                      {tx.name}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[8px] text-slate-400 font-semibold leading-tight">Active Power</div>
+                    {loadingSld ? (
+                      <div className="my-0.5 space-y-1">
+                        <div className="h-3 w-14 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                        <div className="h-2 w-10 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                      </div>
+                    ) : (
+                      <>
+                        <div className={`${hasData ? `text-[11px] font-mono ${idx === 0 ? "text-sky-400" : "text-slate-800 dark:text-slate-100"}` : "text-[7px] text-amber-500 leading-tight"} font-extrabold`}>
+                          {hasData ? `${tx.activePowerKw} kW` : NO_REALTIME_API}
+                        </div>
+                        <div className="text-[8px] text-slate-400 leading-tight">
+                          PF: <span className={`font-bold ${tx.powerFactor === null ? "text-[6.5px] text-amber-500" : ""}`}>{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  
+                  {/* Load indicator */}
+                  {(() => {
+                    const txLoadPct = tx.apparentPowerKva && tx.capacityKva 
+                      ? Math.round((tx.apparentPowerKva / tx.capacityKva) * 100) 
+                      : (tx.activePowerKw && tx.capacityKva ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null);
+                    const txLoadColor = txLoadPct !== null
+                      ? (txLoadPct <= loadConfig.safeMax ? "#10b981" : txLoadPct <= loadConfig.cautionMax ? "#eab308" : "#ef4444")
+                      : "#f59e0b";
+                    return (
+                      <div className="pt-1 border-t border-slate-200 dark:border-slate-700/60">
+                        <div className="text-[7px] font-extrabold text-center leading-tight" style={{ color: txLoadColor }}>
+                          {loadingSld ? "..." : (txLoadPct !== null ? `LOAD: ${txLoadPct}%` : `LOAD: ${NO_REALTIME_API}`)}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* 400V/230V Label Box */}
+                <div className="mt-1.5 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-700 dark:text-slate-300 tracking-wider">
+                  400V/230V
+                </div>
+
+                {/* Detail Button */}
+                <button
+                  onClick={() => setSelectedTx(tx)}
+                  className="w-full mt-1.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-300/80 hover:bg-sky-500 hover:text-white dark:bg-slate-700 dark:hover:bg-sky-600 text-[9px] font-extrabold text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
+                >
+                  Detail
+                </button>
+              </div>
             );
           })}
 
-          {/* ═══════════ FACTORY 2 TRANSFORMER CARDS (3 Units) ═══════════ */}
+          {/* ═══════════ FACTORY 2 TRANSFORMER CARDS (3 Units: Centers 800, 925, 1050) ═══════════ */}
           {factory2.map((tx, idx) => {
-            const cardLeft = 745 + idx * 120;
+            const cardLeft = 750 + idx * 125;
+            const hasData = tx.activePowerKw !== null;
             return (
-              <SldTransformerCard
-                key={tx.id}
-                tx={tx}
-                isFirst={idx === 0}
-                isDark={isDark}
-                loadingSld={loadingSld}
-                onClick={() => setSelectedTx(tx)}
-                cardLeft={cardLeft}
-                width={104}
-              />
+              <div key={tx.id} className="absolute z-30" style={{ left: cardLeft, top: 360, width: 100 }}>
+                <div
+                  onClick={() => setSelectedTx(tx)}
+                  className={`rounded-2xl border p-2.5 h-[118px] flex flex-col justify-between text-center cursor-pointer transition-all duration-300 hover:shadow-lg ${
+                    idx === 0
+                      ? "bg-slate-900 border-slate-700 text-white"
+                      : isDark
+                        ? "bg-slate-800/80 border-slate-700 text-slate-200"
+                        : "bg-slate-100/90 border-slate-300 text-slate-800"
+                  }`}
+                >
+                  <div>
+                    <div className={`text-[11px] font-black leading-tight ${idx === 0 ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
+                      {tx.capacityKva} kVa
+                    </div>
+                    <div className={`text-[9px] font-black tracking-wider uppercase leading-tight ${idx === 0 ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
+                      {tx.name}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[8px] text-slate-400 font-semibold leading-tight">Active Power</div>
+                    {loadingSld ? (
+                      <div className="my-0.5 space-y-1">
+                        <div className="h-3 w-14 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                        <div className="h-2 w-10 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                      </div>
+                    ) : (
+                      <>
+                        <div className={`${hasData ? `text-[11px] font-mono ${idx === 0 ? "text-emerald-400" : "text-slate-800 dark:text-slate-100"}` : "text-[7px] text-amber-500 leading-tight"} font-extrabold`}>
+                          {hasData ? `${tx.activePowerKw} kW` : NO_REALTIME_API}
+                        </div>
+                        <div className="text-[8px] text-slate-400 leading-tight">
+                          PF: <span className={`font-bold ${tx.powerFactor === null ? "text-[6.5px] text-amber-500" : ""}`}>{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Load indicator */}
+                  {(() => {
+                    const txLoadPct = tx.apparentPowerKva && tx.capacityKva 
+                      ? Math.round((tx.apparentPowerKva / tx.capacityKva) * 100) 
+                      : (tx.activePowerKw && tx.capacityKva ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null);
+                    const txLoadColor = txLoadPct !== null
+                      ? (txLoadPct <= loadConfig.safeMax ? "#10b981" : txLoadPct <= loadConfig.cautionMax ? "#eab308" : "#ef4444")
+                      : "#f59e0b";
+                    return (
+                      <div className="pt-1 border-t border-slate-200 dark:border-slate-700/60">
+                        <div className="text-[7px] font-extrabold text-center leading-tight" style={{ color: txLoadColor }}>
+                          {loadingSld ? "..." : (txLoadPct !== null ? `LOAD: ${txLoadPct}%` : `LOAD: ${NO_REALTIME_API}`)}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* 400V/230V Label Box */}
+                <div className="mt-1.5 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-700 dark:text-slate-300 tracking-wider">
+                  400V/230V
+                </div>
+
+                {/* Detail Button */}
+                <button
+                  onClick={() => setSelectedTx(tx)}
+                  className="w-full mt-1.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-300/80 hover:bg-sky-500 hover:text-white dark:bg-slate-700 dark:hover:bg-sky-600 text-[9px] font-extrabold text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
+                >
+                  Detail
+                </button>
+              </div>
             );
           })}
+
+          {/* ═══════════ TOTAL MDP SUMMARY CARD (Factory 1: MDP-1.1, MDP-1.2, MDP-2, MDP-3) ═══════════ */}
+          <div className="absolute z-30" style={{ left: 63, top: 560, width: 424 }}>
+            <div className={`px-4 h-[52px] rounded-2xl border shadow-sm flex items-center justify-between transition duration-300 ${
+              isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
+            }`}>
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                  TOTAL MDP (Factory 1)
+                </div>
+                <div className="text-[8.5px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                  MDP-1.1 • MDP-1.2 • MDP-2 • MDP-3
+                </div>
+              </div>
+              <div className="flex items-center gap-4 text-right shrink-0">
+                <div>
+                  <div className="text-[8px] font-bold uppercase text-slate-400 whitespace-nowrap">Total Kapasitas</div>
+                  <div className="text-xs font-black font-mono text-blue-700 dark:text-blue-300 whitespace-nowrap">
+                    {f1TotalCapacityKva.toLocaleString("id-ID")} kVA
+                  </div>
+                </div>
+                <div className="pl-3 border-l border-blue-200 dark:border-blue-800/60">
+                  <div className="text-[8px] font-bold uppercase text-slate-400 whitespace-nowrap">Total Active Power</div>
+                  {loadingSld ? (
+                    <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mt-0.5" />
+                  ) : (
+                    <div className={`text-xs font-extrabold whitespace-nowrap ${f1TotalKw !== null ? "font-mono text-sky-600 dark:text-sky-400" : "text-[8px] text-amber-500"}`}>
+                      {f1TotalKw !== null ? `${f1TotalKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ═══════════ TOTAL PUTR SUMMARY CARD (Factory 2: PUTR-1, PUTR-2, PUTR-NEW) ═══════════ */}
+          <div className="absolute z-30" style={{ left: 750, top: 560, width: 350 }}>
+            <div className={`px-3.5 h-[52px] rounded-2xl border shadow-sm flex items-center justify-between transition duration-300 ${
+              isDark ? "bg-emerald-950/35 border-emerald-500/40 text-white" : "bg-emerald-50/90 border-emerald-300 text-slate-800"
+            }`}>
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                  TOTAL PUTR (Factory 2)
+                </div>
+                <div className="text-[8.5px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                  PUTR-1 • PUTR-2 • PUTR-NEW
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-right shrink-0">
+                <div>
+                  <div className="text-[8px] font-bold uppercase text-slate-400 whitespace-nowrap">Total Kapasitas</div>
+                  <div className="text-xs font-black font-mono text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                    {f2TotalCapacityKva.toLocaleString("id-ID")} kVA
+                  </div>
+                </div>
+                <div className="pl-3 border-l border-emerald-200 dark:border-emerald-800/60">
+                  <div className="text-[8px] font-bold uppercase text-slate-400 whitespace-nowrap">Total Active Power</div>
+                  {loadingSld ? (
+                    <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mt-0.5" />
+                  ) : (
+                    <div className={`text-xs font-extrabold whitespace-nowrap ${f2TotalKw !== null ? "font-mono text-emerald-600 dark:text-emerald-400" : "text-[8px] text-amber-500"}`}>
+                      {f2TotalKw !== null ? `${f2TotalKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Legend */}
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-4 text-[9px] font-bold text-slate-400 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-1.5 rounded-full border border-slate-200/50 dark:border-slate-800/40">
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" style={{ boxShadow: "0 0 6px #10b981" }} /> Online</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Online</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> Warning</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-400" /> Belum Ada Sensor</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-400" /> {NO_REALTIME_API}</span>
             <span className="text-[8px] text-slate-500 italic ml-2">Klik panel / Detail untuk info lengkap</span>
           </div>
         </SldScaledCanvas>
@@ -4018,159 +3690,38 @@ export default function PowerDistribution() {
 
       {/* ═══════════ SECTION B: DETAIL TRANSFORMATOR CARDS (MDP) ═══════════ */}
       <section className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/80 pb-3">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <svg style={{ width: 18, height: 18 }} className="text-sky-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-            <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">
-              Detail Transformator — Parameter Lengkap
-            </h3>
-            {canEditPosition && (
-              <div className="ml-2">
-                {!isEditingTrafoPos ? (
-                  <button
-                    type="button"
-                    onClick={handleStartEditTrafoPos}
-                    className="flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 transition cursor-pointer"
-                    title="Atur Urutan dan Posisi Kartu Transformator (Senior Unit Head / Admin Only)"
-                  >
-                    <span>📐 Atur Posisi</span>
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-1.5 animate-in fade-in duration-150">
-                    <button
-                      type="button"
-                      onClick={handleCancelEditTrafoPos}
-                      className="px-2.5 py-1 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSaveTrafoPos}
-                      className="flex items-center gap-1.5 px-3 py-1 text-xs font-extrabold rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/25 transition cursor-pointer active:scale-95"
-                    >
-                      <span>💾 Simpan Posisi</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          {trafoToast && (
-            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800 animate-in fade-in">
-              {trafoToast}
-            </span>
-          )}
+        <div className="flex items-center gap-2.5">
+          <svg style={{ width: 18, height: 18 }} className="text-sky-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+          <h3 className="text-sm font-extrabold text-slate-800 dark:text-white">
+            Detail Transformator — Parameter Lengkap
+          </h3>
         </div>
 
-        {/* Factory Sections with Rows and Drag & Drop */}
-        {trafoGroups.map((group) => {
-          const isGroupDrop = isEditingTrafoPos && activeDropFactory === group.key && !activeDropTxId;
+        {/* Factory 1 */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-extrabold text-[#47729f] dark:text-sky-400 uppercase tracking-widest pl-2">
+            ● Factory 1 — {factory1.length} Transformator
+          </h4>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
+            {factory1.map((tx) => (
+              <TransformerDetailCard key={tx.id} tx={tx} factoryLabel="F1" loadConfig={loadConfig} />
+            ))}
+          </div>
+        </div>
 
-          return (
-            <div
-              key={group.key}
-              onDragOver={(e) => handleTrafoDragOverFactory(e, group.key)}
-              className={`space-y-3 transition-all duration-200 rounded-2xl p-2.5 ${
-                isGroupDrop ? "bg-sky-500/5 ring-2 ring-dashed ring-sky-400 p-4 shadow-inner" : ""
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-extrabold text-[#47729f] dark:text-sky-400 uppercase tracking-widest pl-2">
-                  ● {group.label} — {group.count} Transformator
-                </h4>
-                {isEditingTrafoPos && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400/80 hidden sm:inline">
-                    Tarik kartu ke {group.label}
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-5">
-                {group.rows.map((row) => {
-                  const isSingle = row.items.length === 1;
-                  if (isSingle) {
-                    const item = row.items[0];
-                    const align = item.align || "center";
-                    const span = item.span || "full";
-                    const justifyClass = align === "left" ? "justify-start" : align === "right" ? "justify-end" : "justify-center";
-                    const widthClass = span === "1" ? "w-full xl:w-1/2" : "w-full";
-
-                    return (
-                      <div key={row.rowIdx} className={`w-full flex items-stretch ${justifyClass}`}>
-                        <div className={widthClass}>
-                          <TransformerDetailCard
-                            tx={item.tx}
-                            factoryLabel={group.label}
-                            loadConfig={loadConfig}
-                            isEditMode={isEditingTrafoPos}
-                            isBeingDragged={draggedTrafo?.id === item.id}
-                            isDropTarget={activeDropTxId === item.id}
-                            dragAction={activeDropTxId === item.id ? dragAction : null}
-                            isSingleInRow={true}
-                            span={span}
-                            align={align}
-                            onSetSpan={(newSpan) => handleSetCardSpan(item.id, newSpan)}
-                            onSetAlign={(newAlign) => handleSetCardAlign(item.id, newAlign)}
-                            onDragStart={(e) => handleTrafoDragStart(e, item.id, group.key, item.tx.name)}
-                            onDragEnd={handleTrafoDragEnd}
-                            onDragOver={(e) => handleTrafoDragOverCard(e, group.key, item.id)}
-                            onDrop={() => handleTrafoDropOnCard(group.key, item.id)}
-                          />
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div key={row.rowIdx} className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-                      {row.items.map((item) => (
-                        <TransformerDetailCard
-                          key={item.id}
-                          tx={item.tx}
-                          factoryLabel={group.label}
-                          loadConfig={loadConfig}
-                          isEditMode={isEditingTrafoPos}
-                          isBeingDragged={draggedTrafo?.id === item.id}
-                          isDropTarget={activeDropTxId === item.id}
-                          dragAction={activeDropTxId === item.id ? dragAction : null}
-                          isSingleInRow={false}
-                          span="1"
-                          align="center"
-                          onDragStart={(e) => handleTrafoDragStart(e, item.id, group.key, item.tx.name)}
-                          onDragEnd={handleTrafoDragEnd}
-                          onDragOver={(e) => handleTrafoDragOverCard(e, group.key, item.id)}
-                          onDrop={() => handleTrafoDropOnCard(group.key, item.id)}
-                        />
-                      ))}
-                    </div>
-                  );
-                })}
-
-                {isEditingTrafoPos && (
-                  <div
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.dataTransfer.dropEffect = "move";
-                    }}
-                    onDrop={(e) => {
-                      e.stopPropagation();
-                      handleDropOnNewRow(group.key);
-                    }}
-                    className="border-2 border-dashed border-sky-300/60 dark:border-slate-700 hover:border-sky-500 hover:bg-sky-500/5 rounded-2xl p-3 text-center transition flex items-center justify-center gap-2 text-xs font-bold text-sky-600 dark:text-sky-400 cursor-pointer"
-                    title={`Tarik kartu ke sini untuk membuat Baris Baru di ${group.label}`}
-                  >
-                    <span className="text-sm font-black">+</span>
-                    <span>Tarik kartu ke sini untuk membuat Baris Baru di {group.label}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {/* Factory 2 */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-extrabold text-[#47729f] dark:text-sky-400 uppercase tracking-widest pl-2">
+            ● Factory 2 — {factory2.length} Transformator
+          </h4>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
+            {factory2.map((tx) => (
+              <TransformerDetailCard key={tx.id} tx={tx} factoryLabel="F2" loadConfig={loadConfig} />
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* ═══════════ SECTION: SUB-DISTRIBUTION POWER METERS (SDP) ═══════════ */}
@@ -4205,7 +3756,6 @@ export default function PowerDistribution() {
           isDark={isDark}
           groupId={selectedEwGroup}
           title={`Sub-Distribution ${selectedEwGroup.toUpperCase()}`}
-          canEditPosition={canEditPosition}
         />
       </div>
 
@@ -4290,12 +3840,25 @@ export default function PowerDistribution() {
                 </button>
               </div>
             </div>
-            <div className="h-[140px] w-full">
-              {bottomPointCount > 0 ? (
-                <Line data={voltageTrendChart} options={multiLineChartOptions} />
+            <div className="h-[175px] w-full">
+              {bottomVoltageMode === "230v" && (bottomSeriesRef.current.vRn.length === 0 && bottomSeriesRef.current.vSn.length === 0) ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-amber-500/30 bg-amber-500/5 rounded-xl">
+                  <span className="text-xs font-extrabold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                    Tag tegangan 230V (L-N) belum tersedia dari API Power Meter ({bottomTx?.name}).
+                  </p>
+                </div>
+              ) : bottomPointCount > 0 ? (
+                <TradingViewChart
+                  data={voltageTrendChart}
+                  options={multiLineChartOptions}
+                  defaultRange={bottomWindowRange}
+                  isDark={isDark}
+                  resetKey={`${bottomTxId}-voltage-${bottomVoltageMode}`}
+                />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-                  <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA BELUM TERSEDIA</span>
+                  <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
                   <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Belum ada riwayat tegangan tersimpan hari ini.</p>
                 </div>
               )}
@@ -4321,12 +3884,18 @@ export default function PowerDistribution() {
                 </button>
               </div>
             </div>
-            <div className="h-[140px] w-full">
+            <div className="h-[175px] w-full">
               {bottomPointCount > 0 ? (
-                <Line data={powerTrendChart} options={lineChartOptions} />
+                <TradingViewChart
+                  data={powerTrendChart}
+                  options={lineChartOptions}
+                  defaultRange={bottomWindowRange}
+                  isDark={isDark}
+                  resetKey={`${bottomTxId}-power`}
+                />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-                  <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA BELUM TERSEDIA</span>
+                  <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
                   <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Belum ada riwayat daya aktif tersimpan hari ini.</p>
                 </div>
               )}
@@ -4335,8 +3904,11 @@ export default function PowerDistribution() {
 
           {/* Ampere */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">{t("electricity.ampereRecord")}</h4>
+            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">{t("electricity.ampereRecord")}</h4>
+
+              </div>
               <div className="flex items-center gap-2">
                 {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
                 <button
@@ -4352,12 +3924,18 @@ export default function PowerDistribution() {
                 </button>
               </div>
             </div>
-            <div className="h-[150px] w-full">
+            <div className="h-[180px] w-full">
               {bottomPointCount > 0 ? (
-                <Line data={currentTrendChart} options={currentChartOptions} />
+                <TradingViewChart
+                  data={currentTrendChart}
+                  options={currentChartOptions}
+                  defaultRange={bottomWindowRange}
+                  isDark={isDark}
+                  resetKey={`${bottomTxId}-current`}
+                />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-                  <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">DATA BELUM TERSEDIA</span>
+                  <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
                   <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Belum ada riwayat arus tersimpan hari ini.</p>
                 </div>
               )}
@@ -4373,65 +3951,43 @@ export default function PowerDistribution() {
           onClick={() => setBottomZoomChart(null)}
         >
           <div
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col space-y-3 overflow-hidden"
-            style={{ width: "95vw", maxWidth: "1560px", height: "88vh", maxHeight: "90vh", padding: "1.25rem 1.5rem" }}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col space-y-4 overflow-hidden"
+            style={{ width: "90vw", maxWidth: "1480px", height: "85vh", maxHeight: "86vh", padding: "1.25rem 1.5rem" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-base font-bold text-slate-800 dark:text-white uppercase tracking-wide">
                     {bottomZoomChart === "voltage"
                       ? `Voltage Record (V) — ${bottomVoltageMode === "380v" ? "Tegangan 380V" : "Tegangan 230V"}`
                       : bottomZoomChart === "power"
                       ? "Daya Aktif Record — kW Total (kW)"
-                      : "Ampere Record (A) — Total & 3 Fasa (R, S, T)"}
+                      : "Ampere Record (A) — 3 Fasa (R, S, T)"}
                   </h3>
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 font-bold">
                     {bottomTx?.factory === 1 ? "F1" : "F2"} {bottomTx?.name}
                   </span>
+
                 </div>
-                <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                  <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                    Waktu: {formatWibTick(modalActiveWindow.min)} - {formatWibTick(modalActiveWindow.max)} WIB
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
+                    Rentang: 24 Jam Terakhir (Rolling Sliding Window)
                   </span>
-                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                    • Resolusi 3 Detik (Historikal & Live Buffer)
+                  <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                    • Resolusi 1 Detik (Real-Time Buffer & Historikal)
                   </span>
-                  {modalActiveWindow.isCustom ? (
-                    <div className="flex items-center gap-1.5">
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
-                        Interactive View (Zoom / Pan)
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setModalRangeX(null);
-                          setModalRangeY(null);
-                        }}
-                        className="px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded border border-slate-200 dark:border-slate-700 transition cursor-pointer"
-                        title="Reset ke Tampilan Live Auto-Fit (atau Klik Ganda di Grafik)"
-                      >
-                        ↺ Reset
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                      Live Stream
-                    </span>
-                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 {bottomZoomChart === "voltage" && (
                   <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
                     <button
                       type="button"
                       onClick={() => setBottomVoltageMode("380v")}
-                      className={`px-2.5 py-1 text-xs font-bold rounded transition-all cursor-pointer ${
+                      className={`px-2.5 py-1 text-xs font-bold rounded transition-all ${
                         bottomVoltageMode === "380v"
                           ? "bg-white dark:bg-slate-700 text-amber-500 shadow-sm"
                           : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -4442,7 +3998,7 @@ export default function PowerDistribution() {
                     <button
                       type="button"
                       onClick={() => setBottomVoltageMode("230v")}
-                      className={`px-2.5 py-1 text-xs font-bold rounded transition-all cursor-pointer ${
+                      className={`px-2.5 py-1 text-xs font-bold rounded transition-all ${
                         bottomVoltageMode === "230v"
                           ? "bg-white dark:bg-slate-700 text-cyan-500 shadow-sm"
                           : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -4466,38 +4022,46 @@ export default function PowerDistribution() {
               </div>
             </div>
 
-            {/* Modal Body: Full Responsive TradingView Canvas (NO BUTTON BARS, NO OVERFLOW SCROLLBAR) */}
-            <div
-              ref={modalChartContainerRef}
-              className="relative w-full flex-1 min-h-[420px] sm:min-h-[460px] overflow-hidden rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 p-2 select-none"
-            >
-              <div className="w-full h-full min-h-[420px]">
-                {bottomZoomChart === "voltage" ? (
-                  <Line ref={modalChartRef} data={voltageTrendChart} options={modalChartOptions} />
-                ) : bottomZoomChart === "power" ? (
-                  <Line ref={modalChartRef} data={powerTrendChart} options={modalChartOptions} />
+            {/* Modal Body: Large Chart */}
+            <div className="relative w-full flex-1 min-h-[420px] sm:min-h-[460px]">
+              {bottomZoomChart === "voltage" ? (
+                bottomVoltageMode === "230v" && (bottomSeriesRef.current.vRn.length === 0 && bottomSeriesRef.current.vSn.length === 0) ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 border border-dashed border-amber-500/30 bg-amber-500/5 rounded-2xl">
+                    <span className="text-sm font-extrabold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                      Tag tegangan 230V (L-N) belum tersedia dari API Power Meter ({bottomTx?.name}).
+                    </p>
+                  </div>
                 ) : (
-                  <Line ref={modalChartRef} data={currentTrendChart} options={modalChartOptions} />
-                )}
-              </div>
+                  <TradingViewChart
+                    data={voltageTrendChart}
+                    options={multiLineChartOptions}
+                    defaultRange={bottomWindowRange}
+                    isDark={isDark}
+                    resetKey={`zoom-${bottomTxId}-voltage-${bottomVoltageMode}`}
+                  />
+                )
+              ) : bottomZoomChart === "power" ? (
+                <TradingViewChart
+                  data={powerTrendChart}
+                  options={lineChartOptions}
+                  defaultRange={bottomWindowRange}
+                  isDark={isDark}
+                  resetKey={`zoom-${bottomTxId}-power`}
+                />
+              ) : (
+                <TradingViewChart
+                  data={currentTrendChart}
+                  options={currentChartOptions}
+                  defaultRange={bottomWindowRange}
+                  isDark={isDark}
+                  resetKey={`zoom-${bottomTxId}-current`}
+                />
+              )}
             </div>
 
-            {/* Modal Footer: Guidance info like TradingView */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800/80 pt-2.5 text-xs text-slate-400">
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                <span className="flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400">
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Polling 3s
-                </span>
-                <span>•</span>
-                <span className="hidden sm:inline">🖱️ <b>Hold LMB</b> geser kanvas bebas</span>
-                <span className="hidden sm:inline">•</span>
-                <span className="hidden sm:inline"><b>Scroll mouse</b> zoom waktu (lebar)</span>
-                <span className="hidden sm:inline">•</span>
-                <span className="hidden sm:inline"><b>Scroll / drag sumbu kiri</b> atur tinggi grafik</span>
-                <span className="hidden sm:inline">•</span>
-                <span><b>Klik ganda</b> untuk reset</span>
-              </div>
+            <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-3 text-xs text-slate-400">
+              <span>{t("electricity.syncNote")}</span>
               <span className="text-[11px]">Tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] border border-slate-200 dark:border-slate-700">ESC</kbd> untuk menutup</span>
             </div>
           </div>

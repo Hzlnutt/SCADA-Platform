@@ -648,6 +648,10 @@ export const ensurePostgresTables = async () => {
         volt_bc NUMERIC,
         volt_ca NUMERIC,
         volt_ll NUMERIC,
+        volt_an NUMERIC,
+        volt_bn NUMERIC,
+        volt_cn NUMERIC,
+        volt_ln NUMERIC,
         current_a NUMERIC,
         current_b NUMERIC,
         current_c NUMERIC,
@@ -680,6 +684,10 @@ export const ensurePostgresTables = async () => {
         volt_bc NUMERIC,
         volt_ca NUMERIC,
         volt_ll NUMERIC,
+        volt_an NUMERIC,
+        volt_bn NUMERIC,
+        volt_cn NUMERIC,
+        volt_ln NUMERIC,
         current_a NUMERIC,
         current_b NUMERIC,
         current_c NUMERIC,
@@ -794,6 +802,10 @@ export const ensurePostgresTables = async () => {
         current_b NUMERIC,
         current_c NUMERIC,
         power_factor NUMERIC,
+        volt_an NUMERIC,
+        volt_bn NUMERIC,
+        volt_cn NUMERIC,
+        volt_ln NUMERIC,
         PRIMARY KEY (pm_id, t_stamp)
       );
       CREATE INDEX IF NOT EXISTS idx_trafo_rolling_3s_ts ON electric_trafo_rolling_3s (t_stamp);
@@ -1179,6 +1191,77 @@ export const ensurePostgresTables = async () => {
       logger.warn({ err }, "Failed to create electricity routing triggers");
     });
 
+        // Auto-migration for 230V Phase-to-Neutral columns
+    await pool.query(`
+      ALTER TABLE electric_pm_telemetry ADD COLUMN IF NOT EXISTS volt_an NUMERIC;
+      ALTER TABLE electric_pm_telemetry ADD COLUMN IF NOT EXISTS volt_bn NUMERIC;
+      ALTER TABLE electric_pm_telemetry ADD COLUMN IF NOT EXISTS volt_cn NUMERIC;
+      ALTER TABLE electric_pm_telemetry ADD COLUMN IF NOT EXISTS volt_ln NUMERIC;
+      ALTER TABLE electric_pm_telemetry_minute ADD COLUMN IF NOT EXISTS volt_an NUMERIC;
+      ALTER TABLE electric_pm_telemetry_minute ADD COLUMN IF NOT EXISTS volt_bn NUMERIC;
+      ALTER TABLE electric_pm_telemetry_minute ADD COLUMN IF NOT EXISTS volt_cn NUMERIC;
+      ALTER TABLE electric_pm_telemetry_minute ADD COLUMN IF NOT EXISTS volt_ln NUMERIC;
+      ALTER TABLE electric_trafo_rolling_3s ADD COLUMN IF NOT EXISTS volt_an NUMERIC;
+      ALTER TABLE electric_trafo_rolling_3s ADD COLUMN IF NOT EXISTS volt_bn NUMERIC;
+      ALTER TABLE electric_trafo_rolling_3s ADD COLUMN IF NOT EXISTS volt_cn NUMERIC;
+      ALTER TABLE electric_trafo_rolling_3s ADD COLUMN IF NOT EXISTS volt_ln NUMERIC;
+    `).catch(err => logger.warn({ err }, "230V column migrations check skipped or already exists"));
+
+    // 5. Fill any historical missing hourly gaps with NULL values
+    try {
+      await pool.query(`
+        INSERT INTO electric_pln_telemetry (t_stamp, status_pm8000)
+        SELECT h.t_stamp, false
+        FROM (
+          SELECT generate_series(
+            (SELECT MIN(date_trunc('hour', t_stamp)) FROM electric_pln_telemetry),
+            (SELECT MAX(date_trunc('hour', t_stamp)) FROM electric_pln_telemetry),
+            INTERVAL '1 hour'
+          ) AS t_stamp
+        ) h
+        LEFT JOIN electric_pln_telemetry p ON p.t_stamp = h.t_stamp
+        WHERE p.t_stamp IS NULL AND h.t_stamp IS NOT NULL;
+
+        INSERT INTO electric_wf1_telemetry (t_stamp, status_pm5500)
+        SELECT h.t_stamp, false
+        FROM (
+          SELECT generate_series(
+            (SELECT MIN(date_trunc('hour', t_stamp)) FROM electric_wf1_telemetry),
+            (SELECT MAX(date_trunc('hour', t_stamp)) FROM electric_wf1_telemetry),
+            INTERVAL '1 hour'
+          ) AS t_stamp
+        ) h
+        LEFT JOIN electric_wf1_telemetry p ON p.t_stamp = h.t_stamp
+        WHERE p.t_stamp IS NULL AND h.t_stamp IS NOT NULL;
+
+        INSERT INTO electric_wf2_telemetry (t_stamp, status_pm5500)
+        SELECT h.t_stamp, false
+        FROM (
+          SELECT generate_series(
+            (SELECT MIN(date_trunc('hour', t_stamp)) FROM electric_wf2_telemetry),
+            (SELECT MAX(date_trunc('hour', t_stamp)) FROM electric_wf2_telemetry),
+            INTERVAL '1 hour'
+          ) AS t_stamp
+        ) h
+        LEFT JOIN electric_wf2_telemetry p ON p.t_stamp = h.t_stamp
+        WHERE p.t_stamp IS NULL AND h.t_stamp IS NOT NULL;
+
+        INSERT INTO cooling_tower_telemetry (t_stamp, id_device)
+        SELECT h.t_stamp, 'cooling-water-1'
+        FROM (
+          SELECT generate_series(
+            (SELECT MIN(date_trunc('hour', t_stamp)) FROM cooling_tower_telemetry),
+            (SELECT MAX(date_trunc('hour', t_stamp)) FROM cooling_tower_telemetry),
+            INTERVAL '1 hour'
+          ) AS t_stamp
+        ) h
+        LEFT JOIN cooling_tower_telemetry p ON p.t_stamp = h.t_stamp AND p.id_device = 'cooling-water-1'
+        WHERE p.t_stamp IS NULL AND h.t_stamp IS NOT NULL;
+      `);
+      logger.info("Historical hourly telemetry gaps populated with NULL values successfully");
+    } catch (err: any) {
+      logger.warn({ err: err.message }, "Hourly gap filler check finished with notice");
+    }
     logger.info("postgres tables ensured and migrated to NUMERIC successfully");
   } catch (err: any) {
     logger.error({ err }, "failed to ensure postgres tables");

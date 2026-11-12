@@ -10,7 +10,7 @@ import { getPostgresPool } from "../../database/postgres";
 import { defaultWaterConfig } from "../config/config.controller";
 import { calculateWaterCost } from "../../utils/water";
 import { getElectricityExportData, generateElectricityExcelWorkbook } from "./electricity.export";
-import { getIncomingHourlyTrend, getLatestIncomingTelemetry, getLatestEwLiveRecords, getWibDateTime, getLatestElectricityOverviewLive } from "../../core/scheduler";
+import { getIncomingHourlyTrend, getLatestIncomingTelemetry, getLatestEwGroupTelemetry, getLatestEwLiveRecords, getSyncedNow, getWibDateTime, getLatestElectricityOverviewLive } from "../../core/scheduler";
 import { getIncomingTrend1hFromDb } from "./electricity.analytics";
 
 export const getAnalyticsSummaryHandler = async (
@@ -79,14 +79,9 @@ export const getElectricityAnalyticsHandler = async (
     }
     const cached = electricityAnalyticsCache.get(cacheKey);
     if (!force && cached && cached.expiresAt > now) {
-      const livePq = getLatestIncomingTelemetry(deviceId);
-      if (livePq && livePq.pqData) {
-        return res.json({
-          data: {
-            ...cached.data,
-            pqData: livePq.pqData
-          }
-        });
+      const liveIncoming = getLatestIncomingTelemetry(deviceId);
+      if (liveIncoming?.pqData) {
+        return res.json({ data: { ...cached.data, pqData: liveIncoming.pqData } });
       }
       return res.json({ data: cached.data });
     }
@@ -466,28 +461,28 @@ export const getPowerMetersLatestHandler = async (
               t_stamp: pln.t_stamp,
               group_id: "ew23",
               pm_id: "PM410",
-              status: isPlnOnline,
-              volt_ab: isPlnOnline && pln.volt_ab ? Number(pln.volt_ab) : null,
-              volt_bc: isPlnOnline && pln.volt_bc ? Number(pln.volt_bc) : null,
-              volt_ca: isPlnOnline && pln.volt_ca ? Number(pln.volt_ca) : null,
-              volt_ll: isPlnOnline && pln.volt_ll ? Number(pln.volt_ll) : null,
-              current_a: isPlnOnline && pln.current_a ? Number(pln.current_a) : null,
-              current_b: isPlnOnline && pln.current_b ? Number(pln.current_b) : null,
-              current_c: isPlnOnline && pln.current_c ? Number(pln.current_c) : null,
-              frequency: isPlnOnline && pln.frequency ? Number(pln.frequency) : (isPlnOnline ? 50.0 : null),
-              active_power_total: isPlnOnline && pln.active_power ? (Number(pln.active_power) > 10000 ? Number(pln.active_power) / 1000.0 : Number(pln.active_power)) : 0,
-              reactive_power_total: isPlnOnline && pln.reactive_power_total ? (Number(pln.reactive_power_total) > 10000 ? Number(pln.reactive_power_total) / 1000.0 : Number(pln.reactive_power_total)) : 0,
-              apparent_power_total: isPlnOnline && pln.apparent_power_total ? (Number(pln.apparent_power_total) > 10000 ? Number(pln.apparent_power_total) / 1000.0 : Number(pln.apparent_power_total)) : 0,
-              power_factor: isPlnOnline && pln.power_factor ? Number(pln.power_factor) : null,
-              voltage_unbalance: isPlnOnline && pln.voltage_unbalance ? Number(pln.voltage_unbalance) : null,
-              current_unbalance: isPlnOnline && pln.current_unbalance ? Number(pln.current_unbalance) : null,
-              thd_volt_a: isPlnOnline && pln.thd_volt_a ? Number(pln.thd_volt_a) : null,
-              thd_volt_b: isPlnOnline && pln.thd_volt_b ? Number(pln.thd_volt_b) : null,
-              thd_volt_c: isPlnOnline && pln.thd_volt_c ? Number(pln.thd_volt_c) : null,
-              thd_current_a: isPlnOnline && pln.thd_current_a ? Number(pln.thd_current_a) : null,
-              thd_current_b: isPlnOnline && pln.thd_current_b ? Number(pln.thd_current_b) : null,
-              thd_current_c: isPlnOnline && pln.thd_current_c ? Number(pln.thd_current_c) : null,
-              active_energy: pln.active_energy ? Number(pln.active_energy) : null
+              status: pln.status_pm8000 !== null ? !!pln.status_pm8000 : true,
+              volt_ab: pln.volt_ab !== null && pln.volt_ab !== undefined ? Number(pln.volt_ab) : null,
+              volt_bc: pln.volt_bc !== null && pln.volt_bc !== undefined ? Number(pln.volt_bc) : null,
+              volt_ca: pln.volt_ca !== null && pln.volt_ca !== undefined ? Number(pln.volt_ca) : null,
+              volt_ll: pln.volt_ll !== null && pln.volt_ll !== undefined ? Number(pln.volt_ll) : null,
+              current_a: pln.current_a !== null && pln.current_a !== undefined ? Number(pln.current_a) : null,
+              current_b: pln.current_b !== null && pln.current_b !== undefined ? Number(pln.current_b) : null,
+              current_c: pln.current_c !== null && pln.current_c !== undefined ? Number(pln.current_c) : null,
+              frequency: pln.frequency !== null && pln.frequency !== undefined ? Number(pln.frequency) : null,
+              active_power_total: pln.active_power !== null && pln.active_power !== undefined ? (Math.abs(Number(pln.active_power)) > 10000 ? Number(pln.active_power) / 1000.0 : Number(pln.active_power)) : null,
+              reactive_power_total: pln.reactive_power_total !== null && pln.reactive_power_total !== undefined ? (Math.abs(Number(pln.reactive_power_total)) > 10000 ? Number(pln.reactive_power_total) / 1000.0 : Number(pln.reactive_power_total)) : null,
+              apparent_power_total: pln.apparent_power_total !== null && pln.apparent_power_total !== undefined ? (Math.abs(Number(pln.apparent_power_total)) > 10000 ? Number(pln.apparent_power_total) / 1000.0 : Number(pln.apparent_power_total)) : null,
+              power_factor: pln.power_factor !== null && pln.power_factor !== undefined ? Math.abs(Number(pln.power_factor)) : null,
+              voltage_unbalance: pln.voltage_unbalance !== null && pln.voltage_unbalance !== undefined ? Number(pln.voltage_unbalance) : null,
+              current_unbalance: pln.current_unbalance !== null && pln.current_unbalance !== undefined ? Number(pln.current_unbalance) : null,
+              thd_volt_a: pln.thd_volt_a !== null && pln.thd_volt_a !== undefined ? Number(pln.thd_volt_a) : null,
+              thd_volt_b: pln.thd_volt_b !== null && pln.thd_volt_b !== undefined ? Number(pln.thd_volt_b) : null,
+              thd_volt_c: pln.thd_volt_c !== null && pln.thd_volt_c !== undefined ? Number(pln.thd_volt_c) : null,
+              thd_current_a: pln.thd_current_a !== null && pln.thd_current_a !== undefined ? Number(pln.thd_current_a) : null,
+              thd_current_b: pln.thd_current_b !== null && pln.thd_current_b !== undefined ? Number(pln.thd_current_b) : null,
+              thd_current_c: pln.thd_current_c !== null && pln.thd_current_c !== undefined ? Number(pln.thd_current_c) : null,
+              active_energy: pln.active_energy !== null && pln.active_energy !== undefined ? Number(pln.active_energy) : null
             });
           }
         } catch {}
@@ -512,28 +507,28 @@ export const getPowerMetersLatestHandler = async (
               t_stamp: wf1.t_stamp,
               group_id: "ew23",
               pm_id: "PM411",
-              status: isWf1Online,
-              volt_ab: isWf1Online && wf1.volt_ab ? Number(wf1.volt_ab) : null,
-              volt_bc: isWf1Online && wf1.volt_bc ? Number(wf1.volt_bc) : null,
-              volt_ca: isWf1Online && wf1.volt_ca ? Number(wf1.volt_ca) : null,
-              volt_ll: isWf1Online && wf1.volt_ll ? Number(wf1.volt_ll) : null,
-              current_a: isWf1Online && wf1.current_a ? Number(wf1.current_a) : null,
-              current_b: isWf1Online && wf1.current_b ? Number(wf1.current_b) : null,
-              current_c: isWf1Online && wf1.current_c ? Number(wf1.current_c) : null,
-              frequency: isWf1Online && wf1.frequency ? Number(wf1.frequency) : (isWf1Online ? 50.0 : null),
-              active_power_total: isWf1Online && wf1.active_power_total ? Number(wf1.active_power_total) : 0,
-              reactive_power_total: isWf1Online && wf1.reactive_power_total ? Number(wf1.reactive_power_total) : 0,
-              apparent_power_total: isWf1Online && wf1.apparent_power_total ? Number(wf1.apparent_power_total) : 0,
-              power_factor: isWf1Online && wf1.power_factor ? Number(wf1.power_factor) : null,
-              voltage_unbalance: isWf1Online && wf1.voltage_unbalance ? Number(wf1.voltage_unbalance) : null,
-              current_unbalance: isWf1Online && wf1.current_unbalance ? Number(wf1.current_unbalance) : null,
-              thd_volt_a: isWf1Online && wf1.thd_volt_a ? Number(wf1.thd_volt_a) : null,
-              thd_volt_b: isWf1Online && wf1.thd_volt_b ? Number(wf1.thd_volt_b) : null,
-              thd_volt_c: isWf1Online && wf1.thd_volt_c ? Number(wf1.thd_volt_c) : null,
-              thd_current_a: isWf1Online && wf1.thd_current_a ? Number(wf1.thd_current_a) : null,
-              thd_current_b: isWf1Online && wf1.thd_current_b ? Number(wf1.thd_current_b) : null,
-              thd_current_c: isWf1Online && wf1.thd_current_c ? Number(wf1.thd_current_c) : null,
-              active_energy: wf1.active_energy ? Number(wf1.active_energy) : null
+              status: wf1.status_pm5500 !== null ? !!wf1.status_pm5500 : true,
+              volt_ab: wf1.volt_ab !== null && wf1.volt_ab !== undefined ? Number(wf1.volt_ab) : null,
+              volt_bc: wf1.volt_bc !== null && wf1.volt_bc !== undefined ? Number(wf1.volt_bc) : null,
+              volt_ca: wf1.volt_ca !== null && wf1.volt_ca !== undefined ? Number(wf1.volt_ca) : null,
+              volt_ll: wf1.volt_ll !== null && wf1.volt_ll !== undefined ? Number(wf1.volt_ll) : null,
+              current_a: wf1.current_a !== null && wf1.current_a !== undefined ? Number(wf1.current_a) : null,
+              current_b: wf1.current_b !== null && wf1.current_b !== undefined ? Number(wf1.current_b) : null,
+              current_c: wf1.current_c !== null && wf1.current_c !== undefined ? Number(wf1.current_c) : null,
+              frequency: wf1.frequency !== null && wf1.frequency !== undefined ? Number(wf1.frequency) : null,
+              active_power_total: wf1.active_power_total !== null && wf1.active_power_total !== undefined ? Number(wf1.active_power_total) : null,
+              reactive_power_total: wf1.reactive_power_total !== null && wf1.reactive_power_total !== undefined ? Number(wf1.reactive_power_total) : null,
+              apparent_power_total: wf1.apparent_power_total !== null && wf1.apparent_power_total !== undefined ? Number(wf1.apparent_power_total) : null,
+              power_factor: wf1.power_factor !== null && wf1.power_factor !== undefined ? Math.abs(Number(wf1.power_factor)) : null,
+              voltage_unbalance: wf1.voltage_unbalance !== null && wf1.voltage_unbalance !== undefined ? Number(wf1.voltage_unbalance) : null,
+              current_unbalance: wf1.current_unbalance !== null && wf1.current_unbalance !== undefined ? Number(wf1.current_unbalance) : null,
+              thd_volt_a: wf1.thd_volt_a !== null && wf1.thd_volt_a !== undefined ? Number(wf1.thd_volt_a) : null,
+              thd_volt_b: wf1.thd_volt_b !== null && wf1.thd_volt_b !== undefined ? Number(wf1.thd_volt_b) : null,
+              thd_volt_c: wf1.thd_volt_c !== null && wf1.thd_volt_c !== undefined ? Number(wf1.thd_volt_c) : null,
+              thd_current_a: wf1.thd_current_a !== null && wf1.thd_current_a !== undefined ? Number(wf1.thd_current_a) : null,
+              thd_current_b: wf1.thd_current_b !== null && wf1.thd_current_b !== undefined ? Number(wf1.thd_current_b) : null,
+              thd_current_c: wf1.thd_current_c !== null && wf1.thd_current_c !== undefined ? Number(wf1.thd_current_c) : null,
+              active_energy: wf1.active_energy !== null && wf1.active_energy !== undefined ? Number(wf1.active_energy) : null
             });
           }
         } catch {}
@@ -558,51 +553,59 @@ export const getPowerMetersLatestHandler = async (
               t_stamp: wf2.t_stamp,
               group_id: "ew23",
               pm_id: "PM412",
-              status: isWf2Online,
-              volt_ab: isWf2Online && wf2.volt_ab ? Number(wf2.volt_ab) : null,
-              volt_bc: isWf2Online && wf2.volt_bc ? Number(wf2.volt_bc) : null,
-              volt_ca: isWf2Online && wf2.volt_ca ? Number(wf2.volt_ca) : null,
-              volt_ll: isWf2Online && wf2.volt_ll ? Number(wf2.volt_ll) : null,
-              current_a: isWf2Online && wf2.current_a ? Number(wf2.current_a) : null,
-              current_b: isWf2Online && wf2.current_b ? Number(wf2.current_b) : null,
-              current_c: isWf2Online && wf2.current_c ? Number(wf2.current_c) : null,
-              frequency: isWf2Online && wf2.frequency ? Number(wf2.frequency) : (isWf2Online ? 50.0 : null),
-              active_power_total: isWf2Online && wf2.active_power_total ? Number(wf2.active_power_total) : 0,
-              reactive_power_total: isWf2Online && wf2.reactive_power_total ? Number(wf2.reactive_power_total) : 0,
-              apparent_power_total: isWf2Online && wf2.apparent_power_total ? Number(wf2.apparent_power_total) : 0,
-              power_factor: isWf2Online && wf2.power_factor ? Number(wf2.power_factor) : null,
-              voltage_unbalance: isWf2Online && wf2.voltage_unbalance ? Number(wf2.voltage_unbalance) : null,
-              current_unbalance: isWf2Online && wf2.current_unbalance ? Number(wf2.current_unbalance) : null,
-              thd_volt_a: isWf2Online && wf2.thd_volt_a ? Number(wf2.thd_volt_a) : null,
-              thd_volt_b: isWf2Online && wf2.thd_volt_b ? Number(wf2.thd_volt_b) : null,
-              thd_volt_c: isWf2Online && wf2.thd_volt_c ? Number(wf2.thd_volt_c) : null,
-              thd_current_a: isWf2Online && wf2.thd_current_a ? Number(wf2.thd_current_a) : null,
-              thd_current_b: isWf2Online && wf2.thd_current_b ? Number(wf2.thd_current_b) : null,
-              thd_current_c: isWf2Online && wf2.thd_current_c ? Number(wf2.thd_current_c) : null,
-              active_energy: wf2.active_energy ? Number(wf2.active_energy) : null
+              status: wf2.status_pm5500 !== null ? !!wf2.status_pm5500 : true,
+              volt_ab: wf2.volt_ab !== null && wf2.volt_ab !== undefined ? Number(wf2.volt_ab) : null,
+              volt_bc: wf2.volt_bc !== null && wf2.volt_bc !== undefined ? Number(wf2.volt_bc) : null,
+              volt_ca: wf2.volt_ca !== null && wf2.volt_ca !== undefined ? Number(wf2.volt_ca) : null,
+              volt_ll: wf2.volt_ll !== null && wf2.volt_ll !== undefined ? Number(wf2.volt_ll) : null,
+              current_a: wf2.current_a !== null && wf2.current_a !== undefined ? Number(wf2.current_a) : null,
+              current_b: wf2.current_b !== null && wf2.current_b !== undefined ? Number(wf2.current_b) : null,
+              current_c: wf2.current_c !== null && wf2.current_c !== undefined ? Number(wf2.current_c) : null,
+              frequency: wf2.frequency !== null && wf2.frequency !== undefined ? Number(wf2.frequency) : null,
+              active_power_total: wf2.active_power_total !== null && wf2.active_power_total !== undefined ? Number(wf2.active_power_total) : null,
+              reactive_power_total: wf2.reactive_power_total !== null && wf2.reactive_power_total !== undefined ? Number(wf2.reactive_power_total) : null,
+              apparent_power_total: wf2.apparent_power_total !== null && wf2.apparent_power_total !== undefined ? Number(wf2.apparent_power_total) : null,
+              power_factor: wf2.power_factor !== null && wf2.power_factor !== undefined ? Math.abs(Number(wf2.power_factor)) : null,
+              voltage_unbalance: wf2.voltage_unbalance !== null && wf2.voltage_unbalance !== undefined ? Number(wf2.voltage_unbalance) : null,
+              current_unbalance: wf2.current_unbalance !== null && wf2.current_unbalance !== undefined ? Number(wf2.current_unbalance) : null,
+              thd_volt_a: wf2.thd_volt_a !== null && wf2.thd_volt_a !== undefined ? Number(wf2.thd_volt_a) : null,
+              thd_volt_b: wf2.thd_volt_b !== null && wf2.thd_volt_b !== undefined ? Number(wf2.thd_volt_b) : null,
+              thd_volt_c: wf2.thd_volt_c !== null && wf2.thd_volt_c !== undefined ? Number(wf2.thd_volt_c) : null,
+              thd_current_a: wf2.thd_current_a !== null && wf2.thd_current_a !== undefined ? Number(wf2.thd_current_a) : null,
+              thd_current_b: wf2.thd_current_b !== null && wf2.thd_current_b !== undefined ? Number(wf2.thd_current_b) : null,
+              thd_current_c: wf2.thd_current_c !== null && wf2.thd_current_c !== undefined ? Number(wf2.thd_current_c) : null,
+              active_energy: wf2.active_energy !== null && wf2.active_energy !== undefined ? Number(wf2.active_energy) : null
             });
           }
         } catch {}
       }
     }
-
-    // Ensure all meters where status === false have measurements zeroed or nulled to avoid stale numbers
-    data = data.map((r: any) => {
-      if (r.status === false) {
-        return {
-          ...r,
-          status: false,
-          volt_ab: null, volt_bc: null, volt_ca: null, volt_ll: null,
-          current_a: null, current_b: null, current_c: null,
-          frequency: null, active_power_total: 0, reactive_power_total: 0,
-          apparent_power_total: 0, power_factor: null, voltage_unbalance: null,
-          current_unbalance: null, thd_volt_a: null, thd_volt_b: null,
-          thd_volt_c: null, thd_current_a: null, thd_current_b: null,
-          thd_current_c: null
-        };
+    // Overlay 1-second real-time in-memory records from Ignition API polling so 1s HTTP requests always get live data
+    const liveRecords = getLatestEwGroupTelemetry(group);
+    if (liveRecords.length > 0) {
+      const mergedMap = new Map<string, any>();
+      for (const row of data) {
+        if (row?.pm_id) {
+          mergedMap.set(String(row.pm_id).toUpperCase().trim(), row);
+        }
       }
-      return r;
-    });
+      for (const liveRec of liveRecords) {
+        if (!liveRec?.pm_id) continue;
+        const upId = String(liveRec.pm_id).toUpperCase().trim();
+        const existing = mergedMap.get(upId);
+        // If live record has real measurements or no existing DB row, overlay live values
+        const hasLiveMeasure =
+          liveRec.volt_ab !== null ||
+          liveRec.volt_ll !== null ||
+          liveRec.active_power_total !== null ||
+          liveRec.current_a !== null ||
+          liveRec.active_energy !== null;
+        if (hasLiveMeasure || !existing) {
+          mergedMap.set(upId, existing ? { ...existing, ...liveRec } : liveRec);
+        }
+      }
+      data = Array.from(mergedMap.values());
+    }
     const pmOrder: Record<string, number> = {
       PM318: 10, PM319: 20, PM320: 30, PM321: 40, PM322: 50,
       PM323: 60, PM324: 70, PM325: 80, PM327: 90, PM337: 100,
@@ -660,15 +663,16 @@ export const getPowerMeterHistoryHandler = async (
       "F2_PUTRNEW": "PM327",
     };
     const pmId = trafoAliasMap[rawPmId] || rawPmId;
-    const nowWib = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
-    const todayWibStr = nowWib.toISOString().slice(0, 10);
+    const syncedNow = getSyncedNow();
+    const wibNow = getWibDateTime(syncedNow);
+    const todayWibStr = wibNow.dateStr;
     const targetDate = (req.query.date as string) || todayWibStr;
     const isToday = targetDate === todayWibStr;
 
     // Use client's local laptop hour if provided, else default to server's Jakarta hour
     const clientHour = req.query.hour !== undefined ? parseInt(req.query.hour as string, 10) : undefined;
     const currentHour = isToday
-      ? (Number.isInteger(clientHour) && clientHour! >= 0 && clientHour! <= 23 ? clientHour! : nowWib.getHours())
+      ? (Number.isInteger(clientHour) && clientHour! >= 0 && clientHour! <= 23 ? clientHour! : wibNow.hour)
       : 23;
 
     const pool = getPostgresPool();
@@ -678,6 +682,15 @@ export const getPowerMeterHistoryHandler = async (
       if (target3sPmId === "PM8000" || target3sPmId === "CUBICLE_PLN_PM8000") target3sPmId = "PM410";
       if (target3sPmId === "PM5560" || target3sPmId === "PM5560_WF1" || target3sPmId === "FEEDER_WF1_PM5560") target3sPmId = "PM411";
       if (target3sPmId === "PM5560_WF2" || target3sPmId === "PM5500" || target3sPmId === "FEEDER_WF2_PM5500") target3sPmId = "PM412";
+
+      // Bound upper timestamp strictly to real current WIB time (never allow future timestamps from clock-skewed servers)
+      const clientTsParam = Number(req.query._t);
+      const effectiveNowMs =
+        Number.isFinite(clientTsParam) && Math.abs(clientTsParam - syncedNow.getTime()) < 300000
+          ? Math.min(syncedNow.getTime(), clientTsParam)
+          : syncedNow.getTime();
+      const maxWibStr = getWibDateTime(new Date(effectiveNowMs)).tStampStr;
+      const minWibStr = getWibDateTime(new Date(effectiveNowMs - 24 * 3600 * 1000)).tStampStr;
 
       const rollingDbRes = await pool.query(`
         SELECT
@@ -689,35 +702,48 @@ export const getPowerMeterHistoryHandler = async (
           volt_ab::numeric(12,2) as volt_ab,
           volt_bc::numeric(12,2) as volt_bc,
           volt_ca::numeric(12,2) as volt_ca,
-          NULL::numeric(12,2) as volt_rn,
-          NULL::numeric(12,2) as volt_sn,
-          NULL::numeric(12,2) as volt_tn,
-          ABS(active_power_total)::numeric(12,2) as active_power_total,
+          volt_an::numeric(12,2) as volt_rn,
+          volt_bn::numeric(12,2) as volt_sn,
+          volt_cn::numeric(12,2) as volt_tn,
+          volt_ln::numeric(12,2) as volt_ln,
+          active_power_total::numeric(12,2) as active_power_total,
           current_a::numeric(12,2) as current_a,
           current_b::numeric(12,2) as current_b,
           current_c::numeric(12,2) as current_c,
-          (COALESCE(current_a, 0) + COALESCE(current_b, 0) + COALESCE(current_c, 0))::numeric(12,2) as current_total,
+          NULL::numeric(12,2) as current_total,
           power_factor::numeric(12,3) as power_factor,
           t_stamp
         FROM electric_trafo_rolling_3s
         WHERE UPPER(pm_id) = $1
-          AND t_stamp >= (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '24 hours'
+          AND t_stamp >= $2::timestamp
+          AND t_stamp <= $3::timestamp
+          AND status IS NOT FALSE
+          AND (volt_ab IS NULL OR volt_ab > 50)
+          AND (volt_bc IS NULL OR volt_bc > 50)
+          AND (volt_ca IS NULL OR volt_ca > 50)
         ORDER BY t_stamp ASC
-      `, [target3sPmId]);
+      `, [target3sPmId, minWibStr, maxWibStr]);
 
       if (req.query.compact === "true") {
-        const tuples = rollingDbRes.rows.map((r: any) => {
-          return [
+        const tuples = rollingDbRes.rows
+          .filter((r: any) => r.status !== false
+            && (r.volt_ab === null || Number(r.volt_ab) > 50)
+            && (r.volt_bc === null || Number(r.volt_bc) > 50)
+            && (r.volt_ca === null || Number(r.volt_ca) > 50))
+          .map((r: any) => [
             Number(r.ts),
             r.volt_ab !== null ? Number(r.volt_ab) : 0,
             r.volt_bc !== null ? Number(r.volt_bc) : 0,
             r.volt_ca !== null ? Number(r.volt_ca) : 0,
-            r.active_power_total !== null ? Math.abs(Number(r.active_power_total)) : 0,
+            r.active_power_total !== null ? Number(r.active_power_total) : 0,
             r.current_a !== null ? Number(r.current_a) : 0,
             r.current_b !== null ? Number(r.current_b) : 0,
-            r.current_c !== null ? Number(r.current_c) : 0
-          ];
-        });
+            r.current_c !== null ? Number(r.current_c) : 0,
+            r.volt_rn !== null && r.volt_rn !== undefined ? Number(r.volt_rn) : null,
+            r.volt_sn !== null && r.volt_sn !== undefined ? Number(r.volt_sn) : null,
+            r.volt_tn !== null && r.volt_tn !== undefined ? Number(r.volt_tn) : null,
+            r.volt_ln !== null && r.volt_ln !== undefined ? Number(r.volt_ln) : null
+          ]);
         return res.json({
           targetDate,
           currentHour,
@@ -747,13 +773,14 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            NULL::numeric(12,2) as volt_rn,
-            NULL::numeric(12,2) as volt_sn,
-            NULL::numeric(12,2) as volt_tn,
+            AVG(volt_an)::numeric(12,2) as volt_rn,
+            AVG(volt_bn)::numeric(12,2) as volt_sn,
+            AVG(volt_cn)::numeric(12,2) as volt_tn,
+            AVG(volt_ln)::numeric(12,2) as volt_ln,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -768,13 +795,14 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            NULL::numeric(12,2) as volt_rn,
-            NULL::numeric(12,2) as volt_sn,
-            NULL::numeric(12,2) as volt_tn,
+            AVG(volt_an)::numeric(12,2) as volt_rn,
+            AVG(volt_bn)::numeric(12,2) as volt_sn,
+            AVG(volt_cn)::numeric(12,2) as volt_tn,
+            AVG(volt_ln)::numeric(12,2) as volt_ln,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -868,13 +896,14 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            NULL::numeric(12,2) as volt_rn,
-            NULL::numeric(12,2) as volt_sn,
-            NULL::numeric(12,2) as volt_tn,
+            AVG(volt_an)::numeric(12,2) as volt_rn,
+            AVG(volt_bn)::numeric(12,2) as volt_sn,
+            AVG(volt_cn)::numeric(12,2) as volt_tn,
+            AVG(volt_ln)::numeric(12,2) as volt_ln,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -889,13 +918,14 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            NULL::numeric(12,2) as volt_rn,
-            NULL::numeric(12,2) as volt_sn,
-            NULL::numeric(12,2) as volt_tn,
+            AVG(volt_an)::numeric(12,2) as volt_rn,
+            AVG(volt_bn)::numeric(12,2) as volt_sn,
+            AVG(volt_cn)::numeric(12,2) as volt_tn,
+            AVG(volt_ln)::numeric(12,2) as volt_ln,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -989,13 +1019,14 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            NULL::numeric(12,2) as volt_rn,
-            NULL::numeric(12,2) as volt_sn,
-            NULL::numeric(12,2) as volt_tn,
+            AVG(volt_an)::numeric(12,2) as volt_rn,
+            AVG(volt_bn)::numeric(12,2) as volt_sn,
+            AVG(volt_cn)::numeric(12,2) as volt_tn,
+            AVG(volt_ln)::numeric(12,2) as volt_ln,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -1010,13 +1041,14 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            NULL::numeric(12,2) as volt_rn,
-            NULL::numeric(12,2) as volt_sn,
-            NULL::numeric(12,2) as volt_tn,
+            AVG(volt_an)::numeric(12,2) as volt_rn,
+            AVG(volt_bn)::numeric(12,2) as volt_sn,
+            AVG(volt_cn)::numeric(12,2) as volt_tn,
+            AVG(volt_ln)::numeric(12,2) as volt_ln,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -1111,13 +1143,14 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            NULL::numeric(12,2) as volt_rn,
-            NULL::numeric(12,2) as volt_sn,
-            NULL::numeric(12,2) as volt_tn,
+            AVG(volt_an)::numeric(12,2) as volt_rn,
+            AVG(volt_bn)::numeric(12,2) as volt_sn,
+            AVG(volt_cn)::numeric(12,2) as volt_tn,
+            AVG(volt_ln)::numeric(12,2) as volt_ln,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -1133,13 +1166,14 @@ export const getPowerMeterHistoryHandler = async (
             AVG(current_a)::numeric(12,2) as current_a,
             AVG(current_b)::numeric(12,2) as current_b,
             AVG(current_c)::numeric(12,2) as current_c,
-            (AVG(current_a) + AVG(current_b) + AVG(current_c))::numeric(12,2) as current_total,
+            NULL::numeric(12,2) as current_total,
             AVG(volt_ab)::numeric(12,2) as volt_ab,
             AVG(volt_bc)::numeric(12,2) as volt_bc,
             AVG(volt_ca)::numeric(12,2) as volt_ca,
-            NULL::numeric(12,2) as volt_rn,
-            NULL::numeric(12,2) as volt_sn,
-            NULL::numeric(12,2) as volt_tn,
+            AVG(volt_an)::numeric(12,2) as volt_rn,
+            AVG(volt_bn)::numeric(12,2) as volt_sn,
+            AVG(volt_cn)::numeric(12,2) as volt_tn,
+            AVG(volt_ln)::numeric(12,2) as volt_ln,
             AVG(power_factor)::numeric(12,3) as power_factor,
             MAX(active_energy)::numeric(14,2) as active_energy,
             MAX(t_stamp) as t_stamp
@@ -1227,10 +1261,54 @@ export const getPowerMeterHistoryHandler = async (
       `, [pmId, targetDate, currentHour]);
     }
 
+    const rows = dbRes.rows;
+    if (isToday) {
+      let targetLivePmId = pmId.toUpperCase();
+      if (targetLivePmId === "PM8000" || targetLivePmId === "CUBICLE_PLN_PM8000") targetLivePmId = "PM410";
+      if (targetLivePmId === "PM5560" || targetLivePmId === "PM5560_WF1" || targetLivePmId === "FEEDER_WF1_PM5560") targetLivePmId = "PM411";
+      if (targetLivePmId === "PM5560_WF2" || targetLivePmId === "PM5500" || targetLivePmId === "FEEDER_WF2_PM5500") targetLivePmId = "PM412";
+
+      const liveAll = getLatestEwGroupTelemetry("all");
+      const liveRec = liveAll.find((r) => String(r.pm_id || "").toUpperCase().trim() === targetLivePmId);
+      if (liveRec) {
+        const curSlot = rows.find((r: any) => Number(r.hour) === currentHour);
+        if (curSlot) {
+          if (liveRec.active_power_total !== null && liveRec.active_power_total !== undefined) {
+            curSlot.active_power_total = Number(liveRec.active_power_total).toFixed(2);
+          }
+          if (liveRec.current_a !== null && liveRec.current_a !== undefined) {
+            curSlot.current_a = Number(liveRec.current_a).toFixed(2);
+          }
+          if (liveRec.current_b !== null && liveRec.current_b !== undefined) {
+            curSlot.current_b = Number(liveRec.current_b).toFixed(2);
+          }
+          if (liveRec.current_c !== null && liveRec.current_c !== undefined) {
+            curSlot.current_c = Number(liveRec.current_c).toFixed(2);
+          }
+          if (liveRec.volt_ab !== null && liveRec.volt_ab !== undefined) {
+            curSlot.volt_ab = Number(liveRec.volt_ab).toFixed(2);
+          }
+          if (liveRec.volt_bc !== null && liveRec.volt_bc !== undefined) {
+            curSlot.volt_bc = Number(liveRec.volt_bc).toFixed(2);
+          }
+          if (liveRec.volt_ca !== null && liveRec.volt_ca !== undefined) {
+            curSlot.volt_ca = Number(liveRec.volt_ca).toFixed(2);
+          }
+          if (liveRec.power_factor !== null && liveRec.power_factor !== undefined) {
+            curSlot.power_factor = Number(Math.abs(Number(liveRec.power_factor))).toFixed(3);
+          }
+          if (liveRec.active_energy !== null && liveRec.active_energy !== undefined) {
+            curSlot.active_energy = Number(liveRec.active_energy).toFixed(2);
+          }
+          curSlot.t_stamp = liveRec.t_stamp || syncedNow;
+        }
+      }
+    }
+
     res.json({
       targetDate,
       currentHour,
-      data: dbRes.rows
+      data: rows
     });
   } catch (err) {
     next(err);
@@ -1331,9 +1409,9 @@ export const getElectricityReportHandler = async (
       "pm337": { pmId: "PM337", group: "ew23", label: "F2 MCC BP 7" },
 
       // Cubicles
-      "pm410": { pmId: "PM410", group: "ew23", label: "incoming cubicle WF2", table: "electric_wf2_telemetry" },
-      "pm411": { pmId: "PM411", group: "ew23", label: "incoming cubicle pln", table: "electric_pln_telemetry" },
-      "pm412": { pmId: "PM412", group: "ew23", label: "incoming cubicle WF1", table: "electric_wf1_telemetry" }
+      "pm410": { pmId: "PM410", group: "ew23", label: "incoming cubicle pln", table: "electric_pln_telemetry" },
+      "pm411": { pmId: "PM411", group: "ew23", label: "incoming cubicle WF1", table: "electric_wf1_telemetry" },
+      "pm412": { pmId: "PM412", group: "ew23", label: "incoming cubicle WF2", table: "electric_wf2_telemetry" }
     };
 
     const mapping = tagMap[tag.toLowerCase()] || {};
@@ -1346,8 +1424,8 @@ export const getElectricityReportHandler = async (
     // Select date trunc granularity: 'hour', 'day', 'month'
     const truncUnit = granularity === "month" ? "month" : granularity === "day" ? "day" : "hour";
     const toCharFmt = truncUnit === "month" ? "YYYY-MM" : truncUnit === "day" ? "YYYY-MM-DD" : "YYYY-MM-DD HH24:MI:SS";
-    const orderClausePm = `ORDER BY date_trunc('${truncUnit}', p.t_stamp) ASC`;
-    const orderClauseFeeder = `ORDER BY date_trunc('${truncUnit}', t_stamp) ASC`;
+    const orderClausePm = `ORDER BY date_trunc('${truncUnit}', h_bucket) ASC`;
+    const orderClauseFeeder = `ORDER BY date_trunc('${truncUnit}', h_bucket) ASC`;
 
     const normalizeThd = (val: any): number | null => {
       if (val === null || val === undefined || isNaN(Number(val))) return null;
@@ -1361,12 +1439,13 @@ export const getElectricityReportHandler = async (
       return +num.toFixed(2);
     };
 
-    // 1. Query electric_pm_telemetry / minute with fallback feeder THD for Factory 1 sub-meters
+    // 1. Query electric_pm_telemetry / minute with hourly deduplication and precise physical energy integration
     let queryRows: any[] = [];
     try {
       const pmSql = `
         WITH raw_pm AS (
           SELECT t_stamp, volt_ab, volt_bc, volt_ca, volt_ll,
+                 volt_an, volt_bn, volt_cn, volt_ln,
                  current_a, current_b, current_c, current_unbalance,
                  active_power_total, reactive_power_total, apparent_power_total,
                  power_factor, frequency,
@@ -1376,13 +1455,14 @@ export const getElectricityReportHandler = async (
                  CASE WHEN thd_current_a >= 0 AND thd_current_a <= 100 THEN thd_current_a ELSE NULL END AS thd_current_a,
                  CASE WHEN thd_current_b >= 0 AND thd_current_b <= 100 THEN thd_current_b ELSE NULL END AS thd_current_b,
                  CASE WHEN thd_current_c >= 0 AND thd_current_c <= 100 THEN thd_current_c ELSE NULL END AS thd_current_c,
-                 active_energy
+                 CASE WHEN active_energy >= 0 AND active_energy < 100000000 THEN active_energy ELSE NULL END AS active_energy
           FROM electric_pm_telemetry
           WHERE (($1 != '%' AND pm_id ILIKE $1) OR ($1 = '%' AND group_id ILIKE $2))
             AND t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
             AND (volt_ab IS NOT NULL OR volt_ll IS NOT NULL OR current_a IS NOT NULL OR active_power_total IS NOT NULL OR active_energy IS NOT NULL)
           UNION ALL
           SELECT t_stamp, volt_ab, volt_bc, volt_ca, volt_ll,
+                 volt_an, volt_bn, volt_cn, volt_ln,
                  current_a, current_b, current_c, current_unbalance,
                  active_power_total, reactive_power_total, apparent_power_total,
                  power_factor, frequency,
@@ -1392,60 +1472,98 @@ export const getElectricityReportHandler = async (
                  CASE WHEN thd_current_a >= 0 AND thd_current_a <= 100 THEN thd_current_a ELSE NULL END AS thd_current_a,
                  CASE WHEN thd_current_b >= 0 AND thd_current_b <= 100 THEN thd_current_b ELSE NULL END AS thd_current_b,
                  CASE WHEN thd_current_c >= 0 AND thd_current_c <= 100 THEN thd_current_c ELSE NULL END AS thd_current_c,
-                 active_energy
+                 CASE WHEN active_energy >= 0 AND active_energy < 100000000 THEN active_energy ELSE NULL END AS active_energy
           FROM electric_pm_telemetry_minute
           WHERE (($1 != '%' AND pm_id ILIKE $1) OR ($1 = '%' AND group_id ILIKE $2))
             AND t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
             AND (volt_ab IS NOT NULL OR volt_ll IS NOT NULL OR current_a IS NOT NULL OR active_power_total IS NOT NULL OR active_energy IS NOT NULL)
         ),
-        raw_feeder AS (
-          SELECT t_stamp, thd_volt_a, thd_volt_b, thd_volt_c, thd_current_a, thd_current_b, thd_current_c
-          FROM ${targetTable}
-          WHERE t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
-          UNION ALL
-          SELECT t_stamp, thd_volt_a, thd_volt_b, thd_volt_c, thd_current_a, thd_current_b, thd_current_c
-          FROM ${targetTable}_minute
-          WHERE t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
-        ),
-        feeder_hourly AS (
+        hourly_dedup AS (
           SELECT 
-            date_trunc('${truncUnit}', t_stamp) as f_bucket,
-            AVG(thd_volt_a) as f_thdv_r,
-            AVG(thd_volt_b) as f_thdv_s,
-            AVG(thd_volt_c) as f_thdv_t,
-            AVG(thd_current_a) as f_thdi_r,
-            AVG(thd_current_b) as f_thdi_s,
-            AVG(thd_current_c) as f_thdi_t
-          FROM raw_feeder
-          GROUP BY date_trunc('${truncUnit}', t_stamp)
+            date_trunc('hour', t_stamp) as h_bucket,
+            AVG(volt_ab) as volt_ab,
+            AVG(volt_bc) as volt_bc,
+            AVG(volt_ca) as volt_ca,
+            AVG(CASE WHEN volt_ll > 50 THEN volt_ll ELSE NULL END) as volt_ll,
+            AVG(volt_an) as volt_an,
+            AVG(volt_bn) as volt_bn,
+            AVG(volt_cn) as volt_cn,
+            AVG(volt_ln) as volt_ln,
+            AVG(current_a) as current_a,
+            AVG(current_b) as current_b,
+            AVG(current_c) as current_c,
+            AVG(current_unbalance) as current_unbalance,
+            AVG(thd_volt_a) as thd_volt_a,
+            AVG(thd_volt_b) as thd_volt_b,
+            AVG(thd_volt_c) as thd_volt_c,
+            AVG(thd_current_a) as thd_current_a,
+            AVG(thd_current_b) as thd_current_b,
+            AVG(thd_current_c) as thd_current_c,
+            AVG(CASE WHEN active_power_total >= 0 AND active_power_total < 10000 THEN active_power_total ELSE NULL END) as kw,
+            AVG(CASE WHEN reactive_power_total IS NOT NULL AND ABS(reactive_power_total) < 10000 THEN reactive_power_total ELSE NULL END) as kvar,
+            AVG(CASE WHEN apparent_power_total IS NOT NULL AND apparent_power_total >= 0 AND apparent_power_total < 10000 THEN apparent_power_total ELSE NULL END) as kva,
+            AVG(CASE WHEN power_factor IS NOT NULL AND ABS(power_factor) <= 1.0 AND power_factor != 0 THEN ABS(power_factor) ELSE NULL END) as pf,
+            AVG(CASE WHEN frequency >= 40 AND frequency <= 65 THEN frequency ELSE NULL END) as freq,
+            MAX(active_energy) as max_e,
+            MIN(active_energy) as min_e
+          FROM raw_pm
+          GROUP BY date_trunc('hour', t_stamp)
+        ),
+        hourly_energy AS (
+          SELECT 
+            h_bucket,
+            volt_ab, volt_bc, volt_ca, volt_ll,
+            volt_an, volt_bn, volt_cn, volt_ln,
+            current_a, current_b, current_c, current_unbalance,
+            thd_volt_a, thd_volt_b, thd_volt_c,
+            thd_current_a, thd_current_b, thd_current_c,
+            kw, kvar, kva, pf, freq,
+            max_e, min_e,
+            CASE 
+              WHEN max_e IS NOT NULL AND min_e IS NOT NULL AND (max_e - min_e) > 0 AND (max_e - min_e) < 5000
+                THEN (max_e - min_e)
+              WHEN kw IS NOT NULL AND kw >= 0
+                THEN kw
+              ELSE 0
+            END as h_kwh,
+            CASE 
+              WHEN kvar IS NOT NULL THEN ABS(kvar)
+              ELSE 0
+            END as h_kvarh,
+            CASE 
+              WHEN kva IS NOT NULL THEN ABS(kva)
+              ELSE 0
+            END as h_kvah
+          FROM hourly_dedup
         )
         SELECT 
-          to_char(date_trunc('${truncUnit}', p.t_stamp), '${toCharFmt}') AS date_str,
-          NULL::numeric AS vr, 
-          NULL::numeric AS vs, 
-          NULL::numeric AS vt,
-          ROUND(AVG(p.volt_ab), 1) AS vrs, 
-          ROUND(AVG(p.volt_bc), 1) AS vst, 
-          ROUND(AVG(p.volt_ca), 1) AS vtr,
-          ROUND(AVG(p.volt_ll), 1) AS vll_avg,
-          NULL::numeric AS vln_avg,
-          AVG(p.current_a) AS ir, AVG(p.current_b) AS is_val, AVG(p.current_c) AS it, AVG(p.current_unbalance) AS in_val,
-          AVG(p.thd_volt_a) AS thdv_r,
-          AVG(p.thd_volt_b) AS thdv_s,
-          AVG(p.thd_volt_c) AS thdv_t,
-          AVG(p.thd_current_a) AS thdi_r,
-          AVG(p.thd_current_b) AS thdi_s,
-          AVG(p.thd_current_c) AS thdi_t,
-          AVG(p.active_power_total) AS kw,
-          AVG(p.reactive_power_total) AS kvar,
-          AVG(p.apparent_power_total) AS kva,
-          AVG(p.power_factor) AS pf,
-          AVG(p.frequency) AS freq,
-          MAX(p.active_energy) AS max_energy,
-          MIN(p.active_energy) AS min_energy,
+          to_char(date_trunc('${truncUnit}', h_bucket), '${toCharFmt}') AS date_str,
+          ROUND(AVG(volt_an)::numeric, 1) AS vr, 
+          ROUND(AVG(volt_bn)::numeric, 1) AS vs, 
+          ROUND(AVG(volt_cn)::numeric, 1) AS vt,
+          ROUND(AVG(volt_ab)::numeric, 1) AS vrs, 
+          ROUND(AVG(volt_bc)::numeric, 1) AS vst, 
+          ROUND(AVG(volt_ca)::numeric, 1) AS vtr,
+          ROUND(AVG(volt_ll)::numeric, 1) AS vll_avg,
+          ROUND(AVG(volt_ln)::numeric, 1) AS vln_avg,
+          AVG(current_a) AS ir, AVG(current_b) AS is_val, AVG(current_c) AS it, AVG(current_unbalance) AS in_val,
+          AVG(thd_volt_a) AS thdv_r,
+          AVG(thd_volt_b) AS thdv_s,
+          AVG(thd_volt_c) AS thdv_t,
+          AVG(thd_current_a) AS thdi_r,
+          AVG(thd_current_b) AS thdi_s,
+          AVG(thd_current_c) AS thdi_t,
+          ROUND(AVG(kw)::numeric, 1) AS kw,
+          ROUND(AVG(kvar)::numeric, 1) AS kvar,
+          ROUND(AVG(kva)::numeric, 1) AS kva,
+          AVG(pf) AS pf,
+          AVG(freq) AS freq,
+          ROUND(SUM(h_kwh)::numeric, 2) AS kwh,
+          ROUND(SUM(h_kvarh)::numeric, 2) AS kvarh,
+          ROUND(SUM(h_kvah)::numeric, 2) AS kvah,
           COUNT(*) as sample_count
-        FROM raw_pm p
-        GROUP BY date_trunc('${truncUnit}', p.t_stamp)
+        FROM hourly_energy
+        GROUP BY date_trunc('${truncUnit}', h_bucket)
         ${orderClausePm}
       `;
       const pmRes = await pool.query(pmSql, [targetPmId || "%", targetGroup || "%", `${startDate} 00:00:00`, endDate]);
@@ -1464,6 +1582,7 @@ export const getElectricityReportHandler = async (
         const feederSql = `
           WITH raw_feeder AS (
             SELECT t_stamp, volt_ab, volt_bc, volt_ca, volt_ll,
+                   volt_an, volt_bn, volt_cn,
                    current_a, current_b, current_c, current_unbalance,
                    COALESCE(active_power_total, active_power) AS active_power_total,
                    reactive_power_total, apparent_power_total,
@@ -1479,6 +1598,7 @@ export const getElectricityReportHandler = async (
             WHERE t_stamp >= $1::timestamp AND t_stamp <= ($2 || ' 23:59:59')::timestamp
             UNION ALL
             SELECT t_stamp, volt_ab, volt_bc, volt_ca, volt_ll,
+                   volt_an, volt_bn, volt_cn,
                    current_a, current_b, current_c, current_unbalance,
                    COALESCE(active_power_total, active_power) AS active_power_total,
                    reactive_power_total, apparent_power_total,
@@ -1492,30 +1612,87 @@ export const getElectricityReportHandler = async (
                    active_energy
             FROM ${targetTable}_minute
             WHERE t_stamp >= $1::timestamp AND t_stamp <= ($2 || ' 23:59:59')::timestamp
+          ),
+          hourly_feeder AS (
+            SELECT 
+              date_trunc('hour', t_stamp) as h_bucket,
+              AVG(volt_an) as vr,
+              AVG(volt_bn) as vs,
+              AVG(volt_cn) as vt,
+              AVG(volt_ab) as volt_ab,
+              AVG(volt_bc) as volt_bc,
+              AVG(volt_ca) as volt_ca,
+              AVG(CASE WHEN volt_ll > 50 THEN volt_ll ELSE NULL END) as volt_ll,
+              AVG(current_a) as current_a,
+              AVG(current_b) as current_b,
+              AVG(current_c) as current_c,
+              AVG(current_unbalance) as current_unbalance,
+              AVG(thd_volt_a) as thd_volt_a,
+              AVG(thd_volt_b) as thd_volt_b,
+              AVG(thd_volt_c) as thd_volt_c,
+              AVG(thd_current_a) as thd_current_a,
+              AVG(thd_current_b) as thd_current_b,
+              AVG(thd_current_c) as thd_current_c,
+              AVG(CASE WHEN active_power_total > 10000 THEN active_power_total / 1000.0 ELSE active_power_total END) as kw,
+              AVG(CASE WHEN reactive_power_total > 10000 THEN reactive_power_total / 1000.0 ELSE reactive_power_total END) as kvar,
+              AVG(CASE WHEN apparent_power_total > 100000 THEN NULL WHEN apparent_power_total > 10000 THEN apparent_power_total / 1000.0 ELSE apparent_power_total END) as kva,
+              AVG(CASE WHEN power_factor IS NOT NULL AND ABS(power_factor) <= 1.0 AND power_factor != 0 THEN ABS(power_factor) ELSE NULL END) as pf,
+              AVG(frequency) as freq,
+              MAX(active_energy) as max_e,
+              MIN(active_energy) as min_e
+            FROM raw_feeder
+            GROUP BY date_trunc('hour', t_stamp)
+          ),
+          hourly_energy_feeder AS (
+            SELECT 
+              h_bucket,
+              vr, vs, vt,
+              volt_ab, volt_bc, volt_ca, volt_ll,
+              current_a, current_b, current_c, current_unbalance,
+              thd_volt_a, thd_volt_b, thd_volt_c,
+              thd_current_a, thd_current_b, thd_current_c,
+              kw, kvar, kva, pf, freq,
+              CASE 
+                WHEN max_e IS NOT NULL AND min_e IS NOT NULL AND (max_e - min_e) > 0 AND (max_e - min_e) < 50000
+                  THEN (max_e - min_e)
+                WHEN kw IS NOT NULL AND kw >= 0
+                  THEN kw
+                ELSE 0
+              END as h_kwh,
+              CASE 
+                WHEN kvar IS NOT NULL THEN ABS(kvar)
+                ELSE 0
+              END as h_kvarh,
+              CASE 
+                WHEN kva IS NOT NULL THEN ABS(kva)
+                ELSE 0
+              END as h_kvah
+            FROM hourly_feeder
           )
           SELECT 
-            to_char(date_trunc('${truncUnit}', t_stamp), '${toCharFmt}') AS date_str,
-            NULL::numeric AS vr, 
-            NULL::numeric AS vs, 
-            NULL::numeric AS vt,
-            ROUND(AVG(volt_ab), 1) AS vrs, 
-            ROUND(AVG(volt_bc), 1) AS vst, 
-            ROUND(AVG(volt_ca), 1) AS vtr,
-            ROUND(AVG(volt_ll), 1) AS vll_avg,
-            NULL::numeric AS vln_avg,
+            to_char(date_trunc('${truncUnit}', h_bucket), '${toCharFmt}') AS date_str,
+            ROUND(AVG(vr)::numeric, 1) AS vr, 
+            ROUND(AVG(vs)::numeric, 1) AS vs, 
+            ROUND(AVG(vt)::numeric, 1) AS vt,
+            ROUND(AVG(volt_ab)::numeric, 1) AS vrs, 
+            ROUND(AVG(volt_bc)::numeric, 1) AS vst, 
+            ROUND(AVG(volt_ca)::numeric, 1) AS vtr,
+            ROUND(AVG(volt_ll)::numeric, 1) AS vll_avg,
+            ROUND(AVG((vr + vs + vt) / 3.0)::numeric, 1) AS vln_avg,
             AVG(current_a) AS ir, AVG(current_b) AS is_val, AVG(current_c) AS it, AVG(current_unbalance) AS in_val,
             AVG(thd_volt_a) AS thdv_r, AVG(thd_volt_b) AS thdv_s, AVG(thd_volt_c) AS thdv_t,
             AVG(thd_current_a) AS thdi_r, AVG(thd_current_b) AS thdi_s, AVG(thd_current_c) AS thdi_t,
-            AVG(active_power_total) AS kw,
-            AVG(reactive_power_total) AS kvar,
-            AVG(apparent_power_total) AS kva,
-            AVG(power_factor) AS pf,
-            AVG(frequency) AS freq,
-            MAX(active_energy) AS max_energy,
-            MIN(active_energy) AS min_energy,
+            ROUND(AVG(kw)::numeric, 1) AS kw,
+            ROUND(AVG(kvar)::numeric, 1) AS kvar,
+            ROUND(AVG(kva)::numeric, 1) AS kva,
+            AVG(pf) AS pf,
+            AVG(freq) AS freq,
+            ROUND(SUM(h_kwh)::numeric, 2) AS kwh,
+            ROUND(SUM(h_kvarh)::numeric, 2) AS kvarh,
+            ROUND(SUM(h_kvah)::numeric, 2) AS kvah,
             COUNT(*) as sample_count
-          FROM raw_feeder
-          GROUP BY date_trunc('${truncUnit}', t_stamp)
+          FROM hourly_energy_feeder
+          GROUP BY date_trunc('${truncUnit}', h_bucket)
           ${orderClauseFeeder}
         `;
         const feederRes = await pool.query(feederSql, [`${startDate} 00:00:00`, endDate]);
@@ -1537,20 +1714,9 @@ export const getElectricityReportHandler = async (
       const kwVal = r.kw !== null ? Number(r.kw) : null;
       const kvarVal = r.kvar !== null ? Number(r.kvar) : null;
       const kvaVal = r.kva !== null ? Number(r.kva) : null;
-      const energyDiff = (r.max_energy !== null && r.min_energy !== null && Number(r.max_energy) > Number(r.min_energy))
-        ? Number(r.max_energy) - Number(r.min_energy)
-        : null;
-
-      // Real active energy (kWh)
-      const kwhVal = energyDiff !== null && energyDiff > 0
-        ? energyDiff
-        : (kwVal !== null ? kwVal : (r.max_energy !== null ? Number(r.max_energy) : null));
-
-      // Real reactive energy (kVARh) - calculated directly from real reactive_power_total
-      const kvarhVal = kvarVal !== null ? Math.abs(kvarVal) : null;
-
-      // Real apparent energy (kVAh) - only if measured directly, no formula calculation
-      const kvahVal = kvaVal !== null ? Math.abs(kvaVal) : null;
+      const kwhVal = r.kwh !== null ? Number(r.kwh) : null;
+      const kvarhVal = r.kvarh !== null ? Number(r.kvarh) : null;
+      const kvahVal = r.kvah !== null ? Number(r.kvah) : null;
 
       return {
         date: dateStr,
