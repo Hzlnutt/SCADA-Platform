@@ -703,6 +703,7 @@ export interface ElectricPmRecord {
   volt_bc: number | null;
   volt_ca: number | null;
   volt_ll: number | null;
+  volt_ln?: number | null;
   current_a: number | null;
   current_b: number | null;
   current_c: number | null;
@@ -837,6 +838,7 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
       volt_bc: vBc,
       volt_ca: vCa,
       volt_ll: vLl,
+      volt_ln: getVal(["VoltLN", "Volt_LN"]),
       current_a: getVal(["Current_A"]),
       current_b: getVal(["Current_B"]),
       current_c: getVal(["Current_C"]),

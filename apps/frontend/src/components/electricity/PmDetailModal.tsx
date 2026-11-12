@@ -12,6 +12,7 @@ export type ElectricPmItem = {
   volt_bc: number | null;
   volt_ca: number | null;
   volt_ll: number | null;
+  volt_ln?: number | null;
   current_a: number | null;
   current_b: number | null;
   current_c: number | null;

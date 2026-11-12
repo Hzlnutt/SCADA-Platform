@@ -174,7 +174,8 @@ const decodePf = (val: number | null | undefined): number | null => {
 
 function mapPmToTransformer(
   initialTx: TransformerData,
-  pm?: ElectricPmItem
+  pm?: ElectricPmItem,
+  incomingVolts?: { wf1Volt: number | null; wf2Volt: number | null }
 ): TransformerData {
   if (!pm) return initialTx;
 
@@ -204,7 +205,9 @@ function mapPmToTransformer(
     ? Number(Number(pm.volt_ll).toFixed(1))
     : null;
 
-  const voltageOutL2N: number | null = null;
+  const voltageOutL2N = pm.volt_ln !== null && pm.volt_ln !== undefined
+    ? Number(Number(pm.volt_ln).toFixed(1))
+    : null;
 
   const currentR = pm.current_a !== null && pm.current_a !== undefined ? Number(Number(pm.current_a).toFixed(1)) : null;
   const currentS = pm.current_b !== null && pm.current_b !== undefined ? Number(Number(pm.current_b).toFixed(1)) : null;
@@ -233,7 +236,7 @@ function mapPmToTransformer(
     apparentPowerKva,
     powerFactor,
     frequencyHz,
-    voltageInKv: null,
+    voltageInKv: initialTx.factory === 1 ? (incomingVolts?.wf1Volt ?? initialTx.voltageInKv) : (incomingVolts?.wf2Volt ?? initialTx.voltageInKv),
     voltageOutL2L,
     voltageOutL2N,
     voltAb: vAb,
@@ -2068,6 +2071,15 @@ export default function PowerDistribution() {
     incomingDataRef.current = incomingData;
   }, [incomingData]);
 
+  // Sync 20 kV feeder voltages to transformer cards
+  useEffect(() => {
+    if (!incomingData.wf1Volt && !incomingData.wf2Volt) return;
+    setTelemetryTransformers(prev => prev.map(tx => ({
+      ...tx,
+      voltageInKv: tx.factory === 1 ? (incomingData.wf1Volt ?? tx.voltageInKv) : (incomingData.wf2Volt ?? tx.voltageInKv)
+    })));
+  }, [incomingData.wf1Volt, incomingData.wf2Volt]);
+
   const toKv = (v: number | null | undefined): number | null => {
     if (v === null || v === undefined || isNaN(Number(v))) return null;
     const num = Number(v);
@@ -2223,7 +2235,7 @@ export default function PowerDistribution() {
               if (!mapping) return tx;
               const pmRecord = pmMap.get(mapping.pmId.toUpperCase());
               if (!pmRecord) return tx;
-              return mapPmToTransformer(tx, pmRecord);
+              return mapPmToTransformer(tx, pmRecord, incomingDataRef.current);
             })
           );
           setLoadingSld(false);
@@ -2257,7 +2269,7 @@ export default function PowerDistribution() {
           if (!mapping) return tx;
           const pmRecord = pmMap.get(mapping.pmId.toUpperCase());
           if (!pmRecord) return tx;
-          return mapPmToTransformer(tx, pmRecord);
+          return mapPmToTransformer(tx, pmRecord, incomingDataRef.current);
         })
       );
     };
