@@ -648,6 +648,10 @@ export const ensurePostgresTables = async () => {
         volt_bc NUMERIC,
         volt_ca NUMERIC,
         volt_ll NUMERIC,
+        volt_an NUMERIC,
+        volt_bn NUMERIC,
+        volt_cn NUMERIC,
+        volt_ln NUMERIC,
         current_a NUMERIC,
         current_b NUMERIC,
         current_c NUMERIC,
@@ -680,6 +684,10 @@ export const ensurePostgresTables = async () => {
         volt_bc NUMERIC,
         volt_ca NUMERIC,
         volt_ll NUMERIC,
+        volt_an NUMERIC,
+        volt_bn NUMERIC,
+        volt_cn NUMERIC,
+        volt_ln NUMERIC,
         current_a NUMERIC,
         current_b NUMERIC,
         current_c NUMERIC,
@@ -794,6 +802,10 @@ export const ensurePostgresTables = async () => {
         current_b NUMERIC,
         current_c NUMERIC,
         power_factor NUMERIC,
+        volt_an NUMERIC,
+        volt_bn NUMERIC,
+        volt_cn NUMERIC,
+        volt_ln NUMERIC,
         PRIMARY KEY (pm_id, t_stamp)
       );
       CREATE INDEX IF NOT EXISTS idx_trafo_rolling_3s_ts ON electric_trafo_rolling_3s (t_stamp);
@@ -1174,6 +1186,22 @@ export const ensurePostgresTables = async () => {
     `).catch((err) => {
       logger.warn({ err }, "Failed to create electricity routing triggers");
     });
+
+        // Auto-migration for 230V Phase-to-Neutral columns
+    await pool.query(`
+      ALTER TABLE electric_pm_telemetry ADD COLUMN IF NOT EXISTS volt_an NUMERIC;
+      ALTER TABLE electric_pm_telemetry ADD COLUMN IF NOT EXISTS volt_bn NUMERIC;
+      ALTER TABLE electric_pm_telemetry ADD COLUMN IF NOT EXISTS volt_cn NUMERIC;
+      ALTER TABLE electric_pm_telemetry ADD COLUMN IF NOT EXISTS volt_ln NUMERIC;
+      ALTER TABLE electric_pm_telemetry_minute ADD COLUMN IF NOT EXISTS volt_an NUMERIC;
+      ALTER TABLE electric_pm_telemetry_minute ADD COLUMN IF NOT EXISTS volt_bn NUMERIC;
+      ALTER TABLE electric_pm_telemetry_minute ADD COLUMN IF NOT EXISTS volt_cn NUMERIC;
+      ALTER TABLE electric_pm_telemetry_minute ADD COLUMN IF NOT EXISTS volt_ln NUMERIC;
+      ALTER TABLE electric_trafo_rolling_3s ADD COLUMN IF NOT EXISTS volt_an NUMERIC;
+      ALTER TABLE electric_trafo_rolling_3s ADD COLUMN IF NOT EXISTS volt_bn NUMERIC;
+      ALTER TABLE electric_trafo_rolling_3s ADD COLUMN IF NOT EXISTS volt_cn NUMERIC;
+      ALTER TABLE electric_trafo_rolling_3s ADD COLUMN IF NOT EXISTS volt_ln NUMERIC;
+    `).catch(err => logger.warn({ err }, "230V column migrations check skipped or already exists"));
 
     // 5. Fill any historical missing hourly gaps with NULL values
     try {

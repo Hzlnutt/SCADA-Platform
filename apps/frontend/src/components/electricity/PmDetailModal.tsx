@@ -12,6 +12,9 @@ export type ElectricPmItem = {
   volt_bc: number | null;
   volt_ca: number | null;
   volt_ll: number | null;
+  volt_an?: number | null;
+  volt_bn?: number | null;
+  volt_cn?: number | null;
   volt_ln?: number | null;
   current_a: number | null;
   current_b: number | null;
@@ -328,6 +331,22 @@ export function PmDetailModal({ pm, onClose, isDark }: Props) {
                   <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
                     <span className="text-slate-400 shrink-0">Volt L-L:</span>
                     <span className={`font-bold text-right ${pm.volt_ll !== null && pm.volt_ll !== undefined ? "text-slate-800 dark:text-white" : "text-[10px] font-sans text-amber-500"}`}>{fmt(pm.volt_ll, "V")}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Volt A-N:</span>
+                    <span className={`font-bold text-right ${pm.volt_an !== null && pm.volt_an !== undefined ? "text-slate-800 dark:text-white" : "text-[10px] font-sans text-amber-500"}`}>{fmt(pm.volt_an, "V")}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Volt B-N:</span>
+                    <span className={`font-bold text-right ${pm.volt_bn !== null && pm.volt_bn !== undefined ? "text-slate-800 dark:text-white" : "text-[10px] font-sans text-amber-500"}`}>{fmt(pm.volt_bn, "V")}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Volt C-N:</span>
+                    <span className={`font-bold text-right ${pm.volt_cn !== null && pm.volt_cn !== undefined ? "text-slate-800 dark:text-white" : "text-[10px] font-sans text-amber-500"}`}>{fmt(pm.volt_cn, "V")}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                    <span className="text-slate-400 shrink-0">Volt L-N:</span>
+                    <span className={`font-bold text-right ${pm.volt_ln !== null && pm.volt_ln !== undefined ? "text-slate-800 dark:text-white" : "text-[10px] font-sans text-amber-500"}`}>{fmt(pm.volt_ln, "V")}</span>
                   </div>
                   <div className="col-span-2 flex justify-between items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
                     <span className="text-slate-400 shrink-0">Voltage Unbalance:</span>

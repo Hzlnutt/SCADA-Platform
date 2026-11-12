@@ -703,6 +703,9 @@ export interface ElectricPmRecord {
   volt_bc: number | null;
   volt_ca: number | null;
   volt_ll: number | null;
+  volt_an?: number | null;
+  volt_bn?: number | null;
+  volt_cn?: number | null;
   volt_ln?: number | null;
   current_a: number | null;
   current_b: number | null;
@@ -838,6 +841,9 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
       volt_bc: vBc,
       volt_ca: vCa,
       volt_ll: vLl,
+      volt_an: getVal(["VoltAN", "Volt_AN"]),
+      volt_bn: getVal(["VoltBN", "Volt_BN"]),
+      volt_cn: getVal(["VoltCN", "Volt_CN"]),
       volt_ln: getVal(["VoltLN", "Volt_LN"]),
       current_a: getVal(["Current_A"]),
       current_b: getVal(["Current_B"]),
@@ -949,10 +955,11 @@ const insertPmMinuteTelemetryBatch = async (records: ElectricPmRecord[], minuteT
 
     for (const r of validRecords) {
       valueClauses.push(
-        `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`
+        `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`
       );
       params.push(
         minuteTs, r.group_id, r.pm_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
+        r.volt_an ?? null, r.volt_bn ?? null, r.volt_cn ?? null, r.volt_ln ?? null,
         r.current_a, r.current_b, r.current_c, r.frequency, r.active_power_total,
         r.reactive_power_total, r.apparent_power_total, r.power_factor,
         r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
@@ -963,6 +970,7 @@ const insertPmMinuteTelemetryBatch = async (records: ElectricPmRecord[], minuteT
     await pool.query(`
       INSERT INTO electric_pm_telemetry_minute (
         t_stamp, group_id, pm_id, status, volt_ab, volt_bc, volt_ca, volt_ll,
+        volt_an, volt_bn, volt_cn, volt_ln,
         current_a, current_b, current_c, frequency, active_power_total,
         reactive_power_total, apparent_power_total, power_factor,
         voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
@@ -2128,7 +2136,7 @@ export const startIncomingElectricityPolling = () => {
           placeholders.push(
             "($" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) +
             ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) +
-            ", $" + (pIdx++) + ")"
+            ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ", $" + (pIdx++) + ")"
           );
           vals.push(
             r.pm_id.toUpperCase(),
@@ -2141,7 +2149,11 @@ export const startIncomingElectricityPolling = () => {
             r.current_a !== null ? r.current_a : null,
             r.current_b !== null ? r.current_b : null,
             r.current_c !== null ? r.current_c : null,
-            r.power_factor !== null ? Number(r.power_factor) : null
+            r.power_factor !== null ? Number(r.power_factor) : null,
+            r.volt_an !== null && r.volt_an !== undefined ? Number(r.volt_an) : null,
+            r.volt_bn !== null && r.volt_bn !== undefined ? Number(r.volt_bn) : null,
+            r.volt_cn !== null && r.volt_cn !== undefined ? Number(r.volt_cn) : null,
+            r.volt_ln !== null && r.volt_ln !== undefined ? Number(r.volt_ln) : null
           );
         }
         const purgeTrafoDate = new Date(ts.getTime() - (24 * 3600 + 300) * 1000);
@@ -2150,7 +2162,8 @@ export const startIncomingElectricityPolling = () => {
         getPostgresPool().query(`
           INSERT INTO electric_trafo_rolling_3s (
             pm_id, t_stamp, status, volt_ab, volt_bc, volt_ca,
-            active_power_total, current_a, current_b, current_c, power_factor
+            active_power_total, current_a, current_b, current_c, power_factor,
+            volt_an, volt_bn, volt_cn, volt_ln
           ) VALUES ${placeholders.join(", ")}
           ON CONFLICT (pm_id, t_stamp) DO UPDATE SET
             status = EXCLUDED.status,
@@ -2161,7 +2174,11 @@ export const startIncomingElectricityPolling = () => {
             current_a = EXCLUDED.current_a,
             current_b = EXCLUDED.current_b,
             current_c = EXCLUDED.current_c,
-            power_factor = EXCLUDED.power_factor
+            power_factor = EXCLUDED.power_factor,
+            volt_an = EXCLUDED.volt_an,
+            volt_bn = EXCLUDED.volt_bn,
+            volt_cn = EXCLUDED.volt_cn,
+            volt_ln = EXCLUDED.volt_ln
         `, vals).then(() => {
           if (io) {
             io.emit("electricity:trafo_3s_saved", {
@@ -2179,7 +2196,11 @@ export const startIncomingElectricityPolling = () => {
                 current_a: r.current_a,
                 current_b: r.current_b,
                 current_c: r.current_c,
-                power_factor: r.power_factor !== null ? Number(r.power_factor) : null
+                power_factor: r.power_factor !== null ? Number(r.power_factor) : null,
+                volt_an: r.volt_an !== null && r.volt_an !== undefined ? Number(r.volt_an) : null,
+                volt_bn: r.volt_bn !== null && r.volt_bn !== undefined ? Number(r.volt_bn) : null,
+                volt_cn: r.volt_cn !== null && r.volt_cn !== undefined ? Number(r.volt_cn) : null,
+                volt_ln: r.volt_ln !== null && r.volt_ln !== undefined ? Number(r.volt_ln) : null
               }))
             });
           }
@@ -2566,6 +2587,10 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(volt_bc) as volt_bc,
             AVG(volt_ca) as volt_ca,
             AVG(volt_ll) as volt_ll,
+            AVG(volt_an) as volt_an,
+            AVG(volt_bn) as volt_bn,
+            AVG(volt_cn) as volt_cn,
+            AVG(volt_ln) as volt_ln,
             AVG(current_a) as current_a,
             AVG(current_b) as current_b,
             AVG(current_c) as current_c,
@@ -2864,15 +2889,17 @@ export const runElectricityRollupAndCleanup = async () => {
           await client.query(`
             INSERT INTO electric_pm_telemetry (
               t_stamp, group_id, pm_id, status, volt_ab, volt_bc, volt_ca, volt_ll,
+              volt_an, volt_bn, volt_cn, volt_ln,
               current_a, current_b, current_c, frequency, active_power_total,
               reactive_power_total, apparent_power_total, power_factor,
               voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
               thd_current_a, thd_current_b, thd_current_c, active_energy
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
             )
           `, [
             hourStartStr, r.group_id, r.pm_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
+            r.volt_an, r.volt_bn, r.volt_cn, r.volt_ln,
             r.current_a, r.current_b, r.current_c, r.frequency, r.active_power_total,
             r.reactive_power_total, r.apparent_power_total, r.power_factor,
             r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,

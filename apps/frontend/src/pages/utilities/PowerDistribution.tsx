@@ -124,6 +124,9 @@ type TransformerData = {
   voltageInKv: number | null;
   voltageOutL2L: number | null;
   voltageOutL2N: number | null;
+  voltAn?: number | null;
+  voltBn?: number | null;
+  voltCn?: number | null;
   voltAb?: number | null;
   voltBc?: number | null;
   voltCa?: number | null;
@@ -201,6 +204,10 @@ function mapPmToTransformer(
   const vBc = pm.volt_bc !== null && pm.volt_bc !== undefined ? Number(pm.volt_bc) : null;
   const vCa = pm.volt_ca !== null && pm.volt_ca !== undefined ? Number(pm.volt_ca) : null;
 
+  const vAn = pm.volt_an !== null && pm.volt_an !== undefined ? Number(pm.volt_an) : null;
+  const vBn = pm.volt_bn !== null && pm.volt_bn !== undefined ? Number(pm.volt_bn) : null;
+  const vCn = pm.volt_cn !== null && pm.volt_cn !== undefined ? Number(pm.volt_cn) : null;
+
   const voltageOutL2L = pm.volt_ll !== null && pm.volt_ll !== undefined
     ? Number(Number(pm.volt_ll).toFixed(1))
     : null;
@@ -239,6 +246,9 @@ function mapPmToTransformer(
     voltageInKv: initialTx.factory === 1 ? (incomingVolts?.wf1Volt ?? initialTx.voltageInKv) : (incomingVolts?.wf2Volt ?? initialTx.voltageInKv),
     voltageOutL2L,
     voltageOutL2N,
+    voltAn: vAn,
+    voltBn: vBn,
+    voltCn: vCn,
     voltAb: vAb,
     voltBc: vBc,
     voltCa: vCa,
@@ -1076,6 +1086,9 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
             const c1 = Number(row[5]) || 0;
             const c2 = Number(row[6]) || 0;
             const c3 = Number(row[7]) || 0;
+            const vrn = (row[8] !== null && row[8] !== undefined && Number(row[8]) > 50) ? Number(row[8]) : null;
+            const vsn = (row[9] !== null && row[9] !== undefined && Number(row[9]) > 50) ? Number(row[9]) : null;
+            const vtn = (row[10] !== null && row[10] !== undefined && Number(row[10]) > 50) ? Number(row[10]) : null;
             vAb[i] = { x, y: v1 };
             vBc[i] = { x, y: v2 };
             vCa[i] = { x, y: v3 };
@@ -1083,6 +1096,9 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
             iR[i] = { x, y: c1 };
             iS[i] = { x, y: c2 };
             iT[i] = { x, y: c3 };
+            if (vrn !== null) vRn.push({ x, y: vrn });
+            if (vsn !== null) vSn.push({ x, y: vsn });
+            if (vtn !== null) vTn.push({ x, y: vtn });
           }
 
           modalSeriesRef.current = { vAb, vBc, vCa, vRn, vSn, vTn, kw, iTot, iR, iS, iT };
@@ -1095,9 +1111,9 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
           const lc3 = Number(last[7]) || 0;
           latestModalLiveRef.current = {
             vAb: lv1, vBc: lv2, vCa: lv3,
-            vRn: 0,
-            vSn: 0,
-            vTn: 0,
+            vRn: (last[8] !== null && last[8] !== undefined) ? Number(last[8]) : 0,
+            vSn: (last[9] !== null && last[9] !== undefined) ? Number(last[9]) : 0,
+            vTn: (last[10] !== null && last[10] !== undefined) ? Number(last[10]) : 0,
             kw: Number(last[4]) || 0,
             iR: lc1, iS: lc2, iT: lc3,
             iTot: 0
@@ -1139,6 +1155,12 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
       pushAndShift(s.vAb, v1);
       pushAndShift(s.vBc, v2);
       pushAndShift(s.vCa, v3);
+      const vrn = pm.volt_an !== undefined && pm.volt_an !== null ? Number(Number(pm.volt_an).toFixed(1)) : 0;
+      const vsn = pm.volt_bn !== undefined && pm.volt_bn !== null ? Number(Number(pm.volt_bn).toFixed(1)) : 0;
+      const vtn = pm.volt_cn !== undefined && pm.volt_cn !== null ? Number(Number(pm.volt_cn).toFixed(1)) : 0;
+      if (vrn > 50) pushAndShift(s.vRn, vrn);
+      if (vsn > 50) pushAndShift(s.vSn, vsn);
+      if (vtn > 50) pushAndShift(s.vTn, vtn);
       pushAndShift(s.kw, p);
       pushAndShift(s.iR, c1);
       pushAndShift(s.iS, c2);
@@ -1415,7 +1437,7 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
 
             {/* Chart View */}
             <div className="relative flex-1 flex flex-col p-4 border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 rounded-2xl overflow-hidden" style={{ minHeight: 280, height: "100%" }}>
-              {activeTab === "voltage" && modalVoltageType === "230v" ? (
+              {activeTab === "voltage" && modalVoltageType === "230v" && (modalSeriesRef.current.vRn.length === 0 && modalSeriesRef.current.vSn.length === 0) ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-amber-500/30 bg-amber-500/5 rounded-xl">
                   <span className="text-xs font-extrabold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
                   <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 max-w-sm">
@@ -1696,7 +1718,17 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 16px" }} className="text-xs">
           <ParamCell label="Input Voltage" value={tx.voltageInKv !== null ? `${tx.voltageInKv.toFixed(2)} kV` : NO_REALTIME_API} warn={tx.voltageInKv === null} />
           <ParamCell label="Output Volt 400V" value={has400V ? `R:${tx.voltAb!.toFixed(1)} S:${tx.voltBc!.toFixed(1)} T:${tx.voltCa!.toFixed(1)} V` : NO_REALTIME_API} warn={!has400V} />
-          <ParamCell label="Output Volt 230V" value={tx.voltageOutL2N !== null ? `${tx.voltageOutL2N.toFixed(1)} V` : NO_REALTIME_API} warn={tx.voltageOutL2N === null} />
+          <ParamCell 
+            label="Output Volt 230V" 
+            value={
+              (tx.voltAn !== null && tx.voltAn !== undefined && tx.voltBn !== null && tx.voltBn !== undefined && tx.voltCn !== null && tx.voltCn !== undefined)
+                ? `R:${tx.voltAn.toFixed(0)} S:${tx.voltBn.toFixed(0)} T:${tx.voltCn.toFixed(0)} V`
+                : (tx.voltageOutL2N !== null && tx.voltageOutL2N !== undefined)
+                  ? `${tx.voltageOutL2N.toFixed(1)} V`
+                  : NO_REALTIME_API
+            } 
+            warn={tx.voltAn === null && tx.voltageOutL2N === null} 
+          />
           
           <ParamCell label="Active Power" value={tx.activePowerKw !== null ? `${tx.activePowerKw} kW` : NO_REALTIME_API} accent={hasData} warn={tx.activePowerKw === null} />
           <ParamCell label="Reactive Power" value={tx.reactivePowerKvar !== null ? `${tx.reactivePowerKvar} kVAR` : NO_REALTIME_API} warn={tx.reactivePowerKvar === null} />
@@ -2385,10 +2417,13 @@ export default function PowerDistribution() {
   // Merge specs into transformers
   const transformers = useMemo(() => {
     return telemetryTransformers.map(tx => {
+      const incomingVolt = tx.factory === 1 ? incomingData.wf1Volt : incomingData.wf2Volt;
+      const effectiveVoltageInKv = incomingVolt ?? tx.voltageInKv;
       const spec = customSpecs[tx.id];
       if (spec) {
         return {
           ...tx,
+          voltageInKv: effectiveVoltageInKv,
           capacityKva: spec.capacityKva || tx.capacityKva,
           vectorGroup: spec.vectorGroup || "Dyn11",
           impedance: spec.impedance || 4.5,
@@ -2398,13 +2433,14 @@ export default function PowerDistribution() {
       }
       return {
         ...tx,
+        voltageInKv: effectiveVoltageInKv,
         vectorGroup: "Dyn11",
         impedance: 4.5,
         year: "2021",
         manufacturer: "Schneider"
       };
     });
-  }, [telemetryTransformers, customSpecs]);
+  }, [telemetryTransformers, customSpecs, incomingData.wf1Volt, incomingData.wf2Volt]);
 
   // Load specs & coverage from database on mount
   useEffect(() => {
@@ -2594,6 +2630,9 @@ export default function PowerDistribution() {
               const c1 = Number(row[5]) || 0;
               const c2 = Number(row[6]) || 0;
               const c3 = Number(row[7]) || 0;
+              const vrn = (row[8] !== null && row[8] !== undefined && Number(row[8]) > 50) ? Number(row[8]) : null;
+              const vsn = (row[9] !== null && row[9] !== undefined && Number(row[9]) > 50) ? Number(row[9]) : null;
+              const vtn = (row[10] !== null && row[10] !== undefined && Number(row[10]) > 50) ? Number(row[10]) : null;
               vAb[i] = { x, y: v1 };
               vBc[i] = { x, y: v2 };
               vCa[i] = { x, y: v3 };
@@ -2601,6 +2640,9 @@ export default function PowerDistribution() {
               iR[i] = { x, y: c1 };
               iS[i] = { x, y: c2 };
               iT[i] = { x, y: c3 };
+              if (vrn !== null) vRn.push({ x, y: vrn });
+              if (vsn !== null) vSn.push({ x, y: vsn });
+              if (vtn !== null) vTn.push({ x, y: vtn });
             }
 
             bottomSeriesRef.current = { vAb, vBc, vCa, vRn, vSn, vTn, kw, iTot, iR, iS, iT };
@@ -2613,9 +2655,9 @@ export default function PowerDistribution() {
             const lc3 = Number(last[7]) || 0;
             latestBottomLiveRef.current = {
               vAb: lv1, vBc: lv2, vCa: lv3,
-              vRn: 0,
-              vSn: 0,
-              vTn: 0,
+              vRn: (last[8] !== null && last[8] !== undefined) ? Number(last[8]) : 0,
+              vSn: (last[9] !== null && last[9] !== undefined) ? Number(last[9]) : 0,
+              vTn: (last[10] !== null && last[10] !== undefined) ? Number(last[10]) : 0,
               kw: Number(last[4]) || 0,
               iR: lc1, iS: lc2, iT: lc3,
               iTot: 0
@@ -2661,6 +2703,12 @@ export default function PowerDistribution() {
       pushAndShift(s.vAb, v1);
       pushAndShift(s.vBc, v2);
       pushAndShift(s.vCa, v3);
+      const vrn = pm.volt_an !== undefined && pm.volt_an !== null ? Number(Number(pm.volt_an).toFixed(1)) : 0;
+      const vsn = pm.volt_bn !== undefined && pm.volt_bn !== null ? Number(Number(pm.volt_bn).toFixed(1)) : 0;
+      const vtn = pm.volt_cn !== undefined && pm.volt_cn !== null ? Number(Number(pm.volt_cn).toFixed(1)) : 0;
+      if (vrn > 50) pushAndShift(s.vRn, vrn);
+      if (vsn > 50) pushAndShift(s.vSn, vsn);
+      if (vtn > 50) pushAndShift(s.vTn, vtn);
       pushAndShift(s.kw, p);
       pushAndShift(s.iR, c1);
       pushAndShift(s.iS, c2);
@@ -3760,7 +3808,7 @@ export default function PowerDistribution() {
               </div>
             </div>
             <div className="h-[175px] w-full">
-              {bottomVoltageMode === "230v" ? (
+              {bottomVoltageMode === "230v" && (bottomSeriesRef.current.vRn.length === 0 && bottomSeriesRef.current.vSn.length === 0) ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-amber-500/30 bg-amber-500/5 rounded-xl">
                   <span className="text-xs font-extrabold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
                   <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
@@ -3944,7 +3992,7 @@ export default function PowerDistribution() {
             {/* Modal Body: Large Chart */}
             <div className="relative w-full flex-1 min-h-[420px] sm:min-h-[460px]">
               {bottomZoomChart === "voltage" ? (
-                bottomVoltageMode === "230v" ? (
+                bottomVoltageMode === "230v" && (bottomSeriesRef.current.vRn.length === 0 && bottomSeriesRef.current.vSn.length === 0) ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-6 border border-dashed border-amber-500/30 bg-amber-500/5 rounded-2xl">
                     <span className="text-sm font-extrabold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
