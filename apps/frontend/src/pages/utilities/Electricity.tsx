@@ -54,11 +54,14 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
 const formatNumber = (value: number | undefined | null) => {
-  const val = Number(value ?? 0);
+  const raw = Number(value ?? 0);
+  if (isNaN(raw)) return "0";
+  const val = Math.round(raw * 100) / 100;
   if (val > 0 && val < 1) {
     return val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 });
   }
-  return val.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+  const hasFraction = Math.abs(val - Math.round(val)) > 0.001;
+  return val.toLocaleString("id-ID", { minimumFractionDigits: hasFraction ? 1 : 0, maximumFractionDigits: 2 });
 };
 
 const getLocalTodayString = () => {
@@ -69,11 +72,12 @@ const getLocalTodayString = () => {
   return `${yr}-${mo}-${dy}`;
 };
 
-const formatPeakTs = (tsStr: string) => {
+const formatPeakTs = (tsStr: string | Date | null | undefined) => {
   if (!tsStr) return "";
-  const dateObj = new Date(tsStr);
-  const day = dateObj.getDate();
-  const month = MONTH_SHORT_ID[dateObj.getMonth()];
+  const dateObj = typeof tsStr === "string" ? new Date(tsStr) : tsStr;
+  if (isNaN(dateObj.getTime())) return "";
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  const month = MONTH_SHORT_ID[dateObj.getMonth()] || "";
   const year = dateObj.getFullYear();
   const hrs = String(dateObj.getHours()).padStart(2, "0");
   const mins = String(dateObj.getMinutes()).padStart(2, "0");
@@ -467,8 +471,8 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         display: true,
         position: "bottom" as const,
         labels: {
-          color: isDark ? "rgba(203, 213, 225, 0.9)" : "rgba(51, 65, 85, 0.9)",
-          font: { size: isZoomed ? 13 : 10, weight: isZoomed ? "700" : "600" },
+          color: isDark ? "rgba(203, 213, 225, 0.95)" : "rgba(51, 65, 85, 0.95)",
+          font: { size: isZoomed ? 14 : 11.5, weight: isZoomed ? "700" : "600" },
           usePointStyle: true,
           pointStyle: "rectRounded",
           padding: isZoomed ? 20 : 14,
@@ -481,20 +485,20 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           duration: 180,
           easing: "easeOutQuad"
         },
-        backgroundColor: isDark ? "rgba(13, 21, 39, 0.96)" : "rgba(255, 255, 255, 0.98)",
+        backgroundColor: isDark ? "rgba(13, 21, 39, 0.98)" : "rgba(255, 255, 255, 1)",
         titleColor: isDark ? "#38bdf8" : "#0284c7",
-        titleFont: { size: isZoomed ? 14 : 12, weight: "700" as const },
+        titleFont: { size: isZoomed ? 16 : 14, weight: "700" as const },
         bodyColor: isDark ? "#f1f5f9" : "#0f172a",
-        borderColor: isDark ? "rgba(56, 189, 248, 0.3)" : "rgba(14, 165, 233, 0.3)",
-        borderWidth: 1,
-        padding: isZoomed ? 14 : 10,
-        boxPadding: 4,
-        bodyFont: { family: "IBM Plex Mono, monospace", size: isZoomed ? 13 : 11 },
+        borderColor: isDark ? "rgba(56, 189, 248, 0.4)" : "rgba(14, 165, 233, 0.4)",
+        borderWidth: 1.5,
+        padding: isZoomed ? 16 : 13,
+        boxPadding: 6,
+        bodyFont: { family: "IBM Plex Mono, monospace", size: isZoomed ? 14.5 : 13, weight: "500" as const },
         callbacks: {
           title: (items: any[]) => {
             if (!items || items.length === 0) return "";
             const dayNum = String(items[0].dataIndex + 1).padStart(2, "0");
-            return `Tanggal ${dayNum} ${currMonthName || "Bulan Ini"}`;
+            return `Tanggal ${dayNum} ${currMonthName || "Bulan Utama"}`;
           },
           label: (ctx: any) => {
             const val = Number(ctx.parsed.y || 0);
@@ -524,23 +528,23 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             if (selectorType === "all") {
               const b = currentBreakdown?.[idx];
               if (b && (b.poi1 > 0 || b.poi2 > 0)) {
-                lines.push(`• Rincian PLTS Bulan Ini: POI-1 ${b.poi1.toLocaleString("id-ID", { maximumFractionDigits: 2 })} | POI-2 ${b.poi2.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`);
+                lines.push(`• Rincian PLTS ${currMonthName || "Bulan Ini"}: POI-1 ${b.poi1.toLocaleString("id-ID", { maximumFractionDigits: 2 })} | POI-2 ${b.poi2.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`);
               }
               const pb = previousBreakdown?.[idx];
-              if (pb && (pb.poi1 > 0 || pb.poi2 > 0)) {
-                lines.push(`• Rincian PLTS ${prevMonthName || "Bln Lalu"}: POI-1 ${pb.poi1.toLocaleString("id-ID", { maximumFractionDigits: 2 })} | POI-2 ${pb.poi2.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`);
+              if (showPrevious && pb && (pb.poi1 > 0 || pb.poi2 > 0)) {
+                lines.push(`• Rincian PLTS ${prevMonthName || "Pembanding"}: POI-1 ${pb.poi1.toLocaleString("id-ID", { maximumFractionDigits: 2 })} | POI-2 ${pb.poi2.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`);
               }
-              lines.push(`Total Konsumsi Bulan Ini: ${curVal.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`);
-              if (prevVal > 0) {
-                lines.push(`Total Konsumsi ${prevMonthName || "Bln Lalu"}: ${prevVal.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`);
+              lines.push(`Total Konsumsi ${currMonthName || "Bulan Ini"}: ${curVal.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`);
+              if (showPrevious && prevVal > 0) {
+                lines.push(`Total Konsumsi ${prevMonthName || "Pembanding"}: ${prevVal.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh`);
               }
             }
 
-            if (prevVal > 0) {
+            if (showPrevious && prevVal > 0) {
               const diff = curVal - prevVal;
               const diffSign = diff > 0 ? "+" : "";
               const pct = ((diff / prevVal) * 100).toFixed(1);
-              lines.push(`Selisih vs Bulan Lalu: ${diffSign}${diff.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh (${diffSign}${pct}%)`);
+              lines.push(`Selisih vs ${prevMonthName || "Bulan Pembanding"}: ${diffSign}${diff.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 3 })} kWh (${diffSign}${pct}%)`);
             }
 
             if ((selectorType === "pln" || selectorType === "wf1" || selectorType === "wf2") && currentBreakdown?.[idx]) {
@@ -556,9 +560,9 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
               const pvCost = kwh * currentPvRate;
               const savings = kwh * (plnRate - currentPvRate);
               if (currentPvRate > 0) {
-                lines.push(`• Biaya PV: Rp ${Math.round(pvCost).toLocaleString("id-ID")}`);
+                lines.push(`• Biaya PV: Rp ${pvCost.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
               }
-              lines.push(`• Estimasi Hemat: Rp ${Math.round(savings).toLocaleString("id-ID")}`);
+              lines.push(`• Estimasi Hemat: Rp ${savings.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
             }
 
             return lines;
@@ -574,10 +578,10 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           color: isDark ? "rgba(51, 65, 85, 0.3)" : "rgba(203, 213, 225, 0.4)"
         },
         ticks: {
-          color: isDark ? "rgba(203, 213, 225, 0.85)" : "rgba(51, 65, 85, 0.85)",
+          color: isDark ? "rgba(203, 213, 225, 0.9)" : "rgba(51, 65, 85, 0.9)",
           font: {
-            size: isZoomed ? 12 : 9,
-            weight: isZoomed ? ("700" as const) : ("normal" as const),
+            size: isZoomed ? 13 : 10.5,
+            weight: isZoomed ? ("700" as const) : ("600" as const),
             family: "IBM Plex Mono, monospace"
           },
           padding: isZoomed ? 6 : 2,
@@ -601,10 +605,10 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         grid: { color: isDark ? "rgba(51, 65, 85, 0.4)" : "rgba(203, 213, 225, 0.5)" },
         ticks: {
           maxTicksLimit: isZoomed ? 10 : 6,
-          color: isDark ? "rgba(203, 213, 225, 0.85)" : "rgba(51, 65, 85, 0.85)",
+          color: isDark ? "rgba(203, 213, 225, 0.9)" : "rgba(51, 65, 85, 0.9)",
           font: {
-            size: isZoomed ? 12 : 9,
-            weight: isZoomed ? ("700" as const) : ("normal" as const),
+            size: isZoomed ? 13 : 10.5,
+            weight: isZoomed ? ("700" as const) : ("600" as const),
             family: "IBM Plex Mono, monospace"
           },
           padding: isZoomed ? 8 : 4,
@@ -642,7 +646,9 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   currentBreakdown,
   previousBreakdown,
   solarRate,
-  pvRate
+  pvRate,
+  showPreviousControlled,
+  onToggleShowPrevious
 }: {
   title: string;
   currentData: number[];
@@ -655,8 +661,20 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   previousBreakdown?: MonthlyBreakdownItem[];
   solarRate?: number;
   pvRate?: number;
+  showPreviousControlled?: boolean;
+  onToggleShowPrevious?: (val: boolean) => void;
 }) {
-  const [showPrevious, setShowPrevious] = useState(true);
+  const isControlled = typeof showPreviousControlled === "boolean";
+  const [internalShowPrevious, setInternalShowPrevious] = useState(true);
+  const showPrevious = isControlled ? showPreviousControlled : internalShowPrevious;
+
+  const handleTogglePrevious = (val: boolean) => {
+    if (!isControlled) {
+      setInternalShowPrevious(val);
+    }
+    onToggleShowPrevious?.(val);
+  };
+
   const [isZoomOpen, setIsZoomOpen] = useState(false);
 
   useEffect(() => {
@@ -699,13 +717,13 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm h-full flex-1 flex flex-col justify-between">
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-3 min-h-[64px]">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-3 min-h-[56px]">
         {/* Top-Left: Title and Total kWh */}
-        <div className="flex flex-col min-h-[50px] justify-between">
+        <div className="flex flex-col min-h-[46px] justify-between">
           <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 line-clamp-2" title={title}>{title}</h4>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex flex-wrap items-center gap-2 mt-1">
             <span className="text-base font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400">
-              {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">kWh</span>
+              {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 font-sans">kWh</span>
             </span>
             {showPrevious && diffPct !== null && (
               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
@@ -713,26 +731,17 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
                   ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
                   : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
               }`}>
-                {Number(diffPct) > 0 ? `+${diffPct}%` : `${diffPct}%`} vs bln lalu
+                {Number(diffPct) > 0 ? `+${diffPct}%` : `${diffPct}%`} vs {prevMonthName ? prevMonthName.split(" ")[0] : "pembanding"}
               </span>
             )}
           </div>
         </div>
 
-        {/* Top-Right: Checkbox, Month badges & Zoom In Button */}
+        {/* Top-Right: Month badge & Zoom Button */}
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 hover:bg-slate-200/80 dark:hover:bg-slate-700 transition cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showPrevious}
-              onChange={(e) => setShowPrevious(e.target.checked)}
-              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer accent-blue-600"
-            />
-            <span>Bulan Lalu</span>
-          </label>
           {showPrevious && (
-            <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-              {prevMonthName || "Bln Pembanding"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
+            <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+              {prevMonthName || "Pembanding"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
             </span>
           )}
           <button
@@ -764,7 +773,7 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
         />
       </div>
 
-      {/* Zoom Popup Modal - Balanced Large Modal (Not Covering Entire Screen) */}
+      {/* Zoom Popup Modal - Balanced Large Modal */}
       {isZoomOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 md:p-6 animate-in fade-in duration-200"
@@ -773,10 +782,10 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
           <div
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl flex flex-col overflow-hidden transition-all duration-150"
             style={{
-              width: "90vw",
-              maxWidth: "1480px",
-              height: "85vh",
-              maxHeight: "86vh",
+              width: "92vw",
+              maxWidth: "1540px",
+              height: "88vh",
+              maxHeight: "90vh",
               padding: "1.25rem 1.5rem"
             }}
             onClick={(e) => e.stopPropagation()}
@@ -795,7 +804,7 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
                 {/* KPI Metrics Strip */}
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2">
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-xs text-slate-400 uppercase font-semibold">Bulan Ini:</span>
+                    <span className="text-xs text-slate-400 uppercase font-semibold">{currMonthName || "Bulan Utama"}:</span>
                     <span className="text-2xl sm:text-3xl font-black font-mono text-[#1f6fb5] dark:text-sky-400">
                       {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">kWh</span>
                     </span>
@@ -803,7 +812,7 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
 
                   {showPrevious && (
                     <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                      {prevMonthName || "Bulan Lalu"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
+                      {prevMonthName || "Pembanding"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
                     </span>
                   )}
 
@@ -813,7 +822,13 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
                         ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
                         : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
                     }`}>
-                      {Number(diffPct) > 0 ? `+${diffPct}%` : `${diffPct}%`} vs bln lalu
+                      {Number(diffPct) > 0 ? `+${diffPct}%` : `${diffPct}%`} vs {prevMonthName ? prevMonthName.split(" ")[0] : "pembanding"}
+                    </span>
+                  )}
+
+                  {!showPrevious && (
+                    <span className="px-3 py-1 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                      Mode Tunggal (Tanpa Pembanding)
                     </span>
                   )}
 
@@ -831,18 +846,8 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
                 </div>
               </div>
 
-              {/* Action Buttons Top Right */}
+              {/* Action Button Top Right */}
               <div className="flex items-center gap-2 sm:gap-3">
-                <label className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 cursor-pointer select-none transition">
-                  <input
-                    type="checkbox"
-                    checked={showPrevious}
-                    onChange={(e) => setShowPrevious(e.target.checked)}
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer accent-blue-600"
-                  />
-                  <span>Bulan Lalu</span>
-                </label>
-
                 {/* Close Button */}
                 <button
                   type="button"
@@ -2865,9 +2870,38 @@ export default function Electricity() {
   const [isSolarFilterPending, setIsSolarFilterPending] = useState(false);
   const plnCacheRef = useRef<Map<string, { data: any; ts: number }>>(new Map());
   const solarCacheRef = useRef<Map<string, { data: any; ts: number }>>(new Map());
+  const lastOverviewLiveTsRef = useRef<number>(0);
 
   const [livePf, setLivePf] = useState<number | null>(null);
   const [pfStatus, setPfStatus] = useState<"connected" | "offline">("offline");
+
+  // Live WIB clock state updating every second for progressive minute tooltips and real-time synchronization
+  const [liveClock, setLiveClock] = useState(() => {
+    const now = new Date();
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const wib = new Date(utc + (7 * 3600000));
+    return {
+      hour: wib.getHours(),
+      minute: wib.getMinutes(),
+      second: wib.getSeconds(),
+      dateStr: `${wib.getFullYear()}-${String(wib.getMonth() + 1).padStart(2, "0")}-${String(wib.getDate()).padStart(2, "0")}`
+    };
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const wib = new Date(utc + (7 * 3600000));
+      setLiveClock({
+        hour: wib.getHours(),
+        minute: wib.getMinutes(),
+        second: wib.getSeconds(),
+        dateStr: `${wib.getFullYear()}-${String(wib.getMonth() + 1).padStart(2, "0")}-${String(wib.getDate()).padStart(2, "0")}`
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Solar Panel (PLTS) states
   const [solarData, setSolarData] = useState<any>(null);
@@ -2904,6 +2938,7 @@ export default function Electricity() {
 
   // Live socket & API telemetry states for real-time streaming
   const [livePGridKw, setLivePGridKw] = useState<number | null>(null);
+  const [livePlnStatus, setLivePlnStatus] = useState<boolean>(true);
   const [livePeakDemandKw, setLivePeakDemandKw] = useState<number | null>(null);
   const [liveWf1Kw, setLiveWf1Kw] = useState<number | null>(null);
   const [liveWf2Kw, setLiveWf2Kw] = useState<number | null>(null);
@@ -2924,7 +2959,20 @@ export default function Electricity() {
   const [cubiclePoiView, setCubiclePoiView] = useState(false);
   const [cubicleAnalytics, setCubicleAnalytics] = useState<any>(null);
 
-  // Fetch device-specific analytics when cubicle selector changes or on interval
+  // Section F: Monthly Consumption Filter States (Bulan Utama & Bulan Pembanding)
+  const [monthlyPrimaryYear, setMonthlyPrimaryYear] = useState<number>(() => new Date().getFullYear());
+  const [monthlyPrimaryMonth, setMonthlyPrimaryMonth] = useState<number>(() => new Date().getMonth()); // 0-11
+  const [monthlyCompareEnabled, setMonthlyCompareEnabled] = useState<boolean>(true);
+  const [monthlyCompareYear, setMonthlyCompareYear] = useState<number>(() => {
+    const m = new Date().getMonth();
+    return m === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear();
+  });
+  const [monthlyCompareMonth, setMonthlyCompareMonth] = useState<number>(() => {
+    const m = new Date().getMonth();
+    return m === 0 ? 11 : m - 1;
+  });
+
+  // Fetch device-specific analytics when cubicle selector or selected month/year changes
   const fetchCubicleAnalytics = useCallback((force = false) => {
     let devId = "all";
     if (cubicleSelector === "pln") devId = "Cubicle_PLN_PM8000";
@@ -2934,12 +2982,39 @@ export default function Electricity() {
     if (cubicleSelector === "poi2") devId = "Solar_POI2";
 
     const forceQuery = force ? "&force=true" : "";
-    getJson<{ data: any }>(`/analytics/electricity?deviceId=${devId}&year=${selectedYear}&_t=${Date.now()}${forceQuery}`)
-      .then((res) => {
-        if (res?.data) setCubicleAnalytics(res.data);
-      })
-      .catch((err) => console.error("Failed to load cubicle analytics:", err));
-  }, [cubicleSelector, selectedYear]);
+    const yearsToFetch = new Set<number>([monthlyPrimaryYear]);
+    if (monthlyCompareEnabled && monthlyCompareYear) {
+      yearsToFetch.add(monthlyCompareYear);
+    }
+
+    Promise.all(
+      Array.from(yearsToFetch).map((y) =>
+        getJson<{ data: any }>(`/analytics/electricity?deviceId=${devId}&year=${y}&_t=${Date.now()}${forceQuery}`)
+          .then((res) => ({ year: y, data: res?.data }))
+          .catch((err) => {
+            console.error(`Failed to load cubicle analytics for ${y}:`, err);
+            return { year: y, data: null };
+          })
+      )
+    ).then((results) => {
+      const primaryRes = results.find((r) => r.year === monthlyPrimaryYear)?.data;
+      const compareRes = results.find((r) => r.year === monthlyCompareYear)?.data;
+      if (primaryRes) {
+        if (compareRes && monthlyCompareYear !== monthlyPrimaryYear) {
+          const mergedDaily = [...(primaryRes.charts?.daily || []), ...(compareRes.charts?.daily || [])];
+          setCubicleAnalytics({
+            ...primaryRes,
+            charts: {
+              ...primaryRes.charts,
+              daily: mergedDaily
+            }
+          });
+        } else {
+          setCubicleAnalytics(primaryRes);
+        }
+      }
+    });
+  }, [cubicleSelector, monthlyPrimaryYear, monthlyCompareYear, monthlyCompareEnabled]);
 
   useEffect(() => {
     fetchCubicleAnalytics();
@@ -2994,29 +3069,29 @@ export default function Electricity() {
     };
   }, [cubicleAnalytics, summaryData, cubicleSelector, solarLive, solarData, pltsLive, lwbpRate, wbpRate, pvRate]);
 
-  // Daily Comparison Data (Bulan Ini vs Bulan Lalu) for selected cubicle
+  // Daily Comparison Data (Bulan Utama vs Bulan Pembanding) for selected cubicle
   const cubicleDailyData = useMemo(() => {
     const dailyRecords = cubicleAnalytics?.charts?.daily || (cubicleSelector === "pln" ? summaryData?.charts?.daily : []) || [];
-    const now = new Date();
-    const currYear = selectedYear;
-    const currMonth = now.getMonth() + 1; // 1-12
-    const prevYear = currMonth === 1 ? currYear - 1 : currYear;
-    const prevMonth = currMonth === 1 ? 12 : currMonth - 1;
+    
+    const currYear = monthlyPrimaryYear;
+    const currMonth = monthlyPrimaryMonth + 1; // 1-12
+    const prevYear = monthlyCompareYear;
+    const prevMonth = monthlyCompareMonth + 1; // 1-12
 
     const currMonthPrefix = `${currYear}-${String(currMonth).padStart(2, "0")}`;
     const prevMonthPrefix = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
 
     const daysInCurrMonth = new Date(currYear, currMonth, 0).getDate();
-    const daysInPrevMonth = new Date(prevYear, prevMonth, 0).getDate();
-    const daysCount = Math.max(daysInCurrMonth, daysInPrevMonth);
+    const daysInPrevMonth = monthlyCompareEnabled ? new Date(prevYear, prevMonth, 0).getDate() : 0;
+    const daysCount = Math.max(daysInCurrMonth, daysInPrevMonth, 28);
 
     // Build solar daily lookup from solarData if needed as fallback
-    const solarDailyMap: Record<string, { poi1: number; poi2: number }> = {};
+    const solarDailyMap: Record<string, { poi1: number; poi2: number; wbp: number; lwbp: number }> = {};
     (solarData?.charts?.daily || []).forEach((d: any) => {
       if (d.day) {
-        const p1 = (d.poi1 && d.poi1 < 20000) ? d.poi1 : 0;
-        const p2 = (d.poi2 && d.poi2 < 20000) ? d.poi2 : 0;
-        solarDailyMap[d.day] = { poi1: p1, poi2: p2 };
+        const p1 = (typeof d.poi1 === "number" && d.poi1 > 0) ? d.poi1 : 0;
+        const p2 = (typeof d.poi2 === "number" && d.poi2 > 0) ? d.poi2 : 0;
+        solarDailyMap[d.day] = { poi1: p1, poi2: p2, wbp: d.wbp || 0, lwbp: d.lwbp || 0 };
       }
     });
 
@@ -3035,6 +3110,10 @@ export default function Electricity() {
       poi2: number;
       wbp: number;
       lwbp: number;
+      plnWbp: number;
+      plnLwbp: number;
+      pvWbp: number;
+      pvLwbp: number;
     }
 
     const currMap: Record<number, DayDetail> = {};
@@ -3044,25 +3123,39 @@ export default function Electricity() {
       if (!d.day) return;
       const dayNum = parseInt(d.day.split("-")[2], 10);
       const isCurr = d.day.startsWith(currMonthPrefix);
-      const isPrev = d.day.startsWith(prevMonthPrefix);
+      const isPrev = monthlyCompareEnabled && d.day.startsWith(prevMonthPrefix);
       if (!isCurr && !isPrev) return;
 
       const plnVal = typeof d.pln === "number" ? d.pln : (cubicleSelector === "all" ? (plnDailyMap[d.day]?.value || 0) : d.value || 0);
       const rawPoi1 = typeof d.poi1 === "number" ? d.poi1 : (solarDailyMap[d.day]?.poi1 || 0);
       const rawPoi2 = typeof d.poi2 === "number" ? d.poi2 : (solarDailyMap[d.day]?.poi2 || 0);
-      const poi1Val = (rawPoi1 && rawPoi1 < 20000) ? rawPoi1 : 0;
-      const poi2Val = (rawPoi2 && rawPoi2 < 20000) ? rawPoi2 : 0;
+      const poi1Val = (typeof rawPoi1 === "number" && rawPoi1 > 0) ? rawPoi1 : 0;
+      const poi2Val = (typeof rawPoi2 === "number" && rawPoi2 > 0) ? rawPoi2 : 0;
       const totalVal = cubicleSelector === "all"
         ? (plnVal + poi1Val + poi2Val)
         : (cubicleSelector === "poi1" ? poi1Val : cubicleSelector === "poi2" ? poi2Val : (d.value || 0));
+
+      const pvWbpVal = solarDailyMap[d.day]?.wbp || (typeof d.pvWbp === "number" ? d.pvWbp : 0);
+      const pvLwbpVal = solarDailyMap[d.day]?.lwbp || (typeof d.pvLwbp === "number" ? d.pvLwbp : Math.max(0, poi1Val + poi2Val - pvWbpVal));
+
+      const plnWbpVal = cubicleSelector === "all"
+        ? (typeof d.plnWbp === "number" ? d.plnWbp : (plnDailyMap[d.day]?.wbp ?? Math.max(0, (d.wbp || 0) - pvWbpVal)))
+        : (d.wbp || 0);
+      const plnLwbpVal = cubicleSelector === "all"
+        ? (typeof d.plnLwbp === "number" ? d.plnLwbp : (plnDailyMap[d.day]?.lwbp ?? Math.max(0, (d.lwbp || 0) - pvLwbpVal)))
+        : (d.lwbp || 0);
 
       const entry: DayDetail = {
         val: totalVal,
         pln: plnVal,
         poi1: poi1Val,
         poi2: poi2Val,
-        wbp: cubicleSelector === "all" ? (plnDailyMap[d.day]?.wbp ?? (d.wbp || 0)) : (d.wbp || 0),
-        lwbp: cubicleSelector === "all" ? (plnDailyMap[d.day]?.lwbp ?? (d.lwbp || 0)) : (d.lwbp || 0)
+        wbp: plnWbpVal + pvWbpVal,
+        lwbp: plnLwbpVal + pvLwbpVal,
+        plnWbp: plnWbpVal,
+        plnLwbp: plnLwbpVal,
+        pvWbp: pvWbpVal,
+        pvLwbp: pvLwbpVal
       };
 
       if (isCurr) currMap[dayNum] = entry;
@@ -3079,27 +3172,43 @@ export default function Electricity() {
           const p = plnDailyMap[curDayStr]?.value || 0;
           const s1 = solarDailyMap[curDayStr]?.poi1 || 0;
           const s2 = solarDailyMap[curDayStr]?.poi2 || 0;
+          const swbp = solarDailyMap[curDayStr]?.wbp || 0;
+          const slwbp = solarDailyMap[curDayStr]?.lwbp || Math.max(0, s1 + s2 - swbp);
+          const pwbp = plnDailyMap[curDayStr]?.wbp || 0;
+          const plwbp = plnDailyMap[curDayStr]?.lwbp || 0;
           currMap[i] = {
             val: p + s1 + s2,
             pln: p,
             poi1: s1,
             poi2: s2,
-            wbp: plnDailyMap[curDayStr]?.wbp || 0,
-            lwbp: plnDailyMap[curDayStr]?.lwbp || 0
+            wbp: pwbp + swbp,
+            lwbp: plwbp + slwbp,
+            plnWbp: pwbp,
+            plnLwbp: plwbp,
+            pvWbp: swbp,
+            pvLwbp: slwbp
           };
         }
 
-        if (!prevMap[i] && (plnDailyMap[prevDayStr] || solarDailyMap[prevDayStr])) {
+        if (monthlyCompareEnabled && !prevMap[i] && (plnDailyMap[prevDayStr] || solarDailyMap[prevDayStr])) {
           const p = plnDailyMap[prevDayStr]?.value || 0;
           const s1 = solarDailyMap[prevDayStr]?.poi1 || 0;
           const s2 = solarDailyMap[prevDayStr]?.poi2 || 0;
+          const swbp = solarDailyMap[prevDayStr]?.wbp || 0;
+          const slwbp = solarDailyMap[prevDayStr]?.lwbp || Math.max(0, s1 + s2 - swbp);
+          const pwbp = plnDailyMap[prevDayStr]?.wbp || 0;
+          const plwbp = plnDailyMap[prevDayStr]?.lwbp || 0;
           prevMap[i] = {
             val: p + s1 + s2,
             pln: p,
             poi1: s1,
             poi2: s2,
-            wbp: plnDailyMap[prevDayStr]?.wbp || 0,
-            lwbp: plnDailyMap[prevDayStr]?.lwbp || 0
+            wbp: pwbp + swbp,
+            lwbp: plwbp + slwbp,
+            plnWbp: pwbp,
+            plnLwbp: plwbp,
+            pvWbp: swbp,
+            pvLwbp: slwbp
           };
         }
       }
@@ -3107,15 +3216,15 @@ export default function Electricity() {
 
     const currentData: number[] = [];
     const previousData: number[] = [];
-    const currentBreakdown: { day: number; pln: number; poi1: number; poi2: number; wbp: number; lwbp: number }[] = [];
-    const previousBreakdown: { day: number; pln: number; poi1: number; poi2: number; wbp: number; lwbp: number }[] = [];
+    const currentBreakdown: { day: number; pln: number; poi1: number; poi2: number; wbp: number; lwbp: number; plnWbp?: number; plnLwbp?: number; pvWbp: number; pvLwbp: number }[] = [];
+    const previousBreakdown: { day: number; pln: number; poi1: number; poi2: number; wbp: number; lwbp: number; plnWbp?: number; plnLwbp?: number; pvWbp: number; pvLwbp: number }[] = [];
 
     for (let i = 1; i <= daysCount; i++) {
-      const cur = currMap[i] || { val: 0, pln: 0, poi1: 0, poi2: 0, wbp: 0, lwbp: 0 };
-      const prev = prevMap[i] || { val: 0, pln: 0, poi1: 0, poi2: 0, wbp: 0, lwbp: 0 };
+      const cur = currMap[i] || { val: 0, pln: 0, poi1: 0, poi2: 0, wbp: 0, lwbp: 0, plnWbp: 0, plnLwbp: 0, pvWbp: 0, pvLwbp: 0 };
+      const prev = prevMap[i] || { val: 0, pln: 0, poi1: 0, poi2: 0, wbp: 0, lwbp: 0, plnWbp: 0, plnLwbp: 0, pvWbp: 0, pvLwbp: 0 };
 
       currentData.push(cur.val);
-      previousData.push(prev.val);
+      previousData.push(monthlyCompareEnabled ? prev.val : 0);
 
       currentBreakdown.push({
         day: i,
@@ -3123,21 +3232,31 @@ export default function Electricity() {
         poi1: cur.poi1,
         poi2: cur.poi2,
         wbp: cur.wbp,
-        lwbp: cur.lwbp
+        lwbp: cur.lwbp,
+        plnWbp: cur.plnWbp,
+        plnLwbp: cur.plnLwbp,
+        pvWbp: cur.pvWbp,
+        pvLwbp: cur.pvLwbp
       });
 
-      previousBreakdown.push({
-        day: i,
-        pln: prev.pln,
-        poi1: prev.poi1,
-        poi2: prev.poi2,
-        wbp: prev.wbp,
-        lwbp: prev.lwbp
-      });
+      if (monthlyCompareEnabled) {
+        previousBreakdown.push({
+          day: i,
+          pln: prev.pln,
+          poi1: prev.poi1,
+          poi2: prev.poi2,
+          wbp: prev.wbp,
+          lwbp: prev.lwbp,
+          plnWbp: prev.plnWbp,
+          plnLwbp: prev.plnLwbp,
+          pvWbp: prev.pvWbp,
+          pvLwbp: prev.pvLwbp
+        });
+      }
     }
 
     return { currentData, previousData, currentBreakdown, previousBreakdown };
-  }, [cubicleAnalytics, summaryData, solarData, cubicleSelector, selectedYear]);
+  }, [cubicleAnalytics, summaryData, solarData, cubicleSelector, monthlyPrimaryYear, monthlyPrimaryMonth, monthlyCompareYear, monthlyCompareMonth, monthlyCompareEnabled]);
 
   // Executive summary combining PLN and Solar PV - fixed for current active month (Bulan Saat Ini)
   const executiveSummary = useMemo(() => {
@@ -3145,88 +3264,104 @@ export default function Electricity() {
     const currMonthIdx = now.getMonth(); // 0-11
     const currMonthStr = `${now.getFullYear()}-${String(currMonthIdx + 1).padStart(2, "0")}`;
 
-    // 1. PLN Monthly Metrics for Current Month
+    // 1. PLN Monthly Metrics for Current Month (fixed for active month)
     let plnKwh = 0;
     let plnCost = 0;
+    let plnWbpKwh = 0;
+    let plnLwbpKwh = 0;
 
-    let dailyPlnKwh = 0;
-    let dailyPlnWbpKwh = 0;
-    let dailyPlnLwbpKwh = 0;
-    if (cubicleDailyData?.currentBreakdown) {
-      cubicleDailyData.currentBreakdown.forEach((d) => {
-        dailyPlnKwh += d.pln || 0;
-        dailyPlnWbpKwh += d.wbp || 0;
-        dailyPlnLwbpKwh += d.lwbp || 0;
-      });
-    }
-
-    const plnSource = fixedMonthlyPln?.summary || summaryData?.summary;
+    const plnSource = fixedMonthlyPln?.summary || (summaryData?.summary?.perMonthSummary ? summaryData?.summary : null);
     if (plnSource?.perMonthSummary && Array.isArray(plnSource.perMonthSummary)) {
       const curMonthPln = plnSource.perMonthSummary.find((m: any) => m.month === currMonthStr) || plnSource.perMonthSummary[currMonthIdx];
       if (curMonthPln) {
-        plnKwh = dailyPlnKwh > 0 ? dailyPlnKwh : (Number(curMonthPln.totalKwh) || 0);
+        plnKwh = Number(curMonthPln.totalKwh) || 0;
         plnCost = Number(curMonthPln.totalCost) || 0;
+        plnWbpKwh = Number(curMonthPln.wbpKwh) || 0;
+        plnLwbpKwh = Number(curMonthPln.lwbpKwh) || 0;
       }
+    } else if (plnSource?.monthlyKwh) {
+      plnKwh = Number(plnSource.monthlyKwh) || 0;
+      plnCost = Number(plnSource.monthlyCost) || 0;
+      plnWbpKwh = Number(plnSource.monthlyWbpKwh) || 0;
+      plnLwbpKwh = Number(plnSource.monthlyLwbpKwh) || 0;
     }
 
-    if (plnKwh === 0 && dailyPlnKwh > 0) {
-      plnKwh = dailyPlnKwh;
-    }
-    if (plnKwh === 0 && plnSource?.monthlyKwh) {
-      plnKwh = Number(plnSource.monthlyKwh) || 0;
-    }
+    const effectiveLwbpRate = typeof lwbpRate === "number" && lwbpRate > 0 
+      ? lwbpRate 
+      : (Number(plnSource?.lwbpRate) > 0 ? Number(plnSource.lwbpRate) : 1035.78);
+    const effectiveWbpRate = typeof wbpRate === "number" && wbpRate > 0 
+      ? wbpRate 
+      : (Number(plnSource?.wbpRate) > 0 ? Number(plnSource.wbpRate) : 1553.67);
 
     if (plnCost === 0 && plnKwh > 0) {
-      const effectiveLwbpRate = typeof lwbpRate === "number" && lwbpRate > 0 ? lwbpRate : 1112;
-      const effectiveWbpRate = typeof wbpRate === "number" && wbpRate > 0 ? wbpRate : 1668;
-      if (dailyPlnWbpKwh > 0 || dailyPlnLwbpKwh > 0) {
-        plnCost = (dailyPlnWbpKwh * effectiveWbpRate) + (dailyPlnLwbpKwh * effectiveLwbpRate);
+      if (plnWbpKwh > 0 || plnLwbpKwh > 0) {
+        const wCost = Number((plnWbpKwh * effectiveWbpRate).toFixed(2));
+        const lwCost = Number((plnLwbpKwh * effectiveLwbpRate).toFixed(2));
+        plnCost = Number((wCost + lwCost).toFixed(2));
       } else {
-        plnCost = plnKwh * effectiveLwbpRate;
+        plnCost = Number((plnKwh * effectiveLwbpRate).toFixed(2));
       }
     }
 
-    // 2. Solar PV Monthly Metrics for Current Month
+    // 2. Solar PV Monthly Metrics for Current Month (fixed for active month)
     let poi1Kwh = 0;
     let poi2Kwh = 0;
     let totalPvKwh = 0;
+    let pvWbpKwh = 0;
+    let pvLwbpKwh = 0;
 
-    if (cubicleDailyData?.currentBreakdown) {
-      cubicleDailyData.currentBreakdown.forEach((d) => {
-        poi1Kwh += d.poi1 || 0;
-        poi2Kwh += d.poi2 || 0;
-      });
-      totalPvKwh = poi1Kwh + poi2Kwh;
+    // Prioritize active solarData if it covers current active month to ensure 100% synchronization across components
+    const isSolarDataForCurrMonth = (solarRange === "day" && solarSelectedYear === now.getFullYear() && solarSelectedMonth === currMonthIdx) ||
+      ((solarRange === "month" || solarRange === "ytd") && solarSelectedYear === now.getFullYear());
+    const solarSource = (isSolarDataForCurrMonth && solarData?.charts?.monthly)
+      ? solarData
+      : (fixedMonthlySolar || (solarData?.charts?.monthly ? solarData : null));
+    const monthlySolarCharts = solarSource?.charts?.monthly || [];
+    const curMonthSolar = monthlySolarCharts.find((m: any) => m.month === currMonthStr) || monthlySolarCharts[currMonthIdx];
+    if (curMonthSolar) {
+      poi1Kwh = Number(curMonthSolar.poi1) || 0;
+      poi2Kwh = Number(curMonthSolar.poi2) || 0;
+      totalPvKwh = Number(curMonthSolar.total) || (poi1Kwh + poi2Kwh);
+      pvWbpKwh = Number(curMonthSolar.wbp) || 0;
+      pvLwbpKwh = Number(curMonthSolar.lwbp) || Math.max(0, totalPvKwh - pvWbpKwh);
+    } else if (solarSource?.summary?.monthlyKwh) {
+      totalPvKwh = Number(solarSource.summary.monthlyKwh) || 0;
+      poi1Kwh = Number(solarSource.summary.poi1MonthlyKwh) || 0;
+      poi2Kwh = Number(solarSource.summary.poi2MonthlyKwh) || 0;
+      pvWbpKwh = Number(solarSource.summary.monthlyWbpKwh) || 0;
+      pvLwbpKwh = Number(solarSource.summary.monthlyLwbpKwh) || Math.max(0, totalPvKwh - pvWbpKwh);
     }
 
-    const solarSource = fixedMonthlySolar || solarData;
-    if (totalPvKwh === 0) {
-      const monthlySolarCharts = solarSource?.charts?.monthly || [];
-      const curMonthSolar = monthlySolarCharts.find((m: any) => m.month === currMonthStr) || monthlySolarCharts[currMonthIdx];
-      if (curMonthSolar) {
-        poi1Kwh = Number(curMonthSolar.poi1) || 0;
-        poi2Kwh = Number(curMonthSolar.poi2) || 0;
-        totalPvKwh = Number(curMonthSolar.total) || (poi1Kwh + poi2Kwh);
-      } else if (solarSource?.summary?.monthlyKwh) {
-        totalPvKwh = Number(solarSource.summary.monthlyKwh) || 0;
-        poi1Kwh = Number(solarSource.summary.poi1MonthlyKwh) || (totalPvKwh * 0.27);
-        poi2Kwh = Number(solarSource.summary.poi2MonthlyKwh) || (totalPvKwh * 0.73);
-      }
+    if (pvWbpKwh === 0 && pvLwbpKwh === 0 && solarSource?.summary) {
+      pvWbpKwh = Number(solarSource.summary.monthlyWbpKwh) || 0;
+      pvLwbpKwh = Number(solarSource.summary.monthlyLwbpKwh) || Math.max(0, totalPvKwh - pvWbpKwh);
+    }
+    if (pvWbpKwh === 0 && pvLwbpKwh === 0 && totalPvKwh > 0) {
+      pvLwbpKwh = totalPvKwh;
+    }
+    // Pastikan total PV teralokasi utuh 100% ke LWBP dan WBP (tidak ada selisih kWh live yang bocor)
+    if (totalPvKwh > 0 && (pvLwbpKwh + pvWbpKwh) < totalPvKwh) {
+      pvLwbpKwh = Math.max(0, totalPvKwh - pvWbpKwh);
     }
 
-    const effectiveSolarRate = (Number(solarSource?.summary?.solarRate) > 0 ? Number(solarSource.summary.solarRate) : (typeof lwbpRate === "number" && lwbpRate > 0 ? lwbpRate : 1035.78));
-    const effectiveLwbpRate = typeof lwbpRate === "number" && lwbpRate > 0 ? lwbpRate : 1112;
+    const effectiveSolarRate = (Number(solarSource?.summary?.solarRate) > 0 ? Number(solarSource.summary.solarRate) : effectiveLwbpRate);
     const effectivePvRate = typeof pvRate === "number" && pvRate > 0 
       ? pvRate 
       : (Number(solarSource?.summary?.pvRate) > 0 ? Number(solarSource.summary.pvRate) : 549);
 
-    const pvCost = totalPvKwh * effectivePvRate;
-    const savingsRate = Math.max(0, effectiveSolarRate - effectivePvRate);
-    const savingsCost = totalPvKwh * savingsRate;
+    const pvCost = Number((totalPvKwh * effectivePvRate).toFixed(2));
+    
+    // Perhitungan dinamis: kWh WBP dihitung penghematannya dengan selisih tarif WBP - Tarif PV,
+    // dan kWh LWBP dihitung penghematannya dengan selisih tarif LWBP - Tarif PV
+    const plnAvoidedLwbp = Number((pvLwbpKwh * effectiveLwbpRate).toFixed(2));
+    const plnAvoidedWbp = Number((pvWbpKwh * effectiveWbpRate).toFixed(2));
+    const plnAvoidedCost = Number((plnAvoidedLwbp + plnAvoidedWbp).toFixed(2));
+    const savingsCost = Number(Math.max(0, plnAvoidedCost - pvCost).toFixed(2));
+    const savingsRate = totalPvKwh > 0 ? Number((savingsCost / totalPvKwh).toFixed(2)) : Number(Math.max(0, effectiveLwbpRate - effectivePvRate).toFixed(2));
 
-    const totalCost = plnCost + pvCost;
-    const totalKwh = plnKwh + totalPvKwh;
-    const netCost = Math.max(0, totalCost - savingsCost);
+    const totalCost = Number((plnCost + pvCost).toFixed(2));
+    const totalKwh = Number((plnKwh + totalPvKwh).toFixed(2));
+    const netCost = Number(Math.max(0, totalCost - savingsCost).toFixed(2));
 
     const pctCostPln = totalCost > 0 ? (plnCost / totalCost) * 100 : 0;
     const pctCostPv = totalCost > 0 ? (pvCost / totalCost) * 100 : 0;
@@ -3244,20 +3379,136 @@ export default function Electricity() {
       poi1Kwh,
       poi2Kwh,
       totalPvKwh,
+      pvWbpKwh,
+      pvLwbpKwh,
       totalKwh,
       pctKwhPln,
       pctKwhPv,
       effectiveLwbpRate,
+      effectiveWbpRate,
       effectiveSolarRate,
       effectivePvRate,
       savingsRate,
       savingsCost,
       netCost
     };
-  }, [cubicleDailyData, fixedMonthlyPln, fixedMonthlySolar, summaryData, solarData, lwbpRate, wbpRate, pvRate]);
+  }, [fixedMonthlyPln, fixedMonthlySolar, summaryData, solarData, solarRange, solarSelectedYear, solarSelectedMonth, lwbpRate, wbpRate, pvRate]);
 
   // Synchronize monthlyMetrics with executiveSummary so all monthly cards show identical numbers
   const monthlyMetrics = executiveSummary;
+
+  // Section F: Monthly consumption metrics computed from selected month daily records (100% synchronized with chart)
+  const monthlySelectedMetrics = useMemo(() => {
+    const { currentData, currentBreakdown } = cubicleDailyData;
+    const totalKwh = (currentData || []).reduce((sum, v) => sum + (Number(v) || 0), 0);
+
+    const effectiveLwbpRate = typeof lwbpRate === "number" && lwbpRate > 0 ? lwbpRate : 1035.78;
+    const effectiveWbpRate = typeof wbpRate === "number" && wbpRate > 0 ? wbpRate : 1553.67;
+    const effectivePvRate = typeof pvRate === "number" && pvRate > 0 ? pvRate : 549;
+
+    let plnKwh = 0;
+    let poi1Kwh = 0;
+    let poi2Kwh = 0;
+    let totalPvKwh = 0;
+    let plnWbpKwh = 0;
+    let plnLwbpKwh = 0;
+    let pvWbpKwh = 0;
+    let pvLwbpKwh = 0;
+
+    if (cubicleSelector === "all") {
+      (currentBreakdown || []).forEach((b: any) => {
+        plnKwh += (Number(b.pln) || 0);
+        poi1Kwh += (Number(b.poi1) || 0);
+        poi2Kwh += (Number(b.poi2) || 0);
+        plnWbpKwh += (Number(b.plnWbp ?? (b.wbp - (b.pvWbp || 0))) || 0);
+        plnLwbpKwh += (Number(b.plnLwbp ?? (b.lwbp - (b.pvLwbp || 0))) || 0);
+        pvWbpKwh += (Number(b.pvWbp) || 0);
+        pvLwbpKwh += (Number(b.pvLwbp) || 0);
+      });
+      totalPvKwh = poi1Kwh + poi2Kwh;
+    } else if (cubicleSelector === "pln") {
+      plnKwh = totalKwh;
+      (currentBreakdown || []).forEach((b) => {
+        plnWbpKwh += (Number(b.wbp) || 0);
+        plnLwbpKwh += (Number(b.lwbp) || 0);
+      });
+    } else if (cubicleSelector === "poi1") {
+      poi1Kwh = totalKwh;
+      totalPvKwh = poi1Kwh;
+    } else if (cubicleSelector === "poi2") {
+      poi2Kwh = totalKwh;
+      totalPvKwh = poi2Kwh;
+    } else if (cubicleSelector === "wf1" || cubicleSelector === "wf2") {
+      plnKwh = totalKwh;
+      (currentBreakdown || []).forEach((b) => {
+        plnWbpKwh += (Number(b.wbp) || 0);
+        plnLwbpKwh += (Number(b.lwbp) || 0);
+      });
+    }
+
+    const now = new Date();
+    const isCurrentActiveMonth = monthlyPrimaryYear === now.getFullYear() && monthlyPrimaryMonth === now.getMonth();
+    // When viewing current active month with all sources, ensure 100% alignment with executiveSummary
+    if (isCurrentActiveMonth && cubicleSelector === "all" && executiveSummary && (executiveSummary.totalKwh > 0 || executiveSummary.plnKwh > 0 || executiveSummary.totalPvKwh > 0)) {
+      return {
+        totalKwh: executiveSummary.totalKwh,
+        plnKwh: executiveSummary.plnKwh,
+        poi1Kwh: executiveSummary.poi1Kwh,
+        poi2Kwh: executiveSummary.poi2Kwh,
+        totalPvKwh: executiveSummary.totalPvKwh,
+        plnWbpKwh,
+        plnLwbpKwh,
+        pvWbpKwh,
+        pvLwbpKwh,
+        plnCost: executiveSummary.plnCost,
+        pvCost: executiveSummary.pvCost,
+        totalCost: executiveSummary.totalCost,
+        savingsCost: executiveSummary.savingsCost,
+        savingsRate: executiveSummary.savingsRate,
+        effectiveLwbpRate,
+        effectiveWbpRate,
+        effectivePvRate
+      };
+    }
+
+    const calcPlnWbpCost = Number((plnWbpKwh * effectiveWbpRate).toFixed(2));
+    const calcPlnLwbpCost = Number((plnLwbpKwh * effectiveLwbpRate).toFixed(2));
+    const plnCost = (plnWbpKwh > 0 || plnLwbpKwh > 0)
+      ? Number((calcPlnWbpCost + calcPlnLwbpCost).toFixed(2))
+      : Number((plnKwh * effectiveLwbpRate).toFixed(2));
+
+    const pvCost = Number((totalPvKwh * effectivePvRate).toFixed(2));
+
+    const calcPvAvoidedWbp = Number((pvWbpKwh * effectiveWbpRate).toFixed(2));
+    const calcPvAvoidedLwbp = Number((pvLwbpKwh * effectiveLwbpRate).toFixed(2));
+    const plnAvoidedCost = (pvWbpKwh > 0 || pvLwbpKwh > 0)
+      ? Number((calcPvAvoidedWbp + calcPvAvoidedLwbp).toFixed(2))
+      : Number((totalPvKwh * effectiveLwbpRate).toFixed(2));
+
+    const savingsCost = Number(Math.max(0, plnAvoidedCost - pvCost).toFixed(2));
+    const savingsRate = totalPvKwh > 0 ? Number((savingsCost / totalPvKwh).toFixed(2)) : Number(Math.max(0, effectiveLwbpRate - effectivePvRate).toFixed(2));
+    const totalCost = Number((plnCost + pvCost).toFixed(2));
+
+    return {
+      totalKwh,
+      plnKwh,
+      poi1Kwh,
+      poi2Kwh,
+      totalPvKwh,
+      plnWbpKwh,
+      plnLwbpKwh,
+      pvWbpKwh,
+      pvLwbpKwh,
+      plnCost,
+      pvCost,
+      totalCost,
+      savingsCost,
+      savingsRate,
+      effectiveLwbpRate,
+      effectiveWbpRate,
+      effectivePvRate
+    };
+  }, [cubicleDailyData, cubicleSelector, lwbpRate, wbpRate, pvRate, monthlyPrimaryYear, monthlyPrimaryMonth, executiveSummary]);
 
   const [factCategories1, setFactCategories1] = useState<ConsumptionFactCategory[]>(defaultFact1Categories);
   const [factCategories2, setFactCategories2] = useState<ConsumptionFactCategory[]>(defaultFact2Categories);
@@ -3361,9 +3612,175 @@ export default function Electricity() {
   // Poll active URLs (PLN, PLTS, WF1, WF2, EW21, EW22, EW23, etc.)
   useEffect(() => {
     let isMounted = true;
+
+    // Dynamically update factCategories with live kW without overwriting monthly kWh
+    const updateCategoriesWithLive = (aggregatedData: Record<string, any>) => {
+      const updateWithLive = (list: ConsumptionFactCategory[]) => {
+        let changed = false;
+        const nextList = list.map(item => {
+          const rawUrl = item.value?.endpoint_url;
+          const fullUrl = (rawUrl && ENDPOINT_MAP[rawUrl]) ? ENDPOINT_MAP[rawUrl] : rawUrl;
+          const dataPayload = (fullUrl && aggregatedData[fullUrl]) || (rawUrl && aggregatedData[rawUrl]);
+          const pmId = (item.value?.pm_id || item.value?.json_key || item.config_key || "").toUpperCase();
+          const cleanNum = pmId.replace(/\D/g, "");
+
+          if (dataPayload) {
+            let foundVal: number | null = null;
+            if (Array.isArray(dataPayload)) {
+              const entry = dataPayload.find((p: any) => {
+                const pId = String(p.PM || p.pm_id || p.PM_ID || "").toUpperCase();
+                return pId === pmId || (cleanNum && pId.replace(/\D/g, "") === cleanNum);
+              });
+              if (entry) {
+                const candidate = entry[`Active_Power_Total_${pmId}`] ?? entry[`Active_Power_Total_PM${cleanNum}`] ?? entry.ActivePower ?? entry.Active_Power_Total ?? entry.kW;
+                if (candidate !== undefined && candidate !== null) foundVal = Number(candidate);
+              }
+            } else if (typeof dataPayload === "object") {
+              const sub = (item.value?.json_key && dataPayload[item.value.json_key])
+                || dataPayload[pmId]
+                || (cleanNum ? dataPayload[`PM${cleanNum}`] : undefined);
+
+              if (sub !== undefined && sub !== null) {
+                if (typeof sub === "object") {
+                  const candidateKeys = [
+                    `Active_Power_Total_${pmId}`, `Active_Power_Total_PM${cleanNum}`,
+                    "Active_Power_Total", "ActivePower", "kW"
+                  ];
+                  for (const ck of candidateKeys) {
+                    if (sub[ck] !== undefined && sub[ck] !== null) {
+                      foundVal = Number(sub[ck]);
+                      break;
+                    }
+                  }
+                } else {
+                  foundVal = Number(sub);
+                }
+              }
+            }
+            if (foundVal !== null && !isNaN(foundVal) && (item.value as any)?.liveKw !== foundVal) {
+              changed = true;
+              return { ...item, value: { ...item.value, liveKw: foundVal } };
+            }
+          }
+          return item;
+        });
+        return changed ? nextList : list;
+      };
+      setFactCategories1(prev => updateWithLive(prev));
+      setFactCategories2(prev => updateWithLive(prev));
+    };
+
+    const applyLiveTelemetryData = (d: any) => {
+      if (!isMounted || !d) return;
+
+      // 1. Extract PLN
+      if (d.pln) {
+        const isOnline = d.pln.online === true;
+        setLivePlnStatus(isOnline);
+        if (!isOnline) {
+          setLivePGridKw(null);
+          setPfStatus("offline");
+          setLivePeakDemandKw(null);
+        } else {
+          setLivePGridKw(d.pln.activePower !== null ? Math.max(0, Number(d.pln.activePower)) : null);
+          if (d.pln.powerFactor !== null && d.pln.powerFactor !== undefined) {
+            const pfNum = Math.abs(Number(d.pln.powerFactor));
+            if (!isNaN(pfNum)) {
+              setLivePf(pfNum);
+              setPfStatus("connected");
+            }
+          }
+          if (d.pln.peakDemand !== null && d.pln.peakDemand !== undefined) {
+            setLivePeakDemandKw(Number(d.pln.peakDemand));
+          }
+        }
+      }
+
+      // 2. Extract WF1
+      if (d.wf1) {
+        const isOnline = d.wf1.online === true;
+        setLiveWf1Status(isOnline);
+        setLiveWf1Kw(isOnline && d.wf1.activePower !== null ? Math.max(0, Number(d.wf1.activePower)) : null);
+      }
+
+      // 3. Extract WF2
+      if (d.wf2) {
+        const isOnline = d.wf2.online === true;
+        setLiveWf2Status(isOnline);
+        setLiveWf2Kw(isOnline && d.wf2.activePower !== null ? Math.max(0, Number(d.wf2.activePower)) : null);
+      }
+
+      // 4. Extract PLTS (POI_1 & POI_2)
+      if (d.solar) {
+        const poi1Online = Boolean(d.solar.poi1?.online);
+        const poi2Online = Boolean(d.solar.poi2?.online);
+        setPltsLive({
+          poi1: {
+            status: poi1Online,
+            volt_ab: Number(d.solar.raw?.POI_1?.Volt_AB_POI_1) || 0,
+            active_power: poi1Online && d.solar.poi1?.activePower !== null ? Math.max(0, Number(d.solar.poi1.activePower)) : 0,
+            peak_demand: Number(d.solar.poi1?.peakDemand) || 0,
+            total_kwh: Number(d.solar.poi1?.totalKwh) || 0,
+            frequency: Number(d.solar.raw?.POI_1?.Frequency_POI_1) || 0
+          },
+          poi2: {
+            status: poi2Online,
+            volt_ab: Number(d.solar.raw?.POI_2?.Volt_AB_POI_2) || 0,
+            active_power: poi2Online && d.solar.poi2?.activePower !== null ? Math.max(0, Number(d.solar.poi2.activePower)) : 0,
+            peak_demand: Number(d.solar.poi2?.peakDemand) || 0,
+            total_kwh: Number(d.solar.poi2?.totalKwh) || 0,
+            frequency: Number(d.solar.raw?.POI_2?.Frequency_POI_2) || 0
+          }
+        });
+      }
+
+      // 5. Populate apiLiveData dictionary with raw endpoints for getApiVal and sub-cards
+      if (d.rawEndpoints) {
+        const nextApiData: Record<string, any> = { ...d.rawEndpoints };
+        for (const [key, val] of Object.entries(d.rawEndpoints)) {
+          if (ENDPOINT_MAP[key]) {
+            nextApiData[ENDPOINT_MAP[key]] = val;
+          }
+          if (key === "electric_pln") {
+            nextApiData["http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_pln"] = val;
+            nextApiData["http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln"] = val;
+          }
+          if (key === "electric_wf1") {
+            nextApiData["http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_wf1"] = val;
+            nextApiData["http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1"] = val;
+          }
+          if (key === "electric_wf2") {
+            nextApiData["http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_wf2"] = val;
+            nextApiData["http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2"] = val;
+          }
+          if (key === "electric_plts") {
+            nextApiData["http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_plts"] = val;
+            nextApiData["http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_plts"] = val;
+          }
+        }
+        setApiLiveData(nextApiData);
+        updateCategoriesWithLive(nextApiData);
+      }
+      setIsLiveLoading(false);
+    };
+
     const fetchActiveApiData = async () => {
       if (!isPageActive) return;
-      // Only query valid absolute HTTP/HTTPS URLs to eliminate socket stalls and proxy timeouts
+      // If WebSocket is actively receiving real-time stream (< 2500ms), do NOT perform redundant HTTP poll
+      if (Date.now() - lastOverviewLiveTsRef.current < 2500) {
+        return;
+      }
+      try {
+        const res = await getJson<{ success: boolean; data?: any }>("/analytics/electricity/live");
+        if (res && res.success && res.data) {
+          applyLiveTelemetryData(res.data);
+          return;
+        }
+      } catch {
+        // Fallback polling if live batch endpoint fails
+      }
+
+      // Fallback candidate URLs check
       const candidateUrls = [
         DEFAULT_PLN_API_URL,
         DEFAULT_WF1_API_URL,
@@ -3401,9 +3818,9 @@ export default function Electricity() {
                   aggregatedData[shortKey] = res.data;
                 }
               }
-              // Extract PLN
               if (url.includes("electric_pln")) {
                 const isPlnOnline = res.data.Status_PM8000 !== false && res.data.status_pm8000 !== false;
+                setLivePlnStatus(isPlnOnline);
                 if (!isPlnOnline) {
                   setLivePGridKw(null);
                   setPfStatus("offline");
@@ -3422,11 +3839,11 @@ export default function Electricity() {
                   }
                   const rawPeak = res.data.Peak_Demand_W ?? res.data.Peak_Demand_w ?? res.data.PeakDemand_W ?? res.data.peak_demand_w ?? res.data.Peak_Demand ?? res.data.peak_demand;
                   if (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak))) {
-                    setLivePeakDemandKw(Number(rawPeak) / 1000.0);
+                    const peakNum = Number(rawPeak);
+                    setLivePeakDemandKw(peakNum > 10000 ? peakNum / 1000.0 : peakNum);
                   }
                 }
               }
-              // Extract WF1
               if (url.includes("electric_wf1")) {
                 const isWf1Online = res.data.Status_PM5500_WF1 !== false && res.data.Status_PM5560 !== false && res.data.Status_PM5500 !== false;
                 setLiveWf1Status(isWf1Online);
@@ -3436,7 +3853,6 @@ export default function Electricity() {
                   setLiveWf1Kw(Math.max(0, Number(res.data.Active_Power_Total) || 0));
                 }
               }
-              // Extract WF2
               if (url.includes("electric_wf2")) {
                 const isWf2Online = res.data.Status_PM5500_WF2 !== false && res.data.Status_PM5500 !== false && res.data.Status_PM5500_WF1 !== false;
                 setLiveWf2Status(isWf2Online);
@@ -3446,39 +3862,31 @@ export default function Electricity() {
                   setLiveWf2Kw(Math.max(0, Number(res.data.Active_Power_Total) || 0));
                 }
               }
-              // Extract PLTS if this is plts url
               if (url.includes("electric_plts") && res.data.POI_1 && res.data.POI_2) {
+                const poi1Online = Boolean(res.data.POI_1.Status_POI_1 ?? true);
+                const poi2Online = Boolean(res.data.POI_2.Status_POI_2 ?? true);
                 setPltsLive({
                   poi1: {
-                    status: Boolean(res.data.POI_1.Status_POI_1 ?? true),
+                    status: poi1Online,
                     volt_ab: Number(res.data.POI_1.Volt_AB_POI_1) || 0,
-                    active_power: Math.max(0, Number(res.data.POI_1.Scale_Total_KW_POI_1) || 0),
+                    active_power: poi1Online ? Math.max(0, Number(res.data.POI_1.Scale_Total_KW_POI_1) || 0) : 0,
                     peak_demand: Number(res.data.POI_1.Peak_Demand_ScaleKw_POI_1 ?? res.data.POI_1.Peak_Demand_ScaleKW_POI_1) || 0,
                     total_kwh: Number(res.data.POI_1.Total_KWH_POI_1) || 0,
                     frequency: Number(res.data.POI_1.Frequency_POI_1) || 0
                   },
                   poi2: {
-                    status: Boolean(res.data.POI_2.Status_POI_2 ?? true),
+                    status: poi2Online,
                     volt_ab: Number(res.data.POI_2.Volt_AB_POI_2) || 0,
-                    active_power: Math.max(0, Number(res.data.POI_2.Scale_Total_KW_POI_2) || 0),
+                    active_power: poi2Online ? Math.max(0, Number(res.data.POI_2.Scale_Total_KW_POI_2) || 0) : 0,
                     peak_demand: Number(res.data.POI_2.Peak_Demand_ScaleKw_POI_2 ?? res.data.POI_2.Peak_Demand_ScaleKW_POI_2) || 0,
                     total_kwh: Number(res.data.POI_2.Total_KWH_POI_2) || 0,
                     frequency: Number(res.data.POI_2.Frequency_POI_2) || 0
                   }
                 });
               }
-            } else if (url.includes("electric_pln")) {
-              setLivePf(null);
-              setPfStatus("offline");
-              setLivePeakDemandKw(null);
             }
           } catch (err) {
             console.error(`Live API poll error on Electricity for URL ${url}:`, err);
-            if (url.includes("electric_pln")) {
-              setLivePf(null);
-              setPfStatus("offline");
-              setLivePeakDemandKw(null);
-            }
           }
         })
       );
@@ -3486,69 +3894,25 @@ export default function Electricity() {
       if (isMounted) {
         setApiLiveData(aggregatedData);
         setIsLiveLoading(false);
-
-        // Dynamically update factCategories with live kW without overwriting monthly kWh
-        const updateWithLive = (list: ConsumptionFactCategory[]) => {
-          let changed = false;
-          const nextList = list.map(item => {
-            const rawUrl = item.value?.endpoint_url;
-            const fullUrl = (rawUrl && ENDPOINT_MAP[rawUrl]) ? ENDPOINT_MAP[rawUrl] : rawUrl;
-            const dataPayload = (fullUrl && aggregatedData[fullUrl]) || (rawUrl && aggregatedData[rawUrl]);
-            const pmId = (item.value?.pm_id || item.value?.json_key || item.config_key || "").toUpperCase();
-            const cleanNum = pmId.replace(/\D/g, "");
-
-            if (dataPayload) {
-              let foundVal: number | null = null;
-              if (Array.isArray(dataPayload)) {
-                const entry = dataPayload.find((p: any) => {
-                  const pId = String(p.PM || p.pm_id || p.PM_ID || "").toUpperCase();
-                  return pId === pmId || (cleanNum && pId.replace(/\D/g, "") === cleanNum);
-                });
-                if (entry) {
-                  const candidate = entry[`Active_Power_Total_${pmId}`] ?? entry[`Active_Power_Total_PM${cleanNum}`] ?? entry.ActivePower ?? entry.Active_Power_Total ?? entry.kW;
-                  if (candidate !== undefined && candidate !== null) foundVal = Number(candidate);
-                }
-              } else if (typeof dataPayload === "object") {
-                const sub = (item.value?.json_key && dataPayload[item.value.json_key])
-                  || dataPayload[pmId]
-                  || (cleanNum ? dataPayload[`PM${cleanNum}`] : undefined);
-
-                if (sub !== undefined && sub !== null) {
-                  if (typeof sub === "object") {
-                    const candidateKeys = [
-                      `Active_Power_Total_${pmId}`, `Active_Power_Total_PM${cleanNum}`,
-                      "Active_Power_Total", "ActivePower", "kW"
-                    ];
-                    for (const ck of candidateKeys) {
-                      if (sub[ck] !== undefined && sub[ck] !== null) {
-                        foundVal = Number(sub[ck]);
-                        break;
-                      }
-                    }
-                  } else {
-                    foundVal = Number(sub);
-                  }
-                }
-              }
-              if (foundVal !== null && !isNaN(foundVal) && (item.value as any)?.liveKw !== foundVal) {
-                changed = true;
-                return { ...item, value: { ...item.value, liveKw: foundVal } };
-              }
-            }
-            return item;
-          });
-          return changed ? nextList : list;
-        };
-        setFactCategories1(prev => updateWithLive(prev));
-        setFactCategories2(prev => updateWithLive(prev));
+        updateCategoriesWithLive(aggregatedData);
       }
     };
 
     fetchActiveApiData();
-    const interval = setInterval(fetchActiveApiData, 3000); // 3s active fallback polling ensures telemetry numbers never freeze
+    const interval = setInterval(fetchActiveApiData, 1000); // Poll per detik (1000ms) stabil dan konsisten
 
     const socket = getSocket();
+    const handleOverviewLive = (livePayload: any) => {
+      if (livePayload) {
+        lastOverviewLiveTsRef.current = Date.now();
+        applyLiveTelemetryData(livePayload);
+      }
+    };
+    socket.on("electricity:overview_live", handleOverviewLive);
+
     const handlePltsLive = (payload: any) => {
+      // If unified overview_live stream is active (<3000ms), let it handle PLTS to avoid conflicting jitter
+      if (Date.now() - lastOverviewLiveTsRef.current < 3000) return;
       if (payload?.online === false || payload?.status === false) {
         setPltsLive({
           poi1: { status: false, volt_ab: 0, active_power: 0, peak_demand: 0, total_kwh: 0, frequency: 0 },
@@ -3586,6 +3950,7 @@ export default function Electricity() {
     return () => {
       isMounted = false;
       clearInterval(interval);
+      socket.off("electricity:overview_live", handleOverviewLive);
       socket.off("electricity:plts_live", handlePltsLive);
     };
   }, [apiSourceUrls, isPageActive]);
@@ -3793,9 +4158,6 @@ export default function Electricity() {
           plnCacheRef.current.set(cacheKey, { data: res.data, ts: Date.now() });
           setSummaryData(res.data);
           setChartData(res.data);
-          if (range === "month" && selectedYear === new Date().getFullYear()) {
-            setFixedMonthlyPln(res.data);
-          }
         }
         setSummaryLoading(false);
         setChartLoading(false);
@@ -3865,9 +4227,6 @@ export default function Electricity() {
         if (res?.data) {
           solarCacheRef.current.set(cacheKey, { data: res.data, ts: Date.now() });
           setSolarData(res.data);
-          if (solarRange === "month" && solarSelectedYear === new Date().getFullYear()) {
-            setFixedMonthlySolar(res.data);
-          }
           if (res.data.live && isTodayQuery) {
             setSolarLive(res.data.live);
           }
@@ -3884,29 +4243,20 @@ export default function Electricity() {
   // Dedicated fetcher for fixed monthly executive recap (Bulan Ini)
   const fetchFixedMonthlyData = useCallback((force = false) => {
     const curYear = new Date().getFullYear();
-    if (!force && fixedMonthlyPln && fixedMonthlySolar) return;
-
     const forceQuery = force ? "&force=true" : "";
-    const promises: Promise<any>[] = [];
-    if (force || !fixedMonthlyPln) {
-      promises.push(
-        getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${curYear}${forceQuery}`)
-          .then((res) => { if (res?.data) setFixedMonthlyPln(res.data); })
-      );
-    }
-    if (force || !fixedMonthlySolar) {
-      promises.push(
-        getJson<{ data: any }>(`/analytics/solar?year=${curYear}${forceQuery}`)
-          .then((res) => { if (res?.data) setFixedMonthlySolar(res.data); })
-      );
-    }
-    Promise.all(promises).catch((err) => {
+    Promise.all([
+      getJson<{ data: any }>(`/analytics/electricity?deviceId=Cubicle_PLN_PM8000&year=${curYear}&_t=${Date.now()}${forceQuery}`),
+      getJson<{ data: any }>(`/analytics/solar?year=${curYear}&_t=${Date.now()}${forceQuery}`)
+    ]).then(([resPln, resSolar]) => {
+      if (resPln?.data) setFixedMonthlyPln(resPln.data);
+      if (resSolar?.data) setFixedMonthlySolar(resSolar.data);
+    }).catch((err) => {
       console.warn("Failed to load fixed monthly executive data:", err);
     });
-  }, [fixedMonthlyPln, fixedMonthlySolar]);
+  }, []);
 
   useEffect(() => {
-    fetchFixedMonthlyData();
+    fetchFixedMonthlyData(true);
   }, [fetchFixedMonthlyData]);
 
   useEffect(() => {
@@ -3944,31 +4294,35 @@ export default function Electricity() {
       return true;
     };
 
-    const handleElectricityUpdate = () => {
+    let refreshDebounceTimer: any = null;
+    const triggerSimultaneousRefresh = () => {
       if (!active) return;
-      fetchFixedMonthlyData(true);
-      fetchCubicleAnalytics(true);
-      refreshFactCategories();
-      if (isPlnCurrentActivePeriod()) {
+      if (refreshDebounceTimer) clearTimeout(refreshDebounceTimer);
+      refreshDebounceTimer = setTimeout(() => {
         plnCacheRef.current.clear();
-        fetchData(false, true);
-      }
-      if (isSolarCurrentActivePeriod()) {
         solarCacheRef.current.clear();
-        fetchSolarData(false, true);
-      }
+        // Auto-refresh bersamaan untuk seluruh chart konsumsi kWh & Biaya serta rekapitulasi
+        Promise.all([
+          isPlnCurrentActivePeriod() ? fetchData(false, true) : Promise.resolve(),
+          isSolarCurrentActivePeriod() ? fetchSolarData(false, true) : Promise.resolve(),
+          fetchFixedMonthlyData(true),
+          fetchCubicleAnalytics(true),
+          refreshFactCategories()
+        ]);
+      }, 150);
+    };
+
+    const handleElectricityUpdate = () => {
+      triggerSimultaneousRefresh();
     };
 
     const handleSolarUpdate = () => {
-      if (!active) return;
-      fetchFixedMonthlyData(true);
-      if (isSolarCurrentActivePeriod()) {
-        solarCacheRef.current.clear();
-        fetchSolarData(false, true);
-      }
+      triggerSimultaneousRefresh();
     };
     const handleLiveUpdate = (payload: any) => {
       if (!active || !payload) return;
+      // If unified overview_live stream is actively handling overview data, yield to prevent jitter/flicker
+      if (Date.now() - lastOverviewLiveTsRef.current < 3000) return;
       const isOffline = payload.online === false || payload.status === false || payload.pqData?.pfStatus === "offline";
 
       if (payload.deviceId === "Cubicle_PLN_PM8000") {
@@ -4009,6 +4363,7 @@ export default function Electricity() {
     };
     const handleSolarLive = (payload: any) => {
       if (!active || !payload) return;
+      if (Date.now() - lastOverviewLiveTsRef.current < 3000) return;
       if (payload.online === false || payload.status === false) {
         setSolarLive((prev: any) => prev ? ({ ...prev, online: false, status: false, poi1: { ...prev.poi1, status: false, activePower: null as any }, poi2: { ...prev.poi2, status: false, activePower: null as any } }) : payload);
         return;
@@ -4056,7 +4411,15 @@ export default function Electricity() {
       }
     };
 
+    const handleConnect = () => {
+      if (!active) return;
+      fetchFixedMonthlyData(true);
+      fetchCubicleAnalytics(true);
+    };
+
+    socket.on("connect", handleConnect);
     socket.on("electricity:update", handleElectricityUpdate);
+    socket.on("historian:minute_update", handleElectricityUpdate);
     socket.on("electricity:live_update", handleLiveUpdate);
     socket.on("electricity:pm_live_update", handlePmLiveUpdate);
     socket.on("electricity:solar_live", handleSolarLive);
@@ -4066,7 +4429,9 @@ export default function Electricity() {
     socket.on("power_factor:status", handlePfStatus);
     return () => {
       active = false;
+      socket.off("connect", handleConnect);
       socket.off("electricity:update", handleElectricityUpdate);
+      socket.off("historian:minute_update", handleElectricityUpdate);
       socket.off("electricity:live_update", handleLiveUpdate);
       socket.off("electricity:pm_live_update", handlePmLiveUpdate);
       socket.off("electricity:solar_live", handleSolarLive);
@@ -4254,11 +4619,18 @@ export default function Electricity() {
       const todayWbpCost = isToday ? (summaryData.summary?.todayWbpCost ?? (todayWbpKwh * wbpRate)) : (summaryData.summary?.wbpCost ?? (todayWbpKwh * wbpRate));
       const todayLwbpCost = isToday ? (summaryData.summary?.todayLwbpCost ?? (todayLwbpKwh * lwbpRate)) : (summaryData.summary?.lwbpCost ?? (todayLwbpKwh * lwbpRate));
       const todayCost = (todayWbpCost + todayLwbpCost) || (summaryData.summary?.totalCost ?? 0);
+
+      const plnRaw = apiLiveData["electric_pln"] || apiLiveData[DEFAULT_PLN_API_URL] || apiLiveData["http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln"] || apiLiveData["http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_pln"];
+      const rawPeak = plnRaw?.Peak_Demand_W ?? plnRaw?.Peak_Demand_w ?? plnRaw?.PeakDemand_W ?? plnRaw?.peak_demand_w ?? plnRaw?.Peak_Demand ?? plnRaw?.peak_demand;
+      const livePeakFromApi = (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)))
+        ? (Number(rawPeak) > 10000 ? Number(rawPeak) / 1000.0 : Number(rawPeak))
+        : (livePeakDemandKw !== null && !isNaN(Number(livePeakDemandKw)) ? Number(livePeakDemandKw) : null);
+
       return {
         totalCost: todayCost || (summaryData.summary?.totalCost ?? 0),
         totalKwh: todayKwh || (summaryData.summary?.totalKwh ?? 0),
-        peakDemand: summaryData.summary?.peakDemand || summaryData.pqData?.activePower || 0,
-        peakDemandTs: summaryData.summary?.peakDemandTs || summaryData.pqData?.activePowerTs,
+        peakDemand: (isToday && livePeakFromApi) ? livePeakFromApi : (summaryData.summary?.peakDemand || livePeakFromApi || summaryData.pqData?.activePower || 0),
+        peakDemandTs: (isToday && livePeakFromApi) ? (summaryData.summary?.peakDemandTs || new Date().toISOString()) : (summaryData.summary?.peakDemandTs || summaryData.pqData?.activePowerTs),
         loadFactor: summaryData.pqData?.pf ? Math.abs(summaryData.pqData.pf) * 100 : 0,
         wbpKwh: todayWbpKwh || (summaryData.summary?.wbpKwh ?? 0),
         lwbpKwh: todayLwbpKwh || (summaryData.summary?.lwbpKwh ?? 0),
@@ -4270,29 +4642,43 @@ export default function Electricity() {
       const targetMonthKey = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
       const monthData = summaryData.summary?.perMonthSummary?.find((pm: any) => pm.month === targetMonthKey) || summaryData.summary?.perMonthSummary?.[selectedMonth];
       if (monthData) {
+        const mWbpKwh = Number(monthData.wbpKwh) || 0;
+        const mLwbpKwh = Number(monthData.lwbpKwh) || 0;
+        const effectiveWbp = (typeof wbpRate === "number" && wbpRate > 0) ? wbpRate : (Number(summaryData.summary?.wbpRate) || 1553.67);
+        const effectiveLwbp = (typeof lwbpRate === "number" && lwbpRate > 0) ? lwbpRate : (Number(summaryData.summary?.lwbpRate) || 1035.78);
+        const wbpCost = monthData.wbpCost ? Number(monthData.wbpCost) : (mWbpKwh * effectiveWbp);
+        const lwbpCost = monthData.lwbpCost ? Number(monthData.lwbpCost) : (mLwbpKwh * effectiveLwbp);
+        const totalCost = monthData.totalCost ? Number(monthData.totalCost) : (wbpCost + lwbpCost);
         return {
-          totalCost: monthData.totalCost,
+          totalCost,
           totalKwh: monthData.totalKwh,
           peakDemand: monthData.peakDemand,
           peakDemandTs: monthData.peakDemandTs,
           loadFactor: summaryData.pqData?.pf ? Math.abs(summaryData.pqData.pf) * 100 : 0,
-          wbpKwh: monthData.wbpKwh,
-          lwbpKwh: monthData.lwbpKwh,
-          wbpCost: monthData.wbpCost,
-          lwbpCost: monthData.lwbpCost
+          wbpKwh: mWbpKwh,
+          lwbpKwh: mLwbpKwh,
+          wbpCost,
+          lwbpCost
         };
       }
     }
+    const effectiveWbp = (typeof wbpRate === "number" && wbpRate > 0) ? wbpRate : (Number(summaryData.summary?.wbpRate) || 1553.67);
+    const effectiveLwbp = (typeof lwbpRate === "number" && lwbpRate > 0) ? lwbpRate : (Number(summaryData.summary?.lwbpRate) || 1035.78);
+    const defWbpKwh = Number(summaryData.summary?.wbpKwh) || 0;
+    const defLwbpKwh = Number(summaryData.summary?.lwbpKwh) || 0;
+    const defWbpCost = summaryData.summary?.wbpCost ? Number(summaryData.summary.wbpCost) : (defWbpKwh * effectiveWbp);
+    const defLwbpCost = summaryData.summary?.lwbpCost ? Number(summaryData.summary.lwbpCost) : (defLwbpKwh * effectiveLwbp);
+    const defTotalCost = summaryData.summary?.totalCost ? Number(summaryData.summary.totalCost) : (defWbpCost + defLwbpCost);
     return {
-      totalCost: summaryData.summary?.totalCost ?? 0,
-      totalKwh: summaryData.summary?.totalKwh ?? 0,
+      totalCost: defTotalCost,
+      totalKwh: summaryData.summary?.totalKwh ?? (defWbpKwh + defLwbpKwh),
       peakDemand: summaryData.summary?.peakDemand || summaryData.pqData?.activePower || 0,
       peakDemandTs: summaryData.summary?.peakDemandTs || summaryData.pqData?.activePowerTs,
       loadFactor: summaryData.pqData?.pf ? Math.abs(summaryData.pqData.pf) * 100 : 0,
-      wbpKwh: summaryData.summary?.wbpKwh ?? 0,
-      lwbpKwh: summaryData.summary?.lwbpKwh ?? 0,
-      wbpCost: summaryData.summary?.wbpCost ?? 0,
-      lwbpCost: summaryData.summary?.lwbpCost ?? 0
+      wbpKwh: defWbpKwh,
+      lwbpKwh: defLwbpKwh,
+      wbpCost: defWbpCost,
+      lwbpCost: defLwbpCost
     };
   }, [hasSummaryData, summaryData, range, selectedYear, selectedMonth, chartStartDate, wbpRate, lwbpRate]);
 
@@ -4418,17 +4804,46 @@ export default function Electricity() {
         bodyColor: isDark ? "#f8fafc" : "#0f172a",
         borderColor: isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(15, 23, 42, 0.15)",
         borderWidth: 2,
-        padding: 12,
-        titleFont: { family: "IBM Plex Mono, monospace", size: 12, weight: "bold" as const },
-        bodyFont: { family: "IBM Plex Mono, monospace", size: 11, weight: "bold" as const },
+        padding: 14,
+        boxPadding: 6,
+        titleFont: { family: "IBM Plex Mono, monospace", size: 14, weight: "bold" as const },
+        bodyFont: { family: "IBM Plex Mono, monospace", size: 13, weight: "bold" as const },
         footerColor: isDark ? "#fbbf24" : "#b45309",
-        footerFont: { family: "IBM Plex Mono, monospace", size: 11, weight: "bold" as const },
+        footerFont: { family: "IBM Plex Mono, monospace", size: 13, weight: "bold" as const },
         filter: (tooltipItem: any) => tooltipItem.raw !== null && tooltipItem.raw > 0,
         callbacks: {
+          title: (tooltipItems: any[]) => {
+            if (!tooltipItems.length) return "";
+            const h = tooltipItems[0].dataIndex;
+            const padH = String(h).padStart(2, "0");
+            const isHourlyView = range === "hour" || (range === "custom" && chartStartDate === chartEndDate);
+            if (!isHourlyView) {
+              return tooltipItems[0].label;
+            }
+            const todayStr = getLocalTodayString();
+            const isToday = !chartStartDate || chartStartDate === todayStr;
+            if (isToday) {
+              if (h < liveClock.hour) {
+                return `${padH}:00 - ${padH}:59`;
+              } else if (h === liveClock.hour) {
+                // Sesuai kaidah metering SCADA & instruksi user:
+                // Menit berjalan (misal 10:17) belum dihitung karena belum ada data penutup 10:18.
+                // Maka menit progressive yang tampil dihitung sampai menit sebelumnya (10:00 - 10:16).
+                const endM = typeof chartData?.charts?.progressiveMinute === "number"
+                  ? chartData.charts.progressiveMinute
+                  : Math.max(0, liveClock.minute - 1);
+                const padM = String(endM).padStart(2, "0");
+                return `${padH}:00 - ${padH}:${padM}`;
+              } else {
+                return `${padH}:00 - ${padH}:59`;
+              }
+            }
+            return `${padH}:00 - ${padH}:59`;
+          },
           label: (ctx: any) => {
             const val = ctx.raw;
             if (val === null || val === undefined || val === 0) return null;
-            return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { maximumFractionDigits: 2 })}`;
+            return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { maximumFractionDigits: 2 })} ${barUnit}`;
           },
           footer: (tooltipItems: any[]) => {
             if (!tooltipItems || tooltipItems.length === 0) return "";
@@ -4439,10 +4854,28 @@ export default function Electricity() {
             if (total === 0) return "";
             const multiplier = barUnit === "MWh" ? 1000 : 1;
             const cost = (wbp * multiplier * wbpRate) + (lwbp * multiplier * lwbpRate);
-            return [
+            const isHourlyView = range === "hour" || (range === "custom" && chartStartDate === chartEndDate);
+            const isWbpZone = isHourlyView && (dataIndex >= 17 && dataIndex <= 21);
+            const activeRate = isWbpZone ? wbpRate : lwbpRate;
+            const lines = [
               `Total: ${total.toLocaleString("id-ID", { maximumFractionDigits: 2 })} ${barUnit}`,
-              `Estimasi Biaya: Rp ${cost.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+              `Estimasi Biaya: Rp ${cost.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             ];
+            if (isHourlyView) {
+              lines.push(`Zona Tarif: ${isWbpZone ? "WBP" : "LWBP"} (Rp ${activeRate.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/kWh)`);
+              const todayStr = getLocalTodayString();
+              const isToday = !chartStartDate || chartStartDate === todayStr;
+              if (isToday && dataIndex === liveClock.hour) {
+                const endM = typeof chartData?.charts?.progressiveMinute === "number"
+                  ? chartData.charts.progressiveMinute
+                  : Math.max(0, liveClock.minute - 1);
+                const padM = String(endM).padStart(2, "0");
+                lines.push(`Status: Progresif ${endM} menit (menit :00 s/d :${padM} real-time)`);
+              } else if (isToday && dataIndex < liveClock.hour) {
+                lines.push(`Durasi: 60 Menit penuh`);
+              }
+            }
+            return lines;
           }
         }
       }
@@ -4451,7 +4884,7 @@ export default function Electricity() {
       x: { stacked: true, grid: { display: false }, ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
       y: { stacked: true, beginAtZero: true, grace: "15%", grid: { color: isDark ? "rgba(51,65,85,.4)" : "rgba(203,213,225,.6)" }, ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", callback: (v: number) => `${v}` } }
     }
-  }), [isDark, barWbpValues, barLwbpValues, barUnit, wbpRate, lwbpRate]);
+  }), [isDark, barWbpValues, barLwbpValues, barUnit, wbpRate, lwbpRate, range, chartStartDate, chartEndDate, liveClock, chartData]);
 
   /* ═══ SOLAR STACKED BAR ═══ */
   const solarBarLabels = useMemo(() => {
@@ -4529,27 +4962,84 @@ export default function Electricity() {
 
   // Filtered metrics for Solar Panel (PLTS) top cards
   const solarFilteredMetrics = useMemo(() => {
-    const poi1Kwh = solarPoi1Values.reduce((acc: number, v: any) => acc + (Number(v) || 0), 0);
-    const poi2Kwh = solarPoi2Values.reduce((acc: number, v: any) => acc + (Number(v) || 0), 0);
+    let poi1Kwh = solarPoi1Values.reduce((acc: number, v: any) => acc + (Number(v) || 0), 0);
+    let poi2Kwh = solarPoi2Values.reduce((acc: number, v: any) => acc + (Number(v) || 0), 0);
+
+    // Saat filter adalah "day" (bulan tertentu), gunakan nilai bulanan resmi jika tersedia
+    // agar 100% konsisten dengan kartu Rekapitulasi (menghilangkan deviasi akumulasi pembulatan harian 0.03 kWh)
+    if (solarRange === "day") {
+      const targetMonthStr = `${solarSelectedYear}-${String(solarSelectedMonth + 1).padStart(2, "0")}`;
+      const monthlySolarCharts = solarData?.charts?.monthly || [];
+      const curMonthSolar = monthlySolarCharts.find((m: any) => m.month === targetMonthStr);
+      if (curMonthSolar && (curMonthSolar.poi1 > 0 || curMonthSolar.poi2 > 0 || curMonthSolar.total > 0)) {
+        poi1Kwh = Number(curMonthSolar.poi1) || 0;
+        poi2Kwh = Number(curMonthSolar.poi2) || 0;
+      }
+    }
 
     const activeTotalKwh = (solarShowPoi1 ? poi1Kwh : 0) + (solarShowPoi2 ? poi2Kwh : 0);
 
-    const plnRate = Number(solarData?.summary?.solarRate) || lwbpRate || 1112;
-    const currentPvRate = typeof pvRate === "number" ? pvRate : (Number(solarData?.summary?.pvRate) || 0);
-    const plnCost = activeTotalKwh * plnRate;
-    const pvCost = activeTotalKwh * currentPvRate;
-    const savingsCost = plnCost - pvCost;
+    const plnLwbpRate = typeof lwbpRate === "number" && lwbpRate > 0 ? lwbpRate : (Number(solarData?.summary?.lwbpRate) || 1035.78);
+    const plnWbpRate = typeof wbpRate === "number" && wbpRate > 0 ? wbpRate : (Number(solarData?.summary?.wbpRate) || 1553.67);
+    const currentPvRate = typeof pvRate === "number" ? pvRate : (Number(solarData?.summary?.pvRate) || 549);
 
-    let poi1Peak = solarData?.summary?.rangePoi1PeakDemand ?? solarData?.summary?.poi1PeakDemand ?? 0;
-    let poi2Peak = solarData?.summary?.rangePoi2PeakDemand ?? solarData?.summary?.poi2PeakDemand ?? 0;
-
+    // Hitung porsi WBP vs LWBP untuk keakuratan biaya terhindar PLN
+    let wbpKwh = 0;
+    let lwbpKwh = 0;
     if (solarRange === "hour" || (solarRange === "custom" && solarStartDate === solarEndDate)) {
-      poi1Peak = Math.max(0, ...solarPoi1Values);
-      poi2Peak = Math.max(0, ...solarPoi2Values);
-    } else if (poi1Peak === 0 && poi2Peak === 0) {
-      poi1Peak = Math.max(0, ...solarPoi1Values);
-      poi2Peak = Math.max(0, ...solarPoi2Values);
+      solarPoi1Values.forEach((v: number, h: number) => {
+        const p1 = solarShowPoi1 ? Number(v) || 0 : 0;
+        const p2 = solarShowPoi2 ? Number(solarPoi2Values[h]) || 0 : 0;
+        const tot = p1 + p2;
+        if (h >= 17 && h <= 21) {
+          wbpKwh += tot;
+        } else {
+          lwbpKwh += tot;
+        }
+      });
+    } else {
+      const dailyList = solarData?.charts?.daily || [];
+      dailyList.forEach((d: any) => {
+        wbpKwh += Number(d.wbp) || 0;
+        lwbpKwh += Number(d.lwbp) || 0;
+      });
+      if (wbpKwh === 0 && lwbpKwh === 0) {
+        wbpKwh = Number(solarData?.summary?.monthlyWbpKwh) || 0;
+        lwbpKwh = Number(solarData?.summary?.monthlyLwbpKwh) || Math.max(0, activeTotalKwh - wbpKwh);
+      }
     }
+    if (wbpKwh === 0 && lwbpKwh === 0 && activeTotalKwh > 0) {
+      lwbpKwh = activeTotalKwh;
+    }
+
+    const plnCost = (lwbpKwh * plnLwbpRate) + (wbpKwh * plnWbpRate);
+    const pvCost = activeTotalKwh * currentPvRate;
+    const savingsCost = Math.max(0, plnCost - pvCost);
+
+    const isSolarToday = (solarRange === "hour" && (solarStartDate || getLocalTodayString()) === getLocalTodayString()) ||
+      (solarRange === "day" && solarSelectedYear === new Date().getFullYear() && solarSelectedMonth === new Date().getMonth()) ||
+      ((solarRange === "month" || solarRange === "ytd") && solarSelectedYear === new Date().getFullYear());
+
+    const livePoi1Peak = (apiLiveData[DEFAULT_PLTS_API_URL]?.POI_1?.Peak_Demand_ScaleKw_POI_1 !== undefined && apiLiveData[DEFAULT_PLTS_API_URL]?.POI_1?.Peak_Demand_ScaleKw_POI_1 !== null)
+      ? Number(apiLiveData[DEFAULT_PLTS_API_URL].POI_1.Peak_Demand_ScaleKw_POI_1)
+      : (solarLive?.poi1?.peakDemand ?? null);
+    const livePoi2Peak = (apiLiveData[DEFAULT_PLTS_API_URL]?.POI_2?.Peak_Demand_ScaleKw_POI_2 !== undefined && apiLiveData[DEFAULT_PLTS_API_URL]?.POI_2?.Peak_Demand_ScaleKw_POI_2 !== null)
+      ? Number(apiLiveData[DEFAULT_PLTS_API_URL].POI_2.Peak_Demand_ScaleKw_POI_2)
+      : (solarLive?.poi2?.peakDemand ?? null);
+
+    let poi1Peak = (isSolarToday && livePoi1Peak)
+      ? livePoi1Peak
+      : (solarData?.summary?.rangePoi1PeakDemand ?? solarData?.summary?.poi1PeakDemand ?? livePoi1Peak ?? 0);
+    let poi2Peak = (isSolarToday && livePoi2Peak)
+      ? livePoi2Peak
+      : (solarData?.summary?.rangePoi2PeakDemand ?? solarData?.summary?.poi2PeakDemand ?? livePoi2Peak ?? 0);
+
+    let poi1PeakTs = (isSolarToday && livePoi1Peak)
+      ? (solarData?.summary?.rangePoi1PeakDemandTs || new Date().toISOString())
+      : (solarData?.summary?.rangePoi1PeakDemandTs ?? solarData?.summary?.poi1PeakDemandTs ?? null);
+    let poi2PeakTs = (isSolarToday && livePoi2Peak)
+      ? (solarData?.summary?.rangePoi2PeakDemandTs || new Date().toISOString())
+      : (solarData?.summary?.rangePoi2PeakDemandTs ?? solarData?.summary?.poi2PeakDemandTs ?? null);
 
     let periodLabel = "Hari Ini";
     if (solarRange === "hour") {
@@ -4572,7 +5062,9 @@ export default function Electricity() {
       pvCost,
       savingsCost,
       poi1PeakDemand: poi1Peak,
+      poi1PeakDemandTs: poi1PeakTs,
       poi2PeakDemand: poi2Peak,
+      poi2PeakDemandTs: poi2PeakTs,
       periodLabel
     };
   }, [
@@ -4677,11 +5169,43 @@ export default function Electricity() {
         titleColor: isDark ? "#ffffff" : "#000000",
         bodyColor: isDark ? "#f8fafc" : "#0f172a",
         borderColor: isDark ? "rgba(51, 65, 85, 0.8)" : "rgba(226, 232, 240, 1)",
-        borderWidth: 1,
-        padding: 12,
-        boxPadding: 4,
+        borderWidth: 1.5,
+        padding: 14,
+        boxPadding: 6,
+        titleFont: { family: "IBM Plex Mono, monospace", size: 14, weight: "bold" as const },
+        bodyFont: { family: "IBM Plex Mono, monospace", size: 13, weight: "bold" as const },
+        footerColor: isDark ? "#38bdf8" : "#0284c7",
+        footerFont: { family: "IBM Plex Mono, monospace", size: 13, weight: "bold" as const },
         filter: (tooltipItem: any) => tooltipItem.raw !== null && tooltipItem.raw > 0,
         callbacks: {
+          title: (tooltipItems: any[]) => {
+            if (!tooltipItems.length) return "";
+            const h = tooltipItems[0].dataIndex;
+            const padH = String(h).padStart(2, "0");
+            const isHourlyView = solarRange === "hour" || (solarRange === "custom" && solarStartDate === solarEndDate);
+            if (!isHourlyView) {
+              return tooltipItems[0].label;
+            }
+            const todayStr = getLocalTodayString();
+            const isToday = !solarStartDate || solarStartDate === todayStr;
+            if (isToday) {
+              if (h < liveClock.hour) {
+                return `${padH}:00 - ${padH}:59`;
+              } else if (h === liveClock.hour) {
+                // Sesuai kaidah metering SCADA & instruksi user:
+                // Menit berjalan (misal 10:17) belum dihitung karena belum ada data penutup 10:18.
+                // Maka menit progressive yang tampil dihitung sampai menit sebelumnya (10:00 - 10:16).
+                const endM = typeof solarData?.charts?.progressiveMinute === "number"
+                  ? solarData.charts.progressiveMinute
+                  : Math.max(0, liveClock.minute - 1);
+                const padM = String(endM).padStart(2, "0");
+                return `${padH}:00 - ${padH}:${padM}`;
+              } else {
+                return `${padH}:00 - ${padH}:59`;
+              }
+            }
+            return `${padH}:00 - ${padH}:59`;
+          },
           label: (ctx: any) => {
             const val = ctx.raw;
             if (val === null || val === undefined || val === 0) return null;
@@ -4694,15 +5218,31 @@ export default function Electricity() {
             const p2 = solarShowPoi2 ? (solarPoi2Values[idx] || 0) : 0;
             const tot = p1 + p2;
             if (tot === 0) return [];
-            const plnRate = Number(solarData?.summary?.solarRate) || lwbpRate || 1112;
-            const currentPvRate = typeof pvRate === "number" ? pvRate : (Number(solarData?.summary?.pvRate) || 0);
+            const isHourlyView = solarRange === "hour" || (solarRange === "custom" && solarStartDate === solarEndDate);
+            const isWbpZone = isHourlyView && (idx >= 17 && idx <= 21);
+            const plnRate = isWbpZone ? (wbpRate || 1553.67) : (lwbpRate || 1035.78);
+            const currentPvRate = typeof pvRate === "number" ? pvRate : (Number(solarData?.summary?.pvRate) || 549);
             const pvCost = tot * currentPvRate;
-            const savings = tot * (plnRate - currentPvRate);
+            const savings = tot * Math.max(0, plnRate - currentPvRate);
             const lines = [`Total: ${tot.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`];
             if (currentPvRate > 0) {
-              lines.push(`Biaya PV: Rp ${Math.round(pvCost).toLocaleString("id-ID")}`);
+              lines.push(`Biaya PV: Rp ${pvCost.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
             }
-            lines.push(`Penghematan: Rp ${Math.round(savings).toLocaleString("id-ID")}`);
+            lines.push(`Estimasi Hemat: Rp ${savings.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+            if (isHourlyView) {
+              lines.push(`Zona Tarif PLN: ${isWbpZone ? "WBP" : "LWBP"} (Rp ${plnRate.toLocaleString("id-ID", { minimumFractionDigits: 2 })}/kWh)`);
+              const todayStr = getLocalTodayString();
+              const isToday = !solarStartDate || solarStartDate === todayStr;
+              if (isToday && idx === liveClock.hour) {
+                const endM = typeof solarData?.charts?.progressiveMinute === "number"
+                  ? solarData.charts.progressiveMinute
+                  : Math.max(0, liveClock.minute - 1);
+                const padM = String(endM).padStart(2, "0");
+                lines.push(`Status: Progresif ${endM} menit (menit :00 s/d :${padM} real-time)`);
+              } else if (isToday && idx < liveClock.hour) {
+                lines.push(`Durasi: 60 Menit penuh`);
+              }
+            }
             return lines;
           }
         }
@@ -4720,7 +5260,7 @@ export default function Electricity() {
         ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", callback: (v: number) => `${v}` }
       }
     }
-  }), [isDark, solarPoi1Values, solarPoi2Values, solarShowPoi1, solarShowPoi2, lwbpRate, pvRate, solarData]);
+  }), [isDark, solarPoi1Values, solarPoi2Values, solarShowPoi1, solarShowPoi2, lwbpRate, wbpRate, pvRate, solarData, liveClock, solarRange, solarStartDate, solarEndDate]);
 
   /* ═══ COMBINED FACT TIMELINE CHART & DONUT STATE ═══ */
   const fact1Total = useMemo(() => {
@@ -4845,7 +5385,7 @@ export default function Electricity() {
           duration: 180,
           easing: "easeOutQuad"
         },
-        callbacks: { label: (ctx: any) => `${Number(ctx.parsed.x).toLocaleString("id-ID")} kWh` }
+        callbacks: { label: (ctx: any) => `${formatNumber(Number(ctx.parsed.x))} kWh` }
       }
     },
     scales: {
@@ -4872,43 +5412,42 @@ export default function Electricity() {
   // Power metrics & percentages for Top Overview Cards (Pure Real-Time API Polling)
   const apiWf1Val = getCleanNum(getApiVal("wf1/active_power"));
   const rawFact1Val = liveWf1Kw !== null && liveWf1Kw !== undefined ? liveWf1Kw : apiWf1Val;
-  const isFact1Offline = !isLiveLoading && (rawFact1Val === null || (liveWf1Status === false && rawFact1Val === 0 && apiWf1Val === null));
-  const fact1Kw = rawFact1Val !== null ? Math.max(0, rawFact1Val) : null;
+  const isFact1Offline = isGatewayOffline || liveWf1Status === false || (!isLiveLoading && rawFact1Val === null);
+  const fact1Kw = !isFact1Offline && rawFact1Val !== null ? Math.max(0, rawFact1Val) : null;
 
   const apiWf2Val = getCleanNum(getApiVal("wf2/active_power"));
   const rawFact2Val = liveWf2Kw !== null && liveWf2Kw !== undefined ? liveWf2Kw : apiWf2Val;
-  const isFact2Offline = !isLiveLoading && (rawFact2Val === null || (liveWf2Status === false && rawFact2Val === 0 && apiWf2Val === null));
-  const fact2Kw = rawFact2Val !== null ? Math.max(0, rawFact2Val) : null;
+  const isFact2Offline = isGatewayOffline || liveWf2Status === false || (!isLiveLoading && rawFact2Val === null);
+  const fact2Kw = !isFact2Offline && rawFact2Val !== null ? Math.max(0, rawFact2Val) : null;
 
   const apiPlnVal = getCleanNum(getApiVal("pln/active_power"));
   const rawPGridVal = livePGridKw !== null && livePGridKw !== undefined
     ? livePGridKw
-    : (apiPlnVal !== null ? apiPlnVal : (summaryData?.pln?.activePower ?? null));
-  const isPlnOffline = isGatewayOffline || (!isLiveLoading && rawPGridVal === null);
-  const pGridNum = (rawPGridVal !== null && !isGatewayOffline) ? Math.max(0, rawPGridVal) : null;
+    : (apiPlnVal !== null ? apiPlnVal : null);
+  const isPlnOffline = isGatewayOffline || livePlnStatus === false || (!isLiveLoading && rawPGridVal === null);
+  const pGridNum = !isPlnOffline && rawPGridVal !== null ? Math.max(0, rawPGridVal) : null;
 
-  const hasPoi1Data = pltsLive.poi1.status === true || (typeof pltsLive.poi1.active_power === "number" && pltsLive.poi1.active_power > 0) || solarLive?.poi1?.status === true;
-  const isPoi1Offline = isGatewayOffline || (!isLiveLoading && !hasPoi1Data && (pltsLive.poi1.status === false || solarLive?.poi1?.status === false));
-  const hasPoi2Data = pltsLive.poi2.status === true || (typeof pltsLive.poi2.active_power === "number" && pltsLive.poi2.active_power > 0) || solarLive?.poi2?.status === true;
-  const isPoi2Offline = isGatewayOffline || (!isLiveLoading && !hasPoi2Data && (pltsLive.poi2.status === false || solarLive?.poi2?.status === false));
-  const poi1Kw = (!isPoi1Offline && !isGatewayOffline) ? Math.max(0, pltsLive.poi1.active_power || solarLive?.poi1?.activePower || 0) : null;
-  const poi2Kw = (!isPoi2Offline && !isGatewayOffline) ? Math.max(0, pltsLive.poi2.active_power || solarLive?.poi2?.activePower || 0) : null;
-  const isSolarOffline = isGatewayOffline || (!isLiveLoading && isPoi1Offline && isPoi2Offline);
-  const totalSolarKw = (!isSolarOffline && !isGatewayOffline && (poi1Kw !== null || poi2Kw !== null)) ? ((poi1Kw ?? 0) + (poi2Kw ?? 0)) : null;
+  const isPoi1Offline = isGatewayOffline || pltsLive.poi1.status === false;
+  const isPoi2Offline = isGatewayOffline || pltsLive.poi2.status === false;
+  const poi1Kw = !isPoi1Offline ? Math.max(0, pltsLive.poi1.active_power || solarLive?.poi1?.activePower || 0) : null;
+  const poi2Kw = !isPoi2Offline ? Math.max(0, pltsLive.poi2.active_power || solarLive?.poi2?.activePower || 0) : null;
+  const isSolarOffline = isGatewayOffline || (isPoi1Offline && isPoi2Offline);
+  const totalSolarKw = !isSolarOffline && (poi1Kw !== null || poi2Kw !== null) ? ((poi1Kw ?? 0) + (poi2Kw ?? 0)) : null;
 
   const gensetRunning = Number(getCleanNum(getApiVal("electricity/genset_running"))) || 0;
   const pGensetNum = gensetRunning === 1 ? 850 : gensetRunning > 1 ? 1850 : 0;
 
-  const totalPlantLoadKw = !isLiveLoading && !isGatewayOffline && (pGridNum !== null || totalSolarKw !== null || pGensetNum > 0)
-    ? (pGridNum ?? 0) + (totalSolarKw ?? 0) + pGensetNum
-    : null;
+  const activePGrid = !isPlnOffline && pGridNum !== null ? pGridNum : 0;
+  const activeSolar = !isSolarOffline && totalSolarKw !== null ? totalSolarKw : 0;
+  const isAnyPowerSourceOnline = !isGatewayOffline && (!isPlnOffline || !isSolarOffline || pGensetNum > 0);
+  const totalPlantLoadKw = isAnyPowerSourceOnline ? (activePGrid + activeSolar + pGensetNum) : null;
 
-  const gridPct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && pGridNum !== null ? (pGridNum / totalPlantLoadKw) * 100 : 0;
-  const solarPct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && totalSolarKw !== null ? (totalSolarKw / totalPlantLoadKw) * 100 : 0;
-  const poi1Pct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && poi1Kw !== null ? (poi1Kw / totalPlantLoadKw) * 100 : 0;
-  const poi2Pct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && poi2Kw !== null ? (poi2Kw / totalPlantLoadKw) * 100 : 0;
-  const fact1Pct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && fact1Kw !== null ? (fact1Kw / totalPlantLoadKw) * 100 : 0;
-  const fact2Pct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && fact2Kw !== null ? (fact2Kw / totalPlantLoadKw) * 100 : 0;
+  const gridPct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && !isPlnOffline && pGridNum !== null ? (pGridNum / totalPlantLoadKw) * 100 : 0;
+  const solarPct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && !isSolarOffline && totalSolarKw !== null ? (totalSolarKw / totalPlantLoadKw) * 100 : 0;
+  const poi1Pct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && !isPoi1Offline && poi1Kw !== null ? (poi1Kw / totalPlantLoadKw) * 100 : 0;
+  const poi2Pct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && !isPoi2Offline && poi2Kw !== null ? (poi2Kw / totalPlantLoadKw) * 100 : 0;
+  const fact1Pct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && !isFact1Offline && fact1Kw !== null ? (fact1Kw / totalPlantLoadKw) * 100 : 0;
+  const fact2Pct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && !isFact2Offline && fact2Kw !== null ? (fact2Kw / totalPlantLoadKw) * 100 : 0;
 
   /* ═══ RENDER ═══ */
   return (
@@ -4958,10 +5497,10 @@ export default function Electricity() {
                     : isGatewayOffline
                     ? isDark ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-500/15 text-rose-700 border-rose-500/30'
                     : isPlnOffline
-                    ? isDark ? 'bg-amber-400/20 text-amber-300 border-amber-400/30' : 'bg-amber-500/15 text-amber-700 border-amber-500/30'
+                    ? isDark ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-500/15 text-rose-700 border-rose-500/30'
                     : isDark ? 'bg-blue-400/20 text-blue-200 border-blue-400/30' : 'bg-blue-600/10 text-blue-700 border-blue-600/20'
                 }`}>
-                  {isLiveLoading ? "POLLING..." : isGatewayOffline ? "GATEWAY OFFLINE" : isPlnOffline ? "OFFLINE" : `${gridPct.toFixed(1)}% Load`}
+                  {isLiveLoading ? "POLLING..." : isGatewayOffline ? "GATEWAY OFFLINE" : isPlnOffline ? "OFF" : `${gridPct.toFixed(1)}% Load`}
                 </span>
                 <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-blue-600/10 text-blue-700'} flex items-center justify-center`}><IconGrid /></div>
               </div>
@@ -4972,7 +5511,7 @@ export default function Electricity() {
               ) : isGatewayOffline ? (
                 <span className="text-xl text-rose-500 dark:text-rose-400 font-bold font-mono">Gateway Offline</span>
               ) : isPlnOffline ? (
-                <span className="text-xl text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
+                <span className="text-2xl text-rose-500 dark:text-rose-400 font-bold font-mono">OFF</span>
               ) : (
                 <>
                   {pGridNum !== null ? pGridNum.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "0.0"}
@@ -4987,7 +5526,7 @@ export default function Electricity() {
                 ) : isGatewayOffline ? (
                   <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isFact1Offline ? (
-                  <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">OFF</span>
                 ) : (
                   `${(fact1Kw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${fact1Pct.toFixed(1)}%)`
                 )}
@@ -4998,7 +5537,7 @@ export default function Electricity() {
                 ) : isGatewayOffline ? (
                   <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isFact2Offline ? (
-                  <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">OFF</span>
                 ) : (
                   `${(fact2Kw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${fact2Pct.toFixed(1)}%)`
                 )}
@@ -5026,10 +5565,10 @@ export default function Electricity() {
                     : isGatewayOffline
                     ? isDark ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-500/15 text-rose-700 border-rose-500/30'
                     : isSolarOffline
-                    ? isDark ? 'bg-amber-400/20 text-amber-300 border-amber-400/30' : 'bg-amber-500/15 text-amber-700 border-amber-500/30'
+                    ? isDark ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-500/15 text-rose-700 border-rose-500/30'
                     : isDark ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30' : 'bg-emerald-600/10 text-emerald-700 border-emerald-600/20'
                 }`}>
-                  {isLiveLoading ? "POLLING..." : isGatewayOffline ? "GATEWAY OFFLINE" : isSolarOffline ? "OFFLINE" : `${solarPct.toFixed(1)}% Load`}
+                  {isLiveLoading ? "POLLING..." : isGatewayOffline ? "GATEWAY OFFLINE" : isSolarOffline ? "OFF" : `${solarPct.toFixed(1)}% Load`}
                 </span>
                 <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-emerald-600/10 text-emerald-700'} flex items-center justify-center`}><IconSolar /></div>
               </div>
@@ -5040,7 +5579,7 @@ export default function Electricity() {
               ) : isGatewayOffline ? (
                 <span className="text-xl text-rose-500 dark:text-rose-400 font-bold font-mono">Gateway Offline</span>
               ) : isSolarOffline ? (
-                <span className="text-xl text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
+                <span className="text-2xl text-rose-500 dark:text-rose-400 font-bold font-mono">OFF</span>
               ) : (
                 <>
                   {totalSolarKw !== null ? totalSolarKw.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "0.0"}
@@ -5055,7 +5594,7 @@ export default function Electricity() {
                 ) : isGatewayOffline ? (
                   <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isPoi1Offline ? (
-                  <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">OFF</span>
                 ) : (
                   `${(poi1Kw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${poi1Pct.toFixed(1)}%)`
                 )}
@@ -5066,7 +5605,7 @@ export default function Electricity() {
                 ) : isGatewayOffline ? (
                   <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isPoi2Offline ? (
-                  <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">OFF</span>
                 ) : (
                   `${(poi2Kw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${poi2Pct.toFixed(1)}%)`
                 )}
@@ -5149,11 +5688,11 @@ export default function Electricity() {
                 <div className="h-9 w-36 bg-cyan-400/20 dark:bg-cyan-300/20 rounded-lg animate-pulse" />
               ) : isGatewayOffline ? (
                 <span className="text-xl text-rose-500 dark:text-rose-400 font-bold font-mono">Gateway Offline</span>
-              ) : totalPlantLoadKw === null || (isPlnOffline && isSolarOffline && pGensetNum === 0) ? (
-                <span className="text-xl text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
+              ) : !isAnyPowerSourceOnline ? (
+                <span className="text-2xl text-rose-500 dark:text-rose-400 font-bold font-mono">OFF</span>
               ) : (
                 <>
-                  {totalPlantLoadKw.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                  {totalPlantLoadKw !== null ? totalPlantLoadKw.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "0.0"}
                   <span className={`text-sm font-bold ml-1 ${isDark ? 'text-cyan-200' : 'text-cyan-700'}`}>kW</span>
                 </>
               )}
@@ -5165,7 +5704,7 @@ export default function Electricity() {
                 ) : isGatewayOffline ? (
                   <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isPlnOffline ? (
-                  <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">OFF</span>
                 ) : (
                   `${(pGridNum ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${gridPct.toFixed(1)}%)`
                 )}
@@ -5176,7 +5715,7 @@ export default function Electricity() {
                 ) : isGatewayOffline ? (
                   <span className="text-rose-500 dark:text-rose-400 font-bold">Offline</span>
                 ) : isSolarOffline ? (
-                  <span className="text-amber-400 dark:text-amber-300 font-bold">Gagal Polling API</span>
+                  <span className="text-rose-500 dark:text-rose-400 font-bold">OFF</span>
                 ) : (
                   `${(totalSolarKw ?? 0).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW (${solarPct.toFixed(1)}%)`
                 )}
@@ -5366,7 +5905,9 @@ export default function Electricity() {
                 />
               </div>
               <div className="text-center text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                Selisih Tarif: <strong className="font-mono font-bold text-emerald-600 dark:text-emerald-300">Rp {executiveSummary.savingsRate.toLocaleString("id-ID")}/kWh</strong>
+                Selisih Tarif: <strong className="font-mono font-bold text-emerald-600 dark:text-emerald-300">
+                  Rp {(executiveSummary.effectiveLwbpRate - executiveSummary.effectivePvRate).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/kWh
+                </strong>
               </div>
             </div>
           </div>
@@ -5390,7 +5931,7 @@ export default function Electricity() {
               {summaryLoading && !summaryData ? "..." : formatCurrency(cardSummary.totalCost)}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 truncate">
-              {summaryLoading && !summaryData ? "" : `${cardSummary.totalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
+              {summaryLoading && !summaryData ? "" : `${formatNumber(cardSummary.totalKwh)} kWh`}
             </div>
           </div>
 
@@ -5400,7 +5941,7 @@ export default function Electricity() {
               <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">Beban LWBP</span>
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {summaryLoading && !summaryData ? "..." : `${cardSummary.lwbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
+              {summaryLoading && !summaryData ? "..." : `${formatNumber(cardSummary.lwbpKwh)} kWh`}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-blue-500 truncate">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.lwbpCost)}</div>
           </div>
@@ -5411,7 +5952,7 @@ export default function Electricity() {
               <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">Beban WBP</span>
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {summaryLoading && !summaryData ? "..." : `${cardSummary.wbpKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh`}
+              {summaryLoading && !summaryData ? "..." : `${formatNumber(cardSummary.wbpKwh)} kWh`}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-rose-500 truncate">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.wbpCost)}</div>
           </div>
@@ -5421,27 +5962,32 @@ export default function Electricity() {
             <div className="flex items-center justify-between min-h-[24px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">PF</span>
               <span 
-                className={`h-2 w-2 rounded-full ${pfStatus === "connected" && (livePf !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== null)) ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} 
-                title={pfStatus === "connected" ? "Live Real-Time Polling API" : "Gagal Polling API"} 
+                className={`h-2 w-2 rounded-full ${pfStatus === "connected" && livePlnStatus !== false && (livePf !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== null)) ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} 
+                title={pfStatus === "connected" && livePlnStatus !== false ? "Status: ONLINE" : "Status: OFF"} 
               />
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {(() => {
+                const isOnline = pfStatus === "connected" && livePlnStatus !== false;
+                if (!isOnline) {
+                  return <span className="text-rose-500 font-extrabold">OFF</span>;
+                }
                 const liveVal = (livePf !== null && livePf !== undefined && !isNaN(Number(livePf))) 
                   ? Number(livePf) 
                   : (apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== null)
                     ? Number(apiLiveData[DEFAULT_PLN_API_URL].Power_Factor)
                     : null;
+                if (liveVal === null) {
+                  return <span className="text-rose-500 font-extrabold">OFF</span>;
+                }
                 return renderMetricVal(liveVal, (v) => `${Math.abs(v).toFixed(2)}`);
               })()}
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
               <span className="truncate">Stabilitas beban listrik</span>
-              {pfStatus === "connected" && (livePf !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== null)) ? (
-                <span className="text-[9px] font-semibold text-emerald-500 font-mono shrink-0">1s Live</span>
-              ) : (
-                <span className="text-[9px] font-semibold text-amber-500 font-mono shrink-0">Gagal Polling API</span>
-              )}
+              {pfStatus !== "connected" || livePlnStatus === false ? (
+                <span className="text-[9px] font-bold text-rose-500 font-mono shrink-0 uppercase">OFF</span>
+              ) : null}
             </div>
           </div>
 
@@ -5449,28 +5995,20 @@ export default function Electricity() {
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition h-full flex flex-col justify-between min-h-[116px]">
             <div className="flex items-center justify-between min-h-[24px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">Peak Demand</span>
-              <span 
-                className={`h-2 w-2 rounded-full ${pfStatus === "connected" && (livePeakDemandKw !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== null)) ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} 
-                title={pfStatus === "connected" ? "Live Real-Time Polling API" : "Gagal Polling API"} 
-              />
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" title="Live Streaming" />
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {(() => {
-                const liveVal = (livePeakDemandKw !== null && livePeakDemandKw !== undefined && !isNaN(Number(livePeakDemandKw)))
-                  ? Number(livePeakDemandKw)
-                  : (apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== null)
-                    ? Number(apiLiveData[DEFAULT_PLN_API_URL].Peak_Demand_W) / 1000.0
-                    : (cardSummary?.peakDemand ? Number(cardSummary.peakDemand) : null);
-                return renderMetricVal(liveVal, (v) => `${v.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`);
+                const plnRaw = apiLiveData["electric_pln"] || apiLiveData[DEFAULT_PLN_API_URL] || apiLiveData["http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln"] || apiLiveData["http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_pln"];
+                const rawPeak = plnRaw?.Peak_Demand_W ?? plnRaw?.Peak_Demand_w ?? plnRaw?.PeakDemand_W ?? plnRaw?.peak_demand_w ?? plnRaw?.Peak_Demand ?? plnRaw?.peak_demand;
+                const livePeak = (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)))
+                  ? (Number(rawPeak) > 10000 ? Number(rawPeak) / 1000.0 : Number(rawPeak))
+                  : (livePeakDemandKw !== null && !isNaN(Number(livePeakDemandKw)) ? Number(livePeakDemandKw) : (cardSummary?.peakDemand ? Number(cardSummary.peakDemand) : null));
+                return renderMetricVal(livePeak, (v) => `${v.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`);
               })()}
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-              <span className="truncate">Estimasi beban puncak</span>
-              {pfStatus === "connected" && (livePeakDemandKw !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Peak_Demand_W !== null)) ? (
-                <span className="text-[9px] font-semibold text-emerald-500 font-mono shrink-0">1s Live</span>
-              ) : (
-                <span className="text-[9px] font-semibold text-amber-500 font-mono shrink-0">Gagal Polling API</span>
-              )}
+              <span className="truncate">Puncak daya incoming PLN</span>
             </div>
           </div>
         </div>
@@ -5486,7 +6024,7 @@ export default function Electricity() {
                 <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Trend Panel Distribusi</h3>
                 {cardSummary.totalKwh > 0 && (
                   <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 rounded-lg">
-                    Total: {cardSummary.totalKwh.toLocaleString("id-ID", { maximumFractionDigits: 0 })} kWh
+                    Total: {formatNumber(cardSummary.totalKwh)} kWh
                   </span>
                 )}
                 {isFilterPending && (
@@ -5626,14 +6164,14 @@ export default function Electricity() {
             {isSolarOffline ? "GAGAL POLLING API" : "ONLINE"}
           </span>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 items-stretch">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 items-stretch">
           {/* Estimasi Biaya PV */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 h-full flex flex-col justify-between min-h-[116px]">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition h-full flex flex-col justify-between min-h-[116px]">
             <div className="flex items-center justify-between min-h-[24px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Estimasi Biaya PV</span>
               <div className="h-6 w-6 rounded bg-amber-500/10 flex items-center justify-center text-amber-500"><IconMoney /></div>
             </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {formatCurrency(solarFilteredMetrics.pvCost)}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 truncate" title={`${formatNumber(solarFilteredMetrics.totalKwh)} kWh (${solarFilteredMetrics.periodLabel})`}>
@@ -5642,7 +6180,7 @@ export default function Electricity() {
           </div>
 
           {/* POI-1 */}
-          <div className={`rounded-xl border p-4 h-full flex flex-col justify-between min-h-[116px] transition-all ${
+          <div className={`rounded-xl border p-4 hover:border-blue-400 transition h-full flex flex-col justify-between min-h-[116px] ${
             isPoi1Offline
               ? "border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30"
               : solarLive?.poi1?.status === false
@@ -5664,10 +6202,10 @@ export default function Electricity() {
                   ? "bg-amber-500"
                   : solarLive?.poi1?.status === false
                   ? "bg-rose-500"
-                  : "bg-emerald-500"
+                  : "bg-emerald-500 animate-pulse"
               }`} />
             </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {formatNumber(solarFilteredMetrics.poi1Kwh)} kWh
             </div>
             <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 truncate" title={
@@ -5686,21 +6224,28 @@ export default function Electricity() {
           </div>
 
           {/* Peak Demand (POI-1) */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 h-full flex flex-col justify-between min-h-[116px]">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition h-full flex flex-col justify-between min-h-[116px]">
             <div className="flex items-center justify-between min-h-[24px]">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-1)</span>
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase">Max</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">Peak Demand (POI-1)</span>
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" title="Live Streaming" />
             </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-              {formatNumber(solarFilteredMetrics.poi1PeakDemand)} kW
+            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+              {(() => {
+                const pltsRaw = apiLiveData["electric_plts"] || apiLiveData[DEFAULT_PLTS_API_URL] || apiLiveData["http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_plts"] || apiLiveData["http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_plts"];
+                const rawPeak = pltsRaw?.POI_1?.Peak_Demand_ScaleKw_POI_1 ?? pltsRaw?.POI_1?.Peak_Demand_ScaleKW_POI_1 ?? pltsLive?.poi1?.peak_demand;
+                const val = (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)))
+                  ? Number(rawPeak)
+                  : (solarLive?.poi1?.peakDemand ?? solarFilteredMetrics.poi1PeakDemand ?? 0);
+                return `${formatNumber(val)} kW`;
+              })()}
             </div>
-            <div className="mt-1 text-[10px] text-slate-400 truncate" title={`Puncak beban ${solarFilteredMetrics.periodLabel}`}>
-              Puncak beban {solarFilteredMetrics.periodLabel}
+            <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
+              <span className="truncate">Puncak daya inverter POI-1</span>
             </div>
           </div>
 
           {/* POI-2 */}
-          <div className={`rounded-xl border p-4 h-full flex flex-col justify-between min-h-[116px] transition-all ${
+          <div className={`rounded-xl border p-4 hover:border-cyan-400 transition h-full flex flex-col justify-between min-h-[116px] ${
             isPoi2Offline
               ? "border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30"
               : solarLive?.poi2?.status === false
@@ -5722,10 +6267,10 @@ export default function Electricity() {
                   ? "bg-amber-500"
                   : solarLive?.poi2?.status === false
                   ? "bg-rose-500"
-                  : "bg-emerald-500"
+                  : "bg-emerald-500 animate-pulse"
               }`} />
             </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
               {formatNumber(solarFilteredMetrics.poi2Kwh)} kWh
             </div>
             <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 truncate" title={
@@ -5744,16 +6289,23 @@ export default function Electricity() {
           </div>
 
           {/* Peak Demand (POI-2) */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 h-full flex flex-col justify-between min-h-[116px]">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition h-full flex flex-col justify-between min-h-[116px]">
             <div className="flex items-center justify-between min-h-[24px]">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Peak Demand (POI-2)</span>
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase">Max</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">Peak Demand (POI-2)</span>
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" title="Live Streaming" />
             </div>
-            <div className="mt-2 text-base font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-              {formatNumber(solarFilteredMetrics.poi2PeakDemand)} kW
+            <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
+              {(() => {
+                const pltsRaw = apiLiveData["electric_plts"] || apiLiveData[DEFAULT_PLTS_API_URL] || apiLiveData["http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_plts"] || apiLiveData["http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_plts"];
+                const rawPeak = pltsRaw?.POI_2?.Peak_Demand_ScaleKw_POI_2 ?? pltsRaw?.POI_2?.Peak_Demand_ScaleKW_POI_2 ?? pltsLive?.poi2?.peak_demand;
+                const val = (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)))
+                  ? Number(rawPeak)
+                  : (solarLive?.poi2?.peakDemand ?? solarFilteredMetrics.poi2PeakDemand ?? 0);
+                return `${formatNumber(val)} kW`;
+              })()}
             </div>
-            <div className="mt-1 text-[10px] text-slate-400 truncate" title={`Puncak beban ${solarFilteredMetrics.periodLabel}`}>
-              Puncak beban {solarFilteredMetrics.periodLabel}
+            <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
+              <span className="truncate">Puncak daya inverter POI-2</span>
             </div>
           </div>
         </div>
@@ -5994,18 +6546,6 @@ export default function Electricity() {
             </h3>
           </div>
           <div className="flex items-center gap-2">
-            <select
-              value={cubicleSelector}
-              onChange={(e) => setCubicleSelector(e.target.value as any)}
-              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer outline-none"
-            >
-              <option value="all">All (PLN + Total POI-1 & POI-2)</option>
-              <option value="pln">Incoming PLN Grid</option>
-              <option value="wf1">Incoming Cubicle WF1</option>
-              <option value="wf2">Incoming Cubicle WF2</option>
-              <option value="poi1">Solar PV POI-1</option>
-              <option value="poi2">Solar PV POI-2</option>
-            </select>
             {(() => {
               let isOnline = true;
               let isGagalPolling = false;
@@ -6029,7 +6569,7 @@ export default function Electricity() {
                 isGagalPolling = isPlnOffline && isSolarOffline;
               }
               return (
-                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
+                <span className={`px-2.5 py-1 rounded-md text-xs font-black uppercase border ${
                   isGagalPolling
                     ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
                     : isOnline
@@ -6043,29 +6583,119 @@ export default function Electricity() {
           </div>
         </div>
 
+        {/* Monthly Filters Bar: Pilihan Beban, Bulan Utama & Bulan Pembanding */}
+        <div className="bg-slate-50 dark:bg-slate-950/70 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+          {/* Sisi Kiri: Selector Beban */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Sumber Beban:
+            </span>
+            <select
+              value={cubicleSelector}
+              onChange={(e) => setCubicleSelector(e.target.value as any)}
+              className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer shadow-sm"
+            >
+              <option value="all">All (PLN + Total POI-1 & POI-2)</option>
+              <option value="pln">Incoming PLN Grid</option>
+              <option value="wf1">Incoming Feeder WF1</option>
+              <option value="wf2">Incoming Feeder WF2</option>
+              <option value="poi1">Solar PV POI-1</option>
+              <option value="poi2">Solar PV POI-2</option>
+            </select>
+          </div>
+
+          {/* Sisi Kanan: Filter Bulan Utama & Pembanding */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Bulan Utama */}
+            <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 px-2.5 py-1 rounded-lg shadow-sm">
+              <span className="text-xs font-bold text-sky-600 dark:text-sky-400 flex items-center gap-1">
+                <span>📅</span> Bulan Utama:
+              </span>
+              <select
+                value={monthlyPrimaryMonth}
+                onChange={(e) => setMonthlyPrimaryMonth(Number(e.target.value))}
+                className="bg-transparent text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer outline-none"
+              >
+                {MONTH_NAMES_ID.map((name, idx) => (
+                  <option key={idx} value={idx} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={monthlyPrimaryYear}
+                onChange={(e) => setMonthlyPrimaryYear(Number(e.target.value))}
+                className="bg-transparent text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer outline-none border-l border-slate-200 dark:border-slate-700 pl-1.5 ml-1"
+              >
+                {[2024, 2025, 2026, 2027].map((yr) => (
+                  <option key={yr} value={yr} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">
+                    {yr}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Separator */}
+            <div className="h-5 w-px bg-slate-300 dark:bg-slate-700 hidden sm:block" />
+
+            {/* Bulan Pembanding (Single Checkbox Toggle) */}
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={monthlyCompareEnabled}
+                  onChange={(e) => setMonthlyCompareEnabled(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer accent-blue-600"
+                />
+                <span>Bulan Pembanding</span>
+              </label>
+
+              {monthlyCompareEnabled && (
+                <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-lg">
+                  <select
+                    value={monthlyCompareMonth}
+                    onChange={(e) => setMonthlyCompareMonth(Number(e.target.value))}
+                    className="bg-transparent text-xs font-semibold text-amber-700 dark:text-amber-300 cursor-pointer outline-none"
+                  >
+                    {MONTH_NAMES_ID.map((name, idx) => (
+                      <option key={idx} value={idx} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={monthlyCompareYear}
+                    onChange={(e) => setMonthlyCompareYear(Number(e.target.value))}
+                    className="bg-transparent text-xs font-semibold text-amber-700 dark:text-amber-300 cursor-pointer outline-none border-l border-amber-500/20 pl-1.5 ml-1"
+                  >
+                    {[2024, 2025, 2026, 2027].map((yr) => (
+                      <option key={yr} value={yr} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">
+                        {yr}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Monthly consumption summary cards */}
         {(() => {
-          const wf1Kwh = cubicleSelector === "wf1"
-            ? ((cubicleDailyData.currentData || []).reduce((a, b) => a + b, 0) || cubicleSummary.monthlyKwh || 0)
-            : 0;
-          const wf1Cost = cubicleSelector === "wf1"
-            ? (cubicleSummary.cost || (wf1Kwh * (monthlyMetrics.effectiveLwbpRate || 1112)))
-            : 0;
+          const mName = `${MONTH_NAMES_ID[monthlyPrimaryMonth]} ${monthlyPrimaryYear}`;
+          const wf1Kwh = cubicleSelector === "wf1" ? monthlySelectedMetrics.totalKwh : 0;
+          const wf1Cost = cubicleSelector === "wf1" ? monthlySelectedMetrics.plnCost : 0;
 
-          const wf2Kwh = cubicleSelector === "wf2"
-            ? ((cubicleDailyData.currentData || []).reduce((a, b) => a + b, 0) || cubicleSummary.monthlyKwh || 0)
-            : 0;
-          const wf2Cost = cubicleSelector === "wf2"
-            ? (cubicleSummary.cost || (wf2Kwh * (monthlyMetrics.effectiveLwbpRate || 1112)))
-            : 0;
+          const wf2Kwh = cubicleSelector === "wf2" ? monthlySelectedMetrics.totalKwh : 0;
+          const wf2Cost = cubicleSelector === "wf2" ? monthlySelectedMetrics.plnCost : 0;
 
-          const poi1Kwh = monthlyMetrics.poi1Kwh || (cubicleSelector === "poi1" ? (cubicleDailyData.currentData || []).reduce((a, b) => a + b, 0) : 0) || cubicleSummary.poi1Kwh || 0;
-          const poi1Cost = poi1Kwh * monthlyMetrics.effectivePvRate;
-          const poi1Savings = poi1Kwh * monthlyMetrics.savingsRate;
+          const poi1Kwh = cubicleSelector === "poi1" ? monthlySelectedMetrics.totalKwh : monthlySelectedMetrics.poi1Kwh;
+          const poi1Cost = poi1Kwh * monthlySelectedMetrics.effectivePvRate;
+          const poi1Savings = poi1Kwh * (monthlySelectedMetrics.effectiveLwbpRate - monthlySelectedMetrics.effectivePvRate);
 
-          const poi2Kwh = monthlyMetrics.poi2Kwh || (cubicleSelector === "poi2" ? (cubicleDailyData.currentData || []).reduce((a, b) => a + b, 0) : 0) || cubicleSummary.poi2Kwh || 0;
-          const poi2Cost = poi2Kwh * monthlyMetrics.effectivePvRate;
-          const poi2Savings = poi2Kwh * monthlyMetrics.savingsRate;
+          const poi2Kwh = cubicleSelector === "poi2" ? monthlySelectedMetrics.totalKwh : monthlySelectedMetrics.poi2Kwh;
+          const poi2Cost = poi2Kwh * monthlySelectedMetrics.effectivePvRate;
+          const poi2Savings = poi2Kwh * (monthlySelectedMetrics.effectiveLwbpRate - monthlySelectedMetrics.effectivePvRate);
 
           const gridColsClass = cubicleSelector === "all"
             ? "sm:grid-cols-2 lg:grid-cols-4"
@@ -6078,7 +6708,7 @@ export default function Electricity() {
               {/* All (PLN + PV): 4 cards */}
               {cubicleSelector === "all" && (
                 <>
-                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
@@ -6089,16 +6719,16 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatNumber(monthlyMetrics.totalKwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
+                        {formatNumber(monthlySelectedMetrics.totalKwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                      <span>PLN: <strong className="text-slate-700 dark:text-slate-200 font-mono">{formatNumber(monthlyMetrics.plnKwh)}</strong></span>
-                      <span>PV: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{formatNumber(monthlyMetrics.totalPvKwh)}</strong></span>
+                      <span>PLN: <strong className="text-slate-700 dark:text-slate-200 font-mono font-bold">{formatNumber(monthlySelectedMetrics.plnKwh)}</strong></span>
+                      <span>PV: <strong className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">{formatNumber(monthlySelectedMetrics.totalPvKwh)}</strong></span>
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
@@ -6109,15 +6739,15 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatCurrency(monthlyMetrics.plnCost)}
+                        {formatCurrency(monthlySelectedMetrics.plnCost)}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Beban Incoming PLN bulan ini
+                      Beban Incoming PLN ({mName})
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
@@ -6128,15 +6758,15 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatCurrency(monthlyMetrics.pvCost)}
+                        {formatCurrency(monthlySelectedMetrics.pvCost)}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Tarif PV: Rp {monthlyMetrics.effectivePvRate.toLocaleString("id-ID")}/kWh
+                      Tarif PV: Rp {monthlySelectedMetrics.effectivePvRate.toLocaleString("id-ID")}/kWh
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
@@ -6147,11 +6777,11 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-tight">
-                        {formatCurrency(monthlyMetrics.savingsCost)}
+                        {formatCurrency(monthlySelectedMetrics.savingsCost)}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Selisih PLN (LWBP) - Biaya PV
+                      Selisih PLN - Biaya PV ({mName})
                     </div>
                   </div>
                 </>
@@ -6160,7 +6790,7 @@ export default function Electricity() {
               {/* PLN: 2 cards */}
               {cubicleSelector === "pln" && (
                 <>
-                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
@@ -6171,15 +6801,15 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatNumber(monthlyMetrics.plnKwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
+                        {formatNumber(monthlySelectedMetrics.totalKwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Incoming PLN Grid bulan ini
+                      Incoming PLN Grid ({mName})
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
@@ -6190,11 +6820,11 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatCurrency(monthlyMetrics.plnCost)}
+                        {formatCurrency(monthlySelectedMetrics.plnCost)}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Beban Incoming PLN bulan ini
+                      Beban Incoming PLN ({mName})
                     </div>
                   </div>
                 </>
@@ -6203,7 +6833,7 @@ export default function Electricity() {
               {/* WF1: 2 cards */}
               {cubicleSelector === "wf1" && (
                 <>
-                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
@@ -6214,15 +6844,15 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatNumber(wf1Kwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
+                        {formatNumber(wf1Kwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Incoming Feeder WF1 bulan ini
+                      Incoming Feeder WF1 ({mName})
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
@@ -6237,7 +6867,7 @@ export default function Electricity() {
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Estimasi biaya pemakaian WF1
+                      Estimasi biaya pemakaian WF1 ({mName})
                     </div>
                   </div>
                 </>
@@ -6246,7 +6876,7 @@ export default function Electricity() {
               {/* WF2: 2 cards */}
               {cubicleSelector === "wf2" && (
                 <>
-                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/30 p-4 hover:border-indigo-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
@@ -6257,15 +6887,15 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatNumber(wf2Kwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
+                        {formatNumber(wf2Kwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Incoming Feeder WF2 bulan ini
+                      Incoming Feeder WF2 ({mName})
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30 p-4 hover:border-blue-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
@@ -6280,7 +6910,7 @@ export default function Electricity() {
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Estimasi biaya pemakaian WF2
+                      Estimasi biaya pemakaian WF2 ({mName})
                     </div>
                   </div>
                 </>
@@ -6289,7 +6919,7 @@ export default function Electricity() {
               {/* POI-1: 3 cards */}
               {cubicleSelector === "poi1" && (
                 <>
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
@@ -6300,15 +6930,15 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatNumber(poi1Kwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
+                        {formatNumber(poi1Kwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Produksi Solar PV POI-1 bulan ini
+                      Produksi Solar PV POI-1 ({mName})
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
@@ -6323,11 +6953,11 @@ export default function Electricity() {
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Tarif PV: Rp {monthlyMetrics.effectivePvRate.toLocaleString("id-ID")}/kWh
+                      Tarif PV: Rp {monthlySelectedMetrics.effectivePvRate.toLocaleString("id-ID")}/kWh
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
@@ -6342,7 +6972,7 @@ export default function Electricity() {
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Selisih PLN (LWBP) - Biaya PV
+                      Selisih PLN - Biaya PV ({mName})
                     </div>
                   </div>
                 </>
@@ -6351,7 +6981,7 @@ export default function Electricity() {
               {/* POI-2: 3 cards */}
               {cubicleSelector === "poi2" && (
                 <>
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
@@ -6362,15 +6992,15 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatNumber(poi2Kwh)} <span className="text-xs text-slate-400 font-sans">kWh</span>
+                        {formatNumber(poi2Kwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Produksi Solar PV POI-2 bulan ini
+                      Produksi Solar PV POI-2 ({mName})
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30 p-4 hover:border-amber-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
@@ -6385,11 +7015,11 @@ export default function Electricity() {
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Tarif PV: Rp {monthlyMetrics.effectivePvRate.toLocaleString("id-ID")}/kWh
+                      Tarif PV: Rp {monthlySelectedMetrics.effectivePvRate.toLocaleString("id-ID")}/kWh
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between">
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/30 p-4 hover:border-emerald-400 transition flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
@@ -6404,7 +7034,7 @@ export default function Electricity() {
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
-                      Selisih PLN (LWBP) - Biaya PV
+                      Selisih PLN - Biaya PV ({mName})
                     </div>
                   </div>
                 </>
@@ -6415,23 +7045,27 @@ export default function Electricity() {
 
         {/* Cubicle monthly comparison chart */}
         <MonthlyComparisonChart
-          title={`Konsumsi Bulanan Real Time (vs Bulan Sebelumnya) — ${
+          title={`Konsumsi Bulanan — ${
             cubicleSelector === "all" ? "All (PLN + Total POI-1 & POI-2)" :
             cubicleSelector === "pln" ? "Incoming PLN Grid" :
             cubicleSelector === "wf1" ? "Incoming Cubicle WF1" :
             cubicleSelector === "wf2" ? "Incoming Cubicle WF2" :
             cubicleSelector === "poi1" ? "Solar PV POI-1" : "Solar PV POI-2"
+          } — ${MONTH_NAMES_ID[monthlyPrimaryMonth]} ${monthlyPrimaryYear}${
+            monthlyCompareEnabled ? ` (vs ${MONTH_NAMES_ID[monthlyCompareMonth]} ${monthlyCompareYear})` : ""
           }`}
           currentData={cubicleDailyData.currentData}
           previousData={cubicleDailyData.previousData}
           isDark={isDark}
-          currMonthName={MONTH_NAMES_ID[new Date().getMonth()]}
-          prevMonthName={MONTH_NAMES_ID[new Date().getMonth() === 0 ? 11 : new Date().getMonth() - 1]}
+          currMonthName={`${MONTH_NAMES_ID[monthlyPrimaryMonth]} ${monthlyPrimaryYear}`}
+          prevMonthName={monthlyCompareEnabled ? `${MONTH_NAMES_ID[monthlyCompareMonth]} ${monthlyCompareYear}` : undefined}
           selectorType={cubicleSelector}
           currentBreakdown={cubicleDailyData.currentBreakdown}
           previousBreakdown={cubicleDailyData.previousBreakdown}
           solarRate={solarData?.summary?.solarRate || lwbpRate}
           pvRate={pvRate}
+          showPreviousControlled={monthlyCompareEnabled}
+          onToggleShowPrevious={setMonthlyCompareEnabled}
         />
       </div>
 
@@ -6445,7 +7079,7 @@ export default function Electricity() {
                 <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 1</h3>
                 {fact1Total > 0 && (
                   <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md">
-                    Total: {fact1Total.toLocaleString("id-ID")} kWh
+                    Total: {formatNumber(fact1Total)} kWh
                   </span>
                 )}
               </div>
@@ -6488,7 +7122,7 @@ export default function Electricity() {
                 <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 2</h3>
                 {fact2Total > 0 && (
                   <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md">
-                    Total: {fact2Total.toLocaleString("id-ID")} kWh
+                    Total: {formatNumber(fact2Total)} kWh
                   </span>
                 )}
               </div>
@@ -6534,7 +7168,7 @@ export default function Electricity() {
                 <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Utility Consumption</h3>
                 {utilityData.totalKwh > 0 && (
                   <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md">
-                    Total: {utilityData.totalKwh.toLocaleString("id-ID")} kWh
+                    Total: {formatNumber(utilityData.totalKwh)} kWh
                   </span>
                 )}
               </div>
@@ -6591,7 +7225,7 @@ export default function Electricity() {
               segments={utilityDonutSegments.length > 0 ? utilityDonutSegments : [{ label: "Belum Ada Data", value: 100, color: "#cbd5e1" }]} 
               size={140} 
               thickness={16} 
-              centerLabel={utilityData.totalKwh > 0 ? `${utilityData.totalKwh.toLocaleString("id-ID")} kWh` : "0 kWh"} 
+              centerLabel={utilityData.totalKwh > 0 ? `${formatNumber(utilityData.totalKwh)} kWh` : "0 kWh"} 
               centerLabelSize="text-[10px]"
             />
           </div>
@@ -6623,7 +7257,7 @@ export default function Electricity() {
                 <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#06b6d4] dark:text-cyan-400">HVAC Consumption</h3>
                 {hvacData.totalKwh > 0 && (
                   <span className="text-xs font-extrabold font-mono text-[#06b6d4] dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-md">
-                    Total: {hvacData.totalKwh.toLocaleString("id-ID")} kWh
+                    Total: {formatNumber(hvacData.totalKwh)} kWh
                   </span>
                 )}
               </div>
@@ -6680,7 +7314,7 @@ export default function Electricity() {
               segments={hvacDonutSegments.length > 0 ? hvacDonutSegments : [{ label: "Belum Ada Data", value: 100, color: "#cbd5e1" }]} 
               size={140} 
               thickness={16} 
-              centerLabel={hvacData.totalKwh > 0 ? `${hvacData.totalKwh.toLocaleString("id-ID")} kWh` : "0 kWh"} 
+              centerLabel={hvacData.totalKwh > 0 ? `${formatNumber(hvacData.totalKwh)} kWh` : "0 kWh"} 
               centerLabelSize="text-[10px]"
             />
           </div>

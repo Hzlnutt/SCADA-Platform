@@ -17,10 +17,12 @@ import {
   getEquipmentMonthlyAnalyticsHandler,
   getEquipmentMonthlyBatchAnalyticsHandler,
   getIncomingHourlyTrendHandler,
+  getElectricityLiveHandler,
 } from "./analytics.controller";
 
 export const analyticsRouter = Router();
 
+analyticsRouter.get("/analytics/electricity/live", getElectricityLiveHandler);
 analyticsRouter.get("/analytics/summary", getAnalyticsSummaryHandler);
 analyticsRouter.get("/analytics/electricity", getElectricityAnalyticsHandler);
 analyticsRouter.get("/analytics/electricity/incoming-hourly-trend", getIncomingHourlyTrendHandler);

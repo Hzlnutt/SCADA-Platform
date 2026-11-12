@@ -3,6 +3,7 @@ import { getPostgresPool } from "../../database/postgres";
 import { ELECTRICITY_RAW_COLLECTION, ELECTRICITY_1M_COLLECTION, ELECTRICITY_1H_COLLECTION, GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
 import { env } from "../../config/env.config";
 import { getIncomingHourlyTrend, getLatestIncomingTelemetry, getWibDateTime, IncomingTrend5sPoint } from "../../core/scheduler";
+import { getSolarAnalytics } from "./solar.analytics";
 
 export interface ElectricityTariff {
   validFrom: string; // "YYYY-MM"
@@ -11,16 +12,26 @@ export interface ElectricityTariff {
 }
 
 export function getTariffForDate(dateStr: string, tariffs: ElectricityTariff[]): { wbpRate: number, lwbpRate: number } {
+  if (!tariffs || tariffs.length === 0) {
+    return { wbpRate: 1560.63, lwbpRate: 1114.74 };
+  }
+  const cleanDate = (dateStr || "").split(" ")[0].split("T")[0]; // YYYY-MM-DD or YYYY-MM
   const sorted = [...tariffs].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
-  const recordMonth = dateStr.substring(0, 7); // "YYYY-MM"
-  const match = sorted.find(t => t.validFrom <= recordMonth);
+  
+  const match = sorted.find(t => {
+    if (t.validFrom.length === 7) {
+      return t.validFrom <= cleanDate.substring(0, 7);
+    }
+    return t.validFrom <= cleanDate;
+  });
+
   if (match) {
     return { wbpRate: match.wbpRate, lwbpRate: match.lwbpRate };
   }
   if (sorted.length > 0) {
     return { wbpRate: sorted[sorted.length - 1].wbpRate, lwbpRate: sorted[sorted.length - 1].lwbpRate };
   }
-  return { wbpRate: 1600, lwbpRate: 1112 };
+  return { wbpRate: 1560.63, lwbpRate: 1114.74 };
 }
 
 function parsePowerFactor(data: any): number | null {
@@ -228,6 +239,8 @@ export interface ElectricityAnalyticsResult {
     monthlyLwbpKwh: number;
     peakDemand: number;
     peakDemandTs: string | null;
+    wbpRate?: number;
+    lwbpRate?: number;
     // Per-month summaries for period selector
     perMonthSummary: {
       month: string;
@@ -238,6 +251,7 @@ export interface ElectricityAnalyticsResult {
       wbpCost: number;
       lwbpCost: number;
       peakDemand: number;
+      peakDemandTs?: string | null;
       loadFactor: number;
     }[];
   };
@@ -253,6 +267,7 @@ export interface ElectricityAnalyticsResult {
     activePower24h?: { hour: string; value: number }[];
     hourlyTrend5s?: IncomingTrend5sPoint[];
     currentHour?: number;
+    progressiveMinute?: number | null;
   };
   pqData: {
     activePower: number;
@@ -320,32 +335,52 @@ export const getElectricityAnalytics = async (
   year?: number,
   includeTrends: boolean = false
 ): Promise<ElectricityAnalyticsResult> => {
+  const todayStr = getWibDateString(new Date());
+
   if ((deviceId || "").toLowerCase() === "all") {
-    const [pln, poi1, poi2] = await Promise.all([
+    const [pln, solar] = await Promise.all([
       getElectricityAnalytics("Cubicle_PLN_PM8000", fromStr, toStr, lwbpRate, wbpRate, year, includeTrends),
-      getElectricityAnalytics("Solar_POI1", fromStr, toStr, lwbpRate, wbpRate, year, includeTrends),
-      getElectricityAnalytics("Solar_POI2", fromStr, toStr, lwbpRate, wbpRate, year, includeTrends)
+      getSolarAnalytics(fromStr, toStr, year)
     ]);
 
-    // Merge daily records
-    const dailyMap = new Map<string, { day: string; value: number; wbp: number; lwbp: number; pln: number; poi1: number; poi2: number }>();
+    // Merge daily records directly using synchronized solar analytics
+    const dailyMap = new Map<string, { day: string; value: number; wbp: number; lwbp: number; pln: number; plnWbp: number; plnLwbp: number; poi1: number; poi2: number; pvWbp: number; pvLwbp: number }>();
     (pln.charts?.daily || []).forEach(d => {
-      dailyMap.set(d.day, { day: d.day, value: d.value, wbp: d.wbp, lwbp: d.lwbp, pln: d.value, poi1: 0, poi2: 0 });
+      dailyMap.set(d.day, {
+        day: d.day,
+        value: d.value,
+        wbp: d.wbp,
+        lwbp: d.lwbp,
+        pln: d.value,
+        plnWbp: d.wbp || 0,
+        plnLwbp: d.lwbp || 0,
+        poi1: 0,
+        poi2: 0,
+        pvWbp: 0,
+        pvLwbp: 0
+      });
     });
-    (poi1.charts?.daily || []).forEach(d => {
-      const existing = dailyMap.get(d.day) || { day: d.day, value: 0, wbp: 0, lwbp: 0, pln: 0, poi1: 0, poi2: 0 };
-      existing.poi1 = d.value;
-      existing.lwbp += d.lwbp;
-      existing.wbp += d.wbp;
-      existing.value += d.value;
-      dailyMap.set(d.day, existing);
-    });
-    (poi2.charts?.daily || []).forEach(d => {
-      const existing = dailyMap.get(d.day) || { day: d.day, value: 0, wbp: 0, lwbp: 0, pln: 0, poi1: 0, poi2: 0 };
-      existing.poi2 = d.value;
-      existing.lwbp += d.lwbp;
-      existing.wbp += d.wbp;
-      existing.value += d.value;
+    (solar.charts?.daily || []).forEach(d => {
+      const existing = dailyMap.get(d.day) || {
+        day: d.day,
+        value: 0,
+        wbp: 0,
+        lwbp: 0,
+        pln: 0,
+        plnWbp: 0,
+        plnLwbp: 0,
+        poi1: 0,
+        poi2: 0,
+        pvWbp: 0,
+        pvLwbp: 0
+      };
+      existing.poi1 = d.poi1 || 0;
+      existing.poi2 = d.poi2 || 0;
+      existing.pvWbp = d.wbp || 0;
+      existing.pvLwbp = d.lwbp || 0;
+      existing.lwbp += (d.lwbp || 0);
+      existing.wbp += (d.wbp || 0);
+      existing.value += (d.total || (existing.poi1 + existing.poi2));
       dailyMap.set(d.day, existing);
     });
     const mergedDaily = Array.from(dailyMap.values()).sort((a, b) => a.day.localeCompare(b.day));
@@ -355,58 +390,51 @@ export const getElectricityAnalytics = async (
     (pln.charts?.monthly || []).forEach(m => {
       monthlyMap.set(m.month, { month: m.month, value: m.value, wbp: m.wbp, lwbp: m.lwbp });
     });
-    (poi1.charts?.monthly || []).forEach(m => {
+    (solar.charts?.monthly || []).forEach(m => {
       const existing = monthlyMap.get(m.month) || { month: m.month, value: 0, wbp: 0, lwbp: 0 };
-      existing.value += m.value;
-      existing.lwbp += m.lwbp;
-      existing.wbp += m.wbp;
-      monthlyMap.set(m.month, existing);
-    });
-    (poi2.charts?.monthly || []).forEach(m => {
-      const existing = monthlyMap.get(m.month) || { month: m.month, value: 0, wbp: 0, lwbp: 0 };
-      existing.value += m.value;
-      existing.lwbp += m.lwbp;
-      existing.wbp += m.wbp;
+      existing.value += (m.total || 0);
+      existing.lwbp += (m.lwbp || 0);
+      existing.wbp += (m.wbp || 0);
       monthlyMap.set(m.month, existing);
     });
     const mergedMonthly = Array.from(monthlyMap.values()).sort((a, b) => a.month.localeCompare(b.month));
 
     // Merge hourly records
     const hourlyLen = Math.max(pln.charts?.hourly?.length || 24, 24);
-    const hourly = Array.from({ length: hourlyLen }, (_, i) => (pln.charts?.hourly?.[i] || 0) + (poi1.charts?.hourly?.[i] || 0) + (poi2.charts?.hourly?.[i] || 0));
-    const hourlyWbp = Array.from({ length: hourlyLen }, (_, i) => (pln.charts?.hourlyWbp?.[i] || 0) + (poi1.charts?.hourlyWbp?.[i] || 0) + (poi2.charts?.hourlyWbp?.[i] || 0));
-    const hourlyLwbp = Array.from({ length: hourlyLen }, (_, i) => (pln.charts?.hourlyLwbp?.[i] || 0) + (poi1.charts?.hourlyLwbp?.[i] || 0) + (poi2.charts?.hourlyLwbp?.[i] || 0));
-    const prevHourly = Array.from({ length: hourlyLen }, (_, i) => (pln.charts?.prevHourly?.[i] || 0) + (poi1.charts?.prevHourly?.[i] || 0) + (poi2.charts?.prevHourly?.[i] || 0));
+    const hourly = Array.from({ length: hourlyLen }, (_, i) => (pln.charts?.hourly?.[i] || 0) + (solar.charts?.hourly?.[i] || 0));
+    const hourlyWbp = Array.from({ length: hourlyLen }, (_, i) => (pln.charts?.hourlyWbp?.[i] || 0) + ((i >= 17 && i <= 21) ? (solar.charts?.hourly?.[i] || 0) : 0));
+    const hourlyLwbp = Array.from({ length: hourlyLen }, (_, i) => (pln.charts?.hourlyLwbp?.[i] || 0) + ((i < 17 || i > 21) ? (solar.charts?.hourly?.[i] || 0) : 0));
+    const prevHourly = Array.from({ length: hourlyLen }, (_, i) => (pln.charts?.prevHourly?.[i] || 0));
 
-    const totalKwh = pln.summary.totalKwh + poi1.summary.totalKwh + poi2.summary.totalKwh;
-    const wbpKwh = pln.summary.wbpKwh + poi1.summary.wbpKwh + poi2.summary.wbpKwh;
-    const lwbpKwh = pln.summary.lwbpKwh + poi1.summary.lwbpKwh + poi2.summary.lwbpKwh;
-    const todayWbpKwh = pln.summary.todayWbpKwh + poi1.summary.todayWbpKwh + poi2.summary.todayWbpKwh;
-    const todayLwbpKwh = pln.summary.todayLwbpKwh + poi1.summary.todayLwbpKwh + poi2.summary.todayLwbpKwh;
-    const monthlyWbpKwh = pln.summary.monthlyWbpKwh + poi1.summary.monthlyWbpKwh + poi2.summary.monthlyWbpKwh;
-    const monthlyLwbpKwh = pln.summary.monthlyLwbpKwh + poi1.summary.monthlyLwbpKwh + poi2.summary.monthlyLwbpKwh;
-    const peakDemand = pln.summary.peakDemand + poi1.summary.peakDemand + poi2.summary.peakDemand;
+    const totalKwh = pln.summary.totalKwh + solar.summary.totalKwh;
+    const wbpKwh = pln.summary.wbpKwh + (solar.summary.totalWbpKwh || 0);
+    const lwbpKwh = pln.summary.lwbpKwh + (solar.summary.totalLwbpKwh || 0);
+    const todayWbpKwh = pln.summary.todayWbpKwh + (solar.summary.todayWbpKwh || 0);
+    const todayLwbpKwh = pln.summary.todayLwbpKwh + (solar.summary.todayLwbpKwh || 0);
+    const monthlyWbpKwh = pln.summary.monthlyWbpKwh + (solar.summary.monthlyWbpKwh || 0);
+    const monthlyLwbpKwh = pln.summary.monthlyLwbpKwh + (solar.summary.monthlyLwbpKwh || 0);
+    const peakDemand = pln.summary.peakDemand + (solar.summary.peakDemand || 0);
 
     // Per month summary
     const perMonthSummary = (pln.summary?.perMonthSummary || []).map(pm => {
-      const p1 = poi1.summary?.perMonthSummary?.find(x => x.month === pm.month);
-      const p2 = poi2.summary?.perMonthSummary?.find(x => x.month === pm.month);
+      const s = solar.charts?.monthly?.find(x => x.month === pm.month);
       return {
         month: pm.month,
-        totalKwh: pm.totalKwh + (p1?.totalKwh || 0) + (p2?.totalKwh || 0),
-        wbpKwh: pm.wbpKwh + (p1?.wbpKwh || 0) + (p2?.wbpKwh || 0),
-        lwbpKwh: pm.lwbpKwh + (p1?.lwbpKwh || 0) + (p2?.lwbpKwh || 0),
+        totalKwh: pm.totalKwh + (s?.total || 0),
+        wbpKwh: pm.wbpKwh + (s?.wbp || 0),
+        lwbpKwh: pm.lwbpKwh + (s?.lwbp || 0),
         totalCost: pm.totalCost,
         wbpCost: pm.wbpCost,
         lwbpCost: pm.lwbpCost,
-        peakDemand: pm.peakDemand + (p1?.peakDemand || 0) + (p2?.peakDemand || 0),
+        peakDemand: pm.peakDemand,
+        peakDemandTs: pm.peakDemandTs || null,
         loadFactor: pm.loadFactor
       };
     });
 
     return {
       summary: {
-        todayKwh: pln.summary.todayKwh + poi1.summary.todayKwh + poi2.summary.todayKwh,
+        todayKwh: pln.summary.todayKwh + solar.summary.todayKwh,
         todayCost: pln.summary.todayCost,
         monthlyMwh: Number(((monthlyWbpKwh + monthlyLwbpKwh) / 1000).toFixed(2)),
         monthlyCost: pln.summary.monthlyCost,
@@ -424,6 +452,8 @@ export const getElectricityAnalytics = async (
         monthlyLwbpKwh,
         peakDemand,
         peakDemandTs: pln.summary.peakDemandTs,
+        wbpRate: pln.summary.wbpRate,
+        lwbpRate: pln.summary.lwbpRate,
         perMonthSummary
       },
       charts: {
@@ -435,13 +465,14 @@ export const getElectricityAnalytics = async (
         monthly: mergedMonthly,
         breakdown: [
           { label: "PLN Grid", value: pln.summary.totalKwh, color: "#3b82f6" },
-          { label: "Solar POI-1", value: poi1.summary.totalKwh, color: "#06b6d4" },
-          { label: "Solar POI-2", value: poi2.summary.totalKwh, color: "#10b981" }
+          { label: "Solar POI-1", value: solar.summary.poi1TotalKwh || 0, color: "#06b6d4" },
+          { label: "Solar POI-2", value: solar.summary.poi2TotalKwh || 0, color: "#10b981" }
         ],
         voltage24h: pln.charts.voltage24h,
         activePower24h: pln.charts.activePower24h,
         hourlyTrend5s: pln.charts.hourlyTrend5s,
-        currentHour: pln.charts.currentHour
+        currentHour: pln.charts.currentHour,
+        progressiveMinute: pln.charts.progressiveMinute ?? solar.charts?.progressiveMinute
       },
       pqData: pln.pqData
     };
@@ -486,20 +517,246 @@ export const getElectricityAnalytics = async (
   let poiFilter: string | null = null;
 
   const normDev = (deviceId || "").toLowerCase();
+
+  // If requesting Solar POI-1 or POI-2, delegate directly to getSolarAnalytics for unified source of truth
+  if (normDev.includes("poi1") || normDev.includes("poi_1") || normDev.includes("solar_poi1")) {
+    const solar = await getSolarAnalytics(fromStr, toStr, year);
+    const daily = (solar.charts?.daily || []).map(d => ({
+      day: d.day,
+      value: d.poi1 || 0,
+      wbp: 0,
+      lwbp: d.poi1 || 0,
+      pln: 0,
+      poi1: d.poi1 || 0,
+      poi2: 0,
+      pvWbp: 0,
+      pvLwbp: d.poi1 || 0
+    }));
+    const monthly = (solar.charts?.monthly || []).map(m => ({
+      month: m.month,
+      value: m.poi1 || 0,
+      wbp: 0,
+      lwbp: m.poi1 || 0
+    }));
+    const perMonthSummary = monthly.map(m => ({
+      month: m.month,
+      totalKwh: m.value,
+      wbpKwh: 0,
+      lwbpKwh: m.value,
+      totalCost: Number((m.value * (solar.summary.pvRate || 549)).toFixed(2)),
+      wbpCost: 0,
+      lwbpCost: Number((m.value * (solar.summary.pvRate || 549)).toFixed(2)),
+      peakDemand: solar.summary.rangePoi1PeakDemand || solar.summary.poi1PeakDemand || 0,
+      peakDemandTs: solar.summary.rangePoi1PeakDemandTs || solar.summary.poi1PeakDemandTs || null,
+      loadFactor: 0
+    }));
+    const curMonthStr = `${todayStr.slice(0, 7)}`;
+    const curMonthSolar = monthly.find(m => m.month === curMonthStr);
+    const monthlyKwh = curMonthSolar ? curMonthSolar.value : (solar.summary.poi1MonthlyKwh || 0);
+    const monthlyCost = Number((monthlyKwh * (solar.summary.pvRate || 549)).toFixed(2));
+    const totalKwh = Number((solar.summary.rangePoi1Kwh ?? solar.summary.poi1TotalKwh ?? 0));
+    const totalCost = Number((totalKwh * (solar.summary.pvRate || 549)).toFixed(2));
+    const todayKwh = Number(solar.summary.poi1TodayKwh || 0);
+    const todayCost = Number((todayKwh * (solar.summary.pvRate || 549)).toFixed(2));
+
+    return {
+      summary: {
+        todayKwh,
+        todayCost,
+        monthlyMwh: Number((monthlyKwh / 1000).toFixed(4)),
+        monthlyCost,
+        yearlyMwh: Number((totalKwh / 1000).toFixed(4)),
+        co2Emitted: Number((totalKwh * 0.00085).toFixed(2)),
+        totalKwh,
+        wbpKwh: 0,
+        lwbpKwh: totalKwh,
+        wbpCost: 0,
+        lwbpCost: totalCost,
+        totalCost,
+        todayWbpKwh: 0,
+        todayLwbpKwh: todayKwh,
+        monthlyWbpKwh: 0,
+        monthlyLwbpKwh: monthlyKwh,
+        peakDemand: solar.summary.rangePoi1PeakDemand || solar.summary.poi1PeakDemand || 0,
+        peakDemandTs: solar.summary.rangePoi1PeakDemandTs || solar.summary.poi1PeakDemandTs || null,
+        perMonthSummary,
+        wbpRate: 0,
+        lwbpRate: solar.summary.pvRate || 549
+      },
+      charts: {
+        hourly: solar.charts?.hourlyPoi1 || [],
+        hourlyWbp: Array(24).fill(0),
+        hourlyLwbp: solar.charts?.hourlyPoi1 || [],
+        prevHourly: Array(24).fill(0),
+        daily: daily as any,
+        monthly,
+        breakdown: [
+          { label: "Solar POI-1", value: totalKwh, color: "#06b6d4" }
+        ],
+        currentHour: solar.charts?.currentHour,
+        progressiveMinute: solar.charts?.progressiveMinute
+      },
+      pqData: {
+        activePower: solar.live?.poi1?.activePower || 0,
+        activePowerTs: null,
+        peakDemand: solar.summary.rangePoi1PeakDemand || solar.summary.poi1PeakDemand || null,
+        reactivePower: 0,
+        apparentPower: 0,
+        pf: 1,
+        pfStatus: "connected",
+        freq: 50,
+        vUnb: 0,
+        iUnb: 0,
+        thdV: 0,
+        thdI: 0,
+        vll1: 390,
+        vll2: 390,
+        vll3: 390,
+        vln1: 225,
+        vln2: 225,
+        vln3: 225,
+        current1: 0,
+        current2: 0,
+        current3: 0,
+        vR: 225,
+        vS: 225,
+        vT: 225,
+        iR: 0,
+        iS: 0,
+        iT: 0,
+        thdV_R: 0,
+        thdV_S: 0,
+        thdV_T: 0,
+        thdI_R: 0,
+        thdI_S: 0,
+        thdI_T: 0,
+        voltage: 390
+      }
+    };
+  }
+
+  if (normDev.includes("poi2") || normDev.includes("poi_2") || normDev.includes("solar_poi2")) {
+    const solar = await getSolarAnalytics(fromStr, toStr, year);
+    const daily = (solar.charts?.daily || []).map(d => ({
+      day: d.day,
+      value: d.poi2 || 0,
+      wbp: 0,
+      lwbp: d.poi2 || 0,
+      pln: 0,
+      poi1: 0,
+      poi2: d.poi2 || 0,
+      pvWbp: 0,
+      pvLwbp: d.poi2 || 0
+    }));
+    const monthly = (solar.charts?.monthly || []).map(m => ({
+      month: m.month,
+      value: m.poi2 || 0,
+      wbp: 0,
+      lwbp: m.poi2 || 0
+    }));
+    const perMonthSummary = monthly.map(m => ({
+      month: m.month,
+      totalKwh: m.value,
+      wbpKwh: 0,
+      lwbpKwh: m.value,
+      totalCost: Number((m.value * (solar.summary.pvRate || 549)).toFixed(2)),
+      wbpCost: 0,
+      lwbpCost: Number((m.value * (solar.summary.pvRate || 549)).toFixed(2)),
+      peakDemand: solar.summary.rangePoi2PeakDemand || solar.summary.poi2PeakDemand || 0,
+      peakDemandTs: solar.summary.rangePoi2PeakDemandTs || solar.summary.poi2PeakDemandTs || null,
+      loadFactor: 0
+    }));
+    const curMonthStr = `${todayStr.slice(0, 7)}`;
+    const curMonthSolar = monthly.find(m => m.month === curMonthStr);
+    const monthlyKwh = curMonthSolar ? curMonthSolar.value : (solar.summary.poi2MonthlyKwh || 0);
+    const monthlyCost = Number((monthlyKwh * (solar.summary.pvRate || 549)).toFixed(2));
+    const totalKwh = Number((solar.summary.rangePoi2Kwh ?? solar.summary.poi2TotalKwh ?? 0));
+    const totalCost = Number((totalKwh * (solar.summary.pvRate || 549)).toFixed(2));
+    const todayKwh = Number(solar.summary.poi2TodayKwh || 0);
+    const todayCost = Number((todayKwh * (solar.summary.pvRate || 549)).toFixed(2));
+
+    return {
+      summary: {
+        todayKwh,
+        todayCost,
+        monthlyMwh: Number((monthlyKwh / 1000).toFixed(4)),
+        monthlyCost,
+        yearlyMwh: Number((totalKwh / 1000).toFixed(4)),
+        co2Emitted: Number((totalKwh * 0.00085).toFixed(2)),
+        totalKwh,
+        wbpKwh: 0,
+        lwbpKwh: totalKwh,
+        wbpCost: 0,
+        lwbpCost: totalCost,
+        totalCost,
+        todayWbpKwh: 0,
+        todayLwbpKwh: todayKwh,
+        monthlyWbpKwh: 0,
+        monthlyLwbpKwh: monthlyKwh,
+        peakDemand: solar.summary.rangePoi2PeakDemand || solar.summary.poi2PeakDemand || 0,
+        peakDemandTs: solar.summary.rangePoi2PeakDemandTs || solar.summary.poi2PeakDemandTs || null,
+        perMonthSummary,
+        wbpRate: 0,
+        lwbpRate: solar.summary.pvRate || 549
+      },
+      charts: {
+        hourly: solar.charts?.hourlyPoi2 || [],
+        hourlyWbp: Array(24).fill(0),
+        hourlyLwbp: solar.charts?.hourlyPoi2 || [],
+        prevHourly: Array(24).fill(0),
+        daily: daily as any,
+        monthly,
+        breakdown: [
+          { label: "Solar POI-2", value: totalKwh, color: "#10b981" }
+        ],
+        currentHour: solar.charts?.currentHour,
+        progressiveMinute: solar.charts?.progressiveMinute
+      },
+      pqData: {
+        activePower: solar.live?.poi2?.activePower || 0,
+        activePowerTs: null,
+        peakDemand: solar.summary.rangePoi2PeakDemand || solar.summary.poi2PeakDemand || null,
+        reactivePower: 0,
+        apparentPower: 0,
+        pf: 1,
+        pfStatus: "connected",
+        freq: 50,
+        vUnb: 0,
+        iUnb: 0,
+        thdV: 0,
+        thdI: 0,
+        vll1: 390,
+        vll2: 390,
+        vll3: 390,
+        vln1: 225,
+        vln2: 225,
+        vln3: 225,
+        current1: 0,
+        current2: 0,
+        current3: 0,
+        vR: 225,
+        vS: 225,
+        vT: 225,
+        iR: 0,
+        iS: 0,
+        iT: 0,
+        thdV_R: 0,
+        thdV_S: 0,
+        thdV_T: 0,
+        thdI_R: 0,
+        thdI_S: 0,
+        thdI_T: 0,
+        voltage: 390
+      }
+    };
+  }
+
   if (normDev.includes("wf1")) {
     tableName = "electric_wf1_telemetry";
     energyCol = "active_energy";
   } else if (normDev.includes("wf2")) {
     tableName = "electric_wf2_telemetry";
     energyCol = "active_energy";
-  } else if (normDev.includes("poi1") || normDev.includes("poi_1") || normDev.includes("solar_poi1")) {
-    tableName = "electric_plts_telemetry";
-    energyCol = "total_kwh";
-    poiFilter = "POI_1";
-  } else if (normDev.includes("poi2") || normDev.includes("poi_2") || normDev.includes("solar_poi2")) {
-    tableName = "electric_plts_telemetry";
-    energyCol = "total_kwh";
-    poiFilter = "POI_2";
   } else if (normDev.includes("pln") || normDev.includes("pm8000")) {
     tableName = "electric_pln_telemetry";
     energyCol = "active_energy";
@@ -527,58 +784,89 @@ export const getElectricityAnalytics = async (
       `, [fromQueryVal, toQueryVal, poiFilter]);
       hourlyRecords = res.rows;
 
-      // Append latest from minute table if available and querying today/future
+      // Append hourly boundaries from minute table if available and querying today/future
       if (to >= new Date()) {
         try {
-          const minRes = await pool.query(`
-            SELECT t_stamp::text AS ts_text, ${energyCol}::float AS value
-            FROM electric_plts_telemetry_minute
-            WHERE poi_id = $1 AND ${energyCol} IS NOT NULL
-            ORDER BY t_stamp DESC LIMIT 1
-          `, [poiFilter]);
-          if (minRes.rows.length > 0) {
-            const latest = minRes.rows[0];
-            const latestTs = latest.ts_text ? new Date(latest.ts_text) : new Date(0);
-            const lastTsStr = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "") : "";
-            const lastTs = lastTsStr ? new Date(lastTsStr) : new Date(0);
-            if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
-              hourlyRecords.push(latest);
+          const lastTsStr = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "").split(".")[0] : "";
+          if (lastTsStr) {
+            const boundaries = await pool.query(`
+              SELECT DISTINCT ON (date_trunc('hour', t_stamp))
+                date_trunc('hour', t_stamp)::text AS ts_text,
+                ${energyCol}::float AS value
+              FROM electric_plts_telemetry_minute
+              WHERE poi_id = $1 AND t_stamp > $2 AND t_stamp <= $3 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 5
+              ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
+            `, [poiFilter, lastTsStr, toQueryVal]);
+            for (const b of boundaries.rows) {
+              hourlyRecords.push(b);
             }
+          } else {
+            const minAll = await pool.query(`
+              SELECT DISTINCT ON (date_trunc('hour', t_stamp))
+                date_trunc('hour', t_stamp)::text AS ts_text,
+                ${energyCol}::float AS value
+              FROM electric_plts_telemetry_minute
+              WHERE poi_id = $1 AND t_stamp >= $2 AND t_stamp <= $3 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 5
+              ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
+            `, [poiFilter, fromQueryVal, toQueryVal]);
+            hourlyRecords = minAll.rows;
           }
         } catch {}
       }
     } else {
-      const statusCol = tableName === "electric_pln_telemetry" ? "status_pm8000" : "status_pm5500";
-      const res = await pool.query(`
+      let queryStr = `
         SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
           t_stamp::text AS ts_text, 
-          CASE WHEN ${statusCol} IS FALSE THEN NULL ELSE ${energyCol}::float END AS value
+          CASE WHEN ${energyCol} <= 0 THEN NULL ELSE ${energyCol}::float END AS value
         FROM ${tableName}
         WHERE t_stamp >= $1 AND t_stamp <= $2
         ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
-      `, [fromQueryVal, toQueryVal]);
+      `;
+      if (tableName === "electric_pln_telemetry") {
+        queryStr = `
+          SELECT DISTINCT ON (date_trunc('hour', t_stamp)) 
+            t_stamp::text AS ts_text, 
+            CASE WHEN active_energy <= 0 THEN NULL ELSE active_energy::float END AS value
+          FROM (
+            SELECT t_stamp, active_energy FROM electric_pln_telemetry WHERE t_stamp >= $1 AND t_stamp <= $2 AND active_energy > 0
+            UNION ALL
+            SELECT t_stamp, active_energy FROM electric_pm_telemetry WHERE pm_id = 'PM410' AND t_stamp >= $1 AND t_stamp <= $2 AND active_energy > 0
+          ) pln_src
+          ORDER BY date_trunc('hour', t_stamp), t_stamp DESC
+        `;
+      }
+      const res = await pool.query(queryStr, [fromQueryVal, toQueryVal]);
       hourlyRecords = res.rows;
 
-      // Append latest from minute table if available and querying today/future
+      // Append hourly boundaries from minute table if available and querying today/future
       if (to >= new Date()) {
         try {
           const minuteTable = tableName === "electric_pln_telemetry" ? "electric_pln_telemetry_minute"
             : tableName === "electric_wf1_telemetry" ? "electric_wf1_telemetry_minute"
             : "electric_wf2_telemetry_minute";
-          const minRes = await pool.query(`
-            SELECT t_stamp::text AS ts_text, 
-              CASE WHEN ${statusCol} IS FALSE THEN NULL ELSE ${energyCol}::float END AS value
-            FROM ${minuteTable}
-            ORDER BY t_stamp DESC LIMIT 1
-          `);
-          if (minRes.rows.length > 0) {
-            const latest = minRes.rows[0];
-            const latestTs = latest.ts_text ? new Date(latest.ts_text) : new Date(0);
-            const lastTsStr = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "") : "";
-            const lastTs = lastTsStr ? new Date(lastTsStr) : new Date(0);
-            if (latestTs.getTime() > lastTs.getTime() + 60000 && latest.value > 0) {
-              hourlyRecords.push(latest);
+          const lastTsStr = hourlyRecords.length > 0 ? (hourlyRecords[hourlyRecords.length - 1].ts_text || "").split(".")[0] : "";
+          if (lastTsStr) {
+            const boundaries = await pool.query(`
+              SELECT DISTINCT ON (date_trunc('hour', t_stamp))
+                date_trunc('hour', t_stamp)::text AS ts_text,
+                CASE WHEN ${energyCol} <= 0 THEN NULL ELSE ${energyCol}::float END AS value
+              FROM ${minuteTable}
+              WHERE t_stamp > $1 AND t_stamp <= $2 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 5
+              ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
+            `, [lastTsStr, toQueryVal]);
+            for (const b of boundaries.rows) {
+              hourlyRecords.push(b);
             }
+          } else {
+            const minAll = await pool.query(`
+              SELECT DISTINCT ON (date_trunc('hour', t_stamp))
+                date_trunc('hour', t_stamp)::text AS ts_text,
+                CASE WHEN ${energyCol} <= 0 THEN NULL ELSE ${energyCol}::float END AS value
+              FROM ${minuteTable}
+              WHERE t_stamp >= $1 AND t_stamp <= $2 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 5
+              ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
+            `, [fromQueryVal, toQueryVal]);
+            hourlyRecords = minAll.rows;
           }
         } catch {}
       }
@@ -604,20 +892,19 @@ export const getElectricityAnalytics = async (
     }));
   }
 
-  const todayStr = getWibDateString(new Date());
   const currentMonthStr = todayStr.substring(0, 7);
 
-  // Fetch electricity tariffs from config
+  // Fetch electricity tariffs from config (PostgreSQL global_configs)
   let configDoc: any = null;
   try {
-    const db = getMongoDb();
-    if (db && typeof db.collection === "function") {
-      configDoc = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
-    }
+    const pgRes = await pool.query("SELECT value FROM global_configs WHERE key = 'utility' LIMIT 1");
+    configDoc = pgRes.rows[0]?.value;
   } catch {}
-  const tariffs: ElectricityTariff[] = configDoc?.electricityTariffs || [
-    { validFrom: "2024-01", wbpRate: wbpRate, lwbpRate: lwbpRate }
-  ];
+  const configWbpRate = typeof configDoc?.wbpRate === "number" && configDoc.wbpRate > 0 ? configDoc.wbpRate : 1553.67;
+  const configLwbpRate = typeof configDoc?.lwbpRate === "number" && configDoc.lwbpRate > 0 ? configDoc.lwbpRate : 1035.78;
+  const tariffs: ElectricityTariff[] = configDoc?.electricityTariffs && configDoc.electricityTariffs.length > 0
+    ? configDoc.electricityTariffs
+    : [{ validFrom: "2026-01", wbpRate: configWbpRate, lwbpRate: configLwbpRate }];
 
   let wbpKwh = 0;
   let lwbpKwh = 0;
@@ -677,10 +964,6 @@ export const getElectricityAnalytics = async (
       if (timeDiffMs <= 90 * 60 * 1000) {
         diff = currVal - prevVal;
         if (diff < 0) diff = 0; // Guard against resets or anomalies
-        // Filter lonjakan anomali baseline meter awal untuk Solar POI (kapasitas 1,7 MWp -> max 2000 kWh per jam)
-        if (poiFilter && diff > 2000) {
-          diff = 0;
-        }
       }
     }
 
@@ -693,8 +976,11 @@ export const getElectricityAnalytics = async (
     const prevHour = parseInt(prevTimeStr.split(":")[0], 10);
     const currHour = parseInt(currTimeStr.split(":")[0], 10);
 
-    const dateStr = currDateStr;
-    const targetHour = currHour;
+    // Standar A (Start-of-Interval):
+    // Konsumsi selisih Meter(curr) - Meter(prev) dicatat pada jam awal interval (prevHour & prevDateStr)
+    // Contoh: Meter(08:00) - Meter(07:00) = Konsumsi jam 07:00 (rentang 07:00:00 - 07:59:59)
+    const dateStr = prevDateStr;
+    const targetHour = prevHour;
     const monthStr = dateStr.substring(0, 7);
     const isToday = dateStr === todayStr;
     const isCurrentMonth = monthStr === currentMonthStr;
@@ -752,12 +1038,12 @@ export const getElectricityAnalytics = async (
       // Track peak demand
       if (diff > maxDiff) {
         maxDiff = diff;
-        peakDemandTs = currRecord.ts_text ? new Date(currRecord.ts_text) : null;
+        peakDemandTs = prevRecord.ts_text ? new Date(prevRecord.ts_text) : null;
       }
       const currentMonthPeak = monthlyPeakMap.get(monthStr) || 0;
       if (diff > currentMonthPeak) {
         monthlyPeakMap.set(monthStr, diff);
-        monthlyPeakTsMap.set(monthStr, currRecord.ts_text ? new Date(currRecord.ts_text) : new Date());
+        monthlyPeakTsMap.set(monthStr, prevRecord.ts_text ? new Date(prevRecord.ts_text) : new Date());
       }
     }
 
@@ -780,20 +1066,26 @@ export const getElectricityAnalytics = async (
     }
   }
 
-  let latestWibDate = toStr || fromStr;
-  if (!latestWibDate) {
+  const isSingleDay = Boolean(fromStr && toStr && fromStr === toStr);
+  const isTodayInRange = (!fromStr || todayStr >= fromStr) && (!toStr || todayStr <= toStr);
+
+  let latestWibDate = isSingleDay ? fromStr! : (isTodayInRange ? todayStr : (toStr || todayStr));
+  if (!dailyHourlyMap.has(latestWibDate)) {
     const dates = Array.from(dailyHourlyMap.keys())
       .filter(d => (!fromStr || d >= fromStr) && (!toStr || d <= toStr) && d <= todayStr)
       .sort();
-    latestWibDate = dates.length > 0 ? dates[dates.length - 1] : todayStr;
+    if (dates.length > 0) {
+      latestWibDate = dates[dates.length - 1];
+    }
   }
 
   const hourlyValues = dailyHourlyMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
   const hourlyWbpValues = dailyHourlyWbpMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
   const hourlyLwbpValues = dailyHourlyLwbpMap.get(latestWibDate) || Array.from({ length: 24 }, () => 0);
+  let lastProgressiveMinute: number | null = null;
 
-  // Progressive real-time calculation for today's active current hour
-  if (latestWibDate === todayStr) {
+  // Progressive real-time calculation for today's active current hour (if today is in the queried range)
+  if (isTodayInRange) {
     const nowWib = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
     const currentWibHour = nowWib.getUTCHours();
     const padHour = (n: number) => String(n).padStart(2, "0");
@@ -803,30 +1095,87 @@ export const getElectricityAnalytics = async (
     try {
       const minuteTable = tableName === "electric_wf1_telemetry" ? "electric_wf1_telemetry_minute"
         : tableName === "electric_wf2_telemetry" ? "electric_wf2_telemetry_minute"
+        : tableName === "electric_plts_telemetry" ? "electric_plts_telemetry_minute"
         : "electric_pln_telemetry_minute";
 
-      const progRes = await pool.query(`
-        SELECT 
-          (MAX(active_energy) - MIN(active_energy))::float as progressive_kwh
+      const queryCol = tableName === "electric_plts_telemetry" ? "total_kwh" : "active_energy";
+      const filterClause = poiFilter ? `AND poi_id = '${poiFilter}'` : "";
+
+      // Sequential per-minute progressive calculation:
+      // Konsumsi per menit dihitung selisih berurutan Meter(t) - Meter(t-1) dengan validasi delta wajar
+      const minRowsRes = await pool.query(`
+        SELECT t_stamp::text as ts_text, ${queryCol}::float as val
         FROM ${minuteTable}
         WHERE t_stamp >= $1 AND t_stamp < $2
-          AND active_energy IS NOT NULL
+          AND ${queryCol} IS NOT NULL ${filterClause}
+        ORDER BY t_stamp ASC
       `, [currentHourStart, nextHourStart]);
 
-      const progressiveKwh = Math.max(0, progRes.rows[0]?.progressive_kwh || 0);
+      let progressiveKwh = 0;
+      lastProgressiveMinute = 0;
+      const rows = minRowsRes.rows;
+      if (rows.length >= 2) {
+        for (let i = 1; i < rows.length; i++) {
+          const prevVal = rows[i - 1].val;
+          const currVal = rows[i].val;
+          if (prevVal !== null && currVal !== null && prevVal > 0 && currVal >= prevVal) {
+            const delta = currVal - prevVal;
+            progressiveKwh += delta;
+          }
+        }
+        const lastRow = rows[rows.length - 1];
+        const lastTime = (lastRow.ts_text || "").split(" ")[1] || "";
+        const lastMin = parseInt(lastTime.split(":")[1] || "0", 10);
+        // Data timestamp 10:17:00 adalah penutup menit 16. Menit 17 baru berjalan dan baru selesai saat 10:18:00 masuk.
+        // Maka menit progresif yang telah terkalkulasi adalah lastMin - 1 (contoh: 10:00 - 10:16).
+        lastProgressiveMinute = Math.max(0, lastMin - 1);
+      } else if (rows.length === 1 && rows[0].val > 0) {
+        const baseRes = await pool.query(`
+          SELECT ${queryCol}::float as val FROM ${tableName}
+          WHERE t_stamp = $1 ${filterClause} LIMIT 1
+        `, [currentHourStart]);
+        const baseVal = baseRes.rows[0]?.val;
+        if (baseVal && rows[0].val >= baseVal) {
+          progressiveKwh = rows[0].val - baseVal;
+        }
+        lastProgressiveMinute = 0;
+      }
+
+      progressiveKwh = Math.max(0, progressiveKwh);
       const isCurrentWbp = currentWibHour >= 17 && currentWibHour <= 21; // 17:00 to 22:00 WIB
 
       hourlyValues[currentWibHour] = progressiveKwh;
-      if (isCurrentWbp) {
-        hourlyWbpValues[currentWibHour] = progressiveKwh;
-        hourlyLwbpValues[currentWibHour] = 0;
-        todayWbpKwh += progressiveKwh;
-        todayWbpCost += progressiveKwh * getTariffForDate(todayStr, tariffs).wbpRate;
-      } else {
-        hourlyLwbpValues[currentWibHour] = progressiveKwh;
-        hourlyWbpValues[currentWibHour] = 0;
-        todayLwbpKwh += progressiveKwh;
-        todayLwbpCost += progressiveKwh * getTariffForDate(todayStr, tariffs).lwbpRate;
+      if (progressiveKwh > 0) {
+        const currentTariff = getTariffForDate(todayStr, tariffs);
+        const progCost = progressiveKwh * (isCurrentWbp ? currentTariff.wbpRate : currentTariff.lwbpRate);
+
+        if (isCurrentWbp) {
+          hourlyWbpValues[currentWibHour] = progressiveKwh;
+          hourlyLwbpValues[currentWibHour] = 0;
+          todayWbpKwh += progressiveKwh;
+          todayWbpCost += progCost;
+          monthlyWbpKwh += progressiveKwh;
+          monthlyWbpCost += progCost;
+          wbpKwh += progressiveKwh;
+          totalWbpCost += progCost;
+          dailyWbpMap.set(todayStr, (dailyWbpMap.get(todayStr) || 0) + progressiveKwh);
+          monthlyWbpMap.set(currentMonthStr, (monthlyWbpMap.get(currentMonthStr) || 0) + progressiveKwh);
+          monthlyWbpCostMap.set(currentMonthStr, (monthlyWbpCostMap.get(currentMonthStr) || 0) + progCost);
+        } else {
+          hourlyLwbpValues[currentWibHour] = progressiveKwh;
+          hourlyWbpValues[currentWibHour] = 0;
+          todayLwbpKwh += progressiveKwh;
+          todayLwbpCost += progCost;
+          monthlyLwbpKwh += progressiveKwh;
+          monthlyLwbpCost += progCost;
+          lwbpKwh += progressiveKwh;
+          totalLwbpCost += progCost;
+          dailyLwbpMap.set(todayStr, (dailyLwbpMap.get(todayStr) || 0) + progressiveKwh);
+          monthlyLwbpMap.set(currentMonthStr, (monthlyLwbpMap.get(currentMonthStr) || 0) + progressiveKwh);
+          monthlyLwbpCostMap.set(currentMonthStr, (monthlyLwbpCostMap.get(currentMonthStr) || 0) + progCost);
+        }
+        dailyMap.set(todayStr, (dailyMap.get(todayStr) || 0) + progressiveKwh);
+        monthlyMap.set(currentMonthStr, (monthlyMap.get(currentMonthStr) || 0) + progressiveKwh);
       }
     } catch {}
 
@@ -912,21 +1261,28 @@ export const getElectricityAnalytics = async (
     const mTotalKwh = (monthlyMap.get(monthKey) || 0);
     const mWbpKwh = (monthlyWbpMap.get(monthKey) || 0);
     const mLwbpKwh = (monthlyLwbpMap.get(monthKey) || 0);
-    const mWbpCost = monthlyWbpCostMap.get(monthKey) || 0;
-    const mLwbpCost = monthlyLwbpCostMap.get(monthKey) || 0;
-    const mTotalCost = mWbpCost + mLwbpCost;
+
+    const monthTariff = getTariffForDate(`${monthKey}-01`, tariffs);
+    const actualWbpKwh = Number(mWbpKwh.toFixed(2));
+    const actualLwbpKwh = Number(mLwbpKwh.toFixed(2));
+    const actualTotalKwh = Number((actualWbpKwh + actualLwbpKwh).toFixed(2));
+
+    const calculatedWbpCost = Number((actualWbpKwh * monthTariff.wbpRate).toFixed(2));
+    const calculatedLwbpCost = Number((actualLwbpKwh * monthTariff.lwbpRate).toFixed(2));
+    const calculatedTotalCost = Number((calculatedWbpCost + calculatedLwbpCost).toFixed(2));
+
     const mPeak = monthlyPeakMap.get(monthKey) || 0;
     const mPeakTs = monthlyPeakTsMap.get(monthKey);
     const [mYear, mMonth] = monthKey.split("-").map(Number);
-    const mLoadFactor = mPeak > 0 ? (mTotalKwh / (mPeak * 24 * daysInMonth(mYear, mMonth))) : 0;
+    const mLoadFactor = mPeak > 0 ? (actualTotalKwh / (mPeak * 24 * daysInMonth(mYear, mMonth))) : 0;
     return {
       month: monthKey,
-      totalKwh: Number(mTotalKwh.toFixed(0)),
-      wbpKwh: Number(mWbpKwh.toFixed(0)),
-      lwbpKwh: Number(mLwbpKwh.toFixed(0)),
-      totalCost: Number(mTotalCost.toFixed(0)),
-      wbpCost: Number(mWbpCost.toFixed(0)),
-      lwbpCost: Number(mLwbpCost.toFixed(0)),
+      totalKwh: actualTotalKwh,
+      wbpKwh: actualWbpKwh,
+      lwbpKwh: actualLwbpKwh,
+      totalCost: calculatedTotalCost,
+      wbpCost: calculatedWbpCost,
+      lwbpCost: calculatedLwbpCost,
       peakDemand: Number(mPeak.toFixed(1)),
       peakDemandTs: mPeakTs ? mPeakTs.toISOString() : null,
       loadFactor: Number(mLoadFactor.toFixed(4))
@@ -1091,27 +1447,44 @@ export const getElectricityAnalytics = async (
   const voltageTrend: { hour: string; value: number }[] = [];
   const powerTrend: { hour: string; value: number }[] = [];
 
+  const summaryTariff = getTariffForDate(todayStr, tariffs);
+  const actualSummaryWbpKwh = Number(wbpKwh.toFixed(2));
+  const actualSummaryLwbpKwh = Number(lwbpKwh.toFixed(2));
+  const actualSummaryTotalKwh = Number((actualSummaryWbpKwh + actualSummaryLwbpKwh).toFixed(2));
+  const calculatedSummaryWbpCost = Number((actualSummaryWbpKwh * summaryTariff.wbpRate).toFixed(2));
+  const calculatedSummaryLwbpCost = Number((actualSummaryLwbpKwh * summaryTariff.lwbpRate).toFixed(2));
+  const calculatedSummaryTotalCost = Number((calculatedSummaryWbpCost + calculatedSummaryLwbpCost).toFixed(2));
+
+  const actualTodayWbpKwh = Number(todayWbpKwh.toFixed(2));
+  const actualTodayLwbpKwh = Number(todayLwbpKwh.toFixed(2));
+  const actualTodayKwh = Number((actualTodayWbpKwh + actualTodayLwbpKwh).toFixed(2));
+  const calculatedTodayWbpCost = Number((actualTodayWbpKwh * summaryTariff.wbpRate).toFixed(2));
+  const calculatedTodayLwbpCost = Number((actualTodayLwbpKwh * summaryTariff.lwbpRate).toFixed(2));
+  const calculatedTodayCost = Number((calculatedTodayWbpCost + calculatedTodayLwbpCost).toFixed(2));
+
   return {
     summary: {
-      todayKwh: Number(today.toFixed(0)),
-      todayCost: Number(todayCost.toFixed(0)),
-      monthlyMwh: Number(monthlyMwh.toFixed(4)),
-      monthlyCost: Number(monthlyCost.toFixed(0)),
-      yearlyMwh: Number(yearlyMwh.toFixed(4)),
+      todayKwh: actualTodayKwh,
+      todayCost: calculatedTodayCost,
+      monthlyMwh: Number((actualSummaryTotalKwh / 1000).toFixed(4)),
+      monthlyCost: calculatedSummaryTotalCost,
+      yearlyMwh: Number((actualSummaryTotalKwh / 1000).toFixed(4)),
       co2Emitted: Number(co2Emitted.toFixed(1)),
-      totalKwh: Number(totalKwh.toFixed(0)),
-      wbpKwh: Number(wbpKwh.toFixed(0)),
-      lwbpKwh: Number(lwbpKwh.toFixed(0)),
-      wbpCost: Number(wbpCost.toFixed(0)),
-      lwbpCost: Number(lwbpCost.toFixed(0)),
-      totalCost: Number(totalCost.toFixed(0)),
-      todayWbpKwh: Number(todayWbpKwh.toFixed(0)),
-      todayLwbpKwh: Number(todayLwbpKwh.toFixed(0)),
-      monthlyWbpKwh: Number(monthlyWbpKwh.toFixed(0)),
-      monthlyLwbpKwh: Number(monthlyLwbpKwh.toFixed(0)),
-      peakDemand: (peakDemandVal !== null && peakDemandVal > 0) ? Number(peakDemandVal.toFixed(1)) : Number(maxDiff.toFixed(1)),
+      totalKwh: actualSummaryTotalKwh,
+      wbpKwh: actualSummaryWbpKwh,
+      lwbpKwh: actualSummaryLwbpKwh,
+      wbpCost: calculatedSummaryWbpCost,
+      lwbpCost: calculatedSummaryLwbpCost,
+      totalCost: calculatedSummaryTotalCost,
+      todayWbpKwh: actualTodayWbpKwh,
+      todayLwbpKwh: actualTodayLwbpKwh,
+      monthlyWbpKwh: actualSummaryWbpKwh,
+      monthlyLwbpKwh: actualSummaryLwbpKwh,
+      peakDemand: Number(maxDiff.toFixed(1)),
       peakDemandTs: maxDiff > 0 && peakDemandTs ? peakDemandTs.toISOString() : null,
-      perMonthSummary
+      perMonthSummary,
+      wbpRate: summaryTariff.wbpRate,
+      lwbpRate: summaryTariff.lwbpRate
     },
     charts: {
       hourly: hourlyValues,
@@ -1124,43 +1497,44 @@ export const getElectricityAnalytics = async (
       voltage24h: voltageTrend,
       activePower24h: powerTrend,
       hourlyTrend5s: includeTrends ? await getIncomingTrend1hFromDb(deviceId) : [],
-      currentHour: getWibDateTime(new Date()).hour
+      currentHour: getWibDateTime(new Date()).hour,
+      progressiveMinute: lastProgressiveMinute
     },
     pqData: {
-      activePower: isConnected ? Number(activePowerVal.toFixed(1)) : 0,
-      activePowerTs: isConnected && maxDiff > 0 && peakDemandTs ? peakDemandTs.toISOString() : null,
-      peakDemand: isConnected && peakDemandVal !== null ? Number(peakDemandVal.toFixed(2)) : null,
-      reactivePower: isConnected ? Number(reactivePowerVal.toFixed(1)) : 0,
-      apparentPower: isConnected ? Number(apparentPowerVal.toFixed(1)) : 0,
-      pf: isConnected && pfVal !== null ? Number(pfVal.toFixed(3)) : null,
+      activePower: Number(activePowerVal.toFixed(1)),
+      activePowerTs: maxDiff > 0 && peakDemandTs ? peakDemandTs.toISOString() : null,
+      peakDemand: peakDemandVal !== null ? Number(peakDemandVal.toFixed(2)) : null,
+      reactivePower: Number(reactivePowerVal.toFixed(1)),
+      apparentPower: Number(apparentPowerVal.toFixed(1)),
+      pf: pfVal !== null ? Number(pfVal.toFixed(3)) : null,
       pfStatus: isConnected ? "connected" : "offline",
-      freq: isConnected ? Number(freqVal.toFixed(2)) : 0,
-      vUnb: isConnected ? Number(vUnbVal.toFixed(2)) : 0,
-      iUnb: isConnected ? Number(iUnbVal.toFixed(2)) : 0,
-      thdV: isConnected ? Number(thdVVVal.toFixed(2)) : 0,
-      thdI: isConnected ? Number(thdIIVal.toFixed(2)) : 0,
-      vll1: isConnected ? Number(voltABVal.toFixed(2)) : 0,
-      vll2: isConnected ? Number(voltBCVal.toFixed(2)) : 0,
-      vll3: isConnected ? Number(voltCAVal.toFixed(2)) : 0,
-      vln1: isConnected ? Number(vln1.toFixed(2)) : 0,
-      vln2: isConnected ? Number(vln2.toFixed(2)) : 0,
-      vln3: isConnected ? Number(vln3.toFixed(2)) : 0,
-      current1: isConnected ? Number(currentAVal.toFixed(1)) : 0,
-      current2: isConnected ? Number(currentBVal.toFixed(1)) : 0,
-      current3: isConnected ? Number(currentCVal.toFixed(1)) : 0,
-      vR: isConnected ? Number(vln1.toFixed(3)) : 0,
-      vS: isConnected ? Number(vln2.toFixed(3)) : 0,
-      vT: isConnected ? Number(vln3.toFixed(3)) : 0,
-      iR: isConnected ? Number(currentAVal.toFixed(1)) : 0,
-      iS: isConnected ? Number(currentBVal.toFixed(1)) : 0,
-      iT: isConnected ? Number(currentCVal.toFixed(1)) : 0,
-      thdV_R: isConnected ? Number(thdVR.toFixed(2)) : 0,
-      thdV_S: isConnected ? Number(thdVS.toFixed(2)) : 0,
-      thdV_T: isConnected ? Number(thdVT.toFixed(2)) : 0,
-      thdI_R: isConnected ? Number(thdIR.toFixed(2)) : 0,
-      thdI_S: isConnected ? Number(thdIS.toFixed(2)) : 0,
-      thdI_T: isConnected ? Number(thdIT.toFixed(2)) : 0,
-      voltage: isConnected ? Number(voltLAvg.toFixed(2)) : 0
+      freq: Number(freqVal.toFixed(2)),
+      vUnb: Number(vUnbVal.toFixed(2)),
+      iUnb: Number(iUnbVal.toFixed(2)),
+      thdV: Number(thdVVVal.toFixed(2)),
+      thdI: Number(thdIIVal.toFixed(2)),
+      vll1: Number(voltABVal.toFixed(2)),
+      vll2: Number(voltBCVal.toFixed(2)),
+      vll3: Number(voltCAVal.toFixed(2)),
+      vln1: Number(vln1.toFixed(2)),
+      vln2: Number(vln2.toFixed(2)),
+      vln3: Number(vln3.toFixed(2)),
+      current1: Number(currentAVal.toFixed(1)),
+      current2: Number(currentBVal.toFixed(1)),
+      current3: Number(currentCVal.toFixed(1)),
+      vR: Number(vln1.toFixed(3)),
+      vS: Number(vln2.toFixed(3)),
+      vT: Number(vln3.toFixed(3)),
+      iR: Number(currentAVal.toFixed(1)),
+      iS: Number(currentBVal.toFixed(1)),
+      iT: Number(currentCVal.toFixed(1)),
+      thdV_R: Number(thdVR.toFixed(2)),
+      thdV_S: Number(thdVS.toFixed(2)),
+      thdV_T: Number(thdVT.toFixed(2)),
+      thdI_R: Number(thdIR.toFixed(2)),
+      thdI_S: Number(thdIS.toFixed(2)),
+      thdI_T: Number(thdIT.toFixed(2)),
+      voltage: Number(voltLAvg.toFixed(2))
     }
   };
 };

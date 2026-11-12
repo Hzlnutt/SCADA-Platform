@@ -12,7 +12,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getSocketServer } from "../../services/socket.manager";
 import { recordAudit, getClientIp } from "../../services/audit.service";
-import { refreshDynamicCustomPmSources } from "../../core/scheduler";
+import { refreshDynamicCustomPmSources, getWorkingBaseUrl, latestRawApiData } from "../../core/scheduler";
 
 // Zod schemas for validation
 const machinePayloadSchema = z.object({
@@ -318,7 +318,7 @@ export const defaultWaterConfig = {
 };
 
 export const defaultElectricityTariffs = [
-  { validFrom: "2024-01", wbpRate: 1600, lwbpRate: 1112 }
+  { validFrom: "2026-01", wbpRate: 1553.67, lwbpRate: 1035.78 }
 ];
 
 export const defaultGasConfig = {
@@ -334,17 +334,18 @@ export const defaultGasCategories = [
 
 export const getUtilityConfigHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const db = getMongoDb();
-    const config = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
+    const pool = getPostgresPool();
+    const pgRes = await pool.query("SELECT value FROM global_configs WHERE key = 'utility' LIMIT 1");
+    const config = pgRes.rows.length > 0 ? pgRes.rows[0].value : null;
     if (config) {
       res.json({
         data: {
-          wbpRate: config.wbpRate,
-          lwbpRate: config.lwbpRate,
-          pvRate: config.pvRate ?? 0,
+          wbpRate: config.wbpRate ?? 1553.67,
+          lwbpRate: config.lwbpRate ?? 1035.78,
+          pvRate: (typeof config.pvRate === "number" && config.pvRate > 0) ? config.pvRate : 549,
           waterConfig: config.waterConfig || defaultWaterConfig,
           electricityTariffs: config.electricityTariffs || [
-            { validFrom: "2024-01", wbpRate: config.wbpRate || 1600, lwbpRate: config.lwbpRate || 1112 }
+            { validFrom: "2026-01", wbpRate: config.wbpRate || 1553.67, lwbpRate: config.lwbpRate || 1035.78 }
           ],
           gasConfig: config.gasConfig || defaultGasConfig,
           gasCategories: config.gasCategories || defaultGasCategories
@@ -353,9 +354,9 @@ export const getUtilityConfigHandler = async (req: Request, res: Response, next:
     } else {
       res.json({
         data: {
-          wbpRate: 1600,
-          lwbpRate: 1112,
-          pvRate: 0,
+          wbpRate: 1553.67,
+          lwbpRate: 1035.78,
+          pvRate: 549,
           waterConfig: defaultWaterConfig,
           electricityTariffs: defaultElectricityTariffs,
           gasConfig: defaultGasConfig,
@@ -370,16 +371,17 @@ export const getUtilityConfigHandler = async (req: Request, res: Response, next:
 
 export const updateUtilityConfigHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const db = getMongoDb();
+    const pool = getPostgresPool();
     const parsed = utilityConfigSchema.parse(req.body);
 
-    const beforeDoc = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: "utility" });
-    const oldWbpRate = beforeDoc ? beforeDoc.wbpRate : 1600;
-    const oldLwbpRate = beforeDoc ? beforeDoc.lwbpRate : 1112;
-    const oldPvRate = beforeDoc ? (beforeDoc.pvRate ?? 0) : 0;
+    const beforeRes = await pool.query("SELECT value FROM global_configs WHERE key = 'utility' LIMIT 1");
+    const beforeDoc = beforeRes.rows.length > 0 ? beforeRes.rows[0].value : null;
+    const oldWbpRate = beforeDoc ? beforeDoc.wbpRate : 1553.67;
+    const oldLwbpRate = beforeDoc ? beforeDoc.lwbpRate : 1035.78;
+    const oldPvRate = beforeDoc ? (beforeDoc.pvRate ?? 549) : 549;
     const oldWaterConfig = beforeDoc?.waterConfig || defaultWaterConfig;
     const oldElectricityTariffs = beforeDoc?.electricityTariffs || [
-      { validFrom: "2024-01", wbpRate: oldWbpRate, lwbpRate: oldLwbpRate }
+      { validFrom: "2026-01", wbpRate: oldWbpRate, lwbpRate: oldLwbpRate }
     ];
     const oldGasConfig = beforeDoc?.gasConfig || defaultGasConfig;
     const oldGasCategories = beforeDoc?.gasCategories || defaultGasCategories;
@@ -396,26 +398,26 @@ export const updateUtilityConfigHandler = async (req: Request, res: Response, ne
     }
 
     const doc = {
-      key: "utility",
       wbpRate,
       lwbpRate,
       pvRate,
       waterConfig: parsed.waterConfig || oldWaterConfig,
       electricityTariffs: tariffs.length > 0 ? tariffs : oldElectricityTariffs,
       gasConfig: parsed.gasConfig || oldGasConfig,
-      gasCategories: parsed.gasCategories || oldGasCategories,
-      updatedAt: new Date()
+      gasCategories: parsed.gasCategories || oldGasCategories
     };
 
-    await db.collection(GLOBAL_CONFIG_COLLECTION).updateOne(
-      { key: "utility" },
-      { $set: doc },
-      { upsert: true }
-    );
+    await pool.query(`
+      INSERT INTO global_configs (key, value, updated_at)
+      VALUES ('utility', $1, NOW())
+      ON CONFLICT (key) DO UPDATE SET
+        value = EXCLUDED.value,
+        updated_at = NOW()
+    `, [JSON.stringify(doc)]);
 
     const io = getSocketServer();
     if (io) {
-      io.emit("config:update", doc);
+      io.emit("config:update", { key: "utility", ...doc });
     }
 
 
@@ -1433,10 +1435,23 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
     reqMethod = (method || "GET").toUpperCase();
     const now = Date.now();
 
-    // Cache GET requests for 4000ms so multiple components or tabs sharing the same URL don't flood the server with HTTP fetches
+    // 1. If request matches a known core endpoint and we already have fresh live data in scheduler, return it immediately (<1ms)
+    const cleanUrl = String(url).toLowerCase();
+    for (const [key, rawObj] of Object.entries(latestRawApiData)) {
+      if (cleanUrl.includes(key) && rawObj?.data && Date.now() - rawObj.ts < 4000) {
+        res.json({
+          success: true,
+          status: 200,
+          data: rawObj.data
+        });
+        return;
+      }
+    }
+
+    // Cache GET requests for 1000ms so multiple components or tabs sharing the same URL don't flood the server with HTTP fetches
     if (reqMethod === "GET") {
       const cached = apiProxyCache.get(url);
-      if (cached && now - cached.ts < 4000) {
+      if (cached && now - cached.ts < 1000) {
         res.json({
           success: cached.success,
           status: cached.status,
@@ -1447,11 +1462,20 @@ export const testApiSourceHandler = async (req: Request, res: Response, next: Ne
       }
     }
 
+    const workingBase = getWorkingBaseUrl();
     const candidateUrls = [url];
     if (url.includes("10.3.164.3:8088")) {
       candidateUrls.push(url.replace("10.3.164.3:8088", "10.3.161.3:8088"));
     } else if (url.includes("10.3.161.3:8088")) {
       candidateUrls.push(url.replace("10.3.161.3:8088", "10.3.164.3:8088"));
+    }
+    if (workingBase) {
+      const baseClean = workingBase.replace("http://", "").replace("https://", "");
+      candidateUrls.sort((a, b) => {
+        const aHas = a.includes(baseClean);
+        const bHas = b.includes(baseClean);
+        return aHas === bHas ? 0 : aHas ? -1 : 1;
+      });
     }
 
     let data: any = null;

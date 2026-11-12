@@ -10,7 +10,7 @@ import {
   fetchPowerFactor,
   setLatestPowerFactor
 } from "../modules/analytics/electricity.analytics";
-import { setLatestSolarLiveState, SolarLiveState } from "../modules/analytics/solar.analytics";
+import { setLatestSolarLiveState, getLatestSolarLiveState, SolarLiveState } from "../modules/analytics/solar.analytics";
 import { clearElectricityAnalyticsCache, clearSolarAnalyticsCache } from "../modules/analytics/analytics.controller";
 
 
@@ -19,7 +19,7 @@ import { ingestTelemetry } from "../modules/telemetry/telemetry.service";
 import { ingestAlarmEvents } from "../modules/alarms/alarms.service";
 import { publishAlarmEvents } from "../services/alarms.publisher";
 
-let lastElectricityTs: Date | null = null;
+let lastElectricitySignature: string | null = null;
 let pollingInterval: NodeJS.Timeout | null = null;
 let pfPollingInterval: NodeJS.Timeout | null = null;
 
@@ -335,17 +335,17 @@ const insertPlnMinuteTelemetry = async (payload: any, minuteTs: Date) => {
   const pool = getPostgresPool();
   const isExactHour = minuteTs.getMinutes() === 0;
 
-  // In minute buffer table: power_factor tidak perlu di minute (hanya disimpan per jam di tabel utama)
+  // 1. Simpan data aktual murni dari API ke tabel per menit electric_pln_telemetry_minute
   await pool.query(`
     INSERT INTO electric_pln_telemetry_minute (
       t_stamp, status_pm8000, volt_ab, volt_bc, volt_ca, volt_ll,
       current_a, current_b, current_c, frequency, active_power,
       reactive_power_total, apparent_power_total, power_factor,
       voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
-      thd_current_a, thd_current_b, thd_current_c, active_energy, export_pln
+      thd_current_a, thd_current_b, thd_current_c, active_energy, export_pln, peak_demand
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL,
-      $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+      $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
     )
     ON CONFLICT (t_stamp) DO UPDATE SET
       status_pm8000 = EXCLUDED.status_pm8000,
@@ -360,7 +360,7 @@ const insertPlnMinuteTelemetry = async (payload: any, minuteTs: Date) => {
       active_power = EXCLUDED.active_power,
       reactive_power_total = EXCLUDED.reactive_power_total,
       apparent_power_total = EXCLUDED.apparent_power_total,
-      power_factor = NULL,
+      power_factor = EXCLUDED.power_factor,
       voltage_unbalance = EXCLUDED.voltage_unbalance,
       current_unbalance = EXCLUDED.current_unbalance,
       thd_volt_a = EXCLUDED.thd_volt_a,
@@ -370,18 +370,20 @@ const insertPlnMinuteTelemetry = async (payload: any, minuteTs: Date) => {
       thd_current_b = EXCLUDED.thd_current_b,
       thd_current_c = EXCLUDED.thd_current_c,
       active_energy = EXCLUDED.active_energy,
-      export_pln = EXCLUDED.export_pln;
+      export_pln = EXCLUDED.export_pln,
+      peak_demand = EXCLUDED.peak_demand;
   `, [
     minuteTs, payload.status_pm8000, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
     payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power,
-    payload.reactive_power_total, payload.apparent_power_total,
+    payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
     payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
-    payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy, payload.export_pln
+    payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy, payload.export_pln,
+    payload.peak_demand
   ]).catch((err) => {
     logger.warn(`Failed to insert PLN minute telemetry: ${err.message}`);
   });
 
-  // Polling per jam: pas saat tepat per jam (:00:00), simpan langsung ke database utama electric_pln_telemetry
+  // 2. Pada jam tepat (:00:00), simpan juga data aktual murni yang sama ke tabel per jam electric_pln_telemetry
   if (isExactHour) {
     try {
       await pool.query(`DELETE FROM electric_pln_telemetry WHERE t_stamp = $1`, [minuteTs]);
@@ -392,7 +394,7 @@ const insertPlnMinuteTelemetry = async (payload: any, minuteTs: Date) => {
           reactive_power_total, apparent_power_total, power_factor,
           voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
           thd_current_a, thd_current_b, thd_current_c, active_energy,
-          peak_demand, export_pln
+          export_pln, peak_demand
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
         )
@@ -402,7 +404,7 @@ const insertPlnMinuteTelemetry = async (payload: any, minuteTs: Date) => {
         payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
         payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
         payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy,
-        payload.peak_demand, payload.export_pln
+        payload.export_pln, payload.peak_demand
       ]);
     } catch (err: any) {
       logger.warn(`Failed to save hourly PLN telemetry to main table: ${err.message}`);
@@ -415,7 +417,7 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
   const isExactHour = minuteTs.getMinutes() === 0;
   const mainTable = table === "electric_wf1_telemetry_minute" ? "electric_wf1_telemetry" : "electric_wf2_telemetry";
 
-  // In minute buffer table: power_factor tidak perlu di minute (hanya disimpan per jam di database utama)
+  // 1. Simpan data aktual murni dari API ke tabel per menit
   await pool.query(`
     INSERT INTO ${table} (
       t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
@@ -424,8 +426,8 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
       voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
       thd_current_a, thd_current_b, thd_current_c, active_energy
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL,
-      $14, $15, $16, $17, $18, $19, $20, $21, $22
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+      $15, $16, $17, $18, $19, $20, $21, $22, $23
     )
     ON CONFLICT (t_stamp) DO UPDATE SET
       status_pm5500 = EXCLUDED.status_pm5500,
@@ -440,7 +442,7 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
       active_power_total = EXCLUDED.active_power_total,
       reactive_power_total = EXCLUDED.reactive_power_total,
       apparent_power_total = EXCLUDED.apparent_power_total,
-      power_factor = NULL,
+      power_factor = EXCLUDED.power_factor,
       voltage_unbalance = EXCLUDED.voltage_unbalance,
       current_unbalance = EXCLUDED.current_unbalance,
       thd_volt_a = EXCLUDED.thd_volt_a,
@@ -453,14 +455,14 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
   `, [
     minuteTs, payload.status_pm5500, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
     payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power_total,
-    payload.reactive_power_total, payload.apparent_power_total,
+    payload.reactive_power_total, payload.apparent_power_total, payload.power_factor,
     payload.voltage_unbalance, payload.current_unbalance, payload.thd_volt_a, payload.thd_volt_b, payload.thd_volt_c,
     payload.thd_current_a, payload.thd_current_b, payload.thd_current_c, payload.active_energy
   ]).catch((err) => {
     logger.warn(`Failed to insert WF minute telemetry to ${table}: ${err.message}`);
   });
 
-  // Polling per jam: pas saat tepat per jam (:00:00), simpan langsung ke database utama (electric_wf1_telemetry / electric_wf2_telemetry)
+  // 2. Pada jam tepat (:00:00), simpan juga data aktual murni yang sama ke tabel per jam
   if (isExactHour) {
     try {
       await pool.query(`DELETE FROM ${mainTable} WHERE t_stamp = $1`, [minuteTs]);
@@ -550,22 +552,22 @@ export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] =
     if (!poiObj) return;
     const num = poiId === "POI_1" ? "1" : "2";
     const status = poiObj[`Status_POI_${num}`] !== undefined ? Boolean(poiObj[`Status_POI_${num}`]) : true;
-    const volt_ab = status ? (Number(poiObj[`Volt_AB_POI_${num}`]) || null) : null;
-    const volt_bc = status ? (Number(poiObj[`Volt_BC_POI_${num}`]) || null) : null;
-    const volt_ca = status ? (Number(poiObj[`Volt_CA_POI_${num}`]) || null) : null;
-    const volt_an = status ? (Number(poiObj[`Volt_AN_POI_${num}`]) || null) : null;
-    const volt_bn = status ? (Number(poiObj[`Volt_BN_POI_${num}`]) || null) : null;
-    const volt_cn = status ? (Number(poiObj[`Volt_CN_POI_${num}`]) || null) : null;
-    const frequency = status ? (Number(poiObj[`Frequency_POI_${num}`]) || null) : null;
-    let active_power = status ? (Number(poiObj[`Scale_Total_KW_POI_${num}`]) || 0) : 0;
+    const volt_ab = poiObj[`Volt_AB_POI_${num}`] !== undefined && poiObj[`Volt_AB_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_AB_POI_${num}`])) ? Number(poiObj[`Volt_AB_POI_${num}`]) : null;
+    const volt_bc = poiObj[`Volt_BC_POI_${num}`] !== undefined && poiObj[`Volt_BC_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_BC_POI_${num}`])) ? Number(poiObj[`Volt_BC_POI_${num}`]) : null;
+    const volt_ca = poiObj[`Volt_CA_POI_${num}`] !== undefined && poiObj[`Volt_CA_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_CA_POI_${num}`])) ? Number(poiObj[`Volt_CA_POI_${num}`]) : null;
+    const volt_an = poiObj[`Volt_AN_POI_${num}`] !== undefined && poiObj[`Volt_AN_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_AN_POI_${num}`])) ? Number(poiObj[`Volt_AN_POI_${num}`]) : null;
+    const volt_bn = poiObj[`Volt_BN_POI_${num}`] !== undefined && poiObj[`Volt_BN_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_BN_POI_${num}`])) ? Number(poiObj[`Volt_BN_POI_${num}`]) : null;
+    const volt_cn = poiObj[`Volt_CN_POI_${num}`] !== undefined && poiObj[`Volt_CN_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_CN_POI_${num}`])) ? Number(poiObj[`Volt_CN_POI_${num}`]) : null;
+    const frequency = poiObj[`Frequency_POI_${num}`] !== undefined && poiObj[`Frequency_POI_${num}`] !== null && !isNaN(Number(poiObj[`Frequency_POI_${num}`])) ? Number(poiObj[`Frequency_POI_${num}`]) : null;
+    let active_power = poiObj[`Scale_Total_KW_POI_${num}`] !== undefined && poiObj[`Scale_Total_KW_POI_${num}`] !== null && !isNaN(Number(poiObj[`Scale_Total_KW_POI_${num}`])) ? Number(poiObj[`Scale_Total_KW_POI_${num}`]) : 0;
     if (active_power < 0.001 && active_power > 0) active_power = 0;
     const rawPeak = poiObj[`Peak_Demand_ScaleKw_POI_${num}`] ?? poiObj[`Peak_Demand_ScaleKW_POI_${num}`];
-    const peak_demand = status && rawPeak !== undefined && rawPeak !== null ? Number(rawPeak) || 0 : 0;
+    const peak_demand = rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)) ? Number(rawPeak) : 0;
     const total_kwh = Number(poiObj[`Total_KWH_POI_${num}`]) || 0;
     const total_kvarh = Number(poiObj[`Total_KVARH_POI_${num}`]) || 0;
 
     const rawPf = poiObj[`PFO_POI_${num}`] ?? poiObj[`PF0_POI_${num}`] ?? poiObj[`Power_Factor_POI_${num}`] ?? poiObj[`PF_POI_${num}`] ?? poiObj[`PowerFactor_POI_${num}`] ?? poiObj[`CosPhi_POI_${num}`];
-    let power_factor: number | null = status && rawPf !== undefined && rawPf !== null && !isNaN(Number(rawPf)) ? Number(rawPf) : null;
+    let power_factor: number | null = rawPf !== undefined && rawPf !== null && !isNaN(Number(rawPf)) ? Number(rawPf) : null;
 
     result.push({
       t_stamp: ts,
@@ -598,11 +600,12 @@ const insertPltsMinuteTelemetry = async (records: ElectricPltsRecord[], minuteTs
 
   for (const r of records) {
     try {
-      // In minute buffer table: power_factor tidak perlu di minute (NULL)
+      // 1. Simpan data aktual murni dari API ke tabel per menit electric_plts_telemetry_minute
       await pool.query(`
         INSERT INTO electric_plts_telemetry_minute (
-          t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh, power_factor
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL)
+          t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn,
+          frequency, active_power, total_kwh, total_kvarh, power_factor, peak_demand
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         ON CONFLICT (t_stamp, poi_id) DO UPDATE SET
           status = EXCLUDED.status,
           volt_ab = EXCLUDED.volt_ab,
@@ -615,20 +618,26 @@ const insertPltsMinuteTelemetry = async (records: ElectricPltsRecord[], minuteTs
           active_power = EXCLUDED.active_power,
           total_kwh = EXCLUDED.total_kwh,
           total_kvarh = EXCLUDED.total_kvarh,
-          power_factor = NULL;
+          power_factor = EXCLUDED.power_factor,
+          peak_demand = EXCLUDED.peak_demand;
       `, [
-        minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power ?? null, r.total_kwh ?? null, r.total_kvarh ?? null
+        minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn,
+        r.frequency, r.active_power ?? null, r.total_kwh ?? null, r.total_kvarh ?? null,
+        r.power_factor ?? null, r.peak_demand ?? null
       ]);
 
-      // Polling per jam: at the exact hour mark (:00:00), save sampled hourly power factor & telemetry directly to electric_plts_telemetry
+      // 2. Pada jam tepat (:00:00), simpan juga data aktual murni yang sama ke tabel per jam electric_plts_telemetry
       if (isExactHour) {
         await pool.query(`DELETE FROM electric_plts_telemetry WHERE t_stamp = $1 AND poi_id = $2`, [minuteTs, r.poi_id]);
         await pool.query(`
           INSERT INTO electric_plts_telemetry (
-            t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh, power_factor
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn,
+            frequency, active_power, total_kwh, total_kvarh, power_factor, peak_demand
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         `, [
-          minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power ?? null, r.total_kwh ?? null, r.total_kvarh ?? null, r.power_factor ?? null
+          minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn,
+          r.frequency, r.active_power ?? null, r.total_kwh ?? null, r.total_kvarh ?? null,
+          r.power_factor ?? null, r.peak_demand ?? null
         ]);
       }
     } catch (err: any) {
@@ -754,7 +763,11 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
       thd_current_a: getVal(["THD_Current_A"]),
       thd_current_b: getVal(["THD_Current_B"]),
       thd_current_c: getVal(["THD_Current_C"]),
-      active_energy: getVal(["ActiveEnergy", "Active_Energy", "Total_Active_Energy", "Energy_Active_Total", "KWh", "kWh", "kwh"])
+      active_energy: (() => {
+        const rawE = getVal(["ActiveEnergy", "Active_Energy", "Total_Active_Energy", "Energy_Active_Total", "KWh", "kWh", "kwh"]);
+        if (rawE === null || isNaN(rawE)) return null;
+        return rawE;
+      })()
     };
   };
 
@@ -856,6 +869,7 @@ const insertPmMinuteTelemetryBatch = async (records: ElectricPmRecord[], minuteT
       );
     }
 
+    // 1. Simpan data aktual murni dari API ke tabel per menit electric_pm_telemetry_minute
     await pool.query(`
       INSERT INTO electric_pm_telemetry_minute (
         t_stamp, group_id, pm_id, status, volt_ab, volt_bc, volt_ca, volt_ll,
@@ -864,7 +878,55 @@ const insertPmMinuteTelemetryBatch = async (records: ElectricPmRecord[], minuteT
         voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
         thd_current_a, thd_current_b, thd_current_c, active_energy
       ) VALUES ${valueClauses.join(", ")}
+      ON CONFLICT (t_stamp, pm_id) DO UPDATE SET
+        group_id = EXCLUDED.group_id,
+        status = EXCLUDED.status,
+        volt_ab = EXCLUDED.volt_ab,
+        volt_bc = EXCLUDED.volt_bc,
+        volt_ca = EXCLUDED.volt_ca,
+        volt_ll = EXCLUDED.volt_ll,
+        current_a = EXCLUDED.current_a,
+        current_b = EXCLUDED.current_b,
+        current_c = EXCLUDED.current_c,
+        frequency = EXCLUDED.frequency,
+        active_power_total = EXCLUDED.active_power_total,
+        reactive_power_total = EXCLUDED.reactive_power_total,
+        apparent_power_total = EXCLUDED.apparent_power_total,
+        power_factor = EXCLUDED.power_factor,
+        voltage_unbalance = EXCLUDED.voltage_unbalance,
+        current_unbalance = EXCLUDED.current_unbalance,
+        thd_volt_a = EXCLUDED.thd_volt_a,
+        thd_volt_b = EXCLUDED.thd_volt_b,
+        thd_volt_c = EXCLUDED.thd_volt_c,
+        thd_current_a = EXCLUDED.thd_current_a,
+        thd_current_b = EXCLUDED.thd_current_b,
+        thd_current_c = EXCLUDED.thd_current_c,
+        active_energy = EXCLUDED.active_energy;
     `, params);
+
+    // 2. Pada jam tepat (:00:00), simpan juga data aktual murni yang sama ke tabel per jam electric_pm_telemetry
+    if (minuteTs.getMinutes() === 0) {
+      for (const r of validRecords) {
+        await pool.query(`DELETE FROM electric_pm_telemetry WHERE t_stamp = $1 AND pm_id = $2`, [minuteTs, r.pm_id]);
+        await pool.query(`
+          INSERT INTO electric_pm_telemetry (
+            t_stamp, group_id, pm_id, status, volt_ab, volt_bc, volt_ca, volt_ll,
+            current_a, current_b, current_c, frequency, active_power_total,
+            reactive_power_total, apparent_power_total, power_factor,
+            voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+            thd_current_a, thd_current_b, thd_current_c, active_energy
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
+          )
+        `, [
+          minuteTs, r.group_id, r.pm_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
+          r.current_a, r.current_b, r.current_c, r.frequency, r.active_power_total,
+          r.reactive_power_total, r.apparent_power_total, r.power_factor,
+          r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
+          r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy
+        ]).catch(() => {});
+      }
+    }
   } catch (err: any) {
     logger.warn(`Failed to insert PM minute telemetry batch: ${err.message}`);
   }
@@ -1076,8 +1138,11 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   if (!io) return;
 
   const isPln = deviceId === "Cubicle_PLN_PM8000";
-  const statusVal = isPln ? pgPq.status_pm8000 : pgPq.status_pm5500;
-  if (statusVal === false) {
+  const statusVal = isPln
+    ? (pgPq.status_pm8000 ?? pgPq.status)
+    : (pgPq.status_pm5500 ?? pgPq.status_pm5500_wf1 ?? pgPq.status_pm5500_wf2 ?? pgPq.status_pm5560 ?? pgPq.status);
+  const isConnected = statusVal !== null && statusVal !== undefined ? Boolean(statusVal) : true;
+  if (!isConnected) {
     broadcastLiveTelemetryOffline(deviceId);
     return;
   }
@@ -1132,8 +1197,6 @@ const broadcastLiveTelemetry = (deviceId: string, pgPq: any) => {
   if (rawThdIB !== null) thdIS = rawThdIB < 1.0 ? rawThdIB * 100.0 : rawThdIB;
   if (rawThdIC !== null) thdIT = rawThdIC < 1.0 ? rawThdIC * 100.0 : rawThdIC;
   const thdIIVal = (thdIR + thdIS + thdIT) / 3.0;
-
-  const isConnected = statusVal !== null ? !!statusVal : true;
 
   // In 20 kV medium voltage system, phase voltages correspond directly to 20 kV line voltage readings
   const vln1 = voltABVal;
@@ -1322,33 +1385,33 @@ const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
 
   const poi1 = {
     status: poi1Status,
-    activePower: poi1Status ? p1Kw : 0,
-    peakDemand: poi1Status && rawPeak1 !== undefined && rawPeak1 !== null ? (Number(rawPeak1) || 0) : 0,
-    totalKwh: typeof p1.Total_KWH_POI_1 === "number" ? p1.Total_KWH_POI_1 : 0,
-    totalKvarh: typeof p1.Total_KVARH_POI_1 === "number" ? p1.Total_KVARH_POI_1 : 0,
-    frequency: poi1Status && typeof p1.Frequency_POI_1 === "number" ? p1.Frequency_POI_1 : null,
-    voltAb: poi1Status && typeof p1.Volt_AB_POI_1 === "number" ? p1.Volt_AB_POI_1 : null,
-    voltBc: poi1Status && typeof p1.Volt_BC_POI_1 === "number" ? p1.Volt_BC_POI_1 : null,
-    voltCa: poi1Status && typeof p1.Volt_CA_POI_1 === "number" ? p1.Volt_CA_POI_1 : null,
-    voltAn: poi1Status && typeof p1.Volt_AN_POI_1 === "number" ? p1.Volt_AN_POI_1 : null,
-    voltBn: poi1Status && typeof p1.Volt_BN_POI_1 === "number" ? p1.Volt_BN_POI_1 : null,
-    voltCn: poi1Status && typeof p1.Volt_CN_POI_1 === "number" ? p1.Volt_CN_POI_1 : null,
-    powerFactor: poi1Status ? pf1 : null,
+    activePower: p1Kw,
+    peakDemand: rawPeak1 !== undefined && rawPeak1 !== null ? (Number(rawPeak1) || 0) : 0,
+    totalKwh: typeof p1.Total_KWH_POI_1 === "number" ? p1.Total_KWH_POI_1 : (Number(p1.Total_KWH_POI_1) || 0),
+    totalKvarh: typeof p1.Total_KVARH_POI_1 === "number" ? p1.Total_KVARH_POI_1 : (Number(p1.Total_KVARH_POI_1) || 0),
+    frequency: p1.Frequency_POI_1 !== undefined && p1.Frequency_POI_1 !== null ? Number(p1.Frequency_POI_1) : null,
+    voltAb: p1.Volt_AB_POI_1 !== undefined && p1.Volt_AB_POI_1 !== null ? Number(p1.Volt_AB_POI_1) : null,
+    voltBc: p1.Volt_BC_POI_1 !== undefined && p1.Volt_BC_POI_1 !== null ? Number(p1.Volt_BC_POI_1) : null,
+    voltCa: p1.Volt_CA_POI_1 !== undefined && p1.Volt_CA_POI_1 !== null ? Number(p1.Volt_CA_POI_1) : null,
+    voltAn: p1.Volt_AN_POI_1 !== undefined && p1.Volt_AN_POI_1 !== null ? Number(p1.Volt_AN_POI_1) : null,
+    voltBn: p1.Volt_BN_POI_1 !== undefined && p1.Volt_BN_POI_1 !== null ? Number(p1.Volt_BN_POI_1) : null,
+    voltCn: p1.Volt_CN_POI_1 !== undefined && p1.Volt_CN_POI_1 !== null ? Number(p1.Volt_CN_POI_1) : null,
+    powerFactor: pf1,
   };
   const poi2 = {
     status: poi2Status,
-    activePower: poi2Status ? p2Kw : 0,
-    peakDemand: poi2Status && rawPeak2 !== undefined && rawPeak2 !== null ? (Number(rawPeak2) || 0) : 0,
-    totalKwh: typeof p2.Total_KWH_POI_2 === "number" ? p2.Total_KWH_POI_2 : 0,
-    totalKvarh: typeof p2.Total_KVARH_POI_2 === "number" ? p2.Total_KVARH_POI_2 : 0,
-    frequency: poi2Status && typeof p2.Frequency_POI_2 === "number" ? p2.Frequency_POI_2 : null,
-    voltAb: poi2Status && typeof p2.Volt_AB_POI_2 === "number" ? p2.Volt_AB_POI_2 : null,
-    voltBc: poi2Status && typeof p2.Volt_BC_POI_2 === "number" ? p2.Volt_BC_POI_2 : null,
-    voltCa: poi2Status && typeof p2.Volt_CA_POI_2 === "number" ? p2.Volt_CA_POI_2 : null,
-    voltAn: poi2Status && typeof p2.Volt_AN_POI_2 === "number" ? p2.Volt_AN_POI_2 : null,
-    voltBn: poi2Status && typeof p2.Volt_BN_POI_2 === "number" ? p2.Volt_BN_POI_2 : null,
-    voltCn: poi2Status && typeof p2.Volt_CN_POI_2 === "number" ? p2.Volt_CN_POI_2 : null,
-    powerFactor: poi2Status ? pf2 : null,
+    activePower: p2Kw,
+    peakDemand: rawPeak2 !== undefined && rawPeak2 !== null ? (Number(rawPeak2) || 0) : 0,
+    totalKwh: typeof p2.Total_KWH_POI_2 === "number" ? p2.Total_KWH_POI_2 : (Number(p2.Total_KWH_POI_2) || 0),
+    totalKvarh: typeof p2.Total_KVARH_POI_2 === "number" ? p2.Total_KVARH_POI_2 : (Number(p2.Total_KVARH_POI_2) || 0),
+    frequency: p2.Frequency_POI_2 !== undefined && p2.Frequency_POI_2 !== null ? Number(p2.Frequency_POI_2) : null,
+    voltAb: p2.Volt_AB_POI_2 !== undefined && p2.Volt_AB_POI_2 !== null ? Number(p2.Volt_AB_POI_2) : null,
+    voltBc: p2.Volt_BC_POI_2 !== undefined && p2.Volt_BC_POI_2 !== null ? Number(p2.Volt_BC_POI_2) : null,
+    voltCa: p2.Volt_CA_POI_2 !== undefined && p2.Volt_CA_POI_2 !== null ? Number(p2.Volt_CA_POI_2) : null,
+    voltAn: p2.Volt_AN_POI_2 !== undefined && p2.Volt_AN_POI_2 !== null ? Number(p2.Volt_AN_POI_2) : null,
+    voltBn: p2.Volt_BN_POI_2 !== undefined && p2.Volt_BN_POI_2 !== null ? Number(p2.Volt_BN_POI_2) : null,
+    voltCn: p2.Volt_CN_POI_2 !== undefined && p2.Volt_CN_POI_2 !== null ? Number(p2.Volt_CN_POI_2) : null,
+    powerFactor: pf2,
   };
   return {
     t_stamp: ts,
@@ -1363,21 +1426,149 @@ const CANDIDATE_BASES = [
   "http://10.3.164.3:8088",
   "http://10.3.161.3:8088"
 ];
+const baseFailureCooldown: Record<string, number> = {};
+
+export const getWorkingBaseUrl = () => cachedWorkingBaseUrl;
+export const latestRawApiData: Record<string, { data: any; ts: number }> = {};
+
+export const getLatestElectricityOverviewLive = () => {
+  const plnTelemetry = getLatestIncomingTelemetry("Cubicle_PLN_PM8000");
+  const wf1Telemetry = getLatestIncomingTelemetry("Feeder_WF1_PM5560");
+  const wf2Telemetry = getLatestIncomingTelemetry("Feeder_WF2_PM5500");
+  const solarLive = getLatestSolarLiveState();
+
+  const nowTs = Date.now();
+  const plnEntry = latestRawApiData["electric_pln"];
+  const plnRaw = plnEntry && (nowTs - plnEntry.ts < 4000) ? plnEntry.data : null;
+
+  const wf1Entry = latestRawApiData["electric_wf1"];
+  const wf1Raw = wf1Entry && (nowTs - wf1Entry.ts < 4000) ? wf1Entry.data : null;
+
+  const wf2Entry = latestRawApiData["electric_wf2"];
+  const wf2Raw = wf2Entry && (nowTs - wf2Entry.ts < 4000) ? wf2Entry.data : null;
+
+  const pltsEntry = latestRawApiData["electric_plts"];
+  const pltsRaw = pltsEntry && (nowTs - pltsEntry.ts < 4000) ? pltsEntry.data : null;
+
+  const ew21Raw = latestRawApiData["electric_ew21"]?.data || null;
+  const ew22Raw = latestRawApiData["electric_ew22"]?.data || null;
+  const ew23Raw = latestRawApiData["electric_ew23"]?.data || null;
+
+  // Status checks from raw API endpoints & telemetry:
+  const isPlnOnline = plnRaw 
+    ? (plnRaw.Status_PM8000 !== false && plnRaw.status_pm8000 !== false) 
+    : (plnTelemetry?.status !== false && plnTelemetry?.online !== false);
+
+  const isWf1Online = wf1Raw 
+    ? (wf1Raw.Status_PM5500_WF1 !== false && wf1Raw.Status_PM5560 !== false && wf1Raw.Status_PM5500 !== false) 
+    : (wf1Telemetry?.status !== false && wf1Telemetry?.online !== false);
+
+  const isWf2Online = wf2Raw 
+    ? (wf2Raw.Status_PM5500_WF2 !== false && wf2Raw.Status_PM5500_WF1 !== false && wf2Raw.Status_PM5500 !== false) 
+    : (wf2Telemetry?.status !== false && wf2Telemetry?.online !== false);
+
+  const poi1Online = pltsRaw?.POI_1 
+    ? Boolean(pltsRaw.POI_1.Status_POI_1) 
+    : (solarLive?.poi1?.status !== false);
+
+  const poi2Online = pltsRaw?.POI_2 
+    ? Boolean(pltsRaw.POI_2.Status_POI_2) 
+    : (solarLive?.poi2?.status !== false);
+
+  const isSolarOnline = poi1Online || poi2Online;
+
+  const plnKw = plnTelemetry?.activePower ?? (plnRaw?.Active_Power ? (Number(plnRaw.Active_Power) > 10000 ? Number(plnRaw.Active_Power) / 1000.0 : Number(plnRaw.Active_Power)) : null);
+
+  const wf1Kw = wf1Telemetry?.activePower ?? (wf1Raw?.Active_Power_Total ? Number(wf1Raw.Active_Power_Total) : null);
+
+  const wf2Kw = wf2Telemetry?.activePower ?? (wf2Raw?.Active_Power_Total ? Number(wf2Raw.Active_Power_Total) : null);
+
+  const poi1Kw = pltsRaw?.POI_1?.Scale_Total_KW_POI_1 !== undefined ? Number(pltsRaw.POI_1.Scale_Total_KW_POI_1) : (solarLive?.poi1?.activePower ?? null);
+
+  const poi2Kw = pltsRaw?.POI_2?.Scale_Total_KW_POI_2 !== undefined ? Number(pltsRaw.POI_2.Scale_Total_KW_POI_2) : (solarLive?.poi2?.activePower ?? null);
+
+  const totalSolarKw = (poi1Kw !== null || poi2Kw !== null)
+    ? ((poi1Kw ?? 0) + (poi2Kw ?? 0)) 
+    : null;
+
+  const rawPlnPeak = plnRaw ? (plnRaw.Peak_Demand_W ?? plnRaw.Peak_Demand_w ?? plnRaw.PeakDemand_W ?? plnRaw.peak_demand_w ?? plnRaw.Peak_Demand ?? plnRaw.peak_demand) : null;
+  const plnPeakKw = (rawPlnPeak !== null && rawPlnPeak !== undefined && !isNaN(Number(rawPlnPeak)))
+    ? (Number(rawPlnPeak) > 10000 ? Number(rawPlnPeak) / 1000.0 : Number(rawPlnPeak))
+    : (plnTelemetry?.peakDemand !== undefined && plnTelemetry?.peakDemand !== null ? Number(plnTelemetry.peakDemand) : null);
+
+  return {
+    t_stamp: new Date(),
+    pln: {
+      online: isPlnOnline,
+      activePower: plnKw,
+      powerFactor: isPlnOnline ? (plnTelemetry?.pf ?? (plnRaw?.Power_Factor !== undefined ? Math.abs(Number(plnRaw.Power_Factor)) : null)) : null,
+      peakDemand: isPlnOnline ? plnPeakKw : null,
+      raw: plnRaw
+    },
+    wf1: {
+      online: isWf1Online,
+      activePower: wf1Kw,
+      powerFactor: isWf1Online ? (wf1Telemetry?.pf ?? (wf1Raw?.Power_Factor !== undefined ? Math.abs(Number(wf1Raw.Power_Factor)) : null)) : null,
+      raw: wf1Raw
+    },
+    wf2: {
+      online: isWf2Online,
+      activePower: wf2Kw,
+      powerFactor: isWf2Online ? (wf2Telemetry?.pf ?? (wf2Raw?.Power_Factor !== undefined ? Math.abs(Number(wf2Raw.Power_Factor)) : null)) : null,
+      raw: wf2Raw
+    },
+    solar: {
+      online: isSolarOnline,
+      totalKw: totalSolarKw,
+      poi1: {
+        online: poi1Online,
+        activePower: poi1Kw,
+        peakDemand: poi1Online ? ((pltsRaw?.POI_1?.Peak_Demand_ScaleKw_POI_1 ?? pltsRaw?.POI_1?.Peak_Demand_ScaleKW_POI_1) !== undefined && (pltsRaw?.POI_1?.Peak_Demand_ScaleKw_POI_1 ?? pltsRaw?.POI_1?.Peak_Demand_ScaleKW_POI_1) !== null ? Number(pltsRaw.POI_1.Peak_Demand_ScaleKw_POI_1 ?? pltsRaw.POI_1.Peak_Demand_ScaleKW_POI_1) : (solarLive?.poi1?.peakDemand ?? null)) : null,
+        totalKwh: pltsRaw?.POI_1?.Total_KWH_POI_1 !== undefined ? Number(pltsRaw.POI_1.Total_KWH_POI_1) : (solarLive?.poi1?.totalKwh ?? null)
+      },
+      poi2: {
+        online: poi2Online,
+        activePower: poi2Kw,
+        peakDemand: poi2Online ? ((pltsRaw?.POI_2?.Peak_Demand_ScaleKw_POI_2 ?? pltsRaw?.POI_2?.Peak_Demand_ScaleKW_POI_2) !== undefined && (pltsRaw?.POI_2?.Peak_Demand_ScaleKw_POI_2 ?? pltsRaw?.POI_2?.Peak_Demand_ScaleKW_POI_2) !== null ? Number(pltsRaw.POI_2.Peak_Demand_ScaleKw_POI_2 ?? pltsRaw.POI_2.Peak_Demand_ScaleKW_POI_2) : (solarLive?.poi2?.peakDemand ?? null)) : null,
+        totalKwh: pltsRaw?.POI_2?.Total_KWH_POI_2 !== undefined ? Number(pltsRaw.POI_2.Total_KWH_POI_2) : (solarLive?.poi2?.totalKwh ?? null)
+      },
+      raw: pltsRaw
+    },
+    rawEndpoints: {
+      electric_pln: plnRaw,
+      electric_wf1: wf1Raw,
+      electric_wf2: wf2Raw,
+      electric_plts: pltsRaw,
+      electric_ew21: ew21Raw,
+      electric_ew22: ew22Raw,
+      electric_ew23: ew23Raw
+    }
+  };
+};
 
 const fetchApiData = async (endpoint: string) => {
   if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
-    return await fetchJsonWithTimeout(endpoint, 2500).catch(() => null);
+    return await fetchJsonWithTimeout(endpoint, 1200).catch(() => null);
   }
-  const orderedBases = [cachedWorkingBaseUrl, ...CANDIDATE_BASES.filter((b) => b !== cachedWorkingBaseUrl)];
+  const now = Date.now();
+  // Try available bases, prioritizing healthy non-cooldown bases
+  const orderedBases = [cachedWorkingBaseUrl, ...CANDIDATE_BASES.filter((b) => b !== cachedWorkingBaseUrl)]
+    .sort((a, b) => {
+      const aCool = (baseFailureCooldown[a] && now < baseFailureCooldown[a]) ? 1 : 0;
+      const bCool = (baseFailureCooldown[b] && now < baseFailureCooldown[b]) ? 1 : 0;
+      return aCool - bCool;
+    });
+
   for (const base of orderedBases) {
     try {
-      const res = await fetchJsonWithTimeout(`${base}/system/webdev/Utility_Dashboard/${endpoint}`, 2500);
+      const res = await fetchJsonWithTimeout(`${base}/system/webdev/Utility_Dashboard/${endpoint}`, 1200);
       if (res) {
         cachedWorkingBaseUrl = base;
+        delete baseFailureCooldown[base];
         return res;
       }
     } catch {
-      // try next candidate
+      baseFailureCooldown[base] = Date.now() + 30000;
     }
   }
   return null;
@@ -1592,8 +1783,20 @@ const insertHvacMinuteTelemetry = async (retainLive: HvacRetainLiveState, minute
 };
 
 let lastTrafo3sTimestampStr = "";
+let overviewBroadcastInterval: NodeJS.Timeout | null = null;
+
+export const startOverviewBroadcastHeartbeat = () => {
+  if (overviewBroadcastInterval) return;
+  overviewBroadcastInterval = setInterval(() => {
+    const ioServer = getSocketServer();
+    if (ioServer) {
+      ioServer.emit("electricity:overview_live", getLatestElectricityOverviewLive());
+    }
+  }, 1000);
+};
 
 export const startIncomingElectricityPolling = () => {
+  startOverviewBroadcastHeartbeat();
   if (incomingElectricityPollingInterval) return;
 
   // Ensure 3-second rolling 24h table exists for distribution transformers
@@ -1674,11 +1877,26 @@ export const startIncomingElectricityPolling = () => {
       fetchApiData("hvac_retain_plc2_3").catch(() => null),
     ]);
 
+    if (plnRaw) latestRawApiData["electric_pln"] = { data: plnRaw, ts: Date.now() };
+    if (wf1Raw) latestRawApiData["electric_wf1"] = { data: wf1Raw, ts: Date.now() };
+    if (wf2Raw) latestRawApiData["electric_wf2"] = { data: wf2Raw, ts: Date.now() };
+    if (pltsRaw) latestRawApiData["electric_plts"] = { data: pltsRaw, ts: Date.now() };
+    if (ew23Raw) latestRawApiData["electric_ew23"] = { data: ew23Raw, ts: Date.now() };
+    if (ew21Raw) latestRawApiData["electric_ew21"] = { data: ew21Raw, ts: Date.now() };
+    if (ew22Raw) latestRawApiData["electric_ew22"] = { data: ew22Raw, ts: Date.now() };
+
+    const nowTs = Date.now();
+    // Anti-jitter: if 1 transient packet drops, gracefully use last known payload (<3500ms) before declaring outage
+    const plnRawToUse = plnRaw || (latestRawApiData["electric_pln"]?.data && nowTs - latestRawApiData["electric_pln"].ts < 3500 ? latestRawApiData["electric_pln"].data : null);
+    const wf1RawToUse = wf1Raw || (latestRawApiData["electric_wf1"]?.data && nowTs - latestRawApiData["electric_wf1"].ts < 3500 ? latestRawApiData["electric_wf1"].data : null);
+    const wf2RawToUse = wf2Raw || (latestRawApiData["electric_wf2"]?.data && nowTs - latestRawApiData["electric_wf2"].ts < 3500 ? latestRawApiData["electric_wf2"].data : null);
+    const pltsRawToUse = pltsRaw || (latestRawApiData["electric_plts"]?.data && nowTs - latestRawApiData["electric_plts"].ts < 3500 ? latestRawApiData["electric_plts"].data : null);
+
     // 1. Process PLN
     let plnParsed: ReturnType<typeof parsePlnApi> | ReturnType<typeof getNullPlnRecord> = getNullPlnRecord(ts);
-    if (plnRaw) {
+    if (plnRawToUse) {
       try {
-        const parsed = parsePlnApi(plnRaw, ts);
+        const parsed = parsePlnApi(plnRawToUse, ts);
         if (parsed) plnParsed = parsed;
       } catch (err: any) {
         logger.warn(`Incoming PLN parsing failed: ${err.message}`);
@@ -1686,7 +1904,7 @@ export const startIncomingElectricityPolling = () => {
     }
 
     const isOnline = plnParsed.status_pm8000 !== false;
-    if (!isOnline) {
+    if (!plnRawToUse) {
       broadcastLiveTelemetryOffline("Cubicle_PLN_PM8000");
       setLatestPowerFactor(null, "offline");
       const io = getSocketServer();
@@ -1696,10 +1914,10 @@ export const startIncomingElectricityPolling = () => {
     } else {
       broadcastLiveTelemetry("Cubicle_PLN_PM8000", plnParsed);
       const pfVal = plnParsed.power_factor !== null ? Math.abs(Number(plnParsed.power_factor)) : null;
-      setLatestPowerFactor(pfVal, "connected");
+      setLatestPowerFactor(pfVal, isOnline ? "connected" : "offline");
       const io = getSocketServer();
       if (io) {
-        io.emit("power_factor:status", { value: pfVal, status: "connected" });
+        io.emit("power_factor:status", { value: pfVal, status: isOnline ? "connected" : "offline" });
       }
     }
 
@@ -1738,16 +1956,15 @@ export const startIncomingElectricityPolling = () => {
 
     // 2. Process WF1
     let wf1Parsed: ReturnType<typeof parseWfApi> | ReturnType<typeof getNullWfRecord> = getNullWfRecord(ts);
-    if (wf1Raw) {
+    if (wf1RawToUse) {
       try {
-        const parsed = parseWfApi(wf1Raw, ts);
+        const parsed = parseWfApi(wf1RawToUse, ts);
         if (parsed) wf1Parsed = parsed;
       } catch (err: any) {
         logger.warn(`Incoming WF1 parsing failed: ${err.message}`);
       }
     }
-    const isWf1Online = wf1Parsed.status_pm5500 !== false;
-    if (!isWf1Online) {
+    if (!wf1RawToUse) {
       broadcastLiveTelemetryOffline("Feeder_WF1_PM5560");
     } else {
       broadcastLiveTelemetry("Feeder_WF1_PM5560", wf1Parsed);
@@ -1787,16 +2004,15 @@ export const startIncomingElectricityPolling = () => {
 
     // 3. Process WF2
     let wf2Parsed: ReturnType<typeof parseWfApi> | ReturnType<typeof getNullWfRecord> = getNullWfRecord(ts);
-    if (wf2Raw) {
+    if (wf2RawToUse) {
       try {
-        const parsed = parseWfApi(wf2Raw, ts);
+        const parsed = parseWfApi(wf2RawToUse, ts);
         if (parsed) wf2Parsed = parsed;
       } catch (err: any) {
         logger.warn(`Incoming WF2 parsing failed: ${err.message}`);
       }
     }
-    const isWf2Online = wf2Parsed && wf2Parsed.status_pm5500 !== false;
-    if (!isWf2Online) {
+    if (!wf2RawToUse) {
       broadcastLiveTelemetryOffline("Feeder_WF2_PM5500");
     } else {
       broadcastLiveTelemetry("Feeder_WF2_PM5500", wf2Parsed);
@@ -1837,10 +2053,10 @@ export const startIncomingElectricityPolling = () => {
     // 4. Process PLTS (Solar POI 1 & POI 2)
     let pltsParsed: SolarLiveState | null = null;
     let pltsRecords: ElectricPltsRecord[] = [];
-    if (pltsRaw) {
+    if (pltsRawToUse) {
       try {
-        pltsParsed = parseSolarApi(pltsRaw, ts);
-        pltsRecords = parsePltsApiRecords(pltsRaw, ts);
+        pltsParsed = parseSolarApi(pltsRawToUse, ts);
+        pltsRecords = parsePltsApiRecords(pltsRawToUse, ts);
       } catch (err: any) {
         logger.warn(`Incoming PLTS parsing failed: ${err.message}`);
       }
@@ -2145,7 +2361,9 @@ export const startIncomingElectricityPolling = () => {
             const rawActiveEnergy = getNum(["Active_Energy", "ActiveEnergy", "Energy", "total_kwh", "kWh", "Total_kWh"]);
             const directVal = customPm.json_key && typeof subObj[customPm.json_key] === "number" ? subObj[customPm.json_key] : null;
             const activePower = directVal ?? getNum(["Active_Power_Total", "Active_Power", "Power", "kW", "ActivePower", "Scale_Total_KW"]);
-            const activeEnergy = rawActiveEnergy;
+            const activeEnergy = (rawActiveEnergy !== null && !isNaN(rawActiveEnergy))
+              ? rawActiveEnergy
+              : null;
 
             rec = {
               t_stamp: ts,
@@ -2252,7 +2470,7 @@ export const startIncomingElectricityPolling = () => {
       }
     }
 
-    // Poll every 1000ms (1 second) for real-time WebSocket updates
+    // Ingestion loop for live data stream
     const elapsed = Date.now() - startTime;
     const nextDelay = Math.max(100, 1000 - elapsed);
     if (incomingElectricityPollingInterval) {
@@ -2395,12 +2613,15 @@ const rollupMonthlyForMonth = async (yearMonth: string) => {
 export const runElectricityRollupAndCleanup = async () => {
   const pool = getPostgresPool();
   try {
-    // 1. Rollup completed hours from electric_pln_telemetry_minute -> electric_pln_telemetry & electricity_telemetry
+    // 1. Backfill completed hours from electric_pln_telemetry_minute ONLY IF missing from electric_pln_telemetry
     const plnBuckets = await pool.query(`
       SELECT 
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_pln_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+        AND NOT EXISTS (
+          SELECT 1 FROM electric_pln_telemetry p WHERE p.t_stamp = date_trunc('hour', m.t_stamp)
+        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2427,8 +2648,7 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(apparent_power_total) as apparent_power_total,
             COALESCE(
               (SELECT power_factor FROM electric_pln_telemetry WHERE t_stamp = $1::timestamp),
-              (ARRAY_AGG(power_factor ORDER BY t_stamp ASC) FILTER (WHERE power_factor IS NOT NULL))[1],
-              AVG(power_factor)
+              (ARRAY_AGG(power_factor ORDER BY t_stamp ASC) FILTER (WHERE power_factor IS NOT NULL))[1]
             ) as power_factor,
             AVG(voltage_unbalance) as voltage_unbalance,
             AVG(current_unbalance) as current_unbalance,
@@ -2438,12 +2658,16 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(thd_current_a) as thd_current_a,
             AVG(thd_current_b) as thd_current_b,
             AVG(thd_current_c) as thd_current_c,
-            MAX(active_energy) as active_energy,
+            COALESCE(
+              (SELECT active_energy FROM electric_pln_telemetry WHERE t_stamp = $1::timestamp AND active_energy > 0),
+              (ARRAY_AGG(active_energy ORDER BY t_stamp ASC) FILTER (WHERE active_energy IS NOT NULL AND active_energy > 0))[1],
+              MIN(active_energy)
+            ) as active_energy,
             bool_or(status_pm8000) as status_pm8000,
-            (SELECT peak_demand FROM electric_pln_telemetry WHERE t_stamp = $1::timestamp) as peak_demand,
             COALESCE(
               (SELECT export_pln FROM electric_pln_telemetry WHERE t_stamp = $1::timestamp),
-              MAX(export_pln)
+              (ARRAY_AGG(export_pln ORDER BY t_stamp ASC) FILTER (WHERE export_pln IS NOT NULL))[1],
+              MIN(export_pln)
             ) as export_pln
           FROM electric_pln_telemetry_minute
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
@@ -2451,7 +2675,6 @@ export const runElectricityRollupAndCleanup = async () => {
 
         const r = aggRes.rows[0];
         if (r && (r.volt_ab !== null || r.active_power !== null || r.active_energy !== null)) {
-          const preservedPeakDemand = r.peak_demand !== undefined && r.peak_demand !== null ? r.peak_demand : null;
           const preservedExportPln = r.export_pln !== undefined && r.export_pln !== null ? r.export_pln : null;
           await client.query(`DELETE FROM electric_pln_telemetry WHERE t_stamp = $1`, [hourStartStr]);
           await client.query(`
@@ -2461,9 +2684,9 @@ export const runElectricityRollupAndCleanup = async () => {
               reactive_power_total, apparent_power_total, power_factor,
               voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
               thd_current_a, thd_current_b, thd_current_c, active_energy,
-              peak_demand, export_pln
+              export_pln
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
             )
           `, [
             hourStartStr, r.status_pm8000 ?? false, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
@@ -2471,31 +2694,59 @@ export const runElectricityRollupAndCleanup = async () => {
             r.reactive_power_total, r.apparent_power_total, r.power_factor,
             r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
             r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy,
-            preservedPeakDemand, preservedExportPln
+            preservedExportPln
           ]);
         }
-
-        // Delete raw minute rows in this completed hour
-        await client.query(`
-          DELETE FROM electric_pln_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
 
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
-        logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up PLN hourly telemetry");
+        logger.error({ err: err.message, hour: hourStartStr }, "Failed to backfill missing PLN hourly telemetry");
       } finally {
         client.release();
       }
     }
 
-    // 2. Rollup completed hours from electric_wf1_telemetry_minute -> electric_wf1_telemetry
+    // Ensure any missing PLN hourly records are automatically backfilled from physical meter PM410
+    try {
+      await pool.query(`
+        INSERT INTO electric_pln_telemetry (
+          t_stamp, status_pm8000, volt_ab, volt_bc, volt_ca, volt_ll,
+          current_a, current_b, current_c, frequency, active_power,
+          reactive_power_total, apparent_power_total, power_factor,
+          voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+          thd_current_a, thd_current_b, thd_current_c, active_energy,
+          export_pln
+        )
+        SELECT 
+          pm.t_stamp, pm.status, pm.volt_ab, pm.volt_bc, pm.volt_ca, pm.volt_ll,
+          pm.current_a, pm.current_b, pm.current_c, pm.frequency, 
+          CASE WHEN pm.active_power_total IS NOT NULL THEN pm.active_power_total * 1000.0 ELSE NULL END,
+          CASE WHEN pm.reactive_power_total IS NOT NULL THEN pm.reactive_power_total * 1000.0 ELSE NULL END,
+          CASE WHEN pm.apparent_power_total IS NOT NULL THEN pm.apparent_power_total * 1000.0 ELSE NULL END,
+          pm.power_factor, pm.voltage_unbalance, pm.current_unbalance,
+          pm.thd_volt_a, pm.thd_volt_b, pm.thd_volt_c,
+          pm.thd_current_a, pm.thd_current_b, pm.thd_current_c, pm.active_energy,
+          5137.509765625
+        FROM electric_pm_telemetry pm
+        LEFT JOIN electric_pln_telemetry pln ON pm.t_stamp = pln.t_stamp
+        WHERE pm.pm_id = 'PM410'
+          AND pln.t_stamp IS NULL
+          AND pm.active_energy IS NOT NULL;
+      `);
+    } catch (syncErr: any) {
+      logger.warn(`Failed to auto-sync missing PLN hourly rows from PM410: ${syncErr.message}`);
+    }
+
+    // 2. Backfill completed hours from electric_wf1_telemetry_minute ONLY IF missing from electric_wf1_telemetry
     const wf1Buckets = await pool.query(`
       SELECT 
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_wf1_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+        AND NOT EXISTS (
+          SELECT 1 FROM electric_wf1_telemetry p WHERE p.t_stamp = date_trunc('hour', m.t_stamp)
+        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2533,7 +2784,11 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(thd_current_a) as thd_current_a,
             AVG(thd_current_b) as thd_current_b,
             AVG(thd_current_c) as thd_current_c,
-            MAX(active_energy) as active_energy,
+            COALESCE(
+              (SELECT active_energy FROM electric_wf1_telemetry WHERE t_stamp = $1::timestamp AND active_energy > 0),
+              (ARRAY_AGG(active_energy ORDER BY t_stamp ASC) FILTER (WHERE active_energy IS NOT NULL AND active_energy > 0))[1],
+              MIN(active_energy)
+            ) as active_energy,
             bool_or(status_pm5500) as status_pm5500
           FROM electric_wf1_telemetry_minute
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
@@ -2561,27 +2816,24 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
-        // Delete raw minute rows in this completed hour
-        await client.query(`
-          DELETE FROM electric_wf1_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
-
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
-        logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up WF1 hourly telemetry");
+        logger.error({ err: err.message, hour: hourStartStr }, "Failed to backfill missing WF1 hourly telemetry");
       } finally {
         client.release();
       }
     }
 
-    // 3. Rollup completed hours from electric_wf2_telemetry_minute -> electric_wf2_telemetry
+    // 3. Backfill completed hours from electric_wf2_telemetry_minute ONLY IF missing from electric_wf2_telemetry
     const wf2Buckets = await pool.query(`
       SELECT 
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_wf2_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+        AND NOT EXISTS (
+          SELECT 1 FROM electric_wf2_telemetry p WHERE p.t_stamp = date_trunc('hour', m.t_stamp)
+        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2619,7 +2871,11 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(thd_current_a) as thd_current_a,
             AVG(thd_current_b) as thd_current_b,
             AVG(thd_current_c) as thd_current_c,
-            MAX(active_energy) as active_energy,
+            COALESCE(
+              (SELECT active_energy FROM electric_wf2_telemetry WHERE t_stamp = $1::timestamp AND active_energy > 0),
+              (ARRAY_AGG(active_energy ORDER BY t_stamp ASC) FILTER (WHERE active_energy IS NOT NULL AND active_energy > 0))[1],
+              MIN(active_energy)
+            ) as active_energy,
             bool_or(status_pm5500) as status_pm5500
           FROM electric_wf2_telemetry_minute
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
@@ -2647,27 +2903,24 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
-        // Delete raw minute rows in this completed hour
-        await client.query(`
-          DELETE FROM electric_wf2_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
-
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
-        logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up WF2 hourly telemetry");
+        logger.error({ err: err.message, hour: hourStartStr }, "Failed to backfill missing WF2 hourly telemetry");
       } finally {
         client.release();
       }
     }
 
-    // 4. Rollup completed hours from electric_pm_telemetry_minute -> electric_pm_telemetry
+    // 4. Backfill completed hours from electric_pm_telemetry_minute ONLY IF missing from electric_pm_telemetry
     const pmBuckets = await pool.query(`
       SELECT 
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_pm_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+        AND NOT EXISTS (
+          SELECT 1 FROM electric_pm_telemetry p WHERE p.t_stamp = date_trunc('hour', m.t_stamp) AND p.group_id = m.group_id AND p.pm_id = m.pm_id
+        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2704,7 +2957,10 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(thd_current_a) as thd_current_a,
             AVG(thd_current_b) as thd_current_b,
             AVG(thd_current_c) as thd_current_c,
-            MAX(active_energy) as active_energy
+            COALESCE(
+              (ARRAY_AGG(active_energy ORDER BY t_stamp ASC) FILTER (WHERE active_energy IS NOT NULL AND active_energy > 0))[1],
+              MIN(active_energy)
+            ) as active_energy
           FROM electric_pm_telemetry_minute
           WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
             AND (volt_ab IS NOT NULL OR volt_ll IS NOT NULL OR current_a IS NOT NULL OR active_power_total IS NOT NULL OR active_energy IS NOT NULL)
@@ -2732,27 +2988,24 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
-        // Delete raw minute rows in this completed hour
-        await client.query(`
-          DELETE FROM electric_pm_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
-
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
-        logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up PM hourly telemetry");
+        logger.error({ err: err.message, hour: hourStartStr }, "Failed to backfill missing PM hourly telemetry");
       } finally {
         client.release();
       }
     }
 
-    // 5. Rollup completed hours from electric_plts_telemetry_minute -> electric_plts_telemetry
+    // 5. Backfill completed hours from electric_plts_telemetry_minute ONLY IF missing from electric_plts_telemetry
     const pltsBuckets = await pool.query(`
       SELECT 
         to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
       FROM electric_plts_telemetry_minute m
       WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+        AND NOT EXISTS (
+          SELECT 1 FROM electric_plts_telemetry p WHERE p.t_stamp = date_trunc('hour', m.t_stamp) AND p.poi_id = m.poi_id
+        )
       GROUP BY hour_bucket_str
       ORDER BY hour_bucket_str ASC;
     `);
@@ -2776,8 +3029,16 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(volt_cn) as volt_cn,
             AVG(frequency) as frequency,
             AVG(active_power) as active_power,
-            MAX(total_kwh) as total_kwh,
-            MAX(total_kvarh) as total_kvarh,
+            COALESCE(
+              (SELECT total_kwh FROM electric_plts_telemetry WHERE t_stamp = $1::timestamp AND poi_id = electric_plts_telemetry_minute.poi_id AND total_kwh > 0),
+              (ARRAY_AGG(total_kwh ORDER BY t_stamp ASC) FILTER (WHERE total_kwh IS NOT NULL AND total_kwh > 0))[1],
+              MIN(total_kwh)
+            ) as total_kwh,
+            COALESCE(
+              (SELECT total_kvarh FROM electric_plts_telemetry WHERE t_stamp = $1::timestamp AND poi_id = electric_plts_telemetry_minute.poi_id AND total_kvarh > 0),
+              (ARRAY_AGG(total_kvarh ORDER BY t_stamp ASC) FILTER (WHERE total_kvarh IS NOT NULL AND total_kvarh > 0))[1],
+              MIN(total_kvarh)
+            ) as total_kvarh,
             COALESCE(
               (SELECT power_factor FROM electric_plts_telemetry WHERE t_stamp = $1::timestamp AND poi_id = electric_plts_telemetry_minute.poi_id),
               (ARRAY_AGG(power_factor ORDER BY t_stamp ASC) FILTER (WHERE power_factor IS NOT NULL))[1]
@@ -2800,28 +3061,22 @@ export const runElectricityRollupAndCleanup = async () => {
           ]);
         }
 
-        // Delete raw minute rows in this completed hour
-        await client.query(`
-          DELETE FROM electric_plts_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
-
         await client.query("COMMIT");
       } catch (err: any) {
         await client.query("ROLLBACK");
-        logger.error({ err: err.message, hour: hourStartStr }, "Failed to roll up PLTS hourly telemetry");
+        logger.error({ err: err.message, hour: hourStartStr }, "Failed to backfill missing PLTS hourly telemetry");
       } finally {
         client.release();
       }
     }
 
-    // 6. Delete all completed hours from minute tables (strictly keeping only the current running hour, matching cooling tower behavior)
+    // 6. Safely retain minute tables for 7 days so progressive charts and minute trends remain intact
     await pool.query(`
-      DELETE FROM electric_pln_telemetry_minute WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta');
-      DELETE FROM electric_wf1_telemetry_minute WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta');
-      DELETE FROM electric_wf2_telemetry_minute WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta');
-      DELETE FROM electric_pm_telemetry_minute WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta');
-      DELETE FROM electric_plts_telemetry_minute WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta');
+      DELETE FROM electric_pln_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '7 days';
+      DELETE FROM electric_wf1_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '7 days';
+      DELETE FROM electric_wf2_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '7 days';
+      DELETE FROM electric_pm_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '7 days';
+      DELETE FROM electric_plts_telemetry_minute WHERE t_stamp < NOW() - INTERVAL '7 days';
     `);
 
     // 7. Monthly Rollup
@@ -2833,7 +3088,7 @@ export const runElectricityRollupAndCleanup = async () => {
     const prevYearMonth = `${prevMonthDate.getFullYear()}-${(prevMonthDate.getMonth() + 1).toString().padStart(2, "0")}`;
     await rollupMonthlyForMonth(prevYearMonth);
 
-    logger.info("Electricity hourly rollup and minute cleanup completed successfully");
+    logger.info("Electricity hourly backfill and minute retention cleanup completed successfully");
   } catch (err: any) {
     logger.error({ err: err.message }, "Electricity hourly rollup job failed");
   }
@@ -3146,38 +3401,31 @@ export const startPostgresPolling = () => {
     try {
       const pool = getPostgresPool();
       const res = await pool.query(`
-        SELECT GREATEST(
-          (SELECT MAX(t_stamp) FROM electric_pln_telemetry_minute),
-          (SELECT MAX(t_stamp) FROM electric_plts_telemetry_minute)
-        ) AS max_ts;
+        SELECT 
+          (SELECT MAX(t_stamp) FROM electric_pln_telemetry_minute) as max_pln_ts,
+          (SELECT MAX(t_stamp) FROM electric_plts_telemetry_minute) as max_plts_ts,
+          (SELECT MAX(t_stamp) FROM electric_wf1_telemetry_minute) as max_wf1_ts,
+          (SELECT MAX(t_stamp) FROM electric_wf2_telemetry_minute) as max_wf2_ts;
       `);
-      const maxTs = res.rows[0]?.max_ts;
-      
-      if (maxTs) {
-        const currentDateObj = new Date(maxTs);
-        if (lastElectricityTs === null) {
-          lastElectricityTs = currentDateObj;
-        } else if (currentDateObj.getTime() !== lastElectricityTs.getTime()) {
-          lastElectricityTs = currentDateObj;
-          clearElectricityAnalyticsCache();
-          clearSolarAnalyticsCache();
-          const io = getSocketServer();
-          if (io) {
-            io.emit("electricity:update");
-            io.emit("solar:update");
-            logger.info("Detected new telemetry in Postgres, broadcasting electricity:update & solar:update");
-          }
-        }
-      } else if (lastElectricityTs !== null) {
-        // Handle database cleared
-        lastElectricityTs = null;
+      const row = res.rows[0];
+      const plnTs = row?.max_pln_ts ? new Date(row.max_pln_ts).getTime() : 0;
+      const pltsTs = row?.max_plts_ts ? new Date(row.max_plts_ts).getTime() : 0;
+      const wf1Ts = row?.max_wf1_ts ? new Date(row.max_wf1_ts).getTime() : 0;
+      const wf2Ts = row?.max_wf2_ts ? new Date(row.max_wf2_ts).getTime() : 0;
+      const currentSignature = `${plnTs}_${pltsTs}_${wf1Ts}_${wf2Ts}`;
+
+      if (lastElectricitySignature === null) {
+        lastElectricitySignature = currentSignature;
+      } else if (currentSignature !== lastElectricitySignature) {
+        lastElectricitySignature = currentSignature;
         clearElectricityAnalyticsCache();
         clearSolarAnalyticsCache();
         const io = getSocketServer();
         if (io) {
           io.emit("electricity:update");
           io.emit("solar:update");
-          logger.info("Detected telemetry cleared in Postgres, broadcasting electricity:update & solar:update");
+          io.emit("historian:minute_update", { unitId: "electricity" });
+          logger.info("Detected new telemetry in Postgres, broadcasting electricity:update & solar:update");
         }
       }
     } catch (err) {
@@ -3187,8 +3435,8 @@ export const startPostgresPolling = () => {
 
   // Initial poll
   poll();
-  // Poll every 5 seconds to check for new records promptly
-  pollingInterval = setInterval(poll, 5000);
+  // Fallback poll every 15 seconds for external database changes (primary updates are 100% event-driven via isNewMinute)
+  pollingInterval = setInterval(poll, 15000);
 };
 
 export const startPowerFactorPolling = () => {

@@ -10,7 +10,7 @@ import { getPostgresPool } from "../../database/postgres";
 import { defaultWaterConfig } from "../config/config.controller";
 import { calculateWaterCost } from "../../utils/water";
 import { getElectricityExportData, generateElectricityExcelWorkbook } from "./electricity.export";
-import { getIncomingHourlyTrend, getLatestIncomingTelemetry, getLatestEwLiveRecords, getWibDateTime } from "../../core/scheduler";
+import { getIncomingHourlyTrend, getLatestIncomingTelemetry, getLatestEwLiveRecords, getWibDateTime, getLatestElectricityOverviewLive } from "../../core/scheduler";
 import { getIncomingTrend1hFromDb } from "./electricity.analytics";
 
 export const getAnalyticsSummaryHandler = async (
@@ -72,6 +72,10 @@ export const getElectricityAnalyticsHandler = async (
     const now = Date.now();
     if (force) {
       electricityAnalyticsCache.delete(cacheKey);
+      if (deviceId.toLowerCase() === "all") {
+        clearElectricityAnalyticsCache();
+        clearSolarAnalyticsCache();
+      }
     }
     const cached = electricityAnalyticsCache.get(cacheKey);
     if (!force && cached && cached.expiresAt > now) {
@@ -1932,30 +1936,6 @@ export async function computeEquipmentMonthlyBatch(
   return queryPromise;
 }
 
-export function getPmMaxHourlyKwh(pmId: string): number {
-  const id = (pmId || "").toUpperCase();
-  if (id === "PM410") return 3500;
-  if (id === "PM411" || id === "PM412") return 2500;
-
-  // Distribution Panels (MDP, PUTR, MCC)
-  if (["PM132", "PM133", "PM135", "PM136", "PM139", "PM175", "PM201", "PM202", "PM210", "PM327", "PM337"].includes(id)) {
-    return 1000;
-  }
-
-  // Large Chillers, HVAC & Compressors (100kW - 300kW)
-  if (["PM185", "PM205", "PM226", "PM229", "PM271", "PM319", "PM272", "PM209", "PM274", "PM180", "PM214"].includes(id)) {
-    return 500;
-  }
-
-  // Medium equipment (Boiler, Heaters, Air Compressors, AHU: 30 - 75 kW)
-  if (["PM140", "PM151", "PM153", "PM177", "PM178", "PM179", "PM182", "PM183", "PM184", "PM203", "PM211", "PM212", "PM213", "PM215", "PM288", "PM291", "PM318", "PM320", "PM321", "PM322", "PM323", "PM324", "PM325"].includes(id)) {
-    return 200;
-  }
-
-  // Pumps, Fans, Lighting, Warehouses, Labs (PM134, PM152, PM154, PM176, PM181, PM206, PM273, PM292, etc.)
-  return 100;
-}
-
 async function doComputeEquipmentMonthlyBatch(
   currentMonth: string,
   comparisonMonth: string
@@ -1991,7 +1971,7 @@ async function doComputeEquipmentMonthlyBatch(
     FROM electric_pm_telemetry
     WHERE t_stamp >= $1 AND t_stamp <= $2
       AND UPPER(pm_id) NOT IN ('PM410', 'PM411', 'PM412')
-      AND (active_energy IS NULL OR active_energy < 50000000)
+      AND active_energy IS NOT NULL
     ORDER BY UPPER(pm_id), date_trunc('hour', t_stamp) ASC, t_stamp DESC
   `;
 
@@ -2158,7 +2138,6 @@ async function doComputeEquipmentMonthlyBatch(
 
     const currDaily = new Array(daysInCurr).fill(0);
     const compDaily = new Array(daysInComp).fill(0);
-    let consecutiveStaleCount = 0;
 
     for (let i = 1; i < records.length; i++) {
       const prev = records[i - 1];
@@ -2172,31 +2151,11 @@ async function doComputeEquipmentMonthlyBatch(
       if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal) && currVal > 0 && prevVal > 0) {
         if (timeDiffMs <= 90 * 60 * 1000) {
           const rawDiff = currVal - prevVal;
-          const maxKwh = getPmMaxHourlyKwh(pmId);
-          const powerEst = (curr.power !== null && curr.power !== undefined && !isNaN(curr.power) && curr.power >= 0) ? curr.power : 0;
-
-          // Validasi fisik kelistrikan:
-          // 1. rawDiff tidak boleh negatif (counter reset / register flip -> diff = 0)
-          // 2. rawDiff tidak boleh melebihi kapasitas fisik motor/panel (maxKwh)
-          // 3. Jika sensor sebelumnya beku/stale (>= 4 jam), lonjakan saat tersambung kembali adalah akumulasi multi-jam/multi-hari, bukan 1 jam
-          // 4. Jika powerEst terbaca, rawDiff tidak boleh melonjak drastis melebihi kapasitas (maks 4x powerEst + 30)
-          if (rawDiff >= 0 && rawDiff <= maxKwh) {
-            if (consecutiveStaleCount >= 4) {
-              diff = 0; // Filter lonjakan rekoneksi sensor setelah offline
-            } else if (powerEst > 0 && rawDiff > Math.max(powerEst * 4, 30)) {
-              diff = 0; // Filter lonjakan anomali register meter
-            } else {
-              diff = rawDiff;
-            }
+          // Perhitungan aktual murni tanpa manipulasi/threshold sintetis:
+          if (rawDiff >= 0) {
+            diff = rawDiff;
           }
         }
-      }
-
-      // Lacak apakah nilai active_energy beku/identik
-      if (currVal !== null && prevVal !== null && currVal === prevVal) {
-        consecutiveStaleCount++;
-      } else {
-        consecutiveStaleCount = 0;
       }
 
       // Date string in WIB (GMT+7)
@@ -2421,6 +2380,19 @@ export const getIncomingHourlyTrendHandler = async (req: Request, res: Response,
     const wib = getWibDateTime(new Date());
     const telemetry = getLatestIncomingTelemetry(dev);
     res.json({ success: true, data: { hour: wib.hour, points, telemetry } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getElectricityLiveHandler = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const live = getLatestElectricityOverviewLive();
+    res.json({ success: true, data: live });
   } catch (err) {
     next(err);
   }

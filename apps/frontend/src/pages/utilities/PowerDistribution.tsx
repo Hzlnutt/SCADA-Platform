@@ -393,7 +393,7 @@ const INITIAL_TRANSFORMERS: TransformerData[] = [
   }
 ];
 
-const TARIF_PER_KWH = 1114.74; // Industrial I-3 tariff in IDR
+const TARIF_PER_KWH = 1035.78; // Industrial I-3 tariff in IDR
 
 const formatCurrencyIDR = (v: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(v);

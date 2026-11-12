@@ -52,8 +52,8 @@ type ConfigState = {
 };
 
 export const useConfigStore = create<ConfigState>((set) => ({
-  wbpRate: 1600,
-  lwbpRate: 1112,
+  wbpRate: 1553.67,
+  lwbpRate: 1035.78,
   pvRate: 549,
   waterConfig: {
     taxRate: 0.20,
@@ -67,7 +67,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
     ]
   },
   electricityTariffs: [
-    { validFrom: "2024-01", wbpRate: 1600, lwbpRate: 1112 }
+    { validFrom: "2026-01", wbpRate: 1553.67, lwbpRate: 1035.78 }
   ],
   gasConfig: null,
   gasCategories: [],
@@ -95,7 +95,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
           ...(res.data.gasConfig ? { gasConfig: res.data.gasConfig } : {}),
           ...(res.data.gasCategories ? { gasCategories: res.data.gasCategories } : {}),
           electricityTariffs: res.data.electricityTariffs || [
-            { validFrom: "2024-01", wbpRate: res.data.wbpRate, lwbpRate: res.data.lwbpRate }
+            { validFrom: "2026-01", wbpRate: res.data.wbpRate, lwbpRate: res.data.lwbpRate }
           ]
         });
       }
