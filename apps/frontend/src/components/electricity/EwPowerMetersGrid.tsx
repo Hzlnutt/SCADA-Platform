@@ -54,6 +54,12 @@ export function EwPowerMetersGrid({
 
   const onlineCount = powerMeters.filter((pm) => pm.status !== false).length;
 
+  const totalKw = useMemo(() => {
+    const valid = powerMeters.filter((pm) => pm.active_power_total !== null && pm.active_power_total !== undefined && Number(pm.active_power_total) > 0);
+    if (valid.length === 0) return null;
+    return Number(valid.reduce((sum, pm) => sum + Number(pm.active_power_total), 0).toFixed(1));
+  }, [powerMeters]);
+
   return (
     <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
       {/* Header Bar */}
@@ -78,6 +84,20 @@ export function EwPowerMetersGrid({
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Quick Total Load Badge */}
+          <div className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm flex items-center gap-2">
+            <span className="text-[10px] font-extrabold uppercase text-slate-400">Total Beban:</span>
+            {totalKw !== null ? (
+              <span className="text-xs font-mono font-extrabold text-sky-600 dark:text-sky-400">
+                {totalKw.toLocaleString("id-ID")} kW
+              </span>
+            ) : (
+              <span className="text-[10px] font-extrabold text-amber-500">
+                {NO_REALTIME_API}
+              </span>
+            )}
+          </div>
+
           {/* Search Input */}
           <div className="relative">
             <input

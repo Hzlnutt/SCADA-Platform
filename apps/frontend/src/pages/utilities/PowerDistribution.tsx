@@ -12,6 +12,7 @@ import { EwPowerMetersGrid } from "../../components/electricity/EwPowerMetersGri
 import type { ElectricPmItem } from "../../components/electricity/PmDetailModal";
 import { getPmSortIndex } from "../../data/pmMapping";
 import { useTranslation } from "../../i18n/useTranslation";
+import { useConfigStore } from "../../store/config.store";
 
 /* ═══════════ DETAILED COVERED DIRECTORY ═══════════ */
 const COVERED_EQUIPMENT: Record<string, { group?: string; breaker: string; load: string; label: string }[]> = {
@@ -1671,6 +1672,10 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
     tx.currentS !== null && tx.currentS !== undefined &&
     tx.currentT !== null && tx.currentT !== undefined;
 
+  const storeLwbpRate = useConfigStore((state) => state.lwbpRate);
+  const effectiveRate = typeof storeLwbpRate === "number" && storeLwbpRate > 0 ? storeLwbpRate : TARIF_PER_KWH;
+  const estimatedCost = tx.kwh !== null ? tx.kwh * effectiveRate : null;
+
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
       {/* Card Header */}
@@ -1828,9 +1833,18 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
           </div>
           <div>
             <span className="text-[9px] text-slate-400 uppercase block font-bold">Estimasi Cost</span>
-            <span className="text-[9px] font-bold text-amber-500">
-              {NO_REALTIME_API}
-            </span>
+            {estimatedCost !== null ? (
+              <span
+                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono"
+                title={`Kalkulasi: ${tx.kwh?.toLocaleString("id-ID")} kWh × Rp ${effectiveRate.toLocaleString("id-ID")}/kWh (Tarif Industri)`}
+              >
+                {formatCurrencyIDR(estimatedCost)}
+              </span>
+            ) : (
+              <span className="text-[9px] font-bold text-amber-500">
+                {NO_REALTIME_API}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -2442,6 +2456,11 @@ export default function PowerDistribution() {
     });
   }, [telemetryTransformers, customSpecs, incomingData.wf1Volt, incomingData.wf2Volt]);
 
+  const fetchRates = useConfigStore((state) => state.fetchRates);
+  useEffect(() => {
+    fetchRates();
+  }, [fetchRates]);
+
   // Load specs & coverage from database on mount
   useEffect(() => {
     getJson<{ data: any[] }>("/config/electricity?configType=trafo_spec")
@@ -2980,6 +2999,16 @@ export default function PowerDistribution() {
     return Number(valid.reduce((sum, tx) => sum + Number(tx.activePowerKw || 0), 0).toFixed(1));
   }, [factory2]);
 
+  const systemTotalKw = useMemo(() => {
+    if (incomingData.plnKw !== null && incomingData.plnKw !== undefined && incomingData.plnKw > 0) {
+      return incomingData.plnKw;
+    }
+    if (f1TotalKw !== null || f2TotalKw !== null) {
+      return Number(((f1TotalKw || 0) + (f2TotalKw || 0)).toFixed(1));
+    }
+    return null;
+  }, [incomingData.plnKw, f1TotalKw, f2TotalKw]);
+
   const activeLineColor = isDark ? "#06b6d4" : "#3b82f6";
 
   return (
@@ -3003,6 +3032,10 @@ export default function PowerDistribution() {
             <span className="text-[10px] font-extrabold uppercase text-slate-400">{t("electricity.totalLoad")}</span>
             {loadingSld ? (
               <span className="inline-block h-5 w-20 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />
+            ) : systemTotalKw !== null ? (
+              <span className="text-base font-extrabold font-mono text-slate-800 dark:text-white">
+                {systemTotalKw.toLocaleString("id-ID")} <span className="text-xs text-slate-400 font-bold">kW</span>
+              </span>
             ) : (
               <span className="text-xs font-extrabold text-amber-500">
                 {NO_REALTIME_API}
