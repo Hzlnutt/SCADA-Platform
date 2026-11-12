@@ -976,6 +976,34 @@ const insertPmMinuteTelemetryBatch = async (records: ElectricPmRecord[], minuteT
         voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
         thd_current_a, thd_current_b, thd_current_c, active_energy
       ) VALUES ${valueClauses.join(", ")}
+      ON CONFLICT (t_stamp, pm_id) DO UPDATE SET
+        group_id = EXCLUDED.group_id,
+        status = EXCLUDED.status,
+        volt_ab = EXCLUDED.volt_ab,
+        volt_bc = EXCLUDED.volt_bc,
+        volt_ca = EXCLUDED.volt_ca,
+        volt_ll = EXCLUDED.volt_ll,
+        volt_an = EXCLUDED.volt_an,
+        volt_bn = EXCLUDED.volt_bn,
+        volt_cn = EXCLUDED.volt_cn,
+        volt_ln = EXCLUDED.volt_ln,
+        current_a = EXCLUDED.current_a,
+        current_b = EXCLUDED.current_b,
+        current_c = EXCLUDED.current_c,
+        frequency = EXCLUDED.frequency,
+        active_power_total = EXCLUDED.active_power_total,
+        reactive_power_total = EXCLUDED.reactive_power_total,
+        apparent_power_total = EXCLUDED.apparent_power_total,
+        power_factor = EXCLUDED.power_factor,
+        voltage_unbalance = EXCLUDED.voltage_unbalance,
+        current_unbalance = EXCLUDED.current_unbalance,
+        thd_volt_a = EXCLUDED.thd_volt_a,
+        thd_volt_b = EXCLUDED.thd_volt_b,
+        thd_volt_c = EXCLUDED.thd_volt_c,
+        thd_current_a = EXCLUDED.thd_current_a,
+        thd_current_b = EXCLUDED.thd_current_b,
+        thd_current_c = EXCLUDED.thd_current_c,
+        active_energy = EXCLUDED.active_energy
     `, params);
   } catch (err: any) {
     logger.warn(`Failed to insert PM minute telemetry batch: ${err.message}`);
