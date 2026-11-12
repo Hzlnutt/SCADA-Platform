@@ -441,9 +441,11 @@ export const getSolarAnalytics = async (
         const lastRow = rows[rows.length - 1];
         const lastTime = (lastRow.ts_text || "").split(" ")[1] || "";
         const lastMin = parseInt(lastTime.split(":")[1] || "0", 10);
-        // Data timestamp 10:17:00 adalah batas akhir menit 16. Menit 17 baru selesai saat 10:18:00 masuk.
-        // Maka menit progresif yang telah terkalkulasi adalah lastMin - 1 (contoh: 10:00 - 10:16).
-        lastProgressiveMinute = Math.max(0, lastMin - 1);
+        lastProgressiveMinute = lastMin;
+      } else if (rows.length === 1) {
+        const lastTime = (rows[0].ts_text || "").split(" ")[1] || "";
+        const rowMin = parseInt(lastTime.split(":")[1] || "0", 10);
+        lastProgressiveMinute = rowMin === 0 ? 0 : rowMin;
       }
 
       const totalProg = poi1Prog + poi2Prog;
@@ -451,6 +453,43 @@ export const getSolarAnalytics = async (
       hourlyPoi1[currentWibHour] = poi1Prog;
       hourlyPoi2[currentWibHour] = poi2Prog;
       hourly[currentWibHour] = totalProg;
+
+      // Proteksi transisi pergantian jam PLTS:
+      if (currentWibHour > 0 && (!hourly[currentWibHour - 1] || hourly[currentWibHour - 1] === 0)) {
+        const prevHourStart = `${todayStr} ${padHour(currentWibHour - 1)}:00:00`;
+        const prevMinRes = await pool.query(`
+          SELECT t_stamp::text as ts_text, poi_id, total_kwh::float as val
+          FROM electric_plts_telemetry_minute
+          WHERE t_stamp >= $1 AND t_stamp <= $2
+            AND total_kwh IS NOT NULL
+          ORDER BY t_stamp ASC
+        `, [prevHourStart, currentHourStart]);
+        const pRows = prevMinRes.rows;
+        let prevPoi1 = 0;
+        let prevPoi2 = 0;
+        const pPoi1Rows = pRows.filter((r: any) => r.poi_id === "POI_1");
+        if (pPoi1Rows.length >= 2) {
+          for (let i = 1; i < pPoi1Rows.length; i++) {
+            const pv = pPoi1Rows[i - 1].val;
+            const cv = pPoi1Rows[i].val;
+            if (pv !== null && cv !== null && pv > 0 && cv >= pv) prevPoi1 += (cv - pv);
+          }
+        }
+        const pPoi2Rows = pRows.filter((r: any) => r.poi_id === "POI_2");
+        if (pPoi2Rows.length >= 2) {
+          for (let i = 1; i < pPoi2Rows.length; i++) {
+            const pv = pPoi2Rows[i - 1].val;
+            const cv = pPoi2Rows[i].val;
+            if (pv !== null && cv !== null && pv > 0 && cv >= pv) prevPoi2 += (cv - pv);
+          }
+        }
+        const prevTot = prevPoi1 + prevPoi2;
+        if (prevTot > 0) {
+          hourlyPoi1[currentWibHour - 1] = prevPoi1;
+          hourlyPoi2[currentWibHour - 1] = prevPoi2;
+          hourly[currentWibHour - 1] = prevTot;
+        }
+      }
     } catch {}
 
     // Ensure all future hours (> currentWibHour) are 0

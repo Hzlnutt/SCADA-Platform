@@ -4804,12 +4804,12 @@ export default function Electricity() {
         bodyColor: isDark ? "#f8fafc" : "#0f172a",
         borderColor: isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(15, 23, 42, 0.15)",
         borderWidth: 2,
-        padding: 14,
-        boxPadding: 6,
-        titleFont: { family: "IBM Plex Mono, monospace", size: 14, weight: "bold" as const },
-        bodyFont: { family: "IBM Plex Mono, monospace", size: 13, weight: "bold" as const },
+        padding: 16,
+        boxPadding: 8,
+        titleFont: { family: "IBM Plex Mono, monospace", size: 16, weight: "700" as const },
+        bodyFont: { family: "IBM Plex Mono, monospace", size: 14.5, weight: "bold" as const },
         footerColor: isDark ? "#fbbf24" : "#b45309",
-        footerFont: { family: "IBM Plex Mono, monospace", size: 13, weight: "bold" as const },
+        footerFont: { family: "IBM Plex Mono, monospace", size: 14, weight: "bold" as const },
         filter: (tooltipItem: any) => tooltipItem.raw !== null && tooltipItem.raw > 0,
         callbacks: {
           title: (tooltipItems: any[]) => {
@@ -4822,16 +4822,14 @@ export default function Electricity() {
             }
             const todayStr = getLocalTodayString();
             const isToday = !chartStartDate || chartStartDate === todayStr;
+            const activeHour = typeof chartData?.charts?.currentHour === "number"
+              ? chartData.charts.currentHour
+              : liveClock.hour;
             if (isToday) {
-              if (h < liveClock.hour) {
-                return `${padH}:00 - ${padH}:59`;
-              } else if (h === liveClock.hour) {
-                // Sesuai kaidah metering SCADA & instruksi user:
-                // Menit berjalan (misal 10:17) belum dihitung karena belum ada data penutup 10:18.
-                // Maka menit progressive yang tampil dihitung sampai menit sebelumnya (10:00 - 10:16).
+              if (h === activeHour) {
                 const endM = typeof chartData?.charts?.progressiveMinute === "number"
                   ? chartData.charts.progressiveMinute
-                  : Math.max(0, liveClock.minute - 1);
+                  : liveClock.minute;
                 const padM = String(endM).padStart(2, "0");
                 return `${padH}:00 - ${padH}:${padM}`;
               } else {
@@ -4865,13 +4863,16 @@ export default function Electricity() {
               lines.push(`Zona Tarif: ${isWbpZone ? "WBP" : "LWBP"} (Rp ${activeRate.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/kWh)`);
               const todayStr = getLocalTodayString();
               const isToday = !chartStartDate || chartStartDate === todayStr;
-              if (isToday && dataIndex === liveClock.hour) {
+              const activeHour = typeof chartData?.charts?.currentHour === "number"
+                ? chartData.charts.currentHour
+                : liveClock.hour;
+              if (isToday && dataIndex === activeHour) {
                 const endM = typeof chartData?.charts?.progressiveMinute === "number"
                   ? chartData.charts.progressiveMinute
-                  : Math.max(0, liveClock.minute - 1);
+                  : liveClock.minute;
                 const padM = String(endM).padStart(2, "0");
                 lines.push(`Status: Progresif ${endM} menit (menit :00 s/d :${padM} real-time)`);
-              } else if (isToday && dataIndex < liveClock.hour) {
+              } else if (isToday && dataIndex < activeHour) {
                 lines.push(`Durasi: 60 Menit penuh`);
               }
             }
@@ -5169,13 +5170,13 @@ export default function Electricity() {
         titleColor: isDark ? "#ffffff" : "#000000",
         bodyColor: isDark ? "#f8fafc" : "#0f172a",
         borderColor: isDark ? "rgba(51, 65, 85, 0.8)" : "rgba(226, 232, 240, 1)",
-        borderWidth: 1.5,
-        padding: 14,
-        boxPadding: 6,
-        titleFont: { family: "IBM Plex Mono, monospace", size: 14, weight: "bold" as const },
-        bodyFont: { family: "IBM Plex Mono, monospace", size: 13, weight: "bold" as const },
+        borderWidth: 2,
+        padding: 16,
+        boxPadding: 8,
+        titleFont: { family: "IBM Plex Mono, monospace", size: 16, weight: "700" as const },
+        bodyFont: { family: "IBM Plex Mono, monospace", size: 14.5, weight: "bold" as const },
         footerColor: isDark ? "#38bdf8" : "#0284c7",
-        footerFont: { family: "IBM Plex Mono, monospace", size: 13, weight: "bold" as const },
+        footerFont: { family: "IBM Plex Mono, monospace", size: 14, weight: "bold" as const },
         filter: (tooltipItem: any) => tooltipItem.raw !== null && tooltipItem.raw > 0,
         callbacks: {
           title: (tooltipItems: any[]) => {
@@ -5188,16 +5189,14 @@ export default function Electricity() {
             }
             const todayStr = getLocalTodayString();
             const isToday = !solarStartDate || solarStartDate === todayStr;
+            const activeHour = typeof solarData?.charts?.currentHour === "number"
+              ? solarData.charts.currentHour
+              : liveClock.hour;
             if (isToday) {
-              if (h < liveClock.hour) {
-                return `${padH}:00 - ${padH}:59`;
-              } else if (h === liveClock.hour) {
-                // Sesuai kaidah metering SCADA & instruksi user:
-                // Menit berjalan (misal 10:17) belum dihitung karena belum ada data penutup 10:18.
-                // Maka menit progressive yang tampil dihitung sampai menit sebelumnya (10:00 - 10:16).
+              if (h === activeHour) {
                 const endM = typeof solarData?.charts?.progressiveMinute === "number"
                   ? solarData.charts.progressiveMinute
-                  : Math.max(0, liveClock.minute - 1);
+                  : liveClock.minute;
                 const padM = String(endM).padStart(2, "0");
                 return `${padH}:00 - ${padH}:${padM}`;
               } else {
@@ -5233,13 +5232,16 @@ export default function Electricity() {
               lines.push(`Zona Tarif PLN: ${isWbpZone ? "WBP" : "LWBP"} (Rp ${plnRate.toLocaleString("id-ID", { minimumFractionDigits: 2 })}/kWh)`);
               const todayStr = getLocalTodayString();
               const isToday = !solarStartDate || solarStartDate === todayStr;
-              if (isToday && idx === liveClock.hour) {
+              const activeHour = typeof solarData?.charts?.currentHour === "number"
+                ? solarData.charts.currentHour
+                : liveClock.hour;
+              if (isToday && idx === activeHour) {
                 const endM = typeof solarData?.charts?.progressiveMinute === "number"
                   ? solarData.charts.progressiveMinute
-                  : Math.max(0, liveClock.minute - 1);
+                  : liveClock.minute;
                 const padM = String(endM).padStart(2, "0");
                 lines.push(`Status: Progresif ${endM} menit (menit :00 s/d :${padM} real-time)`);
-              } else if (isToday && idx < liveClock.hour) {
+              } else if (isToday && idx < activeHour) {
                 lines.push(`Durasi: 60 Menit penuh`);
               }
             }

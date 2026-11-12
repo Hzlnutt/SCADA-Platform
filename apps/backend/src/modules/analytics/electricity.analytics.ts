@@ -794,7 +794,7 @@ export const getElectricityAnalytics = async (
                 date_trunc('hour', t_stamp)::text AS ts_text,
                 ${energyCol}::float AS value
               FROM electric_plts_telemetry_minute
-              WHERE poi_id = $1 AND t_stamp > $2 AND t_stamp <= $3 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 5
+              WHERE poi_id = $1 AND t_stamp >= $2::timestamp + INTERVAL '1 hour' AND t_stamp <= $3 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 2
               ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
             `, [poiFilter, lastTsStr, toQueryVal]);
             for (const b of boundaries.rows) {
@@ -806,7 +806,7 @@ export const getElectricityAnalytics = async (
                 date_trunc('hour', t_stamp)::text AS ts_text,
                 ${energyCol}::float AS value
               FROM electric_plts_telemetry_minute
-              WHERE poi_id = $1 AND t_stamp >= $2 AND t_stamp <= $3 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 5
+              WHERE poi_id = $1 AND t_stamp >= $2 AND t_stamp <= $3 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 2
               ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
             `, [poiFilter, fromQueryVal, toQueryVal]);
             hourlyRecords = minAll.rows;
@@ -851,7 +851,7 @@ export const getElectricityAnalytics = async (
                 date_trunc('hour', t_stamp)::text AS ts_text,
                 CASE WHEN ${energyCol} <= 0 THEN NULL ELSE ${energyCol}::float END AS value
               FROM ${minuteTable}
-              WHERE t_stamp > $1 AND t_stamp <= $2 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 5
+              WHERE t_stamp >= $1::timestamp + INTERVAL '1 hour' AND t_stamp <= $2 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 2
               ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
             `, [lastTsStr, toQueryVal]);
             for (const b of boundaries.rows) {
@@ -863,7 +863,7 @@ export const getElectricityAnalytics = async (
                 date_trunc('hour', t_stamp)::text AS ts_text,
                 CASE WHEN ${energyCol} <= 0 THEN NULL ELSE ${energyCol}::float END AS value
               FROM ${minuteTable}
-              WHERE t_stamp >= $1 AND t_stamp <= $2 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 5
+              WHERE t_stamp >= $1 AND t_stamp <= $2 AND ${energyCol} > 0 AND date_part('minute', t_stamp) <= 2
               ORDER BY date_trunc('hour', t_stamp), t_stamp ASC
             `, [fromQueryVal, toQueryVal]);
             hourlyRecords = minAll.rows;
@@ -1126,19 +1126,66 @@ export const getElectricityAnalytics = async (
         const lastRow = rows[rows.length - 1];
         const lastTime = (lastRow.ts_text || "").split(" ")[1] || "";
         const lastMin = parseInt(lastTime.split(":")[1] || "0", 10);
-        // Data timestamp 10:17:00 adalah penutup menit 16. Menit 17 baru berjalan dan baru selesai saat 10:18:00 masuk.
-        // Maka menit progresif yang telah terkalkulasi adalah lastMin - 1 (contoh: 10:00 - 10:16).
-        lastProgressiveMinute = Math.max(0, lastMin - 1);
+        // Sesuai kaidah aktual: data menit :01 s/d :00 menunjukkan durasi menit aktual yang terukur
+        lastProgressiveMinute = lastMin;
       } else if (rows.length === 1 && rows[0].val > 0) {
-        const baseRes = await pool.query(`
-          SELECT ${queryCol}::float as val FROM ${tableName}
-          WHERE t_stamp = $1 ${filterClause} LIMIT 1
-        `, [currentHourStart]);
-        const baseVal = baseRes.rows[0]?.val;
-        if (baseVal && rows[0].val >= baseVal) {
-          progressiveKwh = rows[0].val - baseVal;
+        const lastTime = (rows[0].ts_text || "").split(" ")[1] || "";
+        const rowMin = parseInt(lastTime.split(":")[1] || "0", 10);
+        if (rowMin === 0) {
+          // Record tepat di awal jam (:00:00), belum ada menit berjalan -> durasi 0 menit
+          progressiveKwh = 0;
+          lastProgressiveMinute = 0;
+        } else {
+          // Record di tengah jam tanpa record awal jam di tabel menit, ambil baseVal dari tabel jam
+          const baseRes = await pool.query(`
+            SELECT ${queryCol}::float as val FROM ${tableName}
+            WHERE t_stamp = $1 ${filterClause} LIMIT 1
+          `, [currentHourStart]);
+          const baseVal = baseRes.rows[0]?.val;
+          if (baseVal && rows[0].val >= baseVal) {
+            progressiveKwh = rows[0].val - baseVal;
+          }
+          lastProgressiveMinute = rowMin;
         }
-        lastProgressiveMinute = 0;
+      }
+
+      // Proteksi transisi pergantian jam: jika jam sebelumnya (H-1) belum sempat terisi di hourlyValues,
+      // kalkulasikan secara mulus dari tabel menit agar grafik tidak pernah anjlok ke 0 saat transisi :59 -> :00
+      if (currentWibHour > 0 && (!hourlyValues[currentWibHour - 1] || hourlyValues[currentWibHour - 1] === 0)) {
+        const prevHourStart = `${todayStr} ${padHour(currentWibHour - 1)}:00:00`;
+        const prevMinRes = await pool.query(`
+          SELECT t_stamp::text as ts_text, ${queryCol}::float as val
+          FROM ${minuteTable}
+          WHERE t_stamp >= $1 AND t_stamp <= $2
+            AND ${queryCol} IS NOT NULL ${filterClause}
+          ORDER BY t_stamp ASC
+        `, [prevHourStart, currentHourStart]);
+        const pRows = prevMinRes.rows;
+        if (pRows.length >= 2) {
+          let prevHourKwh = 0;
+          for (let i = 1; i < pRows.length; i++) {
+            const pv = pRows[i - 1].val;
+            const cv = pRows[i].val;
+            if (pv !== null && cv !== null && pv > 0 && cv >= pv) {
+              prevHourKwh += (cv - pv);
+            }
+          }
+          if (prevHourKwh > 0) {
+            hourlyValues[currentWibHour - 1] = prevHourKwh;
+            const isPrevWbp = (currentWibHour - 1) >= 17 && (currentWibHour - 1) <= 21;
+            const currentTariff = getTariffForDate(todayStr, tariffs);
+            const pCost = prevHourKwh * (isPrevWbp ? currentTariff.wbpRate : currentTariff.lwbpRate);
+            if (isPrevWbp) {
+              hourlyWbpValues[currentWibHour - 1] = prevHourKwh;
+              todayWbpKwh += prevHourKwh;
+              todayWbpCost += pCost;
+            } else {
+              hourlyLwbpValues[currentWibHour - 1] = prevHourKwh;
+              todayLwbpKwh += prevHourKwh;
+              todayLwbpCost += pCost;
+            }
+          }
+        }
       }
 
       progressiveKwh = Math.max(0, progressiveKwh);
