@@ -211,9 +211,9 @@ export default function CoolingWF1U3Pid({
 
       {/* Pipe Makeup Water to Tank */}
       <PipeH x={940} y={336} w={58} h={6}
-        on={motorStatus["MTR-3"]} dir="left" type="cold" />
+        on={false} dir="left" type="cold" />
       <PipeV x={923} y={358} w={7} h={48}
-        on={motorStatus["MTR-9"]} dir="down" />
+        on={false} dir="down" />
       <PipeBend x={921} y={334} size={25} angle={90} />
 
       {/* Pipe Area to Tank*/}
