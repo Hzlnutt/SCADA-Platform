@@ -107,8 +107,8 @@ export default function PidPageTemplate({
         {/* Canvas Wrapper with horizontal scroll */}
         <div className="overflow-x-auto scrollbar-thin rounded-xl border border-slate-100 dark:border-slate-800">
           <div
-            className="relative w-full min-w-[760px] md:min-w-[900px] rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-900"
-            style={{ aspectRatio: "1836 / 1110" }}
+            className="relative w-full min-w-[760px] md:min-w-[900px] rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900"
+            style={{ aspectRatio: unitId?.startsWith("cooling-water") ? "1728 / 985" : "1836 / 1110" }}
           >
             {children}
           </div>

@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { PipeDefs } from "../../../components/pid/PipeDefs";
 import { PipeH, PipeV } from "../../../components/pid/Pipe";
 import { SensorIndicator } from "../../../components/pid/SensorIndicator";
@@ -13,11 +12,8 @@ import PipeGauge from "../../../components/pid/PipeGauge";
 import VerticalValve from "../../../components/pid/VerticalValve";
 import PumpMotor from "../../../components/pid/PumpMotor";
 import CoolingTower from "../../../components/pid/CoolingTower";
-import InfoCard from "../../../components/pid/InfoCard";
 import SensorCard from "../../../components/pid/SensorCard";
-import DashedLine from "../../../components/pid/DashedLine";
 import { useTelemetryStore } from "../../../store/telemetry.store";
-import { getDefaultEqConfigs } from "../../../data/equipment";
 
 
 interface CoolingWF1U3PidProps {
@@ -157,118 +153,23 @@ export default function CoolingWF1U3Pid({
     );
   };
 
-  const getEqThresholds = (tagKey: string, fallbackUnitId: string) => {
-    const saved = localStorage.getItem(`scada.config.eq.${fallbackUnitId}`);
-    if (saved) {
-      try {
-        const list = JSON.parse(saved);
-        const item = list.find((x: any) => x.tagKey === tagKey);
-        if (item) {
-          return { warning: item.baseline, alarm: item.highLimit };
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-    const defaults = getDefaultEqConfigs(fallbackUnitId);
-    const item = defaults.find((x: any) => x.tagKey === tagKey);
-    return item ? { warning: item.baseline, alarm: item.highLimit } : { warning: 5000, alarm: 10000 };
-  };
-
-  const getRhConfig = (motorId: string) => {
-    switch (motorId) {
-      case "MTR-1": return getEqThresholds("M1_PUMP_MOTOR_OVERHAUL", "cooling-water-1");
-      case "MTR-2": return getEqThresholds("M2_SUPPLY_MOTOR_OVERHAUL", "cooling-water-1");
-      case "MTR-3": return getEqThresholds("M3_SUPPLY_MOTOR_OVERHAUL", "cooling-water-1");
-      case "MTR-4": return getEqThresholds("M4_PUMP_MOTOR_OVERHAUL", "cooling-water-2");
-      case "MTR-5": return getEqThresholds("M5_SUPPLY_MOTOR_OVERHAUL", "cooling-water-2");
-      case "MTR-6": return getEqThresholds("M6_SUPPLY_MOTOR_OVERHAUL", "cooling-water-2");
-      case "MTR-7": return getEqThresholds("M7_PUMP_MOTOR_OVERHAUL", "cooling-water-3");
-      case "MTR-8": return getEqThresholds("M8_SUPPLY_MOTOR_OVERHAUL", "cooling-water-3");
-      case "MTR-9": return getEqThresholds("M9_SUPPLY_MOTOR_OVERHAUL", "cooling-water-3");
-      case "FAN-1": return getEqThresholds("F1_MOTOR_OVERHAUL", "cooling-water-1");
-      case "FAN-2": return getEqThresholds("F2_MOTOR_OVERHAUL", "cooling-water-2");
-      case "FAN-3": return getEqThresholds("F3_MOTOR_OVERHAUL", "cooling-water-3");
-      default: return { warning: 5000, alarm: 10000 };
-    }
-  };
-
-  const getRh = (tagId: string) => {
-    const val = runningHours[tagId];
-    if (val === undefined || val === null) return "XX";
-    return val.toFixed(1);
-  };
-
-
-  const dashedLines = useMemo(() => (
-    <>
-      <DashedLine x={95} y={430} w={0} h={340} />
-      <DashedLine x={95} y={430} w={50} h={0} />
-
-      <DashedLine x={260} y={430} w={0} h={340} />
-      <DashedLine x={260} y={430} w={100} h={0} />
-
-      <DashedLine x={430} y={430} w={0} h={340} />
-      <DashedLine x={430} y={430} w={140} h={0} />
-
-      <DashedLine x={637} y={650} w={0} h={120} />
-
-      <DashedLine x={782} y={650} w={0} h={120} />
-      <DashedLine x={782} y={650} w={100} h={0} />
-      <DashedLine x={882} y={580} w={0} h={70} />
-
-      <DashedLine x={965} y={750} w={0} h={20} />
-      <DashedLine x={1126} y={750} w={0} h={20} />
-
-      <DashedLine x={1265} y={428} w={0} h={153} />
-      <DashedLine x={1240} y={428} w={30} h={0} />
-
-      <DashedLine x={1438} y={500} w={0} h={80} />
-      <DashedLine x={1370} y={500} w={70} h={0} />
-      <DashedLine x={1370} y={428} w={0} h={73} />
-      <DashedLine x={1340} y={428} w={30} h={0} />
-
-      <DashedLine x={1613} y={500} w={0} h={80} />
-      <DashedLine x={1480} y={500} w={134} h={0} />
-      <DashedLine x={1480} y={428} w={0} h={73} />
-      <DashedLine x={1450} y={428} w={30} h={0} />
-
-      <DashedLine x={1387} y={745} w={0} h={30} />
-      <DashedLine x={1387} y={745} w={200} h={0} />
-      <DashedLine x={1582} y={428} w={0} h={320} />
-      <DashedLine x={1555} y={428} w={30} h={0} />
-
-      <DashedLine x={1600} y={745} w={0} h={30} />
-      <DashedLine x={1600} y={745} w={130} h={0} />
-      <DashedLine x={1725} y={500} w={0} h={245} />
-      <DashedLine x={1660} y={428} w={30} h={0} />
-      <DashedLine x={1690} y={500} w={35} h={0} />
-      <DashedLine x={1687} y={430} w={0} h={70} />
-
-      <DashedLine x={1800} y={430} w={0} h={340} />
-      <DashedLine x={1770} y={430} w={30} h={0} />
-    </>
-  ), []);
-
-
   return (
     <svg
       ref={svgRef}
       className="absolute inset-0 h-full w-full"
-      viewBox="0 -160 1900 1110"
+      viewBox="24 -38 1728 985"
       preserveAspectRatio="xMidYMid meet"
       style={{ pointerEvents: "auto" }}
       onClick={onSvgClick}
     >
       <PipeDefs />
 
-      {/* Dashed Line */}
-      {dashedLines}
-
+      {/* ── P&ID SCHEMATIC (1:1 Native Proportions, Balanced & Symmetrical) ── */}
+      <g>
       {/* ── PIPE ─────────────────────────────────────────────────── */}
 
       {/* Pipe Tank to Right Header */}
-      <PipeH x={961} y={544} w={205} h={6}
+      <PipeH x={961} y={544} w={105} h={6}
         on={motorStatus["MTR-4"] || motorStatus["MTR-5"] || motorStatus["MTR-6"] || motorStatus["MTR-7"] || motorStatus["MTR-8"] || motorStatus["MTR-9"]} />
 
       {/* Pipe Tank to Left Header */}
@@ -288,80 +189,80 @@ export default function CoolingWF1U3Pid({
       <PipeV x={151} y={146} w={7} h={382}
         on={motorStatus["MTR-1"]} dir="up" type="warm" />
 
-      {/* Pipe  Right Header to Area */}
-      <PipeV x={1210} y={249} w={7} h={280}
+      {/* Pipe Right Header to Area */}
+      <PipeV x={1110} y={249} w={7} h={280}
         on={motorStatus["MTR-4"]} dir="up" />
-      <PipeV x={1316} y={249} w={7} h={280}
+      <PipeV x={1216} y={249} w={7} h={280}
         on={motorStatus["MTR-5"]} dir="up" />
-      <PipeV x={1422} y={249} w={7} h={280}
+      <PipeV x={1322} y={249} w={7} h={280}
         on={motorStatus["MTR-6"]} dir="up" />
-      <PipeV x={1527} y={249} w={7} h={280}
+      <PipeV x={1427} y={249} w={7} h={280}
         on={motorStatus["MTR-7"]} dir="up" />
-      <PipeV x={1632} y={249} w={7} h={280}
+      <PipeV x={1532} y={249} w={7} h={280}
         on={motorStatus["MTR-8"]} dir="up" />
-      <PipeV x={1738} y={249} w={7} h={280}
+      <PipeV x={1638} y={249} w={7} h={280}
         on={motorStatus["MTR-9"]} dir="up" />
 
       {/* Pipe Makeup Water to Tank */}
-      <PipeH x={940} y={336} w={70} h={6}
+      <PipeH x={940} y={336} w={58} h={6}
         on={motorStatus["MTR-3"]} dir="left" type="cold" />
       <PipeV x={923} y={358} w={7} h={48}
         on={motorStatus["MTR-9"]} dir="down" />
       <PipeBend x={921} y={334} size={25} angle={90} />
 
       {/* Pipe Area to Tank*/}
-      <PipeV x={1210} y={166} w={7} h={30}
+      <PipeV x={1110} y={166} w={7} h={30}
         on={motorStatus["MTR-4"]} dir="up" type="return" />
-      <PipeH x={820} y={145} w={377} h={6}
+      <PipeH x={820} y={145} w={277} h={6}
         on={motorStatus["MTR-4"]} dir="left" type="return" />
       <PipeV x={800} y={168} w={7} h={238}
         on={motorStatus["MTR-4"]} dir="down" type="return" />
-      <PipeBend x={1195} y={143} size={25} angle={180} />
+      <PipeBend x={1095} y={143} size={25} angle={180} />
       <PipeBend x={798} y={143} size={25} angle={90} />
 
-      <PipeV x={1314} y={153} w={7} h={45}
+      <PipeV x={1214} y={153} w={7} h={45}
         on={motorStatus["MTR-5"]} dir="up" type="return" />
-      <PipeH x={810} y={133} w={488} h={6}
+      <PipeH x={810} y={133} w={388} h={6}
         on={motorStatus["MTR-5"]} dir="left" type="return" />
       <PipeV x={788} y={156} w={7} h={250}
         on={motorStatus["MTR-5"]} dir="down" type="return" />
-      <PipeBend x={1298} y={130} size={25} angle={180} />
+      <PipeBend x={1198} y={130} size={25} angle={180} />
       <PipeBend x={786} y={131} size={25} angle={90} />
 
-      <PipeV x={1422} y={141} w={7} h={57}
+      <PipeV x={1322} y={141} w={7} h={57}
         on={motorStatus["MTR-6"]} dir="up" type="return" />
-      <PipeH x={795} y={121} w={615} h={6}
+      <PipeH x={795} y={121} w={515} h={6}
         on={motorStatus["MTR-6"]} dir="left" type="return" />
       <PipeV x={776} y={144} w={7} h={262}
         on={motorStatus["MTR-6"]} dir="down" type="return" />
-      <PipeBend x={1406} y={118} size={25} angle={180} />
+      <PipeBend x={1306} y={118} size={25} angle={180} />
       <PipeBend x={774} y={119} size={25} angle={90} />
 
-      <PipeV x={1527} y={129} w={7} h={69}
+      <PipeV x={1427} y={129} w={7} h={69}
         on={motorStatus["MTR-7"]} dir="up" type="return" />
-      <PipeH x={783} y={109} w={730} h={6}
+      <PipeH x={783} y={109} w={630} h={6}
         on={motorStatus["MTR-7"]} dir="left" type="return" />
       <PipeV x={764} y={132} w={7} h={274}
         on={motorStatus["MTR-7"]} dir="down" type="return" />
-      <PipeBend x={1511} y={106} size={25} angle={180} />
+      <PipeBend x={1411} y={106} size={25} angle={180} />
       <PipeBend x={762} y={107} size={25} angle={90} />
 
-      <PipeV x={1632} y={117} w={7} h={81}
+      <PipeV x={1532} y={117} w={7} h={81}
         on={motorStatus["MTR-8"]} dir="up" type="return" />
-      <PipeH x={771} y={97} w={850} h={6}
+      <PipeH x={771} y={97} w={750} h={6}
         on={motorStatus["MTR-8"]} dir="left" type="return" />
       <PipeV x={752} y={120} w={7} h={286}
         on={motorStatus["MTR-8"]} dir="down" type="return" />
-      <PipeBend x={1616} y={94} size={25} angle={180} />
+      <PipeBend x={1516} y={94} size={25} angle={180} />
       <PipeBend x={750} y={95} size={25} angle={90} />
 
-      <PipeV x={1738} y={105} w={7} h={93}
+      <PipeV x={1638} y={105} w={7} h={93}
         on={motorStatus["MTR-9"]} dir="up" type="return" />
-      <PipeH x={759} y={85} w={965} h={6}
+      <PipeH x={759} y={85} w={865} h={6}
         on={motorStatus["MTR-9"]} dir="left" type="return" />
       <PipeV x={740} y={108} w={7} h={298}
         on={motorStatus["MTR-9"]} dir="down" type="return" />
-      <PipeBend x={1722} y={82} size={25} angle={180} />
+      <PipeBend x={1622} y={82} size={25} angle={180} />
       <PipeBend x={738} y={83} size={25} angle={90} />
 
 
@@ -415,16 +316,16 @@ export default function CoolingWF1U3Pid({
 
       <PipeV x={912} y={575} w={7} h={20}
         on={isDosing327On} dir="up" />
-      <PipeV x={1123} y={630} w={7} h={34}
+      <PipeV x={1083} y={630} w={7} h={34}
         on={isDosing327On} dir="up" />
-      <PipeH x={935} y={609} w={175} h={7}
+      <PipeH x={935} y={609} w={135} h={7}
         on={isDosing327On} dir="left" />
       <PipeBend x={911} y={594} size={25} angle={0} />
-      <PipeBend x={1107} y={607} size={25} angle={180} />
+      <PipeBend x={1067} y={607} size={25} angle={180} />
 
       {/* Header Pipe */}
       <HeaderPipe x={89} y={525} w={350} h={45} />
-      <HeaderPipe x={1167} y={525} w={620} h={45} />
+      <HeaderPipe x={1067} y={525} w={620} h={45} />
 
       {/* ── TANK ────────────────────────────────────────────────── */}
       <TankFrame x={708} y={410} w={120} h={163} label="" />
@@ -471,44 +372,44 @@ export default function CoolingWF1U3Pid({
         decimalPlaces: 1
       })}
       {renderSensorIndicator("cooling-water/eq_press_du03", {
-        x: 1177, y: 273,
+        x: 1077, y: 273,
         w: 75, h: 30,
         unit: " BAR",
         decimalPlaces: 1
       })}
       {renderSensorIndicator("cooling-water/eq_press_bp03", {
-        x: 1282, y: 273,
+        x: 1182, y: 273,
         w: 75, h: 30,
         unit: " BAR",
         decimalPlaces: 1
       })}
       {renderSensorIndicator("cooling-water/eq_press_prep03", {
-        x: 1390, y: 273,
+        x: 1290, y: 273,
         w: 75, h: 30,
         unit: " BAR",
         decimalPlaces: 1
       })}
       {renderSensorIndicator("cooling-water/eq_press_st03", {
-        x: 1495, y: 273,
+        x: 1395, y: 273,
         w: 75, h: 30,
         unit: " BAR",
         decimalPlaces: 1
       })}
       {renderSensorIndicator("cooling-water/eq_press_washing", {
-        x: 1599, y: 273,
+        x: 1499, y: 273,
         w: 75, h: 30,
         unit: " BAR",
         decimalPlaces: 1
       })}
       {renderSensorIndicator("cooling-water/eq_press_minilab", {
-        x: 1705, y: 273,
+        x: 1605, y: 273,
         w: 75, h: 30,
         unit: " BAR",
         decimalPlaces: 1
       })}
 
       {renderSensorIndicator("cooling-water/st3_return_temp", {
-        x: 1496, y: 147,
+        x: 1396, y: 147,
         w: 75, h: 30,
         unit: " °C",
         decimalPlaces: 1
@@ -516,10 +417,10 @@ export default function CoolingWF1U3Pid({
 
       {/* Chemical Dosing Tank */}
       <ChemicalDosingTank x={932} y={685} width={67} height={65} id="tankA" />
-      <ChemicalDosingTank x={1094} y={685} width={67} height={65} id="tankB" />
+      <ChemicalDosingTank x={1054} y={685} width={67} height={65} id="tankB" />
 
       <LevelIndicator x={940} y={700} value={getChem357Lvl()} w={51} h={51} type="cold" />
-      <LevelIndicator x={1102} y={700} value={getChem327Lvl()} w={51} h={51} type="cold" />
+      <LevelIndicator x={1062} y={700} value={getChem327Lvl()} w={51} h={51} type="cold" />
 
       {/* Gauge */}
       <PipeGauge x={946} y={287} size={60} />
@@ -529,755 +430,104 @@ export default function CoolingWF1U3Pid({
       <VerticalValve x={130} y={319} size={50} angle={0} />
       <VerticalValve x={343} y={319} size={50} angle={0} />
       <VerticalValve x={562} y={319} size={50} angle={0} />
-      <VerticalValve x={1189} y={319} size={50} angle={0} />
-      <VerticalValve x={1295} y={319} size={50} angle={0} />
-      <VerticalValve x={1401} y={319} size={50} angle={0} />
-      <VerticalValve x={1506} y={319} size={50} angle={0} />
-      <VerticalValve x={1611} y={319} size={50} angle={0} />
-      <VerticalValve x={1717} y={319} size={50} angle={0} />
+      <VerticalValve x={1089} y={319} size={50} angle={0} />
+      <VerticalValve x={1195} y={319} size={50} angle={0} />
+      <VerticalValve x={1301} y={319} size={50} angle={0} />
+      <VerticalValve x={1406} y={319} size={50} angle={0} />
+      <VerticalValve x={1511} y={319} size={50} angle={0} />
+      <VerticalValve x={1617} y={319} size={50} angle={0} />
 
       {/* Y-Strainer Pipe */}
       <YStrainer x={148} y={478} size={15} />
       <YStrainer x={361} y={478} size={15} />
       <YStrainer x={580} y={478} size={15} />
-      <YStrainer x={1207} y={478} size={15} />
-      <YStrainer x={1313} y={478} size={15} />
-      <YStrainer x={1419} y={478} size={15} />
-      <YStrainer x={1524} y={478} size={15} />
-      <YStrainer x={1629} y={478} size={15} />
-      <YStrainer x={1735} y={478} size={15} />
+      <YStrainer x={1107} y={478} size={15} />
+      <YStrainer x={1213} y={478} size={15} />
+      <YStrainer x={1319} y={478} size={15} />
+      <YStrainer x={1424} y={478} size={15} />
+      <YStrainer x={1529} y={478} size={15} />
+      <YStrainer x={1635} y={478} size={15} />
 
       {/* Pump MTR */}
       <PumpMotor x={105} y={370} size={100} on={motorStatus["MTR-1"]} />
       <PumpMotor x={318} y={370} size={100} on={motorStatus["MTR-2"]} />
       <PumpMotor x={537} y={370} size={100} on={motorStatus["MTR-3"]} />
-      <PumpMotor x={1164} y={370} size={100} on={motorStatus["MTR-4"]} />
-      <PumpMotor x={1270} y={370} size={100} on={motorStatus["MTR-5"]} />
-      <PumpMotor x={1376} y={370} size={100} on={motorStatus["MTR-6"]} />
-      <PumpMotor x={1481} y={370} size={100} on={motorStatus["MTR-7"]} />
-      <PumpMotor x={1586} y={370} size={100} on={motorStatus["MTR-8"]} />
-      <PumpMotor x={1692} y={370} size={100} on={motorStatus["MTR-9"]} />
+      <PumpMotor x={1064} y={370} size={100} on={motorStatus["MTR-4"]} />
+      <PumpMotor x={1170} y={370} size={100} on={motorStatus["MTR-5"]} />
+      <PumpMotor x={1276} y={370} size={100} on={motorStatus["MTR-6"]} />
+      <PumpMotor x={1381} y={370} size={100} on={motorStatus["MTR-7"]} />
+      <PumpMotor x={1486} y={370} size={100} on={motorStatus["MTR-8"]} />
+      <PumpMotor x={1592} y={370} size={100} on={motorStatus["MTR-9"]} />
 
       {/* Cooling Tower */}
       <CoolingTower x={55} y={-12} size={200} on={motorStatus["FAN-1"]} />
       <CoolingTower x={269} y={-12} size={200} on={motorStatus["FAN-2"]} />
       <CoolingTower x={487} y={-12} size={200} on={motorStatus["FAN-3"]} />
 
-      {/* Info Card */}
+      {/* Component Labels */}
+      <LabelComponent text="FAN-1" x={145} y={-4} w={20} h={20} hasBorder={false} fontSize={17} />
+      <LabelComponent text="FAN-2" x={359} y={-4} w={20} h={20} hasBorder={false} fontSize={17} />
+      <LabelComponent text="FAN-3" x={577} y={-4} w={20} h={20} hasBorder={false} fontSize={17} />
 
-      {/* MTR 1 */}
-      <InfoCard
-        x={12}
-        y={770}
-        width={165}
-        height={180}
-        title="MTR-1"
-        lines={["STATUS :", "RH :", "HZ :", "KW :"]}
-      />
-      <SensorIndicator
-        x={100}
-        y={824}
-        w={63.75}
-        h={25.5}
-        value={motorStatus["MTR-1"]} // true = ON (hijau), false = OFF (merah)
-        mode="onoff"
-      />
-      <SensorIndicator
-        x={100}
-        y={852}
-        w={63.75}
-        h={25.5}
-        value={getRh("cooling-water/mtr1_running_hours")}
-        unit=" h"
-        warningThreshold={getRhConfig("MTR-1").warning}
-        alarmThreshold={getRhConfig("MTR-1").alarm}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={100}
-        y={880}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/mtr1_hz")}
-        unit=" Hz"
-      />
-      <SensorIndicator
-        x={100}
-        y={908}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/mtr1_kw")}
-        unit=" kW"
-      />
+      <LabelComponent text="MAKEUP" x={966} y={268} w={20} h={20} hasBorder={false} fontSize={13} />
 
-      {/* MTR 2 */}
-      <InfoCard
-        x={180}
-        y={770}
-        width={165}
-        height={180}
-        title="MTR-2"
-        lines={["STATUS :", "RH :", "HZ :", "KW :"]}
-      />
-      <SensorIndicator
-        x={268}
-        y={824}
-        w={63.75}
-        h={25.5}
-        value={motorStatus["MTR-2"]} // true = ON (hijau), false = OFF (merah)
-        mode="onoff"
-      />
-      <SensorIndicator
-        x={268}
-        y={852}
-        w={63.75}
-        h={25.5}
-        value={getRh("cooling-water/mtr2_running_hours")}
-        unit=" h"
-        warningThreshold={getRhConfig("MTR-2").warning}
-        alarmThreshold={getRhConfig("MTR-2").alarm}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={268}
-        y={880}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/mtr2_hz")}
-        unit=" Hz"
-      />
-      <SensorIndicator
-        x={268}
-        y={908}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/mtr2_kw")}
-        unit=" kW"
-      />
+      <LabelComponent text="DU-3" x={1103} y={212} w={20} h={20} hasBorder={false} fontSize={16} />
+      <LabelComponent text="BP-3" x={1208} y={212} w={20} h={20} hasBorder={false} fontSize={16} />
+      <LabelComponent text="SP-3" x={1316} y={212} w={20} h={20} hasBorder={false} fontSize={16} />
+      <LabelComponent text="ST-3" x={1422} y={212} w={20} h={20} hasBorder={false} fontSize={16} />
+      <LabelComponent text="WASHING" x={1525} y={212} w={20} h={20} hasBorder={false} fontSize={15} />
+      <LabelComponent text="MINI LAB" x={1632} y={212} w={20} h={20} hasBorder={false} fontSize={15} />
 
-      {/* MTR 3 */}
-      <InfoCard
-        x={348}
-        y={770}
-        width={165}
-        height={180}
-        title="MTR-3"
-        lines={["STATUS :", "RH :", "HZ :", "KW :"]}
-      />
-      <SensorIndicator
-        x={436}
-        y={824}
-        w={63.75}
-        h={25.5}
-        value={motorStatus["MTR-3"]} // true = ON (hijau), false = OFF (merah)
-        mode="onoff"
-      />
-      <SensorIndicator
-        x={436}
-        y={852}
-        w={63.75}
-        h={25.5}
-        value={getRh("cooling-water/mtr3_running_hours")}
-        unit=" h"
-        warningThreshold={getRhConfig("MTR-3").warning}
-        alarmThreshold={getRhConfig("MTR-3").alarm}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={436}
-        y={880}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/mtr3_hz")}
-        unit=" Hz"
-      />
-      <SensorIndicator
-        x={436}
-        y={908}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/mtr3_kw")}
-        unit=" kW"
-      />
+      <LabelComponent text="HEADER" x={250} y={540} w={20} h={20} hasBorder={false} fontSize={15} />
+      <LabelComponent text="HEADER" x={1365} y={540} w={20} h={20} hasBorder={false} fontSize={15} />
 
-      {/* BLOWDOWN */}
-      <InfoCard
-        x={525}
-        y={770}
-        width={170}
-        height={150}
-        title="BLOWDOWN WATER"
-        titleFontSize={15}
-        lines={["STATUS :", "VOL :"]}
-      />
-      <SensorIndicator
-        x={617}
-        y={845}
-        w={63.75}
-        h={25.5}
-        value={isBlowdownOn ? "ON" : (latest["cooling-water/blowdown_status"]?.value ?? "XX")}
-        mode="onoff"
-      />
-      <SensorIndicator
-        x={617}
-        y={875}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/blowdown_vol")}
-        unit=""
-      />
+      <LabelComponent text="MTR-1" x={145} y={580} w={20} h={20} hasBorder={false} fontSize={15} />
+      <LabelComponent text="MTR-2" x={358} y={580} w={20} h={20} hasBorder={false} fontSize={15} />
+      <LabelComponent text="MTR-3" x={562} y={580} w={20} h={20} hasBorder={false} fontSize={15} />
+      <LabelComponent text="MTR-4" x={1104} y={580} w={20} h={20} hasBorder={false} fontSize={15} />
+      <LabelComponent text="MTR-5" x={1210} y={580} w={20} h={20} hasBorder={false} fontSize={15} />
+      <LabelComponent text="MTR-6" x={1316} y={580} w={20} h={20} hasBorder={false} fontSize={15} />
+      <LabelComponent text="MTR-7" x={1421} y={580} w={20} h={20} hasBorder={false} fontSize={15} />
+      <LabelComponent text="MTR-8" x={1526} y={580} w={20} h={20} hasBorder={false} fontSize={15} />
+      <LabelComponent text="MTR-9" x={1632} y={580} w={20} h={20} hasBorder={false} fontSize={15} />
 
-      {/* COOLING TANK */}
-      <InfoCard
-        x={698}
-        y={770}
-        width={170}
-        height={150}
-        title="COOLING  TANK"
-        titleFontSize={15}
-        lines={["TDS :", "PH :", "LEVEL :"]}
-      />
-      <SensorIndicator
-        x={790}
-        y={822}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/cooling_tank_tds")}
-        unit=""
-        warningThreshold={23000}
-        alarmThreshold={25000}
-        thresholdDirection="above"
-        decimalPlaces={1}
-      />
-      <SensorIndicator
-        x={790}
-        y={850}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/cooling_tank_ph")}
-        unit=" PH"
-        warningThreshold={7.5}
-        alarmThreshold={8}
-        thresholdDirection="above"
-        decimalPlaces={1}
-      />
-      <SensorIndicator
-        x={790}
-        y={878}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/basin_lvl")}
-        unit=" %"
-        warningThreshold={75}
-        alarmThreshold={70}
-        thresholdDirection="below"
-        decimalPlaces={1}
-      />
+      <LabelComponent text="COOLING TANK" x={822} y={640} w={20} h={20} hasBorder={false} fontSize={14} />
+      <LabelComponent text="CHEM 357" x={955.5} y={758} w={20} h={20} hasBorder={false} fontSize={13} />
+      <LabelComponent text="CHEM 327/317" x={1077.5} y={758} w={20} h={20} hasBorder={false} fontSize={13} />
+      </g>
 
-      {/* CHEMICAL 357 */}
-      <InfoCard
-        x={875}
-        y={770}
-        width={170}
-        height={150}
-        title="CHEMICAL  357"
-        titleFontSize={15}
-        lines={["LEVEL :", "PUMP :", "VOL :"]}
-      />
-      {renderSensorIndicator("cooling-water/chemical_357_lvl", {
-        x: 967,
-        y: 822,
-        w: 63.75,
-        h: 25.5,
-        unit: " %",
-        decimalPlaces: 1
-      })}
-      <SensorIndicator
-        x={967}
-        y={850}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/chemical_357_pump")}
-        mode="onoff"
-      />
-      <SensorIndicator
-        x={967}
-        y={878}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/chemical_357_vol")}
-        unit=" L"
-      />
-
-      {/* CHEMICAL 327 */}
-      <InfoCard
-        x={1045}
-        y={770}
-        width={170}
-        height={150}
-        title="CHEMICAL  327 / 317"
-        titleFontSize={14}
-        lines={["LEVEL :", "PUMP :", "VOL :"]}
-      />
-      {renderSensorIndicator("cooling-water/chemical_327_lvl", {
-        x: 1137,
-        y: 822,
-        w: 63.75,
-        h: 25.5,
-        unit: " %",
-        decimalPlaces: 1
-      })}
-      <SensorIndicator
-        x={1137}
-        y={850}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/chemical_327_pump")}
-        mode="onoff"
-      />
-      <SensorIndicator
-        x={1137}
-        y={878}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/chemical_327_vol")}
-        unit=" L"
-      />
-
-      {/* MTR 4 */}
-      <InfoCard
-        x={1180}
-        y={580}
-        width={175}
-        height={150}
-        title="MTR-4"
-        lines={["RH :", "AMPERE :", "KW :"]}
-      />
-      <SensorIndicator
-        x={1277}
-        y={632}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_hrs_du03")}
-        unit=" h"
-        warningThreshold={getRhConfig("MTR-4").warning}
-        alarmThreshold={getRhConfig("MTR-4").alarm}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={1277}
-        y={660}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_curr_du03")}
-        unit=" A"
-      />
-      <SensorIndicator
-        x={1277}
-        y={688}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_pow_du03")}
-        unit=" kW"
-      />
-
-      {/* MTR 5 */}
-      <InfoCard
-        x={1355}
-        y={580}
-        width={175}
-        height={150}
-        title="MTR-5"
-        lines={["RH :", "AMPERE :", "KW :"]}
-      />
-      <SensorIndicator
-        x={1452}
-        y={632}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_hrs_bp03")}
-        unit=" h"
-        warningThreshold={getRhConfig("MTR-5").warning}
-        alarmThreshold={getRhConfig("MTR-5").alarm}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={1452}
-        y={660}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_curr_bp03")}
-        unit=" A"
-      />
-      <SensorIndicator
-        x={1452}
-        y={688}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_pow_bp03")}
-        unit=" kW"
-      />
-
-      {/* MTR 6 */}
-      <InfoCard
-        x={1530}
-        y={580}
-        width={175}
-        height={150}
-        title="MTR-6"
-        lines={["RH :", "AMPERE :", "KW :"]}
-      />
-      <SensorIndicator
-        x={1627}
-        y={632}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_hrs_prep03")}
-        unit=" h"
-        warningThreshold={getRhConfig("MTR-6").warning}
-        alarmThreshold={getRhConfig("MTR-6").alarm}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={1627}
-        y={660}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_curr_prep03")}
-        unit=" A"
-      />
-      <SensorIndicator
-        x={1627}
-        y={688}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_pow_prep03")}
-        unit=" kW"
-      />
-
-      {/* MTR 7 */}
-      <InfoCard
-        x={1300}
-        y={770}
-        width={175}
-        height={150}
-        title="MTR-7"
-        lines={["RH :", "AMPERE :", "KW :"]}
-      />
-      <SensorIndicator
-        x={1397}
-        y={822}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_hrs_st03")}
-        unit=" h"
-        warningThreshold={getRhConfig("MTR-7").warning}
-        alarmThreshold={getRhConfig("MTR-7").alarm}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={1397}
-        y={850}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_curr_st03")}
-        unit=" A"
-      />
-      <SensorIndicator
-        x={1397}
-        y={878}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_pow_st03")}
-        unit=" kW"
-      />
-
-      {/* MTR 8 */}
-      <InfoCard
-        x={1475}
-        y={770}
-        width={175}
-        height={150}
-        title="MTR-8"
-        lines={["RH :", "AMPERE :", "KW :"]}
-      />
-      <SensorIndicator
-        x={1572}
-        y={822}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_hrs_washing")}
-        unit=" h"
-        warningThreshold={getRhConfig("MTR-8").warning}
-        alarmThreshold={getRhConfig("MTR-8").alarm}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={1572}
-        y={850}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_curr_washing")}
-        unit=" A"
-      />
-      <SensorIndicator
-        x={1572}
-        y={878}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_pow_washing")}
-        unit=" kW"
-      />
-
-      {/* MTR 9 */}
-      <InfoCard
-        x={1650}
-        y={770}
-        width={175}
-        height={150}
-        title="MTR-9"
-        lines={["RH :", "AMPERE :", "KW :"]}
-      />
-      <SensorIndicator
-        x={1747}
-        y={822}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_hrs_minilab")}
-        unit=" h"
-        warningThreshold={getRhConfig("MTR-9").warning}
-        alarmThreshold={getRhConfig("MTR-9").alarm}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={1747}
-        y={850}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_curr_minilab")}
-        unit=" A"
-      />
-      <SensorIndicator
-        x={1747}
-        y={878}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/eq_pow_minilab")}
-        unit=" kW"
-      />
-
-      {/* MAKEUP WATER */}
-      <InfoCard
-        x={1009}
-        y={250}
-        width={140}
-        height={170}
-        title="MAKEUP WATER"
-        lines={["TDS :", "PH :", "VOL :"]}
-      />
-      <SensorIndicator
-        x={1077}
-        y={322}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/makeup_wtr_tds")}
-        unit=" µS/cm"
-      />
-      <SensorIndicator
-        x={1077}
-        y={350}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/makeup_wtr_ph")}
-        unit=" pH"
-      />
-      <SensorIndicator
-        x={1077}
-        y={378}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/makeup_wtr_vol")}
-        unit=" L/h"
-      />
-
-      {/* FAN 1 */}
-      <InfoCard
-        x={73}
-        y={-160}
-        width={165}
-        height={180}
-        title="FAN-1"
-        lines={["STATUS :", "RH :", "HZ :", "KW :"]}
-      />
-      <SensorIndicator
-        x={161}
-        y={-108}
-        w={63.75}
-        h={25.5}
-        value={motorStatus["FAN-1"]} // true = ON (hijau), false = OFF (merah)
-        mode="onoff"
-      />
-      <SensorIndicator
-        x={161}
-        y={-79}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/ct1_running_hours")}
-        unit=" h"
-        warningThreshold={getRhConfig("FAN-1").warning}
-        alarmThreshold={getRhConfig("FAN-1").alarm}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={161}
-        y={-50}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/ct1_fan_speed")}
-        unit=" RPM"
-      />
-      <SensorIndicator
-        x={161}
-        y={-22}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/ct1_motor_power")}
-        unit=" kW"
-      />
-
-      {/* FAN 2 */}
-      <InfoCard
-        x={287}
-        y={-160}
-        width={165}
-        height={180}
-        title="FAN-2"
-        lines={["STATUS :", "RH :", "HZ :", "KW :"]}
-      />
-      <SensorIndicator
-        x={375}
-        y={-108}
-        w={63.75}
-        h={25.5}
-        value={motorStatus["FAN-2"]} // true = ON (hijau), false = OFF (merah)
-        mode="onoff"
-      />
-      <SensorIndicator
-        x={375}
-        y={-79}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/ct2_running_hours")}
-        unit=" h"
-        warningThreshold={getRhConfig("FAN-2").warning}
-        alarmThreshold={getRhConfig("FAN-2").alarm}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={375}
-        y={-50}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/ct2_fan_speed")}
-        unit=" RPM"
-      />
-      <SensorIndicator
-        x={375}
-        y={-22}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/ct2_motor_power")}
-        unit=" kW"
-      />
-
-      {/* FAN 3 */}
-      <InfoCard
-        x={506}
-        y={-160}
-        width={165}
-        height={180}
-        title="FAN-3"
-        lines={["STATUS :", "RH :", "HZ :", "KW :"]}
-      />
-      <SensorIndicator
-        x={594}
-        y={-108}
-        w={63.75}
-        h={25.5}
-        value={motorStatus["FAN-3"]} // true = ON (hijau), false = OFF (merah)
-        mode="onoff"
-      />
-      <SensorIndicator
-        x={594}
-        y={-79}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/ct3_running_hours")}
-        unit=" h"
-        warningThreshold={getRhConfig("FAN-3").warning}
-        alarmThreshold={getRhConfig("FAN-3").alarm}
-        thresholdDirection="above"
-      />
-      <SensorIndicator
-        x={594}
-        y={-50}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/ct3_fan_speed")}
-        unit=" RPM"
-      />
-      <SensorIndicator
-        x={594}
-        y={-22}
-        w={63.75}
-        h={25.5}
-        value={getVal("cooling-water/ct3_motor_power")}
-        unit=" kW"
-      />
-
-      {/* Text Label Area */}
-      <LabelComponent text="DU-3" x={1203} y={212} w={20} h={20} hasBorder={false} fontSize={18} />
-      <LabelComponent text="BP-3" x={1308} y={212} w={20} h={20} hasBorder={false} fontSize={18} />
-      <LabelComponent text="SP-3" x={1416} y={212} w={20} h={20} hasBorder={false} fontSize={18} />
-      <LabelComponent text="ST-3" x={1522} y={212} w={20} h={20} hasBorder={false} fontSize={18} />
-      <LabelComponent text="WASHING" x={1625} y={212} w={20} h={20} hasBorder={false} fontSize={16} />
-      <LabelComponent text="MINI LAB" x={1732} y={212} w={20} h={20} hasBorder={false} fontSize={16} />
-
-      <LabelComponent text="HEADER" x={250} y={540} w={20} h={20} hasBorder={false} fontSize={16} />
-      <LabelComponent text="HEADER" x={1465} y={540} w={20} h={20} hasBorder={false} fontSize={16} />
-
-      {/* Sensor Card */}
+      {/* ── BOTTOM WHITE SENSOR CARDS (Symmetrical 9-Card Row: x=89..1687) ── */}
       <SensorCard
-        x={829}
-        y={-145}
-        width={175}
+        x={89}
+        y={812}
+        width={164}
         title="SUPPLY TEMP"
         value={getVal("cooling-water/supply_temp") as string | number}
         unit={typeof getVal("cooling-water/supply_temp") === "number" ? " °C" : ""}
         colorType="green"
       />
       <SensorCard
-        x={1038}
-        y={-145}
-        width={175}
-        title="Δ TEMP"
-        value={deltaTVal}
-        unit={typeof deltaTVal === "number" ? " °C" : ""}
-        colorType="green"
-      />
-      <SensorCard
-        x={829}
-        y={-35}
-        width={175}
+        x={266}
+        y={812}
+        width={164}
         title="RETURN TEMP"
         value={getVal("cooling-water/return_temp") as string | number}
         unit={typeof getVal("cooling-water/return_temp") === "number" ? " °C" : ""}
         colorType="green"
       />
       <SensorCard
-        x={1038}
-        y={-35}
-        width={175}
+        x={443}
+        y={812}
+        width={164}
+        title="Δ TEMP"
+        value={deltaTVal}
+        unit={typeof deltaTVal === "number" ? " °C" : ""}
+        colorType="green"
+      />
+      <SensorCard
+        x={620}
+        y={812}
+        width={164}
         title="AMBIENT"
         values={[
           { value: getVal("cooling-water/ambient_temp") as string | number, unit: typeof getVal("cooling-water/ambient_temp") === "number" ? " °C" : "" },
@@ -1285,51 +535,59 @@ export default function CoolingWF1U3Pid({
         ]}
         colorType="green"
       />
-      <SensorCard
-        x={1495}
-        y={-145}
-        width={175}
-        title="HEATING"
-        value={getStatusDisplay("cooling-water/st3_heating")}
-        colorType="blue"
+
+      {/* Subtle Group Divider */}
+      <line
+        x1={799.5}
+        y1={822}
+        x2={799.5}
+        y2={902}
+        stroke="#94a3b8"
+        strokeWidth={1.5}
+        strokeDasharray="4 4"
+        opacity={0.5}
       />
+
       <SensorCard
-        x={1280}
-        y={-145}
-        width={175}
+        x={815}
+        y={812}
+        width={164}
         title="PROSES ST"
         value={getStProcessStatus()}
         colorType="blue"
       />
       <SensorCard
-        x={1495}
-        y={-35}
-        width={175}
+        x={992}
+        y={812}
+        width={164}
+        title="LOT"
+        value={getLotValue()}
+        colorType="blue"
+      />
+      <SensorCard
+        x={1169}
+        y={812}
+        width={164}
+        title="HEATING"
+        value={getStatusDisplay("cooling-water/st3_heating")}
+        colorType="blue"
+      />
+      <SensorCard
+        x={1346}
+        y={812}
+        width={164}
         title="COOLING"
         value={getStatusDisplay("cooling-water/st3_cooling")}
         colorType="blue"
       />
       <SensorCard
-        x={1710}
-        y={-145}
-        width={175}
+        x={1523}
+        y={812}
+        width={164}
         title="STERIL"
         value={getStatusDisplay("cooling-water/st3_steril")}
         colorType="blue"
       />
-      <SensorCard
-        x={1280}
-        y={-35}
-        width={175}
-        title="LOT"
-        value={getLotValue()}
-        colorType="blue"
-      />
-
-
-
-
-
     </svg>
   );
 }

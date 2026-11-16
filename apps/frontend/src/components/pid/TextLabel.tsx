@@ -72,8 +72,8 @@ const LabelComponent: React.FC<Props> = ({
         dominantBaseline="middle"
         textAnchor="middle"
         fontSize={fontSize}
-        fontFamily="Arial Black, sans-serif"
-        fontWeight="900"
+        fontFamily="sans-serif"
+        fontWeight="bold"
         fill={isDark ? "#f1f5f9" : "#000000"}
       >
         {text}
