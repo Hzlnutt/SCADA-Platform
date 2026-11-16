@@ -6,6 +6,7 @@ import {
   getWh7ConfigHandler,
   getWh7OverviewHandler,
   getWh7TrendHandler,
+  getWh7TtsAudioHandler,
   testWh7ConnectionHandler,
   updateWh7AlarmPrefHandler,
   updateWh7ConfigHandler
@@ -17,6 +18,7 @@ warehouseRouter.get("/warehouse/wh7/overview", authenticate, getWh7OverviewHandl
 warehouseRouter.get("/warehouse/wh7/trend", authenticate, getWh7TrendHandler);
 warehouseRouter.get("/warehouse/wh7/alarm-preference", authenticate, getWh7AlarmPrefHandler);
 warehouseRouter.put("/warehouse/wh7/alarm-preference", authenticate, updateWh7AlarmPrefHandler);
+warehouseRouter.get("/warehouse/wh7/tts", authenticate, getWh7TtsAudioHandler);
 warehouseRouter.get("/warehouse/wh7/config", authenticate, getWh7ConfigHandler);
 warehouseRouter.put(
   "/warehouse/wh7/config",

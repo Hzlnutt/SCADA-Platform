@@ -1,4 +1,5 @@
-// Alarm siren + fluent female multilingual voice dubbing + browser notification utility for Warehouse 7
+// Alarm siren (3x high peaks) + unified female multilingual voice dubbing + browser notification utility for Warehouse 7
+import { getAudioBuffer } from "../services/api.client";
 
 export interface WarehouseAlarmViolation {
   deviceId: string;
@@ -15,7 +16,11 @@ let lastAlertPlayedAt = 0;
 let isAlarmMuted = true; // Default disabled per account until explicitly enabled
 let pendingSpeechTimer: ReturnType<typeof setTimeout> | null = null;
 let activeUtterance: SpeechSynthesisUtterance | null = null;
+let activeAudioEl: HTMLAudioElement | null = null;
+let activeAudioBlobUrl: string | null = null;
+let activeBufferSource: AudioBufferSourceNode | null = null;
 let cachedVoices: SpeechSynthesisVoice[] = [];
+const clientTtsCache = new Map<string, ArrayBuffer>();
 
 const ALERT_COOLDOWN_MS = 25000;
 
@@ -42,7 +47,34 @@ function initSpeechVoicesCache(): void {
 
 initSpeechVoicesCache();
 
-async function ensureVoicesLoaded(maxWaitMs = 280): Promise<SpeechSynthesisVoice[]> {
+function stopActiveSpeechPlayback(): void {
+  if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+  activeUtterance = null;
+  if (activeAudioEl) {
+    try {
+      activeAudioEl.pause();
+      activeAudioEl.src = "";
+    } catch {}
+    activeAudioEl = null;
+  }
+  if (activeAudioBlobUrl) {
+    try {
+      URL.revokeObjectURL(activeAudioBlobUrl);
+    } catch {}
+    activeAudioBlobUrl = null;
+  }
+  if (activeBufferSource) {
+    try {
+      activeBufferSource.stop();
+      activeBufferSource.disconnect();
+    } catch {}
+    activeBufferSource = null;
+  }
+}
+
+async function ensureVoicesLoaded(maxWaitMs = 500): Promise<SpeechSynthesisVoice[]> {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return [];
   const synth = window.speechSynthesis;
   const immediate = synth.getVoices();
@@ -96,10 +128,7 @@ export function setWarehouseAlarmMuted(muted: boolean): void {
       clearTimeout(pendingSpeechTimer);
       pendingSpeechTimer = null;
     }
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
-    activeUtterance = null;
+    stopActiveSpeechPlayback();
   }
 }
 
@@ -109,7 +138,7 @@ export async function unlockWarehouseAudio(): Promise<boolean> {
     if (ctx && ctx.state === "suspended") {
       await ctx.resume();
     }
-    await ensureVoicesLoaded(150);
+    await ensureVoicesLoaded(200);
     return Boolean(ctx && ctx.state === "running");
   } catch {
     return false;
@@ -142,8 +171,8 @@ export function showBrowserWarehouseNotification(title: string, body: string): v
 }
 
 /**
- * Clean control-room / HVAC BMS two-cycle sweeping alert siren (~2.1s) with warm harmonic filter
- * so it sounds modern, authoritative, and finishes cleanly before voice announcement begins.
+ * Clean, authoritative industrial SCADA alarm siren with 3 distinct rising HIGH-TONE peaks (~2.15s)
+ * passed through dynamics limiting & smooth low-pass filtering for clarity without speaker harshness.
  */
 export async function playWarningSiren(): Promise<number> {
   const ctx = getAudioContext();
@@ -156,68 +185,74 @@ export async function playWarningSiren(): Promise<number> {
     if (ctx.state !== "running") return 0;
 
     const now = ctx.currentTime;
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-10, now);
+    compressor.ratio.setValueAtTime(6, now);
+
     const filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(2400, now);
-    filter.Q.setValueAtTime(1.2, now);
-    filter.connect(ctx.destination);
+    filter.frequency.setValueAtTime(3800, now);
+    filter.Q.setValueAtTime(1.1, now);
 
-    // 2 smooth rising-and-settling industrial SCADA alert sweeps (C5 -> G5 -> E5)
-    const cycles = [0.0, 1.05];
-    for (const offset of cycles) {
-      const t0 = now + offset;
-      const tRiseEnd = t0 + 0.42;
-      const tHoldEnd = t0 + 0.56;
-      const tEnd = t0 + 0.94;
+    filter.connect(compressor);
+    compressor.connect(ctx.destination);
+
+    // 3x crisp high-pitch SCADA alert pulses: quick sweep up to 1760Hz -> 1975Hz high peak, clean release
+    const pulseStarts = [0.0, 0.72, 1.44];
+    for (let i = 0; i < pulseStarts.length; i++) {
+      const t0 = now + pulseStarts[i];
+      const tSweep = t0 + 0.14;
+      const tPeakHold = t0 + (i === 2 ? 0.44 : 0.38);
+      const tEnd = t0 + (i === 2 ? 0.62 : 0.56);
 
       const oscMain = ctx.createOscillator();
-      const oscHarmonic = ctx.createOscillator();
+      const oscAccent = ctx.createOscillator();
       const gainMain = ctx.createGain();
-      const gainHarmonic = ctx.createGain();
+      const gainAccent = ctx.createGain();
 
       oscMain.type = "sine";
-      oscMain.frequency.setValueAtTime(523.25, t0);
-      oscMain.frequency.exponentialRampToValueAtTime(783.99, tRiseEnd);
-      oscMain.frequency.setValueAtTime(783.99, tHoldEnd);
-      oscMain.frequency.exponentialRampToValueAtTime(659.25, tEnd);
+      oscMain.frequency.setValueAtTime(880, t0);
+      oscMain.frequency.exponentialRampToValueAtTime(1760, tSweep);
+      oscMain.frequency.exponentialRampToValueAtTime(1975.5, tPeakHold);
+      oscMain.frequency.exponentialRampToValueAtTime(1174.66, tEnd);
 
-      // Subtle upper harmonic shimmer (-15 dB) for crisp industrial presence without harshness
-      oscHarmonic.type = "triangle";
-      oscHarmonic.frequency.setValueAtTime(1046.5, t0);
-      oscHarmonic.frequency.exponentialRampToValueAtTime(1567.98, tRiseEnd);
-      oscHarmonic.frequency.setValueAtTime(1567.98, tHoldEnd);
-      oscHarmonic.frequency.exponentialRampToValueAtTime(1318.51, tEnd);
+      // Subtle triangle layer (-13 dB) adds clean industrial horn definition
+      oscAccent.type = "triangle";
+      oscAccent.frequency.setValueAtTime(880, t0);
+      oscAccent.frequency.exponentialRampToValueAtTime(1760, tSweep);
+      oscAccent.frequency.exponentialRampToValueAtTime(1975.5, tPeakHold);
+      oscAccent.frequency.exponentialRampToValueAtTime(1174.66, tEnd);
 
       gainMain.gain.setValueAtTime(0.0001, t0);
-      gainMain.gain.linearRampToValueAtTime(0.24, t0 + 0.05);
-      gainMain.gain.setValueAtTime(0.22, tHoldEnd);
+      gainMain.gain.linearRampToValueAtTime(0.28, t0 + 0.035);
+      gainMain.gain.setValueAtTime(0.26, tPeakHold);
       gainMain.gain.exponentialRampToValueAtTime(0.0001, tEnd);
 
-      gainHarmonic.gain.setValueAtTime(0.0001, t0);
-      gainHarmonic.gain.linearRampToValueAtTime(0.045, t0 + 0.05);
-      gainHarmonic.gain.setValueAtTime(0.04, tHoldEnd);
-      gainHarmonic.gain.exponentialRampToValueAtTime(0.0001, tEnd);
+      gainAccent.gain.setValueAtTime(0.0001, t0);
+      gainAccent.gain.linearRampToValueAtTime(0.07, t0 + 0.035);
+      gainAccent.gain.setValueAtTime(0.06, tPeakHold);
+      gainAccent.gain.exponentialRampToValueAtTime(0.0001, tEnd);
 
       oscMain.connect(gainMain);
-      oscHarmonic.connect(gainHarmonic);
+      oscAccent.connect(gainAccent);
       gainMain.connect(filter);
-      gainHarmonic.connect(filter);
+      gainAccent.connect(filter);
 
       oscMain.start(t0);
-      oscHarmonic.start(t0);
+      oscAccent.start(t0);
       oscMain.stop(tEnd + 0.03);
-      oscHarmonic.stop(tEnd + 0.03);
+      oscAccent.stop(tEnd + 0.03);
     }
 
-    return 2220;
+    return 2260;
   } catch {
     return 0;
   }
 }
 
 function formatSpokenCode(raw: string): string {
-  // Spell letter codes cleanly ("Aa" -> "A A") so Indonesian & English TTS pronounce them distinctly
-  return /^[a-z]{1,3}$/i.test(raw) ? raw.toUpperCase().split("").join(" ") : raw;
+  // Separate every letter clearly ("Aa" -> "A, A") so TTS speaks distinct letters rather than merging vowels into "aa"
+  return /^[a-z]{1,4}$/i.test(raw) ? raw.toUpperCase().split("").join(", ") : raw;
 }
 
 function parseLocationParts(location: string): { row?: string; rack?: number; comp?: number } | null {
@@ -229,7 +264,7 @@ function parseLocationParts(location: string): { row?: string; rack?: number; co
       comp: fullMatch[3] ? Number(fullMatch[3]) : undefined
     };
   }
-  const shortMatch = /^\s*([a-z]{1,3})-(\d+)(?:-(\d+))?\s*$/i.exec(location);
+  const shortMatch = /^\s*([a-z]{1,4})-(\d+)(?:-(\d+))?\s*$/i.exec(location);
   if (shortMatch) {
     return {
       row: shortMatch[1],
@@ -246,7 +281,10 @@ function formatSpeechLocation(location: string, language: WarehouseAlarmLanguage
     const rowSpoken = formatSpokenCode(parts.row);
     return language === "en" ? `Row ${rowSpoken}, Rack ${parts.rack}` : `Baris ${rowSpoken}, Rak ${parts.rack}`;
   }
-  return location.replace(/[-·]/g, " ").trim();
+  return location
+    .replace(/[-·]/g, " ")
+    .replace(/\b([a-z]{2,3})\b/gi, (m) => (/^(di|ke|on|in|to|of|at|rak|row|baris|rack|and|the|for|min|max|api)$/i.test(m) ? m : m.toUpperCase().split("").join(", ")))
+    .trim();
 }
 
 function formatShortDisplayLocation(location: string): string {
@@ -290,12 +328,12 @@ export function buildWarehouseAlertMessages(
   if (violations.length === 1) {
     const dir = first.direction === "high" ? "melebihi batas" : "di bawah batas";
     return {
-      speechText: `Peringatan Gudang 7. ${spokenLoc}, suhu ${suhuStr} derajat, ${dir}.`,
+      speechText: `Peringatan, Gudang 7. ${spokenLoc}, suhu ${suhuStr} derajat, ${dir}.`,
       displayText: `${displayLoc} · ${suhuNum}°C ${dir} (batas ${first.threshold}°C)`
     };
   }
   return {
-    speechText: `Peringatan Gudang 7. ${violations.length} sensor melewati batas suhu.`,
+    speechText: `Peringatan, Gudang 7. ${violations.length} sensor melewati batas suhu.`,
     displayText: `${violations.length} sensor melewati batas (${displayLoc} ${suhuNum}°C)`
   };
 }
@@ -307,11 +345,11 @@ function selectFluentFemaleVoice(
   if (!voices.length) return { voice: null, isConfirmedFemale: false };
 
   const maleRegex =
-    /\b(david|mark|george|daniel|ryan|guy|christopher|eric|roger|steffan|andrew|brian|alex|fred|aaron|arthur|oliver|thomas|james|richard|sean|lee|rishi|ravi|hemant|prabhat|ardi|andika|rizky|budi|joko|male|man|pria|laki)\b/i;
+    /\b(david|mark|george|daniel|ryan|guy|christopher|eric|roger|steffan|andrew|brian|alex|fred|aaron|arthur|oliver|thomas|james|richard|sean|lee|rishi|ravi|hemant|prabhat|eddy|reed|rocko|grandpa|ardi|andika|rizky|budi|joko|male|man|pria|laki)\b/i;
 
   const femaleIdRegex = /\b(gadis|damayanti|putri|sari|google bahasa indonesia|female|woman|wanita|perempuan)\b/i;
   const femaleEnRegex =
-    /\b(aria|jenny|ava|emma|sonia|libby|natasha|clara|google us english|google uk english female|samantha|karen|serena|victoria|kate|fiona|tessa|moira|allison|susan|zoe|zira|hazel|female|woman)\b/i;
+    /\b(aria|jenny|ava|emma|sonia|libby|natasha|clara|google us english|google uk english female|samantha|karen|serena|victoria|kate|fiona|tessa|moira|allison|susan|zoe|zira|hazel|sandy|shelley|flo|grandma|female|woman)\b/i;
 
   const isNatural = (name: string) => /\b(natural|neural|online|google)\b/i.test(name);
 
@@ -326,14 +364,13 @@ function selectFluentFemaleVoice(
     let confirmedFemale = false;
 
     if (language === "id") {
-      // Strictly prefer Indonesian locales (including legacy Java/Android "in-ID")
       if (!lang.startsWith("id") && !lang.startsWith("in-") && lang !== "in" && !name.includes("indonesia")) {
         continue;
       }
       if (lang === "id-id" || lang === "id") score += 30;
       else score += 15;
 
-      if (maleRegex.test(name)) score -= 220;
+      if (maleRegex.test(name)) score -= 240;
       if (name.includes("gadis")) {
         score += 150;
         confirmedFemale = true;
@@ -351,7 +388,6 @@ function selectFluentFemaleVoice(
       if (isNatural(name)) score += 45;
       if (name.includes("espeak")) score -= 80;
     } else {
-      // Fluent native Western English ("bule"): US, UK, AU, CA, IE, NZ
       if (!lang.startsWith("en")) continue;
 
       if (lang === "en-us") score += 36;
@@ -360,7 +396,7 @@ function selectFluentFemaleVoice(
       else if (lang === "en-in" || lang === "en-pk" || lang === "en-sg" || lang === "en-ph") score -= 70;
       else score += 10;
 
-      if (maleRegex.test(name)) score -= 220;
+      if (maleRegex.test(name)) score -= 240;
 
       if (/\b(aria|jenny|ava|emma|sonia|libby|natasha|clara)\b/i.test(name) && isNatural(name)) {
         score += 155;
@@ -390,6 +426,82 @@ function selectFluentFemaleVoice(
   return { voice: bestVoice, isConfirmedFemale: bestIsFemale };
 }
 
+async function fetchServerFemaleTtsBuffer(text: string, language: WarehouseAlarmLanguage): Promise<ArrayBuffer | null> {
+  const key = `${language}:${text}`;
+  const cached = clientTtsCache.get(key);
+  if (cached) return cached;
+
+  const buf = await getAudioBuffer(`/warehouse/wh7/tts?lang=${language}&text=${encodeURIComponent(text)}`);
+  if (buf && buf.byteLength > 256) {
+    if (clientTtsCache.size >= 40) {
+      const oldest = clientTtsCache.keys().next().value;
+      if (oldest) clientTtsCache.delete(oldest);
+    }
+    clientTtsCache.set(key, buf);
+    return buf;
+  }
+  return null;
+}
+
+async function playAudioBufferFemaleVoice(arrayBuffer: ArrayBuffer): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  stopActiveSpeechPlayback();
+
+  try {
+    const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.volume = 1.0;
+    audio.playbackRate = 0.87;
+    (audio as unknown as { preservesPitch?: boolean; mozPreservesPitch?: boolean; webkitPreservesPitch?: boolean }).preservesPitch = true;
+    (audio as unknown as { mozPreservesPitch?: boolean }).mozPreservesPitch = true;
+    (audio as unknown as { webkitPreservesPitch?: boolean }).webkitPreservesPitch = true;
+
+    activeAudioEl = audio;
+    activeAudioBlobUrl = url;
+    audio.onended = () => {
+      if (activeAudioBlobUrl === url) {
+        URL.revokeObjectURL(url);
+        activeAudioBlobUrl = null;
+      }
+      if (activeAudioEl === audio) activeAudioEl = null;
+    };
+
+    await audio.play();
+    return true;
+  } catch {
+    // Fallback to already-unlocked AudioContext if background tab blocked HTML5 Audio.play()
+    if (activeAudioBlobUrl) {
+      try {
+        URL.revokeObjectURL(activeAudioBlobUrl);
+      } catch {}
+      activeAudioBlobUrl = null;
+    }
+    activeAudioEl = null;
+  }
+
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return false;
+    if (ctx.state === "suspended") await ctx.resume();
+    if (ctx.state !== "running") return false;
+
+    const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+    const src = ctx.createBufferSource();
+    src.buffer = decoded;
+    src.playbackRate.value = 1.0; // Keep pitch pure when playing via AudioBufferSourceNode
+    src.connect(ctx.destination);
+    activeBufferSource = src;
+    src.onended = () => {
+      if (activeBufferSource === src) activeBufferSource = null;
+    };
+    src.start(0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function speakWarehouseWarning(text: string, language: WarehouseAlarmLanguage = "id"): boolean {
   if (typeof window === "undefined" || !("speechSynthesis" in window) || !text) {
     return false;
@@ -402,14 +514,22 @@ export function speakWarehouseWarning(text: string, language: WarehouseAlarmLang
 
     const voices = synth.getVoices();
     const availableVoices = voices.length > 0 ? voices : cachedVoices;
-    const { voice: matched, isConfirmedFemale } = selectFluentFemaleVoice(availableVoices, language);
+    let { voice: matched, isConfirmedFemale } = selectFluentFemaleVoice(availableVoices, language);
+
+    // Prevent Windows Chrome/Firefox from silently falling back to male Microsoft David/Andika when no ID voice is installed
+    if (!matched && language === "id" && availableVoices.length > 0) {
+      const ziraOrFemaleEn = selectFluentFemaleVoice(availableVoices, "en");
+      if (ziraOrFemaleEn.isConfirmedFemale && ziraOrFemaleEn.voice) {
+        matched = ziraOrFemaleEn.voice;
+        isConfirmedFemale = true;
+      }
+    }
 
     const utter = new SpeechSynthesisUtterance(text);
     const defaultLang = language === "en" ? "en-US" : "id-ID";
     utter.lang = matched?.lang || defaultLang;
-    // Calm, articulate, unhurried pace so announcements are clear and fluent
     utter.rate = 0.86;
-    utter.pitch = isConfirmedFemale ? 1.04 : 1.12;
+    utter.pitch = isConfirmedFemale ? 1.04 : 1.15;
     utter.volume = 1;
 
     if (matched) {
@@ -458,14 +578,22 @@ export async function triggerWarehouseAlarmAudio(
     pendingSpeechTimer = null;
   }
 
-  await ensureVoicesLoaded(250);
+  // Start loading consistent server female TTS audio & browser voices while siren plays
+  const serverTtsPromise = fetchServerFemaleTtsBuffer(speechText, language);
+  void ensureVoicesLoaded(400);
+
   const sirenMs = await playWarningSiren();
-  pendingSpeechTimer = setTimeout(() => {
+  pendingSpeechTimer = setTimeout(async () => {
     pendingSpeechTimer = null;
-    if (!isAlarmMuted || forceImmediate) {
-      speakWarehouseWarning(speechText, language);
+    if (isAlarmMuted && !forceImmediate) return;
+
+    const serverAudio = await serverTtsPromise.catch(() => null);
+    if (serverAudio) {
+      const ok = await playAudioBufferFemaleVoice(serverAudio);
+      if (ok) return;
     }
-  }, Math.min(2300, sirenMs));
+    speakWarehouseWarning(speechText, language);
+  }, Math.min(2320, sirenMs));
 
   return { played: true, message: displayText, speechMessage: speechText, title };
 }

@@ -158,3 +158,68 @@ export const updateWh7AlarmPrefHandler = async (req: Request, res: Response, nex
     next(err);
   }
 };
+
+const TTS_CACHE_MAX_ENTRIES = 100;
+const TTS_CACHE_TTL_MS = 60 * 60 * 1000;
+const ttsAudioCache = new Map<string, { buf: Buffer; expiresAt: number }>();
+
+/**
+ * Serve unified fluent female TTS audio across all client browsers and accounts (with cache)
+ * so every user hears an identical female voice regardless of local OS voice packs.
+ */
+export const getWh7TtsAudioHandler = async (req: Request, res: Response) => {
+  const rawText = String(req.query.text || "").trim().slice(0, 220);
+  const lang = String(req.query.lang || "id").toLowerCase() === "en" ? "en" : "id";
+  if (!rawText) {
+    res.status(400).json({ error: "Missing text" });
+    return;
+  }
+
+  const cacheKey = `${lang}:${rawText}`;
+  const now = Date.now();
+  const cached = ttsAudioCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.send(cached.buf);
+    return;
+  }
+
+  try {
+    const tl = lang === "en" ? "en" : "id";
+    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(rawText)}&tl=${tl}&client=tw-ob`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const upstream = await fetch(ttsUrl, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+      }
+    });
+    clearTimeout(timer);
+
+    const contentType = upstream.headers.get("content-type") || "";
+    if (!upstream.ok || !contentType.includes("audio")) {
+      res.status(204).end();
+      return;
+    }
+
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    if (buf.byteLength < 256) {
+      res.status(204).end();
+      return;
+    }
+
+    if (ttsAudioCache.size >= TTS_CACHE_MAX_ENTRIES) {
+      const oldestKey = ttsAudioCache.keys().next().value;
+      if (oldestKey) ttsAudioCache.delete(oldestKey);
+    }
+    ttsAudioCache.set(cacheKey, { buf, expiresAt: now + TTS_CACHE_TTL_MS });
+
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.send(buf);
+  } catch {
+    res.status(204).end();
+  }
+};

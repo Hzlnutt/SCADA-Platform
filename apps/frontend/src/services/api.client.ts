@@ -7,17 +7,25 @@ const rawBaseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? devFal
 const baseUrl = rawBaseUrl.replace(/\/$/, "");
 const apiBase = baseUrl.endsWith("/api/v1") ? baseUrl : `${baseUrl}/api/v1`;
 
-const request = async (path: string, options?: RequestInit) => {
-  const url = `${apiBase}${path.startsWith("/") ? path : `/${path}`}`;
+const buildUrl = (path: string) => `${apiBase}${path.startsWith("/") ? path : `/${path}`}`;
+
+const buildAuthHeaders = (extra?: HeadersInit): HeadersInit => {
   const accessToken = getAccessToken();
+  return {
+    "X-Client-MAC": getTerminalMacAddress(),
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...(extra ?? {})
+  };
+};
+
+const request = async (path: string, options?: RequestInit) => {
+  const url = buildUrl(path);
   const response = await fetch(url, {
+    ...options,
     headers: {
       "Content-Type": "application/json",
-      "X-Client-MAC": getTerminalMacAddress(),
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...(options?.headers ?? {})
-    },
-    ...options
+      ...buildAuthHeaders(options?.headers)
+    }
   });
 
   if (!response.ok) {
@@ -32,6 +40,20 @@ const request = async (path: string, options?: RequestInit) => {
   }
 
   return response.json();
+};
+
+export const getAudioBuffer = async (path: string): Promise<ArrayBuffer | null> => {
+  try {
+    const response = await fetch(buildUrl(path), {
+      headers: buildAuthHeaders()
+    });
+    if (response.status !== 200) return null;
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("audio")) return null;
+    return await response.arrayBuffer();
+  } catch {
+    return null;
+  }
 };
 
 export const getJson = async <T>(path: string) => {
