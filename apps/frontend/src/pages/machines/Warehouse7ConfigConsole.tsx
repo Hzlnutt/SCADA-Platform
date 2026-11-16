@@ -4,6 +4,7 @@ import { useAuthStore } from "../../store/auth.store";
 import { useTranslation } from "../../i18n/useTranslation";
 import { canEditWarehouse7Config } from "../../utils/roles";
 import { testWarehouseAlarmVoice } from "../../utils/warehouseAlarmAudio";
+import Warehouse7AlarmToast, { type Warehouse7AlarmToastData } from "../../components/warehouse/Warehouse7AlarmToast";
 
 interface Wh7ConfigData {
   baseUrl: string;
@@ -28,7 +29,7 @@ export default function Warehouse7ConfigConsole() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [alarmToast, setAlarmToast] = useState<{ title: string; message: string } | null>(null);
+  const [alarmToast, setAlarmToast] = useState<Warehouse7AlarmToastData | null>(null);
   const [discoveredWarehouses, setDiscoveredWarehouses] = useState<Array<{ id_wh: number; nm_gudang: string }>>([]);
 
   const [baseUrl, setBaseUrl] = useState("http://172.16.4.122:8002");
@@ -201,7 +202,7 @@ export default function Warehouse7ConfigConsole() {
     const parsedMax = Number(maxTemp);
     const sampleMax = Number.isFinite(parsedMax) ? parsedMax : 30;
     const res = await testWarehouseAlarmVoice(sampleMax, language);
-    setAlarmToast({ title: res.title, message: res.message });
+    setAlarmToast({ id: Date.now(), title: res.title, message: res.message, durationMs: 10000 });
   };
 
   if (loading) {
@@ -215,29 +216,7 @@ export default function Warehouse7ConfigConsole() {
   return (
     <div className="space-y-6">
       {/* Floating Test Alarm Notification Toast */}
-      {alarmToast && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-md rounded-xl border-2 border-rose-500 bg-white dark:bg-slate-900 p-4 shadow-2xl flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 text-lg font-extrabold">
-            !
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-extrabold text-rose-600 dark:text-rose-400">
-              {alarmToast.title}
-            </div>
-            <div className="mt-0.5 text-sm font-medium text-[#002b5c] dark:text-slate-200">
-              {alarmToast.message}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setAlarmToast(null)}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold px-1 cursor-pointer"
-            aria-label="Close notification"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      <Warehouse7AlarmToast toast={alarmToast} onClose={() => setAlarmToast(null)} />
 
       <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-sm space-y-5 transition-colors duration-300">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#acd3ff]/40 dark:border-slate-800 pb-3">

@@ -894,6 +894,47 @@ export const ensurePostgresTables = async () => {
       DELETE FROM electric_plts_telemetry_minute a USING electric_plts_telemetry_minute b WHERE a.id < b.id AND a.t_stamp = b.t_stamp AND a.poi_id = b.poi_id;
       CREATE UNIQUE INDEX IF NOT EXISTS uq_plts_minute_tstamp ON electric_plts_telemetry_minute (t_stamp, poi_id);
 
+      -- Deduplicate any legacy concurrent exact-hour duplicates (prefer valid >0 energy, then latest id) and lock hourly uniqueness
+      WITH ranked AS (
+        SELECT id, ROW_NUMBER() OVER (
+          PARTITION BY t_stamp
+          ORDER BY (CASE WHEN active_energy IS NOT NULL AND active_energy > 0 THEN 0 ELSE 1 END), id DESC
+        ) AS rn
+        FROM electric_pln_telemetry
+      )
+      DELETE FROM electric_pln_telemetry WHERE id IN (SELECT id FROM ranked WHERE rn > 1);
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_pln_hourly_tstamp ON electric_pln_telemetry (t_stamp);
+
+      WITH ranked AS (
+        SELECT id, ROW_NUMBER() OVER (
+          PARTITION BY t_stamp
+          ORDER BY (CASE WHEN active_energy IS NOT NULL AND active_energy > 0 THEN 0 ELSE 1 END), id DESC
+        ) AS rn
+        FROM electric_wf1_telemetry
+      )
+      DELETE FROM electric_wf1_telemetry WHERE id IN (SELECT id FROM ranked WHERE rn > 1);
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_wf1_hourly_tstamp ON electric_wf1_telemetry (t_stamp);
+
+      WITH ranked AS (
+        SELECT id, ROW_NUMBER() OVER (
+          PARTITION BY t_stamp
+          ORDER BY (CASE WHEN active_energy IS NOT NULL AND active_energy > 0 THEN 0 ELSE 1 END), id DESC
+        ) AS rn
+        FROM electric_wf2_telemetry
+      )
+      DELETE FROM electric_wf2_telemetry WHERE id IN (SELECT id FROM ranked WHERE rn > 1);
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_wf2_hourly_tstamp ON electric_wf2_telemetry (t_stamp);
+
+      WITH ranked AS (
+        SELECT id, ROW_NUMBER() OVER (
+          PARTITION BY t_stamp, poi_id
+          ORDER BY (CASE WHEN total_kwh IS NOT NULL AND total_kwh > 0 THEN 0 ELSE 1 END), id DESC
+        ) AS rn
+        FROM electric_plts_telemetry
+      )
+      DELETE FROM electric_plts_telemetry WHERE id IN (SELECT id FROM ranked WHERE rn > 1);
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_plts_hourly_tstamp_poi ON electric_plts_telemetry (t_stamp, poi_id);
+
       -- HVAC Retained Sample telemetry tables
       CREATE TABLE IF NOT EXISTS hvac_telemetry_minute (
         id SERIAL PRIMARY KEY,

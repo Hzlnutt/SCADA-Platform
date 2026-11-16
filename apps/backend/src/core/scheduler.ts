@@ -25,6 +25,7 @@ let pfPollingInterval: NodeJS.Timeout | null = null;
 
 let incomingElectricityPollingInterval: NodeJS.Timeout | null = null;
 let incomingElectricityRollupInterval: NodeJS.Timeout | null = null;
+let isElectricityRollupRunning = false;
 
 export interface HvacRetainLiveState {
   PLC1_AHU1_Utl: {
@@ -440,10 +441,9 @@ const insertPlnMinuteTelemetry = async (payload: any, minuteTs: Date) => {
     logger.warn(`Failed to insert PLN minute telemetry: ${err.message}`);
   });
 
-  // 2. Pada jam tepat (:00:00), simpan juga data aktual murni yang sama ke tabel per jam electric_pln_telemetry
+  // 2. Pada jam tepat (:00:00), simpan juga data aktual murni yang sama ke tabel per jam electric_pln_telemetry secara atomik
   if (isExactHour) {
     try {
-      await pool.query(`DELETE FROM electric_pln_telemetry WHERE t_stamp = $1`, [minuteTs]);
       await pool.query(`
         INSERT INTO electric_pln_telemetry (
           t_stamp, status_pm8000, volt_ab, volt_bc, volt_ca, volt_ll,
@@ -455,6 +455,32 @@ const insertPlnMinuteTelemetry = async (payload: any, minuteTs: Date) => {
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
         )
+        ON CONFLICT (t_stamp) DO UPDATE SET
+          status_pm8000 = EXCLUDED.status_pm8000,
+          volt_ab = EXCLUDED.volt_ab,
+          volt_bc = EXCLUDED.volt_bc,
+          volt_ca = EXCLUDED.volt_ca,
+          volt_ll = EXCLUDED.volt_ll,
+          current_a = EXCLUDED.current_a,
+          current_b = EXCLUDED.current_b,
+          current_c = EXCLUDED.current_c,
+          frequency = EXCLUDED.frequency,
+          active_power = EXCLUDED.active_power,
+          reactive_power_total = EXCLUDED.reactive_power_total,
+          apparent_power_total = EXCLUDED.apparent_power_total,
+          power_factor = EXCLUDED.power_factor,
+          voltage_unbalance = EXCLUDED.voltage_unbalance,
+          current_unbalance = EXCLUDED.current_unbalance,
+          thd_volt_a = EXCLUDED.thd_volt_a,
+          thd_volt_b = EXCLUDED.thd_volt_b,
+          thd_volt_c = EXCLUDED.thd_volt_c,
+          thd_current_a = EXCLUDED.thd_current_a,
+          thd_current_b = EXCLUDED.thd_current_b,
+          thd_current_c = EXCLUDED.thd_current_c,
+          active_energy = EXCLUDED.active_energy,
+          export_pln = EXCLUDED.export_pln,
+          peak_demand = EXCLUDED.peak_demand
+        WHERE electric_pln_telemetry.active_energy IS NULL OR electric_pln_telemetry.active_energy <= 0
       `, [
         minuteTs, payload.status_pm8000, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
         payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power,
@@ -519,10 +545,9 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
     logger.warn(`Failed to insert WF minute telemetry to ${table}: ${err.message}`);
   });
 
-  // 2. Pada jam tepat (:00:00), simpan juga data aktual murni yang sama ke tabel per jam
+  // 2. Pada jam tepat (:00:00), simpan juga data aktual murni yang sama ke tabel per jam secara atomik
   if (isExactHour) {
     try {
-      await pool.query(`DELETE FROM ${mainTable} WHERE t_stamp = $1`, [minuteTs]);
       await pool.query(`
         INSERT INTO ${mainTable} (
           t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
@@ -533,6 +558,30 @@ const insertWfMinuteTelemetry = async (table: "electric_wf1_telemetry_minute" | 
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
         )
+        ON CONFLICT (t_stamp) DO UPDATE SET
+          status_pm5500 = EXCLUDED.status_pm5500,
+          volt_ab = EXCLUDED.volt_ab,
+          volt_bc = EXCLUDED.volt_bc,
+          volt_ca = EXCLUDED.volt_ca,
+          volt_ll = EXCLUDED.volt_ll,
+          current_a = EXCLUDED.current_a,
+          current_b = EXCLUDED.current_b,
+          current_c = EXCLUDED.current_c,
+          frequency = EXCLUDED.frequency,
+          active_power_total = EXCLUDED.active_power_total,
+          reactive_power_total = EXCLUDED.reactive_power_total,
+          apparent_power_total = EXCLUDED.apparent_power_total,
+          power_factor = EXCLUDED.power_factor,
+          voltage_unbalance = EXCLUDED.voltage_unbalance,
+          current_unbalance = EXCLUDED.current_unbalance,
+          thd_volt_a = EXCLUDED.thd_volt_a,
+          thd_volt_b = EXCLUDED.thd_volt_b,
+          thd_volt_c = EXCLUDED.thd_volt_c,
+          thd_current_a = EXCLUDED.thd_current_a,
+          thd_current_b = EXCLUDED.thd_current_b,
+          thd_current_c = EXCLUDED.thd_current_c,
+          active_energy = EXCLUDED.active_energy
+        WHERE ${mainTable}.active_energy IS NULL OR ${mainTable}.active_energy <= 0
       `, [
         minuteTs, payload.status_pm5500, payload.volt_ab, payload.volt_bc, payload.volt_ca, payload.volt_ll,
         payload.current_a, payload.current_b, payload.current_c, payload.frequency, payload.active_power_total,
@@ -683,14 +732,28 @@ const insertPltsMinuteTelemetry = async (records: ElectricPltsRecord[], minuteTs
         r.power_factor ?? null, r.peak_demand ?? null
       ]);
 
-      // 2. Pada jam tepat (:00:00), simpan juga data aktual murni yang sama ke tabel per jam electric_plts_telemetry
+      // 2. Pada jam tepat (:00:00), simpan juga data aktual murni yang sama ke tabel per jam electric_plts_telemetry secara atomik
       if (isExactHour) {
-        await pool.query(`DELETE FROM electric_plts_telemetry WHERE t_stamp = $1 AND poi_id = $2`, [minuteTs, r.poi_id]);
         await pool.query(`
           INSERT INTO electric_plts_telemetry (
             t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn,
             frequency, active_power, total_kwh, total_kvarh, power_factor, peak_demand
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          ON CONFLICT (t_stamp, poi_id) DO UPDATE SET
+            status = EXCLUDED.status,
+            volt_ab = EXCLUDED.volt_ab,
+            volt_bc = EXCLUDED.volt_bc,
+            volt_ca = EXCLUDED.volt_ca,
+            volt_an = EXCLUDED.volt_an,
+            volt_bn = EXCLUDED.volt_bn,
+            volt_cn = EXCLUDED.volt_cn,
+            frequency = EXCLUDED.frequency,
+            active_power = EXCLUDED.active_power,
+            total_kwh = EXCLUDED.total_kwh,
+            total_kvarh = EXCLUDED.total_kvarh,
+            power_factor = EXCLUDED.power_factor,
+            peak_demand = EXCLUDED.peak_demand
+          WHERE electric_plts_telemetry.total_kwh IS NULL OR electric_plts_telemetry.total_kwh <= 0
         `, [
           minuteTs, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn,
           r.frequency, r.active_power ?? null, r.total_kwh ?? null, r.total_kvarh ?? null,
@@ -1009,28 +1072,49 @@ const insertPmMinuteTelemetryBatch = async (records: ElectricPmRecord[], minuteT
         active_energy = EXCLUDED.active_energy;
     `, params);
 
-    // 2. Pada jam tepat (:00:00), simpan juga data aktual murni yang sama ke tabel per jam electric_pm_telemetry
+    // 2. Pada jam tepat (:00:00), simpan juga data aktual murni yang sama ke tabel per jam electric_pm_telemetry secara atomik
     if (minuteTs.getMinutes() === 0) {
-      for (const r of validRecords) {
-        await pool.query(`DELETE FROM electric_pm_telemetry WHERE t_stamp = $1 AND pm_id = $2`, [minuteTs, r.pm_id]);
-        await pool.query(`
-          INSERT INTO electric_pm_telemetry (
-            t_stamp, group_id, pm_id, status, volt_ab, volt_bc, volt_ca, volt_ll,
-            current_a, current_b, current_c, frequency, active_power_total,
-            reactive_power_total, apparent_power_total, power_factor,
-            voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
-            thd_current_a, thd_current_b, thd_current_c, active_energy
-          ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
-          )
-        `, [
-          minuteTs, r.group_id, r.pm_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
-          r.current_a, r.current_b, r.current_c, r.frequency, r.active_power_total,
-          r.reactive_power_total, r.apparent_power_total, r.power_factor,
-          r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
-          r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy
-        ]).catch(() => {});
-      }
+      await pool.query(`
+        INSERT INTO electric_pm_telemetry (
+          t_stamp, group_id, pm_id, status, volt_ab, volt_bc, volt_ca, volt_ll,
+          volt_an, volt_bn, volt_cn, volt_ln,
+          current_a, current_b, current_c, frequency, active_power_total,
+          reactive_power_total, apparent_power_total, power_factor,
+          voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+          thd_current_a, thd_current_b, thd_current_c, active_energy
+        ) VALUES ${valueClauses.join(", ")}
+        ON CONFLICT (t_stamp, pm_id) DO UPDATE SET
+          group_id = EXCLUDED.group_id,
+          status = EXCLUDED.status,
+          volt_ab = EXCLUDED.volt_ab,
+          volt_bc = EXCLUDED.volt_bc,
+          volt_ca = EXCLUDED.volt_ca,
+          volt_ll = EXCLUDED.volt_ll,
+          volt_an = EXCLUDED.volt_an,
+          volt_bn = EXCLUDED.volt_bn,
+          volt_cn = EXCLUDED.volt_cn,
+          volt_ln = EXCLUDED.volt_ln,
+          current_a = EXCLUDED.current_a,
+          current_b = EXCLUDED.current_b,
+          current_c = EXCLUDED.current_c,
+          frequency = EXCLUDED.frequency,
+          active_power_total = EXCLUDED.active_power_total,
+          reactive_power_total = EXCLUDED.reactive_power_total,
+          apparent_power_total = EXCLUDED.apparent_power_total,
+          power_factor = EXCLUDED.power_factor,
+          voltage_unbalance = EXCLUDED.voltage_unbalance,
+          current_unbalance = EXCLUDED.current_unbalance,
+          thd_volt_a = EXCLUDED.thd_volt_a,
+          thd_volt_b = EXCLUDED.thd_volt_b,
+          thd_volt_c = EXCLUDED.thd_volt_c,
+          thd_current_a = EXCLUDED.thd_current_a,
+          thd_current_b = EXCLUDED.thd_current_b,
+          thd_current_c = EXCLUDED.thd_current_c,
+          active_energy = EXCLUDED.active_energy
+        WHERE electric_pm_telemetry.active_energy IS NULL OR electric_pm_telemetry.active_energy <= 0
+      `, params).catch((err: any) => {
+        logger.warn(`Failed to save hourly PM telemetry batch: ${err.message}`);
+      });
     }
   } catch (err: any) {
     logger.warn(`Failed to insert PM minute telemetry batch: ${err.message}`);
@@ -2772,7 +2856,124 @@ const rollupMonthlyForMonth = async (yearMonth: string) => {
   }
 };
 
+const backfillMissingWfHours = async (
+  pool: ReturnType<typeof getPostgresPool>,
+  minuteTable: "electric_wf1_telemetry_minute" | "electric_wf2_telemetry_minute",
+  mainTable: "electric_wf1_telemetry" | "electric_wf2_telemetry"
+) => {
+  const buckets = await pool.query(`
+    SELECT 
+      to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
+    FROM ${minuteTable} m
+    WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
+      AND NOT EXISTS (
+        SELECT 1 FROM ${mainTable} p WHERE p.t_stamp = date_trunc('hour', m.t_stamp)
+      )
+    GROUP BY hour_bucket_str
+    ORDER BY hour_bucket_str ASC;
+  `);
+
+  for (const b of buckets.rows) {
+    const hourStartStr = b.hour_bucket_str;
+    if (!hourStartStr) continue;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const aggRes = await client.query(`
+        SELECT 
+          AVG(volt_ab) as volt_ab,
+          AVG(volt_bc) as volt_bc,
+          AVG(volt_ca) as volt_ca,
+          AVG(volt_ll) as volt_ll,
+          AVG(current_a) as current_a,
+          AVG(current_b) as current_b,
+          AVG(current_c) as current_c,
+          AVG(frequency) as frequency,
+          AVG(active_power_total) as active_power_total,
+          AVG(reactive_power_total) as reactive_power_total,
+          AVG(apparent_power_total) as apparent_power_total,
+          COALESCE(
+            (SELECT power_factor FROM ${mainTable} WHERE t_stamp = $1::timestamp),
+            (ARRAY_AGG(power_factor ORDER BY t_stamp ASC) FILTER (WHERE power_factor IS NOT NULL))[1],
+            AVG(power_factor)
+          ) as power_factor,
+          AVG(voltage_unbalance) as voltage_unbalance,
+          AVG(current_unbalance) as current_unbalance,
+          AVG(thd_volt_a) as thd_volt_a,
+          AVG(thd_volt_b) as thd_volt_b,
+          AVG(thd_volt_c) as thd_volt_c,
+          AVG(thd_current_a) as thd_current_a,
+          AVG(thd_current_b) as thd_current_b,
+          AVG(thd_current_c) as thd_current_c,
+          COALESCE(
+            (SELECT active_energy FROM ${mainTable} WHERE t_stamp = $1::timestamp AND active_energy > 0),
+            (ARRAY_AGG(active_energy ORDER BY t_stamp ASC) FILTER (WHERE active_energy IS NOT NULL AND active_energy > 0))[1],
+            MIN(active_energy)
+          ) as active_energy,
+          bool_or(status_pm5500) as status_pm5500
+        FROM ${minuteTable}
+        WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
+      `, [hourStartStr]);
+
+      const r = aggRes.rows[0];
+      if (r && (r.volt_ab !== null || r.active_power_total !== null || r.active_energy !== null)) {
+        await client.query(`
+          INSERT INTO ${mainTable} (
+            t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
+            current_a, current_b, current_c, frequency, active_power_total,
+            reactive_power_total, apparent_power_total, power_factor,
+            voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
+            thd_current_a, thd_current_b, thd_current_c, active_energy
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+          )
+          ON CONFLICT (t_stamp) DO UPDATE SET
+            status_pm5500 = EXCLUDED.status_pm5500,
+            volt_ab = EXCLUDED.volt_ab,
+            volt_bc = EXCLUDED.volt_bc,
+            volt_ca = EXCLUDED.volt_ca,
+            volt_ll = EXCLUDED.volt_ll,
+            current_a = EXCLUDED.current_a,
+            current_b = EXCLUDED.current_b,
+            current_c = EXCLUDED.current_c,
+            frequency = EXCLUDED.frequency,
+            active_power_total = EXCLUDED.active_power_total,
+            reactive_power_total = EXCLUDED.reactive_power_total,
+            apparent_power_total = EXCLUDED.apparent_power_total,
+            power_factor = EXCLUDED.power_factor,
+            voltage_unbalance = EXCLUDED.voltage_unbalance,
+            current_unbalance = EXCLUDED.current_unbalance,
+            thd_volt_a = EXCLUDED.thd_volt_a,
+            thd_volt_b = EXCLUDED.thd_volt_b,
+            thd_volt_c = EXCLUDED.thd_volt_c,
+            thd_current_a = EXCLUDED.thd_current_a,
+            thd_current_b = EXCLUDED.thd_current_b,
+            thd_current_c = EXCLUDED.thd_current_c,
+            active_energy = EXCLUDED.active_energy
+          WHERE ${mainTable}.active_energy IS NULL OR ${mainTable}.active_energy <= 0
+        `, [
+          hourStartStr, r.status_pm5500 ?? false, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
+          r.current_a, r.current_b, r.current_c, r.frequency, r.active_power_total,
+          r.reactive_power_total, r.apparent_power_total, r.power_factor,
+          r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
+          r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy
+        ]);
+      }
+
+      await client.query("COMMIT");
+    } catch (err: any) {
+      await client.query("ROLLBACK");
+      logger.error({ err: err.message, hour: hourStartStr, mainTable }, "Failed to backfill missing WF hourly telemetry");
+    } finally {
+      client.release();
+    }
+  }
+};
+
 export const runElectricityRollupAndCleanup = async () => {
+  if (isElectricityRollupRunning) return;
+  isElectricityRollupRunning = true;
   const pool = getPostgresPool();
   try {
     // 1. Backfill completed hours from electric_pln_telemetry_minute ONLY IF missing from electric_pln_telemetry
@@ -2801,10 +3002,6 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(volt_bc) as volt_bc,
             AVG(volt_ca) as volt_ca,
             AVG(volt_ll) as volt_ll,
-            AVG(volt_an) as volt_an,
-            AVG(volt_bn) as volt_bn,
-            AVG(volt_cn) as volt_cn,
-            AVG(volt_ln) as volt_ln,
             AVG(current_a) as current_a,
             AVG(current_b) as current_b,
             AVG(current_c) as current_c,
@@ -2842,7 +3039,6 @@ export const runElectricityRollupAndCleanup = async () => {
         const r = aggRes.rows[0];
         if (r && (r.volt_ab !== null || r.active_power !== null || r.active_energy !== null)) {
           const preservedExportPln = r.export_pln !== undefined && r.export_pln !== null ? r.export_pln : null;
-          await client.query(`DELETE FROM electric_pln_telemetry WHERE t_stamp = $1`, [hourStartStr]);
           await client.query(`
             INSERT INTO electric_pln_telemetry (
               t_stamp, status_pm8000, volt_ab, volt_bc, volt_ca, volt_ll,
@@ -2854,6 +3050,31 @@ export const runElectricityRollupAndCleanup = async () => {
             ) VALUES (
               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
             )
+            ON CONFLICT (t_stamp) DO UPDATE SET
+              status_pm8000 = EXCLUDED.status_pm8000,
+              volt_ab = EXCLUDED.volt_ab,
+              volt_bc = EXCLUDED.volt_bc,
+              volt_ca = EXCLUDED.volt_ca,
+              volt_ll = EXCLUDED.volt_ll,
+              current_a = EXCLUDED.current_a,
+              current_b = EXCLUDED.current_b,
+              current_c = EXCLUDED.current_c,
+              frequency = EXCLUDED.frequency,
+              active_power = EXCLUDED.active_power,
+              reactive_power_total = EXCLUDED.reactive_power_total,
+              apparent_power_total = EXCLUDED.apparent_power_total,
+              power_factor = EXCLUDED.power_factor,
+              voltage_unbalance = EXCLUDED.voltage_unbalance,
+              current_unbalance = EXCLUDED.current_unbalance,
+              thd_volt_a = EXCLUDED.thd_volt_a,
+              thd_volt_b = EXCLUDED.thd_volt_b,
+              thd_volt_c = EXCLUDED.thd_volt_c,
+              thd_current_a = EXCLUDED.thd_current_a,
+              thd_current_b = EXCLUDED.thd_current_b,
+              thd_current_c = EXCLUDED.thd_current_c,
+              active_energy = EXCLUDED.active_energy,
+              export_pln = EXCLUDED.export_pln
+            WHERE electric_pln_telemetry.active_energy IS NULL OR electric_pln_telemetry.active_energy <= 0
           `, [
             hourStartStr, r.status_pm8000 ?? false, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
             r.current_a, r.current_b, r.current_c, r.frequency, r.active_power,
@@ -2874,179 +3095,9 @@ export const runElectricityRollupAndCleanup = async () => {
     }
 
     // PLN hourly records are kept 100% pure from electric_pln_telemetry
-    // 2. Backfill completed hours from electric_wf1_telemetry_minute ONLY IF missing from electric_wf1_telemetry
-    const wf1Buckets = await pool.query(`
-      SELECT 
-        to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
-      FROM electric_wf1_telemetry_minute m
-      WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-        AND NOT EXISTS (
-          SELECT 1 FROM electric_wf1_telemetry p WHERE p.t_stamp = date_trunc('hour', m.t_stamp)
-        )
-      GROUP BY hour_bucket_str
-      ORDER BY hour_bucket_str ASC;
-    `);
-
-    for (const b of wf1Buckets.rows) {
-      const hourStartStr = b.hour_bucket_str;
-      if (!hourStartStr) continue;
-
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        const aggRes = await client.query(`
-          SELECT 
-            AVG(volt_ab) as volt_ab,
-            AVG(volt_bc) as volt_bc,
-            AVG(volt_ca) as volt_ca,
-            AVG(volt_ll) as volt_ll,
-            AVG(current_a) as current_a,
-            AVG(current_b) as current_b,
-            AVG(current_c) as current_c,
-            AVG(frequency) as frequency,
-            AVG(active_power_total) as active_power_total,
-            AVG(reactive_power_total) as reactive_power_total,
-            AVG(apparent_power_total) as apparent_power_total,
-            COALESCE(
-              (SELECT power_factor FROM electric_wf1_telemetry WHERE t_stamp = $1::timestamp),
-              (ARRAY_AGG(power_factor ORDER BY t_stamp ASC) FILTER (WHERE power_factor IS NOT NULL))[1],
-              AVG(power_factor)
-            ) as power_factor,
-            AVG(voltage_unbalance) as voltage_unbalance,
-            AVG(current_unbalance) as current_unbalance,
-            AVG(thd_volt_a) as thd_volt_a,
-            AVG(thd_volt_b) as thd_volt_b,
-            AVG(thd_volt_c) as thd_volt_c,
-            AVG(thd_current_a) as thd_current_a,
-            AVG(thd_current_b) as thd_current_b,
-            AVG(thd_current_c) as thd_current_c,
-            COALESCE(
-              (SELECT active_energy FROM electric_wf1_telemetry WHERE t_stamp = $1::timestamp AND active_energy > 0),
-              (ARRAY_AGG(active_energy ORDER BY t_stamp ASC) FILTER (WHERE active_energy IS NOT NULL AND active_energy > 0))[1],
-              MIN(active_energy)
-            ) as active_energy,
-            bool_or(status_pm5500) as status_pm5500
-          FROM electric_wf1_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
-
-        const r = aggRes.rows[0];
-        if (r && (r.volt_ab !== null || r.active_power_total !== null || r.active_energy !== null)) {
-          await client.query(`DELETE FROM electric_wf1_telemetry WHERE t_stamp = $1`, [hourStartStr]);
-          await client.query(`
-            INSERT INTO electric_wf1_telemetry (
-              t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
-              current_a, current_b, current_c, frequency, active_power_total,
-              reactive_power_total, apparent_power_total, power_factor,
-              voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
-              thd_current_a, thd_current_b, thd_current_c, active_energy
-            ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
-            )
-          `, [
-            hourStartStr, r.status_pm5500 ?? false, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
-            r.current_a, r.current_b, r.current_c, r.frequency, r.active_power_total,
-            r.reactive_power_total, r.apparent_power_total, r.power_factor,
-            r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
-            r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy
-          ]);
-        }
-
-        await client.query("COMMIT");
-      } catch (err: any) {
-        await client.query("ROLLBACK");
-        logger.error({ err: err.message, hour: hourStartStr }, "Failed to backfill missing WF1 hourly telemetry");
-      } finally {
-        client.release();
-      }
-    }
-
-    // 3. Backfill completed hours from electric_wf2_telemetry_minute ONLY IF missing from electric_wf2_telemetry
-    const wf2Buckets = await pool.query(`
-      SELECT 
-        to_char(date_trunc('hour', t_stamp), 'YYYY-MM-DD HH24:00:00') as hour_bucket_str
-      FROM electric_wf2_telemetry_minute m
-      WHERE t_stamp < date_trunc('hour', NOW() AT TIME ZONE 'Asia/Jakarta')
-        AND NOT EXISTS (
-          SELECT 1 FROM electric_wf2_telemetry p WHERE p.t_stamp = date_trunc('hour', m.t_stamp)
-        )
-      GROUP BY hour_bucket_str
-      ORDER BY hour_bucket_str ASC;
-    `);
-
-    for (const b of wf2Buckets.rows) {
-      const hourStartStr = b.hour_bucket_str;
-      if (!hourStartStr) continue;
-
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        const aggRes = await client.query(`
-          SELECT 
-            AVG(volt_ab) as volt_ab,
-            AVG(volt_bc) as volt_bc,
-            AVG(volt_ca) as volt_ca,
-            AVG(volt_ll) as volt_ll,
-            AVG(current_a) as current_a,
-            AVG(current_b) as current_b,
-            AVG(current_c) as current_c,
-            AVG(frequency) as frequency,
-            AVG(active_power_total) as active_power_total,
-            AVG(reactive_power_total) as reactive_power_total,
-            AVG(apparent_power_total) as apparent_power_total,
-            COALESCE(
-              (SELECT power_factor FROM electric_wf2_telemetry WHERE t_stamp = $1::timestamp),
-              (ARRAY_AGG(power_factor ORDER BY t_stamp ASC) FILTER (WHERE power_factor IS NOT NULL))[1],
-              AVG(power_factor)
-            ) as power_factor,
-            AVG(voltage_unbalance) as voltage_unbalance,
-            AVG(current_unbalance) as current_unbalance,
-            AVG(thd_volt_a) as thd_volt_a,
-            AVG(thd_volt_b) as thd_volt_b,
-            AVG(thd_volt_c) as thd_volt_c,
-            AVG(thd_current_a) as thd_current_a,
-            AVG(thd_current_b) as thd_current_b,
-            AVG(thd_current_c) as thd_current_c,
-            COALESCE(
-              (SELECT active_energy FROM electric_wf2_telemetry WHERE t_stamp = $1::timestamp AND active_energy > 0),
-              (ARRAY_AGG(active_energy ORDER BY t_stamp ASC) FILTER (WHERE active_energy IS NOT NULL AND active_energy > 0))[1],
-              MIN(active_energy)
-            ) as active_energy,
-            bool_or(status_pm5500) as status_pm5500
-          FROM electric_wf2_telemetry_minute
-          WHERE t_stamp >= $1 AND t_stamp < $1::timestamp + INTERVAL '1 hour'
-        `, [hourStartStr]);
-
-        const r = aggRes.rows[0];
-        if (r && (r.volt_ab !== null || r.active_power_total !== null || r.active_energy !== null)) {
-          await client.query(`DELETE FROM electric_wf2_telemetry WHERE t_stamp = $1`, [hourStartStr]);
-          await client.query(`
-            INSERT INTO electric_wf2_telemetry (
-              t_stamp, status_pm5500, volt_ab, volt_bc, volt_ca, volt_ll,
-              current_a, current_b, current_c, frequency, active_power_total,
-              reactive_power_total, apparent_power_total, power_factor,
-              voltage_unbalance, current_unbalance, thd_volt_a, thd_volt_b, thd_volt_c,
-              thd_current_a, thd_current_b, thd_current_c, active_energy
-            ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
-            )
-          `, [
-            hourStartStr, r.status_pm5500 ?? false, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
-            r.current_a, r.current_b, r.current_c, r.frequency, r.active_power_total,
-            r.reactive_power_total, r.apparent_power_total, r.power_factor,
-            r.voltage_unbalance, r.current_unbalance, r.thd_volt_a, r.thd_volt_b, r.thd_volt_c,
-            r.thd_current_a, r.thd_current_b, r.thd_current_c, r.active_energy
-          ]);
-        }
-
-        await client.query("COMMIT");
-      } catch (err: any) {
-        await client.query("ROLLBACK");
-        logger.error({ err: err.message, hour: hourStartStr }, "Failed to backfill missing WF2 hourly telemetry");
-      } finally {
-        client.release();
-      }
-    }
+    // 2 & 3. Backfill completed hours from electric_wf1/wf2_telemetry_minute ONLY IF missing from main table
+    await backfillMissingWfHours(pool, "electric_wf1_telemetry_minute", "electric_wf1_telemetry");
+    await backfillMissingWfHours(pool, "electric_wf2_telemetry_minute", "electric_wf2_telemetry");
 
     // 4. Backfill completed hours from electric_pm_telemetry_minute ONLY IF missing from electric_pm_telemetry
     const pmBuckets = await pool.query(`
@@ -3077,6 +3128,10 @@ export const runElectricityRollupAndCleanup = async () => {
             AVG(volt_bc) as volt_bc,
             AVG(volt_ca) as volt_ca,
             AVG(volt_ll) as volt_ll,
+            AVG(volt_an) as volt_an,
+            AVG(volt_bn) as volt_bn,
+            AVG(volt_cn) as volt_cn,
+            AVG(volt_ln) as volt_ln,
             AVG(current_a) as current_a,
             AVG(current_b) as current_b,
             AVG(current_c) as current_c,
@@ -3104,7 +3159,6 @@ export const runElectricityRollupAndCleanup = async () => {
         `, [hourStartStr]);
 
         for (const r of aggRes.rows) {
-          await client.query(`DELETE FROM electric_pm_telemetry WHERE t_stamp = $1 AND group_id = $2 AND pm_id = $3`, [hourStartStr, r.group_id, r.pm_id]);
           await client.query(`
             INSERT INTO electric_pm_telemetry (
               t_stamp, group_id, pm_id, status, volt_ab, volt_bc, volt_ca, volt_ll,
@@ -3116,6 +3170,35 @@ export const runElectricityRollupAndCleanup = async () => {
             ) VALUES (
               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
             )
+            ON CONFLICT (t_stamp, pm_id) DO UPDATE SET
+              group_id = EXCLUDED.group_id,
+              status = EXCLUDED.status,
+              volt_ab = EXCLUDED.volt_ab,
+              volt_bc = EXCLUDED.volt_bc,
+              volt_ca = EXCLUDED.volt_ca,
+              volt_ll = EXCLUDED.volt_ll,
+              volt_an = EXCLUDED.volt_an,
+              volt_bn = EXCLUDED.volt_bn,
+              volt_cn = EXCLUDED.volt_cn,
+              volt_ln = EXCLUDED.volt_ln,
+              current_a = EXCLUDED.current_a,
+              current_b = EXCLUDED.current_b,
+              current_c = EXCLUDED.current_c,
+              frequency = EXCLUDED.frequency,
+              active_power_total = EXCLUDED.active_power_total,
+              reactive_power_total = EXCLUDED.reactive_power_total,
+              apparent_power_total = EXCLUDED.apparent_power_total,
+              power_factor = EXCLUDED.power_factor,
+              voltage_unbalance = EXCLUDED.voltage_unbalance,
+              current_unbalance = EXCLUDED.current_unbalance,
+              thd_volt_a = EXCLUDED.thd_volt_a,
+              thd_volt_b = EXCLUDED.thd_volt_b,
+              thd_volt_c = EXCLUDED.thd_volt_c,
+              thd_current_a = EXCLUDED.thd_current_a,
+              thd_current_b = EXCLUDED.thd_current_b,
+              thd_current_c = EXCLUDED.thd_current_c,
+              active_energy = EXCLUDED.active_energy
+            WHERE electric_pm_telemetry.active_energy IS NULL OR electric_pm_telemetry.active_energy <= 0
           `, [
             hourStartStr, r.group_id, r.pm_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_ll,
             r.volt_an, r.volt_bn, r.volt_cn, r.volt_ln,
@@ -3187,13 +3270,26 @@ export const runElectricityRollupAndCleanup = async () => {
         `, [hourStartStr]);
 
         for (const r of aggRes.rows) {
-          await client.query(`DELETE FROM electric_plts_telemetry WHERE t_stamp = $1 AND poi_id = $2`, [hourStartStr, r.poi_id]);
           await client.query(`
             INSERT INTO electric_plts_telemetry (
               t_stamp, poi_id, status, volt_ab, volt_bc, volt_ca, volt_an, volt_bn, volt_cn, frequency, active_power, total_kwh, total_kvarh, power_factor
             ) VALUES (
               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
             )
+            ON CONFLICT (t_stamp, poi_id) DO UPDATE SET
+              status = EXCLUDED.status,
+              volt_ab = EXCLUDED.volt_ab,
+              volt_bc = EXCLUDED.volt_bc,
+              volt_ca = EXCLUDED.volt_ca,
+              volt_an = EXCLUDED.volt_an,
+              volt_bn = EXCLUDED.volt_bn,
+              volt_cn = EXCLUDED.volt_cn,
+              frequency = EXCLUDED.frequency,
+              active_power = EXCLUDED.active_power,
+              total_kwh = EXCLUDED.total_kwh,
+              total_kvarh = EXCLUDED.total_kvarh,
+              power_factor = EXCLUDED.power_factor
+            WHERE electric_plts_telemetry.total_kwh IS NULL OR electric_plts_telemetry.total_kwh <= 0
           `, [
             hourStartStr, r.poi_id, r.status, r.volt_ab, r.volt_bc, r.volt_ca, r.volt_an, r.volt_bn, r.volt_cn, r.frequency, r.active_power, r.total_kwh, r.total_kvarh, r.power_factor
           ]);
@@ -3229,6 +3325,8 @@ export const runElectricityRollupAndCleanup = async () => {
     logger.info("Electricity hourly backfill and minute retention cleanup completed successfully");
   } catch (err: any) {
     logger.error({ err: err.message }, "Electricity hourly rollup job failed");
+  } finally {
+    isElectricityRollupRunning = false;
   }
 };
 

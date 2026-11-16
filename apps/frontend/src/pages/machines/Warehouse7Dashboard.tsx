@@ -5,6 +5,7 @@ import { useAuthStore } from "../../store/auth.store";
 import { useSystemStore } from "../../store/system.store";
 import { useTranslation } from "../../i18n/useTranslation";
 import Warehouse7LineChart, { type Warehouse7TrendPayload } from "../../components/warehouse/Warehouse7LineChart";
+import Warehouse7AlarmToast, { type Warehouse7AlarmToastData } from "../../components/warehouse/Warehouse7AlarmToast";
 import {
   Warehouse7DeviceFilterSelect,
   Warehouse7PeriodControls,
@@ -138,7 +139,7 @@ export default function Warehouse7Dashboard() {
     return window.localStorage.getItem(`scada.wh7.alarm_enabled.${userId}`) === "true";
   });
   const muted = !alarmEnabled;
-  const [alarmToast, setAlarmToast] = useState<{ title: string; message: string } | null>(null);
+  const [alarmToast, setAlarmToast] = useState<Warehouse7AlarmToastData | null>(null);
 
   // Synchronize per-account alarm preference (default disabled) across refresh/relogin
   useEffect(() => {
@@ -252,7 +253,7 @@ export default function Warehouse7Dashboard() {
       if (!payload?.alarms || payload.alarms.length === 0) return;
       const res = await triggerWarehouseAlarmAudio(payload.alarms, language);
       if (res.played && res.message) {
-        setAlarmToast({ title: res.title, message: res.message });
+        setAlarmToast({ id: Date.now(), title: res.title, message: res.message, durationMs: 12000 });
       }
     };
 
@@ -277,7 +278,7 @@ export default function Warehouse7Dashboard() {
     if (!alarmEnabled || !overview?.activeAlarms || overview.activeAlarms.length === 0) return;
     triggerWarehouseAlarmAudio(overview.activeAlarms, language).then((res) => {
       if (res.played && res.message) {
-        setAlarmToast({ title: res.title, message: res.message });
+        setAlarmToast({ id: Date.now(), title: res.title, message: res.message, durationMs: 12000 });
       }
     });
   }, [overview?.activeAlarms, alarmEnabled, language]);
@@ -380,29 +381,7 @@ export default function Warehouse7Dashboard() {
   return (
     <div className="space-y-5">
       {/* Floating Alarm Notification Toast */}
-      {alarmToast && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-md rounded-xl border-2 border-rose-500 bg-white dark:bg-slate-900 p-4 shadow-2xl flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 text-lg font-extrabold">
-            !
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-extrabold text-rose-600 dark:text-rose-400">
-              {alarmToast.title}
-            </div>
-            <div className="mt-0.5 text-sm font-medium text-[#002b5c] dark:text-slate-200">
-              {alarmToast.message}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setAlarmToast(null)}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold px-1 cursor-pointer"
-            aria-label="Close notification"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      <Warehouse7AlarmToast toast={alarmToast} onClose={() => setAlarmToast(null)} />
 
       {/* Uniform SCADA Toolbar */}
       <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-4 shadow-sm transition-colors duration-300">
@@ -488,10 +467,10 @@ export default function Warehouse7Dashboard() {
         </div>
       )}
 
-      {/* Uniform KPI Summary Cards */}
+      {/* Uniform Interactive KPI Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm flex items-center gap-4 transition-colors duration-300">
-          <div className="w-12 h-12 rounded-xl bg-[#1f6fb5]/10 text-[#1f6fb5] dark:text-sky-400 flex items-center justify-center shrink-0">
+        <div className="group rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm flex items-center gap-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-[#1f6fb5] dark:hover:border-sky-500">
+          <div className="w-12 h-12 rounded-xl bg-[#1f6fb5]/10 text-[#1f6fb5] dark:text-sky-400 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z" />
             </svg>
@@ -500,7 +479,7 @@ export default function Warehouse7Dashboard() {
             <div className="text-xs font-bold uppercase tracking-wider text-[#47729f] dark:text-slate-400">
               {t("warehouse7.avgTempLabel", "RATA-RATA SUHU GUDANG")}
             </div>
-            <div className="mt-1 text-3xl sm:text-4xl font-extrabold text-[#002b5c] dark:text-slate-100 font-mono">
+            <div className="mt-1 text-3xl sm:text-4xl font-extrabold text-[#002b5c] dark:text-slate-100 font-mono transition-colors group-hover:text-[#1f6fb5] dark:group-hover:text-sky-400">
               {overview?.avgTemp !== null && overview?.avgTemp !== undefined ? `${overview.avgTemp.toFixed(1)} °C` : "— °C"}
             </div>
             {overview?.deltaFromPrevious !== null && overview?.deltaFromPrevious !== undefined ? (
@@ -522,38 +501,54 @@ export default function Warehouse7Dashboard() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm flex flex-col justify-center transition-colors duration-300">
+        <div className="group rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm flex flex-col justify-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-[#1f6fb5] dark:hover:border-sky-500">
           <div className="text-xs font-bold uppercase tracking-wider text-[#47729f] dark:text-slate-400">
             {t("warehouse7.tempLimitsLabel", "BATAS SUHU ALARM")}
           </div>
           <div className="mt-2 flex items-baseline gap-3">
-            <span className="text-3xl sm:text-4xl font-extrabold text-[#1f6fb5] dark:text-sky-400 font-mono">{minTemp}°C</span>
+            <span className="text-3xl sm:text-4xl font-extrabold text-[#1f6fb5] dark:text-sky-400 font-mono transition-transform duration-200 group-hover:scale-105 inline-block">{minTemp}°C</span>
             <span className="text-slate-400 text-xl font-bold">—</span>
-            <span className="text-3xl sm:text-4xl font-extrabold text-rose-600 dark:text-rose-400 font-mono">{maxTemp}°C</span>
+            <span className="text-3xl sm:text-4xl font-extrabold text-rose-600 dark:text-rose-400 font-mono transition-transform duration-200 group-hover:scale-105 inline-block">{maxTemp}°C</span>
           </div>
         </div>
 
-        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm flex flex-col justify-between transition-colors duration-300">
+        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-[#1f6fb5] dark:hover:border-sky-500">
           <div className="text-xs font-bold uppercase tracking-wider text-[#47729f] dark:text-slate-400">
             {t("warehouse7.sensorSummaryLabel", "RINGKASAN SENSOR")}
           </div>
           <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-            <div className="rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 p-2.5">
+            <button
+              type="button"
+              onClick={() => setStatusFilter("all")}
+              className="rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 p-2.5 transition-all duration-150 hover:scale-105 hover:border-[#1f6fb5] cursor-pointer"
+            >
               <div className="text-xl font-extrabold text-[#002b5c] dark:text-slate-100">{counts.all}</div>
               <div className="text-xs font-bold text-[#47729f] dark:text-slate-400">{t("warehouse7.total", "Total")}</div>
-            </div>
-            <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5">
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("all")}
+              className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 transition-all duration-150 hover:scale-105 hover:border-emerald-500 cursor-pointer"
+            >
               <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">{overview?.onlineCount ?? 0}</div>
               <div className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{t("warehouse7.online", "Online")}</div>
-            </div>
-            <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-2.5">
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("critical")}
+              className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-2.5 transition-all duration-150 hover:scale-105 hover:border-rose-500 cursor-pointer"
+            >
               <div className="text-xl font-extrabold text-rose-600 dark:text-rose-400">{counts.critical}</div>
               <div className="text-xs font-bold text-rose-700 dark:text-rose-300">{t("warehouse7.critical", "Kritis")}</div>
-            </div>
-            <div className="rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700 p-2.5">
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("offline")}
+              className="rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700 p-2.5 transition-all duration-150 hover:scale-105 hover:border-slate-500 cursor-pointer"
+            >
               <div className="text-xl font-extrabold text-slate-600 dark:text-slate-300">{counts.offline}</div>
               <div className="text-xs font-bold text-slate-500 dark:text-slate-400">{t("warehouse7.offline", "Offline")}</div>
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -580,7 +575,7 @@ export default function Warehouse7Dashboard() {
           isDark={isDark}
           minTemp={minTemp}
           maxTemp={maxTemp}
-          heightClass="h-[380px]"
+          defaultHeightPx={380}
         />
       </div>
 
@@ -607,7 +602,7 @@ export default function Warehouse7Dashboard() {
                 key={pill.id}
                 type="button"
                 onClick={() => setStatusFilter(pill.id as any)}
-                className={`px-3.5 py-1.5 rounded-full border text-sm font-bold transition inline-flex items-center gap-2 cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-full border text-sm font-bold transition inline-flex items-center gap-2 cursor-pointer hover:-translate-y-0.5 ${
                   statusFilter === pill.id
                     ? "bg-[#1f6fb5] text-white border-[#1f6fb5] shadow-sm"
                     : "bg-white dark:bg-slate-950 text-[#47729f] dark:text-slate-300 border-[#acd3ff] dark:border-slate-800 hover:bg-[#1f6fb5]/10"
@@ -625,6 +620,7 @@ export default function Warehouse7Dashboard() {
         {filteredDevices.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredDevices.map((dev) => {
+              const isSelected = deviceMode === dev.deviceId;
               const borderAccent =
                 dev.status === "critical"
                   ? "border-l-4 border-l-rose-500"
@@ -655,25 +651,42 @@ export default function Warehouse7Dashboard() {
               return (
                 <div
                   key={dev.deviceId}
-                  className={`rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm transition-all duration-200 hover:shadow-md ${borderAccent}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setDeviceMode((prev) => (prev === dev.deviceId ? "all" : dev.deviceId))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setDeviceMode((prev) => (prev === dev.deviceId ? "all" : dev.deviceId));
+                    }
+                  }}
+                  title={t("warehouse7.clickToFilterChart", "Klik untuk filter grafik")}
+                  className={`group rounded-xl border bg-white dark:bg-slate-950 p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:border-[#1f6fb5] dark:hover:border-sky-500 cursor-pointer ${borderAccent} ${
+                    isSelected
+                      ? "border-[#1f6fb5] ring-2 ring-[#1f6fb5]/35 dark:border-sky-400 dark:ring-sky-400/30"
+                      : "border-[#acd3ff] dark:border-slate-800"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="text-base sm:text-lg font-extrabold text-[#002b5c] dark:text-slate-100">
+                      <div className="text-base sm:text-lg font-extrabold text-[#002b5c] dark:text-slate-100 group-hover:text-[#1f6fb5] dark:group-hover:text-sky-400 transition-colors">
                         {dev.shortLocation}
                       </div>
                       <div className="text-xs font-bold text-[#47729f] dark:text-slate-400">
                         {dev.sensorTag || dev.fullLocation}
                       </div>
                     </div>
-                    <span className="text-xs font-mono font-bold text-[#1f6fb5] dark:text-sky-400 bg-[#e8f3ff] dark:bg-sky-950/50 border border-[#acd3ff] dark:border-sky-800/50 px-2.5 py-0.5 rounded">
+                    <span className="text-xs font-mono font-bold text-[#1f6fb5] dark:text-sky-400 bg-[#e8f3ff] dark:bg-sky-950/50 border border-[#acd3ff] dark:border-sky-800/50 px-2.5 py-0.5 rounded transition-transform duration-200 group-hover:scale-105">
                       #{dev.deviceId}
                     </span>
                   </div>
 
-                  <div className="mt-2.5">
+                  <div className="mt-2.5 flex items-center justify-between gap-2">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-extrabold uppercase ${badgeStyle}`}>
                       {localizedStatus}
+                    </span>
+                    <span className="text-[11px] font-bold text-[#1f6fb5] dark:text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                      ↗ {t("warehouse7.clickToFilterChart", "Klik untuk filter grafik")}
                     </span>
                   </div>
 
@@ -682,7 +695,7 @@ export default function Warehouse7Dashboard() {
                       {t("warehouse7.tempLabel", "SUHU")}
                     </div>
                     <div
-                      className={`text-3xl sm:text-4xl font-extrabold font-mono mt-0.5 ${
+                      className={`text-3xl sm:text-4xl font-extrabold font-mono mt-0.5 transition-transform duration-200 origin-left group-hover:scale-[1.03] ${
                         dev.status === "critical"
                           ? "text-rose-600 dark:text-rose-400"
                           : "text-[#002b5c] dark:text-slate-100"

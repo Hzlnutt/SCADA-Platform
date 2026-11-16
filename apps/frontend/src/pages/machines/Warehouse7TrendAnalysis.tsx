@@ -141,7 +141,7 @@ export default function Warehouse7TrendAnalysis() {
 
       {/* Statistical KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm">
+        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-[#1f6fb5] dark:hover:border-sky-500">
           <div className="text-xs font-bold uppercase tracking-wider text-[#47729f] dark:text-slate-400">
             {t("warehouse7.minTempCard", "SUHU MINIMUM")}
           </div>
@@ -150,7 +150,7 @@ export default function Warehouse7TrendAnalysis() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm">
+        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-[#1f6fb5] dark:hover:border-sky-500">
           <div className="text-xs font-bold uppercase tracking-wider text-[#47729f] dark:text-slate-400">
             {t("warehouse7.avgTempCard", "SUHU RATA-RATA")}
           </div>
@@ -159,7 +159,7 @@ export default function Warehouse7TrendAnalysis() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm">
+        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-[#1f6fb5] dark:hover:border-sky-500">
           <div className="text-xs font-bold uppercase tracking-wider text-[#47729f] dark:text-slate-400">
             {t("warehouse7.maxTempCard", "SUHU MAKSIMUM")}
           </div>
@@ -168,7 +168,7 @@ export default function Warehouse7TrendAnalysis() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm">
+        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-[#1f6fb5] dark:hover:border-sky-500">
           <div className="text-xs font-bold uppercase tracking-wider text-[#47729f] dark:text-slate-400">
             {t("warehouse7.exceedCard", "DI LUAR BATAS")}
           </div>
@@ -199,7 +199,7 @@ export default function Warehouse7TrendAnalysis() {
           isDark={isDark}
           minTemp={minTemp}
           maxTemp={maxTemp}
-          heightClass="h-[380px]"
+          defaultHeightPx={400}
         />
       </div>
 
