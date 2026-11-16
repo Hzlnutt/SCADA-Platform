@@ -331,6 +331,10 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
     const barPct = isZoomed ? 0.68 : 0.55;
     const catPct = isZoomed ? 0.88 : 0.8;
     const barRadius = isZoomed ? 4 : 2;
+    const plnPrevBg = isDark ? "rgba(100, 116, 139, 0.9)" : "rgba(71, 85, 105, 0.9)";
+    const plnPrevHover = isDark ? "rgba(120, 136, 160, 1)" : "rgba(51, 65, 85, 1)";
+    const pvPrevBg = isDark ? "rgba(203, 213, 225, 0.9)" : "rgba(190, 200, 214, 0.92)";
+    const pvPrevHover = isDark ? "rgba(226, 232, 240, 1)" : "rgba(148, 163, 184, 1)";
 
     if (selectorType === "all") {
       const plnData = (currentBreakdown || []).map((b) => b.pln || 0);
@@ -353,8 +357,8 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
               {
                 label: prevMonthName ? `PLN Grid (${prevMonthName})` : "PLN Bulan Lalu",
                 data: paddedPlnPrev,
-                backgroundColor: "rgba(249, 115, 22, 0.85)",
-                hoverBackgroundColor: "rgba(234, 88, 12, 1)",
+                backgroundColor: plnPrevBg,
+                hoverBackgroundColor: plnPrevHover,
                 borderWidth: 0,
                 borderRadius: { topLeft: 0, topRight: 0, bottomLeft: barRadius, bottomRight: barRadius },
                 stack: "previous",
@@ -364,8 +368,8 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
               {
                 label: prevMonthName ? `Solar PLTS (${prevMonthName})` : "Solar Bulan Lalu",
                 data: paddedSolarPrev,
-                backgroundColor: "rgba(52, 211, 153, 0.85)",
-                hoverBackgroundColor: "rgba(16, 185, 129, 1)",
+                backgroundColor: pvPrevBg,
+                hoverBackgroundColor: pvPrevHover,
                 borderWidth: 0,
                 borderRadius: { topLeft: barRadius, topRight: barRadius, bottomLeft: 0, bottomRight: 0 },
                 stack: "previous",
@@ -377,8 +381,8 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
               {
                 label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
                 data: paddedPreviousData,
-                backgroundColor: "rgba(239, 68, 68, 0.75)",
-                hoverBackgroundColor: "rgba(220, 38, 38, 1)",
+                backgroundColor: plnPrevBg,
+                hoverBackgroundColor: plnPrevHover,
                 borderWidth: 0,
                 borderRadius: barRadius,
                 stack: "previous",
@@ -418,6 +422,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
       };
     }
 
+    const isPvSelector = selectorType === "poi1" || selectorType === "poi2";
     return {
       labels: dayLabels,
       datasets: [
@@ -435,8 +440,8 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         ...(showPrevious ? [{
           label: prevMonthName ? `Bulan Lalu (${prevMonthName})` : "Bulan Lalu",
           data: paddedPreviousData,
-          backgroundColor: "rgba(239, 68, 68, 0.75)",
-          hoverBackgroundColor: "rgba(220, 38, 38, 1)",
+          backgroundColor: isPvSelector ? pvPrevBg : plnPrevBg,
+          hoverBackgroundColor: isPvSelector ? pvPrevHover : plnPrevHover,
           borderWidth: 0,
           borderRadius: barRadius,
           stack: "previous",
@@ -445,7 +450,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         }] : [])
       ]
     };
-  }, [dayLabels, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, showPrevious, isZoomed, daysInMonth]);
+  }, [dayLabels, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, showPrevious, isZoomed, daysInMonth, isDark]);
 
   const options: any = useMemo(() => ({
     responsive: true,

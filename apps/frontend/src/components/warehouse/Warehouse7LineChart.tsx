@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Line } from "react-chartjs-2";
 import type { Chart as ChartJS, ChartOptions, Plugin } from "chart.js";
@@ -91,7 +91,7 @@ function drawRoundedPill(
   }
 }
 
-export default function Warehouse7LineChart({
+function Warehouse7LineChart({
   trend,
   deviceMode,
   isDark,
@@ -106,8 +106,8 @@ export default function Warehouse7LineChart({
   maxTemp: number;
   defaultHeightPx?: number;
 }) {
-  const { t, language } = useTranslation();
-  const [hoverMode, setHoverMode] = useState<"nearest" | "index">("nearest");
+  const { t } = useTranslation();
+  const [hoverMode, setHoverMode] = useState<"nearest" | "index">("index");
   const [xRange, setXRange] = useState<{ min: number; max: number } | null>(null);
   const [yRange, setYRange] = useState<{ min: number; max: number } | null>(null);
   const [customHeightPx, setCustomHeightPx] = useState<number>(defaultHeightPx);
@@ -180,9 +180,9 @@ export default function Warehouse7LineChart({
         tension: 0.25,
         fill: false,
         spanGaps: true,
-        pointHoverRadius: 10,
-        pointHoverBorderWidth: 3,
-        pointHitRadius: 40,
+        pointHoverRadius: 7.5,
+        pointHoverBorderWidth: 2.5,
+        pointHitRadius: 12,
         pointBackgroundColor: data.map((v) =>
           v !== null && (v > maxTemp || v < minTemp) ? "#dc2626" : "#e11d48"
         ),
@@ -218,9 +218,9 @@ export default function Warehouse7LineChart({
           tension: 0.25,
           fill: false,
           spanGaps: true,
-          pointHoverRadius: 10,
-          pointHoverBorderWidth: 3,
-          pointHitRadius: 40,
+          pointHoverRadius: 7.5,
+          pointHoverBorderWidth: 2.5,
+          pointHitRadius: 12,
           pointBackgroundColor: data.map((v) =>
             v !== null && (v > maxTemp || v < minTemp) ? "#dc2626" : color
           ),
@@ -251,7 +251,8 @@ export default function Warehouse7LineChart({
     }
     const visibleCount = Math.max(1, eIdx - sIdx);
     const slicedLabels = fullSeries.labels.slice(sIdx, eIdx);
-    const dotRadius = visibleCount <= 48 ? 6.2 : visibleCount <= 140 ? 5 : 4;
+    const dotRadius = visibleCount <= 48 ? 6.2 : visibleCount <= 140 ? 5 : 3.8;
+    const hoverRadius = dotRadius + 2.5;
 
     const slicedDatasets = fullSeries.datasets.map((ds) => ({
       ...ds,
@@ -261,33 +262,40 @@ export default function Warehouse7LineChart({
       pointBackgroundColor: Array.isArray(ds.pointBackgroundColor)
         ? ds.pointBackgroundColor.slice(sIdx, eIdx)
         : ds.pointBackgroundColor,
-      pointRadius: dotRadius
+      pointRadius: dotRadius,
+      pointHoverRadius: hoverRadius
     }));
 
     if (slicedLabels.length > 0) {
+      // Keep threshold legend entries with empty data arrays so Chart.js never snaps `nearest` hover
+      // onto invisible threshold points along 30°C / 24°C instead of real sensor data points.
       slicedDatasets.push({
         label: `${t("warehouse7.tempMaxBadge", "Temp Max")} ${maxTemp}°C`,
-        data: slicedLabels.map(() => maxTemp),
+        data: [],
         borderColor: "rgba(239, 68, 68, 0.92)",
+        backgroundColor: "rgba(239, 68, 68, 0.14)",
         borderDash: [7, 5],
         borderWidth: 2.2,
         pointRadius: 0,
         pointHoverRadius: 0,
         pointHitRadius: 0,
         fill: false,
-        isThresholdLine: true
+        isThresholdLine: true,
+        thresholdType: "max"
       });
       slicedDatasets.push({
         label: `${t("warehouse7.tempMinBadge", "Temp Min")} ${minTemp}°C`,
-        data: slicedLabels.map(() => minTemp),
+        data: [],
         borderColor: "rgba(59, 130, 246, 0.92)",
+        backgroundColor: "rgba(59, 130, 246, 0.14)",
         borderDash: [7, 5],
         borderWidth: 2.2,
         pointRadius: 0,
         pointHoverRadius: 0,
         pointHitRadius: 0,
         fill: false,
-        isThresholdLine: true
+        isThresholdLine: true,
+        thresholdType: "min"
       });
     }
 
@@ -304,13 +312,62 @@ export default function Warehouse7LineChart({
   const effectiveYMax = yRange ? yRange.max : fullSeries.autoYMax;
   autoYRef.current = { min: fullSeries.autoYMin, max: fullSeries.autoYMax };
 
-  // Draw crisp inline pill badges ("Temp Max 30°C" & "Temp Min 24°C") pinned visibly inside left edge of chartArea
+  // Draw threshold dashed lines & inline pill badges ("Temp Max 30°C" & "Temp Min 24°C")
   const thresholdBadgePlugin: Plugin<"line"> = useMemo(() => {
     const maxText = `${t("warehouse7.tempMaxBadge", "Temp Max")} ${maxTemp}°C`;
     const minText = `${t("warehouse7.tempMinBadge", "Temp Min")} ${minTemp}°C`;
 
+    const isThresholdVisible = (chart: ChartJS<"line">, kind: "max" | "min") => {
+      const idx = chart.data.datasets.findIndex((d: any) => d.thresholdType === kind);
+      return idx === -1 || chart.isDatasetVisible(idx);
+    };
+
     return {
       id: "wh7ThresholdBadges",
+      beforeDatasetsDraw(chart) {
+        const yScale = chart.scales?.y;
+        const area = chart.chartArea;
+        if (!yScale || !area || chart.data.labels?.length === 0) return;
+
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(area.left, area.top, area.right - area.left, area.bottom - area.top);
+        ctx.clip();
+        ctx.setLineDash([7, 5]);
+        ctx.lineWidth = 2.2;
+
+        const lines = [
+          isThresholdVisible(chart, "max") ? { val: maxTemp, color: "rgba(239, 68, 68, 0.92)" } : null,
+          isThresholdVisible(chart, "min") ? { val: minTemp, color: "rgba(59, 130, 246, 0.92)" } : null
+        ];
+        for (const ln of lines) {
+          if (!ln) continue;
+          const yPx = yScale.getPixelForValue(ln.val);
+          if (!Number.isFinite(yPx) || yPx < area.top - 2 || yPx > area.bottom + 2) continue;
+          ctx.strokeStyle = ln.color;
+          ctx.beginPath();
+          ctx.moveTo(area.left, yPx);
+          ctx.lineTo(area.right, yPx);
+          ctx.stroke();
+        }
+
+        // Draw crisp vertical dashed crosshair guideline ("segaris") aligned to active hovered column
+        const activeEls = chart.getActiveElements();
+        if (activeEls && activeEls.length > 0) {
+          const xPx = activeEls[0]?.element?.x;
+          if (Number.isFinite(xPx) && xPx >= area.left - 1 && xPx <= area.right + 1) {
+            ctx.setLineDash([4, 4]);
+            ctx.lineWidth = 1.3;
+            ctx.strokeStyle = isDark ? "rgba(148, 163, 184, 0.55)" : "rgba(71, 114, 159, 0.5)";
+            ctx.beginPath();
+            ctx.moveTo(xPx, area.top);
+            ctx.lineTo(xPx, area.bottom);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      },
       afterDatasetsDraw(chart) {
         const yScale = chart.scales?.y;
         const area = chart.chartArea;
@@ -323,11 +380,12 @@ export default function Warehouse7LineChart({
         ctx.textBaseline = "middle";
 
         const badges = [
-          { val: maxTemp, label: maxText, bg: "#ef4444" },
-          { val: minTemp, label: minText, bg: "#3b82f6" }
+          isThresholdVisible(chart, "max") ? { val: maxTemp, label: maxText, bg: "#ef4444" } : null,
+          isThresholdVisible(chart, "min") ? { val: minTemp, label: minText, bg: "#3b82f6" } : null
         ];
 
         for (const b of badges) {
+          if (!b) continue;
           const yPx = yScale.getPixelForValue(b.val);
           if (!Number.isFinite(yPx) || yPx < area.top - 12 || yPx > area.bottom + 12) continue;
 
@@ -349,7 +407,9 @@ export default function Warehouse7LineChart({
         ctx.restore();
       }
     };
-  }, [maxTemp, minTemp, t]);
+  }, [maxTemp, minTemp, isDark, t]);
+
+  const chartPlugins = useMemo(() => [thresholdBadgePlugin], [thresholdBadgePlugin]);
 
   // Attach interactive TradingView-style zoom & pan gestures directly on chart frame (zero horizontal scrollbars):
   // - Mouse wheel on body: widen/narrow X time window centered on cursor
@@ -367,6 +427,13 @@ export default function Warehouse7LineChart({
       let initMaxIdx = totalPoints;
       let initMinY = autoYRef.current.min;
       let initMaxY = autoYRef.current.max;
+      let lastCursor: string | null = null;
+
+      const syncCursor = (cursor: string, canvas?: HTMLCanvasElement | null) => {
+        if (!canvas || lastCursor === cursor) return;
+        lastCursor = cursor;
+        canvas.style.cursor = cursor;
+      };
 
       const getMetrics = () => {
         const chart = chartRef.current;
@@ -385,22 +452,12 @@ export default function Warehouse7LineChart({
 
       const onMouseMoveHover = (e: MouseEvent) => {
         if (dragging) return;
-        const { canvas, rect, area } = getMetrics();
+        const chart = chartRef.current;
+        const canvas = chart?.canvas;
         if (!canvas) return;
-        const mouseX = e.clientX - rect.left;
-        if (mouseX < area.left) {
-          canvas.style.cursor = "ns-resize";
-          canvas.title =
-            language === "en"
-              ? "Scroll or drag vertically to scale temperature height"
-              : "Scroll atau drag vertikal untuk mengatur tinggi skala suhu";
-        } else {
-          canvas.style.cursor = xRangeRef.current ? "grab" : "crosshair";
-          canvas.title =
-            language === "en"
-              ? "Scroll to zoom time width · Drag to pan · Double-click to reset"
-              : "Scroll untuk zoom lebar waktu · Drag untuk geser · Klik ganda untuk reset";
-        }
+        const mouseX = e.target === canvas ? e.offsetX : e.clientX - canvas.getBoundingClientRect().left;
+        const areaLeft = chart.chartArea?.left ?? 58;
+        syncCursor(mouseX < areaLeft ? "ns-resize" : xRangeRef.current ? "grab" : "crosshair", canvas);
       };
 
       const onWheel = (e: WheelEvent) => {
@@ -468,9 +525,7 @@ export default function Warehouse7LineChart({
         initMinY = yRangeRef.current ? yRangeRef.current.min : (chart?.scales?.y?.min ?? autoYRef.current.min);
         initMaxY = yRangeRef.current ? yRangeRef.current.max : (chart?.scales?.y?.max ?? autoYRef.current.max);
 
-        if (canvas) {
-          canvas.style.cursor = isYAxisZone ? "ns-resize" : "grabbing";
-        }
+        syncCursor(isYAxisZone ? "ns-resize" : "grabbing", canvas);
       };
 
       const onWindowMouseMove = (e: MouseEvent) => {
@@ -525,15 +580,15 @@ export default function Warehouse7LineChart({
         mode = null;
         const { canvas, rect, area } = getMetrics();
         if (canvas) {
-          const mouseX = e.clientX - rect.left;
-          canvas.style.cursor = mouseX < area.left ? "ns-resize" : xRangeRef.current ? "grab" : "crosshair";
+          const mouseX = e.target === canvas ? e.offsetX : e.clientX - rect.left;
+          syncCursor(mouseX < area.left ? "ns-resize" : xRangeRef.current ? "grab" : "crosshair", canvas);
         }
       };
 
-      container.addEventListener("mousemove", onMouseMoveHover);
+      container.addEventListener("mousemove", onMouseMoveHover, { passive: true });
       container.addEventListener("wheel", onWheel, { passive: false });
       container.addEventListener("mousedown", onMouseDown);
-      window.addEventListener("mousemove", onWindowMouseMove);
+      window.addEventListener("mousemove", onWindowMouseMove, { passive: true });
       window.addEventListener("mouseup", onWindowMouseUp);
 
       return () => {
@@ -544,7 +599,7 @@ export default function Warehouse7LineChart({
         window.removeEventListener("mouseup", onWindowMouseUp);
       };
     },
-    [totalPoints, minVisiblePoints, language]
+    [totalPoints, minVisiblePoints]
   );
 
   useEffect(() => {
@@ -557,35 +612,51 @@ export default function Warehouse7LineChart({
   }, [isZoomOpen, attachInteractiveGestures]);
 
   const options: ChartOptions<"line"> = useMemo(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 120 },
-      interaction: {
-        mode: hoverMode,
-        axis: hoverMode === "nearest" ? "xy" : "x",
-        intersect: false
-      },
-      hover: {
-        mode: hoverMode,
-        intersect: false
-      },
-      plugins: {
-        legend: {
-          display: true,
-          position: "bottom",
-          labels: {
-            color: isDark ? "#cbd5e1" : "#002b5c",
-            usePointStyle: true,
-            boxWidth: 11,
-            padding: 16,
-            font: { size: 13, weight: "bold" }
+    () => {
+      const interactionMode = (hoverMode === "index" ? "index" : "wh7VerticalSingle") as any;
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        transitions: {
+          active: {
+            animation: {
+              duration: 0
+            }
+          },
+          resize: {
+            animation: {
+              duration: 0
+            }
           }
         },
-        tooltip: {
-          enabled: true,
-          mode: hoverMode,
-          intersect: false,
+        interaction: {
+          mode: interactionMode,
+          axis: "x",
+          intersect: false
+        },
+        hover: {
+          mode: interactionMode,
+          axis: "x",
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: "bottom",
+            labels: {
+              color: isDark ? "#cbd5e1" : "#002b5c",
+              usePointStyle: true,
+              boxWidth: 11,
+              padding: 16,
+              font: { size: 13, weight: "bold" }
+            }
+          },
+          tooltip: {
+            enabled: true,
+            animation: false,
+            mode: interactionMode,
+            intersect: false,
           backgroundColor: isDark ? "rgba(15, 23, 42, 0.97)" : "rgba(255, 255, 255, 0.98)",
           titleColor: isDark ? "#f8fafc" : "#002b5c",
           bodyColor: isDark ? "#e2e8f0" : "#1e293b",
@@ -659,9 +730,10 @@ export default function Warehouse7LineChart({
           }
         }
       }
-    }),
-    [hoverMode, isDark, maxTemp, minTemp, effectiveYMax, effectiveYMin, t]
-  );
+    };
+  },
+  [hoverMode, isDark, maxTemp, minTemp, effectiveYMax, effectiveYMin, t]
+);
 
   const hasChartPoints = Boolean(trend?.hasData && totalPoints > 0);
   const canZoomInX = hasChartPoints && endIdx - startIdx > minVisiblePoints;
@@ -855,7 +927,7 @@ export default function Warehouse7LineChart({
           style={{ height: `${customHeightPx}px` }}
           onDoubleClick={handleResetView}
         >
-          <Line ref={inlineChartRef} data={chartData} options={options} plugins={[thresholdBadgePlugin]} />
+          <Line ref={inlineChartRef} data={chartData} options={options} plugins={chartPlugins} />
         </div>
       ) : (
         <div
@@ -906,7 +978,7 @@ export default function Warehouse7LineChart({
                 onDoubleClick={handleResetView}
               >
                 <div className="w-full" style={{ height: customHeightPx > defaultHeightPx ? `${Math.max(customHeightPx, 520)}px` : "100%", minHeight: "420px" }}>
-                  <Line ref={modalChartRef} data={chartData} options={options} plugins={[thresholdBadgePlugin]} />
+                  <Line ref={modalChartRef} data={chartData} options={options} plugins={chartPlugins} />
                 </div>
               </div>
             </div>
@@ -916,3 +988,5 @@ export default function Warehouse7LineChart({
     </div>
   );
 }
+
+export default memo(Warehouse7LineChart);
