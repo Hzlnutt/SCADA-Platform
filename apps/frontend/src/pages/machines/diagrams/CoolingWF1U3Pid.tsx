@@ -80,7 +80,13 @@ export default function CoolingWF1U3Pid({
     return pt.value;
   };
 
-  const deltaTVal = getVal("cooling-water/delta_temp");
+  const suppTempRaw = getVal("cooling-water/supply_temp");
+  const retTempRaw = getVal("cooling-water/return_temp");
+  const suppTempNum = typeof suppTempRaw === "number" ? suppTempRaw : parseFloat(String(suppTempRaw));
+  const retTempNum = typeof retTempRaw === "number" ? retTempRaw : parseFloat(String(retTempRaw));
+  const deltaTVal = !isNaN(retTempNum) && !isNaN(suppTempNum)
+    ? Number((retTempNum - suppTempNum).toFixed(2))
+    : getVal("cooling-water/delta_temp");
 
   const getStatusDisplay = (tagId: string) => {
     const raw = getVal(tagId);

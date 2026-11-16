@@ -212,8 +212,6 @@ export default function MachineAlarm() {
     const merged = { ...latest };
     if (unitId.startsWith("cooling-water")) {
       Object.entries(apiSourceUrls).forEach(([tagKey, url]) => {
-        if (!url || !url.trim()) return;
-
         if (tagKey === "cooling-water/delta_temp") {
           const retKey = jsonKeyMap["cooling-water/return_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/return_temp"];
           const suppKey = jsonKeyMap["cooling-water/supply_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
@@ -229,7 +227,7 @@ export default function MachineAlarm() {
               quality: "good",
               meta: { tagId: tagKey }
             };
-          } else if (apiLiveData[retUrl] === null || apiLiveData[suppUrl] === null) {
+          } else if ((retUrl && apiLiveData[retUrl] === null) || (suppUrl && apiLiveData[suppUrl] === null)) {
             merged[tagKey] = {
               ts: new Date().toISOString(),
               value: "Gagal Polling API",
@@ -239,6 +237,8 @@ export default function MachineAlarm() {
           }
           return;
         }
+
+        if (!url || !url.trim()) return;
 
         let jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
         let val = apiLiveData[url]?.[jsonKey];
