@@ -2,6 +2,7 @@ import { NavItem } from "../navigation/NavItem";
 import { useAuthStore } from "../../store/auth.store";
 import { canAccessConfigAndAudit } from "../../utils/roles";
 import { canAccessHvacControls } from "../../pages/machines/HvacLayout";
+import { useTranslation } from "../../i18n/useTranslation";
 
 // ── KONFIGURASI TAB PER MESIN ────────────────────────────────────
 // Tambahkan mapping untuk setiap mesin HVAC di sini
@@ -40,6 +41,8 @@ export const MachineTabs = ({
   const role = user?.role ?? "user";
   const canAccessConfig = canAccessConfigAndAudit(role);
   const hasControlAccess = canAccessHvacControls(user?.role);
+  const { t } = useTranslation();
+  const isWarehouseGroup = groupId === "hvac-warehouse" || currentUnitId === "hvac-wh-7";
 
   // ── Mode HVAC : tab dinamis per mesin ──────────────────────────
   if (isHvacGroup && groupId && currentUnitId) {
@@ -50,7 +53,7 @@ export const MachineTabs = ({
       <div className="mb-4 border-b border-[#acd3ff] dark:border-slate-800">
         <nav className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin whitespace-nowrap py-1">
           {/* Tab Dashboard */}
-          <NavItem to={basePath} label="Dashboard" tone="tabs" end />
+          <NavItem to={basePath} label={isWarehouseGroup ? t("warehouse7.tabs.dashboard", "Dashboard") : "Dashboard"} tone="tabs" end />
 
           {/* Tab khusus mesin ini (dinamis) */}
           {customTabs.map(({ label, tabId }) => (
@@ -62,14 +65,14 @@ export const MachineTabs = ({
             />
           ))}
 
-          <NavItem to={`${basePath}/statistics`} label="Trend Analysis" tone="tabs" />
-          <NavItem to={`${basePath}/tasks`} label="Tasks" tone="tabs" />
-          <NavItem to={`${basePath}/alarm`} label="Alarms" tone="tabs" />
-          <NavItem to={`${basePath}/maintenance`} label="Maintenance" tone="tabs" />
-          <NavItem to={`${basePath}/shift-report`} label="Shift Report" tone="tabs" />
-          <NavItem to={`${basePath}/energy`} label="Energy" tone="tabs" />
-          {canAccessConfig && <NavItem to={`${basePath}/configuration`} label="Configuration" tone="tabs" />}
-          {canAccessConfig && <NavItem to={`${basePath}/audit-trail`} label="Audit Trail" tone="tabs" />}
+          <NavItem to={`${basePath}/statistics`} label={isWarehouseGroup ? t("warehouse7.tabs.trend", "Trend Analysis") : "Trend Analysis"} tone="tabs" />
+          <NavItem to={`${basePath}/tasks`} label={isWarehouseGroup ? t("warehouse7.tabs.tasks", "Tasks") : "Tasks"} tone="tabs" />
+          <NavItem to={`${basePath}/alarm`} label={isWarehouseGroup ? t("warehouse7.tabs.alarms", "Alarms") : "Alarms"} tone="tabs" />
+          <NavItem to={`${basePath}/maintenance`} label={isWarehouseGroup ? t("warehouse7.tabs.maintenance", "Maintenance") : "Maintenance"} tone="tabs" />
+          <NavItem to={`${basePath}/shift-report`} label={isWarehouseGroup ? t("warehouse7.tabs.shiftReport", "Shift Report") : "Shift Report"} tone="tabs" />
+          <NavItem to={`${basePath}/energy`} label={isWarehouseGroup ? t("warehouse7.tabs.energy", "Energy") : "Energy"} tone="tabs" />
+          {canAccessConfig && <NavItem to={`${basePath}/configuration`} label={isWarehouseGroup ? t("warehouse7.tabs.configuration", "Configuration") : "Configuration"} tone="tabs" />}
+          {canAccessConfig && <NavItem to={`${basePath}/audit-trail`} label={isWarehouseGroup ? t("warehouse7.tabs.auditTrail", "Audit Trail") : "Audit Trail"} tone="tabs" />}
         </nav>
       </div>
     );

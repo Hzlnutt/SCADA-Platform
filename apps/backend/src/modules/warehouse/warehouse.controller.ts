@@ -1,10 +1,12 @@
 import { NextFunction, Request, Response } from "express";
 import {
+  getWarehouse7AlarmPreference,
   getWarehouse7Config,
   getWarehouse7LiveOverview,
   getWarehouse7Trend,
   pollWarehouse7Once,
   saveWarehouse7Config,
+  setWarehouse7AlarmPreference,
   testWarehouse7Connection,
   WH7_ALLOWED_EDIT_ROLES
 } from "../../services/warehouse7.service";
@@ -18,10 +20,14 @@ function canEditWh7(role?: string | null): boolean {
 export const getWh7OverviewHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const force = req.query.force === "true";
-    const overview = force ? await pollWarehouse7Once() : await getWarehouse7LiveOverview();
+    const [overview, alarmEnabled] = await Promise.all([
+      force ? pollWarehouse7Once() : getWarehouse7LiveOverview(),
+      getWarehouse7AlarmPreference(req.user?.id || "")
+    ]);
     res.json({
       success: true,
       canEditConfig: canEditWh7(req.user?.role),
+      alarmEnabled,
       data: overview
     });
   } catch (err) {
@@ -131,5 +137,24 @@ export const testWh7ConnectionHandler = async (req: Request, res: Response, next
       success: false,
       error: err?.message || "Gagal terhubung ke API Warehouse"
     });
+  }
+};
+
+export const getWh7AlarmPrefHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const alarmEnabled = await getWarehouse7AlarmPreference(req.user?.id || "");
+    res.json({ success: true, alarmEnabled });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateWh7AlarmPrefHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.id || "";
+    const alarmEnabled = await setWarehouse7AlarmPreference(userId, Boolean(req.body?.alarmEnabled));
+    res.json({ success: true, alarmEnabled });
+  } catch (err) {
+    next(err);
   }
 };

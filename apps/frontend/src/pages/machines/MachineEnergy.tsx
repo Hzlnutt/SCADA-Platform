@@ -5,6 +5,7 @@ import { getUnitById } from "../../data/machines";
 import { useSystemStore } from "../../store/system.store";
 import type { MachineOutletContext } from "./MachineLayout";
 import { getJson } from "../../services/api.client";
+import { useTranslation } from "../../i18n/useTranslation";
 
 // Canvas-based Power Demand real-time scrolling wave
 function PowerDemandOscilloscope() {
@@ -191,14 +192,15 @@ const mapUnitIdToDeviceId = (id: string | undefined): string => {
 
 export default function MachineEnergy() {
   const { unitId } = useOutletContext<MachineOutletContext>();
+  const { t } = useTranslation();
   if (unitId === "hvac-wh-7") {
     return (
       <div className="rounded-xl border border-dashed border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-8 text-center shadow-sm">
-        <h3 className="text-sm font-extrabold text-slate-700 dark:text-slate-200">
-          Energy Telemetry — Warehouse 7
+        <h3 className="text-base font-extrabold text-[#002b5c] dark:text-slate-100">
+          {t("warehouse7.energyEmptyTitle", "Telemetri Energi — Gudang 7")}
         </h3>
-        <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-          Data dummy energi telah dikosongkan. Belum ada data konsumsi energi spesifik yang terhubung untuk Warehouse 7.
+        <p className="mt-2 text-sm text-[#47729f] dark:text-slate-400 max-w-md mx-auto">
+          {t("warehouse7.energyEmptyDesc", "Data dummy dikosongkan. Belum ada sumber energi khusus untuk Gudang 7.")}
         </p>
       </div>
     );

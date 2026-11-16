@@ -1,4 +1,4 @@
-// Alarm sound + Indonesian speech dubbing utility for Warehouse 7 temperature threshold breaches
+// Alarm siren + short multilingual voice dubbing + browser notification utility for Warehouse 7
 
 export interface WarehouseAlarmViolation {
   deviceId: string;
@@ -8,15 +8,20 @@ export interface WarehouseAlarmViolation {
   direction: "high" | "low";
 }
 
+export type WarehouseAlarmLanguage = "id" | "en";
+
 let sharedAudioCtx: AudioContext | null = null;
 let lastAlertPlayedAt = 0;
-let isAlarmMuted = false;
+let isAlarmMuted = true; // Default disabled per account until explicitly enabled
+let pendingSpeechTimer: ReturnType<typeof setTimeout> | null = null;
 
 const ALERT_COOLDOWN_MS = 25000;
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
-  const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  const AudioCtx =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioCtx) return null;
   if (!sharedAudioCtx) {
     sharedAudioCtx = new AudioCtx();
@@ -30,8 +35,14 @@ export function isWarehouseAlarmMuted(): boolean {
 
 export function setWarehouseAlarmMuted(muted: boolean): void {
   isAlarmMuted = muted;
-  if (muted && typeof window !== "undefined" && "speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
+  if (muted) {
+    if (pendingSpeechTimer) {
+      clearTimeout(pendingSpeechTimer);
+      pendingSpeechTimer = null;
+    }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
   }
 }
 
@@ -47,8 +58,33 @@ export async function unlockWarehouseAudio(): Promise<boolean> {
   }
 }
 
+export async function requestWarehouseNotificationPermission(): Promise<void> {
+  if (typeof window === "undefined" || !("Notification" in window)) return;
+  try {
+    if (Notification.permission === "default") {
+      await Notification.requestPermission();
+    }
+  } catch {
+    // Non-fatal in unsupported/iframe contexts
+  }
+}
+
+export function showBrowserWarehouseNotification(title: string, body: string): void {
+  if (typeof window === "undefined" || !("Notification" in window)) return;
+  try {
+    if (Notification.permission === "granted") {
+      new Notification(title, {
+        body,
+        tag: "scada-wh7-temp-alarm"
+      });
+    }
+  } catch {
+    // Non-fatal
+  }
+}
+
 /**
- * Play a crisp 3-pulse SCADA warning chime using Web Audio API (returns total duration in ms).
+ * Play a longer multi-pulse SCADA warning siren (~2.35s) using Web Audio API.
  */
 export async function playWarningSiren(): Promise<number> {
   const ctx = getAudioContext();
@@ -62,9 +98,12 @@ export async function playWarningSiren(): Promise<number> {
 
     const now = ctx.currentTime;
     const pulses = [
-      { start: 0, freq: 880, dur: 0.18 },
-      { start: 0.22, freq: 660, dur: 0.18 },
-      { start: 0.44, freq: 980, dur: 0.25 }
+      { start: 0.0, freq: 920, dur: 0.32 },
+      { start: 0.36, freq: 680, dur: 0.32 },
+      { start: 0.72, freq: 920, dur: 0.32 },
+      { start: 1.08, freq: 680, dur: 0.32 },
+      { start: 1.48, freq: 980, dur: 0.36 },
+      { start: 1.88, freq: 740, dur: 0.42 }
     ];
 
     for (const p of pulses) {
@@ -74,7 +113,7 @@ export async function playWarningSiren(): Promise<number> {
       osc.frequency.setValueAtTime(p.freq, now + p.start);
 
       gain.gain.setValueAtTime(0.001, now + p.start);
-      gain.gain.exponentialRampToValueAtTime(0.24, now + p.start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.28, now + p.start + 0.025);
       gain.gain.exponentialRampToValueAtTime(0.001, now + p.start + p.dur);
 
       osc.connect(gain);
@@ -83,36 +122,46 @@ export async function playWarningSiren(): Promise<number> {
       osc.stop(now + p.start + p.dur + 0.02);
     }
 
-    return 750;
+    return 2350;
   } catch {
     return 0;
   }
 }
 
-export function buildWarehouseDubbingText(violations: WarehouseAlarmViolation[]): string {
-  if (violations.length === 0) return "";
-  if (violations.length === 1) {
-    const v = violations[0];
-    const suhuStr = v.suhu.toFixed(1).replace(".", " koma ");
-    const limitStr = v.threshold.toFixed(1).replace(".", " koma ");
-    const detail =
-      v.direction === "high"
-        ? `melebihi batas maksimum ${limitStr} derajat Celsius`
-        : `di bawah batas minimum ${limitStr} derajat Celsius`;
-    return `Peringatan alarm Warehouse 7. Suhu pada ${v.location} mencapai ${suhuStr} derajat Celsius, ${detail}. Segera periksa kondisi pendingin gudang.`;
+function shortenSpeechLocation(location: string): string {
+  const m = /baris\s+([a-z0-9]+).*?rak\s+(\d+).*?(?:comp(?:artement|artment)?\s+(\d+))?/i.exec(location);
+  if (m) {
+    return `${m[1]} ${Number(m[2])}${m[3] ? ` ${Number(m[3])}` : ""}`;
   }
-
-  const first = violations[0];
-  const suhuStr = first.suhu.toFixed(1).replace(".", " koma ");
-  const limitStr = first.threshold.toFixed(1).replace(".", " koma ");
-  const detail =
-    first.direction === "high"
-      ? `melebihi batas maksimum ${limitStr} derajat Celsius`
-      : `di bawah batas minimum ${limitStr} derajat Celsius`;
-  return `Peringatan alarm Warehouse 7. Terdeteksi ${violations.length} titik sensor melewati batas suhu. Pada ${first.location} suhu mencapai ${suhuStr} derajat Celsius, ${detail}.`;
+  return location.replace(/[-·]/g, " ").trim();
 }
 
-export function speakIndonesianWarning(text: string): boolean {
+export function buildWarehouseDubbingText(
+  violations: WarehouseAlarmViolation[],
+  language: WarehouseAlarmLanguage = "id"
+): string {
+  if (violations.length === 0) return "";
+  const first = violations[0];
+  const loc = shortenSpeechLocation(first.location || first.deviceId);
+  const suhuNum = first.suhu.toFixed(1);
+
+  if (language === "en") {
+    if (violations.length === 1) {
+      const dir = first.direction === "high" ? "above limit" : "below limit";
+      return `Warehouse 7 alarm. ${loc}, ${suhuNum} degrees, ${dir}.`;
+    }
+    return `Warehouse 7 alarm. ${violations.length} sensors exceeded limits.`;
+  }
+
+  const suhuStr = suhuNum.replace(".", " koma ");
+  if (violations.length === 1) {
+    const dir = first.direction === "high" ? "melebihi batas" : "di bawah batas";
+    return `Alarm Gudang 7. ${loc}, suhu ${suhuStr} derajat, ${dir}.`;
+  }
+  return `Alarm Gudang 7. ${violations.length} sensor melewati batas suhu.`;
+}
+
+export function speakWarehouseWarning(text: string, language: WarehouseAlarmLanguage = "id"): boolean {
   if (typeof window === "undefined" || !("speechSynthesis" in window) || !text) {
     return false;
   }
@@ -120,17 +169,19 @@ export function speakIndonesianWarning(text: string): boolean {
     const synth = window.speechSynthesis;
     synth.cancel();
     const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = "id-ID";
-    utter.rate = 0.98;
-    utter.pitch = 1.04;
+    const targetLang = language === "en" ? "en-US" : "id-ID";
+    utter.lang = targetLang;
+    utter.rate = 1.0;
+    utter.pitch = 1.03;
     utter.volume = 1;
 
     const voices = synth.getVoices();
-    const idVoice =
-      voices.find((v) => v.lang.toLowerCase() === "id-id") ||
-      voices.find((v) => v.lang.toLowerCase().startsWith("id"));
-    if (idVoice) {
-      utter.voice = idVoice;
+    const prefix = language === "en" ? "en" : "id";
+    const matched =
+      voices.find((v) => v.lang.toLowerCase() === targetLang.toLowerCase()) ||
+      voices.find((v) => v.lang.toLowerCase().startsWith(prefix));
+    if (matched) {
+      utter.voice = matched;
     }
     synth.speak(utter);
     return true;
@@ -141,40 +192,56 @@ export function speakIndonesianWarning(text: string): boolean {
 
 export async function triggerWarehouseAlarmAudio(
   violations: WarehouseAlarmViolation[],
+  language: WarehouseAlarmLanguage = "id",
   forceImmediate = false
-): Promise<{ played: boolean; message: string }> {
-  if (violations.length === 0) return { played: false, message: "" };
-  const message = buildWarehouseDubbingText(violations);
-  if (isAlarmMuted && !forceImmediate) return { played: false, message };
+): Promise<{ played: boolean; message: string; title: string }> {
+  const title = language === "en" ? "Warehouse 7 Temperature Alarm" : "Peringatan Suhu Gudang 7";
+  if (violations.length === 0) return { played: false, message: "", title };
+  const message = buildWarehouseDubbingText(violations, language);
+  if (isAlarmMuted && !forceImmediate) return { played: false, message, title };
 
   const now = Date.now();
   if (!forceImmediate && now - lastAlertPlayedAt < ALERT_COOLDOWN_MS) {
-    return { played: false, message };
+    return { played: false, message, title };
   }
   lastAlertPlayedAt = now;
 
-  const sirenMs = await playWarningSiren();
-  setTimeout(() => {
-    if (!isAlarmMuted || forceImmediate) {
-      speakIndonesianWarning(message);
-    }
-  }, Math.min(800, sirenMs));
+  showBrowserWarehouseNotification(title, message);
 
-  return { played: true, message };
+  if (pendingSpeechTimer) {
+    clearTimeout(pendingSpeechTimer);
+    pendingSpeechTimer = null;
+  }
+
+  const sirenMs = await playWarningSiren();
+  pendingSpeechTimer = setTimeout(() => {
+    pendingSpeechTimer = null;
+    if (!isAlarmMuted || forceImmediate) {
+      speakWarehouseWarning(message, language);
+    }
+  }, Math.min(2350, sirenMs));
+
+  return { played: true, message, title };
 }
 
-export async function testWarehouseAlarmVoice(sampleMax = 30): Promise<void> {
+export async function testWarehouseAlarmVoice(
+  sampleMax = 30,
+  language: WarehouseAlarmLanguage = "id"
+): Promise<{ message: string; title: string }> {
   await unlockWarehouseAudio();
-  await triggerWarehouseAlarmAudio(
+  await requestWarehouseNotificationPermission();
+  const res = await triggerWarehouseAlarmAudio(
     [
       {
         deviceId: "WH7-TEST",
-        location: "Baris Aa Rak 10 Comp 4",
+        location: "Aa-10-04",
         suhu: sampleMax + 1.2,
         threshold: sampleMax,
         direction: "high"
       }
     ],
+    language,
     true
   );
+  return { message: res.message, title: res.title };
 }

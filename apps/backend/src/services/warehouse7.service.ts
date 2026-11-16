@@ -196,6 +196,41 @@ export async function saveWarehouse7Config(partial: Partial<Warehouse7Config>): 
   return next;
 }
 
+const ALARM_PREF_KEY_PREFIX = "warehouse_wh7_alarm_pref:";
+
+/**
+ * Per-account alarm audio/notification preference (defaults to disabled/false).
+ */
+export async function getWarehouse7AlarmPreference(userId: string): Promise<boolean> {
+  const uid = String(userId || "").trim();
+  if (!uid) return false;
+  try {
+    const pool = getPostgresPool();
+    const res = await pool.query(`SELECT value FROM global_configs WHERE key = $1 LIMIT 1`, [
+      `${ALARM_PREF_KEY_PREFIX}${uid}`
+    ]);
+    return res.rows[0]?.value?.alarmEnabled === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function setWarehouse7AlarmPreference(userId: string, alarmEnabled: boolean): Promise<boolean> {
+  const uid = String(userId || "").trim();
+  if (!uid) {
+    throw new Error("Akun pengguna tidak terdeteksi.");
+  }
+  const enabled = Boolean(alarmEnabled);
+  const pool = getPostgresPool();
+  await pool.query(
+    `INSERT INTO global_configs (key, value, updated_at)
+     VALUES ($1, $2::jsonb, CURRENT_TIMESTAMP)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+    [`${ALARM_PREF_KEY_PREFIX}${uid}`, JSON.stringify({ alarmEnabled: enabled })]
+  );
+  return enabled;
+}
+
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 4500): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

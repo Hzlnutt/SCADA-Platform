@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { utils, writeFile } from "xlsx";
 import { getJson } from "../../services/api.client";
 import { useSystemStore } from "../../store/system.store";
+import { useTranslation } from "../../i18n/useTranslation";
 import Warehouse7LineChart, { type Warehouse7TrendPayload } from "../../components/warehouse/Warehouse7LineChart";
 import {
   Warehouse7DeviceFilterSelect,
@@ -9,6 +10,8 @@ import {
   type Wh7DeviceOption,
   type Wh7PeriodFilter
 } from "../../components/warehouse/Warehouse7FilterBar";
+
+const INITIAL_LOG_LIMIT = 10;
 
 function getTodayDateStr(): string {
   const d = new Date();
@@ -24,6 +27,7 @@ function getPastDateStr(daysAgo: number): string {
 export default function Warehouse7TrendAnalysis() {
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
+  const { t, language } = useTranslation();
 
   const [period, setPeriod] = useState<Wh7PeriodFilter>("7d");
   const [startDate, setStartDate] = useState<string>(() => getPastDateStr(6));
@@ -31,6 +35,7 @@ export default function Warehouse7TrendAnalysis() {
   const [deviceMode, setDeviceMode] = useState<string>("all");
   const [trend, setTrend] = useState<Warehouse7TrendPayload | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showAllLogs, setShowAllLogs] = useState(false);
 
   const fetchTrend = useCallback(async () => {
     setLoading(true);
@@ -53,6 +58,7 @@ export default function Warehouse7TrendAnalysis() {
   }, [period, startDate, endDate, deviceMode]);
 
   useEffect(() => {
+    setShowAllLogs(false);
     fetchTrend();
   }, [fetchTrend]);
 
@@ -72,17 +78,28 @@ export default function Warehouse7TrendAnalysis() {
     return rows.filter((r) => r.deviceId === deviceMode);
   }, [trend?.hourlyRows, deviceMode]);
 
+  const displayedRows = useMemo(() => {
+    if (showAllLogs) return filteredTableRows;
+    return filteredTableRows.slice(0, INITIAL_LOG_LIMIT);
+  }, [filteredTableRows, showAllLogs]);
+
   const handleExportExcel = () => {
     const rows = filteredTableRows.map((r) => ({
-      Waktu_WIB: r.label,
-      Device_ID: r.deviceId,
-      Lokasi: r.locationLabel,
-      Suhu_C: r.suhu,
-      Kelembapan_RH: r.humi ?? "-",
-      Baterai_Pct: r.baterai ?? "-",
-      Status_Batas: r.suhu > maxTemp ? "Melebihi Max" : r.suhu < minTemp ? "Di Bawah Min" : "Normal"
+      [t("warehouse7.colTime", "Waktu (WIB)")]: r.label,
+      [t("warehouse7.colDevice", "Perangkat")]: r.deviceId,
+      [t("warehouse7.colLocation", "Lokasi")]: r.locationLabel,
+      [t("warehouse7.colTemp", "Suhu (°C)")]: r.suhu,
+      [t("warehouse7.colHumi", "Kelembapan")]: r.humi ?? "-",
+      [t("warehouse7.colBattery", "Baterai")]: r.baterai ?? "-",
+      [t("warehouse7.colStatus", "Status")]:
+        r.suhu > maxTemp
+          ? t("warehouse7.statusHigh", "Melebihi Maks")
+          : r.suhu < minTemp
+          ? t("warehouse7.statusLow", "Di Bawah Min")
+          : t("warehouse7.statusNormal", "Normal")
     }));
-    const ws = utils.json_to_sheet(rows.length > 0 ? rows : [{ Info: "Belum ada data telemetry" }]);
+    const emptyLabel = language === "en" ? "No telemetry data" : "Belum ada data telemetry";
+    const ws = utils.json_to_sheet(rows.length > 0 ? rows : [{ Info: emptyLabel }]);
     const wb = utils.book_new();
     utils.book_append_sheet(wb, ws, "Warehouse_7_Trend");
     writeFile(wb, `Warehouse_7_Trend_${period}_${getTodayDateStr()}.xlsx`);
@@ -90,19 +107,14 @@ export default function Warehouse7TrendAnalysis() {
 
   return (
     <div className="space-y-6">
-      {/* Header & Filter Controls */}
-      <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm">
+      {/* Header & Filter Controls matching SCADA UI */}
+      <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm transition-colors duration-300">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-extrabold text-slate-800 dark:text-slate-100">
-              Trend Analysis — Warehouse 7
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Analisis histori suhu per jam (<span className="font-mono">warehouse_telemetry</span>) dengan filter rentang waktu, kalender kustom, dan pemilihan perangkat
-            </p>
-          </div>
+          <h2 className="text-lg font-extrabold text-[#002b5c] dark:text-slate-100">
+            {t("warehouse7.trendPageTitle", "Analisis Tren — Gudang 7")}
+          </h2>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <Warehouse7PeriodControls
               period={period}
               onPeriodChange={setPeriod}
@@ -119,9 +131,9 @@ export default function Warehouse7TrendAnalysis() {
             <button
               type="button"
               onClick={handleExportExcel}
-              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-sm"
+              className="px-4 py-2 rounded-lg bg-[#1f6fb5] hover:bg-[#195a94] text-white text-sm font-bold transition shadow-sm cursor-pointer"
             >
-              Export Excel
+              {t("warehouse7.exportExcel", "Ekspor Excel")}
             </button>
           </div>
         </div>
@@ -129,42 +141,57 @@ export default function Warehouse7TrendAnalysis() {
 
       {/* Statistical KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-4 shadow-sm">
-          <div className="text-[11px] font-bold uppercase text-slate-400">MINIMUM TEMP</div>
-          <div className="mt-1 text-2xl font-extrabold font-mono text-blue-600 dark:text-blue-400">
+        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-wider text-[#47729f] dark:text-slate-400">
+            {t("warehouse7.minTempCard", "SUHU MINIMUM")}
+          </div>
+          <div className="mt-1.5 text-3xl font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400">
             {trend?.stats?.minTemp !== null && trend?.stats?.minTemp !== undefined ? `${trend.stats.minTemp.toFixed(1)} °C` : "— °C"}
           </div>
         </div>
-        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-4 shadow-sm">
-          <div className="text-[11px] font-bold uppercase text-slate-400">AVERAGE TEMP</div>
-          <div className="mt-1 text-2xl font-extrabold font-mono text-slate-900 dark:text-slate-100">
+
+        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-wider text-[#47729f] dark:text-slate-400">
+            {t("warehouse7.avgTempCard", "SUHU RATA-RATA")}
+          </div>
+          <div className="mt-1.5 text-3xl font-extrabold font-mono text-[#002b5c] dark:text-slate-100">
             {trend?.stats?.avgTemp !== null && trend?.stats?.avgTemp !== undefined ? `${trend.stats.avgTemp.toFixed(1)} °C` : "— °C"}
           </div>
         </div>
-        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-4 shadow-sm">
-          <div className="text-[11px] font-bold uppercase text-slate-400">MAXIMUM TEMP</div>
-          <div className="mt-1 text-2xl font-extrabold font-mono text-rose-600 dark:text-rose-400">
+
+        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-wider text-[#47729f] dark:text-slate-400">
+            {t("warehouse7.maxTempCard", "SUHU MAKSIMUM")}
+          </div>
+          <div className="mt-1.5 text-3xl font-extrabold font-mono text-rose-600 dark:text-rose-400">
             {trend?.stats?.maxTemp !== null && trend?.stats?.maxTemp !== undefined ? `${trend.stats.maxTemp.toFixed(1)} °C` : "— °C"}
           </div>
         </div>
-        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-4 shadow-sm">
-          <div className="text-[11px] font-bold uppercase text-slate-400">PELANGGARAN THRESHOLD</div>
-          <div className="mt-1 text-2xl font-extrabold font-mono text-amber-600 dark:text-amber-400">
+
+        <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-wider text-[#47729f] dark:text-slate-400">
+            {t("warehouse7.exceedCard", "DI LUAR BATAS")}
+          </div>
+          <div className="mt-1.5 text-3xl font-extrabold font-mono text-amber-600 dark:text-amber-400">
             {trend?.stats?.exceedCount ?? 0}
           </div>
-          <div className="text-[10px] text-slate-400 mt-0.5">
-            Dari {trend?.stats?.totalPoints ?? 0} rekaman (Batas {minTemp}–{maxTemp}°C)
+          <div className="text-xs font-semibold text-[#47729f] dark:text-slate-400 mt-1">
+            {trend?.stats?.totalPoints ?? 0} {t("warehouse7.recordsOf", "rekaman")} ({minTemp}–{maxTemp}°C)
           </div>
         </div>
       </div>
 
       {/* Line Chart Card */}
-      <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
-            Temperature Trend Line Chart
+      <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm transition-colors duration-300">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#acd3ff]/40 dark:border-slate-800 pb-3 mb-4">
+          <h3 className="text-base font-extrabold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
+            {t("warehouse7.chartTitle", "Grafik Tren Suhu")}
           </h3>
-          {loading && <span className="text-xs text-teal-600 font-semibold">Memuat data...</span>}
+          {loading && (
+            <span className="text-xs text-[#1f6fb5] dark:text-sky-400 font-bold animate-pulse">
+              {t("warehouse7.loadingData", "Memuat data...")}
+            </span>
+          )}
         </div>
         <Warehouse7LineChart
           trend={trend}
@@ -176,66 +203,81 @@ export default function Warehouse7TrendAnalysis() {
         />
       </div>
 
-      {/* Hourly Historian Table */}
-      <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      {/* Hourly Historian Table with Initial Limit & View All Toggle */}
+      <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm space-y-4 transition-colors duration-300">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#acd3ff]/40 dark:border-slate-800 pb-3">
           <div>
-            <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
-              Log Telemetry Per Jam (warehouse_telemetry)
+            <h3 className="text-base font-extrabold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
+              {t("warehouse7.logTableTitle", "Log Telemetry Per Jam")}
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Rekaman data utama per jam tersimpan di database PostgreSQL
+            <p className="text-xs font-semibold text-[#47729f] dark:text-slate-400 mt-0.5">
+              {t("warehouse7.showingRows", "Menampilkan")} {displayedRows.length} {t("warehouse7.ofRows", "dari")} {filteredTableRows.length} {t("warehouse7.rowsUnit", "baris")}
             </p>
           </div>
-          <span className="text-xs font-semibold text-slate-500">
-            Total: {filteredTableRows.length} baris
-          </span>
+
+          {filteredTableRows.length > INITIAL_LOG_LIMIT && (
+            <button
+              type="button"
+              onClick={() => setShowAllLogs((prev) => !prev)}
+              className="px-4 py-2 rounded-lg border border-[#acd3ff] dark:border-sky-800 bg-[#e8f3ff] dark:bg-sky-950/40 text-[#1f6fb5] dark:text-sky-300 text-sm font-bold hover:bg-[#d8ebff] transition cursor-pointer"
+            >
+              {showAllLogs
+                ? t("warehouse7.showLess", "Tampilkan Sebagian")
+                : `${t("warehouse7.viewAll", "View All")} (${filteredTableRows.length})`}
+            </button>
+          )}
         </div>
 
         <div className="overflow-x-auto scrollbar-thin">
-          <table className="w-full min-w-[680px] text-left text-xs border-collapse">
+          <table className="w-full min-w-[700px] text-left text-sm border-collapse">
             <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase text-slate-500 dark:text-slate-400">
-                <th className="py-2.5 px-3 font-bold">Waktu (WIB)</th>
-                <th className="py-2.5 px-3 font-bold">Device ID</th>
-                <th className="py-2.5 px-3 font-bold">Lokasi Rak</th>
-                <th className="py-2.5 px-3 font-bold">Suhu (°C)</th>
-                <th className="py-2.5 px-3 font-bold">Kelembapan (%RH)</th>
-                <th className="py-2.5 px-3 font-bold">Baterai</th>
-                <th className="py-2.5 px-3 font-bold">Status Batas</th>
+              <tr className="border-b border-[#acd3ff]/50 dark:border-slate-800 text-xs uppercase tracking-wider text-[#47729f] dark:text-slate-400 font-bold">
+                <th className="py-3 px-3">{t("warehouse7.colTime", "Waktu (WIB)")}</th>
+                <th className="py-3 px-3">{t("warehouse7.colDevice", "Perangkat")}</th>
+                <th className="py-3 px-3">{t("warehouse7.colLocation", "Lokasi")}</th>
+                <th className="py-3 px-3">{t("warehouse7.colTemp", "Suhu (°C)")}</th>
+                <th className="py-3 px-3">{t("warehouse7.colHumi", "Kelembapan")}</th>
+                <th className="py-3 px-3">{t("warehouse7.colBattery", "Baterai")}</th>
+                <th className="py-3 px-3">{t("warehouse7.colStatus", "Status")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
-              {filteredTableRows.length > 0 ? (
-                filteredTableRows.slice(0, 200).map((row, idx) => {
+              {displayedRows.length > 0 ? (
+                displayedRows.map((row, idx) => {
                   const overMax = row.suhu > maxTemp;
                   const underMin = row.suhu < minTemp;
                   return (
                     <tr key={`${row.deviceId}_${row.t_stamp}_${idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
-                      <td className="py-2.5 px-3 font-mono text-slate-700 dark:text-slate-300">{row.label}</td>
-                      <td className="py-2.5 px-3 font-mono font-bold text-teal-600 dark:text-teal-400">#{row.deviceId}</td>
-                      <td className="py-2.5 px-3 text-slate-700 dark:text-slate-200">{row.locationLabel}</td>
-                      <td className={`py-2.5 px-3 font-mono font-bold ${overMax || underMin ? "text-rose-600 dark:text-rose-400" : "text-slate-800 dark:text-slate-100"}`}>
-                        {row.suhu.toFixed(2)} °C
+                      <td className="py-3 px-3 font-mono font-medium text-[#002b5c] dark:text-slate-300">{row.label}</td>
+                      <td className="py-3 px-3 font-mono font-bold text-[#1f6fb5] dark:text-sky-400">#{row.deviceId}</td>
+                      <td className="py-3 px-3 font-medium text-[#002b5c] dark:text-slate-200">{row.locationLabel}</td>
+                      <td className={`py-3 px-3 font-mono font-bold ${overMax || underMin ? "text-rose-600 dark:text-rose-400" : "text-[#002b5c] dark:text-slate-100"}`}>
+                        {row.suhu.toFixed(1)} °C
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">
+                      <td className="py-3 px-3 font-mono text-[#47729f] dark:text-slate-400">
                         {row.humi !== null ? `${row.humi.toFixed(1)}%` : "—"}
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">
+                      <td
+                        className={`py-3 px-3 font-mono ${
+                          row.baterai !== null && row.baterai < 20
+                            ? "text-rose-600 dark:text-rose-400 font-extrabold"
+                            : "text-[#47729f] dark:text-slate-400"
+                        }`}
+                      >
                         {row.baterai !== null ? `${row.baterai}%` : "—"}
                       </td>
-                      <td className="py-2.5 px-3">
+                      <td className="py-3 px-3">
                         {overMax ? (
-                          <span className="px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-bold text-[10px]">
-                            CRITICAL (&gt;{maxTemp}°C)
+                          <span className="px-2.5 py-0.5 rounded bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold text-xs">
+                            {t("warehouse7.critical", "Kritis")} (&gt;{maxTemp}°C)
                           </span>
                         ) : underMin ? (
-                          <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-bold text-[10px]">
-                            CRITICAL (&lt;{minTemp}°C)
+                          <span className="px-2.5 py-0.5 rounded bg-[#e8f3ff] dark:bg-sky-950/60 text-[#1f6fb5] dark:text-sky-300 font-bold text-xs">
+                            {t("warehouse7.critical", "Kritis")} (&lt;{minTemp}°C)
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">
-                            NORMAL
+                          <span className="px-2.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold text-xs">
+                            {t("warehouse7.statusNormal", "Normal")}
                           </span>
                         )}
                       </td>
@@ -244,14 +286,26 @@ export default function Warehouse7TrendAnalysis() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400">
-                    Belum ada data per jam tersimpan di tabel <span className="font-mono">warehouse_telemetry</span> untuk rentang waktu ini.
+                  <td colSpan={7} className="py-8 text-center text-sm text-[#47729f] dark:text-slate-400">
+                    {t("warehouse7.noTableRows", "Belum ada data pada rentang ini.")}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {filteredTableRows.length > INITIAL_LOG_LIMIT && !showAllLogs && (
+          <div className="pt-2 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowAllLogs(true)}
+              className="px-5 py-2 rounded-lg border border-[#acd3ff] dark:border-sky-800 bg-[#f7fbff] dark:bg-slate-900 text-[#1f6fb5] dark:text-sky-300 text-sm font-bold hover:bg-[#e8f3ff] transition cursor-pointer"
+            >
+              {t("warehouse7.viewAll", "View All")} ({filteredTableRows.length})
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

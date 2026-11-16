@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { getJson, postJson, putJson } from "../../services/api.client";
 import { useAuthStore } from "../../store/auth.store";
+import { useTranslation } from "../../i18n/useTranslation";
 import { canEditWarehouse7Config } from "../../utils/roles";
+import { testWarehouseAlarmVoice } from "../../utils/warehouseAlarmAudio";
 
 interface Wh7ConfigData {
   baseUrl: string;
@@ -20,15 +22,17 @@ interface Wh7ConfigData {
 export default function Warehouse7ConfigConsole() {
   const role = useAuthStore((state) => state.user?.role ?? "user");
   const canEdit = canEditWarehouse7Config(role);
+  const { t, language } = useTranslation();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [alarmToast, setAlarmToast] = useState<{ title: string; message: string } | null>(null);
   const [discoveredWarehouses, setDiscoveredWarehouses] = useState<Array<{ id_wh: number; nm_gudang: string }>>([]);
 
   const [baseUrl, setBaseUrl] = useState("http://172.16.4.122:8002");
-  const [authMode, setAuthMode] = useState<"api_key" | "login">("api_key");
+  const [authMode, setAuthMode] = useState<"api_key" | "login">("login");
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [hasStoredApiKey, setHasStoredApiKey] = useState(false);
   const [maskedKey, setMaskedKey] = useState("");
@@ -61,15 +65,24 @@ export default function Warehouse7ConfigConsole() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!alarmToast) return;
+    const tId = setTimeout(() => setAlarmToast(null), 10000);
+    return () => clearTimeout(tId);
+  }, [alarmToast]);
+
   if (!canEdit) {
     return (
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-8 text-center text-sm text-slate-500 shadow-sm">
+      <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-8 text-center shadow-sm">
         <div className="text-3xl mb-2">🔒</div>
-        <h3 className="font-bold text-slate-700 dark:text-slate-200 text-base mb-1">Akses Konfigurasi Dibatasi</h3>
-        <p className="max-w-lg mx-auto">
-          Pengaturan batas suhu (Min/Max) dan koneksi API Warehouse 7 hanya dapat diakses dan diubah oleh role{" "}
-          <span className="font-bold">Unit Head HVAC</span>, <span className="font-bold">Senior Unit Head</span>,{" "}
-          <span className="font-bold">Unit Head Utility</span>, dan <span className="font-bold">Admin</span>.
+        <h3 className="font-bold text-[#002b5c] dark:text-slate-100 text-lg mb-1">
+          {t("warehouse7.restrictedTitle", "Akses Konfigurasi Dibatasi")}
+        </h3>
+        <p className="max-w-lg mx-auto text-sm text-[#47729f] dark:text-slate-400">
+          {t(
+            "warehouse7.restrictedDesc",
+            "Pengaturan Warehouse 7 hanya dapat diakses oleh Unit Head HVAC, Senior Unit Head, Unit Head Utility, dan Admin."
+          )}
         </p>
       </div>
     );
@@ -80,7 +93,13 @@ export default function Warehouse7ConfigConsole() {
     const parsedMin = Number(minTemp);
     const parsedMax = Number(maxTemp);
     if (!Number.isFinite(parsedMin) || !Number.isFinite(parsedMax) || parsedMin >= parsedMax) {
-      setStatusMsg({ type: "err", text: "Min Temp harus berupa angka valid dan lebih kecil dari Max Temp." });
+      setStatusMsg({
+        type: "err",
+        text:
+          language === "en"
+            ? "Min Temp must be valid and lower than Max Temp."
+            : "Min Temp harus angka valid dan lebih kecil dari Max Temp."
+      });
       return;
     }
 
@@ -90,9 +109,9 @@ export default function Warehouse7ConfigConsole() {
       const payload = {
         baseUrl: baseUrl.trim(),
         authMode,
-        apiKey: apiKeyInput.trim() ? apiKeyInput.trim() : (hasStoredApiKey ? "__KEEP__" : ""),
+        apiKey: apiKeyInput.trim() ? apiKeyInput.trim() : hasStoredApiKey ? "__KEEP__" : "",
         username: username.trim(),
-        password: passwordInput ? passwordInput : (hasStoredPassword ? "__KEEP__" : ""),
+        password: passwordInput ? passwordInput : hasStoredPassword ? "__KEEP__" : "",
         idWh: idWh.trim() ? Number(idWh.trim()) : null,
         nmGudang: nmGudang.trim() || "Gudang 7",
         minTemp: parsedMin,
@@ -106,9 +125,20 @@ export default function Warehouse7ConfigConsole() {
       }
       setApiKeyInput("");
       setPasswordInput("");
-      setStatusMsg({ type: "ok", text: res?.message || "Konfigurasi Warehouse 7 berhasil disimpan." });
+      setStatusMsg({
+        type: "ok",
+        text:
+          language === "en"
+            ? "Warehouse 7 configuration saved successfully."
+            : res?.message || "Konfigurasi Warehouse 7 berhasil disimpan."
+      });
     } catch (err: any) {
-      setStatusMsg({ type: "err", text: err?.message || "Gagal menyimpan konfigurasi Warehouse 7." });
+      setStatusMsg({
+        type: "err",
+        text:
+          err?.message ||
+          (language === "en" ? "Failed to save configuration." : "Gagal menyimpan konfigurasi.")
+      });
     } finally {
       setSaving(false);
     }
@@ -121,9 +151,9 @@ export default function Warehouse7ConfigConsole() {
       const payload = {
         baseUrl: baseUrl.trim(),
         authMode,
-        apiKey: apiKeyInput.trim() ? apiKeyInput.trim() : (hasStoredApiKey ? "__KEEP__" : ""),
+        apiKey: apiKeyInput.trim() ? apiKeyInput.trim() : hasStoredApiKey ? "__KEEP__" : "",
         username: username.trim(),
-        password: passwordInput ? passwordInput : (hasStoredPassword ? "__KEEP__" : "")
+        password: passwordInput ? passwordInput : hasStoredPassword ? "__KEEP__" : ""
       };
       const res = await postJson<{
         success: boolean;
@@ -150,41 +180,83 @@ export default function Warehouse7ConfigConsole() {
 
       setStatusMsg({
         type: "ok",
-        text: `Koneksi berhasil! Terdeteksi ${normalizedList.length} gudang dan ${res?.devicesCount ?? 0} device aktif.`
+        text:
+          language === "en"
+            ? `Connected! Detected ${normalizedList.length} warehouse(s) and ${res?.devicesCount ?? 0} device(s).`
+            : `Koneksi berhasil! Terdeteksi ${normalizedList.length} gudang dan ${res?.devicesCount ?? 0} device aktif.`
       });
     } catch (err: any) {
       setStatusMsg({
         type: "err",
-        text: err?.message || "Gagal menguji koneksi API Warehouse."
+        text:
+          err?.message ||
+          (language === "en" ? "Failed to test Warehouse API." : "Gagal menguji koneksi API Warehouse.")
       });
     } finally {
       setTesting(false);
     }
   };
 
+  const handleTestAlarm = async () => {
+    const parsedMax = Number(maxTemp);
+    const sampleMax = Number.isFinite(parsedMax) ? parsedMax : 30;
+    const res = await testWarehouseAlarmVoice(sampleMax, language);
+    setAlarmToast({ title: res.title, message: res.message });
+  };
+
   if (loading) {
     return (
-      <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-6 text-xs text-slate-500">
-        Memuat konfigurasi Warehouse 7...
+      <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-6 text-sm font-semibold text-[#47729f] dark:text-slate-400">
+        {t("common.loading", "Memuat...")}
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-sm space-y-5">
-        <div>
-          <h2 className="text-base font-extrabold text-slate-800 dark:text-slate-100">
-            Konfigurasi Warehouse 7 (WH-7)
+      {/* Floating Test Alarm Notification Toast */}
+      {alarmToast && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-md rounded-xl border-2 border-rose-500 bg-white dark:bg-slate-900 p-4 shadow-2xl flex items-start gap-3">
+          <div className="w-8 h-8 rounded-lg bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 text-lg font-extrabold">
+            !
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-extrabold text-rose-600 dark:text-rose-400">
+              {alarmToast.title}
+            </div>
+            <div className="mt-0.5 text-sm font-medium text-[#002b5c] dark:text-slate-200">
+              {alarmToast.message}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAlarmToast(null)}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold px-1 cursor-pointer"
+            aria-label="Close notification"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-sm space-y-5 transition-colors duration-300">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#acd3ff]/40 dark:border-slate-800 pb-3">
+          <h2 className="text-lg font-extrabold text-[#002b5c] dark:text-slate-100">
+            {t("warehouse7.configTitle", "Konfigurasi Warehouse 7")}
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Atur batas threshold suhu alarm/dubbing (default 24°C – 30°C) dan kredensial integrasi API Gudang (<span className="font-mono">172.16.4.122:8002</span>).
-          </p>
+
+          <button
+            type="button"
+            onClick={handleTestAlarm}
+            className="px-4 py-2 rounded-lg border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-sm font-bold hover:bg-rose-100 dark:hover:bg-rose-900/50 transition cursor-pointer"
+          >
+            ▶ {t("warehouse7.testAlarmBtn", "Tes Alarm")}
+          </button>
         </div>
 
         {statusMsg && (
           <div
-            className={`rounded-lg border px-4 py-2.5 text-xs font-semibold ${
+            className={`rounded-lg border px-4 py-3 text-sm font-semibold ${
               statusMsg.type === "ok"
                 ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300"
                 : "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300"
@@ -196,113 +268,121 @@ export default function Warehouse7ConfigConsole() {
 
         <form onSubmit={handleSave} className="space-y-5">
           {/* Threshold Temperature Limits */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-[#f7fbff] dark:bg-slate-900/50 border border-[#acd3ff]/70 dark:border-slate-800">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                Min Temperature Threshold (°C)
+              <label className="block text-sm font-bold text-[#002b5c] dark:text-slate-200 mb-1.5">
+                {t("warehouse7.minThresholdLabel", "Batas Suhu Minimum (°C)")}
               </label>
               <input
                 type="number"
                 step="0.1"
                 value={minTemp}
                 onChange={(e) => setMinTemp(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-mono font-bold text-blue-600 dark:text-blue-400"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 text-base font-mono font-bold text-[#1f6fb5] dark:text-sky-400 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
                 required
               />
-              <span className="text-[11px] text-slate-400">Default: 24°C. Alarm berbunyi jika suhu &lt; Min.</span>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                Max Temperature Threshold (°C)
+              <label className="block text-sm font-bold text-[#002b5c] dark:text-slate-200 mb-1.5">
+                {t("warehouse7.maxThresholdLabel", "Batas Suhu Maksimum (°C)")}
               </label>
               <input
                 type="number"
                 step="0.1"
                 value={maxTemp}
                 onChange={(e) => setMaxTemp(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-mono font-bold text-rose-600 dark:text-rose-400"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 text-base font-mono font-bold text-rose-600 dark:text-rose-400 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
                 required
               />
-              <span className="text-[11px] text-slate-400">Default: 30°C. Alarm berbunyi jika suhu &gt; Max.</span>
             </div>
           </div>
 
           {/* API Connection Configuration */}
-          <div className="space-y-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-            <div className="text-xs font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-              Integrasi API Gudang (Real-time 1 detik & Database Per Jam)
+          <div className="space-y-4 p-5 rounded-xl border border-[#acd3ff]/70 dark:border-slate-800">
+            <div className="text-xs font-extrabold uppercase tracking-wider text-[#47729f] dark:text-slate-300">
+              {t("warehouse7.apiSectionTitle", "Integrasi API Gudang")}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                  API Base URL
+                <label className="block text-sm font-bold text-[#002b5c] dark:text-slate-200 mb-1.5">
+                  {t("warehouse7.baseUrlLabel", "API Base URL")}
                 </label>
                 <input
                   type="text"
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
                   placeholder="http://172.16.4.122:8002"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono"
+                  className="w-full px-3.5 py-2 rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-mono text-[#002b5c] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                  Mode Autentikasi API
+                <label className="block text-sm font-bold text-[#002b5c] dark:text-slate-200 mb-1.5">
+                  {t("warehouse7.authModeLabel", "Mode Autentikasi API")}
                 </label>
                 <select
                   value={authMode}
                   onChange={(e) => setAuthMode(e.target.value as "api_key" | "login")}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-semibold"
+                  className="w-full px-3.5 py-2 rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-semibold text-[#002b5c] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
                 >
-                  <option value="login">Login Akun Gudang (/api/auth/login)</option>
-                  <option value="api_key">External API Key (Header X-Api-Key)</option>
+                  <option value="login">{t("warehouse7.authLoginOption", "Login Akun Gudang (/api/auth/login)")}</option>
+                  <option value="api_key">{t("warehouse7.authApiKeyOption", "External API Key (Header X-Api-Key)")}</option>
                 </select>
-                <span className="mt-1 block text-[11px] text-slate-400">
-                  Akun operator gudang (mis. <span className="font-mono">gudang7</span>) gunakan mode <span className="font-semibold">Login Akun Gudang</span>.
+                <span className="mt-1 block text-xs text-[#47729f] dark:text-slate-400">
+                  {t("warehouse7.authHintLogin", "Gunakan username & password operator (mis. gudang7).")}
                 </span>
               </div>
             </div>
 
             {authMode === "api_key" ? (
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                  X-Api-Key {hasStoredApiKey && <span className="text-emerald-600 font-normal">(Tersimpan: {maskedKey})</span>}
+                <label className="block text-sm font-bold text-[#002b5c] dark:text-slate-200 mb-1.5">
+                  {t("warehouse7.apiKeyLabel", "X-Api-Key")}{" "}
+                  {hasStoredApiKey && (
+                    <span className="text-emerald-600 dark:text-emerald-400 font-normal">
+                      ({t("warehouse7.savedBadge", "Tersimpan")}: {maskedKey})
+                    </span>
+                  )}
                 </label>
                 <input
                   type="password"
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder={hasStoredApiKey ? "Biarkan kosong jika tidak ingin mengganti API Key" : "Tempel API Key dari http://172.16.4.122:8002/api-management"}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono"
+                  placeholder="X-Api-Key"
+                  className="w-full px-3.5 py-2 rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-mono text-[#002b5c] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
                 />
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                    Username Akun Gudang
+                  <label className="block text-sm font-bold text-[#002b5c] dark:text-slate-200 mb-1.5">
+                    {t("warehouse7.usernameLabel", "Username")}
                   </label>
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="gudang7"
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs"
+                    className="w-full px-3.5 py-2 rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-[#002b5c] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                    Password {hasStoredPassword && <span className="text-emerald-600 font-normal">(Tersimpan)</span>}
+                  <label className="block text-sm font-bold text-[#002b5c] dark:text-slate-200 mb-1.5">
+                    {t("warehouse7.passwordLabel", "Password")}{" "}
+                    {hasStoredPassword && (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-normal">
+                        ({t("warehouse7.savedBadge", "Tersimpan")})
+                      </span>
+                    )}
                   </label>
                   <input
                     type="password"
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder={hasStoredPassword ? "Biarkan kosong untuk tetap memakai password lama" : "Password akun gudang"}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs"
+                    placeholder={hasStoredPassword ? "••••••••" : "Password"}
+                    className="w-full px-3.5 py-2 rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-[#002b5c] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
                   />
                 </div>
               </div>
@@ -310,55 +390,50 @@ export default function Warehouse7ConfigConsole() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                  ID Gudang (`id_wh` di API)
+                <label className="block text-sm font-bold text-[#002b5c] dark:text-slate-200 mb-1.5">
+                  {t("warehouse7.idWhLabel", "ID Gudang (id_wh)")}
                 </label>
                 <input
                   type="number"
                   value={idWh}
                   onChange={(e) => setIdWh(e.target.value)}
-                  placeholder="Contoh: 1 (atau klik Tes Koneksi untuk deteksi otomatis)"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono"
+                  placeholder="1"
+                  className="w-full px-3.5 py-2 rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-mono text-[#002b5c] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
                 />
-                <span className="mt-1 block text-[11px] text-slate-400">
-                  Untuk login operator <span className="font-mono">gudang7</span> bernilai <span className="font-mono">1</span> (kompartemen F2702987/F2745154 termuat otomatis).
+                <span className="mt-1 block text-xs text-[#47729f] dark:text-slate-400">
+                  {t("warehouse7.idWhHint", "Login operator gudang7 bernilai 1.")}
                 </span>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                  Nama Gudang (`nm_gudang`)
+                <label className="block text-sm font-bold text-[#002b5c] dark:text-slate-200 mb-1.5">
+                  {t("warehouse7.nmGudangLabel", "Nama Gudang (nm_gudang)")}
                 </label>
                 <input
                   type="text"
                   value={nmGudang}
                   onChange={(e) => setNmGudang(e.target.value)}
                   placeholder="Gudang 7"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs"
+                  className="w-full px-3.5 py-2 rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-[#002b5c] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1f6fb5]"
                 />
               </div>
             </div>
 
             {discoveredWarehouses.length > 0 && (
-              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
-                <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                  Klik salah satu Gudang yang terdeteksi dari API untuk mengisi otomatis:
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {discoveredWarehouses.map((w) => (
-                    <button
-                      key={`${w.id_wh}_${w.nm_gudang}`}
-                      type="button"
-                      onClick={() => {
-                        setIdWh(String(w.id_wh));
-                        setNmGudang(w.nm_gudang);
-                      }}
-                      className="px-2.5 py-1 rounded border border-teal-300 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 text-xs font-semibold hover:bg-teal-100"
-                    >
-                      id_wh={w.id_wh} · {w.nm_gudang}
-                    </button>
-                  ))}
-                </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {discoveredWarehouses.map((w) => (
+                  <button
+                    key={`${w.id_wh}_${w.nm_gudang}`}
+                    type="button"
+                    onClick={() => {
+                      setIdWh(String(w.id_wh));
+                      setNmGudang(w.nm_gudang);
+                    }}
+                    className="px-3 py-1.5 rounded-lg border border-[#acd3ff] dark:border-sky-800 bg-[#e8f3ff] dark:bg-sky-950/40 text-[#1f6fb5] dark:text-sky-300 text-xs font-bold hover:bg-[#d8ebff] transition cursor-pointer"
+                  >
+                    id_wh={w.id_wh} · {w.nm_gudang}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -368,17 +443,21 @@ export default function Warehouse7ConfigConsole() {
               type="button"
               onClick={handleTestConnection}
               disabled={testing}
-              className="px-4 py-2 rounded-lg border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 text-xs font-bold hover:bg-sky-100 transition disabled:opacity-60"
+              className="px-4 py-2.5 rounded-lg border border-[#acd3ff] dark:border-sky-800 bg-[#e8f3ff] dark:bg-sky-950/40 text-[#1f6fb5] dark:text-sky-300 text-sm font-bold hover:bg-[#d8ebff] transition disabled:opacity-60 cursor-pointer"
             >
-              {testing ? "Menguji Koneksi..." : "Tes Koneksi & Cek ID Gudang"}
+              {testing
+                ? t("warehouse7.testingConnBtn", "Menguji...")
+                : t("warehouse7.testConnBtn", "Tes Koneksi")}
             </button>
 
             <button
               type="submit"
               disabled={saving}
-              className="px-5 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition shadow-sm disabled:opacity-60"
+              className="px-5 py-2.5 rounded-lg bg-[#1f6fb5] hover:bg-[#195a94] text-white text-sm font-bold transition shadow-sm disabled:opacity-60 cursor-pointer"
             >
-              {saving ? "Menyimpan..." : "Simpan Konfigurasi"}
+              {saving
+                ? t("warehouse7.savingBtn", "Menyimpan...")
+                : t("warehouse7.saveBtn", "Simpan Konfigurasi")}
             </button>
           </div>
         </form>

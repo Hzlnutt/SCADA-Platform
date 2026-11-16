@@ -6,6 +6,7 @@ import { DEFAULT_EQ_CONFIGS, DEFAULT_HVAC_EQ_CONFIGS, getDefaultEqConfigs, type 
 import { getJson, postJson } from "../../services/api.client";
 import { useAuthStore } from "../../store/auth.store";
 import { useSystemStore } from "../../store/system.store";
+import { useTranslation } from "../../i18n/useTranslation";
 import type { MachineOutletContext } from "./MachineLayout";
 
 type MaintenanceItem = {
@@ -42,10 +43,12 @@ const formatDate = (value: string) => {
 
 export default function MachineMaintenance() {
   const { unitId } = useOutletContext<MachineOutletContext>();
+  const isWh7 = unitId === "hvac-wh-7";
   const machine = getUnitById(unitId);
   const role = useAuthStore((state) => state.user?.role ?? "user");
   const theme = useSystemStore((state) => state.theme);
   const isDark = theme === "dark";
+  const { t } = useTranslation();
 
   const [records, setRecords] = useState<MaintenanceItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,7 +105,19 @@ export default function MachineMaintenance() {
   }, []);
 
   // Nameplate Editing State
+  const emptyNameplateTemplate = {
+    model: "",
+    serial: "",
+    manufacturer: "",
+    mfgDate: "",
+    electrical: "",
+    capacity: "",
+    flow: "",
+    refrigerant: ""
+  };
+
   const defaultNameplate = useMemo(() => {
+    if (isWh7) return null;
     if (unitId.includes("hvac") || unitId.includes("ahu")) {
       return {
         model: "AHU-QC-RETAINED-01",
@@ -125,11 +140,11 @@ export default function MachineMaintenance() {
       flow: "120 m³/h",
       refrigerant: "Water / Glycol Loop"
     };
-  }, [unitId]);
+  }, [unitId, isWh7]);
 
-  const [nameplates, setNameplates] = useState<any[]>([defaultNameplate]);
+  const [nameplates, setNameplates] = useState<any[]>(() => (defaultNameplate ? [defaultNameplate] : []));
   const [nameplateOpen, setNameplateOpen] = useState(false);
-  const [nameplateForm, setNameplateForm] = useState<any>(defaultNameplate);
+  const [nameplateForm, setNameplateForm] = useState<any>(() => defaultNameplate || emptyNameplateTemplate);
   const [editIndex, setEditIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -138,7 +153,7 @@ export default function MachineMaintenance() {
       try {
         setNameplates(JSON.parse(saved));
       } catch (e) {
-        setNameplates([defaultNameplate]);
+        setNameplates(defaultNameplate ? [defaultNameplate] : []);
       }
     } else {
       // fallback to old single nameplate format
@@ -147,10 +162,10 @@ export default function MachineMaintenance() {
         try {
           setNameplates([JSON.parse(oldSaved)]);
         } catch (e) {
-          setNameplates([defaultNameplate]);
+          setNameplates(defaultNameplate ? [defaultNameplate] : []);
         }
       } else {
-        setNameplates([defaultNameplate]);
+        setNameplates(defaultNameplate ? [defaultNameplate] : []);
       }
     }
   }, [unitId, defaultNameplate]);
@@ -369,8 +384,11 @@ export default function MachineMaintenance() {
       });
     }
 
-    let eqConfigs = getDefaultEqConfigs(unitId);
     const savedEq = localStorage.getItem(`scada.config.eq.${unitId}`);
+    if (isWh7 && !savedEq) {
+      return [];
+    }
+    let eqConfigs = getDefaultEqConfigs(unitId);
     if (savedEq) {
       try {
         eqConfigs = JSON.parse(savedEq);
@@ -403,13 +421,13 @@ export default function MachineMaintenance() {
         rem: `${Math.max(0, item.highLimit - beforePm).toLocaleString()} h`
       };
     });
-  }, [unitId, runningHours, baselines, rhRules]);
+  }, [unitId, isWh7, runningHours, baselines, rhRules]);
 
   const overallHealth = useMemo(() => {
-    if (healthMatrixItems.length === 0) return 100;
+    if (healthMatrixItems.length === 0) return isWh7 ? null : 100;
     const sum = healthMatrixItems.reduce((acc, item) => acc + item.health, 0);
     return Math.round(sum / healthMatrixItems.length);
-  }, [healthMatrixItems]);
+  }, [healthMatrixItems, isWh7]);
 
   const maxRunningHours = useMemo(() => {
     if (healthMatrixItems.length === 0) return 0;
@@ -425,6 +443,14 @@ export default function MachineMaintenance() {
   }, [healthMatrixItems]);
 
   const summaryCards = useMemo(() => {
+    if (overallHealth === null) {
+      return [
+        { label: "Overall Health", value: "—", cap: t("warehouse7.noHealthMatrix", "Belum ada data peralatan"), color: "text-slate-400", bg: "bg-slate-400/20" },
+        { label: "Running Hours (All)", value: "—", cap: "0 hrs", color: "text-slate-400", bg: "bg-slate-400/20" },
+        { label: "PM Due This Month", value: "0", cap: "No pending PM Tasks", color: "text-slate-400", bg: "bg-slate-400/20" },
+        { label: "Overdue Items", value: "0", cap: "All clear", color: "text-emerald-500", bg: "bg-emerald-500/10" }
+      ];
+    }
     const healthColor = overallHealth >= 80 ? "text-emerald-500" : overallHealth >= 60 ? "text-amber-500" : "text-rose-500";
     const healthCap = overallHealth >= 80 ? "Normal Range" : overallHealth >= 60 ? "Warning Range" : "Critical Range";
     
@@ -434,7 +460,7 @@ export default function MachineMaintenance() {
       { label: "PM Due This Month", value: `${pmDueCount} Tasks`, cap: pmDueCount > 0 ? "Needs Scheduled PM" : "No pending PM Tasks", color: "text-amber-500", bg: "bg-amber-500/10" },
       { label: "Overdue Items", value: `${overdueCount} Critical`, cap: overdueCount > 0 ? "Requires Attention" : "All clear", color: overdueCount > 0 ? "text-rose-500" : "text-emerald-500", bg: overdueCount > 0 ? "bg-rose-500/10" : "bg-emerald-500/10" }
     ];
-  }, [overallHealth, maxRunningHours, pmDueCount, overdueCount]);
+  }, [overallHealth, maxRunningHours, pmDueCount, overdueCount, t]);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -469,46 +495,52 @@ export default function MachineMaintenance() {
         <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide border-b border-[#acd3ff]/30 pb-2 mb-4">
           Equipment Health Matrix
         </h3>
-        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-h-[520px] overflow-y-auto pr-2`}>
-          {healthMatrixItems.map((item, idx) => (
-            <div
-              key={idx}
-              className="p-4 bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-900 rounded-xl space-y-2 flex flex-col justify-between"
-            >
-              <div className="space-y-0.5">
-                <div className="text-xs font-extrabold text-[#002b5c] dark:text-slate-200">
-                  {item.tag}
-                </div>
-                <div className="text-[9px] text-[#47729f] dark:text-slate-500">
-                  {item.sub}
-                </div>
-              </div>
-              <div className="space-y-3 pt-1">
-                <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                  <div className={`h-full ${item.barColor} rounded-full`} style={{ width: `${item.health}%` }} />
-                </div>
-                <div className="grid grid-cols-3 gap-2 mt-3 text-center">
-                  <div className="bg-slate-100/80 dark:bg-slate-800/40 rounded-full px-2.5 py-1.5 border border-slate-200/60 dark:border-slate-700/40 flex flex-col items-center justify-center">
-                    <span className="text-[8px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Before PM</span>
-                    <span className="text-base font-extrabold text-slate-800 dark:text-slate-100 font-mono mt-0.5">{item.beforePm.toLocaleString()} h</span>
+        {healthMatrixItems.length > 0 ? (
+          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-h-[520px] overflow-y-auto pr-2`}>
+            {healthMatrixItems.map((item, idx) => (
+              <div
+                key={idx}
+                className="p-4 bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-900 rounded-xl space-y-2 flex flex-col justify-between"
+              >
+                <div className="space-y-0.5">
+                  <div className="text-xs font-extrabold text-[#002b5c] dark:text-slate-200">
+                    {item.tag}
                   </div>
-                  <div className="bg-slate-100/80 dark:bg-slate-800/40 rounded-full px-2.5 py-1.5 border border-slate-200/60 dark:border-slate-700/40 flex flex-col items-center justify-center">
-                    <span className="text-[8px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Lifetime</span>
-                    <span className="text-base font-extrabold text-slate-800 dark:text-slate-100 font-mono mt-0.5">{item.lifetime.toLocaleString()} h</span>
-                  </div>
-                  <div className="bg-slate-100/80 dark:bg-slate-800/40 rounded-full px-2.5 py-1.5 border border-slate-200/60 dark:border-slate-700/40 flex flex-col items-center justify-center">
-                    <span className="text-[8px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Limit</span>
-                    <span className="text-base font-extrabold text-[#002b5c] dark:text-sky-400 font-mono mt-0.5">{item.limit.toLocaleString()} h</span>
+                  <div className="text-[9px] text-[#47729f] dark:text-slate-500">
+                    {item.sub}
                   </div>
                 </div>
+                <div className="space-y-3 pt-1">
+                  <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div className={`h-full ${item.barColor} rounded-full`} style={{ width: `${item.health}%` }} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                    <div className="bg-slate-100/80 dark:bg-slate-800/40 rounded-full px-2.5 py-1.5 border border-slate-200/60 dark:border-slate-700/40 flex flex-col items-center justify-center">
+                      <span className="text-[8px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Before PM</span>
+                      <span className="text-base font-extrabold text-slate-800 dark:text-slate-100 font-mono mt-0.5">{item.beforePm.toLocaleString()} h</span>
+                    </div>
+                    <div className="bg-slate-100/80 dark:bg-slate-800/40 rounded-full px-2.5 py-1.5 border border-slate-200/60 dark:border-slate-700/40 flex flex-col items-center justify-center">
+                      <span className="text-[8px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Lifetime</span>
+                      <span className="text-base font-extrabold text-slate-800 dark:text-slate-100 font-mono mt-0.5">{item.lifetime.toLocaleString()} h</span>
+                    </div>
+                    <div className="bg-slate-100/80 dark:bg-slate-800/40 rounded-full px-2.5 py-1.5 border border-slate-200/60 dark:border-slate-700/40 flex flex-col items-center justify-center">
+                      <span className="text-[8px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Limit</span>
+                      <span className="text-base font-extrabold text-[#002b5c] dark:text-sky-400 font-mono mt-0.5">{item.limit.toLocaleString()} h</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center text-[10px] font-medium text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <span>Health: <span className="font-extrabold font-mono text-[#002b5c] dark:text-slate-200">{item.health}%</span></span>
+                  <span>Remaining: <span className="font-extrabold font-mono text-[#002b5c] dark:text-slate-200">{item.rem}</span></span>
+                </div>
               </div>
-              <div className="flex justify-between items-center text-[10px] font-medium text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <span>Health: <span className="font-extrabold font-mono text-[#002b5c] dark:text-slate-200">{item.health}%</span></span>
-                <span>Remaining: <span className="font-extrabold font-mono text-[#002b5c] dark:text-slate-200">{item.rem}</span></span>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-8 text-center text-sm text-[#47729f] dark:text-slate-400">
+            {t("warehouse7.noHealthMatrix", "Belum ada data peralatan untuk Warehouse 7.")}
+          </div>
+        )}
       </div>
 
       {/* 3. Bottom Split View (Preventive Schedule vs Service & Name Plate) */}
@@ -518,30 +550,36 @@ export default function MachineMaintenance() {
           <h3 className="text-sm font-bold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide border-b border-[#acd3ff]/30 pb-2 mb-3">
             Preventive Maintenance Schedule
           </h3>
-          <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
-            {[
-              { task: "CT-1 Fan Bearing Lubrication", date: "2026-06-15", status: "Scheduled", tech: "Hasan", color: "bg-blue-500/10 text-blue-500 border border-blue-500/20" },
-              { task: "Condenser Coil Cleaning", date: "2026-06-20", status: "Scheduled", tech: "Budi", color: "bg-blue-500/10 text-blue-500 border border-blue-500/20" },
-              { task: "Water Treatment Chemical Check", date: "2026-06-25", status: "Scheduled", tech: "Rian", color: "bg-blue-500/10 text-blue-500 border border-blue-500/20" },
-              { task: "Vibration Sensor Calibration", date: "2026-06-12", status: "Overdue", tech: "Hasan", color: "bg-rose-500/15 text-rose-500 border border-rose-500/30 font-bold animate-pulse" },
-              { task: "Electrical Panel Thermal Check", date: "2026-07-02", status: "Planned", tech: "Asep", color: "bg-slate-500/10 text-slate-400 border border-slate-500/20" }
-            ].map((task, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between p-2.5 bg-slate-50/50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-lg text-xs"
-              >
-                <div>
-                  <div className="font-bold text-[#002b5c] dark:text-slate-200">{task.task}</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    Target: {task.date} | Tech: {task.tech}
+          {isWh7 ? (
+            <div className="py-8 text-center text-sm text-[#47729f] dark:text-slate-400">
+              {t("warehouse7.noPmSchedule", "Belum ada jadwal preventive maintenance.")}
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+              {[
+                { task: "CT-1 Fan Bearing Lubrication", date: "2026-06-15", status: "Scheduled", tech: "Hasan", color: "bg-blue-500/10 text-blue-500 border border-blue-500/20" },
+                { task: "Condenser Coil Cleaning", date: "2026-06-20", status: "Scheduled", tech: "Budi", color: "bg-blue-500/10 text-blue-500 border border-blue-500/20" },
+                { task: "Water Treatment Chemical Check", date: "2026-06-25", status: "Scheduled", tech: "Rian", color: "bg-blue-500/10 text-blue-500 border border-blue-500/20" },
+                { task: "Vibration Sensor Calibration", date: "2026-06-12", status: "Overdue", tech: "Hasan", color: "bg-rose-500/15 text-rose-500 border border-rose-500/30 font-bold animate-pulse" },
+                { task: "Electrical Panel Thermal Check", date: "2026-07-02", status: "Planned", tech: "Asep", color: "bg-slate-500/10 text-slate-400 border border-slate-500/20" }
+              ].map((task, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between p-2.5 bg-slate-50/50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-lg text-xs"
+                >
+                  <div>
+                    <div className="font-bold text-[#002b5c] dark:text-slate-200">{task.task}</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      Target: {task.date} | Tech: {task.tech}
+                    </div>
                   </div>
+                  <span className={`text-[8px] uppercase font-extrabold px-2 py-0.5 rounded-md ${task.color}`}>
+                    {task.status}
+                  </span>
                 </div>
-                <span className={`text-[8px] uppercase font-extrabold px-2 py-0.5 rounded-md ${task.color}`}>
-                  {task.status}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Service & Name Plate */}
@@ -554,7 +592,7 @@ export default function MachineMaintenance() {
               <button
                 type="button"
                 onClick={() => {
-                  setNameplateForm(defaultNameplate);
+                  setNameplateForm(defaultNameplate || emptyNameplateTemplate);
                   setEditIndex(null);
                   setNameplateOpen(true);
                 }}
@@ -568,74 +606,82 @@ export default function MachineMaintenance() {
             )}
           </div>
           
-          <div className="space-y-4 max-h-[260px] overflow-y-auto pr-1">
-            {nameplates.map((plate, idx) => (
-              <div key={idx} className="relative p-3 bg-slate-50/50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-lg group">
-                {canEditNameplate && (
-                  <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => {
-                        setNameplateForm(plate);
-                        setEditIndex(idx);
-                        setNameplateOpen(true);
-                      }}
-                      className="text-[10px] bg-slate-200 dark:bg-slate-800 hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-slate-700 px-2 py-0.5 rounded font-bold transition"
-                    >
-                      Edit
-                    </button>
-                    {nameplates.length > 1 && (
+          {nameplates.length > 0 ? (
+            <div className="space-y-4 max-h-[260px] overflow-y-auto pr-1">
+              {nameplates.map((plate, idx) => (
+                <div key={idx} className="relative p-3 bg-slate-50/50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-900 rounded-lg group">
+                  {canEditNameplate && (
+                    <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={() => deleteNameplate(idx)}
-                        className="text-[10px] bg-slate-200 dark:bg-slate-800 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-slate-700 px-2 py-0.5 rounded font-bold transition"
+                        onClick={() => {
+                          setNameplateForm(plate);
+                          setEditIndex(idx);
+                          setNameplateOpen(true);
+                        }}
+                        className="text-[10px] bg-slate-200 dark:bg-slate-800 hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-slate-700 px-2 py-0.5 rounded font-bold transition"
                       >
-                        Delete
+                        Edit
                       </button>
-                    )}
-                  </div>
-                )}
-                
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-xs text-[#002b5c] dark:text-slate-300 font-medium mt-1">
-                  <div>
-                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Model Number</span>
-                    <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.model}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Serial Number</span>
-                    <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.serial}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Manufacturer</span>
-                    <span className="font-bold text-slate-900 dark:text-white">{plate.manufacturer}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Manufactured Date</span>
-                    <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.mfgDate}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Electrical Rating</span>
-                    <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.electrical}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Capacity</span>
-                    <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.capacity}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Flow Capacity</span>
-                    <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.flow}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Refrigerant / Loop</span>
-                    <span className="font-bold text-slate-900 dark:text-white">{plate.refrigerant}</span>
+                      {(isWh7 || nameplates.length > 1) && (
+                        <button
+                          onClick={() => deleteNameplate(idx)}
+                          className="text-[10px] bg-slate-200 dark:bg-slate-800 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-slate-700 px-2 py-0.5 rounded font-bold transition"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-xs text-[#002b5c] dark:text-slate-300 font-medium mt-1">
+                    <div>
+                      <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Model Number</span>
+                      <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.model}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Serial Number</span>
+                      <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.serial}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Manufacturer</span>
+                      <span className="font-bold text-slate-900 dark:text-white">{plate.manufacturer}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Manufactured Date</span>
+                      <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.mfgDate}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Electrical Rating</span>
+                      <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.electrical}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Capacity</span>
+                      <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.capacity}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Flow Capacity</span>
+                      <span className="font-bold font-mono text-slate-900 dark:text-white">{plate.flow}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase text-[#47729f] dark:text-slate-500 block">Refrigerant / Loop</span>
+                      <span className="font-bold text-slate-900 dark:text-white">{plate.refrigerant}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-sm text-[#47729f] dark:text-slate-400">
+              {t("warehouse7.noNameplate", "Belum ada data nameplate.")}
+            </div>
+          )}
           
-          <div className="text-[9px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-900 mt-auto pt-2 flex items-center justify-between">
-            <span>QC Stamp Approved</span>
-            <span>Support: +62 21-883-WIDATRA</span>
-          </div>
+          {!isWh7 && (
+            <div className="text-[9px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-900 mt-auto pt-2 flex items-center justify-between">
+              <span>QC Stamp Approved</span>
+              <span>Support: +62 21-883-WIDATRA</span>
+            </div>
+          )}
         </div>
       </div>
 
