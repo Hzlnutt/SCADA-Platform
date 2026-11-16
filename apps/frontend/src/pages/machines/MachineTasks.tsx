@@ -70,7 +70,7 @@ export default function MachineTasks() {
   const userRole = user?.role ?? "user";
   const isUnitHvac = isHvacUnit(unitId);
   const canInteract = canInteractWithTask(userRole, unitId);
-  const availableComponents = isUnitHvac ? HVAC_COMPONENTS : ALL_COMPONENTS;
+  const availableComponents = unitId === "hvac-wh-7" ? [] : (isUnitHvac ? HVAC_COMPONENTS : ALL_COMPONENTS);
 
   const [dbTasks, setDbTasks] = useState<any[]>([]);
   const [runningHours, setRunningHours] = useState<Record<string, number>>({});

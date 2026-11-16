@@ -62,6 +62,24 @@ export const canAccessHvacControls = (role?: string | null): boolean => {
   return isUnitHeadOrAdmin(role);
 };
 
+/**
+ * Checks if the given role is allowed to edit Warehouse 7 threshold and API settings.
+ * Restricted strictly to Unit Head HVAC, Senior Unit Head, Unit Head Utility, and Admin.
+ */
+export const canEditWarehouse7Config = (role?: string | null): boolean => {
+  if (!role) return false;
+  const normalized = role.toLowerCase().trim().replace(/[\s-]+/g, "_");
+  return (
+    normalized === "admin" ||
+    normalized === "superadmin" ||
+    normalized === "developer" ||
+    normalized === "dev" ||
+    normalized === "senior_unit_head" ||
+    normalized === "unit_head_utility" ||
+    normalized === "unit_head_hvac"
+  );
+};
+
 export type UserDomain = "utility" | "hvac" | "all";
 
 /**

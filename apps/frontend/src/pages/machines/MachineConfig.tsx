@@ -7,6 +7,7 @@ import type { ConfigEqRow, ConfigTagRow, HvacConfig } from "../../data/equipment
 import type { MachineOutletContext } from "./MachineLayout";
 import { useAuthStore } from "../../store/auth.store";
 import { canAccessConfigAndAudit } from "../../utils/roles";
+import Warehouse7ConfigConsole from "./Warehouse7ConfigConsole";
 
 export type ApiSourceRow = {
   tagKey: string;
@@ -333,6 +334,10 @@ export default function MachineConfig() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const role = useAuthStore((state) => state.user?.role ?? "user");
   const canAccess = canAccessConfigAndAudit(role);
+
+  if (unitId === "hvac-wh-7") {
+    return <Warehouse7ConfigConsole />;
+  }
 
   if (!canAccess) {
     return (

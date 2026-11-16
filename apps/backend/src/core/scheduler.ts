@@ -829,7 +829,8 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
     let pf = normalizePowerFactor(getVal(["Power_Factor", "PF"]));
 
     let ae = getVal(["ActiveEnergy", "Active_Energy", "Total_Active_Energy", "Energy_Active_Total", "KWh", "kWh", "kwh"]);
-    if (ae !== null && (isNaN(ae) || ae > 100000000)) {
+    // Guard against NaN / corrupt astronomical values without blocking Wh-scale meters such as PM209 (~1.25e9)
+    if (ae !== null && (!Number.isFinite(ae) || isNaN(ae) || ae < 0 || ae > 1e14)) {
       ae = null;
     }
 
@@ -4064,6 +4065,14 @@ export const startScheduler = () => {
   startWaterPolling();
   startGasPolling();
   startIncomingElectricityPolling();
+
+  // Start Warehouse 7 1-second real-time API poller & hourly PostgreSQL recorder
+  try {
+    const { startWarehouse7Polling } = require("../services/warehouse7.service");
+    startWarehouse7Polling();
+  } catch (err) {
+    logger.warn({ err }, "Failed to start Warehouse 7 polling");
+  }
 
   // Initial rollup and cleanup on start
   runElectricityRollupAndCleanup().catch((err) => {

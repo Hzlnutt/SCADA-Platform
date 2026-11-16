@@ -1455,7 +1455,7 @@ export const getElectricityReportHandler = async (
                  CASE WHEN thd_current_a >= 0 AND thd_current_a <= 100 THEN thd_current_a ELSE NULL END AS thd_current_a,
                  CASE WHEN thd_current_b >= 0 AND thd_current_b <= 100 THEN thd_current_b ELSE NULL END AS thd_current_b,
                  CASE WHEN thd_current_c >= 0 AND thd_current_c <= 100 THEN thd_current_c ELSE NULL END AS thd_current_c,
-                 CASE WHEN active_energy >= 0 AND active_energy < 100000000 THEN active_energy ELSE NULL END AS active_energy
+                 CASE WHEN active_energy >= 0 THEN active_energy ELSE NULL END AS active_energy
           FROM electric_pm_telemetry
           WHERE (($1 != '%' AND pm_id ILIKE $1) OR ($1 = '%' AND group_id ILIKE $2))
             AND t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
@@ -1472,7 +1472,7 @@ export const getElectricityReportHandler = async (
                  CASE WHEN thd_current_a >= 0 AND thd_current_a <= 100 THEN thd_current_a ELSE NULL END AS thd_current_a,
                  CASE WHEN thd_current_b >= 0 AND thd_current_b <= 100 THEN thd_current_b ELSE NULL END AS thd_current_b,
                  CASE WHEN thd_current_c >= 0 AND thd_current_c <= 100 THEN thd_current_c ELSE NULL END AS thd_current_c,
-                 CASE WHEN active_energy >= 0 AND active_energy < 100000000 THEN active_energy ELSE NULL END AS active_energy
+                 CASE WHEN active_energy >= 0 THEN active_energy ELSE NULL END AS active_energy
           FROM electric_pm_telemetry_minute
           WHERE (($1 != '%' AND pm_id ILIKE $1) OR ($1 = '%' AND group_id ILIKE $2))
             AND t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
@@ -2102,6 +2102,153 @@ export async function computeEquipmentMonthlyBatch(
   return queryPromise;
 }
 
+interface PmSeriesPoint {
+  tsMs: number;
+  val: number | null;
+  power: number | null;
+  status: boolean;
+}
+
+// Meters whose Ignition endpoint reports cumulative active_energy in MWh
+// (pre-Nov-12 13:30 WIB historical rows were stored *1000 as kWh in PostgreSQL)
+const MWH_SCALE_PMS = new Set([
+  "PM134", "PM135", "PM136", "PM139",
+  "PM201", "PM202", "PM206", "PM214",
+  "PM321", "PM325"
+]);
+
+// Meters with 16-bit 65.535 kWh cyclic energy rollover register
+const MOD_65535_PMS = new Set([
+  "PM140", "PM210", "PM211", "PM212", "PM213", "PM215", "PM322"
+]);
+
+const MWH_SCALE_CUTOFF_MS = new Date("2026-11-12T13:30:00+07:00").getTime();
+const F32_SCRATCH_BUF = Buffer.allocUnsafe(4);
+
+function toFloat32Words(v: number): { hi: number; lo: number } {
+  F32_SCRATCH_BUF.writeFloatBE(v, 0);
+  return {
+    hi: F32_SCRATCH_BUF.readUInt16BE(0),
+    lo: F32_SCRATCH_BUF.readUInt16BE(2)
+  };
+}
+
+function fromFloat32Words(hi: number, lo: number): number {
+  F32_SCRATCH_BUF.writeUInt16BE(hi & 0xffff, 0);
+  F32_SCRATCH_BUF.writeUInt16BE(lo & 0xffff, 2);
+  return F32_SCRATCH_BUF.readFloatBE(0);
+}
+
+function isGenuineFloat32(v: number): boolean {
+  if (v <= 0 || !Number.isFinite(v)) return false;
+  F32_SCRATCH_BUF.writeFloatBE(v, 0);
+  return Math.abs(F32_SCRATCH_BUF.readFloatBE(0) - v) <= Math.max(1e-3, v * 1e-6);
+}
+
+/**
+ * Runtime unit normalization for MWh meters so DB stays raw while charts display kWh consistently.
+ */
+function normalizePmEnergyToKwh(pmId: string, tsMs: number, val: number | null): number | null {
+  if (val === null || !Number.isFinite(val)) return null;
+  if (MWH_SCALE_PMS.has(pmId) && val > 0 && tsMs >= MWH_SCALE_CUTOFF_MS && val < 50000) {
+    return val * 1000;
+  }
+  return val;
+}
+
+/**
+ * Compute consumption between two valid cumulative register snapshots, recovering:
+ * 1) 16-bit 65.535 cyclic rollovers (using exact minute-wrap count or kW disambiguation)
+ * 2) IEEE-754 float32 Modbus hi/lo word-tearing artifacts (wrap-without-carry & premature-carry)
+ */
+function computePmStepDiff(
+  pmId: string,
+  prev: PmSeriesPoint,
+  curr: PmSeriesPoint,
+  minuteWrapCount: number | null = null
+): number {
+  const pVal = prev.val;
+  const cVal = curr.val;
+  if (pVal === null || cVal === null || pVal <= 0 || cVal <= 0) return 0;
+
+  const dtMs = curr.tsMs - prev.tsMs;
+  // Cap multi-day disconnects / re-tagging discontinuities (>36h) while recovering normal gaps (<=36h)
+  if (dtMs <= 0 || dtMs > 36 * 3600 * 1000) return 0;
+  const dtH = dtMs / 3600000;
+
+  const pKw = prev.power !== null && prev.power >= 0 && prev.power < 20000 ? prev.power : null;
+  const cKw = curr.power !== null && curr.power >= 0 && curr.power < 20000 ? curr.power : null;
+  const avgKw = pKw !== null && cKw !== null ? (pKw + cKw) / 2 : (pKw ?? cKw ?? null);
+  const estKwh = avgKw !== null ? avgKw * dtH : null;
+
+  if (MOD_65535_PMS.has(pmId)) {
+    let raw = cVal - pVal;
+    if (minuteWrapCount !== null) {
+      let d = raw + minuteWrapCount * 65.535;
+      if (d < -0.5) d += 65.535;
+      return d > 0 ? d : 0;
+    }
+    if (estKwh !== null) {
+      const wraps = Math.max(0, Math.round((estKwh - raw) / 65.535));
+      const d = raw + wraps * 65.535;
+      return d > 0 && d < Math.max(1000, estKwh * 4 + 100) ? d : Math.max(0, estKwh);
+    }
+    if (raw < -0.5) raw += 65.535;
+    return raw > 0 ? raw : 0;
+  }
+
+  const rawDiff = cVal - prev.val!;
+
+  if (pVal >= 8192 && cVal >= 8192 && isGenuineFloat32(pVal) && isGenuineFloat32(cVal)) {
+    const wordStep = Math.pow(2, Math.floor(Math.log2(pVal)) - 7);
+    if (wordStep >= 64) {
+      const w1 = toFloat32Words(pVal);
+      const w2 = toFloat32Words(cVal);
+
+      // Wrap without hi-word carry (negative drop ~ -wordStep)
+      if (w2.hi === w1.hi && w2.lo < w1.lo && (w1.lo - w2.lo) > 0x4000 && rawDiff < 0) {
+        const fixed = fromFloat32Words(w1.hi + 1, w2.lo) - pVal;
+        if (fixed >= 0 && fixed < wordStep * 0.9) return fixed;
+      }
+
+      // Premature hi-word carry without lo-word wrap (or multi-word / exponent jump)
+      if (w2.hi > w1.hi) {
+        if (w2.hi === w1.hi + 1 && w2.lo >= w1.lo && rawDiff > wordStep * 0.55) {
+          const fixed = fromFloat32Words(w1.hi, w2.lo) - pVal;
+          if (fixed >= 0 && fixed < wordStep * 0.9) return fixed;
+        }
+        if (
+          (w2.hi - w1.hi >= 2 || rawDiff > wordStep * 1.15) &&
+          rawDiff > Math.max(wordStep * 0.95, (estKwh ?? 0) * 3 + 200)
+        ) {
+          if (w2.lo >= w1.lo) {
+            const fixed = fromFloat32Words(w1.hi, w2.lo) - pVal;
+            if (fixed >= 0 && fixed <= Math.max((estKwh ?? 100) * 3 + 100, wordStep * 0.9)) return fixed;
+          }
+          const fixedPlus = fromFloat32Words(w1.hi + 1, w2.lo) - pVal;
+          if (fixedPlus >= 0 && fixedPlus <= Math.max((estKwh ?? 100) * 3 + 100, wordStep * 0.9)) return fixedPlus;
+          if (estKwh !== null) return Math.max(0, estKwh);
+        }
+      }
+
+      // Staggered transient hi-word regression during recovery
+      if (w2.hi < w1.hi && rawDiff < 0 && w1.hi - w2.hi <= 2) {
+        const fixed = fromFloat32Words(w1.hi, w2.lo) - pVal;
+        if (fixed >= 0 && fixed < wordStep * 0.9) return fixed;
+      }
+    }
+  }
+
+  return rawDiff >= 0 ? rawDiff : 0;
+}
+
+function getWibMonthAndDay(tsMs: number): { monthKey: string; day: number } {
+  const wibTime = new Date(tsMs + 7 * 60 * 60 * 1000);
+  const y = wibTime.getUTCFullYear();
+  const m = String(wibTime.getUTCMonth() + 1).padStart(2, "0");
+  return { monthKey: `${y}-${m}`, day: wibTime.getUTCDate() };
+}
+
 async function doComputeEquipmentMonthlyBatch(
   currentMonth: string,
   comparisonMonth: string
@@ -2111,26 +2258,25 @@ async function doComputeEquipmentMonthlyBatch(
   const earlierMonth = months[0];
   const laterMonth = months[1];
 
-  const [eYear, eMonth] = earlierMonth.split("-").map(Number);
   const [lYear, lMonth] = laterMonth.split("-").map(Number);
   const lDays = new Date(lYear, lMonth, 0).getDate();
-
   const pad = (n: number) => String(n).padStart(2, "0");
 
-  // Query window: 2 hours before 1st of earlier month to 2 hours after last day of later month
-  const fromDate = new Date(`${earlierMonth}-01T00:00:00`);
-  const baselineDate = new Date(fromDate.getTime() - 2 * 60 * 60 * 1000);
-  const fromQueryVal = `${baselineDate.getFullYear()}-${pad(baselineDate.getMonth() + 1)}-${pad(baselineDate.getDate())} ${pad(baselineDate.getHours())}:${pad(baselineDate.getMinutes())}:${pad(baselineDate.getSeconds())}`;
+  // Interval [T, T+1h) is attributed to T (prev.ts), so query starts cleanly at 00:00:00 of day 1
+  // and extends 2h past last day 23:59:59 to include the closing 00:00 boundary of the next month
+  const fromQueryVal = `${earlierMonth}-01 00:00:00`;
+  const toBaseMs = new Date(`${laterMonth}-${pad(lDays)}T23:59:59+07:00`).getTime();
+  const toQueryVal = getWibDateTime(new Date(toBaseMs + 2 * 60 * 60 * 1000)).tStampStr;
 
-  const toDate = new Date(`${laterMonth}-${pad(lDays)}T23:59:59`);
-  const toPlusDate = new Date(toDate.getTime() + 2 * 60 * 60 * 1000);
-  const toQueryVal = `${toPlusDate.getFullYear()}-${pad(toPlusDate.getMonth() + 1)}-${pad(toPlusDate.getDate())} ${pad(toPlusDate.getHours())}:${pad(toPlusDate.getMinutes())}:${pad(toPlusDate.getSeconds())}`;
+  const syncedNow = getSyncedNow();
+  const currentMonthStr = getWibDateTime(syncedNow).dateStr.slice(0, 7);
+  const minProgressiveFromStr = getWibDateTime(new Date(syncedNow.getTime() - 3 * 60 * 60 * 1000)).tStampStr;
 
-  // 1. Fetch PM telemetry (excluding cubicles which are queried from their dedicated tables)
+  // 1. Fetch hourly main-table telemetry (including cubicles from their dedicated tables)
   const pmSql = `
     SELECT DISTINCT ON (UPPER(pm_id), date_trunc('hour', t_stamp))
       UPPER(pm_id) as pm_id,
-      t_stamp,
+      to_char(t_stamp, 'YYYY-MM-DD"T"HH24:MI:SS"+07:00"') as t_stamp,
       active_energy::float as value,
       active_power_total::float as power,
       status
@@ -2141,15 +2287,14 @@ async function doComputeEquipmentMonthlyBatch(
     ORDER BY UPPER(pm_id), date_trunc('hour', t_stamp) ASC, t_stamp ASC
   `;
 
-  // 2. Fetch Cubicle telemetries
   const [pmRes, plnRes, wf1Res, wf2Res] = await Promise.all([
     pool.query(pmSql, [fromQueryVal, toQueryVal]),
     pool.query(`
       SELECT DISTINCT ON (date_trunc('hour', t_stamp))
         'PM410' as pm_id,
-        t_stamp,
+        to_char(t_stamp, 'YYYY-MM-DD"T"HH24:MI:SS"+07:00"') as t_stamp,
         active_energy::float as value,
-        active_power::float as power,
+        (active_power::float / 1000.0) as power,
         status_pm8000 as status
       FROM electric_pln_telemetry
       WHERE t_stamp >= $1 AND t_stamp <= $2
@@ -2158,7 +2303,7 @@ async function doComputeEquipmentMonthlyBatch(
     pool.query(`
       SELECT DISTINCT ON (date_trunc('hour', t_stamp))
         'PM411' as pm_id,
-        t_stamp,
+        to_char(t_stamp, 'YYYY-MM-DD"T"HH24:MI:SS"+07:00"') as t_stamp,
         active_energy::float as value,
         active_power_total::float as power,
         status_pm5500 as status
@@ -2169,7 +2314,7 @@ async function doComputeEquipmentMonthlyBatch(
     pool.query(`
       SELECT DISTINCT ON (date_trunc('hour', t_stamp))
         'PM412' as pm_id,
-        t_stamp,
+        to_char(t_stamp, 'YYYY-MM-DD"T"HH24:MI:SS"+07:00"') as t_stamp,
         active_energy::float as value,
         active_power_total::float as power,
         status_pm5500 as status
@@ -2179,74 +2324,84 @@ async function doComputeEquipmentMonthlyBatch(
     `, [fromQueryVal, toQueryVal])
   ]);
 
-  // 3. Fetch latest minutes if currentMonth is active
-  const now = new Date();
-  const currentMonthStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
-  let minuteRows: any[] = [];
-  if (currentMonth === currentMonthStr) {
-    try {
-      const pmMinRes = await pool.query(`
-        SELECT DISTINCT ON (UPPER(pm_id))
-          UPPER(pm_id) as pm_id,
-          t_stamp,
-          active_energy::float as value,
-          active_power_total::float as power,
-          status
-        FROM electric_pm_telemetry_minute
-        WHERE active_energy IS NOT NULL
-          AND UPPER(pm_id) NOT IN ('PM410', 'PM411', 'PM412')
-          AND active_energy < 50000000
-        ORDER BY UPPER(pm_id), t_stamp DESC
-      `);
-      minuteRows = pmMinRes.rows;
+  // 2. Fetch minute telemetry:
+  //    - Full retained minute window inside [fromQueryVal, toQueryVal] for MOD_65.535 meters (exact multi-wrap counting)
+  //    - Recent 3h window across all meters (including cubicles) for smooth running-hour progressive updates
+  let pmMinRows: any[] = [];
+  const needProgressive = currentMonth === currentMonthStr || comparisonMonth === currentMonthStr;
+  try {
+    const modPmIds = Array.from(MOD_65535_PMS);
+    const pmMinQuery = needProgressive
+      ? `SELECT UPPER(pm_id) as pm_id,
+                to_char(t_stamp, 'YYYY-MM-DD"T"HH24:MI:SS"+07:00"') as t_stamp,
+                active_energy::float as value,
+                active_power_total::float as power,
+                status
+         FROM electric_pm_telemetry_minute
+         WHERE active_energy IS NOT NULL
+           AND UPPER(pm_id) NOT IN ('PM410', 'PM411', 'PM412')
+           AND t_stamp >= $1 AND t_stamp <= $2
+           AND (UPPER(pm_id) = ANY($3) OR t_stamp >= $4)
+         ORDER BY UPPER(pm_id), t_stamp ASC`
+      : `SELECT UPPER(pm_id) as pm_id,
+                to_char(t_stamp, 'YYYY-MM-DD"T"HH24:MI:SS"+07:00"') as t_stamp,
+                active_energy::float as value,
+                active_power_total::float as power,
+                status
+         FROM electric_pm_telemetry_minute
+         WHERE active_energy IS NOT NULL
+           AND UPPER(pm_id) = ANY($3)
+           AND t_stamp >= $1 AND t_stamp <= $2
+         ORDER BY UPPER(pm_id), t_stamp ASC`;
 
-      const [plnMin, wf1Min, wf2Min] = await Promise.all([
-        pool.query(`SELECT 'PM410' as pm_id, t_stamp, active_energy::float as value, active_power::float as power, status_pm8000 as status FROM electric_pln_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`),
-        pool.query(`SELECT 'PM411' as pm_id, t_stamp, active_energy::float as value, active_power_total::float as power, status_pm5500 as status FROM electric_wf1_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`),
-        pool.query(`SELECT 'PM412' as pm_id, t_stamp, active_energy::float as value, active_power_total::float as power, status_pm5500 as status FROM electric_wf2_telemetry_minute ORDER BY t_stamp DESC LIMIT 1`)
-      ]);
-      minuteRows.push(...plnMin.rows, ...wf1Min.rows, ...wf2Min.rows);
-    } catch (e: any) {
-      console.warn("Minute table query fallback warning:", e.message);
+    const pmMinParams = needProgressive
+      ? [fromQueryVal, toQueryVal, modPmIds, minProgressiveFromStr]
+      : [fromQueryVal, toQueryVal, modPmIds];
+
+    const queries: Promise<any>[] = [pool.query(pmMinQuery, pmMinParams)];
+    if (needProgressive) {
+      queries.push(
+        pool.query(`SELECT 'PM410' as pm_id, to_char(t_stamp, 'YYYY-MM-DD"T"HH24:MI:SS"+07:00"') as t_stamp, active_energy::float as value, (active_power::float / 1000.0) as power, status_pm8000 as status FROM electric_pln_telemetry_minute WHERE t_stamp >= $1 AND active_energy IS NOT NULL ORDER BY t_stamp ASC`, [minProgressiveFromStr]),
+        pool.query(`SELECT 'PM411' as pm_id, to_char(t_stamp, 'YYYY-MM-DD"T"HH24:MI:SS"+07:00"') as t_stamp, active_energy::float as value, active_power_total::float as power, status_pm5500 as status FROM electric_wf1_telemetry_minute WHERE t_stamp >= $1 AND active_energy IS NOT NULL ORDER BY t_stamp ASC`, [minProgressiveFromStr]),
+        pool.query(`SELECT 'PM412' as pm_id, to_char(t_stamp, 'YYYY-MM-DD"T"HH24:MI:SS"+07:00"') as t_stamp, active_energy::float as value, active_power_total::float as power, status_pm5500 as status FROM electric_wf2_telemetry_minute WHERE t_stamp >= $1 AND active_energy IS NOT NULL ORDER BY t_stamp ASC`, [minProgressiveFromStr])
+      );
     }
+    const minRes = await Promise.all(queries);
+    pmMinRows = minRes.flatMap(r => r.rows);
+  } catch (e: any) {
+    console.warn("Minute table query fallback warning:", e.message);
   }
 
-  // Group records by pm_id
-  const pmRecords = new Map<string, { ts: Date; value: number | null; power: number | null; status?: boolean }[]>();
-  const addRow = (row: any) => {
+  // Group hourly and minute records cleanly by pm_id
+  const pmHourlyRecords = new Map<string, PmSeriesPoint[]>();
+  const pmMinuteRecords = new Map<string, PmSeriesPoint[]>();
+
+  const toSeriesPoint = (row: any): PmSeriesPoint => {
     const id = row.pm_id;
-    if (!pmRecords.has(id)) pmRecords.set(id, []);
-    pmRecords.get(id)!.push({
-      ts: new Date(row.t_stamp),
-      value: row.value !== null ? Number(row.value) : null,
+    const tsMs = new Date(row.t_stamp).getTime();
+    const rawVal = row.value !== null && row.value !== undefined ? Number(row.value) : null;
+    const statusOk = row.status !== false;
+    return {
+      tsMs,
+      val: statusOk ? normalizePmEnergyToKwh(id, tsMs, rawVal) : null,
       power: row.power !== null && row.power !== undefined ? Number(row.power) : null,
-      status: row.status !== false
-    });
+      status: statusOk
+    };
   };
 
-  pmRes.rows.forEach(addRow);
-  plnRes.rows.forEach(addRow);
-  wf1Res.rows.forEach(addRow);
-  wf2Res.rows.forEach(addRow);
-
-  // Append minute rows
-  for (const mRow of minuteRows) {
-    const list = pmRecords.get(mRow.pm_id);
-    if (list && list.length > 0) {
-      const mTs = new Date(mRow.t_stamp);
-      const lastTs = list[list.length - 1].ts;
-      if (mTs.getTime() > lastTs.getTime() + 60000 && Number(mRow.value) > 0) {
-        list.push({
-          ts: mTs,
-          value: Number(mRow.value),
-          power: mRow.power !== null && mRow.power !== undefined ? Number(mRow.power) : null,
-          status: mRow.status !== false
-        });
-      }
-    }
+  for (const r of [...pmRes.rows, ...plnRes.rows, ...wf1Res.rows, ...wf2Res.rows]) {
+    const id = r.pm_id;
+    if (!pmHourlyRecords.has(id)) pmHourlyRecords.set(id, []);
+    pmHourlyRecords.get(id)!.push(toSeriesPoint(r));
   }
 
-  // Calculate daily consumption
+  for (const r of pmMinRows) {
+    const id = r.pm_id;
+    if (!pmMinuteRecords.has(id)) pmMinuteRecords.set(id, []);
+    pmMinuteRecords.get(id)!.push(toSeriesPoint(r));
+  }
+
+  // Prepare output containers for all standard and custom configured PMs
   const [currY, currM] = currentMonth.split("-").map(Number);
   const [compY, compM] = comparisonMonth.split("-").map(Number);
   const daysInCurr = new Date(currY, currM, 0).getDate();
@@ -2262,9 +2417,7 @@ async function doComputeEquipmentMonthlyBatch(
     hasData: boolean;
   }> = {};
 
-  // Ensure all standard PMs exist in output even if no rows in DB
-  const allExpectedPms = Object.keys(PM_DEFAULT_LABELS);
-  for (const pmId of allExpectedPms) {
+  for (const pmId of Object.keys(PM_DEFAULT_LABELS)) {
     results[pmId] = {
       pmId,
       label: PM_DEFAULT_LABELS[pmId] || pmId,
@@ -2276,7 +2429,6 @@ async function doComputeEquipmentMonthlyBatch(
     };
   }
 
-  // Also include any custom PMs configured in electricity_config
   try {
     const customConfigRes = await pool.query(`
       SELECT config_key, label, value FROM electricity_config WHERE config_type = 'equipment_display'
@@ -2298,43 +2450,72 @@ async function doComputeEquipmentMonthlyBatch(
     }
   } catch {}
 
-  for (const [pmId, records] of pmRecords.entries()) {
-    // Sort records by timestamp
-    records.sort((a, b) => a.ts.getTime() - b.ts.getTime());
+  const addDailyDiff = (currDaily: number[], compDaily: number[], startTsMs: number, diff: number) => {
+    if (diff <= 0) return;
+    const { monthKey, day } = getWibMonthAndDay(startTsMs);
+    if (monthKey === currentMonth && day >= 1 && day <= daysInCurr) {
+      currDaily[day - 1] += diff;
+    } else if (monthKey === comparisonMonth && day >= 1 && day <= daysInComp) {
+      compDaily[day - 1] += diff;
+    }
+  };
+
+  const allActivePms = new Set<string>([...pmHourlyRecords.keys(), ...pmMinuteRecords.keys()]);
+  for (const pmId of allActivePms) {
+    const hRecords = (pmHourlyRecords.get(pmId) || []).sort((a, b) => a.tsMs - b.tsMs);
+    const mRecords = (pmMinuteRecords.get(pmId) || []).sort((a, b) => a.tsMs - b.tsMs);
 
     const currDaily = new Array(daysInCurr).fill(0);
     const compDaily = new Array(daysInComp).fill(0);
 
-    for (let i = 1; i < records.length; i++) {
-      const prev = records[i - 1];
-      const curr = records[i];
-      const prevVal = prev.status === false ? null : prev.value;
-      const currVal = curr.status === false ? null : curr.value;
-      const timeDiffMs = curr.ts.getTime() - prev.ts.getTime();
-
-      let diff = 0;
-      // Sesuai aturan: data sebelumnya dan data saat ini harus bernilai (> 0 dan tidak null)
-      if (currVal !== null && prevVal !== null && !isNaN(currVal) && !isNaN(prevVal) && currVal > 0 && prevVal > 0) {
-        if (timeDiffMs <= 90 * 60 * 1000) {
-          const rawDiff = currVal - prevVal;
-          // Perhitungan aktual murni tanpa manipulasi/threshold sintetis:
-          if (rawDiff >= 0 && rawDiff < 10000) {
-            diff = rawDiff;
+    // Precompute minute-level cyclic rollover timestamps for MOD_65.535 meters
+    const wrapTimestamps: number[] = [];
+    if (MOD_65535_PMS.has(pmId) && mRecords.length > 1) {
+      let prevMin: PmSeriesPoint | null = null;
+      for (const mr of mRecords) {
+        if (mr.val !== null && mr.val > 0) {
+          if (prevMin !== null && prevMin.val !== null && (mr.tsMs - prevMin.tsMs) <= 20 * 60 * 1000) {
+            if (mr.val - prevMin.val < -0.5) wrapTimestamps.push(mr.tsMs);
           }
+          prevMin = mr;
         }
       }
+    }
 
-      // Date string in WIB (GMT+7)
-      const wibTime = new Date(curr.ts.getTime() + 7 * 60 * 60 * 1000);
-      const y = wibTime.getUTCFullYear();
-      const m = pad(wibTime.getUTCMonth() + 1);
-      const d = wibTime.getUTCDate();
-      const monthKey = `${y}-${m}`;
+    // Completed hourly intervals: carry forward lastValid across transient status=false / 0 holes
+    let lastValidHourly: PmSeriesPoint | null = null;
+    for (const curr of hRecords) {
+      if (curr.val === null || curr.val <= 0) continue;
+      if (lastValidHourly !== null) {
+        let minuteWraps: number | null = null;
+        if (MOD_65535_PMS.has(pmId) && mRecords.length > 0 && lastValidHourly.tsMs >= mRecords[0].tsMs - 5 * 60 * 1000) {
+          minuteWraps = 0;
+          for (const wt of wrapTimestamps) {
+            if (wt > lastValidHourly.tsMs && wt <= curr.tsMs) minuteWraps++;
+          }
+        }
+        const diff = computePmStepDiff(pmId, lastValidHourly, curr, minuteWraps);
+        addDailyDiff(currDaily, compDaily, lastValidHourly.tsMs, diff);
+      }
+      lastValidHourly = curr;
+    }
 
-      if (monthKey === currentMonth && d >= 1 && d <= daysInCurr) {
-        currDaily[d - 1] += diff;
-      } else if (monthKey === comparisonMonth && d >= 1 && d <= daysInComp) {
-        compDaily[d - 1] += diff;
+    // Running-hour progressive accumulation from the last completed hourly point via minute telemetry
+    if (needProgressive && mRecords.length > 0) {
+      const validMins = mRecords.filter(m => m.val !== null && m.val > 0);
+      const startFromTs = lastValidHourly ? lastValidHourly.tsMs : 0;
+      const tailMins = validMins.filter(m => m.tsMs > startFromTs);
+      let prevMin = lastValidHourly ?? (tailMins.length > 0 ? tailMins[0] : null);
+      const startIdx = lastValidHourly ? 0 : 1;
+
+      if (prevMin) {
+        for (let i = startIdx; i < tailMins.length; i++) {
+          const mr = tailMins[i];
+          const minWraps = MOD_65535_PMS.has(pmId) && mr.val !== null && prevMin.val !== null && (mr.val - prevMin.val) < -0.5 ? 1 : 0;
+          const stepDiff = computePmStepDiff(pmId, prevMin, mr, MOD_65535_PMS.has(pmId) ? minWraps : null);
+          addDailyDiff(currDaily, compDaily, prevMin.tsMs, stepDiff);
+          prevMin = mr;
+        }
       }
     }
 
@@ -2342,8 +2523,7 @@ async function doComputeEquipmentMonthlyBatch(
     const compRounded = compDaily.map(v => Math.round(v * 1000) / 1000);
     const currTotal = Math.round(currentRounded.reduce((a, b) => a + b, 0) * 1000) / 1000;
     const compTotal = Math.round(compRounded.reduce((a, b) => a + b, 0) * 1000) / 1000;
-
-    const label = PM_DEFAULT_LABELS[pmId] || pmId;
+    const label = results[pmId]?.label || PM_DEFAULT_LABELS[pmId] || pmId;
 
     results[pmId] = {
       pmId,
@@ -2397,7 +2577,8 @@ export const getEquipmentMonthlyBatchAnalyticsHandler = async (
   next: NextFunction
 ) => {
   try {
-    const currentMonth = (req.query.currentMonth as string) || new Date().toISOString().slice(0, 7); // YYYY-MM
+    const defaultWibMonth = getWibDateTime(getSyncedNow()).dateStr.slice(0, 7);
+    const currentMonth = (req.query.currentMonth as string) || defaultWibMonth; // YYYY-MM
     const force = req.query.force === "true";
     let comparisonMonth = req.query.comparisonMonth as string | undefined;
     if (!comparisonMonth) {
@@ -2429,7 +2610,8 @@ export const getEquipmentMonthlyAnalyticsHandler = async (
     const rawPmId = req.query.pmId as string | undefined;
     const configKey = req.query.configKey as string | undefined;
     const machine = req.query.machine as string | undefined;
-    const currentMonth = (req.query.currentMonth as string) || new Date().toISOString().slice(0, 7); // YYYY-MM
+    const defaultWibMonth = getWibDateTime(getSyncedNow()).dateStr.slice(0, 7);
+    const currentMonth = (req.query.currentMonth as string) || defaultWibMonth; // YYYY-MM
     
     // Comparison month defaults to previous month
     let comparisonMonth = req.query.comparisonMonth as string | undefined;

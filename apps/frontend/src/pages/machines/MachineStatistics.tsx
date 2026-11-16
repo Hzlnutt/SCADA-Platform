@@ -11,6 +11,7 @@ import "../../components/charts/chartjs";
 import coolingSt3Data from "../../data/cooling_st3_data.json";
 import { getJson } from "../../services/api.client";
 import { getSocket } from "../../services/socket.service";
+import Warehouse7TrendAnalysis from "./Warehouse7TrendAnalysis";
 
 // Dedicated Vibration Telemetry Waveform component using Canvas
 function VibrationOscilloscope({ equipmentName }: { equipmentName: string }) {
@@ -320,6 +321,14 @@ function computeIntervals(
 }
 
 export default function MachineStatistics() {
+  const { unitId } = useOutletContext<MachineOutletContext>();
+  if (unitId === "hvac-wh-7") {
+    return <Warehouse7TrendAnalysis />;
+  }
+  return <StandardMachineStatistics />;
+}
+
+function StandardMachineStatistics() {
   const { unitId } = useOutletContext<MachineOutletContext>();
   const machine = getUnitById(unitId);
   if (!machine) return null;

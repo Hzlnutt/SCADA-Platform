@@ -271,8 +271,9 @@ export default function MachineAlarm() {
     return merged;
   }, [latest, apiSourceUrls, apiLiveData, unitId, jsonKeyMap]);
 
-  // Load sensor configurations from Configuration page (local storage or default)
+  // Load sensor configurations from Configuration page (local storage or default); keep empty for Warehouse 7
   const sensorConfigs = useMemo(() => {
+    if (unitId === "hvac-wh-7") return [];
     let configs = getDefaultSensorConfigs(unitId);
     const savedSensor = localStorage.getItem(`scada.config.sensor.${unitId}`);
     if (savedSensor) {
@@ -491,6 +492,7 @@ export default function MachineAlarm() {
   });
 
   const dynamicAlarms = useMemo((): AlarmLogItem[] => {
+    if (unitId === "hvac-wh-7") return [];
     return eqConfigs
       .filter((item) => item.enableAlert && (item.runHoursBeforeMaintenance ?? item.baseline) >= item.highLimit)
       .map((item) => ({
@@ -505,7 +507,7 @@ export default function MachineAlarm() {
         operatorName: "",
         approverName: ""
       }));
-  }, [eqConfigs, loadTime]);
+  }, [eqConfigs, loadTime, unitId]);
 
 
   // Options list for per-item filtering based on Configuration Sensor Parameters

@@ -11,6 +11,7 @@ import { thresholdsRouter } from "../modules/thresholds";
 import { usersRouter } from "../modules/users";
 import { configRouter } from "../modules/config";
 import { auditRouter } from "../modules/audit";
+import { warehouseRouter } from "../modules/warehouse";
 import { mockScadaRouter } from "../modules/mock-scada/mock-scada.routes";
 import { getMongoDb } from "../database/mongo";
 import { getPostgresPool } from "../database/postgres";
@@ -86,6 +87,7 @@ export const registerRoutes = (app: Express) => {
   router.use(usersRouter);
   router.use(configRouter);
   router.use(auditRouter);
+  router.use(warehouseRouter);
 
   app.use("/api/v1", router);
   if (process.env.NODE_ENV !== "production" && process.env.ENABLE_MOCK_SCADA === "true") {

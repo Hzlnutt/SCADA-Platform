@@ -951,6 +951,27 @@ export const ensurePostgresTables = async () => {
         CONSTRAINT uq_hvac_device_hour UNIQUE (id_device, t_stamp)
       );
       CREATE INDEX IF NOT EXISTS idx_hvac_hourly_device_ts ON hvac_telemetry (id_device, t_stamp DESC);
+
+      -- Warehouse 7 telemetry table (hourly primary historian)
+      CREATE TABLE IF NOT EXISTS warehouse_telemetry (
+        id SERIAL PRIMARY KEY,
+        unit_id VARCHAR(50) NOT NULL DEFAULT 'hvac-wh-7',
+        id_wh INTEGER,
+        nm_gudang VARCHAR(100),
+        device_id VARCHAR(100) NOT NULL,
+        device_label VARCHAR(150),
+        location_label VARCHAR(150),
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        suhu NUMERIC(8,2),
+        humi NUMERIC(8,2),
+        baterai INTEGER,
+        is_online BOOLEAN,
+        raw_payload JSONB,
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_warehouse_unit_device_hour UNIQUE (unit_id, device_id, t_stamp)
+      );
+      CREATE INDEX IF NOT EXISTS idx_warehouse_unit_ts ON warehouse_telemetry (unit_id, t_stamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_warehouse_device_ts ON warehouse_telemetry (device_id, t_stamp DESC);
     `).catch((err) => {
       logger.warn({ err }, "Failed to create minute buffer tables");
     });

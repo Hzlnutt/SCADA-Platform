@@ -1060,8 +1060,7 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
     loading: false
   });
 
-  useEffect(() => {
-    let isCancelled = false;
+  const fetchMonthlyData = useCallback((force: boolean = false) => {
     const now = new Date();
     const cYear = currentYear ?? now.getFullYear();
     const cMonth = currentMonthIdx !== undefined ? currentMonthIdx + 1 : now.getMonth() + 1;
@@ -1071,7 +1070,9 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
     const currMonthStr = `${cYear}-${String(cMonth).padStart(2, "0")}`;
     const compMonthStr = `${pYear}-${String(pMonth).padStart(2, "0")}`;
 
-    setDbData((prev) => ({ ...prev, loading: true }));
+    if (!force) {
+      setDbData((prev) => ({ ...prev, loading: true }));
+    }
 
     const query = new URLSearchParams({
       machine: machineName,
@@ -1080,37 +1081,73 @@ const DynamicSelectionChart = memo(function DynamicSelectionChart({
       currentMonth: currMonthStr,
       comparisonMonth: compMonthStr
     });
+    if (force) {
+      query.set("force", "true");
+      query.set("_t", String(Date.now()));
+    }
 
-    getJson<{
+    return getJson<{
       pmId: string;
       label: string;
       currentMonth: { daily: number[]; totalKwh: number; hasData: boolean };
       comparisonMonth: { daily: number[]; totalKwh: number; hasData: boolean };
       hasData: boolean;
-    }>(`/analytics/electricity/equipment-monthly?${query.toString()}`)
-      .then((res) => {
-        if (!isCancelled && res) {
-          setDbData({
-            currentData: res.currentMonth?.daily || [],
-            previousData: res.comparisonMonth?.daily || [],
-            currTotalKwh: res.currentMonth?.totalKwh || 0,
-            prevTotalKwh: res.comparisonMonth?.totalKwh || 0,
-            pmId: res.pmId || itemPmId,
-            hasData: Boolean(res.hasData),
-            loading: false
-          });
-        }
-      })
-      .catch(() => {
-        if (!isCancelled) {
-          setDbData((prev) => ({ ...prev, loading: false }));
-        }
-      });
+    }>(`/analytics/electricity/equipment-monthly?${query.toString()}`);
+  }, [machineName, itemPmId, itemConfigKey, currentYear, currentMonthIdx, compYear, compMonthIdx]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadData = (force: boolean = false) => {
+      fetchMonthlyData(force)
+        .then((res) => {
+          if (!isCancelled && res) {
+            setDbData({
+              currentData: res.currentMonth?.daily || [],
+              previousData: res.comparisonMonth?.daily || [],
+              currTotalKwh: res.currentMonth?.totalKwh || 0,
+              prevTotalKwh: res.comparisonMonth?.totalKwh || 0,
+              pmId: res.pmId || itemPmId,
+              hasData: Boolean(res.hasData),
+              loading: false
+            });
+          }
+        })
+        .catch(() => {
+          if (!isCancelled) {
+            setDbData((prev) => ({ ...prev, loading: false }));
+          }
+        });
+    };
+
+    loadData(false);
+
+    // Auto-refresh progressively when new minute/hour historian telemetry arrives for the active month
+    const socket = getSocket();
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const handleProgressiveUpdate = () => {
+      if (isCancelled) return;
+      const now = new Date();
+      const activeYear = currentYear ?? now.getFullYear();
+      const activeMonthIdx = currentMonthIdx !== undefined ? currentMonthIdx : now.getMonth();
+      if (activeYear === now.getFullYear() && activeMonthIdx === now.getMonth()) {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          if (!isCancelled) loadData(true);
+        }, 180);
+      }
+    };
+
+    socket.on("electricity:update", handleProgressiveUpdate);
+    socket.on("historian:minute_update", handleProgressiveUpdate);
 
     return () => {
       isCancelled = true;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      socket.off("electricity:update", handleProgressiveUpdate);
+      socket.off("historian:minute_update", handleProgressiveUpdate);
     };
-  }, [machineName, itemPmId, itemConfigKey, currentYear, currentMonthIdx, compYear, compMonthIdx]);
+  }, [fetchMonthlyData, itemPmId, currentYear, currentMonthIdx]);
 
   // Strictly factual data from database (no dummy sinusoidal fallback)
   const currentData = dbData.currentData || [];
@@ -2219,7 +2256,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
     if (!force) setLoading(true);
     const currMonthStr = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, "0")}`;
     const compMonthStr = `${compYear}-${String(compMonth + 1).padStart(2, "0")}`;
-    const forceQuery = force ? "&force=true" : "";
+    const forceQuery = force ? `&force=true&_t=${Date.now()}` : "";
     getJson<{
       success: boolean;
       currentMonth: string;
@@ -2245,16 +2282,21 @@ const SectionHEquipment = memo(function SectionHEquipment({
     let isCancelled = false;
     fetchEquipmentBatch(false);
 
-    // Auto-refresh when new minute telemetry arrives via websocket
+    // Auto-refresh when new minute or hourly historian telemetry arrives via websocket
     const socket = getSocket();
+    let batchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     const handleUpdate = () => {
       if (isCancelled) return;
       const now = new Date();
       if (currentYear === now.getFullYear() && currentMonthIdx === now.getMonth()) {
-        fetchEquipmentBatch(true);
+        if (batchDebounceTimer) clearTimeout(batchDebounceTimer);
+        batchDebounceTimer = setTimeout(() => {
+          if (!isCancelled) fetchEquipmentBatch(true);
+        }, 180);
       }
     };
     socket.on("electricity:update", handleUpdate);
+    socket.on("historian:minute_update", handleUpdate);
 
     // Auto-refresh equipment items on database update (synced across all devices/accounts)
     const handleConfigUpdate = () => {
@@ -2267,7 +2309,9 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
     return () => {
       isCancelled = true;
+      if (batchDebounceTimer) clearTimeout(batchDebounceTimer);
       socket.off("electricity:update", handleUpdate);
+      socket.off("historian:minute_update", handleUpdate);
       socket.off("electricity:equipment_config_updated", handleConfigUpdate);
     };
   }, [fetchEquipmentBatch, currentYear, currentMonthIdx, isEditPositionMode, loadConfiguredItems]);
@@ -3545,22 +3589,54 @@ export default function Electricity() {
     });
   };
 
-  const refreshFactCategories = useCallback(() => {
-    getJson<{ data: ConsumptionFactCategory[] }>("/config/electricity?configType=consumption_fact_1")
+  const latestBatchUpdatedAtRef = useRef<number>(0);
+
+  const mergeLiveKwFromPrev = (next: ConsumptionFactCategory[], prev: ConsumptionFactCategory[]) => {
+    const prevKwByKey = new Map<string, number>();
+    for (const p of prev) {
+      const lw = (p.value as any)?.liveKw;
+      if (typeof lw === "number") {
+        prevKwByKey.set(p.config_key, lw);
+      }
+    }
+    if (prevKwByKey.size === 0) return next;
+    return next.map(item => {
+      const lw = prevKwByKey.get(item.config_key);
+      return lw !== undefined ? { ...item, value: { ...item.value, liveKw: lw } } : item;
+    });
+  };
+
+  const refreshFactCategories = useCallback((force: boolean = false) => {
+    const reqStartedAt = Date.now();
+    const forceParams = force ? `&force=true&_t=${reqStartedAt}` : "";
+    getJson<{ data: ConsumptionFactCategory[] }>(`/config/electricity?configType=consumption_fact_1${forceParams}`)
       .then((res) => {
         const raw = (res?.data && res.data.length > 0) ? res.data : defaultFact1Categories;
-        setFactCategories1(latestBatchRef.current ? applyBatchToCategories(raw, latestBatchRef.current) : raw);
+        // Only apply latestBatchRef if it completed after this request started (prevents stale overwrite)
+        const synced = (latestBatchRef.current && latestBatchUpdatedAtRef.current >= reqStartedAt)
+          ? applyBatchToCategories(raw, latestBatchRef.current)
+          : raw;
+        setFactCategories1(prev => mergeLiveKwFromPrev(synced, prev));
       })
       .catch(() => {
-        setFactCategories1(latestBatchRef.current ? applyBatchToCategories(defaultFact1Categories, latestBatchRef.current) : defaultFact1Categories);
+        setFactCategories1(prev => mergeLiveKwFromPrev(
+          latestBatchRef.current ? applyBatchToCategories(defaultFact1Categories, latestBatchRef.current) : defaultFact1Categories,
+          prev
+        ));
       });
-    getJson<{ data: ConsumptionFactCategory[] }>("/config/electricity?configType=consumption_fact_2")
+    getJson<{ data: ConsumptionFactCategory[] }>(`/config/electricity?configType=consumption_fact_2${forceParams}`)
       .then((res) => {
         const raw = (res?.data && res.data.length > 0) ? res.data : defaultFact2Categories;
-        setFactCategories2(latestBatchRef.current ? applyBatchToCategories(raw, latestBatchRef.current) : raw);
+        const synced = (latestBatchRef.current && latestBatchUpdatedAtRef.current >= reqStartedAt)
+          ? applyBatchToCategories(raw, latestBatchRef.current)
+          : raw;
+        setFactCategories2(prev => mergeLiveKwFromPrev(synced, prev));
       })
       .catch(() => {
-        setFactCategories2(latestBatchRef.current ? applyBatchToCategories(defaultFact2Categories, latestBatchRef.current) : defaultFact2Categories);
+        setFactCategories2(prev => mergeLiveKwFromPrev(
+          latestBatchRef.current ? applyBatchToCategories(defaultFact2Categories, latestBatchRef.current) : defaultFact2Categories,
+          prev
+        ));
       });
   }, []);
 
@@ -3568,6 +3644,7 @@ export default function Electricity() {
   const handleEquipmentBatchLoaded = useCallback((batch: Record<string, any>) => {
     if (!batch) return;
     latestBatchRef.current = batch;
+    latestBatchUpdatedAtRef.current = Date.now();
     setFactCategories1(prev => applyBatchToCategories(prev, batch));
     setFactCategories2(prev => applyBatchToCategories(prev, batch));
   }, []);
@@ -4307,7 +4384,7 @@ export default function Electricity() {
           isSolarCurrentActivePeriod() ? fetchSolarData(false, true) : Promise.resolve(),
           fetchFixedMonthlyData(true),
           fetchCubicleAnalytics(true),
-          refreshFactCategories()
+          refreshFactCategories(true)
         ]);
       }, 150);
     };

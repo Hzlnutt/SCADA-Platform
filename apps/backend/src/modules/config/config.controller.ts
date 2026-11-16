@@ -1720,12 +1720,13 @@ export const getElectricityConfigHandler = async (req: Request, res: Response, n
     if (!configType || configType === "consumption_fact_1" || configType === "consumption_fact_2") {
       try {
         const { computeEquipmentMonthlyBatch } = require("../analytics/analytics.controller");
-        const now = new Date();
-        const pad = (n: number) => String(n).padStart(2, "0");
-        const currMonthStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
-        const compMonthStr = now.getMonth() === 0 ? `${now.getFullYear() - 1}-12` : `${now.getFullYear()}-${pad(now.getMonth())}`;
+        const { getSyncedNow, getWibDateTime } = require("../../core/scheduler");
+        const currMonthStr = getWibDateTime(getSyncedNow()).dateStr.slice(0, 7);
+        const [cYear, cMon] = currMonthStr.split("-").map(Number);
+        const compMonthStr = cMon === 1 ? `${cYear - 1}-12` : `${cYear}-${String(cMon - 1).padStart(2, "0")}`;
+        const force = req.query.force === "true";
 
-        const batchRes = await computeEquipmentMonthlyBatch(currMonthStr, compMonthStr);
+        const batchRes = await computeEquipmentMonthlyBatch(currMonthStr, compMonthStr, force);
         if (batchRes && batchRes.data) {
           for (const row of pgRes.rows) {
             const val = typeof row.value === "object" && row.value !== null ? row.value : {};

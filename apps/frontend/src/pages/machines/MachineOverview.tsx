@@ -13,6 +13,7 @@ import type { HvacConfig } from "../../data/equipment";
 import { useMachineConfig } from "../../hooks/useMachineConfig";
 import { getSocket } from "../../services/socket.service";
 import { getJson, postJson } from "../../services/api.client";
+import Warehouse7Dashboard from "./Warehouse7Dashboard";
 
 export default function MachineOverview() {
   const isPageActive = usePageActive();
@@ -60,6 +61,10 @@ export default function MachineOverview() {
         category={category}
       />
     );
+  }
+
+  if (unitId === "hvac-wh-7") {
+    return <Warehouse7Dashboard />;
   }
 
   return (

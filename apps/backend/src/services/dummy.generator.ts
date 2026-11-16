@@ -39,7 +39,7 @@ const baseTags = [
 ];
 
 const hvacUnitSubIds = [
-  "qc-lab", "qc-retained-sample", "wh-3", "wh-4", "wh-5", "wh-6", "wh-7",
+  "qc-lab", "qc-retained-sample", "wh-3", "wh-4", "wh-5", "wh-6",
   "preparation-wf1u3", "bottlepack-wf1u3", "qc-sampling-wf1u3", "corridor-wf1u3", "steril-ip-wf1u3",
   "preparation-wf2u1", "bottlepack-wf2u1", "weighing-wf2u1", "laundry-wf2u1", "steril-wf2u1", "ip-wf2u1", "corridor-wf2u1", "material-wf2u1", "wt-wf2u1", "qc-wf2u1", "oac-1-wf2u1", "oac-2-wf2u1",
   "preparation-wf2u2", "bottlepack-wf2u2", "steril-wf2u2", "ip-wf2u2", "corridor-bp-wf2u2", "oac-wf2u2"
