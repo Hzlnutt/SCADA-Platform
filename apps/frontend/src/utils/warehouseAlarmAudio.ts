@@ -171,8 +171,8 @@ export function showBrowserWarehouseNotification(title: string, body: string): v
 }
 
 /**
- * Classic standard wail alarm siren (~2.2s): 2 smooth rising-and-falling horn cycles (580 Hz <-> 1180 Hz)
- * filtered through a warm low-pass curve so it sounds like a standard building/facility alarm siren.
+ * General emergency/SCADA alarm siren with 3 distinct rising HIGH-TONE peaks (~1.78s),
+ * followed by a brief pause (~0.57s) before the female announcer begins speaking.
  */
 export async function playWarningSiren(): Promise<number> {
   const ctx = getAudioContext();
@@ -191,22 +191,19 @@ export async function playWarningSiren(): Promise<number> {
 
     const filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(1850, now);
-    filter.Q.setValueAtTime(1.4, now);
+    filter.frequency.setValueAtTime(2500, now);
+    filter.Q.setValueAtTime(1.3, now);
 
     filter.connect(compressor);
     compressor.connect(ctx.destination);
 
-    // Classic standard alarm wail: 2 smooth rise-and-fall cycles (~1.05s each)
-    const cycles = [
-      { start: 0.0, peakOffset: 0.48, dur: 1.04 },
-      { start: 1.06, peakOffset: 0.48, dur: 1.08 }
-    ];
-
-    for (const c of cycles) {
-      const t0 = now + c.start;
-      const tPeak = t0 + c.peakOffset;
-      const tEnd = t0 + c.dur;
+    // 3 crisp high-pitch siren tones (780 Hz -> 1560 Hz -> 1760 Hz) separated by clean silence gaps
+    const pulseStarts = [0.0, 0.62, 1.24];
+    for (let i = 0; i < pulseStarts.length; i++) {
+      const t0 = now + pulseStarts[i];
+      const tPeakReach = t0 + 0.16;
+      const tPeakHold = t0 + (i === 2 ? 0.42 : 0.36);
+      const tEnd = t0 + (i === 2 ? 0.54 : 0.48);
 
       const oscHorn = ctx.createOscillator();
       const oscCore = ctx.createOscillator();
@@ -214,23 +211,25 @@ export async function playWarningSiren(): Promise<number> {
       const gainCore = ctx.createGain();
 
       oscHorn.type = "sawtooth";
-      oscHorn.frequency.setValueAtTime(580, t0);
-      oscHorn.frequency.exponentialRampToValueAtTime(1180, tPeak);
-      oscHorn.frequency.exponentialRampToValueAtTime(580, tEnd);
+      oscHorn.frequency.setValueAtTime(780, t0);
+      oscHorn.frequency.exponentialRampToValueAtTime(1560, tPeakReach);
+      oscHorn.frequency.exponentialRampToValueAtTime(1760, tPeakHold);
+      oscHorn.frequency.exponentialRampToValueAtTime(1320, tEnd);
 
       oscCore.type = "sine";
-      oscCore.frequency.setValueAtTime(580, t0);
-      oscCore.frequency.exponentialRampToValueAtTime(1180, tPeak);
-      oscCore.frequency.exponentialRampToValueAtTime(580, tEnd);
+      oscCore.frequency.setValueAtTime(780, t0);
+      oscCore.frequency.exponentialRampToValueAtTime(1560, tPeakReach);
+      oscCore.frequency.exponentialRampToValueAtTime(1760, tPeakHold);
+      oscCore.frequency.exponentialRampToValueAtTime(1320, tEnd);
 
       gainHorn.gain.setValueAtTime(0.0001, t0);
-      gainHorn.gain.linearRampToValueAtTime(0.14, t0 + 0.08);
-      gainHorn.gain.setValueAtTime(0.14, tEnd - 0.14);
+      gainHorn.gain.linearRampToValueAtTime(0.14, t0 + 0.04);
+      gainHorn.gain.setValueAtTime(0.13, tPeakHold);
       gainHorn.gain.exponentialRampToValueAtTime(0.0001, tEnd);
 
       gainCore.gain.setValueAtTime(0.0001, t0);
-      gainCore.gain.linearRampToValueAtTime(0.2, t0 + 0.08);
-      gainCore.gain.setValueAtTime(0.2, tEnd - 0.14);
+      gainCore.gain.linearRampToValueAtTime(0.22, t0 + 0.04);
+      gainCore.gain.setValueAtTime(0.2, tPeakHold);
       gainCore.gain.exponentialRampToValueAtTime(0.0001, tEnd);
 
       oscHorn.connect(gainHorn);
@@ -240,19 +239,15 @@ export async function playWarningSiren(): Promise<number> {
 
       oscHorn.start(t0);
       oscCore.start(t0);
-      oscHorn.stop(tEnd + 0.03);
-      oscCore.stop(tEnd + 0.03);
+      oscHorn.stop(tEnd + 0.02);
+      oscCore.stop(tEnd + 0.02);
     }
 
-    return 2250;
+    // 1.78s for 3x high alarm tones + ~570ms clean pause before dubber speaks
+    return 2350;
   } catch {
     return 0;
   }
-}
-
-function formatSpokenCode(raw: string): string {
-  // Separate every letter clearly ("Aa" -> "A, A") so TTS speaks distinct letters rather than merging vowels into "aa"
-  return /^[a-z]{1,4}$/i.test(raw) ? raw.toUpperCase().split("").join(", ") : raw;
 }
 
 function parseLocationParts(location: string): { row?: string; rack?: number; comp?: number } | null {
@@ -278,13 +273,11 @@ function parseLocationParts(location: string): { row?: string; rack?: number; co
 function formatSpeechLocation(location: string, language: WarehouseAlarmLanguage): string {
   const parts = parseLocationParts(location);
   if (parts?.row && parts.rack !== undefined) {
-    const rowSpoken = formatSpokenCode(parts.row);
-    return language === "en" ? `Row ${rowSpoken}, Rack ${parts.rack}` : `Baris ${rowSpoken}, Rak ${parts.rack}`;
+    // Keep row label natural as written ("Aa" in Indonesian, uppercase "AA" in English for natural native phrasing)
+    const rowLabel = language === "en" ? parts.row.toUpperCase() : parts.row;
+    return language === "en" ? `Row ${rowLabel} Rack ${parts.rack}` : `Baris ${rowLabel} Rak ${parts.rack}`;
   }
-  return location
-    .replace(/[-·]/g, " ")
-    .replace(/\b([a-z]{2,3})\b/gi, (m) => (/^(di|ke|on|in|to|of|at|rak|row|baris|rack|and|the|for|min|max|api)$/i.test(m) ? m : m.toUpperCase().split("").join(", ")))
-    .trim();
+  return location.replace(/[-·]/g, " ").trim();
 }
 
 function formatShortDisplayLocation(location: string): string {
@@ -311,29 +304,31 @@ export function buildWarehouseAlertMessages(
 
   if (language === "en") {
     if (violations.length === 1) {
+      const verb = first.direction === "high" ? "reached" : "dropped to";
       const dir = first.direction === "high" ? "above the limit" : "below the limit";
       const badge = first.direction === "high" ? "above limit" : "below limit";
       return {
-        speechText: `Warehouse 7 alert. ${spokenLoc}, ${suhuNum} degrees Celsius, ${dir}.`,
+        speechText: `Warning, Warehouse 7 temperature at ${spokenLoc} ${verb} ${suhuNum} degrees Celsius, ${dir}.`,
         displayText: `${displayLoc} · ${suhuNum}°C ${badge} (limit ${first.threshold}°C)`
       };
     }
     return {
-      speechText: `Warehouse 7 alert. ${violations.length} sensors exceeded temperature limits.`,
+      speechText: `Warning, ${violations.length} temperature sensors in Warehouse 7 are out of range.`,
       displayText: `${violations.length} sensors out of range (${displayLoc} ${suhuNum}°C)`
     };
   }
 
   const suhuStr = suhuNum.replace(".", " koma ");
   if (violations.length === 1) {
+    const verb = first.direction === "high" ? "mencapai" : "turun menjadi";
     const dir = first.direction === "high" ? "melebihi batas" : "di bawah batas";
     return {
-      speechText: `Peringatan, Gudang 7. ${spokenLoc}, suhu ${suhuStr} derajat, ${dir}.`,
+      speechText: `Peringatan, suhu Gudang 7 di ${spokenLoc} ${verb} ${suhuStr} derajat, ${dir}.`,
       displayText: `${displayLoc} · ${suhuNum}°C ${dir} (batas ${first.threshold}°C)`
     };
   }
   return {
-    speechText: `Peringatan, Gudang 7. ${violations.length} sensor melewati batas suhu.`,
+    speechText: `Peringatan, terdapat ${violations.length} sensor suhu di Gudang 7 yang melewati batas.`,
     displayText: `${violations.length} sensor melewati batas (${displayLoc} ${suhuNum}°C)`
   };
 }
@@ -553,7 +548,7 @@ export async function triggerWarehouseAlarmAudio(
   language: WarehouseAlarmLanguage = "id",
   forceImmediate = false
 ): Promise<{ played: boolean; message: string; speechMessage: string; title: string }> {
-  const title = language === "en" ? "Warehouse 7 Temperature Alarm" : "Peringatan Suhu Gudang 7";
+  const title = language === "en" ? "Warehouse 7 Temperature Warning" : "Peringatan Suhu Gudang 7";
   if (violations.length === 0) {
     return { played: false, message: "", speechMessage: "", title };
   }
@@ -590,7 +585,7 @@ export async function triggerWarehouseAlarmAudio(
       if (ok) return;
     }
     speakWarehouseWarning(speechText, language);
-  }, Math.min(2320, sirenMs));
+  }, Math.min(2800, sirenMs));
 
   return { played: true, message: displayText, speechMessage: speechText, title };
 }
