@@ -171,8 +171,8 @@ export function showBrowserWarehouseNotification(title: string, body: string): v
 }
 
 /**
- * Clean, authoritative industrial SCADA alarm siren with 3 distinct rising HIGH-TONE peaks (~2.15s)
- * passed through dynamics limiting & smooth low-pass filtering for clarity without speaker harshness.
+ * Classic standard wail alarm siren (~2.2s): 2 smooth rising-and-falling horn cycles (580 Hz <-> 1180 Hz)
+ * filtered through a warm low-pass curve so it sounds like a standard building/facility alarm siren.
  */
 export async function playWarningSiren(): Promise<number> {
   const ctx = getAudioContext();
@@ -186,65 +186,65 @@ export async function playWarningSiren(): Promise<number> {
 
     const now = ctx.currentTime;
     const compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.setValueAtTime(-10, now);
+    compressor.threshold.setValueAtTime(-12, now);
     compressor.ratio.setValueAtTime(6, now);
 
     const filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(3800, now);
-    filter.Q.setValueAtTime(1.1, now);
+    filter.frequency.setValueAtTime(1850, now);
+    filter.Q.setValueAtTime(1.4, now);
 
     filter.connect(compressor);
     compressor.connect(ctx.destination);
 
-    // 3x crisp high-pitch SCADA alert pulses: quick sweep up to 1760Hz -> 1975Hz high peak, clean release
-    const pulseStarts = [0.0, 0.72, 1.44];
-    for (let i = 0; i < pulseStarts.length; i++) {
-      const t0 = now + pulseStarts[i];
-      const tSweep = t0 + 0.14;
-      const tPeakHold = t0 + (i === 2 ? 0.44 : 0.38);
-      const tEnd = t0 + (i === 2 ? 0.62 : 0.56);
+    // Classic standard alarm wail: 2 smooth rise-and-fall cycles (~1.05s each)
+    const cycles = [
+      { start: 0.0, peakOffset: 0.48, dur: 1.04 },
+      { start: 1.06, peakOffset: 0.48, dur: 1.08 }
+    ];
 
-      const oscMain = ctx.createOscillator();
-      const oscAccent = ctx.createOscillator();
-      const gainMain = ctx.createGain();
-      const gainAccent = ctx.createGain();
+    for (const c of cycles) {
+      const t0 = now + c.start;
+      const tPeak = t0 + c.peakOffset;
+      const tEnd = t0 + c.dur;
 
-      oscMain.type = "sine";
-      oscMain.frequency.setValueAtTime(880, t0);
-      oscMain.frequency.exponentialRampToValueAtTime(1760, tSweep);
-      oscMain.frequency.exponentialRampToValueAtTime(1975.5, tPeakHold);
-      oscMain.frequency.exponentialRampToValueAtTime(1174.66, tEnd);
+      const oscHorn = ctx.createOscillator();
+      const oscCore = ctx.createOscillator();
+      const gainHorn = ctx.createGain();
+      const gainCore = ctx.createGain();
 
-      // Subtle triangle layer (-13 dB) adds clean industrial horn definition
-      oscAccent.type = "triangle";
-      oscAccent.frequency.setValueAtTime(880, t0);
-      oscAccent.frequency.exponentialRampToValueAtTime(1760, tSweep);
-      oscAccent.frequency.exponentialRampToValueAtTime(1975.5, tPeakHold);
-      oscAccent.frequency.exponentialRampToValueAtTime(1174.66, tEnd);
+      oscHorn.type = "sawtooth";
+      oscHorn.frequency.setValueAtTime(580, t0);
+      oscHorn.frequency.exponentialRampToValueAtTime(1180, tPeak);
+      oscHorn.frequency.exponentialRampToValueAtTime(580, tEnd);
 
-      gainMain.gain.setValueAtTime(0.0001, t0);
-      gainMain.gain.linearRampToValueAtTime(0.28, t0 + 0.035);
-      gainMain.gain.setValueAtTime(0.26, tPeakHold);
-      gainMain.gain.exponentialRampToValueAtTime(0.0001, tEnd);
+      oscCore.type = "sine";
+      oscCore.frequency.setValueAtTime(580, t0);
+      oscCore.frequency.exponentialRampToValueAtTime(1180, tPeak);
+      oscCore.frequency.exponentialRampToValueAtTime(580, tEnd);
 
-      gainAccent.gain.setValueAtTime(0.0001, t0);
-      gainAccent.gain.linearRampToValueAtTime(0.07, t0 + 0.035);
-      gainAccent.gain.setValueAtTime(0.06, tPeakHold);
-      gainAccent.gain.exponentialRampToValueAtTime(0.0001, tEnd);
+      gainHorn.gain.setValueAtTime(0.0001, t0);
+      gainHorn.gain.linearRampToValueAtTime(0.14, t0 + 0.08);
+      gainHorn.gain.setValueAtTime(0.14, tEnd - 0.14);
+      gainHorn.gain.exponentialRampToValueAtTime(0.0001, tEnd);
 
-      oscMain.connect(gainMain);
-      oscAccent.connect(gainAccent);
-      gainMain.connect(filter);
-      gainAccent.connect(filter);
+      gainCore.gain.setValueAtTime(0.0001, t0);
+      gainCore.gain.linearRampToValueAtTime(0.2, t0 + 0.08);
+      gainCore.gain.setValueAtTime(0.2, tEnd - 0.14);
+      gainCore.gain.exponentialRampToValueAtTime(0.0001, tEnd);
 
-      oscMain.start(t0);
-      oscAccent.start(t0);
-      oscMain.stop(tEnd + 0.03);
-      oscAccent.stop(tEnd + 0.03);
+      oscHorn.connect(gainHorn);
+      oscCore.connect(gainCore);
+      gainHorn.connect(filter);
+      gainCore.connect(filter);
+
+      oscHorn.start(t0);
+      oscCore.start(t0);
+      oscHorn.stop(tEnd + 0.03);
+      oscCore.stop(tEnd + 0.03);
     }
 
-    return 2260;
+    return 2250;
   } catch {
     return 0;
   }
@@ -452,10 +452,7 @@ async function playAudioBufferFemaleVoice(arrayBuffer: ArrayBuffer): Promise<boo
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     audio.volume = 1.0;
-    audio.playbackRate = 0.87;
-    (audio as unknown as { preservesPitch?: boolean; mozPreservesPitch?: boolean; webkitPreservesPitch?: boolean }).preservesPitch = true;
-    (audio as unknown as { mozPreservesPitch?: boolean }).mozPreservesPitch = true;
-    (audio as unknown as { webkitPreservesPitch?: boolean }).webkitPreservesPitch = true;
+    audio.playbackRate = 1.0;
 
     activeAudioEl = audio;
     activeAudioBlobUrl = url;
@@ -528,7 +525,7 @@ export function speakWarehouseWarning(text: string, language: WarehouseAlarmLang
     const utter = new SpeechSynthesisUtterance(text);
     const defaultLang = language === "en" ? "en-US" : "id-ID";
     utter.lang = matched?.lang || defaultLang;
-    utter.rate = 0.86;
+    utter.rate = 1.0;
     utter.pitch = isConfirmedFemale ? 1.04 : 1.15;
     utter.volume = 1;
 

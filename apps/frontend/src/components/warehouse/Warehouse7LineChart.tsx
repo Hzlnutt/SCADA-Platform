@@ -106,11 +106,11 @@ export default function Warehouse7LineChart({
   maxTemp: number;
   defaultHeightPx?: number;
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [hoverMode, setHoverMode] = useState<"nearest" | "index">("nearest");
-  const [customWidthPct, setCustomWidthPct] = useState<number | null>(null);
+  const [xRange, setXRange] = useState<{ min: number; max: number } | null>(null);
+  const [yRange, setYRange] = useState<{ min: number; max: number } | null>(null);
   const [customHeightPx, setCustomHeightPx] = useState<number>(defaultHeightPx);
-  const [customYRange, setCustomYRange] = useState<{ min: number; max: number } | null>(null);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
 
   const inlineContainerRef = useRef<HTMLDivElement | null>(null);
@@ -118,8 +118,27 @@ export default function Warehouse7LineChart({
   const modalContainerRef = useRef<HTMLDivElement | null>(null);
   const modalChartRef = useRef<ChartJS<"line"> | null>(null);
 
-  const pointCount = trend?.timestamps?.length || 0;
-  const effectiveWidthPct = customWidthPct ?? (pointCount > 240 ? 240 : pointCount > 72 ? 150 : 100);
+  const xRangeRef = useRef(xRange);
+  xRangeRef.current = xRange;
+  const yRangeRef = useRef(yRange);
+  yRangeRef.current = yRange;
+  const autoYRef = useRef<{ min: number; max: number }>({ min: minTemp - 2, max: maxTemp + 2 });
+
+  const totalPoints = trend?.timestamps?.length || 0;
+  const minVisiblePoints = Math.min(Math.max(2, totalPoints), 8);
+
+  // Reset X-zoom window when period filter or device selection changes
+  useEffect(() => {
+    setXRange(null);
+  }, [trend?.filter, deviceMode]);
+
+  // Clamp X-zoom if dataset size shrinks on refresh
+  useEffect(() => {
+    if (!xRange || totalPoints === 0) return;
+    if (xRange.max > totalPoints || xRange.min >= totalPoints - 1) {
+      setXRange(null);
+    }
+  }, [totalPoints, xRange]);
 
   // Close modal with ESC
   useEffect(() => {
@@ -131,16 +150,13 @@ export default function Warehouse7LineChart({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isZoomOpen]);
 
-  const { chartData, autoYMin, autoYMax } = useMemo(() => {
+  // Full chronological series + Y auto bounds
+  const fullSeries = useMemo(() => {
     const timestamps = trend?.timestamps || [];
     const labels = timestamps.map((tItem) => tItem.label);
     const tsKeys = timestamps.map((tItem) => tItem.ts);
-
     const datasets: any[] = [];
     const numericVals: number[] = [minTemp, maxTemp];
-
-    const dotRadius =
-      pointCount <= 72 ? 6 : pointCount <= 250 ? 5 : 4.2;
 
     if (deviceMode === "highest") {
       const highestMap = new Map<string, Warehouse7HighestPoint>();
@@ -164,7 +180,6 @@ export default function Warehouse7LineChart({
         tension: 0.25,
         fill: false,
         spanGaps: true,
-        pointRadius: dotRadius,
         pointHoverRadius: 10,
         pointHoverBorderWidth: 3,
         pointHitRadius: 40,
@@ -203,7 +218,6 @@ export default function Warehouse7LineChart({
           tension: 0.25,
           fill: false,
           spanGaps: true,
-          pointRadius: dotRadius,
           pointHoverRadius: 10,
           pointHoverBorderWidth: 3,
           pointHitRadius: 40,
@@ -216,10 +230,44 @@ export default function Warehouse7LineChart({
       });
     }
 
-    if (labels.length > 0) {
-      datasets.push({
+    const lo = Math.min(...numericVals);
+    const hi = Math.max(...numericVals);
+    return {
+      labels,
+      datasets,
+      autoYMin: Math.floor(lo - 1),
+      autoYMax: Math.ceil(hi + 1)
+    };
+  }, [trend, deviceMode, minTemp, maxTemp, t]);
+
+  // Slice visible X-axis window in-place so chart stays 100% fixed width without any horizontal scrollbar
+  const { chartData, startIdx, endIdx, widthZoomPct } = useMemo(() => {
+    const total = fullSeries.labels.length;
+    let sIdx = 0;
+    let eIdx = total;
+    if (xRange && total > 0) {
+      sIdx = Math.max(0, Math.min(Math.max(0, total - minVisiblePoints), Math.round(xRange.min)));
+      eIdx = Math.min(total, Math.max(sIdx + minVisiblePoints, Math.round(xRange.max)));
+    }
+    const visibleCount = Math.max(1, eIdx - sIdx);
+    const slicedLabels = fullSeries.labels.slice(sIdx, eIdx);
+    const dotRadius = visibleCount <= 48 ? 6.2 : visibleCount <= 140 ? 5 : 4;
+
+    const slicedDatasets = fullSeries.datasets.map((ds) => ({
+      ...ds,
+      data: Array.isArray(ds.data) ? ds.data.slice(sIdx, eIdx) : ds.data,
+      sourceDevices: Array.isArray(ds.sourceDevices) ? ds.sourceDevices.slice(sIdx, eIdx) : ds.sourceDevices,
+      humiData: Array.isArray(ds.humiData) ? ds.humiData.slice(sIdx, eIdx) : ds.humiData,
+      pointBackgroundColor: Array.isArray(ds.pointBackgroundColor)
+        ? ds.pointBackgroundColor.slice(sIdx, eIdx)
+        : ds.pointBackgroundColor,
+      pointRadius: dotRadius
+    }));
+
+    if (slicedLabels.length > 0) {
+      slicedDatasets.push({
         label: `${t("warehouse7.tempMaxBadge", "Temp Max")} ${maxTemp}°C`,
-        data: labels.map(() => maxTemp),
+        data: slicedLabels.map(() => maxTemp),
         borderColor: "rgba(239, 68, 68, 0.92)",
         borderDash: [7, 5],
         borderWidth: 2.2,
@@ -229,9 +277,9 @@ export default function Warehouse7LineChart({
         fill: false,
         isThresholdLine: true
       });
-      datasets.push({
+      slicedDatasets.push({
         label: `${t("warehouse7.tempMinBadge", "Temp Min")} ${minTemp}°C`,
-        data: labels.map(() => minTemp),
+        data: slicedLabels.map(() => minTemp),
         borderColor: "rgba(59, 130, 246, 0.92)",
         borderDash: [7, 5],
         borderWidth: 2.2,
@@ -243,19 +291,20 @@ export default function Warehouse7LineChart({
       });
     }
 
-    const lo = Math.min(...numericVals);
-    const hi = Math.max(...numericVals);
+    const pct = total > 0 && xRange ? Math.max(100, Math.round((total / visibleCount) * 100)) : 100;
     return {
-      chartData: { labels, datasets },
-      autoYMin: Math.floor(lo - 1),
-      autoYMax: Math.ceil(hi + 1)
+      chartData: { labels: slicedLabels, datasets: slicedDatasets },
+      startIdx: sIdx,
+      endIdx: eIdx,
+      widthZoomPct: pct
     };
-  }, [trend, deviceMode, minTemp, maxTemp, t, pointCount]);
+  }, [fullSeries, xRange, minVisiblePoints, maxTemp, minTemp, t]);
 
-  const effectiveYMin = customYRange ? customYRange.min : autoYMin;
-  const effectiveYMax = customYRange ? customYRange.max : autoYMax;
+  const effectiveYMin = yRange ? yRange.min : fullSeries.autoYMin;
+  const effectiveYMax = yRange ? yRange.max : fullSeries.autoYMax;
+  autoYRef.current = { min: fullSeries.autoYMin, max: fullSeries.autoYMax };
 
-  // Plugin drawing crisp inline pill badges ("Temp Max 30°C" & "Temp Min 24°C") directly on threshold lines
+  // Draw crisp inline pill badges ("Temp Max 30°C" & "Temp Min 24°C") pinned visibly inside left edge of chartArea
   const thresholdBadgePlugin: Plugin<"line"> = useMemo(() => {
     const maxText = `${t("warehouse7.tempMaxBadge", "Temp Max")} ${maxTemp}°C`;
     const minText = `${t("warehouse7.tempMinBadge", "Temp Min")} ${minTemp}°C`;
@@ -302,81 +351,183 @@ export default function Warehouse7LineChart({
     };
   }, [maxTemp, minTemp, t]);
 
-  // Attach left-Y-axis vertical scale adjust (wheel + vertical drag) matching Polling 3s Y-axis height behavior
-  const attachYAxisHeightGestures = useCallback(
+  // Attach interactive TradingView-style zoom & pan gestures directly on chart frame (zero horizontal scrollbars):
+  // - Mouse wheel on body: widen/narrow X time window centered on cursor
+  // - LMB drag on body: pan time horizontally (and Y vertically if Y-zoomed)
+  // - Mouse wheel / LMB vertical drag on left Y-axis: adjust Y temperature height/scale
+  const attachInteractiveGestures = useCallback(
     (container: HTMLDivElement | null, chartRef: React.MutableRefObject<ChartJS<"line"> | null>) => {
-      if (!container) return undefined;
+      if (!container || totalPoints <= 1) return undefined;
+
       let dragging = false;
+      let mode: "body-pan" | "y-axis" | null = null;
+      let startX = 0;
       let startY = 0;
-      let initMin = effectiveYMin;
-      let initMax = effectiveYMax;
+      let initMinIdx = 0;
+      let initMaxIdx = totalPoints;
+      let initMinY = autoYRef.current.min;
+      let initMaxY = autoYRef.current.max;
+
+      const getMetrics = () => {
+        const chart = chartRef.current;
+        const canvas = chart?.canvas;
+        const rect = canvas ? canvas.getBoundingClientRect() : container.getBoundingClientRect();
+        const area = chart?.chartArea ?? {
+          left: 58,
+          right: rect.width - 16,
+          top: 20,
+          bottom: rect.height - 35,
+          width: Math.max(40, rect.width - 74),
+          height: Math.max(40, rect.height - 55)
+        };
+        return { chart, canvas, rect, area };
+      };
 
       const onMouseMoveHover = (e: MouseEvent) => {
         if (dragging) return;
-        const chart = chartRef.current;
-        const canvas = chart?.canvas;
-        if (!chart || !canvas || !chart.chartArea) return;
-        const rect = canvas.getBoundingClientRect();
+        const { canvas, rect, area } = getMetrics();
+        if (!canvas) return;
         const mouseX = e.clientX - rect.left;
-        canvas.style.cursor = mouseX < chart.chartArea.left ? "ns-resize" : "crosshair";
+        if (mouseX < area.left) {
+          canvas.style.cursor = "ns-resize";
+          canvas.title =
+            language === "en"
+              ? "Scroll or drag vertically to scale temperature height"
+              : "Scroll atau drag vertikal untuk mengatur tinggi skala suhu";
+        } else {
+          canvas.style.cursor = xRangeRef.current ? "grab" : "crosshair";
+          canvas.title =
+            language === "en"
+              ? "Scroll to zoom time width · Drag to pan · Double-click to reset"
+              : "Scroll untuk zoom lebar waktu · Drag untuk geser · Klik ganda untuk reset";
+        }
       };
 
       const onWheel = (e: WheelEvent) => {
-        const chart = chartRef.current;
-        if (!chart || !chart.chartArea) return;
-        const rect = chart.canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        if (mouseX >= chart.chartArea.left) return;
-
         e.preventDefault();
         e.stopPropagation();
 
-        setCustomYRange((prev) => {
-          const curMin = prev ? prev.min : chart.scales.y.min;
-          const curMax = prev ? prev.max : chart.scales.y.max;
-          const span = Math.max(0.5, curMax - curMin);
-          const mouseY = e.clientY - rect.top;
-          const ratioY = Math.max(0, Math.min(1, (chart.chartArea.bottom - mouseY) / Math.max(1, chart.chartArea.height)));
-          const anchor = curMin + ratioY * span;
-          const factor = e.deltaY < 0 ? 0.85 : 1.18;
-          const newSpan = Math.max(1, Math.min(60, span * factor));
-          const nextMin = Number((anchor - ratioY * newSpan).toFixed(2));
-          return { min: nextMin, max: Number((nextMin + newSpan).toFixed(2)) };
+        const { chart, rect, area } = getMetrics();
+        const mouseX = e.clientX - rect.left;
+        const isYAxisZone = mouseX < area.left;
+
+        if (isYAxisZone) {
+          setYRange((prevY) => {
+            const curMin = prevY ? prevY.min : (chart?.scales?.y?.min ?? autoYRef.current.min);
+            const curMax = prevY ? prevY.max : (chart?.scales?.y?.max ?? autoYRef.current.max);
+            const span = Math.max(0.5, curMax - curMin);
+            const mouseY = e.clientY - rect.top;
+            const ratioY = Math.max(0, Math.min(1, (area.bottom - mouseY) / Math.max(1, area.height)));
+            const anchor = curMin + ratioY * span;
+            const factor = e.deltaY < 0 ? 0.85 : 1.18;
+            const newSpan = Math.max(1, Math.min(60, span * factor));
+            const nextMin = Number((anchor - ratioY * newSpan).toFixed(2));
+            return { min: nextMin, max: Number((nextMin + newSpan).toFixed(2)) };
+          });
+          return;
+        }
+
+        setXRange((prev) => {
+          const curMin = prev ? prev.min : 0;
+          const curMax = prev ? prev.max : totalPoints;
+          const curSpan = Math.max(minVisiblePoints, curMax - curMin);
+          const factor = e.deltaY < 0 ? 0.8 : 1.25;
+          const nextSpan = Math.max(minVisiblePoints, Math.min(totalPoints, curSpan * factor));
+          if (nextSpan >= totalPoints - 0.5) return null;
+
+          const plotWidth = Math.max(10, area.width);
+          const ratioX = Math.max(0, Math.min(1, (mouseX - area.left) / plotWidth));
+          const anchorIdx = curMin + ratioX * curSpan;
+
+          let nextMin = anchorIdx - ratioX * nextSpan;
+          let nextMax = nextMin + nextSpan;
+          if (nextMin < 0) {
+            nextMax = Math.min(totalPoints, nextMax - nextMin);
+            nextMin = 0;
+          }
+          if (nextMax > totalPoints) {
+            nextMin = Math.max(0, nextMin - (nextMax - totalPoints));
+            nextMax = totalPoints;
+          }
+          return { min: nextMin, max: nextMax };
         });
       };
 
       const onMouseDown = (e: MouseEvent) => {
         if (e.button !== 0) return;
-        const chart = chartRef.current;
-        if (!chart || !chart.chartArea) return;
-        const rect = chart.canvas.getBoundingClientRect();
+        const { chart, canvas, rect, area } = getMetrics();
         const mouseX = e.clientX - rect.left;
-        if (mouseX >= chart.chartArea.left) return;
+        const isYAxisZone = mouseX < area.left;
 
         dragging = true;
+        mode = isYAxisZone ? "y-axis" : "body-pan";
+        startX = e.clientX;
         startY = e.clientY;
-        initMin = customYRange ? customYRange.min : chart.scales.y.min;
-        initMax = customYRange ? customYRange.max : chart.scales.y.max;
-        chart.canvas.style.cursor = "ns-resize";
+        initMinIdx = xRangeRef.current ? xRangeRef.current.min : 0;
+        initMaxIdx = xRangeRef.current ? xRangeRef.current.max : totalPoints;
+        initMinY = yRangeRef.current ? yRangeRef.current.min : (chart?.scales?.y?.min ?? autoYRef.current.min);
+        initMaxY = yRangeRef.current ? yRangeRef.current.max : (chart?.scales?.y?.max ?? autoYRef.current.max);
+
+        if (canvas) {
+          canvas.style.cursor = isYAxisZone ? "ns-resize" : "grabbing";
+        }
       };
 
       const onWindowMouseMove = (e: MouseEvent) => {
-        if (!dragging) return;
-        const chart = chartRef.current;
-        const plotHeight = chart?.chartArea?.height || 300;
+        if (!dragging || !mode) return;
+        const { rect, area } = getMetrics();
+        const dx = e.clientX - startX;
         const dy = e.clientY - startY;
-        const span = Math.max(0.5, initMax - initMin);
-        const factor = Math.exp((dy / Math.max(60, plotHeight)) * 1.5);
-        const newSpan = Math.max(1, Math.min(60, span * factor));
-        const mid = (initMin + initMax) / 2;
-        setCustomYRange({
-          min: Number((mid - newSpan / 2).toFixed(2)),
-          max: Number((mid + newSpan / 2).toFixed(2))
-        });
+
+        if (mode === "y-axis") {
+          const plotHeight = Math.max(20, area.height);
+          const spanY = Math.max(0.5, initMaxY - initMinY);
+          const factor = Math.exp((dy / Math.max(60, plotHeight)) * 1.5);
+          const newSpan = Math.max(1, Math.min(60, spanY * factor));
+          const initMouseY = startY - rect.top;
+          const anchorRatio = Math.max(0, Math.min(1, (area.bottom - initMouseY) / plotHeight));
+          const anchorVal = initMinY + anchorRatio * spanY;
+          const nextMin = Number((anchorVal - anchorRatio * newSpan).toFixed(2));
+          setYRange({ min: nextMin, max: Number((nextMin + newSpan).toFixed(2)) });
+          return;
+        }
+
+        const spanIdx = initMaxIdx - initMinIdx;
+        if (spanIdx < totalPoints) {
+          const ptsPerPixel = spanIdx / Math.max(20, area.width);
+          const shift = dx * ptsPerPixel;
+          let nextMin = initMinIdx - shift;
+          let nextMax = initMaxIdx - shift;
+          if (nextMin < 0) {
+            nextMax -= nextMin;
+            nextMin = 0;
+          }
+          if (nextMax > totalPoints) {
+            nextMin = Math.max(0, nextMin - (nextMax - totalPoints));
+            nextMax = totalPoints;
+          }
+          setXRange({ min: nextMin, max: nextMax });
+        }
+
+        if (yRangeRef.current) {
+          const spanY = initMaxY - initMinY;
+          const shiftY = dy * (spanY / Math.max(20, area.height));
+          setYRange({
+            min: Number((initMinY + shiftY).toFixed(2)),
+            max: Number((initMaxY + shiftY).toFixed(2))
+          });
+        }
       };
 
-      const onWindowMouseUp = () => {
+      const onWindowMouseUp = (e: MouseEvent) => {
+        if (!dragging) return;
         dragging = false;
+        mode = null;
+        const { canvas, rect, area } = getMetrics();
+        if (canvas) {
+          const mouseX = e.clientX - rect.left;
+          canvas.style.cursor = mouseX < area.left ? "ns-resize" : xRangeRef.current ? "grab" : "crosshair";
+        }
       };
 
       container.addEventListener("mousemove", onMouseMoveHover);
@@ -393,23 +544,23 @@ export default function Warehouse7LineChart({
         window.removeEventListener("mouseup", onWindowMouseUp);
       };
     },
-    [customYRange, effectiveYMin, effectiveYMax]
+    [totalPoints, minVisiblePoints, language]
   );
 
   useEffect(() => {
-    return attachYAxisHeightGestures(inlineContainerRef.current, inlineChartRef);
-  }, [attachYAxisHeightGestures]);
+    return attachInteractiveGestures(inlineContainerRef.current, inlineChartRef);
+  }, [attachInteractiveGestures]);
 
   useEffect(() => {
     if (!isZoomOpen) return;
-    return attachYAxisHeightGestures(modalContainerRef.current, modalChartRef);
-  }, [isZoomOpen, attachYAxisHeightGestures]);
+    return attachInteractiveGestures(modalContainerRef.current, modalChartRef);
+  }, [isZoomOpen, attachInteractiveGestures]);
 
   const options: ChartOptions<"line"> = useMemo(
     () => ({
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 150 },
+      animation: { duration: 120 },
       interaction: {
         mode: hoverMode,
         axis: hoverMode === "nearest" ? "xy" : "x",
@@ -482,7 +633,7 @@ export default function Warehouse7LineChart({
           },
           ticks: {
             color: isDark ? "#94a3b8" : "#47729f",
-            maxTicksLimit: effectiveWidthPct > 140 ? 28 : 12,
+            maxTicksLimit: 12,
             maxRotation: 0,
             autoSkip: true,
             font: { size: 12, weight: "bold" }
@@ -509,29 +660,63 @@ export default function Warehouse7LineChart({
         }
       }
     }),
-    [hoverMode, isDark, maxTemp, minTemp, effectiveYMax, effectiveYMin, t, effectiveWidthPct]
+    [hoverMode, isDark, maxTemp, minTemp, effectiveYMax, effectiveYMin, t]
   );
 
-  const hasChartPoints = Boolean(trend?.hasData && pointCount > 0);
+  const hasChartPoints = Boolean(trend?.hasData && totalPoints > 0);
+  const canZoomInX = hasChartPoints && endIdx - startIdx > minVisiblePoints;
+  const canZoomOutX = Boolean(xRange);
 
-  const adjustWidth = (deltaPct: number) => {
-    const next = Math.max(100, Math.min(400, effectiveWidthPct + deltaPct));
-    setCustomWidthPct(next);
+  // Zoom time window X in/out inside the fixed 100% chart frame (anchored to most recent points / center)
+  const adjustHorizontalZoom = (zoomIn: boolean) => {
+    if (totalPoints <= minVisiblePoints) return;
+    setXRange((prev) => {
+      const curMin = prev ? prev.min : 0;
+      const curMax = prev ? prev.max : totalPoints;
+      const curSpan = Math.max(minVisiblePoints, curMax - curMin);
+      const nextSpan = zoomIn ? curSpan * 0.72 : curSpan * 1.4;
+      if (nextSpan >= totalPoints - 0.5) return null;
+
+      const clampedSpan = Math.max(minVisiblePoints, nextSpan);
+      // When zooming in from full view, focus toward latest data on right; when already zoomed, zoom around midpoint
+      if (!prev && zoomIn) {
+        return { min: Math.max(0, totalPoints - clampedSpan), max: totalPoints };
+      }
+      const center = (curMin + curMax) / 2;
+      let nextMin = center - clampedSpan / 2;
+      let nextMax = center + clampedSpan / 2;
+      if (nextMin < 0) {
+        nextMax = Math.min(totalPoints, nextMax - nextMin);
+        nextMin = 0;
+      }
+      if (nextMax > totalPoints) {
+        nextMin = Math.max(0, nextMin - (nextMax - totalPoints));
+        nextMax = totalPoints;
+      }
+      return { min: nextMin, max: nextMax };
+    });
   };
 
   const adjustHeight = (deltaPx: number) => {
     setCustomHeightPx((prev) => Math.max(280, Math.min(820, prev + deltaPx)));
   };
 
-  const handleResetDimensions = () => {
-    setCustomWidthPct(null);
+  const handleResetView = () => {
+    setXRange(null);
+    setYRange(null);
     setCustomHeightPx(defaultHeightPx);
-    setCustomYRange(null);
   };
+
+  const rangeBadge =
+    chartData.labels.length > 0
+      ? `${chartData.labels[0]} — ${chartData.labels[chartData.labels.length - 1]}`
+      : null;
+
+  const isViewModified = Boolean(xRange || yRange || customHeightPx !== defaultHeightPx);
 
   const renderSizeAndHoverControls = (inModal = false) => (
     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-      {/* Width & Height adjustment controls */}
+      {/* Horizontal Zoom (Perlebar), Height (Pertinggi), Pan & Reset controls */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex items-center gap-1 rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-[#f7fbff] dark:bg-slate-900 px-2 py-1">
           <span className="font-bold text-[#47729f] dark:text-slate-400 mr-1">
@@ -539,27 +724,27 @@ export default function Warehouse7LineChart({
           </span>
           <button
             type="button"
-            onClick={() => adjustWidth(-40)}
-            disabled={effectiveWidthPct <= 100}
+            onClick={() => adjustHorizontalZoom(false)}
+            disabled={!canZoomOutX}
             className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-[#acd3ff] dark:border-slate-700 font-extrabold text-[#002b5c] dark:text-slate-200 hover:bg-[#1f6fb5] hover:text-white transition disabled:opacity-40 cursor-pointer"
           >
             −
           </button>
           <span className="min-w-[44px] text-center font-mono font-bold text-[#002b5c] dark:text-slate-200">
-            {effectiveWidthPct}%
+            {widthZoomPct}%
           </span>
           <button
             type="button"
-            onClick={() => adjustWidth(40)}
-            disabled={effectiveWidthPct >= 400}
+            onClick={() => adjustHorizontalZoom(true)}
+            disabled={!canZoomInX}
             className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-[#acd3ff] dark:border-slate-700 font-extrabold text-[#002b5c] dark:text-slate-200 hover:bg-[#1f6fb5] hover:text-white transition disabled:opacity-40 cursor-pointer"
           >
             +
           </button>
-          {effectiveWidthPct !== 100 && (
+          {canZoomOutX && (
             <button
               type="button"
-              onClick={() => setCustomWidthPct(100)}
+              onClick={() => setXRange(null)}
               className="ml-1 px-2 py-0.5 rounded text-[11px] font-bold text-[#1f6fb5] dark:text-sky-400 hover:bg-[#1f6fb5]/10 cursor-pointer"
             >
               {t("warehouse7.fitWidth", "Pas")}
@@ -592,14 +777,20 @@ export default function Warehouse7LineChart({
           </button>
         </div>
 
-        {(customWidthPct !== null || customHeightPx !== defaultHeightPx || customYRange !== null) && (
+        {isViewModified && (
           <button
             type="button"
-            onClick={handleResetDimensions}
+            onClick={handleResetView}
             className="px-2.5 py-1.5 rounded-lg border border-[#acd3ff] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#1f6fb5] dark:text-sky-400 font-bold hover:bg-[#1f6fb5]/10 transition cursor-pointer"
           >
             ↺ {t("warehouse7.resetBtn", "Reset")}
           </button>
+        )}
+
+        {xRange && rangeBadge && (
+          <span className="hidden sm:inline-flex items-center px-2 py-1 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-300 font-mono text-[11px] font-bold">
+            {rangeBadge}
+          </span>
         )}
       </div>
 
@@ -660,18 +851,11 @@ export default function Warehouse7LineChart({
       {hasChartPoints ? (
         <div
           ref={inlineContainerRef}
-          className="overflow-x-auto scrollbar-thin pb-2"
-          onDoubleClick={handleResetDimensions}
+          className="relative w-full overflow-hidden select-none transition-[height] duration-150"
+          style={{ height: `${customHeightPx}px` }}
+          onDoubleClick={handleResetView}
         >
-          <div
-            className="relative transition-[height] duration-150"
-            style={{
-              width: effectiveWidthPct > 100 ? `${effectiveWidthPct}%` : "100%",
-              height: `${customHeightPx}px`
-            }}
-          >
-            <Line ref={inlineChartRef} data={chartData} options={options} plugins={[thresholdBadgePlugin]} />
-          </div>
+          <Line ref={inlineChartRef} data={chartData} options={options} plugins={[thresholdBadgePlugin]} />
         </div>
       ) : (
         <div
@@ -687,7 +871,7 @@ export default function Warehouse7LineChart({
         </div>
       )}
 
-      {/* Expanded Width/Height Popup Modal (from Polling 3s enlarge pattern) */}
+      {/* Expanded Fixed-Width Popup Modal (interactive wheel zoom + drag pan + vertical Y-scale) */}
       {isZoomOpen &&
         typeof document !== "undefined" &&
         createPortal(
@@ -718,16 +902,10 @@ export default function Warehouse7LineChart({
 
               <div
                 ref={modalContainerRef}
-                className="flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-thin rounded-xl border border-[#acd3ff]/50 dark:border-slate-800 bg-[#f7fbff]/40 dark:bg-slate-900/20 p-3"
-                onDoubleClick={handleResetDimensions}
+                className="relative flex-1 min-h-0 w-full overflow-x-hidden overflow-y-auto scrollbar-thin select-none rounded-xl border border-[#acd3ff]/50 dark:border-slate-800 bg-[#f7fbff]/40 dark:bg-slate-900/20 p-3"
+                onDoubleClick={handleResetView}
               >
-                <div
-                  className="relative"
-                  style={{
-                    width: effectiveWidthPct > 100 ? `${effectiveWidthPct}%` : "100%",
-                    height: `${Math.max(customHeightPx, 480)}px`
-                  }}
-                >
+                <div className="w-full" style={{ height: customHeightPx > defaultHeightPx ? `${Math.max(customHeightPx, 520)}px` : "100%", minHeight: "420px" }}>
                   <Line ref={modalChartRef} data={chartData} options={options} plugins={[thresholdBadgePlugin]} />
                 </div>
               </div>
