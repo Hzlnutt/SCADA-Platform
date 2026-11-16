@@ -351,8 +351,6 @@ function StandardMachineOverview({
     const merged = { ...latest };
     if (unitId.startsWith("cooling-water")) {
       Object.entries(apiSourceUrls).forEach(([tagKey, url]) => {
-        if (!url || !url.trim()) return;
-
         if (tagKey === "cooling-water/delta_temp") {
           const retKey = jsonKeyMap["cooling-water/return_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/return_temp"];
           const suppKey = jsonKeyMap["cooling-water/supply_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
@@ -368,7 +366,7 @@ function StandardMachineOverview({
               quality: "good",
               meta: { tagId: tagKey }
             };
-          } else if (apiLiveData[retUrl] === null || apiLiveData[suppUrl] === null) {
+          } else if ((retUrl && apiLiveData[retUrl] === null) || (suppUrl && apiLiveData[suppUrl] === null)) {
             merged[tagKey] = {
               ts: new Date().toISOString(),
               value: "Gagal Polling API",
@@ -378,6 +376,8 @@ function StandardMachineOverview({
           }
           return;
         }
+
+        if (!url || !url.trim()) return;
 
         let jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
         let val = apiLiveData[url]?.[jsonKey];
@@ -549,24 +549,29 @@ function StandardMachineOverview({
   const liveData = useMemo(() => {
     if (unitId.startsWith("cooling-water")) {
       const getApiVal = (tagKey: string) => {
-        const url = apiSourceUrls[tagKey] || "";
-        if (!url.trim()) return "Belum Ada API";
-
         if (tagKey === "cooling-water/delta_temp") {
           const retKey = jsonKeyMap["cooling-water/return_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/return_temp"];
           const suppKey = jsonKeyMap["cooling-water/supply_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
           const retUrl = apiSourceUrls["cooling-water/return_temp"] || "";
           const suppUrl = apiSourceUrls["cooling-water/supply_temp"] || "";
-          if (apiLiveData[retUrl] === null || apiLiveData[suppUrl] === null) {
+          if ((retUrl && apiLiveData[retUrl] === null) || (suppUrl && apiLiveData[suppUrl] === null)) {
             return "Gagal Polling API";
           }
-          const retVal = retKey && retUrl ? apiLiveData[retUrl]?.[retKey] : undefined;
-          const suppVal = suppKey && suppUrl ? apiLiveData[suppUrl]?.[suppKey] : undefined;
+          const retVal = retKey && retUrl ? (apiLiveData[retUrl]?.[retKey] ?? apiLiveData[retUrl]?.[retKey === "Scaled_Temp_Tank_Cooling3_Return" ? "Scaled_Temp_Tank_Colling3_Return" : retKey]) : undefined;
+          const suppVal = suppKey && suppUrl ? (apiLiveData[suppUrl]?.[suppKey] ?? apiLiveData[suppUrl]?.[suppKey === "Scaled_Temp_Tank_Cooling3_Supp" ? "Scaled_Temp_Tank_Colling3_Supp" : suppKey]) : undefined;
           if (typeof retVal === "number" && typeof suppVal === "number") {
-            return retVal - suppVal;
+            return Number((retVal - suppVal).toFixed(2));
+          }
+          const storeRet = mergedLatest["cooling-water/return_temp"]?.value;
+          const storeSupp = mergedLatest["cooling-water/supply_temp"]?.value;
+          if (typeof storeRet === "number" && typeof storeSupp === "number") {
+            return Number((storeRet - storeSupp).toFixed(2));
           }
           return "xx";
         }
+
+        const url = apiSourceUrls[tagKey] || "";
+        if (!url.trim()) return "Belum Ada API";
 
         const jsonKey = jsonKeyMap[tagKey] || TAG_KEY_TO_API_JSON_KEY[tagKey] || tagKey.split("/")[1];
         if (!jsonKey) return "xx";

@@ -347,16 +347,6 @@ export default function MachinePidDiagram() {
     const merged = { ...latest };
     if (unitId.startsWith("cooling-water")) {
       Object.entries(apiSourceUrls).forEach(([tagKey, url]) => {
-        if (!url.trim()) {
-          merged[tagKey] = {
-            ts: new Date().toISOString(),
-            value: "xx",
-            quality: "bad",
-            meta: { tagId: tagKey }
-          };
-          return;
-        }
-
         if (tagKey === "cooling-water/delta_temp") {
           const retKey = jsonKeyMap["cooling-water/return_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/return_temp"];
           const suppKey = jsonKeyMap["cooling-water/supply_temp"] || TAG_KEY_TO_API_JSON_KEY["cooling-water/supply_temp"];
@@ -372,7 +362,7 @@ export default function MachinePidDiagram() {
               quality: "good",
               meta: { tagId: tagKey }
             };
-          } else if (apiLiveData[retUrl] === null || apiLiveData[suppUrl] === null) {
+          } else if ((retUrl && apiLiveData[retUrl] === null) || (suppUrl && apiLiveData[suppUrl] === null)) {
             merged[tagKey] = {
               ts: new Date().toISOString(),
               value: "Gagal Polling API",
@@ -387,6 +377,16 @@ export default function MachinePidDiagram() {
               meta: { tagId: tagKey }
             };
           }
+          return;
+        }
+
+        if (!url.trim()) {
+          merged[tagKey] = {
+            ts: new Date().toISOString(),
+            value: "xx",
+            quality: "bad",
+            meta: { tagId: tagKey }
+          };
           return;
         }
 
@@ -434,6 +434,19 @@ export default function MachinePidDiagram() {
           };
         }
       });
+
+      const finalRet = merged["cooling-water/return_temp"]?.value;
+      const finalSupp = merged["cooling-water/supply_temp"]?.value;
+      const finalRetNum = typeof finalRet === "number" ? finalRet : parseFloat(String(finalRet));
+      const finalSuppNum = typeof finalSupp === "number" ? finalSupp : parseFloat(String(finalSupp));
+      if (!isNaN(finalRetNum) && !isNaN(finalSuppNum)) {
+        merged["cooling-water/delta_temp"] = {
+          ts: new Date().toISOString(),
+          value: Number((finalRetNum - finalSuppNum).toFixed(2)),
+          quality: "good",
+          meta: { tagId: "cooling-water/delta_temp" }
+        };
+      }
     }
     return merged;
   }, [latest, apiSourceUrls, apiLiveData, unitId, jsonKeyMap]);
