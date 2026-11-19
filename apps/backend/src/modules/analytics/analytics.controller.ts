@@ -423,7 +423,7 @@ export const getPowerMetersLatestHandler = async (
   try {
     const group = ((req.query.group as string) || "ew23").toLowerCase();
     const live = getLatestEwLiveRecords(group);
-    if (live && live.length > 0) {
+    if (live && live.length > 0 && (group !== "all" || live.length >= 45)) {
       return res.json({ data: live });
     }
 
@@ -441,6 +441,16 @@ export const getPowerMetersLatestHandler = async (
     `, [group]);
 
     let data = dbRes.rows;
+    if (live && live.length > 0) {
+      const mergedMap = new Map<string, any>();
+      for (const row of data) {
+        if (row?.pm_id) mergedMap.set(String(row.pm_id).toUpperCase(), row);
+      }
+      for (const liveRow of live) {
+        if (liveRow?.pm_id) mergedMap.set(String(liveRow.pm_id).toUpperCase(), liveRow);
+      }
+      data = Array.from(mergedMap.values());
+    }
 
     // For ew23 or all, ensure the 3 incoming cubicles (PLN, WF1, WF2) are included if not present in the PM array
     if (group === "ew23" || group === "all") {

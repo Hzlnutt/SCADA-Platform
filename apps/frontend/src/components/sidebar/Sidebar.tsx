@@ -306,6 +306,7 @@ export const Sidebar = () => {
                 <NavItem to="/listrik/incoming-fact-1" label={t("sidebar.incomingFact1")} tone="scada" />
                 <NavItem to="/listrik/incoming-fact-2" label={t("sidebar.incomingFact2")} tone="scada" />
                 <NavItem to="/listrik/distribusi" label={t("sidebar.powerDistribution")} tone="scada" />
+                <NavItem to="/listrik/konsumsi-realtime" label={t("sidebar.realtimePower")} tone="scada" />
                 <NavItem to="/listrik/report" label={t("sidebar.report")} tone="scada" />
               </div>
             )}

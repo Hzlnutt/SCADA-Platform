@@ -37,6 +37,7 @@ import UtilityStatus from "../pages/UtilityStatus";
 import Electricity from "../pages/utilities/Electricity";
 import IncomingPln from "../pages/utilities/IncomingPln";
 import PowerDistribution from "../pages/utilities/PowerDistribution";
+import RealtimePowerConsumption from "../pages/utilities/RealtimePowerConsumption";
 import ElectricityReport from "../pages/utilities/ElectricityReport";
 import WaterOverview from "../pages/utilities/WaterOverview";
 import WaterDistribution from "../pages/utilities/WaterDistribution";
@@ -121,6 +122,8 @@ export const AppRouter = () => {
               <Route path="incoming-fact-2" element={<IncomingPln />} />
               <Route path="incoming_fact_2" element={<Navigate to="/listrik/incoming-fact-2" replace />} />
               <Route path="distribusi" element={<PowerDistribution />} />
+              <Route path="konsumsi-realtime" element={<RealtimePowerConsumption />} />
+              <Route path="realtime-kw" element={<Navigate to="/listrik/konsumsi-realtime" replace />} />
               <Route path="report" element={<ElectricityReport />} />
             </Route>
             <Route path="air">
