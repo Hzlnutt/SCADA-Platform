@@ -1708,8 +1708,27 @@ export const getElectricityReportHandler = async (
       ? (machine && machine !== "all" && machine.toUpperCase() !== targetPmId && !pmInfo.label.includes(machine) ? `${pmInfo.label} - ${machine}` : pmInfo.label)
       : (machine && machine !== "all" ? `${tag.toUpperCase()} - ${machine}` : tag.toUpperCase());
 
+    const buildTimestampRange = (dateStr: string): string => {
+      const trimmed = String(dateStr || "").trim();
+      const hourlyMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}):(\d{2})(?::\d{2})?$/);
+      if (hourlyMatch) {
+        const hh = hourlyMatch[2];
+        return `${hh}:00 - ${hh}:59`;
+      }
+      if (truncUnit === "day" || /^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        return "00:00 - 23:59";
+      }
+      const monthlyMatch = trimmed.match(/^(\d{4})-(\d{2})$/);
+      if (monthlyMatch) {
+        const lastDay = new Date(Number(monthlyMatch[1]), Number(monthlyMatch[2]), 0).getDate();
+        return `01-${String(lastDay).padStart(2, "0")} (00:00 - 23:59)`;
+      }
+      return "-";
+    };
+
     const result = queryRows.map((r: any) => {
       const dateStr = r.date_str || "";
+      const timestampRange = buildTimestampRange(dateStr);
 
       const kwVal = r.kw !== null ? Number(r.kw) : null;
       const kvarVal = r.kvar !== null ? Number(r.kvar) : null;
@@ -1720,6 +1739,7 @@ export const getElectricityReportHandler = async (
 
       return {
         date: dateStr,
+        timestamp: timestampRange,
         tag: tagLabel,
         // Energy tab
         kwh: kwhVal !== null ? +kwhVal.toFixed(2) : null,
