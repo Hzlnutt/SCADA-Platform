@@ -1,0 +1,570 @@
+import { Router, type NextFunction, type Request, type Response } from "express";
+import { authenticate, authorize } from "../auth/auth.middleware";
+import { logger } from "../../config/logger.config";
+import {
+  fetchLatestReadingPerPm,
+  fetchRawPmReadings,
+  testPmHealthDbConnection
+} from "./pm-health.db";
+import {
+  analyzeSinglePmSeries,
+  buildPmHealthOverview,
+  formatWibNow,
+  shiftWibTimestamp
+} from "./pm-health.analyzer";
+import { pmHealthStore } from "./pm-health.store";
+import { resolvePmMeta } from "./pm-health.catalog";
+import type { AnomalyEvent, AnomalyType, SourceTable } from "./pm-health.types";
+
+const POLL_INTERVAL_MS = 30_000;
+const DEFAULT_LOOKBACK_HOURS = 24;
+
+const sseClients = new Set<Response>();
+let lastPollAt: string | null = null;
+let lastPollError: string | null = null;
+let isPolling = false;
+let pollerStarted = false;
+
+function broadcastSse(eventName: string, payload: unknown) {
+  const data = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
+  for (const client of sseClients) {
+    try {
+      client.write(data);
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+}
+
+function parseSourceParam(val: unknown): "both" | SourceTable {
+  if (val === "electric_pm_telemetry" || val === "hourly") return "electric_pm_telemetry";
+  if (val === "electric_pm_telemetry_minute" || val === "minute") return "electric_pm_telemetry_minute";
+  return "both";
+}
+
+function buildRangeTimestamps(params: {
+  hours?: number;
+  startDate?: string;
+  endDate?: string;
+}): { startTimestamp: string; endTimestamp: string } {
+  if (params.startDate && /^\d{4}-\d{2}-\d{2}$/.test(params.startDate)) {
+    const endD = params.endDate && /^\d{4}-\d{2}-\d{2}$/.test(params.endDate) ? params.endDate : params.startDate;
+    return {
+      startTimestamp: `${params.startDate} 00:00:00`,
+      endTimestamp: `${endD} 23:59:59`
+    };
+  }
+  const hrs = Math.min(24 * 60, Math.max(1, Number(params.hours || DEFAULT_LOOKBACK_HOURS)));
+  return {
+    startTimestamp: formatWibNow(-hrs * 3600_000),
+    endTimestamp: formatWibNow(60_000)
+  };
+}
+
+function maxTimestamp(a: string, b: string): string {
+  return a >= b ? a : b;
+}
+
+async function runPmHealthBackgroundPoll(isInitial = false) {
+  if (isPolling) return;
+  isPolling = true;
+  try {
+    const resetAt = pmHealthStore.getResetAt();
+    const minuteLookbackHours = isInitial ? DEFAULT_LOOKBACK_HOURS : 2;
+    const hourlyLookbackHours = isInitial ? Math.max(DEFAULT_LOOKBACK_HOURS, 48) : 12;
+
+    const endTimestamp = formatWibNow(60_000);
+    let minStart = formatWibNow(-minuteLookbackHours * 3600_000);
+    let hrStart = formatWibNow(-hourlyLookbackHours * 3600_000);
+
+    if (resetAt) {
+      minStart = maxTimestamp(minStart, shiftWibTimestamp(resetAt, -5 * 60_000));
+      hrStart = maxTimestamp(hrStart, shiftWibTimestamp(resetAt, -2 * 3600_000));
+    }
+
+    const [minuteReadings, hourlyReadings] = await Promise.all([
+      fetchRawPmReadings({
+        table: "electric_pm_telemetry_minute",
+        startTimestamp: minStart,
+        endTimestamp
+      }),
+      fetchRawPmReadings({
+        table: "electric_pm_telemetry",
+        startTimestamp: hrStart,
+        endTimestamp
+      })
+    ]);
+
+    const detectedAtIso = new Date().toISOString();
+    const detected: AnomalyEvent[] = [];
+
+    const groupAndAnalyze = (rows: typeof minuteReadings, table: SourceTable) => {
+      const byPm = new Map<string, typeof rows>();
+      for (const r of rows) {
+        const list = byPm.get(r.pm_id) || [];
+        list.push(r);
+        byPm.set(r.pm_id, list);
+      }
+      for (const [pmId, pmRows] of byPm.entries()) {
+        const { anomalies } = analyzeSinglePmSeries(pmId, table, pmRows, detectedAtIso, {
+          markInitialRead: isInitial,
+          minAnomalyTimestamp: resetAt
+        });
+        detected.push(...anomalies);
+      }
+    };
+
+    groupAndAnalyze(minuteReadings, "electric_pm_telemetry_minute");
+    groupAndAnalyze(hourlyReadings, "electric_pm_telemetry");
+
+    const newlyAdded = pmHealthStore.upsertAnomalies(detected, { respectResetAt: true });
+    lastPollAt = formatWibNow();
+    lastPollError = null;
+
+    if (!isInitial && newlyAdded.length > 0) {
+      broadcastSse("anomaly", {
+        anomalies: newlyAdded.slice(0, 20),
+        newCount: newlyAdded.length,
+        stats: pmHealthStore.getStats(),
+        scannedAt: lastPollAt
+      });
+    }
+
+    broadcastSse("heartbeat_scan", {
+      scannedAt: lastPollAt,
+      newCount: newlyAdded.length,
+      stats: pmHealthStore.getStats()
+    });
+  } catch (err: any) {
+    lastPollError = err?.message || "Poll failed";
+    logger.warn(`[PM-Health] Read-only poll skipped: ${lastPollError}`);
+  } finally {
+    isPolling = false;
+  }
+}
+
+function ensurePollerStarted() {
+  if (pollerStarted) return;
+  pollerStarted = true;
+  // Delay initial read-only poll slightly so SCADA startup runs with zero contention
+  const initTimer = setTimeout(() => {
+    void runPmHealthBackgroundPoll(true);
+  }, 5000);
+  initTimer.unref?.();
+
+  const interval = setInterval(() => {
+    void runPmHealthBackgroundPoll(false);
+  }, POLL_INTERVAL_MS);
+  interval.unref?.();
+}
+
+/**
+ * Supports passing JWT via `?token=` query param for EventSource (SSE) where custom headers
+ * cannot be attached by browsers, then delegates to standard SCADA `authenticate` + `authorize(["admin"])`.
+ */
+function attachQueryTokenToHeader(req: Request, _res: Response, next: NextFunction) {
+  if (!req.headers.authorization && typeof req.query.token === "string" && req.query.token.trim()) {
+    req.headers.authorization = `Bearer ${req.query.token.trim()}`;
+  }
+  next();
+}
+
+export const pmHealthRouter = Router();
+
+// Strictly Admin-Only across ALL PM Health endpoints
+const adminOnly = [authenticate, authorize(["admin"])];
+
+pmHealthRouter.get("/pm-health/health", ...adminOnly, async (_req: Request, res: Response) => {
+  ensurePollerStarted();
+  const dbStatus = await testPmHealthDbConnection();
+  res.json({
+    ok: dbStatus.connected,
+    mode: "READ_ONLY",
+    db: dbStatus,
+    monitor: {
+      pollIntervalMs: POLL_INTERVAL_MS,
+      defaultLookbackHours: DEFAULT_LOOKBACK_HOURS,
+      lastPollAt,
+      lastPollError,
+      isPolling,
+      resetAt: pmHealthStore.getResetAt()
+    },
+    logs: pmHealthStore.getStats()
+  });
+});
+
+pmHealthRouter.get("/pm-health/overview", ...adminOnly, async (req: Request, res: Response) => {
+  ensurePollerStarted();
+  try {
+    const source = parseSourceParam(req.query.source);
+    const resetAt = pmHealthStore.getResetAt();
+    const sinceReset = req.query.sinceReset === "true" && Boolean(resetAt);
+    const hours = Number(req.query.hours || DEFAULT_LOOKBACK_HOURS);
+    const startDate = typeof req.query.startDate === "string" ? req.query.startDate : undefined;
+    const endDate = typeof req.query.endDate === "string" ? req.query.endDate : undefined;
+
+    let minStart: string;
+    let hrStart: string;
+    let endTimestamp: string;
+    let displayStart: string;
+
+    if (sinceReset && resetAt) {
+      endTimestamp = formatWibNow(60_000);
+      displayStart = resetAt;
+      minStart = shiftWibTimestamp(resetAt, -5 * 60_000);
+      hrStart = shiftWibTimestamp(resetAt, -2 * 3600_000);
+    } else {
+      const range = buildRangeTimestamps({ hours, startDate, endDate });
+      minStart = range.startTimestamp;
+      hrStart = range.startTimestamp;
+      displayStart = range.startTimestamp;
+      endTimestamp = range.endTimestamp;
+    }
+
+    const [minuteReadings, hourlyReadings, latestMinutePerPm, latestHourlyPerPm] = await Promise.all([
+      source === "electric_pm_telemetry"
+        ? Promise.resolve([])
+        : fetchRawPmReadings({ table: "electric_pm_telemetry_minute", startTimestamp: minStart, endTimestamp }),
+      source === "electric_pm_telemetry_minute"
+        ? Promise.resolve([])
+        : fetchRawPmReadings({ table: "electric_pm_telemetry", startTimestamp: hrStart, endTimestamp }),
+      source === "electric_pm_telemetry"
+        ? Promise.resolve([])
+        : fetchLatestReadingPerPm("electric_pm_telemetry_minute"),
+      source === "electric_pm_telemetry_minute"
+        ? Promise.resolve([])
+        : fetchLatestReadingPerPm("electric_pm_telemetry")
+    ]);
+
+    const { pms, anomalies } = buildPmHealthOverview({
+      minuteReadings,
+      hourlyReadings,
+      latestMinutePerPm,
+      latestHourlyPerPm,
+      source,
+      minAnomalyTimestamp: sinceReset ? resetAt : null
+    });
+
+    const newlyLogged = pmHealthStore.upsertAnomalies(anomalies, { respectResetAt: true });
+
+    const summary = {
+      totalPms: pms.length,
+      healthyCount: pms.filter((p) => p.healthStatus === "healthy").length,
+      criticalCount: pms.filter((p) => p.healthStatus === "critical").length,
+      warningCount: pms.filter((p) => p.healthStatus === "warning").length,
+      offlineCount: pms.filter((p) => p.healthStatus === "offline").length,
+      totalDropsInWindow: pms.reduce((acc, p) => acc + p.dropCount, 0),
+      totalAnomaliesInWindow: anomalies.length,
+      newlyLoggedCount: newlyLogged.length,
+      minuteRowsScanned: minuteReadings.length,
+      hourlyRowsScanned: hourlyReadings.length
+    };
+
+    res.json({
+      range: {
+        startTimestamp: displayStart,
+        endTimestamp,
+        hours,
+        source,
+        sinceReset,
+        resetAt
+      },
+      scannedAt: formatWibNow(),
+      summary,
+      pms,
+      logStats: pmHealthStore.getStats()
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "Gagal memuat data kesehatan power meter" });
+  }
+});
+
+pmHealthRouter.get("/pm-health/pm/:pmId/series", ...adminOnly, async (req: Request, res: Response) => {
+  try {
+    const pmId = String(req.params.pmId || "").trim().toUpperCase();
+    if (!pmId) {
+      res.status(400).json({ error: "pmId wajib diisi" });
+      return;
+    }
+
+    const source = parseSourceParam(req.query.source);
+    const resetAt = pmHealthStore.getResetAt();
+    const sinceReset = req.query.sinceReset === "true" && Boolean(resetAt);
+    const hours = Number(req.query.hours || DEFAULT_LOOKBACK_HOURS);
+    const startDate = typeof req.query.startDate === "string" ? req.query.startDate : undefined;
+    const endDate = typeof req.query.endDate === "string" ? req.query.endDate : undefined;
+
+    let minStart: string;
+    let hrStart: string;
+    let displayStart: string;
+    let endTimestamp: string;
+
+    if (sinceReset && resetAt) {
+      endTimestamp = formatWibNow(60_000);
+      displayStart = resetAt;
+      minStart = shiftWibTimestamp(resetAt, -5 * 60_000);
+      hrStart = shiftWibTimestamp(resetAt, -2 * 3600_000);
+    } else {
+      const range = buildRangeTimestamps({ hours, startDate, endDate });
+      minStart = range.startTimestamp;
+      hrStart = range.startTimestamp;
+      displayStart = range.startTimestamp;
+      endTimestamp = range.endTimestamp;
+    }
+
+    const [minuteRows, hourlyRows] = await Promise.all([
+      source === "electric_pm_telemetry"
+        ? Promise.resolve([])
+        : fetchRawPmReadings({
+            table: "electric_pm_telemetry_minute",
+            startTimestamp: minStart,
+            endTimestamp,
+            pmId,
+            limit: 15000
+          }),
+      source === "electric_pm_telemetry_minute"
+        ? Promise.resolve([])
+        : fetchRawPmReadings({
+            table: "electric_pm_telemetry",
+            startTimestamp: hrStart,
+            endTimestamp,
+            pmId,
+            limit: 15000
+          })
+    ]);
+
+    const detectedAtIso = new Date().toISOString();
+    const minuteAnalysis = analyzeSinglePmSeries(pmId, "electric_pm_telemetry_minute", minuteRows, detectedAtIso, {
+      markInitialRead: true,
+      minAnomalyTimestamp: sinceReset ? resetAt : null
+    });
+    const hourlyAnalysis = analyzeSinglePmSeries(pmId, "electric_pm_telemetry", hourlyRows, detectedAtIso, {
+      markInitialRead: true,
+      minAnomalyTimestamp: sinceReset ? resetAt : null
+    });
+
+    const combinedAnomalies = [...minuteAnalysis.anomalies, ...hourlyAnalysis.anomalies].sort((a, b) =>
+      b.timestamp.localeCompare(a.timestamp)
+    );
+    pmHealthStore.upsertAnomalies(combinedAnomalies, { respectResetAt: true });
+
+    const meta = resolvePmMeta(
+      pmId,
+      minuteRows[minuteRows.length - 1]?.group_id || hourlyRows[hourlyRows.length - 1]?.group_id
+    );
+
+    res.json({
+      pm: meta,
+      range: {
+        startTimestamp: displayStart,
+        endTimestamp,
+        hours,
+        source,
+        sinceReset,
+        resetAt
+      },
+      minuteSeries: minuteAnalysis.annotated,
+      hourlySeries: hourlyAnalysis.annotated,
+      anomalies: combinedAnomalies
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "Gagal mengambil riwayat power meter" });
+  }
+});
+
+pmHealthRouter.get("/pm-health/logs", ...adminOnly, (req: Request, res: Response) => {
+  ensurePollerStarted();
+  const pmId = typeof req.query.pmId === "string" ? req.query.pmId : undefined;
+  const type = typeof req.query.type === "string" ? (req.query.type as AnomalyType | "all") : "all";
+  const source = parseSourceParam(req.query.source);
+  const startDate = typeof req.query.startDate === "string" && req.query.startDate ? req.query.startDate : undefined;
+  const endDate = typeof req.query.endDate === "string" && req.query.endDate ? req.query.endDate : undefined;
+  const ack = req.query.ack === "open" || req.query.ack === "acked" ? req.query.ack : "all";
+  const search = typeof req.query.search === "string" ? req.query.search : undefined;
+  const limit = Number(req.query.limit || 500);
+
+  res.json(
+    pmHealthStore.queryLogs({
+      pmId,
+      type,
+      source,
+      startDate,
+      endDate,
+      ack,
+      search,
+      limit
+    })
+  );
+});
+
+pmHealthRouter.post("/pm-health/scan", ...adminOnly, async (req: Request, res: Response) => {
+  ensurePollerStarted();
+  try {
+    const body = req.body || {};
+    const source = parseSourceParam(body.source);
+    const resetAt = pmHealthStore.getResetAt();
+    const sinceReset = Boolean(body.sinceReset && resetAt);
+    const saveBeforeReset = Boolean(body.saveBeforeReset);
+
+    let minStart: string;
+    let hrStart: string;
+    let displayStart: string;
+    let endTimestamp: string;
+
+    if (sinceReset && resetAt) {
+      endTimestamp = formatWibNow(60_000);
+      displayStart = resetAt;
+      minStart = shiftWibTimestamp(resetAt, -5 * 60_000);
+      hrStart = shiftWibTimestamp(resetAt, -2 * 3600_000);
+    } else {
+      const range = buildRangeTimestamps({
+        hours: body.hours,
+        startDate: body.startDate,
+        endDate: body.endDate
+      });
+      minStart = range.startTimestamp;
+      hrStart = range.startTimestamp;
+      displayStart = range.startTimestamp;
+      endTimestamp = range.endTimestamp;
+    }
+    const pmId = typeof body.pmId === "string" && body.pmId && body.pmId !== "all" ? body.pmId : undefined;
+
+    const [minuteRows, hourlyRows] = await Promise.all([
+      source === "electric_pm_telemetry"
+        ? Promise.resolve([])
+        : fetchRawPmReadings({ table: "electric_pm_telemetry_minute", startTimestamp: minStart, endTimestamp, pmId }),
+      source === "electric_pm_telemetry_minute"
+        ? Promise.resolve([])
+        : fetchRawPmReadings({ table: "electric_pm_telemetry", startTimestamp: hrStart, endTimestamp, pmId })
+    ]);
+
+    const detectedAtIso = new Date().toISOString();
+    const detected: AnomalyEvent[] = [];
+
+    const analyzeGrouped = (rows: typeof minuteRows, table: SourceTable) => {
+      const byPm = new Map<string, typeof rows>();
+      for (const r of rows) {
+        const list = byPm.get(r.pm_id) || [];
+        list.push(r);
+        byPm.set(r.pm_id, list);
+      }
+      for (const [id, list] of byPm.entries()) {
+        const { anomalies } = analyzeSinglePmSeries(id, table, list, detectedAtIso, {
+          minAnomalyTimestamp: sinceReset ? resetAt : null
+        });
+        detected.push(...anomalies);
+      }
+    };
+
+    analyzeGrouped(minuteRows, "electric_pm_telemetry_minute");
+    analyzeGrouped(hourlyRows, "electric_pm_telemetry");
+
+    detected.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    const newlyLogged = pmHealthStore.upsertAnomalies(detected, {
+      respectResetAt: !saveBeforeReset
+    });
+    lastPollAt = formatWibNow();
+
+    if (newlyLogged.length > 0) {
+      broadcastSse("anomaly", {
+        anomalies: newlyLogged.slice(0, 20),
+        newCount: newlyLogged.length,
+        stats: pmHealthStore.getStats(),
+        scannedAt: lastPollAt
+      });
+    }
+
+    res.json({
+      ok: true,
+      scannedAt: lastPollAt,
+      range: { startTimestamp: displayStart, endTimestamp, source, pmId: pmId || "all", sinceReset, resetAt },
+      minuteRowsScanned: minuteRows.length,
+      hourlyRowsScanned: hourlyRows.length,
+      detectedCount: detected.length,
+      newlyLoggedCount: newlyLogged.length,
+      anomalies: detected.slice(0, 500),
+      logStats: pmHealthStore.getStats()
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "Gagal memindai data historis" });
+  }
+});
+
+pmHealthRouter.post("/pm-health/monitor/reset-baseline", ...adminOnly, (_req: Request, res: Response) => {
+  const nowWib = formatWibNow();
+  const { clearedCount, resetAt } = pmHealthStore.resetBaseline(nowWib);
+  const stats = pmHealthStore.getStats();
+  broadcastSse("baseline_reset", { resetAt, clearedCount, stats });
+  res.json({ ok: true, resetAt, clearedCount, stats });
+});
+
+pmHealthRouter.delete("/pm-health/monitor/reset-baseline", ...adminOnly, (_req: Request, res: Response) => {
+  pmHealthStore.clearResetBaseline();
+  const stats = pmHealthStore.getStats();
+  broadcastSse("baseline_reset", { resetAt: null, clearedCount: 0, stats });
+  res.json({ ok: true, resetAt: null, stats });
+});
+
+pmHealthRouter.post("/pm-health/logs/:id/ack", ...adminOnly, (req: Request, res: Response) => {
+  const id = decodeURIComponent(String(req.params.id || ""));
+  const updated = pmHealthStore.acknowledge(id);
+  if (!updated) {
+    res.status(404).json({ error: "Log tidak ditemukan" });
+    return;
+  }
+  res.json({ ok: true, log: updated, stats: pmHealthStore.getStats() });
+});
+
+pmHealthRouter.post("/pm-health/logs/ack-all", ...adminOnly, (_req: Request, res: Response) => {
+  const updatedCount = pmHealthStore.acknowledgeAll();
+  res.json({ ok: true, updatedCount, stats: pmHealthStore.getStats() });
+});
+
+pmHealthRouter.post("/pm-health/logs/read-all", ...adminOnly, (_req: Request, res: Response) => {
+  const updatedCount = pmHealthStore.markAllRead();
+  res.json({ ok: true, updatedCount, stats: pmHealthStore.getStats() });
+});
+
+pmHealthRouter.delete("/pm-health/logs", ...adminOnly, (_req: Request, res: Response) => {
+  const nowWib = formatWibNow();
+  const { clearedCount, resetAt } = pmHealthStore.resetBaseline(nowWib);
+  const stats = pmHealthStore.getStats();
+  broadcastSse("baseline_reset", { resetAt, clearedCount, stats });
+  res.json({ ok: true, clearedCount, resetAt, stats });
+});
+
+pmHealthRouter.get(
+  "/pm-health/events",
+  attachQueryTokenToHeader,
+  ...adminOnly,
+  (req: Request, res: Response) => {
+    ensurePollerStarted();
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+
+    sseClients.add(res);
+    res.write(
+      `event: connected\ndata: ${JSON.stringify({
+        connectedAt: formatWibNow(),
+        lastPollAt,
+        stats: pmHealthStore.getStats()
+      })}\n\n`
+    );
+
+    const ping = setInterval(() => {
+      try {
+        res.write(": ping\n\n");
+      } catch {
+        clearInterval(ping);
+        sseClients.delete(res);
+      }
+    }, 25_000);
+
+    req.on("close", () => {
+      clearInterval(ping);
+      sseClients.delete(res);
+    });
+  }
+);

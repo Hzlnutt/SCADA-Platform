@@ -8,6 +8,7 @@ const baseUrl = rawBaseUrl.replace(/\/$/, "");
 const apiBase = baseUrl.endsWith("/api/v1") ? baseUrl : `${baseUrl}/api/v1`;
 
 const buildUrl = (path: string) => `${apiBase}${path.startsWith("/") ? path : `/${path}`}`;
+export const buildApiUrl = buildUrl;
 
 const buildAuthHeaders = (extra?: HeadersInit): HeadersInit => {
   const accessToken = getAccessToken();

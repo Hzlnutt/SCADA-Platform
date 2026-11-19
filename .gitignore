@@ -31,4 +31,5 @@ __pycache__/
 
 # Large database dumps and import files
 import-data/
-.last_sync_success.txt
+.last_sync_success.txt
+apps/backend/data/pm-health/
