@@ -74,10 +74,12 @@ export function PmHealthDetailModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [pmId, onClose]);
 
-  const fetchSeries = async () => {
+  const fetchSeries = async (silent = false) => {
     if (!pmId) return;
-    setLoading(true);
-    setError(null);
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const qs = new URLSearchParams({ source: "both" });
       if (rangeMode === "since_reset" && resetAt) {
@@ -92,24 +94,42 @@ export function PmHealthDetailModal({
         `/pm-health/pm/${encodeURIComponent(pmId)}/series?${qs.toString()}`
       );
       setPayload(json);
-      if (json.minuteSeries.length === 0 && json.hourlySeries.length > 0) {
-        setActiveTable("electric_pm_telemetry");
-      } else if (json.minuteSeries.length > 0) {
-        setActiveTable("electric_pm_telemetry_minute");
+      if (!silent) {
+        if (json.minuteSeries.length === 0 && json.hourlySeries.length > 0) {
+          setActiveTable("electric_pm_telemetry");
+        } else if (json.minuteSeries.length > 0) {
+          setActiveTable("electric_pm_telemetry_minute");
+        }
       }
     } catch (err: any) {
-      setError(err?.message || "Gagal memuat detail PM");
+      if (!silent) {
+        setError(err?.message || "Gagal memuat detail PM");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     if (pmId) {
-      void fetchSeries();
+      void fetchSeries(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pmId, hours, rangeMode]);
+
+  // Silent 15s live auto-refresh while modal is open in live range modes
+  useEffect(() => {
+    if (!pmId || rangeMode === "custom") return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void fetchSeries(true);
+      }
+    }, 15_000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pmId, hours, rangeMode, resetAt]);
 
   const activeSeries: AnnotatedReading[] = useMemo(() => {
     if (!payload) return [];
@@ -367,9 +387,9 @@ export function PmHealthDetailModal({
               />
               <button
                 type="button"
-                onClick={() => void fetchSeries()}
+                onClick={() => void fetchSeries(false)}
                 disabled={loading}
-                className="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-sky-500 text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 dark:bg-sky-500 text-white text-xs font-bold disabled:opacity-50 cursor-pointer transition"
               >
                 {loading ? "Memuat..." : "Muat"}
               </button>

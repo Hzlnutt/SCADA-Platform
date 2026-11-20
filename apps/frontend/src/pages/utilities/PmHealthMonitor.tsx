@@ -35,6 +35,8 @@ import { PmChecklistPanel } from "../../components/pm-health/PmChecklistPanel";
 
 type MainTab = "overview" | "checklist" | "logs" | "audit";
 
+const AUTO_REFRESH_MS = 15_000;
+
 export default function PmHealthMonitor() {
   const role = useAuthStore((s) => s.user?.role ?? "user");
   const isAdmin = isSeniorUnitHeadOrAdmin(role);
@@ -51,6 +53,15 @@ export default function PmHealthMonitor() {
   useEffect(() => {
     localStorage.setItem("scada_pm_health_sound", soundEnabled ? "on" : "off");
   }, [soundEnabled]);
+
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("scada_pm_health_autorefresh") !== "off";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("scada_pm_health_autorefresh", autoRefreshEnabled ? "on" : "off");
+  }, [autoRefreshEnabled]);
 
   // Global monitoring state
   const [activeTab, setActiveTab] = useState<MainTab>("overview");
@@ -115,22 +126,27 @@ export default function PmHealthMonitor() {
   const [selectedPmId, setSelectedPmId] = useState<string | null>(null);
   const [manualScanning, setManualScanning] = useState(false);
 
-  const fetchChecklist = useCallback(async () => {
-    if (!isAdmin) return;
-    setChecklistLoading(true);
-    try {
-      const json = await getJson<ChecklistResponse>("/pm-health/checklist");
-      setChecklistMap(json.items || {});
-      if (Array.isArray(json.catalog)) {
-        setChecklistCatalog(json.catalog);
+  const fetchChecklist = useCallback(
+    async (silent = false) => {
+      if (!isAdmin) return;
+      if (!silent) setChecklistLoading(true);
+      try {
+        const json = await getJson<ChecklistResponse>("/pm-health/checklist");
+        setChecklistMap(json.items || {});
+        if (Array.isArray(json.catalog)) {
+          setChecklistCatalog(json.catalog);
+        }
+        setChecklistError(null);
+      } catch (err: any) {
+        if (!silent) {
+          setChecklistError(err?.message || "Gagal memuat checklist verifikasi PM");
+        }
+      } finally {
+        if (!silent) setChecklistLoading(false);
       }
-      setChecklistError(null);
-    } catch (err: any) {
-      setChecklistError(err?.message || "Gagal memuat checklist verifikasi PM");
-    } finally {
-      setChecklistLoading(false);
-    }
-  }, [isAdmin]);
+    },
+    [isAdmin]
+  );
 
   const fetchHealth = useCallback(async () => {
     if (!isAdmin) return;
@@ -153,10 +169,13 @@ export default function PmHealthMonitor() {
   }, [isAdmin]);
 
   const fetchOverview = useCallback(
-    async (overrideMode?: "since_reset" | "hours") => {
+    async (overrideMode?: "since_reset" | "hours", options?: { silent?: boolean }) => {
       if (!isAdmin) return;
-      setOverviewLoading(true);
-      setOverviewError(null);
+      const silent = Boolean(options?.silent);
+      if (!silent) {
+        setOverviewLoading(true);
+        setOverviewError(null);
+      }
       try {
         const effectiveMode = overrideMode ?? windowMode;
         const qs = new URLSearchParams({ source: sourceFilter });
@@ -167,52 +186,83 @@ export default function PmHealthMonitor() {
         }
         const json = await getJson<OverviewResponse>(`/pm-health/overview?${qs.toString()}`);
         setOverview(json);
+        setOverviewError(null);
         setUnreadCount(json.logStats.unreadCount);
         setUnackedCount(json.logStats.unacknowledgedCount);
         setResetAt(json.logStats.resetAt ?? null);
+
+        // Surface live anomaly notifications even if reverse proxy buffers/drops SSE
+        if (silent && Array.isArray(json.newlyLogged) && json.newlyLogged.length > 0) {
+          const incoming = json.newlyLogged;
+          setToasts((prev) => {
+            const seen = new Set(prev.map((p) => p.id));
+            const unique = incoming.filter((i) => !seen.has(i.id));
+            return unique.length > 0 ? [...unique, ...prev].slice(0, 6) : prev;
+          });
+          if (soundEnabledRef.current) {
+            playPmAnomalyChime();
+          }
+        }
       } catch (err: any) {
-        setOverviewError(err?.message || "Gagal memuat data kesehatan Power Meter");
+        if (!silent) {
+          setOverviewError(err?.message || "Gagal memuat data kesehatan Power Meter");
+        }
       } finally {
-        setOverviewLoading(false);
+        if (!silent) {
+          setOverviewLoading(false);
+        }
       }
     },
     [isAdmin, windowMode, windowHours, sourceFilter]
   );
 
-  const fetchLogs = useCallback(async () => {
-    if (!isAdmin) return;
-    setLogsLoading(true);
-    try {
-      const qs = new URLSearchParams({
-        type: logTypeFilter,
-        source: logSourceFilter,
-        ack: logAckFilter,
-        limit: "1000"
-      });
-      if (logSearch.trim()) qs.set("search", logSearch.trim());
-      if (logStartDate) qs.set("startDate", logStartDate);
-      if (logEndDate) qs.set("endDate", logEndDate);
+  const fetchLogs = useCallback(
+    async (silent = false) => {
+      if (!isAdmin) return;
+      if (!silent) setLogsLoading(true);
+      try {
+        const qs = new URLSearchParams({
+          type: logTypeFilter,
+          source: logSourceFilter,
+          ack: logAckFilter,
+          limit: "1000"
+        });
+        if (logSearch.trim()) qs.set("search", logSearch.trim());
+        if (logStartDate) qs.set("startDate", logStartDate);
+        if (logEndDate) qs.set("endDate", logEndDate);
 
-      const json = await getJson<{
-        logs: AnomalyEvent[];
-        total: number;
-        unreadCount: number;
-        unacknowledgedCount: number;
-        resetAt?: string | null;
-      }>(`/pm-health/logs?${qs.toString()}`);
-      setLogs(json.logs || []);
-      setLogsTotal(json.total || 0);
-      setUnreadCount(json.unreadCount || 0);
-      setUnackedCount(json.unacknowledgedCount || 0);
-      if ("resetAt" in json) {
-        setResetAt(json.resetAt ?? null);
+        const json = await getJson<{
+          logs: AnomalyEvent[];
+          total: number;
+          unreadCount: number;
+          unacknowledgedCount: number;
+          resetAt?: string | null;
+        }>(`/pm-health/logs?${qs.toString()}`);
+        setLogs(json.logs || []);
+        setLogsTotal(json.total || 0);
+        setUnreadCount(json.unreadCount || 0);
+        setUnackedCount(json.unacknowledgedCount || 0);
+        if ("resetAt" in json) {
+          setResetAt(json.resetAt ?? null);
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (!silent) setLogsLoading(false);
       }
-    } catch {
-      // ignore
-    } finally {
-      setLogsLoading(false);
-    }
-  }, [isAdmin, logTypeFilter, logSourceFilter, logAckFilter, logSearch, logStartDate, logEndDate]);
+    },
+    [isAdmin, logTypeFilter, logSourceFilter, logAckFilter, logSearch, logStartDate, logEndDate]
+  );
+
+  const fetchHealthRef = useRef(fetchHealth);
+  fetchHealthRef.current = fetchHealth;
+  const fetchOverviewRef = useRef(fetchOverview);
+  fetchOverviewRef.current = fetchOverview;
+  const fetchLogsRef = useRef(fetchLogs);
+  fetchLogsRef.current = fetchLogs;
+  const fetchChecklistRef = useRef(fetchChecklist);
+  fetchChecklistRef.current = fetchChecklist;
+  const autoRefreshInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -234,7 +284,47 @@ export default function PmHealthMonitor() {
     void fetchChecklist();
   }, [isAdmin, fetchChecklist]);
 
-  // Authenticated SSE stream for live anomaly push notifications & baseline sync
+  // Guaranteed real-time auto-refresh every 15s (works even behind buffering reverse proxies / Nginx)
+  useEffect(() => {
+    if (!isAdmin || !autoRefreshEnabled) return;
+
+    const runAutoRefresh = async () => {
+      if (document.visibilityState !== "visible") return;
+      if (autoRefreshInFlightRef.current) return;
+      autoRefreshInFlightRef.current = true;
+      try {
+        await Promise.all([
+          fetchOverviewRef.current(undefined, { silent: true }),
+          fetchHealthRef.current(),
+          fetchLogsRef.current(true),
+          fetchChecklistRef.current(true)
+        ]);
+      } finally {
+        autoRefreshInFlightRef.current = false;
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      void runAutoRefresh();
+    }, AUTO_REFRESH_MS);
+
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") {
+        void runAutoRefresh();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityOrFocus);
+    window.addEventListener("focus", onVisibilityOrFocus);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityOrFocus);
+      window.removeEventListener("focus", onVisibilityOrFocus);
+    };
+  }, [isAdmin, autoRefreshEnabled]);
+
+  // Authenticated SSE stream for instant anomaly push notifications & live checklist/baseline sync
   useEffect(() => {
     if (!isAdmin) return;
     const token = getAccessToken();
@@ -262,8 +352,8 @@ export default function PmHealthMonitor() {
           setUnackedCount(data.stats.unacknowledgedCount ?? 0);
           if ("resetAt" in data.stats) setResetAt(data.stats.resetAt ?? null);
         }
-        void fetchOverview();
-        void fetchLogs();
+        void fetchOverviewRef.current(undefined, { silent: true });
+        void fetchLogsRef.current(true);
       } catch {
         // ignore parse error
       }
@@ -277,8 +367,8 @@ export default function PmHealthMonitor() {
           setUnackedCount(data.stats.unacknowledgedCount ?? 0);
           if ("resetAt" in data.stats) setResetAt(data.stats.resetAt ?? null);
         }
-        void fetchHealth();
-        void fetchOverview();
+        void fetchHealthRef.current();
+        void fetchOverviewRef.current(undefined, { silent: true });
       } catch {
         // ignore
       }
@@ -291,9 +381,9 @@ export default function PmHealthMonitor() {
         setResetAt(nextResetAt);
         setToasts([]);
         setWindowMode(nextResetAt ? "since_reset" : "hours");
-        void fetchHealth();
-        void fetchOverview(nextResetAt ? "since_reset" : "hours");
-        void fetchLogs();
+        void fetchHealthRef.current();
+        void fetchOverviewRef.current(nextResetAt ? "since_reset" : "hours", { silent: true });
+        void fetchLogsRef.current(true);
       } catch {
         // ignore
       }
@@ -329,7 +419,7 @@ export default function PmHealthMonitor() {
       es.removeEventListener("checklist_reset", onChecklistReset);
       es.close();
     };
-  }, [isAdmin, fetchHealth, fetchLogs, fetchOverview]);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!bellOpen) return;
@@ -620,6 +710,12 @@ export default function PmHealthMonitor() {
 
   const summary = overview?.summary;
   const isViewingSinceReset = Boolean(windowMode === "since_reset" && resetAt);
+  const latestScanTimestamp = (() => {
+    const a = overview?.scannedAt || "";
+    const b = health?.monitor.lastPollAt || "";
+    if (a && b) return a >= b ? a : b;
+    return a || b || null;
+  })();
 
   return (
     <div className="space-y-5">
@@ -632,14 +728,36 @@ export default function PmHealthMonitor() {
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 text-[11px] font-bold">
-            <span className={`w-2 h-2 rounded-full ${health?.ok ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+            <span className={`w-2 h-2 rounded-full ${health?.ok || overview ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
             <span>Read-Only DB</span>
-            {health?.monitor.lastPollAt && (
+            {latestScanTimestamp && (
               <span className="font-mono text-emerald-600/80 dark:text-emerald-300/80">
-                • {health.monitor.lastPollAt.slice(11)}
+                • {latestScanTimestamp.slice(11)}
               </span>
             )}
           </span>
+
+          <button
+            type="button"
+            onClick={() => setAutoRefreshEnabled((prev) => !prev)}
+            title={
+              autoRefreshEnabled
+                ? "Auto-refresh aktif setiap 15 detik — klik untuk menjeda"
+                : "Auto-refresh dijeda — klik untuk mengaktifkan kembali"
+            }
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition cursor-pointer ${
+              autoRefreshEnabled
+                ? "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/30 hover:bg-sky-500/20"
+                : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-sky-400"
+            }`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                autoRefreshEnabled ? "bg-sky-500 animate-pulse" : "bg-slate-400"
+              }`}
+            />
+            <span>{autoRefreshEnabled ? "Auto 15d" : "Auto: Jeda"}</span>
+          </button>
 
           <button
             type="button"
@@ -820,7 +938,11 @@ export default function PmHealthMonitor() {
               <p className="mt-0.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                 {isViewingSinceReset && summary
                   ? summary.criticalCount === 0 && summary.warningCount === 0
-                    ? `Semua PM terpantau sehat sejak ${resetAt.slice(11)} WIB — belum ada anomali naik-turun baru. Polling otomatis aktif setiap 30 detik.`
+                    ? `Semua PM terpantau sehat sejak ${resetAt.slice(11)} WIB — belum ada anomali naik-turun baru. ${
+                        autoRefreshEnabled
+                          ? "Auto-refresh realtime aktif setiap 15 detik."
+                          : "Auto-refresh sedang dijeda."
+                      }`
                     : `Terdeteksi ${summary.criticalCount} PM bermasalah (${summary.totalDropsInWindow}x drop/rollover) sejak ${resetAt.slice(11)} WIB.`
                   : `Log & notifikasi live hanya mencatat anomali baru setelah ${resetAt} WIB.`}
               </p>
@@ -974,7 +1096,7 @@ export default function PmHealthMonitor() {
           onClick={() => setActiveTab("overview")}
           className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
             activeTab === "overview"
-              ? "bg-slate-900 dark:bg-sky-500 text-white shadow-sm"
+              ? "bg-sky-600 dark:bg-sky-500 text-white shadow-sm shadow-sky-500/20"
               : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:border-sky-400"
           }`}
         >
@@ -986,7 +1108,7 @@ export default function PmHealthMonitor() {
           onClick={() => setActiveTab("checklist")}
           className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
             activeTab === "checklist"
-              ? "bg-slate-900 dark:bg-sky-500 text-white shadow-sm"
+              ? "bg-sky-600 dark:bg-sky-500 text-white shadow-sm shadow-sky-500/20"
               : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:border-sky-400"
           }`}
         >
@@ -1011,7 +1133,7 @@ export default function PmHealthMonitor() {
           onClick={() => setActiveTab("logs")}
           className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
             activeTab === "logs"
-              ? "bg-slate-900 dark:bg-sky-500 text-white shadow-sm"
+              ? "bg-sky-600 dark:bg-sky-500 text-white shadow-sm shadow-sky-500/20"
               : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:border-sky-400"
           }`}
         >
@@ -1028,7 +1150,7 @@ export default function PmHealthMonitor() {
           onClick={() => setActiveTab("audit")}
           className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
             activeTab === "audit"
-              ? "bg-slate-900 dark:bg-sky-500 text-white shadow-sm"
+              ? "bg-sky-600 dark:bg-sky-500 text-white shadow-sm shadow-sky-500/20"
               : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:border-sky-400"
           }`}
         >

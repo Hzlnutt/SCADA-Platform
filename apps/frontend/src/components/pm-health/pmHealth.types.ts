@@ -99,6 +99,7 @@ export interface OverviewResponse {
     hourlyRowsScanned: number;
   };
   pms: PmHealthSummary[];
+  newlyLogged?: AnomalyEvent[];
   logStats: {
     totalLogs: number;
     unreadCount: number;

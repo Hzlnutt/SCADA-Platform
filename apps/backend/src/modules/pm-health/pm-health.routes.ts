@@ -16,13 +16,14 @@ import { pmHealthStore } from "./pm-health.store";
 import { PM_CATALOG, resolvePmMeta } from "./pm-health.catalog";
 import type { AnomalyEvent, AnomalyType, PmChecklistPatch, SourceTable } from "./pm-health.types";
 
-const POLL_INTERVAL_MS = 30_000;
+const POLL_INTERVAL_MS = 15_000;
 const DEFAULT_LOOKBACK_HOURS = 24;
 
 const sseClients = new Set<Response>();
 let lastPollAt: string | null = null;
 let lastPollError: string | null = null;
 let isPolling = false;
+let lastPollStartedAtMs = 0;
 let pollerStarted = false;
 
 function broadcastSse(eventName: string, payload: unknown) {
@@ -66,8 +67,9 @@ function maxTimestamp(a: string, b: string): string {
 }
 
 async function runPmHealthBackgroundPoll(isInitial = false) {
-  if (isPolling) return;
+  if (isPolling && Date.now() - lastPollStartedAtMs < 60_000) return;
   isPolling = true;
+  lastPollStartedAtMs = Date.now();
   try {
     const resetAt = pmHealthStore.getResetAt();
     const minuteLookbackHours = isInitial ? DEFAULT_LOOKBACK_HOURS : 2;
@@ -149,7 +151,7 @@ function ensurePollerStarted() {
   // Delay initial read-only poll slightly so SCADA startup runs with zero contention
   const initTimer = setTimeout(() => {
     void runPmHealthBackgroundPoll(true);
-  }, 5000);
+  }, 2000);
   initTimer.unref?.();
 
   const interval = setInterval(() => {
@@ -177,6 +179,7 @@ const adminOnly = [authenticate, authorize(pmHealthAllowedRoles)];
 
 pmHealthRouter.get("/pm-health/health", ...adminOnly, async (_req: Request, res: Response) => {
   ensurePollerStarted();
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   const dbStatus = await testPmHealthDbConnection();
   res.json({
     ok: dbStatus.connected,
@@ -196,6 +199,7 @@ pmHealthRouter.get("/pm-health/health", ...adminOnly, async (_req: Request, res:
 
 pmHealthRouter.get("/pm-health/overview", ...adminOnly, async (req: Request, res: Response) => {
   ensurePollerStarted();
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   try {
     const source = parseSourceParam(req.query.source);
     const resetAt = pmHealthStore.getResetAt();
@@ -247,6 +251,8 @@ pmHealthRouter.get("/pm-health/overview", ...adminOnly, async (req: Request, res
     });
 
     const newlyLogged = pmHealthStore.upsertAnomalies(anomalies, { respectResetAt: true });
+    const scannedAt = formatWibNow();
+    lastPollAt = scannedAt;
 
     const summary = {
       totalPms: pms.length,
@@ -270,9 +276,10 @@ pmHealthRouter.get("/pm-health/overview", ...adminOnly, async (req: Request, res
         sinceReset,
         resetAt
       },
-      scannedAt: formatWibNow(),
+      scannedAt,
       summary,
       pms,
+      newlyLogged: newlyLogged.slice(0, 10),
       logStats: pmHealthStore.getStats()
     });
   } catch (err: any) {
@@ -586,9 +593,10 @@ pmHealthRouter.get(
   ...adminOnly,
   (req: Request, res: Response) => {
     ensurePollerStarted();
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
     res.flushHeaders?.();
 
     sseClients.add(res);
@@ -607,7 +615,7 @@ pmHealthRouter.get(
         clearInterval(ping);
         sseClients.delete(res);
       }
-    }, 25_000);
+    }, 15_000);
 
     req.on("close", () => {
       clearInterval(ping);
