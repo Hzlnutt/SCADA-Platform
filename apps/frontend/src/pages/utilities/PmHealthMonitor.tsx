@@ -2,20 +2,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { useAuthStore, getAccessToken } from "../../store/auth.store";
 import { useSystemStore } from "../../store/system.store";
-import { buildApiUrl, deleteJson, getJson, postJson } from "../../services/api.client";
+import { buildApiUrl, deleteJson, getJson, patchJson, postJson } from "../../services/api.client";
 import type {
   AnomalyEvent,
   AnomalyType,
+  ChecklistResponse,
   HealthResponse,
   HealthStatus,
   OverviewResponse,
+  PmCatalogMeta,
+  PmChecklistItem,
+  PmChecklistPatch,
   SourceTable
 } from "../../components/pm-health/pmHealth.types";
 import {
   anomalyTypeMeta,
   fmtDelta,
   fmtNumber,
+  getChecklistProgress,
   getDaysAgoIso,
+  getEmptyChecklistItem,
   getLocalTodayIso,
   healthStatusMeta,
   playPmAnomalyChime,
@@ -24,8 +30,9 @@ import {
 import { PmMiniSparkline } from "../../components/pm-health/PmMiniSparkline";
 import { PmHealthDetailModal } from "../../components/pm-health/PmHealthDetailModal";
 import { PmAnomalyToastStack } from "../../components/pm-health/PmAnomalyToastStack";
+import { PmChecklistPanel } from "../../components/pm-health/PmChecklistPanel";
 
-type MainTab = "overview" | "logs" | "audit";
+type MainTab = "overview" | "checklist" | "logs" | "audit";
 
 export default function PmHealthMonitor() {
   const role = useAuthStore((s) => s.user?.role ?? "user");
@@ -93,12 +100,36 @@ export default function PmHealthMonitor() {
     anomalies: AnomalyEvent[];
   } | null>(null);
 
+  // Verification Checklist state (eWON, Endpoint, Panel LCD)
+  const [checklistMap, setChecklistMap] = useState<Record<string, PmChecklistItem>>({});
+  const [checklistCatalog, setChecklistCatalog] = useState<PmCatalogMeta[]>([]);
+  const [checklistLoading, setChecklistLoading] = useState(false);
+  const [savingChecklistPmIds, setSavingChecklistPmIds] = useState<Record<string, boolean>>({});
+  const [checklistError, setChecklistError] = useState<string | null>(null);
+
   // Live notifications & UI popovers
   const [toasts, setToasts] = useState<AnomalyEvent[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement | null>(null);
   const [selectedPmId, setSelectedPmId] = useState<string | null>(null);
   const [manualScanning, setManualScanning] = useState(false);
+
+  const fetchChecklist = useCallback(async () => {
+    if (!isAdmin) return;
+    setChecklistLoading(true);
+    try {
+      const json = await getJson<ChecklistResponse>("/pm-health/checklist");
+      setChecklistMap(json.items || {});
+      if (Array.isArray(json.catalog)) {
+        setChecklistCatalog(json.catalog);
+      }
+      setChecklistError(null);
+    } catch (err: any) {
+      setChecklistError(err?.message || "Gagal memuat checklist verifikasi PM");
+    } finally {
+      setChecklistLoading(false);
+    }
+  }, [isAdmin]);
 
   const fetchHealth = useCallback(async () => {
     if (!isAdmin) return;
@@ -197,6 +228,11 @@ export default function PmHealthMonitor() {
     void fetchLogs();
   }, [isAdmin, fetchLogs]);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    void fetchChecklist();
+  }, [isAdmin, fetchChecklist]);
+
   // Authenticated SSE stream for live anomaly push notifications & baseline sync
   useEffect(() => {
     if (!isAdmin) return;
@@ -262,13 +298,34 @@ export default function PmHealthMonitor() {
       }
     };
 
+    const onChecklistUpdated = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        const updatedItem = data?.item as PmChecklistItem | undefined;
+        if (updatedItem && updatedItem.pmId) {
+          const key = updatedItem.pmId.toUpperCase();
+          setChecklistMap((prev) => ({ ...prev, [key]: updatedItem }));
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    const onChecklistReset = () => {
+      setChecklistMap({});
+    };
+
     es.addEventListener("anomaly", onAnomaly);
     es.addEventListener("heartbeat_scan", onHeartbeat);
     es.addEventListener("baseline_reset", onBaselineReset);
+    es.addEventListener("checklist_updated", onChecklistUpdated);
+    es.addEventListener("checklist_reset", onChecklistReset);
     return () => {
       es.removeEventListener("anomaly", onAnomaly);
       es.removeEventListener("heartbeat_scan", onHeartbeat);
       es.removeEventListener("baseline_reset", onBaselineReset);
+      es.removeEventListener("checklist_updated", onChecklistUpdated);
+      es.removeEventListener("checklist_reset", onChecklistReset);
       es.close();
     };
   }, [isAdmin, fetchHealth, fetchLogs, fetchOverview]);
@@ -371,6 +428,98 @@ export default function PmHealthMonitor() {
     setUnreadCount(0);
     await fetchLogs();
   };
+
+  const checklistMapRef = useRef(checklistMap);
+  checklistMapRef.current = checklistMap;
+
+  const handleUpdateChecklist = useCallback(async (pmId: string, patch: PmChecklistPatch) => {
+    const key = pmId.trim().toUpperCase();
+    const previous = checklistMapRef.current[key];
+    const base = previous ?? getEmptyChecklistItem(key);
+    const optimistic: PmChecklistItem = {
+      ...base,
+      ewonChecked: typeof patch.ewonChecked === "boolean" ? patch.ewonChecked : base.ewonChecked,
+      endpointChecked: typeof patch.endpointChecked === "boolean" ? patch.endpointChecked : base.endpointChecked,
+      panelLcdChecked: typeof patch.panelLcdChecked === "boolean" ? patch.panelLcdChecked : base.panelLcdChecked,
+      notes: typeof patch.notes === "string" ? patch.notes : base.notes
+    };
+
+    setChecklistError(null);
+    setChecklistMap((prev) => ({ ...prev, [key]: optimistic }));
+    setSavingChecklistPmIds((prev) => ({ ...prev, [key]: true }));
+    try {
+      const json = await patchJson<{ ok: boolean; item: PmChecklistItem }>(
+        `/pm-health/checklist/${encodeURIComponent(key)}`,
+        patch
+      );
+      if (json?.item) {
+        setChecklistMap((prev) => ({ ...prev, [key]: json.item }));
+      }
+    } catch (err: any) {
+      // Rollback on failure
+      setChecklistMap((prev) => {
+        const next = { ...prev };
+        if (previous) next[key] = previous;
+        else delete next[key];
+        return next;
+      });
+      setChecklistError(err?.message || `Gagal menyimpan checklist untuk ${key}`);
+    } finally {
+      setSavingChecklistPmIds((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  }, []);
+
+  const handleResetChecklistSingle = useCallback(async (pmId: string) => {
+    const key = pmId.trim().toUpperCase();
+    const previous = checklistMapRef.current[key];
+    setChecklistError(null);
+    setChecklistMap((prev) => ({ ...prev, [key]: getEmptyChecklistItem(key) }));
+    setSavingChecklistPmIds((prev) => ({ ...prev, [key]: true }));
+    try {
+      const json = await deleteJson<{ ok: boolean; item?: PmChecklistItem }>(
+        `/pm-health/checklist/${encodeURIComponent(key)}`
+      );
+      setChecklistMap((prev) => ({ ...prev, [key]: json?.item ?? getEmptyChecklistItem(key) }));
+    } catch (err: any) {
+      if (previous) {
+        setChecklistMap((prev) => ({ ...prev, [key]: previous }));
+      }
+      setChecklistError(err?.message || `Gagal mereset checklist ${key}`);
+    } finally {
+      setSavingChecklistPmIds((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  }, []);
+
+  const handleResetChecklistAll = useCallback(async () => {
+    const previous = checklistMapRef.current;
+    setChecklistError(null);
+    setChecklistMap({});
+    try {
+      await deleteJson("/pm-health/checklist");
+    } catch (err: any) {
+      setChecklistMap(previous);
+      setChecklistError(err?.message || "Gagal mereset seluruh checklist");
+    }
+  }, []);
+
+  const checklistSummary = useMemo(() => {
+    const ids = new Set<string>();
+    for (const c of checklistCatalog) ids.add(c.pmId.toUpperCase());
+    for (const pm of overview?.pms || []) ids.add(pm.pmId.toUpperCase());
+    let complete = 0;
+    for (const id of ids) {
+      if (getChecklistProgress(checklistMap[id]).isComplete) complete++;
+    }
+    return { complete, total: ids.size };
+  }, [checklistCatalog, overview?.pms, checklistMap]);
 
   const handleExportCsv = () => {
     const headers = [
@@ -830,6 +979,31 @@ export default function PmHealthMonitor() {
 
         <button
           type="button"
+          onClick={() => setActiveTab("checklist")}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+            activeTab === "checklist"
+              ? "bg-slate-900 dark:bg-sky-500 text-white shadow-sm"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:border-sky-400"
+          }`}
+        >
+          <span>Checklist Verifikasi PM</span>
+          {checklistSummary.total > 0 && (
+            <span
+              className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                checklistSummary.complete === checklistSummary.total
+                  ? "bg-emerald-500 text-white"
+                  : activeTab === "checklist"
+                  ? "bg-white/20 text-white"
+                  : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+              }`}
+            >
+              {checklistSummary.complete}/{checklistSummary.total}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab("logs")}
           className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
             activeTab === "logs"
@@ -857,6 +1031,19 @@ export default function PmHealthMonitor() {
           <span>Audit Historis</span>
         </button>
       </div>
+
+      {checklistError && (
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2.5 text-xs font-semibold text-rose-700 dark:text-rose-300 flex flex-wrap items-center justify-between gap-2">
+          <span>Checklist: {checklistError}</span>
+          <button
+            type="button"
+            onClick={() => setChecklistError(null)}
+            className="text-[11px] font-bold underline cursor-pointer"
+          >
+            Tutup
+          </button>
+        </div>
+      )}
 
       {/* ══════════════════ TAB 1: PM HEALTH OVERVIEW ══════════════════ */}
       {activeTab === "overview" && (
@@ -933,7 +1120,7 @@ export default function PmHealthMonitor() {
           </div>
 
           <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full min-w-[920px] text-left text-xs border-collapse">
+            <table className="w-full min-w-[1040px] text-left text-xs border-collapse">
               <thead className="bg-slate-50 dark:bg-slate-950/70 text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                 <tr>
                   <th className="px-4 py-3">Status</th>
@@ -942,6 +1129,7 @@ export default function PmHealthMonitor() {
                   <th className="px-4 py-3 text-right">Active Energy (kWh)</th>
                   <th className="px-4 py-3 text-right">Daya (kW)</th>
                   <th className="px-4 py-3">Deteksi Anomali</th>
+                  <th className="px-4 py-3">Verifikasi PM</th>
                   <th className="px-4 py-3">Update Terakhir</th>
                   <th className="px-4 py-3 text-right">Aksi</th>
                 </tr>
@@ -949,19 +1137,21 @@ export default function PmHealthMonitor() {
               <tbody translate="no" className="notranslate divide-y divide-slate-100 dark:divide-slate-800/80">
                 {overviewLoading && !overview ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-14 text-center text-slate-400 font-semibold">
+                    <td colSpan={9} className="px-4 py-14 text-center text-slate-400 font-semibold">
                       Memindai electric_pm_telemetry &amp; electric_pm_telemetry_minute...
                     </td>
                   </tr>
                 ) : filteredPms.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-14 text-center text-slate-400 font-semibold">
+                    <td colSpan={9} className="px-4 py-14 text-center text-slate-400 font-semibold">
                       Tidak ada Power Meter yang cocok dengan filter.
                     </td>
                   </tr>
                 ) : (
                   filteredPms.map((pm) => {
                     const sMeta = healthStatusMeta(pm.healthStatus);
+                    const chk = checklistMap[pm.pmId.toUpperCase()] ?? getEmptyChecklistItem(pm.pmId.toUpperCase());
+                    const chkSaving = Boolean(savingChecklistPmIds[pm.pmId.toUpperCase()]);
                     return (
                       <tr
                         key={pm.pmId}
@@ -1041,6 +1231,37 @@ export default function PmHealthMonitor() {
                           )}
                         </td>
 
+                        <td
+                          className="px-4 py-3 whitespace-nowrap"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center gap-1">
+                            {(
+                              [
+                                { key: "ewonChecked", short: "eWON", full: "Cek PM dengan eWON", val: chk.ewonChecked },
+                                { key: "endpointChecked", short: "EP", full: "Cek PM dengan Endpoint", val: chk.endpointChecked },
+                                { key: "panelLcdChecked", short: "LCD", full: "Cek PM dengan Panel LCD", val: chk.panelLcdChecked }
+                              ] as const
+                            ).map((chip) => (
+                              <button
+                                key={chip.key}
+                                type="button"
+                                disabled={chkSaving}
+                                title={`${chip.full}: ${chip.val ? "Sudah sesuai" : "Belum dicek"} (klik untuk toggle)`}
+                                onClick={() => void handleUpdateChecklist(pm.pmId, { [chip.key]: !chip.val })}
+                                className={`px-1.5 py-0.5 rounded-md border font-mono text-[10px] font-bold transition cursor-pointer disabled:opacity-50 ${
+                                  chip.val
+                                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25"
+                                    : "bg-slate-100/80 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-sky-400 hover:text-sky-600 dark:hover:text-sky-300"
+                                }`}
+                              >
+                                {chip.val ? "✓ " : ""}
+                                {chip.short}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+
                         <td className="px-4 py-3 font-mono text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
                           <div>{pm.lastTimestamp || "—"}</div>
                           <div className="text-[10px] text-slate-400">{sourceTableShort(pm.latestSource)}</div>
@@ -1066,6 +1287,21 @@ export default function PmHealthMonitor() {
             </table>
           </div>
         </section>
+      )}
+
+      {/* ══════════════════ TAB 2: PM VERIFICATION CHECKLIST ══════════════════ */}
+      {activeTab === "checklist" && (
+        <PmChecklistPanel
+          pms={overview?.pms || []}
+          catalog={checklistCatalog}
+          checklistMap={checklistMap}
+          savingPmIds={savingChecklistPmIds}
+          loading={checklistLoading}
+          onUpdateChecklist={handleUpdateChecklist}
+          onResetSingle={handleResetChecklistSingle}
+          onResetAll={handleResetChecklistAll}
+          onInspectPm={(pmId) => setSelectedPmId(pmId)}
+        />
       )}
 
       {/* ══════════════════ TAB 2: ANOMALY LOGS ══════════════════ */}
@@ -1458,6 +1694,13 @@ export default function PmHealthMonitor() {
         initialSinceReset={isViewingSinceReset}
         resetAt={resetAt}
         isDark={isDark}
+        checklist={
+          selectedPmId
+            ? checklistMap[selectedPmId.toUpperCase()] ?? getEmptyChecklistItem(selectedPmId.toUpperCase())
+            : undefined
+        }
+        checklistSaving={selectedPmId ? Boolean(savingChecklistPmIds[selectedPmId.toUpperCase()]) : false}
+        onUpdateChecklist={handleUpdateChecklist}
         onClose={() => setSelectedPmId(null)}
       />
 

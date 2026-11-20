@@ -3,11 +3,18 @@ import { Line } from "react-chartjs-2";
 import type { ChartOptions } from "chart.js";
 import "../charts/chartjs";
 import { getJson } from "../../services/api.client";
-import type { AnnotatedReading, PmSeriesResponse, SourceTable } from "./pmHealth.types";
+import type {
+  AnnotatedReading,
+  PmChecklistItem,
+  PmChecklistPatch,
+  PmSeriesResponse,
+  SourceTable
+} from "./pmHealth.types";
 import {
   anomalyTypeMeta,
   fmtDelta,
   fmtNumber,
+  getChecklistProgress,
   getLocalTodayIso,
   sourceTableShort
 } from "./pmHealth.utils";
@@ -18,6 +25,9 @@ interface PmHealthDetailModalProps {
   initialSinceReset?: boolean;
   resetAt?: string | null;
   isDark: boolean;
+  checklist?: PmChecklistItem;
+  checklistSaving?: boolean;
+  onUpdateChecklist?: (pmId: string, patch: PmChecklistPatch) => Promise<void>;
   onClose: () => void;
 }
 
@@ -27,6 +37,9 @@ export function PmHealthDetailModal({
   initialSinceReset = false,
   resetAt = null,
   isDark,
+  checklist,
+  checklistSaving = false,
+  onUpdateChecklist,
   onClose
 }: PmHealthDetailModalProps) {
   const [rangeMode, setRangeMode] = useState<"since_reset" | "preset" | "custom">(
@@ -39,6 +52,13 @@ export function PmHealthDetailModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [payload, setPayload] = useState<PmSeriesResponse | null>(null);
+  const [noteDraft, setNoteDraft] = useState(checklist?.notes || "");
+  const [noteFocused, setNoteFocused] = useState(false);
+
+  useEffect(() => {
+    setNoteDraft(checklist?.notes || "");
+    setNoteFocused(false);
+  }, [pmId, checklist?.notes]);
 
   useEffect(() => {
     setHours(initialHours || 24);
@@ -362,6 +382,125 @@ export function PmHealthDetailModal({
           {error && (
             <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-700 dark:text-rose-300 text-xs font-semibold">
               {error}
+            </div>
+          )}
+
+          {/* Quick Verification Checklist Strip */}
+          {onUpdateChecklist && checklist && (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50 p-3.5 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
+                    Checklist Verifikasi PM
+                  </span>
+                  {(() => {
+                    const prog = getChecklistProgress(checklist);
+                    if (prog.isComplete) {
+                      return (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-emerald-700 dark:text-emerald-300 text-[10px] font-extrabold">
+                          ✓ Telah Sesuai (3/3)
+                        </span>
+                      );
+                    }
+                    if (prog.isPartial) {
+                      return (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/35 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
+                          Proses ({prog.checkedCount}/3)
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-200/80 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-bold">
+                        Belum Dicek (0/3)
+                      </span>
+                    );
+                  })()}
+                </div>
+                {checklist.updatedAt && (
+                  <span className="text-[10px] font-mono text-slate-400">
+                    Update: {checklist.updatedBy || "Admin"} • {checklist.updatedAt.slice(5, 16)} WIB
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {(
+                  [
+                    {
+                      key: "ewonChecked",
+                      label: "Cek PM dengan eWON",
+                      checked: checklist.ewonChecked,
+                      at: checklist.ewonCheckedAt
+                    },
+                    {
+                      key: "endpointChecked",
+                      label: "Cek PM dengan Endpoint",
+                      checked: checklist.endpointChecked,
+                      at: checklist.endpointCheckedAt
+                    },
+                    {
+                      key: "panelLcdChecked",
+                      label: "Cek PM dengan Panel LCD",
+                      checked: checklist.panelLcdChecked,
+                      at: checklist.panelLcdCheckedAt
+                    }
+                  ] as const
+                ).map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    disabled={checklistSaving}
+                    title={item.checked && item.at ? `Dicek pada ${item.at} WIB` : undefined}
+                    onClick={() =>
+                      void onUpdateChecklist(pmId, { [item.key]: !item.checked })
+                    }
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer disabled:opacity-50 ${
+                      item.checked
+                        ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25"
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-sky-400"
+                    }`}
+                  >
+                    <span
+                      className={`w-4 h-4 rounded-md flex items-center justify-center border ${
+                        item.checked
+                          ? "bg-emerald-500 border-emerald-500 text-white"
+                          : "border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-950"
+                      }`}
+                    >
+                      {item.checked && (
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </span>
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+
+                <input
+                  type="text"
+                  value={noteFocused ? noteDraft : checklist.notes}
+                  disabled={checklistSaving}
+                  placeholder="Catatan pengecekan (opsional)..."
+                  maxLength={500}
+                  onFocus={() => {
+                    setNoteDraft(checklist.notes);
+                    setNoteFocused(true);
+                  }}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  onBlur={() => {
+                    setNoteFocused(false);
+                    const trimmed = noteDraft.trim();
+                    if (trimmed !== checklist.notes.trim()) {
+                      void onUpdateChecklist(pmId, { notes: trimmed });
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+                  }}
+                  className="flex-1 min-w-[200px] px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                />
+              </div>
             </div>
           )}
 

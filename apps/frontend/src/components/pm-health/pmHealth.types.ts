@@ -178,3 +178,37 @@ export interface HealthResponse {
     storagePath: string;
   };
 }
+
+export interface PmChecklistItem {
+  pmId: string;
+  ewonChecked: boolean;
+  endpointChecked: boolean;
+  panelLcdChecked: boolean;
+  ewonCheckedAt: string | null;
+  endpointCheckedAt: string | null;
+  panelLcdCheckedAt: string | null;
+  notes: string;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+export interface PmChecklistPatch {
+  ewonChecked?: boolean;
+  endpointChecked?: boolean;
+  panelLcdChecked?: boolean;
+  notes?: string;
+}
+
+export interface PmCatalogMeta {
+  pmId: string;
+  name: string;
+  factory: string;
+  groupId: string;
+  area: string;
+}
+
+export interface ChecklistResponse {
+  ok: boolean;
+  items: Record<string, PmChecklistItem>;
+  catalog: PmCatalogMeta[];
+}

@@ -1,18 +1,41 @@
 import fs from "fs";
 import path from "path";
-import type { AnomalyEvent, AnomalyType, SourceTable } from "./pm-health.types";
+import type {
+  AnomalyEvent,
+  AnomalyType,
+  PmChecklistItem,
+  PmChecklistPatch,
+  SourceTable
+} from "./pm-health.types";
 
 const DATA_DIR = path.resolve(__dirname, "..", "..", "..", "data", "pm-health");
 const LOG_FILE = path.join(DATA_DIR, "anomaly-logs.json");
 const STATE_FILE = path.join(DATA_DIR, "monitor-state.json");
+const CHECKLIST_FILE = path.join(DATA_DIR, "pm-checklist.json");
 const MAX_LOGS = 5000;
 
 interface MonitorPersistedState {
   resetAt: string | null;
 }
 
+function createEmptyChecklistItem(pmId: string): PmChecklistItem {
+  return {
+    pmId,
+    ewonChecked: false,
+    endpointChecked: false,
+    panelLcdChecked: false,
+    ewonCheckedAt: null,
+    endpointCheckedAt: null,
+    panelLcdCheckedAt: null,
+    notes: "",
+    updatedAt: null,
+    updatedBy: null
+  };
+}
+
 class PmHealthLocalStore {
   private logs: Map<string, AnomalyEvent> = new Map();
+  private checklist: Map<string, PmChecklistItem> = new Map();
   private state: MonitorPersistedState = { resetAt: null };
   private loaded = false;
 
@@ -38,6 +61,29 @@ class PmHealthLocalStore {
             if (item && typeof item.id === "string") {
               this.logs.set(item.id, item as AnomalyEvent);
             }
+          }
+        }
+      }
+      if (fs.existsSync(CHECKLIST_FILE)) {
+        const rawChecklist = fs.readFileSync(CHECKLIST_FILE, "utf-8");
+        const parsedChecklist = JSON.parse(rawChecklist);
+        if (parsedChecklist && typeof parsedChecklist === "object" && !Array.isArray(parsedChecklist)) {
+          for (const [key, val] of Object.entries(parsedChecklist as Record<string, any>)) {
+            if (!val || typeof val !== "object") continue;
+            const normId = String(val.pmId || key).trim().toUpperCase();
+            if (!normId) continue;
+            this.checklist.set(normId, {
+              pmId: normId,
+              ewonChecked: Boolean(val.ewonChecked),
+              endpointChecked: Boolean(val.endpointChecked),
+              panelLcdChecked: Boolean(val.panelLcdChecked),
+              ewonCheckedAt: typeof val.ewonCheckedAt === "string" ? val.ewonCheckedAt : null,
+              endpointCheckedAt: typeof val.endpointCheckedAt === "string" ? val.endpointCheckedAt : null,
+              panelLcdCheckedAt: typeof val.panelLcdCheckedAt === "string" ? val.panelLcdCheckedAt : null,
+              notes: typeof val.notes === "string" ? val.notes : "",
+              updatedAt: typeof val.updatedAt === "string" ? val.updatedAt : null,
+              updatedBy: typeof val.updatedBy === "string" ? val.updatedBy : null
+            });
           }
         }
       }
@@ -221,6 +267,110 @@ class PmHealthLocalStore {
     }
     if (count > 0) this.persistLogs();
     return count;
+  }
+
+  private persistChecklist() {
+    try {
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      const obj: Record<string, PmChecklistItem> = {};
+      for (const [key, item] of this.checklist.entries()) {
+        obj[key] = item;
+      }
+      const tmpPath = `${CHECKLIST_FILE}.tmp`;
+      fs.writeFileSync(tmpPath, JSON.stringify(obj, null, 2), "utf-8");
+      fs.renameSync(tmpPath, CHECKLIST_FILE);
+    } catch {
+      // Non-fatal local persistence error
+    }
+  }
+
+  public getAllChecklist(): Record<string, PmChecklistItem> {
+    this.ensureLoaded();
+    const out: Record<string, PmChecklistItem> = {};
+    for (const [key, item] of this.checklist.entries()) {
+      out[key] = { ...item };
+    }
+    return out;
+  }
+
+  public getChecklistItem(pmId: string): PmChecklistItem {
+    this.ensureLoaded();
+    const key = String(pmId || "").trim().toUpperCase();
+    const existing = this.checklist.get(key);
+    return existing ? { ...existing } : createEmptyChecklistItem(key);
+  }
+
+  public upsertChecklistItem(
+    pmId: string,
+    patch: PmChecklistPatch,
+    actor: string,
+    nowWib: string
+  ): PmChecklistItem {
+    this.ensureLoaded();
+    const key = String(pmId || "").trim().toUpperCase();
+    const current = this.checklist.get(key) ?? createEmptyChecklistItem(key);
+
+    const nextEwon = typeof patch.ewonChecked === "boolean" ? patch.ewonChecked : current.ewonChecked;
+    const nextEndpoint = typeof patch.endpointChecked === "boolean" ? patch.endpointChecked : current.endpointChecked;
+    const nextPanelLcd = typeof patch.panelLcdChecked === "boolean" ? patch.panelLcdChecked : current.panelLcdChecked;
+    const nextNotes = typeof patch.notes === "string" ? patch.notes.slice(0, 500) : current.notes;
+
+    const updated: PmChecklistItem = {
+      pmId: key,
+      ewonChecked: nextEwon,
+      endpointChecked: nextEndpoint,
+      panelLcdChecked: nextPanelLcd,
+      ewonCheckedAt: nextEwon
+        ? current.ewonChecked
+          ? current.ewonCheckedAt ?? nowWib
+          : nowWib
+        : null,
+      endpointCheckedAt: nextEndpoint
+        ? current.endpointChecked
+          ? current.endpointCheckedAt ?? nowWib
+          : nowWib
+        : null,
+      panelLcdCheckedAt: nextPanelLcd
+        ? current.panelLcdChecked
+          ? current.panelLcdCheckedAt ?? nowWib
+          : nowWib
+        : null,
+      notes: nextNotes,
+      updatedAt: nowWib,
+      updatedBy: actor || "Admin"
+    };
+
+    const isEmpty =
+      !updated.ewonChecked &&
+      !updated.endpointChecked &&
+      !updated.panelLcdChecked &&
+      !updated.notes.trim();
+
+    if (isEmpty) {
+      this.checklist.delete(key);
+      this.persistChecklist();
+      return createEmptyChecklistItem(key);
+    }
+
+    this.checklist.set(key, updated);
+    this.persistChecklist();
+    return { ...updated };
+  }
+
+  public resetChecklist(pmId?: string): { clearedCount: number; item?: PmChecklistItem } {
+    this.ensureLoaded();
+    if (pmId) {
+      const key = String(pmId).trim().toUpperCase();
+      const existed = this.checklist.delete(key);
+      if (existed) this.persistChecklist();
+      return { clearedCount: existed ? 1 : 0, item: createEmptyChecklistItem(key) };
+    }
+    const clearedCount = this.checklist.size;
+    this.checklist.clear();
+    this.persistChecklist();
+    return { clearedCount };
   }
 
   public getStats() {

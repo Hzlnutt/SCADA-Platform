@@ -108,3 +108,23 @@ export interface AnnotatedReading extends RawPmReading {
   anomaly_severity: AnomalySeverity | null;
   anomaly_message: string | null;
 }
+
+export interface PmChecklistItem {
+  pmId: string;
+  ewonChecked: boolean;
+  endpointChecked: boolean;
+  panelLcdChecked: boolean;
+  ewonCheckedAt: string | null;
+  endpointCheckedAt: string | null;
+  panelLcdCheckedAt: string | null;
+  notes: string;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+export interface PmChecklistPatch {
+  ewonChecked?: boolean;
+  endpointChecked?: boolean;
+  panelLcdChecked?: boolean;
+  notes?: string;
+}

@@ -1,4 +1,4 @@
-import type { AnomalyType, HealthStatus, SourceTable } from "./pmHealth.types";
+import type { AnomalyType, HealthStatus, PmChecklistItem, SourceTable } from "./pmHealth.types";
 
 export function fmtNumber(val: number | null | undefined, digits = 2): string {
   if (val === null || val === undefined || !Number.isFinite(val)) return "—";
@@ -112,6 +112,43 @@ export function sourceTableShort(table: SourceTable | null): string {
   if (table === "electric_pm_telemetry_minute") return "Per Menit";
   if (table === "electric_pm_telemetry") return "Per Jam";
   return "—";
+}
+
+export function getEmptyChecklistItem(pmId: string): PmChecklistItem {
+  return {
+    pmId,
+    ewonChecked: false,
+    endpointChecked: false,
+    panelLcdChecked: false,
+    ewonCheckedAt: null,
+    endpointCheckedAt: null,
+    panelLcdCheckedAt: null,
+    notes: "",
+    updatedAt: null,
+    updatedBy: null
+  };
+}
+
+export function getChecklistProgress(item?: PmChecklistItem | null): {
+  checkedCount: number;
+  total: number;
+  isComplete: boolean;
+  isPartial: boolean;
+  status: "complete" | "partial" | "unchecked";
+} {
+  const checkedCount =
+    (item?.ewonChecked ? 1 : 0) +
+    (item?.endpointChecked ? 1 : 0) +
+    (item?.panelLcdChecked ? 1 : 0);
+  const isComplete = checkedCount === 3;
+  const isPartial = checkedCount > 0 && checkedCount < 3;
+  return {
+    checkedCount,
+    total: 3,
+    isComplete,
+    isPartial,
+    status: isComplete ? "complete" : isPartial ? "partial" : "unchecked"
+  };
 }
 
 let sharedAudioCtx: AudioContext | null = null;

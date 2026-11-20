@@ -13,8 +13,8 @@ import {
   shiftWibTimestamp
 } from "./pm-health.analyzer";
 import { pmHealthStore } from "./pm-health.store";
-import { resolvePmMeta } from "./pm-health.catalog";
-import type { AnomalyEvent, AnomalyType, SourceTable } from "./pm-health.types";
+import { PM_CATALOG, resolvePmMeta } from "./pm-health.catalog";
+import type { AnomalyEvent, AnomalyType, PmChecklistPatch, SourceTable } from "./pm-health.types";
 
 const POLL_INTERVAL_MS = 30_000;
 const DEFAULT_LOOKBACK_HOURS = 24;
@@ -531,6 +531,52 @@ pmHealthRouter.delete("/pm-health/logs", ...adminOnly, (_req: Request, res: Resp
   const stats = pmHealthStore.getStats();
   broadcastSse("baseline_reset", { resetAt, clearedCount, stats });
   res.json({ ok: true, clearedCount, resetAt, stats });
+});
+
+// ─── PM Verification Checklist (eWON, Endpoint, Panel LCD) — Strictly Local JSON ───
+pmHealthRouter.get("/pm-health/checklist", ...adminOnly, (_req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    items: pmHealthStore.getAllChecklist(),
+    catalog: PM_CATALOG
+  });
+});
+
+pmHealthRouter.patch("/pm-health/checklist/:pmId", ...adminOnly, (req: Request, res: Response) => {
+  const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
+  if (!pmId) {
+    res.status(400).json({ error: "pmId wajib diisi" });
+    return;
+  }
+  const body = req.body || {};
+  const patch: PmChecklistPatch = {};
+  if (typeof body.ewonChecked === "boolean") patch.ewonChecked = body.ewonChecked;
+  if (typeof body.endpointChecked === "boolean") patch.endpointChecked = body.endpointChecked;
+  if (typeof body.panelLcdChecked === "boolean") patch.panelLcdChecked = body.panelLcdChecked;
+  if (typeof body.notes === "string") patch.notes = body.notes;
+
+  const actor = req.user?.name || req.user?.id || "Admin";
+  const nowWib = formatWibNow();
+  const item = pmHealthStore.upsertChecklistItem(pmId, patch, actor, nowWib);
+  broadcastSse("checklist_updated", { pmId, item });
+  res.json({ ok: true, item });
+});
+
+pmHealthRouter.delete("/pm-health/checklist/:pmId", ...adminOnly, (req: Request, res: Response) => {
+  const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
+  if (!pmId) {
+    res.status(400).json({ error: "pmId wajib diisi" });
+    return;
+  }
+  const result = pmHealthStore.resetChecklist(pmId);
+  broadcastSse("checklist_updated", { pmId, item: result.item });
+  res.json({ ok: true, clearedCount: result.clearedCount, item: result.item });
+});
+
+pmHealthRouter.delete("/pm-health/checklist", ...adminOnly, (_req: Request, res: Response) => {
+  const result = pmHealthStore.resetChecklist();
+  broadcastSse("checklist_reset", { clearedCount: result.clearedCount });
+  res.json({ ok: true, clearedCount: result.clearedCount });
 });
 
 pmHealthRouter.get(
