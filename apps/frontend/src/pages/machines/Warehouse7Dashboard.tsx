@@ -4,12 +4,10 @@ import { getSocket } from "../../services/socket.service";
 import { useAuthStore } from "../../store/auth.store";
 import { useSystemStore } from "../../store/system.store";
 import { useTranslation } from "../../i18n/useTranslation";
-import Warehouse7LineChart, { type Warehouse7TrendPayload } from "../../components/warehouse/Warehouse7LineChart";
+import type { Warehouse7TrendPayload } from "../../components/warehouse/Warehouse7LineChart";
 import Warehouse7AlarmToast, { type Warehouse7AlarmToastData } from "../../components/warehouse/Warehouse7AlarmToast";
 import {
-  Warehouse7DeviceFilterSelect,
   Warehouse7PeriodControls,
-  type Wh7DeviceOption,
   type Wh7PeriodFilter
 } from "../../components/warehouse/Warehouse7FilterBar";
 import {
@@ -293,22 +291,6 @@ export default function Warehouse7Dashboard() {
   const maxTemp = overview?.limits?.maxTemp ?? trend?.limits?.maxTemp ?? 30;
   const devices = overview?.devices || [];
 
-  const deviceOptions: Wh7DeviceOption[] = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const d of devices) {
-      map.set(
-        d.deviceId,
-        `${d.shortLocation} (${d.deviceId}${d.sensorTag ? ` · ${d.sensorTag}` : ""})`
-      );
-    }
-    for (const td of trend?.devices || []) {
-      if (!map.has(td.deviceId)) {
-        map.set(td.deviceId, td.deviceLabel || td.deviceId);
-      }
-    }
-    return Array.from(map.entries()).map(([deviceId, label]) => ({ deviceId, label }));
-  }, [devices, trend?.devices]);
-
   const counts = useMemo(() => {
     return {
       all: devices.length,
@@ -551,32 +533,6 @@ export default function Warehouse7Dashboard() {
             </button>
           </div>
         </div>
-      </div>
-
-      {/* Daily Trend Analysis Line Chart */}
-      <div className="rounded-xl border border-[#acd3ff] dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm space-y-4 transition-colors duration-300">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#acd3ff]/40 dark:border-slate-800 pb-3">
-          <h3 className="text-base font-extrabold text-[#002b5c] dark:text-slate-100 uppercase tracking-wide">
-            {t("warehouse7.dailyTrendTitle", "Tren Suhu Harian")}
-          </h3>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Warehouse7DeviceFilterSelect
-              deviceMode={deviceMode}
-              onDeviceModeChange={setDeviceMode}
-              deviceOptions={deviceOptions}
-            />
-          </div>
-        </div>
-
-        <Warehouse7LineChart
-          trend={trend}
-          deviceMode={deviceMode}
-          isDark={isDark}
-          minTemp={minTemp}
-          maxTemp={maxTemp}
-          defaultHeightPx={380}
-        />
       </div>
 
       {/* Bottom Device Search, Status Filter Pills & Cards Grid */}

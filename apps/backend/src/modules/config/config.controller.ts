@@ -1648,14 +1648,20 @@ export const getAvailablePowerMetersHandler = async (req: Request, res: Response
         const val = row.value || {};
         const pmId = String(val.pm_id || val.json_key || row.config_key).toUpperCase().replace(/[^A-Z0-9_]/g, "");
         const normalizedPmId = pmId.startsWith("PM") ? pmId : `PM_${pmId}`;
-        const factory = row.config_type || (val.group_id === "ew21" ? "consumption_fact_1" : "consumption_fact_2");
+        const rawFact = String(val.factory || row.config_type || "").toLowerCase();
+        const factory =
+          rawFact === "consumption_fact_1" || rawFact === "realtime_fact_1" || rawFact === "wf1" || val.group_id === "ew21"
+            ? "consumption_fact_1"
+            : rawFact === "consumption_fact_2" || rawFact === "realtime_fact_2" || rawFact === "wf2" || val.group_id === "ew22" || val.group_id === "ew23"
+              ? "consumption_fact_2"
+              : "consumption_fact_1";
         if (!pmMap.has(normalizedPmId)) {
           pmMap.set(normalizedPmId, {
             pm_id: normalizedPmId,
-            label: `${normalizedPmId} — ${row.label}`,
+            label: row.label?.toUpperCase().includes(normalizedPmId) ? row.label : `${normalizedPmId} — ${row.label}`,
             endpoint_url: val.endpoint_url,
             json_key: val.json_key || normalizedPmId,
-            group_id: (val.department || "utility").toLowerCase(),
+            group_id: val.group_id || (val.department || "utility").toLowerCase(),
             factory,
             department: val.department || "Utility",
             subArea: val.subArea || "General",
@@ -1664,8 +1670,8 @@ export const getAvailablePowerMetersHandler = async (req: Request, res: Response
           });
         } else {
           const existing = pmMap.get(normalizedPmId);
-          if (row.config_type && existing.factory === "all") {
-            existing.factory = row.config_type;
+          if (factory && existing.factory === "all") {
+            existing.factory = factory;
           }
         }
       }
@@ -1689,10 +1695,27 @@ export const getElectricityConfigHandler = async (req: Request, res: Response, n
     let pgRes = await pool.query(queryStr, values);
 
     // Auto-seed standard meters if table has no items for this factory config type
-    if ((configType === "consumption_fact_1" || configType === "consumption_fact_2") && pgRes.rows.length === 0) {
+    const isFactConfig =
+      configType === "consumption_fact_1" ||
+      configType === "consumption_fact_2" ||
+      configType === "realtime_fact_1" ||
+      configType === "realtime_fact_2";
+    const isRealtimeFactConfig = configType === "realtime_fact_1" || configType === "realtime_fact_2";
+    const AGGREGATE_PANEL_PM_IDS = new Set([
+      "PM133", "PM135", "PM136", "PM139",
+      "PM201", "PM202", "PM327",
+      "PM410", "PM411", "PM412"
+    ]);
+    const isAggregatePanel = (pmId: string, lbl?: string) =>
+      AGGREGATE_PANEL_PM_IDS.has(String(pmId || "").toUpperCase()) ||
+      /(\bMDP|\bPUTR|incoming cubicle)/i.test(String(lbl || ""));
+
+    if (isFactConfig && pgRes.rows.length === 0) {
+      const isFact1 = configType === "consumption_fact_1" || configType === "realtime_fact_1";
       const targetMeters = STANDARD_METERS.filter(m => {
-        const fact = m.group_id === "ew21" ? "consumption_fact_1" : (m.group_id === "ew22" || m.group_id === "ew23") ? "consumption_fact_2" : null;
-        return fact === configType;
+        if (isAggregatePanel(m.pm_id, m.label)) return false;
+        const fact = m.group_id === "ew21" ? "fact_1" : (m.group_id === "ew22" || m.group_id === "ew23") ? "fact_2" : null;
+        return isFact1 ? fact === "fact_1" : fact === "fact_2";
       });
 
       for (let i = 0; i < targetMeters.length; i++) {
@@ -1703,7 +1726,7 @@ export const getElectricityConfigHandler = async (req: Request, res: Response, n
           pm_id: m.pm_id,
           department: m.department,
           subArea: m.subArea,
-          factory: configType,
+          factory: isFact1 ? "consumption_fact_1" : "consumption_fact_2",
           kWh: 0
         };
         await pool.query(
@@ -1713,10 +1736,42 @@ export const getElectricityConfigHandler = async (req: Request, res: Response, n
           [configType, m.pm_id.toLowerCase(), m.label, JSON.stringify(val), i + 1]
         );
       }
+
+      // Also copy any custom registered PMs for this factory into realtime_fact_1/2
+      if (isRealtimeFactConfig) {
+        try {
+          const sourceFactType = isFact1 ? "consumption_fact_1" : "consumption_fact_2";
+          const customRows = await pool.query(
+            `SELECT config_key, label, value, enabled FROM electricity_config WHERE config_type = $1`,
+            [sourceFactType]
+          );
+          for (const cr of customRows.rows) {
+            const cVal = cr.value || {};
+            const cPmId = String(cVal.pm_id || cr.config_key || "").toUpperCase();
+            if (!cPmId || isAggregatePanel(cPmId, cr.label)) continue;
+            if (STANDARD_METERS.some(sm => sm.pm_id.toUpperCase() === cPmId)) continue;
+            await pool.query(
+              `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
+               VALUES ($1, $2, $3, $4, 999, $5, NOW())
+               ON CONFLICT (config_type, config_key) DO NOTHING`,
+              [configType, cr.config_key, cr.label, JSON.stringify(cVal), cr.enabled !== false]
+            );
+          }
+        } catch {}
+      }
+
       pgRes = await pool.query(queryStr, values);
     }
 
-    // Enrich rows with real monthly factual consumption from batch analytics
+    if (isRealtimeFactConfig && pgRes.rows.length > 0) {
+      pgRes.rows = pgRes.rows.filter((row: any) => {
+        const val = row.value || {};
+        const pmId = String(val.pm_id || val.json_key || row.config_key || "").toUpperCase();
+        return !isAggregatePanel(pmId, row.label);
+      });
+    }
+
+    // Enrich rows with real monthly factual consumption from batch analytics (for consumption_fact_1 & 2)
     if (!configType || configType === "consumption_fact_1" || configType === "consumption_fact_2") {
       try {
         const { computeEquipmentMonthlyBatch } = require("../analytics/analytics.controller");
@@ -2407,42 +2462,42 @@ const CORE_PM_ENDPOINTS: {
     value: "electric_ew21",
     alias: "electric_ew21",
     url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew21",
-    label: "electric_ew21 — http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew21 (Factory 1 / WF1)",
+    label: "Endpoint EW21 — Factory 1 / WF1 (electric_ew21)",
     defaultFactory: "wf1"
   },
   {
     value: "electric_ew22",
     alias: "electric_ew22",
     url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew22",
-    label: "electric_ew22 — http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew22 (Factory 2 / WF2)",
+    label: "Endpoint EW22 — Factory 2 / WF2 (electric_ew22)",
     defaultFactory: "wf2"
   },
   {
     value: "electric_ew23",
     alias: "electric_ew23",
     url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew23",
-    label: "electric_ew23 — http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew23 (Factory 2 Sub / EW23)",
+    label: "Endpoint EW23 — Factory 2 Sub / EW23 (electric_ew23)",
     defaultFactory: "wf2"
   },
   {
     value: "electric_pln",
     alias: "electric_pln",
     url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln",
-    label: "electric_pln — http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_pln (Incoming Cubicle PLN)",
+    label: "Endpoint PLN — Incoming Cubicle PLN (electric_pln)",
     defaultFactory: "wf2"
   },
   {
     value: "electric_wf1",
     alias: "electric_wf1",
     url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1",
-    label: "electric_wf1 — http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf1 (Incoming Cubicle WF1)",
+    label: "Endpoint WF1 — Incoming Cubicle WF1 (electric_wf1)",
     defaultFactory: "wf1"
   },
   {
     value: "electric_wf2",
     alias: "electric_wf2",
     url: "http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2",
-    label: "electric_wf2 — http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_wf2 (Incoming Cubicle WF2)",
+    label: "Endpoint WF2 — Incoming Cubicle WF2 (electric_wf2)",
     defaultFactory: "wf2"
   }
 ];
@@ -2725,9 +2780,12 @@ export const discoverEndpointPmsHandler = async (req: Request, res: Response, ne
     if (!selectedEndpoint) {
       res.json({
         success: true,
+        endpointReachable: true,
         endpoints,
+        storedEndpoints: endpoints,
         unregisteredPms: [],
         totalDetectedInApi: 0,
+        totalDetectedPmsOnEndpoint: 0,
         alreadyRegisteredCount: 0
       });
       return;
@@ -2749,7 +2807,7 @@ export const discoverEndpointPmsHandler = async (req: Request, res: Response, ne
       const regRes = await pool.query(`
         SELECT config_key, value
         FROM electricity_config
-        WHERE config_type IN ('equipment_display', 'consumption_fact_1', 'consumption_fact_2')
+        WHERE config_type IN ('equipment_display', 'consumption_fact_1', 'consumption_fact_2', 'realtime_fact_1', 'realtime_fact_2')
       `);
       for (const r of regRes.rows) {
         const val = r.value || {};
@@ -2764,12 +2822,16 @@ export const discoverEndpointPmsHandler = async (req: Request, res: Response, ne
     if (!liveRes.ok || !liveRes.data) {
       res.json({
         success: false,
+        endpointReachable: false,
+        endpointError: `Gagal membaca endpoint '${selectedEndpoint}': ${liveRes.error || "Endpoint tidak merespons"}`,
         message: `Gagal membaca endpoint '${selectedEndpoint}': ${liveRes.error || "Endpoint tidak merespons"}`,
         endpoint: selectedEndpoint,
         resolvedUrl: liveRes.resolvedUrl,
         endpoints,
+        storedEndpoints: endpoints,
         unregisteredPms: [],
         totalDetectedInApi: 0,
+        totalDetectedPmsOnEndpoint: 0,
         alreadyRegisteredCount: 0
       });
       return;
@@ -2846,12 +2908,15 @@ export const discoverEndpointPmsHandler = async (req: Request, res: Response, ne
 
     res.json({
       success: true,
+      endpointReachable: true,
       endpoint: selectedEndpoint,
       resolvedUrl: liveRes.resolvedUrl,
       totalDetectedInApi: allDetectedPmIds.size,
+      totalDetectedPmsOnEndpoint: allDetectedPmIds.size,
       alreadyRegisteredCount,
       unregisteredPms: unregisteredList,
-      endpoints
+      endpoints,
+      storedEndpoints: endpoints
     });
   } catch (err) {
     next(err);
@@ -2896,17 +2961,35 @@ export const verifyAndRegisterNewPmHandler = async (req: Request, res: Response,
       return;
     }
 
-    // 2. Verifikasi endpoint URL dan ekstraksi parameter otomatis dari API
+    // 2. Verifikasi endpoint URL dan ekstraksi parameter otomatis dari API (dengan fallback jika endpoint sedang offline)
     const liveRes = await fetchLiveEndpointPayload(cleanEndpoint);
-    if (!liveRes.ok || !liveRes.data) {
-      res.status(400).json({
-        success: false,
-        message: `Gagal menghubungi endpoint '${cleanEndpoint}': ${liveRes.error || "Endpoint tidak merespons"}`
-      });
-      return;
-    }
-
-    const extracted = extractPmTelemetryFromPayload(liveRes.data, resolvedPmId);
+    const extracted = liveRes.ok && liveRes.data
+      ? extractPmTelemetryFromPayload(liveRes.data, resolvedPmId)
+      : {
+          detectedFields: [] as string[],
+          status: true,
+          volt_ab: null,
+          volt_bc: null,
+          volt_ca: null,
+          volt_ll: null,
+          current_a: null,
+          current_b: null,
+          current_c: null,
+          frequency: 50.0,
+          active_power_total: 0,
+          reactive_power_total: null,
+          apparent_power_total: null,
+          power_factor: null,
+          voltage_unbalance: null,
+          current_unbalance: null,
+          thd_volt_a: null,
+          thd_volt_b: null,
+          thd_volt_c: null,
+          thd_current_a: null,
+          thd_current_b: null,
+          thd_current_c: null,
+          active_energy: 0
+        };
     const detectedFields = extracted.detectedFields;
     const initialActivePower = extracted.active_power_total;
     const initialActiveEnergy = extracted.active_energy;
@@ -2939,7 +3022,9 @@ export const verifyAndRegisterNewPmHandler = async (req: Request, res: Response,
         ? "ew22"
         : epLower.includes("electric_ew23")
           ? "ew23"
-          : (resolvedDept || "utility").toLowerCase();
+          : (resolvedFact === "wf2" || resolvedFact === "consumption_fact_2" || resolvedFact === "realtime_fact_2")
+            ? "ew22"
+            : "ew21";
 
     const itemValue = {
       pm_id: resolvedPmId,
@@ -2966,15 +3051,19 @@ export const verifyAndRegisterNewPmHandler = async (req: Request, res: Response,
       [cleanKey, label, JSON.stringify(itemValue)]
     );
 
-    // B. Simpan ke sub-metering fact list
-    const factType = resolvedFact === "wf1" || resolvedFact === "consumption_fact_1" ? "consumption_fact_1" : "consumption_fact_2";
-    await pool.query(
-      `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
-       VALUES ($1, $2, $3, $4, 999, true, NOW())
-       ON CONFLICT (config_type, config_key)
-       DO UPDATE SET label = EXCLUDED.label, value = EXCLUDED.value, enabled = true, updated_at = NOW()`,
-      [factType, cleanKey, label, JSON.stringify(itemValue)]
-    );
+    // B. Simpan ke sub-metering fact list & realtime consumption fact list
+    const isTargetFact1 = resolvedFact === "wf1" || resolvedFact === "consumption_fact_1" || resolvedFact === "realtime_fact_1";
+    const factType = isTargetFact1 ? "consumption_fact_1" : "consumption_fact_2";
+    const realtimeFactType = isTargetFact1 ? "realtime_fact_1" : "realtime_fact_2";
+    for (const targetType of [factType, realtimeFactType]) {
+      await pool.query(
+        `INSERT INTO electricity_config (config_type, config_key, label, value, sort_order, enabled, updated_at)
+         VALUES ($1, $2, $3, $4, 999, true, NOW())
+         ON CONFLICT (config_type, config_key)
+         DO UPDATE SET label = EXCLUDED.label, value = EXCLUDED.value, enabled = true, updated_at = NOW()`,
+        [targetType, cleanKey, label, JSON.stringify(itemValue)]
+      );
+    }
 
     // C. Daftarkan ke api_sources
     if (cleanEndpoint.startsWith("http://") || cleanEndpoint.startsWith("https://")) {

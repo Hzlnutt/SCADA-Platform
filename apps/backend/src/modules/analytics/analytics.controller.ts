@@ -423,10 +423,6 @@ export const getPowerMetersLatestHandler = async (
   try {
     const group = ((req.query.group as string) || "ew23").toLowerCase();
     const live = getLatestEwLiveRecords(group);
-    if (live && live.length > 0 && (group !== "all" || live.length >= 45)) {
-      return res.json({ data: live });
-    }
-
     const pool = getPostgresPool();
 
     const dbRes = await pool.query(`
@@ -1468,7 +1464,7 @@ export const getElectricityReportHandler = async (
                  CASE WHEN active_energy >= 0 THEN active_energy ELSE NULL END AS active_energy
           FROM electric_pm_telemetry
           WHERE (($1 != '%' AND pm_id ILIKE $1) OR ($1 = '%' AND group_id ILIKE $2))
-            AND t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
+            AND t_stamp >= ($3::timestamp - INTERVAL '2 hours') AND t_stamp <= ($4 || ' 23:59:59')::timestamp
             AND (volt_ab IS NOT NULL OR volt_ll IS NOT NULL OR current_a IS NOT NULL OR active_power_total IS NOT NULL OR active_energy IS NOT NULL)
           UNION ALL
           SELECT t_stamp, volt_ab, volt_bc, volt_ca, volt_ll,
@@ -1485,7 +1481,7 @@ export const getElectricityReportHandler = async (
                  CASE WHEN active_energy >= 0 THEN active_energy ELSE NULL END AS active_energy
           FROM electric_pm_telemetry_minute
           WHERE (($1 != '%' AND pm_id ILIKE $1) OR ($1 = '%' AND group_id ILIKE $2))
-            AND t_stamp >= $3::timestamp AND t_stamp <= ($4 || ' 23:59:59')::timestamp
+            AND t_stamp >= ($3::timestamp - INTERVAL '2 hours') AND t_stamp <= ($4 || ' 23:59:59')::timestamp
             AND (volt_ab IS NOT NULL OR volt_ll IS NOT NULL OR current_a IS NOT NULL OR active_power_total IS NOT NULL OR active_energy IS NOT NULL)
         ),
         hourly_dedup AS (
@@ -1519,6 +1515,12 @@ export const getElectricityReportHandler = async (
           FROM raw_pm
           GROUP BY date_trunc('hour', t_stamp)
         ),
+        hourly_with_lag AS (
+          SELECT
+            *,
+            LAG(max_e) OVER (ORDER BY h_bucket) as prev_max_e
+          FROM hourly_dedup
+        ),
         hourly_energy AS (
           SELECT 
             h_bucket,
@@ -1530,6 +1532,8 @@ export const getElectricityReportHandler = async (
             kw, kvar, kva, pf, freq,
             max_e, min_e,
             CASE 
+              WHEN max_e IS NOT NULL AND prev_max_e IS NOT NULL AND (max_e - prev_max_e) > 0 AND (max_e - prev_max_e) < 5000
+                THEN GREATEST(max_e - prev_max_e, COALESCE(max_e - min_e, 0))
               WHEN max_e IS NOT NULL AND min_e IS NOT NULL AND (max_e - min_e) > 0 AND (max_e - min_e) < 5000
                 THEN (max_e - min_e)
               WHEN kw IS NOT NULL AND kw >= 0
@@ -1544,7 +1548,8 @@ export const getElectricityReportHandler = async (
               WHEN kva IS NOT NULL THEN ABS(kva)
               ELSE 0
             END as h_kvah
-          FROM hourly_dedup
+          FROM hourly_with_lag
+          WHERE h_bucket >= $3::timestamp
         )
         SELECT 
           to_char(date_trunc('${truncUnit}', h_bucket), '${toCharFmt}') AS date_str,

@@ -49,7 +49,18 @@ interface Props {
   onRefresh: () => void;
   initialFact?: "consumption_fact_1" | "consumption_fact_2";
   initialDept?: "all" | "Utility" | "HVAC" | "Other";
+  fact1ConfigType?: string;
+  fact2ConfigType?: string;
+  fact1TabLabel?: string;
+  fact2TabLabel?: string;
+  excludeAggregatePanels?: boolean;
 }
+
+const AGGREGATE_PANEL_IDS = new Set([
+  "PM133", "PM135", "PM136", "PM139",
+  "PM201", "PM202", "PM327",
+  "PM410", "PM411", "PM412"
+]);
 
 export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
   isOpen,
@@ -58,9 +69,15 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
   fact2Items,
   onRefresh,
   initialFact = "consumption_fact_1",
-  initialDept = "all"
+  initialDept = "all",
+  fact1ConfigType = "consumption_fact_1",
+  fact2ConfigType = "consumption_fact_2",
+  fact1TabLabel = "Biggest Consumption Fact 1",
+  fact2TabLabel = "Biggest Consumption Fact 2",
+  excludeAggregatePanels = false
 }) => {
   const [activeFact, setActiveFact] = useState<"consumption_fact_1" | "consumption_fact_2">(initialFact);
+  const resolvedConfigType = activeFact === "consumption_fact_1" ? fact1ConfigType : fact2ConfigType;
   const [deptFilter, setDeptFilter] = useState<"all" | "Utility" | "HVAC" | "Other">(initialDept);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAllFactories, setShowAllFactories] = useState(false);
@@ -78,6 +95,8 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
   const [newPmId, setNewPmId] = useState("");
   const [newPmLabel, setNewPmLabel] = useState("");
   const [newPmEndpoint, setNewPmEndpoint] = useState("");
+  const [isCustomEndpoint, setIsCustomEndpoint] = useState(false);
+  const [isManualPmId, setIsManualPmId] = useState(false);
 
   // Testing new PM API
   const [isTestingApi, setIsTestingApi] = useState(false);
@@ -125,6 +144,8 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
       setSearchQuery("");
       setIsAddPmOpen(false);
       setNewPmEndpoint("");
+      setIsCustomEndpoint(false);
+      setIsManualPmId(false);
       setNewPmId("");
       setNewPmLabel("");
       setUnregisteredPms([]);
@@ -154,12 +175,22 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
     return availablePms.filter((pm) => {
       const idUpper = pm.pm_id.toUpperCase();
 
+      if (excludeAggregatePanels) {
+        if (
+          AGGREGATE_PANEL_IDS.has(idUpper) ||
+          /(\bMDP|\bPUTR|incoming cubicle)/i.test(pm.label || "")
+        ) {
+          return false;
+        }
+      }
+
       // Factory filter (unless showAllFactories is checked)
       if (!showAllFactories) {
+        const isFact1 = activeFact === "consumption_fact_1";
         const isAssignedToThisFact =
           pm.factory === activeFact ||
           pm.factory === "all" ||
-          (!pm.factory && (activeFact === "consumption_fact_1" ? pm.group_id === "ew21" : pm.group_id === "ew22")) ||
+          (isFact1 ? pm.group_id === "ew21" : pm.group_id === "ew22" || pm.group_id === "ew23") ||
           configMap.has(idUpper);
 
         if (!isAssignedToThisFact) return false;
@@ -182,7 +213,7 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
 
       return true;
     });
-  }, [availablePms, activeFact, deptFilter, searchQuery, showAllFactories, configMap]);
+  }, [availablePms, activeFact, deptFilter, searchQuery, showAllFactories, configMap, excludeAggregatePanels]);
 
   // Count active in activeFact
   const activeCount = useMemo(() => {
@@ -200,7 +231,7 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
 
     try {
       await postJson("/config/electricity/toggle", {
-        config_type: activeFact,
+        config_type: resolvedConfigType,
         pm_id: pm.pm_id,
         enabled: nextEnabled,
         label: existing?.label || pm.label || pm.pm_id,
@@ -233,7 +264,7 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
 
     try {
       await postJson("/config/electricity/batch-toggle", {
-        config_type: activeFact,
+        config_type: resolvedConfigType,
         enabled: enableAll,
         pms: displayedPms.map((pm) => {
           const idUpper = pm.pm_id.toUpperCase();
@@ -414,7 +445,7 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
       const pmObj = availablePms.find((p) => p.pm_id.toUpperCase() === idUpper);
 
       await postJson("/config/electricity/toggle", {
-        config_type: activeFact,
+        config_type: resolvedConfigType,
         pm_id: editingPm.pm_id,
         enabled: existing ? existing.enabled !== false : true,
         label: editLabelInput.trim(),
@@ -442,19 +473,38 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
     }
   };
 
-  // Delete custom configured item
+  // Delete custom configured item or remove standard item from display
   const handleDeleteItem = async (pmId: string) => {
     const idUpper = pmId.toUpperCase();
     const existing = configMap.get(idUpper);
+    const pmObj = availablePms.find((p) => p.pm_id.toUpperCase() === idUpper);
     if (!existing) return;
 
-    if (!window.confirm(`Hapus item '${existing.label || pmId}' dari konfigurasi ${activeFact === "consumption_fact_1" ? "Fact 1" : "Fact 2"}?`)) {
+    const isCustomNew = Boolean(pmObj?.is_new_pm || existing.value?.is_new_pm);
+    const confirmText = isCustomNew
+      ? `Hapus Power Meter kustom '${existing.label || pmId}' dari database konfigurasi?`
+      : `Hapus tampilan '${existing.label || pmId}' dari chart ${activeFact === "consumption_fact_1" ? "Fact 1" : "Fact 2"}?`;
+
+    if (!window.confirm(confirmText)) {
       return;
     }
 
     try {
-      await deleteJson(`/config/electricity/${existing.id}`);
-      setActionMessage({ type: "success", text: `✓ Item '${existing.label}' berhasil dihapus.` });
+      if (isCustomNew && existing.id > 0) {
+        await deleteJson(`/config/electricity/${existing.id}`);
+        setActionMessage({ type: "success", text: `✓ Power Meter '${existing.label || pmId}' berhasil dihapus.` });
+      } else {
+        await postJson("/config/electricity/toggle", {
+          config_type: resolvedConfigType,
+          pm_id: pmId,
+          enabled: false,
+          label: existing.label || pmObj?.label || pmId,
+          endpoint_url: pmObj?.endpoint_url || existing.value?.endpoint_url || "",
+          department: pmObj?.department || existing.value?.department || "Utility",
+          subArea: pmObj?.subArea || existing.value?.subArea || ""
+        });
+        setActionMessage({ type: "success", text: `✓ Tampilan '${existing.label || pmId}' dihapus dari chart.` });
+      }
       onRefresh();
       loadAvailablePms();
     } catch (err: any) {
@@ -532,7 +582,7 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
               }`}
             >
-              <span>Biggest Consumption Fact 1</span>
+              <span>{fact1TabLabel}</span>
               <span
                 className={`px-1.5 py-0.2 rounded-full text-[10px] ${
                   activeFact === "consumption_fact_1" ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-700"
@@ -552,7 +602,7 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
               }`}
             >
-              <span>Biggest Consumption Fact 2</span>
+              <span>{fact2TabLabel}</span>
               <span
                 className={`px-1.5 py-0.2 rounded-full text-[10px] ${
                   activeFact === "consumption_fact_2" ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-700"
@@ -602,35 +652,69 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
               Pilih <strong>Endpoint URL</strong> dari dropdown, lalu pilih <strong>PM ID baru</strong> yang terdeteksi belum terdaftar di sistem dan isi <strong>Label</strong>.
             </p>
 
-            {/* Endpoint URL Dropdown */}
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Endpoint URL (Ignition Webdev API) *
-              </label>
-              <div className="flex items-center gap-2">
-                <select
-                  required
-                  value={newPmEndpoint}
-                  onChange={(e) => {
-                    setNewPmEndpoint(e.target.value);
-                    scanEndpointForNewPms(e.target.value);
+            {/* Endpoint URL Dropdown or Custom API Input */}
+            <div className="min-w-0 w-full">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                  Endpoint URL (Ignition Webdev API) *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !isCustomEndpoint;
+                    setIsCustomEndpoint(next);
+                    setNewPmEndpoint("");
+                    setUnregisteredPms([]);
+                    setTestResult(null);
+                    if (next) setIsManualPmId(true);
                   }}
-                  className="flex-1 px-3 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
+                  className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
                 >
-                  <option value="">— Pilih API Endpoint yang Tersimpan —</option>
-                  {storedEndpoints.map((ep) => (
-                    <option key={ep.url} value={ep.url}>
-                      {ep.label} ({ep.url})
-                    </option>
-                  ))}
-                </select>
+                  {isCustomEndpoint ? "📋 Pilih dari Daftar Endpoint Tersimpan" : "➕ Input Endpoint API Baru (URL Kustom)"}
+                </button>
+              </div>
+              <div className="flex items-center gap-2 min-w-0 w-full">
+                {isCustomEndpoint ? (
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_ew24"
+                    value={newPmEndpoint}
+                    onChange={(e) => setNewPmEndpoint(e.target.value)}
+                    className="flex-1 min-w-0 w-full px-3 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                ) : (
+                  <select
+                    required
+                    value={newPmEndpoint}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setIsCustomEndpoint(true);
+                        setNewPmEndpoint("");
+                        setIsManualPmId(true);
+                        return;
+                      }
+                      setNewPmEndpoint(e.target.value);
+                      scanEndpointForNewPms(e.target.value);
+                    }}
+                    className="flex-1 min-w-0 w-full truncate px-3 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
+                  >
+                    <option value="">— Pilih API Endpoint yang Tersimpan —</option>
+                    {storedEndpoints.map((ep) => (
+                      <option key={ep.url} value={ep.url}>
+                        {ep.label}
+                      </option>
+                    ))}
+                    <option value="__custom__">➕ Gunakan Endpoint API Baru (Input URL Manual)...</option>
+                  </select>
+                )}
                 <button
                   type="button"
                   onClick={() => scanEndpointForNewPms(newPmEndpoint)}
                   disabled={isTestingApi || !newPmEndpoint.trim()}
                   className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition shrink-0 cursor-pointer"
                 >
-                  {isTestingApi ? "Memindai..." : "🔄 Cek Ulang"}
+                  {isTestingApi ? "Memindai..." : "🔄 Pindai API"}
                 </button>
               </div>
               {testResult && (
@@ -645,35 +729,71 @@ export const SeniorUnitHeadConfigModal: React.FC<Props> = ({
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {/* Power Meter ID Dropdown */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Power Meter ID (PM ID) *
-                </label>
-                <select
-                  required
-                  value={newPmId}
-                  onChange={(e) => setNewPmId(e.target.value)}
-                  disabled={!newPmEndpoint || isTestingApi || unregisteredPms.length === 0}
-                  className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {!newPmEndpoint ? (
-                    <option value="">— Pilih Endpoint dulu —</option>
-                  ) : isTestingApi ? (
-                    <option value="">Memeriksa PM baru...</option>
-                  ) : unregisteredPms.length === 0 ? (
-                    <option value=""></option>
-                  ) : (
-                    unregisteredPms.map((pm) => (
-                      <option key={pm.pm_id} value={pm.pm_id}>
-                        {pm.pm_id}
-                        {pm.initialValues?.activePower !== null && pm.initialValues?.activePower !== undefined
-                          ? ` (${pm.initialValues.activePower} kW)`
-                          : ""}
-                      </option>
-                    ))
-                  )}
-                </select>
+              {/* Power Meter ID Dropdown or Manual Input */}
+              <div className="min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                    Power Meter ID (PM ID) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsManualPmId(!isManualPmId);
+                      setNewPmId("");
+                    }}
+                    className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                  >
+                    {isManualPmId ? "Pilih Dropdown" : "✏️ Ketik Manual"}
+                  </button>
+                </div>
+                {isManualPmId ? (
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: PM190 atau PM340"
+                    value={newPmId}
+                    onChange={(e) => setNewPmId(e.target.value.toUpperCase())}
+                    className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                ) : (
+                  <select
+                    required
+                    value={newPmId}
+                    onChange={(e) => {
+                      if (e.target.value === "__manual__") {
+                        setIsManualPmId(true);
+                        setNewPmId("");
+                        return;
+                      }
+                      setNewPmId(e.target.value);
+                    }}
+                    disabled={!newPmEndpoint || isTestingApi}
+                    className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {!newPmEndpoint ? (
+                      <option value="">— Pilih Endpoint dulu —</option>
+                    ) : isTestingApi ? (
+                      <option value="">Memeriksa PM baru...</option>
+                    ) : unregisteredPms.length === 0 ? (
+                      <>
+                        <option value="">— Tidak ada PM baru terdeteksi —</option>
+                        <option value="__manual__">✏️ Ketik PM ID Manual...</option>
+                      </>
+                    ) : (
+                      <>
+                        {unregisteredPms.map((pm) => (
+                          <option key={pm.pm_id} value={pm.pm_id}>
+                            {pm.pm_id}
+                            {pm.initialValues?.activePower !== null && pm.initialValues?.activePower !== undefined
+                              ? ` (${pm.initialValues.activePower} kW)`
+                              : ""}
+                          </option>
+                        ))}
+                        <option value="__manual__">✏️ Ketik PM ID Manual...</option>
+                      </>
+                    )}
+                  </select>
+                )}
               </div>
 
               {/* Label / Item Name */}
