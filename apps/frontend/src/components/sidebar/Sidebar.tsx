@@ -3,7 +3,7 @@ import { NavItem } from "../navigation/NavItem";
 import { machineGroups } from "../../data/machines";
 import { useAuthStore } from "../../store/auth.store";
 import { getJson } from "../../services/api.client";
-import { canAccessConfigAndAudit } from "../../utils/roles";
+import { canAccessConfigAndAudit, isSeniorUnitHeadOrAdmin } from "../../utils/roles";
 import { useTranslation } from "../../i18n/useTranslation";
 import { useSystemStore } from "../../store/system.store";
 
@@ -88,6 +88,7 @@ export const Sidebar = () => {
   const setMobileSidebarOpen = useSystemStore((state) => state.setMobileSidebarOpen);
 
   const isAdmin = role === "admin";
+  const canAccessPmHealth = isSeniorUnitHeadOrAdmin(role);
   const canApprove =
     role === "team_head" ||
     role === "leader" ||
@@ -308,7 +309,7 @@ export const Sidebar = () => {
                 <NavItem to="/listrik/distribusi" label={t("sidebar.powerDistribution")} tone="scada" />
                 <NavItem to="/listrik/konsumsi-realtime" label={t("sidebar.realtimePower")} tone="scada" />
                 <NavItem to="/listrik/report" label={t("sidebar.report")} tone="scada" />
-                {isAdmin && <NavItem to="/listrik/pm-health" label={t("sidebar.pmHealth", "PM Health Monitor")} tone="scada" />}
+                {canAccessPmHealth && <NavItem to="/listrik/pm-health" label={t("sidebar.pmHealth", "PM Health Monitor")} tone="scada" />}
               </div>
             )}
           </div>

@@ -160,7 +160,7 @@ function ensurePollerStarted() {
 
 /**
  * Supports passing JWT via `?token=` query param for EventSource (SSE) where custom headers
- * cannot be attached by browsers, then delegates to standard SCADA `authenticate` + `authorize(["admin"])`.
+ * cannot be attached by browsers, then delegates to standard SCADA `authenticate` + `authorize(...)`.
  */
 function attachQueryTokenToHeader(req: Request, _res: Response, next: NextFunction) {
   if (!req.headers.authorization && typeof req.query.token === "string" && req.query.token.trim()) {
@@ -171,8 +171,9 @@ function attachQueryTokenToHeader(req: Request, _res: Response, next: NextFuncti
 
 export const pmHealthRouter = Router();
 
-// Strictly Admin-Only across ALL PM Health endpoints
-const adminOnly = [authenticate, authorize(["admin"])];
+// Restricted to Administrator & Senior Unit Head across ALL PM Health endpoints
+const pmHealthAllowedRoles = ["admin", "superadmin", "developer", "dev", "senior_unit_head"];
+const adminOnly = [authenticate, authorize(pmHealthAllowedRoles)];
 
 pmHealthRouter.get("/pm-health/health", ...adminOnly, async (_req: Request, res: Response) => {
   ensurePollerStarted();

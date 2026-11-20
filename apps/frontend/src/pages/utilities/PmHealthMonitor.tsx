@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { useAuthStore, getAccessToken } from "../../store/auth.store";
 import { useSystemStore } from "../../store/system.store";
+import { isSeniorUnitHeadOrAdmin } from "../../utils/roles";
 import { buildApiUrl, deleteJson, getJson, patchJson, postJson } from "../../services/api.client";
 import type {
   AnomalyEvent,
@@ -36,7 +37,7 @@ type MainTab = "overview" | "checklist" | "logs" | "audit";
 
 export default function PmHealthMonitor() {
   const role = useAuthStore((s) => s.user?.role ?? "user");
-  const isAdmin = role === "admin";
+  const isAdmin = isSeniorUnitHeadOrAdmin(role);
   const theme = useSystemStore((s) => s.theme);
   const isDark = theme === "dark";
 
@@ -591,13 +592,13 @@ export default function PmHealthMonitor() {
     });
   }, [overview, statusFilter, factoryFilter, pmSearch]);
 
-  // Strict Admin-Only View Guard
+  // Strict Admin & Senior Unit Head View Guard
   if (!isAdmin) {
     return (
       <div className="space-y-5">
         <PageHeader
           title="PM Health Monitoring"
-          description="Diagnostik kesehatan Active Energy Power Meter (Khusus Administrator)"
+          description="Diagnostik kesehatan Active Energy Power Meter (Khusus Administrator & Senior Unit Head)"
         />
         <div className="rounded-2xl border border-rose-500/30 bg-white dark:bg-slate-900 p-8 text-center shadow-sm max-w-lg mx-auto">
           <div className="w-12 h-12 rounded-2xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-3">
@@ -605,9 +606,12 @@ export default function PmHealthMonitor() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
             </svg>
           </div>
-          <h2 className="text-base font-extrabold text-slate-900 dark:text-white">Akses Terbatas (Admin Only)</h2>
+          <h2 className="text-base font-extrabold text-slate-900 dark:text-white">
+            Akses Terbatas (Admin &amp; Senior Unit Head)
+          </h2>
           <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-            Halaman PM Health Monitoring hanya dapat diakses oleh akun dengan peran <strong>Administrator</strong>.
+            Halaman PM Health Monitoring hanya dapat diakses oleh akun dengan peran <strong>Administrator</strong> atau{" "}
+            <strong>Senior Unit Head</strong>.
           </p>
         </div>
       </div>
