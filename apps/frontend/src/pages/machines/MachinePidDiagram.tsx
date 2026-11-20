@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useOutletContext, Navigate } from "react-router-dom";
 import { usePageActive } from "../../hooks/usePageActive";
 import { getUnitById } from "../../data/machines";
@@ -15,6 +15,15 @@ import MachineAHU01Pid from "./diagrams/MachineAHU01Pid";
 import MachineAHU02Pid from "./diagrams/MachineAHU02Pid";
 import MachineAHU03Pid from "./diagrams/MachineAHU03Pid";
 import MachineUtilityPid from "./diagrams/MachineUtilityPid";
+import {
+  St3DurationModal,
+  formatDurationHms,
+  formatLocalDateIso,
+  formatLocalTimeHms,
+  type ActiveSt3Session,
+  type St3ActiveProcess,
+  type St3DurationRecord,
+} from "../../components/pid/St3DurationModal";
 
 const TAG_KEY_TO_API_JSON_KEY: Record<string, string> = {
   "cooling-water/supply_temp": "Scaled_Temp_Tank_Colling3_Supp",
@@ -467,6 +476,199 @@ export default function MachinePidDiagram() {
     "all" | "overdue" | "open" | "close"
   >("all");
 
+  // ── Frontend Temporary ST-3 Process Duration Timer & Local History ──
+  const durationStorageKey = `scada.cooling.st3_duration_state.${unitId}`;
+  const [durationModalOpen, setDurationModalOpen] = useState(false);
+  const [activeSt3Session, setActiveSt3Session] = useState<ActiveSt3Session | null>(null);
+  const [st3DurationRecords, setSt3DurationRecords] = useState<St3DurationRecord[]>([]);
+  const [durationNowMs, setDurationNowMs] = useState<number>(() => Date.now());
+  const durationHydratedRef = useRef(false);
+
+  const currentSt3Process = useMemo<St3ActiveProcess | "STANDBY" | "xx">(() => {
+    const heatVal = mergedLatest["cooling-water/st3_heating"]?.value;
+    const coolVal = mergedLatest["cooling-water/st3_cooling"]?.value;
+    const sterilVal = mergedLatest["cooling-water/st3_steril"]?.value;
+
+    const isHeating = heatVal === 1 || heatVal === true || heatVal === "ON";
+    const isCooling = coolVal === 1 || coolVal === true || coolVal === "ON";
+    const isSteril = sterilVal === 1 || sterilVal === true || sterilVal === "ON";
+
+    const hasHeating = heatVal !== undefined && heatVal !== "XX" && heatVal !== "xx" && heatVal !== "Belum Ada API";
+    const hasCooling = coolVal !== undefined && coolVal !== "XX" && coolVal !== "xx" && coolVal !== "Belum Ada API";
+    const hasSteril = sterilVal !== undefined && sterilVal !== "XX" && sterilVal !== "xx" && sterilVal !== "Belum Ada API";
+
+    if (!hasHeating && !hasCooling && !hasSteril) return "xx";
+    if (heatVal === "Belum Ada API" || coolVal === "Belum Ada API" || sterilVal === "Belum Ada API") return "xx";
+    if (heatVal === "xx" || coolVal === "xx" || sterilVal === "xx") return "xx";
+
+    if (isHeating) return "HEATING";
+    if (isCooling) return "COOLING";
+    if (isSteril) return "STERIL";
+    return "STANDBY";
+  }, [mergedLatest]);
+
+  const currentSt3Lot = useMemo<string>(() => {
+    const val = mergedLatest["cooling-water/jumo_pieces"]?.value;
+    if (val === undefined || val === null || val === "XX" || val === "xx" || val === "Belum Ada API") return "—";
+    const str = String(val).trim();
+    if (!str) return "—";
+    if (str.includes("/")) {
+      const part = str.split("/")[1]?.trim();
+      return part || str;
+    }
+    return str;
+  }, [mergedLatest]);
+
+  // Hydrate persisted duration state from localStorage on unitId change
+  useEffect(() => {
+    durationHydratedRef.current = false;
+    try {
+      const raw = localStorage.getItem(durationStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setActiveSt3Session(parsed?.activeSession ?? null);
+        setSt3DurationRecords(Array.isArray(parsed?.records) ? parsed.records : []);
+      } else {
+        setActiveSt3Session(null);
+        setSt3DurationRecords([]);
+      }
+    } catch {
+      setActiveSt3Session(null);
+      setSt3DurationRecords([]);
+    } finally {
+      durationHydratedRef.current = true;
+    }
+  }, [durationStorageKey]);
+
+  const activeSessionRef = useRef<ActiveSt3Session | null>(activeSt3Session);
+  activeSessionRef.current = activeSt3Session;
+  const durationRecordsRef = useRef<St3DurationRecord[]>(st3DurationRecords);
+  durationRecordsRef.current = st3DurationRecords;
+
+  const persistDurationState = (
+    nextActive: ActiveSt3Session | null,
+    nextRecords: St3DurationRecord[]
+  ) => {
+    try {
+      localStorage.setItem(
+        durationStorageKey,
+        JSON.stringify({
+          activeSession: nextActive,
+          records: nextRecords.slice(0, 200),
+        })
+      );
+    } catch {
+      // ignore storage quota error
+    }
+  };
+
+  // Track ST-3 process state transitions (HEATING / STERIL / COOLING / STANDBY)
+  useEffect(() => {
+    if (!unitId.startsWith("cooling-water") || !durationHydratedRef.current) return;
+    if (currentSt3Process === "xx") return;
+
+    const now = Date.now();
+    const curActive = activeSessionRef.current;
+    const curRecords = durationRecordsRef.current;
+    const isActivePhase =
+      currentSt3Process === "HEATING" ||
+      currentSt3Process === "STERIL" ||
+      currentSt3Process === "COOLING";
+
+    const finalizeSession = (session: ActiveSt3Session): St3DurationRecord => {
+      const gapSinceLastSeen = now - session.lastSeenAtMs;
+      const endedAtMs = gapSinceLastSeen > 60_000 ? session.lastSeenAtMs : now;
+      const durationSeconds = Math.max(1, Math.round((endedAtMs - session.startedAtMs) / 1000));
+      return {
+        id: session.id,
+        date: session.date,
+        lot: session.lot,
+        process: session.process,
+        startedAtMs: session.startedAtMs,
+        endedAtMs,
+        startTime: session.startTime,
+        endTime: formatLocalTimeHms(endedAtMs),
+        durationSeconds,
+      };
+    };
+
+    const createSession = (proc: St3ActiveProcess): ActiveSt3Session => ({
+      id: `${proc}-${now}`,
+      date: formatLocalDateIso(now),
+      lot: currentSt3Lot,
+      process: proc,
+      startedAtMs: now,
+      startTime: formatLocalTimeHms(now),
+      lastSeenAtMs: now,
+    });
+
+    if (isActivePhase) {
+      if (!curActive) {
+        const nextActive = createSession(currentSt3Process);
+        setActiveSt3Session(nextActive);
+        setDurationNowMs(now);
+        persistDurationState(nextActive, curRecords);
+      } else if (
+        curActive.process !== currentSt3Process ||
+        (currentSt3Lot !== "—" && curActive.lot !== "—" && curActive.lot !== currentSt3Lot)
+      ) {
+        const closed = finalizeSession(curActive);
+        const nextRecords = [closed, ...curRecords].slice(0, 200);
+        const nextActive = createSession(currentSt3Process);
+        setSt3DurationRecords(nextRecords);
+        setActiveSt3Session(nextActive);
+        setDurationNowMs(now);
+        persistDurationState(nextActive, nextRecords);
+      } else if (curActive.lot === "—" && currentSt3Lot !== "—") {
+        const updatedActive: ActiveSt3Session = {
+          ...curActive,
+          lot: currentSt3Lot,
+          lastSeenAtMs: now,
+        };
+        setActiveSt3Session(updatedActive);
+        persistDurationState(updatedActive, curRecords);
+      }
+    } else if (currentSt3Process === "STANDBY" && curActive) {
+      const closed = finalizeSession(curActive);
+      const nextRecords = [closed, ...curRecords].slice(0, 200);
+      setSt3DurationRecords(nextRecords);
+      setActiveSt3Session(null);
+      persistDurationState(null, nextRecords);
+    }
+  }, [unitId, currentSt3Process, currentSt3Lot]);
+
+  // 1-second live timer tick only while an ST-3 process phase is actively running
+  useEffect(() => {
+    if (!activeSt3Session) return;
+    setDurationNowMs(Date.now());
+    let tickCount = 0;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setDurationNowMs(now);
+      tickCount += 1;
+      if (tickCount % 10 === 0 && activeSessionRef.current) {
+        const touched: ActiveSt3Session = {
+          ...activeSessionRef.current,
+          lastSeenAtMs: now,
+        };
+        activeSessionRef.current = touched;
+        persistDurationState(touched, durationRecordsRef.current);
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [activeSt3Session?.id]);
+
+  const handleClearDurationHistory = () => {
+    setSt3DurationRecords([]);
+    persistDurationState(activeSessionRef.current, []);
+  };
+
+  const liveSt3DurationSeconds = activeSt3Session
+    ? Math.max(0, Math.floor((durationNowMs - activeSt3Session.startedAtMs) / 1000))
+    : 0;
+  const st3DurationText = activeSt3Session ? formatDurationHms(liveSt3DurationSeconds) : "00:00:00";
+  const st3DurationCount = st3DurationRecords.length + (activeSt3Session ? 1 : 0);
+
   if (!machine) return null;
 
   // ── Ambil task & alarm khusus untuk mesin ini ──────────
@@ -821,32 +1023,52 @@ export default function MachinePidDiagram() {
 
   // ── LAYOUT STANDAR (NON-HVAC) ──────────────────────────
   return (
-    <PidPageTemplate
-      machineName={machine.name}
-      allOn={false}
-      onToggleAllOn={() => {}}
-      tasks={allTasks}
-      selectedTaskFilter={selectedTaskFilter}
-      onFilterChange={setSelectedTaskFilter}
-      taskInfo={taskInfo}
-      alarms={dynamicAlarmsList}
-      onToggleCompleteTask={handleToggleCompleteTask}
-      dateRange={dateRange}
-      onChangeDateRange={setDateRange}
-    >
-      {PidDiagram ? (
-        <PidDiagram 
-          motorStatus={motorStatus} 
-          runningHours={runningHours} 
-          pidThresholds={pidThresholds} 
-          sensorRulesMap={sensorRulesMap} 
-          latest={mergedLatest} 
+    <>
+      <PidPageTemplate
+        machineName={machine.name}
+        allOn={false}
+        onToggleAllOn={() => {}}
+        tasks={allTasks}
+        selectedTaskFilter={selectedTaskFilter}
+        onFilterChange={setSelectedTaskFilter}
+        taskInfo={taskInfo}
+        alarms={dynamicAlarmsList}
+        onToggleCompleteTask={handleToggleCompleteTask}
+        dateRange={dateRange}
+        onChangeDateRange={setDateRange}
+      >
+        {PidDiagram ? (
+          <PidDiagram
+            motorStatus={motorStatus}
+            runningHours={runningHours}
+            pidThresholds={pidThresholds}
+            sensorRulesMap={sensorRulesMap}
+            latest={mergedLatest}
+            durationText={st3DurationText}
+            durationActive={Boolean(activeSt3Session)}
+            durationCount={st3DurationCount}
+            onOpenListDuration={() => setDurationModalOpen(true)}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full text-slate-400">
+            Diagram untuk {unitId} belum tersedia.
+          </div>
+        )}
+      </PidPageTemplate>
+
+      {isCooling && (
+        <St3DurationModal
+          open={durationModalOpen}
+          machineName={machine.name}
+          currentProcess={currentSt3Process}
+          currentLot={currentSt3Lot}
+          liveDurationSeconds={liveSt3DurationSeconds}
+          activeSession={activeSt3Session}
+          records={st3DurationRecords}
+          onClearHistory={handleClearDurationHistory}
+          onClose={() => setDurationModalOpen(false)}
         />
-      ) : (
-        <div className="flex items-center justify-center h-full text-slate-400">
-          Diagram untuk {unitId} belum tersedia.
-        </div>
       )}
-    </PidPageTemplate>
+    </>
   );
 }

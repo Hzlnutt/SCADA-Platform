@@ -24,6 +24,10 @@ interface CoolingWF1U3PidProps {
   svgRef?: React.RefObject<SVGSVGElement>;
   onSvgClick?: (e: React.MouseEvent<SVGSVGElement>) => void;
   latest?: Record<string, any>;
+  durationText?: string;
+  durationActive?: boolean;
+  durationCount?: number;
+  onOpenListDuration?: () => void;
 }
 
 export default function CoolingWF1U3Pid({
@@ -34,6 +38,10 @@ export default function CoolingWF1U3Pid({
   svgRef,
   onSvgClick,
   latest: propLatest,
+  durationText = "00:00:00",
+  durationActive = false,
+  durationCount = 0,
+  onOpenListDuration,
 }: CoolingWF1U3PidProps) {
   const storeLatest = useTelemetryStore((state) => state.latest);
   const latest = propLatest || storeLatest;
@@ -502,38 +510,38 @@ export default function CoolingWF1U3Pid({
       <LabelComponent text="CHEM 327/317" x={1077.5} y={758} w={20} h={20} hasBorder={false} fontSize={13} />
       </g>
 
-      {/* ── BOTTOM WHITE SENSOR CARDS (Symmetrical 9-Card Row: x=89..1687) ── */}
+      {/* ── BOTTOM WHITE SENSOR CARDS (Symmetrical 4 + 4 = 8-Card Row: x=89..1687) ── */}
       <SensorCard
         x={89}
         y={812}
-        width={164}
+        width={182}
         title="SUPPLY TEMP"
         value={getVal("cooling-water/supply_temp") as string | number}
         unit={typeof getVal("cooling-water/supply_temp") === "number" ? " °C" : ""}
         colorType="green"
       />
       <SensorCard
-        x={266}
+        x={287}
         y={812}
-        width={164}
+        width={182}
         title="RETURN TEMP"
         value={getVal("cooling-water/return_temp") as string | number}
         unit={typeof getVal("cooling-water/return_temp") === "number" ? " °C" : ""}
         colorType="green"
       />
       <SensorCard
-        x={443}
+        x={485}
         y={812}
-        width={164}
+        width={182}
         title="Δ TEMP"
         value={deltaTVal}
         unit={typeof deltaTVal === "number" ? " °C" : ""}
         colorType="green"
       />
       <SensorCard
-        x={620}
+        x={683}
         y={812}
-        width={164}
+        width={182}
         title="AMBIENT"
         values={[
           { value: getVal("cooling-water/ambient_temp") as string | number, unit: typeof getVal("cooling-water/ambient_temp") === "number" ? " °C" : "" },
@@ -542,11 +550,11 @@ export default function CoolingWF1U3Pid({
         colorType="green"
       />
 
-      {/* Subtle Group Divider */}
+      {/* Subtle Center Group Divider */}
       <line
-        x1={799.5}
+        x1={888}
         y1={822}
-        x2={799.5}
+        x2={888}
         y2={902}
         stroke="#94a3b8"
         strokeWidth={1.5}
@@ -555,43 +563,40 @@ export default function CoolingWF1U3Pid({
       />
 
       <SensorCard
-        x={815}
+        x={911}
         y={812}
-        width={164}
+        width={182}
         title="PROSES ST"
         value={getStProcessStatus()}
         colorType="blue"
       />
       <SensorCard
-        x={992}
+        x={1109}
         y={812}
-        width={164}
+        width={182}
         title="LOT"
         value={getLotValue()}
         colorType="blue"
       />
       <SensorCard
-        x={1169}
+        x={1307}
         y={812}
-        width={164}
-        title="HEATING"
-        value={getStatusDisplay("cooling-water/st3_heating")}
+        width={182}
+        title="DURATION"
+        value={durationText}
+        valueFontSize={25}
+        valueColorOverride={durationActive ? "#00cc00" : undefined}
         colorType="blue"
       />
       <SensorCard
-        x={1346}
+        x={1505}
         y={812}
-        width={164}
-        title="COOLING"
-        value={getStatusDisplay("cooling-water/st3_cooling")}
-        colorType="blue"
-      />
-      <SensorCard
-        x={1523}
-        y={812}
-        width={164}
-        title="STERIL"
-        value={getStatusDisplay("cooling-water/st3_steril")}
+        width={182}
+        title="LIST DURATION"
+        value={durationCount > 0 ? `LIHAT (${durationCount})` : "LIHAT TABEL"}
+        valueFontSize={15}
+        isActionButton={true}
+        onClick={onOpenListDuration}
         colorType="blue"
       />
     </svg>

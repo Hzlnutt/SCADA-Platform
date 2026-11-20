@@ -80,6 +80,7 @@ export default function PidPageTemplate({
   };
 
   const { groupId, unitId } = useParams<{ groupId: string; unitId: string }>();
+  const isCoolingPid = Boolean(unitId?.startsWith("cooling-water"));
 
   const filteredTasks =
     selectedTaskFilter === "all"
@@ -91,9 +92,19 @@ export default function PidPageTemplate({
       : tasks.filter((t) => t.status === "close");
 
   return (
-    <div className="flex flex-col xl:flex-row gap-5 items-start w-full">
+    <div
+      className={
+        isCoolingPid
+          ? "flex flex-col gap-5 items-stretch w-full"
+          : "flex flex-col xl:flex-row gap-5 items-start w-full"
+      }
+    >
       {/* Canvas Area */}
-      <section className="flex-1 w-full min-w-0 flex flex-col rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 p-3 sm:p-5 shadow-sm transition-colors duration-300">
+      <section
+        className={`${
+          isCoolingPid ? "w-full" : "flex-1 w-full min-w-0"
+        } flex flex-col rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 p-3 sm:p-5 shadow-sm transition-colors duration-300`}
+      >
         {/* Top Bar */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="text-xs uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400 font-extrabold">
@@ -108,17 +119,27 @@ export default function PidPageTemplate({
         <div className="overflow-x-auto scrollbar-thin rounded-xl border border-slate-100 dark:border-slate-800">
           <div
             className="relative w-full min-w-[760px] md:min-w-[900px] rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900"
-            style={{ aspectRatio: unitId?.startsWith("cooling-water") ? "1728 / 985" : "1836 / 1110" }}
+            style={{ aspectRatio: isCoolingPid ? "1728 / 985" : "1836 / 1110" }}
           >
             {children}
           </div>
         </div>
       </section>
 
-      {/* Side Panel: Tasks & Alarms (stacks below on <xl, side-by-side on xl+) */}
-      <div className="w-full xl:w-96 shrink-0 flex flex-col sm:flex-row xl:flex-col gap-4">
+      {/* Tasks & Alarms Panel: below P&ID (2-column grid) on Cooling P&ID; side-by-side on xl+ for others */}
+      <div
+        className={
+          isCoolingPid
+            ? "grid grid-cols-1 lg:grid-cols-2 gap-4 w-full"
+            : "w-full xl:w-96 shrink-0 flex flex-col sm:flex-row xl:flex-col gap-4"
+        }
+      >
         {/* Task Card */}
-        <div className="flex-1 flex flex-col rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm overflow-hidden min-h-[300px] max-h-[500px]">
+        <div
+          className={`flex-1 flex flex-col rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm overflow-hidden ${
+            isCoolingPid ? "min-h-[300px] max-h-[440px]" : "min-h-[300px] max-h-[500px]"
+          }`}
+        >
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 font-extrabold">
               Task Information
@@ -210,7 +231,11 @@ export default function PidPageTemplate({
         </div>
 
         {/* Alarm Card */}
-        <div className="flex-1 flex flex-col rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm overflow-hidden min-h-[300px] max-h-[500px]">
+        <div
+          className={`flex-1 flex flex-col rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm overflow-hidden ${
+            isCoolingPid ? "min-h-[300px] max-h-[440px]" : "min-h-[300px] max-h-[500px]"
+          }`}
+        >
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 font-extrabold">
               Alarms
