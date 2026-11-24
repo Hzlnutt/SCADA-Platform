@@ -146,6 +146,7 @@ type TransformerData = {
   currentUnbalance?: number | null;
   kwh: number | null;
   status: "online" | "warning" | "offline";
+  pmStatus?: boolean | null;
   vectorGroup?: string;
   impedance?: number;
   year?: string;
@@ -233,41 +234,44 @@ function mapPmToTransformer(
   const iUnb = pm.current_unbalance !== null && pm.current_unbalance !== undefined ? Number(pm.current_unbalance) : null;
 
   const kwh = pm.active_energy !== null && pm.active_energy !== undefined ? Number(Number(pm.active_energy).toFixed(0)) : null;
-  const isOnline = pm.status !== null && pm.status !== undefined
-    ? Boolean(pm.status)
+  const pmStatus = pm.status !== null && pm.status !== undefined ? Boolean(pm.status) : null;
+  const isOfflinePm = pmStatus === false;
+  const isOnline = pmStatus !== null
+    ? pmStatus
     : ((activePowerKw !== null && activePowerKw !== undefined) || (vAb !== null && vAb > 100));
 
   return {
     ...initialTx,
-    activePowerKw,
-    reactivePowerKvar,
-    apparentPowerKva,
-    powerFactor,
-    frequencyHz,
+    activePowerKw: isOfflinePm ? null : activePowerKw,
+    reactivePowerKvar: isOfflinePm ? null : reactivePowerKvar,
+    apparentPowerKva: isOfflinePm ? null : apparentPowerKva,
+    powerFactor: isOfflinePm ? null : powerFactor,
+    frequencyHz: isOfflinePm ? null : frequencyHz,
     voltageInKv: initialTx.factory === 1 ? (incomingVolts?.wf1Volt ?? initialTx.voltageInKv) : (incomingVolts?.wf2Volt ?? initialTx.voltageInKv),
-    voltageOutL2L,
-    voltageOutL2N,
-    voltAn: vAn,
-    voltBn: vBn,
-    voltCn: vCn,
-    voltAb: vAb,
-    voltBc: vBc,
-    voltCa: vCa,
-    currentR,
-    currentS,
-    currentT,
+    voltageOutL2L: isOfflinePm ? null : voltageOutL2L,
+    voltageOutL2N: isOfflinePm ? null : voltageOutL2N,
+    voltAn: isOfflinePm ? null : vAn,
+    voltBn: isOfflinePm ? null : vBn,
+    voltCn: isOfflinePm ? null : vCn,
+    voltAb: isOfflinePm ? null : vAb,
+    voltBc: isOfflinePm ? null : vBc,
+    voltCa: isOfflinePm ? null : vCa,
+    currentR: isOfflinePm ? null : currentR,
+    currentS: isOfflinePm ? null : currentS,
+    currentT: isOfflinePm ? null : currentT,
     thdVoltage: null,
     thdCurrent: null,
-    thdVoltA: thdVa,
-    thdVoltB: thdVb,
-    thdVoltC: thdVc,
-    thdCurrentA: thdIa,
-    thdCurrentB: thdIb,
-    thdCurrentC: thdIc,
-    voltageUnbalance: vUnb,
-    currentUnbalance: iUnb,
+    thdVoltA: isOfflinePm ? null : thdVa,
+    thdVoltB: isOfflinePm ? null : thdVb,
+    thdVoltC: isOfflinePm ? null : thdVc,
+    thdCurrentA: isOfflinePm ? null : thdIa,
+    thdCurrentB: isOfflinePm ? null : thdIb,
+    thdCurrentC: isOfflinePm ? null : thdIc,
+    voltageUnbalance: isOfflinePm ? null : vUnb,
+    currentUnbalance: isOfflinePm ? null : iUnb,
     tempCc: null,
     kwh,
+    pmStatus,
     status: isOnline ? "online" : "offline",
   };
 }
@@ -1650,24 +1654,29 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
 
 /* ═══════════ TRANSFORMER DETAIL CARD (Section B) ═══════════ */
 function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; factoryLabel: string; loadConfig: { safeMax: number; cautionMax: number } }) {
-  const hasData = tx.activePowerKw !== null && tx.activePowerKw !== undefined;
+  const isPmOff = tx.pmStatus === false;
+  const hasData = !isPmOff && tx.activePowerKw !== null && tx.activePowerKw !== undefined;
 
   const has400V =
+    !isPmOff &&
     tx.voltAb !== null && tx.voltAb !== undefined &&
     tx.voltBc !== null && tx.voltBc !== undefined &&
     tx.voltCa !== null && tx.voltCa !== undefined;
 
   const hasThdV =
+    !isPmOff &&
     tx.thdVoltA !== null && tx.thdVoltA !== undefined &&
     tx.thdVoltB !== null && tx.thdVoltB !== undefined &&
     tx.thdVoltC !== null && tx.thdVoltC !== undefined;
 
   const hasThdI =
+    !isPmOff &&
     tx.thdCurrentA !== null && tx.thdCurrentA !== undefined &&
     tx.thdCurrentB !== null && tx.thdCurrentB !== undefined &&
     tx.thdCurrentC !== null && tx.thdCurrentC !== undefined;
 
   const hasCurrent =
+    !isPmOff &&
     tx.currentR !== null && tx.currentR !== undefined &&
     tx.currentS !== null && tx.currentS !== undefined &&
     tx.currentT !== null && tx.currentT !== undefined;
@@ -1677,34 +1686,46 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
   const estimatedCost = tx.kwh !== null ? tx.kwh * effectiveRate : null;
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+    <div className={`rounded-2xl border bg-white dark:bg-slate-900 shadow-sm overflow-hidden ${
+      isPmOff ? "border-rose-300 dark:border-rose-500/40" : "border-slate-200 dark:border-slate-800"
+    }`}>
       {/* Card Header */}
       <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <span
             className="rounded-full"
             style={{
               width: 8, height: 8,
-              backgroundColor: hasData ? (tx.status === "online" ? "#10b981" : "#f59e0b") : "#94a3b8",
-              boxShadow: hasData ? "0 0 6px #10b981" : "none",
+              backgroundColor: isPmOff ? "#ef4444" : (hasData ? (tx.status === "online" ? "#10b981" : "#f59e0b") : "#94a3b8"),
+              boxShadow: isPmOff ? "0 0 6px #ef4444" : (hasData ? "0 0 6px #10b981" : "none"),
             }}
           />
           <span className="text-sm font-extrabold text-slate-800 dark:text-white">{tx.name}</span>
           <span className="px-2 py-0.5 rounded text-[8px] font-extrabold bg-sky-500/10 text-sky-500 border border-sky-500/20 uppercase">
             {factoryLabel} — {tx.capacityKva} kVA
           </span>
+          {isPmOff && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold bg-rose-500/10 text-rose-500 border border-rose-500/25 uppercase">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+              PM OFF / MATI
+            </span>
+          )}
         </div>
         {(() => {
-          const loadPct = tx.apparentPowerKva && tx.capacityKva
+          const loadPct = !isPmOff && tx.apparentPowerKva && tx.capacityKva
             ? Math.round((tx.apparentPowerKva / tx.capacityKva) * 100)
-            : (tx.activePowerKw && tx.capacityKva ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null);
+            : (!isPmOff && tx.activePowerKw && tx.capacityKva ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null);
           const loadColor = loadPct !== null
             ? (loadPct <= 70 ? "#10b981" : loadPct <= 85 ? "#eab308" : "#ef4444")
             : "#f59e0b";
           return (
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-bold text-slate-400">LOAD:</span>
-              {loadPct !== null ? (
+              {isPmOff ? (
+                <span className="text-[10px] font-mono font-extrabold text-rose-500">
+                  OFF / MATI
+                </span>
+              ) : loadPct !== null ? (
                 <span className="text-[11px] font-mono font-extrabold" style={{ color: loadColor }}>
                   {loadPct}%
                 </span>
@@ -1722,25 +1743,28 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
       <div className="p-5">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 16px" }} className="text-xs">
           <ParamCell label="Input Voltage" value={tx.voltageInKv !== null ? `${tx.voltageInKv.toFixed(2)} kV` : NO_REALTIME_API} warn={tx.voltageInKv === null} />
-          <ParamCell label="Output Volt 400V" value={has400V ? `R:${tx.voltAb!.toFixed(1)} S:${tx.voltBc!.toFixed(1)} T:${tx.voltCa!.toFixed(1)} V` : NO_REALTIME_API} warn={!has400V} />
+          <ParamCell label="Output Volt 400V" value={isPmOff ? "PM OFF / MATI" : (has400V ? `R:${tx.voltAb!.toFixed(1)} S:${tx.voltBc!.toFixed(1)} T:${tx.voltCa!.toFixed(1)} V` : NO_REALTIME_API)} warn={!isPmOff && !has400V} offline={isPmOff} />
           <ParamCell 
             label="Output Volt 230V" 
             value={
-              (tx.voltAn !== null && tx.voltAn !== undefined && tx.voltBn !== null && tx.voltBn !== undefined && tx.voltCn !== null && tx.voltCn !== undefined)
-                ? `R:${tx.voltAn.toFixed(0)} S:${tx.voltBn.toFixed(0)} T:${tx.voltCn.toFixed(0)} V`
-                : (tx.voltageOutL2N !== null && tx.voltageOutL2N !== undefined)
-                  ? `${tx.voltageOutL2N.toFixed(1)} V`
-                  : NO_REALTIME_API
+              isPmOff
+                ? "PM OFF / MATI"
+                : (tx.voltAn !== null && tx.voltAn !== undefined && tx.voltBn !== null && tx.voltBn !== undefined && tx.voltCn !== null && tx.voltCn !== undefined)
+                  ? `R:${tx.voltAn.toFixed(0)} S:${tx.voltBn.toFixed(0)} T:${tx.voltCn.toFixed(0)} V`
+                  : (tx.voltageOutL2N !== null && tx.voltageOutL2N !== undefined)
+                    ? `${tx.voltageOutL2N.toFixed(1)} V`
+                    : NO_REALTIME_API
             } 
-            warn={tx.voltAn === null && tx.voltageOutL2N === null} 
+            warn={!isPmOff && tx.voltAn === null && tx.voltageOutL2N === null}
+            offline={isPmOff}
           />
           
-          <ParamCell label="Active Power" value={tx.activePowerKw !== null ? `${tx.activePowerKw} kW` : NO_REALTIME_API} accent={hasData} warn={tx.activePowerKw === null} />
-          <ParamCell label="Reactive Power" value={tx.reactivePowerKvar !== null ? `${tx.reactivePowerKvar} kVAR` : NO_REALTIME_API} warn={tx.reactivePowerKvar === null} />
-          <ParamCell label="Apparent Power" value={tx.apparentPowerKva !== null ? `${tx.apparentPowerKva} kVA` : NO_REALTIME_API} warn={tx.apparentPowerKva === null} />
+          <ParamCell label="Active Power" value={isPmOff ? "PM OFF / MATI" : (tx.activePowerKw !== null ? `${tx.activePowerKw} kW` : NO_REALTIME_API)} accent={hasData} warn={!isPmOff && tx.activePowerKw === null} offline={isPmOff} />
+          <ParamCell label="Reactive Power" value={isPmOff ? "PM OFF / MATI" : (tx.reactivePowerKvar !== null ? `${tx.reactivePowerKvar} kVAR` : NO_REALTIME_API)} warn={!isPmOff && tx.reactivePowerKvar === null} offline={isPmOff} />
+          <ParamCell label="Apparent Power" value={isPmOff ? "PM OFF / MATI" : (tx.apparentPowerKva !== null ? `${tx.apparentPowerKva} kVA` : NO_REALTIME_API)} warn={!isPmOff && tx.apparentPowerKva === null} offline={isPmOff} />
           
-          <ParamCell label="Power Factor" value={tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API} warn={tx.powerFactor === null} />
-          <ParamCell label="Frequency" value={tx.frequencyHz !== null ? `${tx.frequencyHz.toFixed(2)} Hz` : NO_REALTIME_API} warn={tx.frequencyHz === null} />
+          <ParamCell label="Power Factor" value={isPmOff ? "OFF" : (tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API)} warn={!isPmOff && tx.powerFactor === null} offline={isPmOff} />
+          <ParamCell label="Frequency" value={isPmOff ? "OFF" : (tx.frequencyHz !== null ? `${tx.frequencyHz.toFixed(2)} Hz` : NO_REALTIME_API)} warn={!isPmOff && tx.frequencyHz === null} offline={isPmOff} />
           <ParamCell label="Temperature" value={tx.tempCc !== null ? `${tx.tempCc.toFixed(1)} °C` : NO_REALTIME_API} warn={tx.tempCc === null || tx.tempCc > 60} />
 
           <ParamCell label="Impedance" value={`${tx.impedance ?? 4.5} %`} />
@@ -1754,7 +1778,9 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
         >
           <div className="flex justify-between items-center text-xs">
             <span className="text-[9px] text-slate-400 uppercase font-extrabold tracking-wider">Arus Per Fasa (A)</span>
-            {hasCurrent ? (
+            {isPmOff ? (
+              <span className="text-[9px] font-mono font-extrabold text-rose-500">PM OFF / MATI</span>
+            ) : hasCurrent ? (
               <div className="font-mono font-bold text-slate-600 dark:text-slate-300">
                 R: <span className="mr-2">{tx.currentR!.toFixed(1)}</span>
                 S: <span className="mr-2">{tx.currentS!.toFixed(1)}</span>
@@ -1768,7 +1794,9 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
           <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/40 text-xs">
             <div>
               <span className="text-[9px] text-slate-400 uppercase block font-extrabold tracking-wider mb-0.5">THDV Per Fasa (%)</span>
-              {hasThdV ? (
+              {isPmOff ? (
+                <span className="text-[9px] font-mono font-extrabold text-rose-500">OFF</span>
+              ) : hasThdV ? (
                 <div className="font-mono font-bold text-slate-600 dark:text-slate-300">
                   R:<span className="mr-1">{tx.thdVoltA!.toFixed(2)}</span>
                   S:<span className="mr-1">{tx.thdVoltB!.toFixed(2)}</span>
@@ -1780,7 +1808,9 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
             </div>
             <div>
               <span className="text-[9px] text-slate-400 uppercase block font-extrabold tracking-wider mb-0.5">THDi Per Fasa (%)</span>
-              {hasThdI ? (
+              {isPmOff ? (
+                <span className="text-[9px] font-mono font-extrabold text-rose-500">OFF</span>
+              ) : hasThdI ? (
                 <div className="font-mono font-bold text-slate-600 dark:text-slate-300">
                   R:<span className="mr-1">{tx.thdCurrentA!.toFixed(2)}</span>
                   S:<span className="mr-1">{tx.thdCurrentB!.toFixed(2)}</span>
@@ -1795,7 +1825,9 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
           <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/40 text-[10px] font-bold text-slate-500">
             <div>
               <span>Voltage Unbalanced: </span>
-              {tx.voltageUnbalance !== null && tx.voltageUnbalance !== undefined ? (
+              {isPmOff ? (
+                <span className="text-[9px] font-mono font-extrabold text-rose-500">OFF</span>
+              ) : tx.voltageUnbalance !== null && tx.voltageUnbalance !== undefined ? (
                 <span className="text-slate-600 dark:text-slate-300 font-mono font-bold">
                   {tx.voltageUnbalance.toFixed(2)} %
                 </span>
@@ -1805,7 +1837,9 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
             </div>
             <div>
               <span>Current Unbalanced: </span>
-              {tx.currentUnbalance !== null && tx.currentUnbalance !== undefined ? (
+              {isPmOff ? (
+                <span className="text-[9px] font-mono font-extrabold text-rose-500">OFF</span>
+              ) : tx.currentUnbalance !== null && tx.currentUnbalance !== undefined ? (
                 <span className="text-slate-600 dark:text-slate-300 font-mono font-bold">
                   {tx.currentUnbalance.toFixed(2)} %
                 </span>
@@ -1852,11 +1886,12 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
   );
 }
 
-function ParamCell({ label, value, accent, warn }: { label: string; value: string; accent?: boolean; warn?: boolean }) {
+function ParamCell({ label, value, accent, warn, offline }: { label: string; value: string; accent?: boolean; warn?: boolean; offline?: boolean }) {
   return (
     <div>
       <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-bold">{label}</span>
       <span className={`font-bold font-mono text-[10px] ${
+        offline ? "text-rose-500 font-extrabold" :
         accent ? "text-emerald-500 font-extrabold" :
         warn ? "text-amber-500" :
         "text-slate-800 dark:text-slate-200"
@@ -2093,20 +2128,26 @@ export default function PowerDistribution() {
 
   // Incoming live telemetry data
   const [incomingData, setIncomingData] = useState<{
+    plnStatus: boolean | null;
     plnKw: number | null;
     plnPf: number | null;
+    wf1Status: boolean | null;
     wf1Kw: number | null;
     wf1Pf: number | null;
     wf1Volt: number | null;
+    wf2Status: boolean | null;
     wf2Kw: number | null;
     wf2Pf: number | null;
     wf2Volt: number | null;
   }>({
+    plnStatus: null,
     plnKw: null,
     plnPf: null,
+    wf1Status: null,
     wf1Kw: null,
     wf1Pf: null,
     wf1Volt: null,
+    wf2Status: null,
     wf2Kw: null,
     wf2Pf: null,
     wf2Volt: null,
@@ -2137,6 +2178,15 @@ export default function PowerDistribution() {
     return Number(Number(val).toFixed(1));
   };
 
+  const resolveDeviceStatus = (dataObj: any, prevStatus: boolean | null): boolean | null => {
+    if (!dataObj) return prevStatus;
+    if (typeof dataObj.online === "boolean") return dataObj.online;
+    if (typeof dataObj.status === "boolean") return dataObj.status;
+    if (typeof dataObj.pqData?.status === "boolean") return dataObj.pqData.status;
+    if (dataObj.pqData?.pfStatus === "offline") return false;
+    return prevStatus;
+  };
+
   // Fetch incoming telemetries for PLN, Fact-1, Fact-2
   useEffect(() => {
     if (!isPageActive) return;
@@ -2147,16 +2197,24 @@ export default function PowerDistribution() {
           getJson<{ data: any }>("/analytics/electricity?deviceId=Feeder_WF1_PM5560"),
           getJson<{ data: any }>("/analytics/electricity?deviceId=Feeder_WF2_PM5500"),
         ]);
-        setIncomingData(prev => ({
-          plnKw: plnRes?.data?.pqData?.activePower !== undefined ? parsePowerVal(plnRes.data.pqData.activePower, prev.plnKw) : prev.plnKw,
-          plnPf: decodePf(plnRes?.data?.pqData?.pf !== undefined ? plnRes.data.pqData.pf : prev.plnPf),
-          wf1Kw: wf1Res?.data?.pqData?.activePower !== undefined ? parsePowerVal(wf1Res.data.pqData.activePower, prev.wf1Kw) : prev.wf1Kw,
-          wf1Pf: decodePf(wf1Res?.data?.pqData?.pf !== undefined ? wf1Res.data.pqData.pf : prev.wf1Pf),
-          wf1Volt: toKv(wf1Res?.data?.pqData?.vll1 ?? wf1Res?.data?.pqData?.voltage) ?? prev.wf1Volt,
-          wf2Kw: wf2Res?.data?.pqData?.activePower !== undefined ? parsePowerVal(wf2Res.data.pqData.activePower, prev.wf2Kw) : prev.wf2Kw,
-          wf2Pf: decodePf(wf2Res?.data?.pqData?.pf !== undefined ? wf2Res.data.pqData.pf : prev.wf2Pf),
-          wf2Volt: toKv(wf2Res?.data?.pqData?.vll1 ?? wf2Res?.data?.pqData?.voltage) ?? prev.wf2Volt,
-        }));
+        setIncomingData(prev => {
+          const plnStatus = resolveDeviceStatus(plnRes?.data, prev.plnStatus);
+          const wf1Status = resolveDeviceStatus(wf1Res?.data, prev.wf1Status);
+          const wf2Status = resolveDeviceStatus(wf2Res?.data, prev.wf2Status);
+          return {
+            plnStatus,
+            plnKw: plnStatus === false ? null : (plnRes?.data?.pqData?.activePower !== undefined ? parsePowerVal(plnRes.data.pqData.activePower, prev.plnKw) : prev.plnKw),
+            plnPf: plnStatus === false ? null : decodePf(plnRes?.data?.pqData?.pf !== undefined ? plnRes.data.pqData.pf : prev.plnPf),
+            wf1Status,
+            wf1Kw: wf1Status === false ? null : (wf1Res?.data?.pqData?.activePower !== undefined ? parsePowerVal(wf1Res.data.pqData.activePower, prev.wf1Kw) : prev.wf1Kw),
+            wf1Pf: wf1Status === false ? null : decodePf(wf1Res?.data?.pqData?.pf !== undefined ? wf1Res.data.pqData.pf : prev.wf1Pf),
+            wf1Volt: wf1Status === false ? null : (toKv(wf1Res?.data?.pqData?.vll1 ?? wf1Res?.data?.pqData?.voltage) ?? prev.wf1Volt),
+            wf2Status,
+            wf2Kw: wf2Status === false ? null : (wf2Res?.data?.pqData?.activePower !== undefined ? parsePowerVal(wf2Res.data.pqData.activePower, prev.wf2Kw) : prev.wf2Kw),
+            wf2Pf: wf2Status === false ? null : decodePf(wf2Res?.data?.pqData?.pf !== undefined ? wf2Res.data.pqData.pf : prev.wf2Pf),
+            wf2Volt: wf2Status === false ? null : (toKv(wf2Res?.data?.pqData?.vll1 ?? wf2Res?.data?.pqData?.voltage) ?? prev.wf2Volt),
+          };
+        });
         setLoadingSld(false);
       } catch (err) {
         console.error("Failed to load incoming telemetries for SLD:", err);
@@ -2172,26 +2230,32 @@ export default function PowerDistribution() {
       setLoadingSld(false);
       setIncomingData(prev => {
         if (payload.deviceId === "Cubicle_PLN_PM8000") {
+          const plnStatus = resolveDeviceStatus(payload, prev.plnStatus);
           return {
             ...prev,
-            plnKw: parsePowerVal(payload.pqData.activePower, prev.plnKw),
-            plnPf: decodePf(payload.pqData.pf !== undefined ? payload.pqData.pf : prev.plnPf)
+            plnStatus,
+            plnKw: plnStatus === false ? null : parsePowerVal(payload.pqData.activePower, prev.plnKw),
+            plnPf: plnStatus === false ? null : decodePf(payload.pqData.pf !== undefined ? payload.pqData.pf : prev.plnPf)
           };
         }
         if (payload.deviceId === "Feeder_WF1_PM5560") {
+          const wf1Status = resolveDeviceStatus(payload, prev.wf1Status);
           return {
             ...prev,
-            wf1Kw: parsePowerVal(payload.pqData.activePower, prev.wf1Kw),
-            wf1Pf: decodePf(payload.pqData.pf !== undefined ? payload.pqData.pf : prev.wf1Pf),
-            wf1Volt: toKv(payload.pqData.vll1 ?? payload.pqData.voltage) ?? prev.wf1Volt
+            wf1Status,
+            wf1Kw: wf1Status === false ? null : parsePowerVal(payload.pqData.activePower, prev.wf1Kw),
+            wf1Pf: wf1Status === false ? null : decodePf(payload.pqData.pf !== undefined ? payload.pqData.pf : prev.wf1Pf),
+            wf1Volt: wf1Status === false ? null : (toKv(payload.pqData.vll1 ?? payload.pqData.voltage) ?? prev.wf1Volt)
           };
         }
         if (payload.deviceId === "Feeder_WF2_PM5500") {
+          const wf2Status = resolveDeviceStatus(payload, prev.wf2Status);
           return {
             ...prev,
-            wf2Kw: parsePowerVal(payload.pqData.activePower, prev.wf2Kw),
-            wf2Pf: decodePf(payload.pqData.pf !== undefined ? payload.pqData.pf : prev.wf2Pf),
-            wf2Volt: toKv(payload.pqData.vll1 ?? payload.pqData.voltage) ?? prev.wf2Volt
+            wf2Status,
+            wf2Kw: wf2Status === false ? null : parsePowerVal(payload.pqData.activePower, prev.wf2Kw),
+            wf2Pf: wf2Status === false ? null : decodePf(payload.pqData.pf !== undefined ? payload.pqData.pf : prev.wf2Pf),
+            wf2Volt: wf2Status === false ? null : (toKv(payload.pqData.vll1 ?? payload.pqData.voltage) ?? prev.wf2Volt)
           };
         }
         return prev;
@@ -2207,13 +2271,17 @@ export default function PowerDistribution() {
 
   // Solar PV POI-1 & POI-2 Telemetry State
   const [solarData, setSolarData] = useState<{
+    poi1Status: boolean | null;
     poi1Kw: number | null;
     poi1Pf: number | null;
+    poi2Status: boolean | null;
     poi2Kw: number | null;
     poi2Pf: number | null;
   }>({
+    poi1Status: null,
     poi1Kw: null,
     poi1Pf: null,
+    poi2Status: null,
     poi2Kw: null,
     poi2Pf: null,
   });
@@ -2221,15 +2289,26 @@ export default function PowerDistribution() {
   // Fetch solar telemetries for SLD
   useEffect(() => {
     if (!isPageActive) return;
+    const parsePoiBool = (val: any, fallback: boolean | null): boolean | null => {
+      if (typeof val === "boolean") return val;
+      if (val === 1 || val === "1" || val === "true") return true;
+      if (val === 0 || val === "0" || val === "false") return false;
+      return fallback;
+    };
+
     const fetchSolar = () => {
       getJson<{ data: any }>("/analytics/solar/latest")
         .then((res) => {
           if (res?.data) {
+            const p1Status = parsePoiBool(res.data.poi1?.status, res.data.online === false ? false : null);
+            const p2Status = parsePoiBool(res.data.poi2?.status, res.data.online === false ? false : null);
             setSolarData({
-              poi1Kw: res.data.poi1?.activePower !== undefined ? res.data.poi1.activePower : null,
-              poi1Pf: decodePf(res.data.poi1?.powerFactor !== undefined ? res.data.poi1.powerFactor : null),
-              poi2Kw: res.data.poi2?.activePower !== undefined ? res.data.poi2.activePower : null,
-              poi2Pf: decodePf(res.data.poi2?.powerFactor !== undefined ? res.data.poi2.powerFactor : null),
+              poi1Status: p1Status,
+              poi1Kw: p1Status === false ? null : (res.data.poi1?.activePower !== undefined && res.data.poi1?.activePower !== null ? Number(res.data.poi1.activePower) : null),
+              poi1Pf: p1Status === false ? null : decodePf(res.data.poi1?.powerFactor !== undefined ? res.data.poi1.powerFactor : null),
+              poi2Status: p2Status,
+              poi2Kw: p2Status === false ? null : (res.data.poi2?.activePower !== undefined && res.data.poi2?.activePower !== null ? Number(res.data.poi2.activePower) : null),
+              poi2Pf: p2Status === false ? null : decodePf(res.data.poi2?.powerFactor !== undefined ? res.data.poi2.powerFactor : null),
             });
           }
         })
@@ -2242,21 +2321,48 @@ export default function PowerDistribution() {
     const socket = getSocket();
     const handleSolarLive = (payload: any) => {
       if (!payload) return;
-      setSolarData(prev => ({
-        poi1Kw: payload.poi1?.activePower !== undefined ? payload.poi1.activePower : prev.poi1Kw,
-        poi1Pf: payload.poi1?.powerFactor !== undefined ? payload.poi1.powerFactor : prev.poi1Pf,
-        poi2Kw: payload.poi2?.activePower !== undefined ? payload.poi2.activePower : prev.poi2Kw,
-        poi2Pf: payload.poi2?.powerFactor !== undefined ? payload.poi2.powerFactor : prev.poi2Pf,
-      }));
+      setSolarData(prev => {
+        const p1Status = parsePoiBool(payload.poi1?.status, payload.online === false ? false : prev.poi1Status);
+        const p2Status = parsePoiBool(payload.poi2?.status, payload.online === false ? false : prev.poi2Status);
+        return {
+          poi1Status: p1Status,
+          poi1Kw: p1Status === false ? null : (payload.poi1?.activePower !== undefined && payload.poi1?.activePower !== null ? Number(payload.poi1.activePower) : prev.poi1Kw),
+          poi1Pf: p1Status === false ? null : (payload.poi1?.powerFactor !== undefined ? decodePf(payload.poi1.powerFactor) : prev.poi1Pf),
+          poi2Status: p2Status,
+          poi2Kw: p2Status === false ? null : (payload.poi2?.activePower !== undefined && payload.poi2?.activePower !== null ? Number(payload.poi2.activePower) : prev.poi2Kw),
+          poi2Pf: p2Status === false ? null : (payload.poi2?.powerFactor !== undefined ? decodePf(payload.poi2.powerFactor) : prev.poi2Pf),
+        };
+      });
+    };
+
+    const handlePltsRecordsLive = (payload: any) => {
+      if (!payload || !Array.isArray(payload.data)) return;
+      const p1Rec = payload.data.find((r: any) => r?.poi_id === "POI_1");
+      const p2Rec = payload.data.find((r: any) => r?.poi_id === "POI_2");
+      if (!p1Rec && !p2Rec) return;
+      setSolarData(prev => {
+        const p1Status = p1Rec ? parsePoiBool(p1Rec.status, prev.poi1Status) : prev.poi1Status;
+        const p2Status = p2Rec ? parsePoiBool(p2Rec.status, prev.poi2Status) : prev.poi2Status;
+        return {
+          poi1Status: p1Status,
+          poi1Kw: p1Status === false ? null : (p1Rec && p1Rec.active_power !== undefined && p1Rec.active_power !== null ? Number(p1Rec.active_power) : prev.poi1Kw),
+          poi1Pf: p1Status === false ? null : (p1Rec && p1Rec.power_factor !== undefined ? decodePf(p1Rec.power_factor) : prev.poi1Pf),
+          poi2Status: p2Status,
+          poi2Kw: p2Status === false ? null : (p2Rec && p2Rec.active_power !== undefined && p2Rec.active_power !== null ? Number(p2Rec.active_power) : prev.poi2Kw),
+          poi2Pf: p2Status === false ? null : (p2Rec && p2Rec.power_factor !== undefined ? decodePf(p2Rec.power_factor) : prev.poi2Pf),
+        };
+      });
     };
 
     socket.on("electricity:solar_live", handleSolarLive);
     socket.on("solar:live_update", handleSolarLive);
+    socket.on("electricity:plts_live", handlePltsRecordsLive);
 
     return () => {
       clearInterval(interval);
       socket.off("electricity:solar_live", handleSolarLive);
       socket.off("solar:live_update", handleSolarLive);
+      socket.off("electricity:plts_live", handlePltsRecordsLive);
     };
   }, [isPageActive]);
 
@@ -2351,22 +2457,14 @@ export default function PowerDistribution() {
                 return [...res.data].sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
               }
               const map = new Map<string, ElectricPmItem>();
-              for (const item of res.data) {
-                if (item?.pm_id) map.set(item.pm_id.toUpperCase(), item);
-              }
               for (const prevItem of prev) {
-                if (!prevItem?.pm_id) continue;
-                const upId = prevItem.pm_id.toUpperCase();
-                const existing = map.get(upId);
-                if (existing) {
-                  const prevTime = prevItem.t_stamp ? new Date(prevItem.t_stamp).getTime() : 0;
-                  const newTime = existing.t_stamp ? new Date(existing.t_stamp).getTime() : 0;
-                  if (prevTime >= newTime) {
-                    map.set(upId, { ...existing, ...prevItem });
-                  }
-                } else {
-                  map.set(upId, prevItem);
-                }
+                if (prevItem?.pm_id) map.set(prevItem.pm_id.toUpperCase(), prevItem);
+              }
+              for (const item of res.data) {
+                if (!item?.pm_id) continue;
+                const upId = item.pm_id.toUpperCase();
+                const prevItem = map.get(upId);
+                map.set(upId, prevItem ? { ...prevItem, ...item } : item);
               }
               return Array.from(map.values()).sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
             });
@@ -2974,17 +3072,25 @@ export default function PowerDistribution() {
   const factory1 = transformers.filter(tx => tx.factory === 1);
   const factory2 = transformers.filter(tx => tx.factory === 2);
 
+  const isPoi1Off = solarData.poi1Status === false;
+  const isPoi2Off = solarData.poi2Status === false;
+  const isAllSolarOff = isPoi1Off && isPoi2Off;
+
   const totalSolarKw = useMemo(() => {
-    if (solarData.poi1Kw === null && solarData.poi2Kw === null) return null;
-    return Number(((solarData.poi1Kw || 0) + (solarData.poi2Kw || 0)).toFixed(1));
-  }, [solarData.poi1Kw, solarData.poi2Kw]);
+    if (isPoi1Off && isPoi2Off) return null;
+    const p1 = !isPoi1Off && solarData.poi1Kw !== null ? solarData.poi1Kw : null;
+    const p2 = !isPoi2Off && solarData.poi2Kw !== null ? solarData.poi2Kw : null;
+    if (p1 === null && p2 === null) return null;
+    return Number(((p1 || 0) + (p2 || 0)).toFixed(1));
+  }, [isPoi1Off, isPoi2Off, solarData.poi1Kw, solarData.poi2Kw]);
 
   const f1TotalCapacityKva = useMemo(() => {
     return factory1.reduce((sum, tx) => sum + tx.capacityKva, 0);
   }, [factory1]);
 
+  const isAllF1Off = factory1.length > 0 && factory1.every(tx => tx.pmStatus === false);
   const f1TotalKw = useMemo(() => {
-    const valid = factory1.filter(tx => tx.activePowerKw !== null && tx.activePowerKw !== undefined);
+    const valid = factory1.filter(tx => tx.pmStatus !== false && tx.activePowerKw !== null && tx.activePowerKw !== undefined);
     if (valid.length === 0) return null;
     return Number(valid.reduce((sum, tx) => sum + Number(tx.activePowerKw || 0), 0).toFixed(1));
   }, [factory1]);
@@ -2993,21 +3099,23 @@ export default function PowerDistribution() {
     return factory2.reduce((sum, tx) => sum + tx.capacityKva, 0);
   }, [factory2]);
 
+  const isAllF2Off = factory2.length > 0 && factory2.every(tx => tx.pmStatus === false);
   const f2TotalKw = useMemo(() => {
-    const valid = factory2.filter(tx => tx.activePowerKw !== null && tx.activePowerKw !== undefined);
+    const valid = factory2.filter(tx => tx.pmStatus !== false && tx.activePowerKw !== null && tx.activePowerKw !== undefined);
     if (valid.length === 0) return null;
     return Number(valid.reduce((sum, tx) => sum + Number(tx.activePowerKw || 0), 0).toFixed(1));
   }, [factory2]);
 
+  const isSystemAllOff = incomingData.plnStatus === false && isAllF1Off && isAllF2Off;
   const systemTotalKw = useMemo(() => {
-    if (incomingData.plnKw !== null && incomingData.plnKw !== undefined && incomingData.plnKw > 0) {
+    if (incomingData.plnStatus !== false && incomingData.plnKw !== null && incomingData.plnKw !== undefined && incomingData.plnKw > 0) {
       return incomingData.plnKw;
     }
     if (f1TotalKw !== null || f2TotalKw !== null) {
       return Number(((f1TotalKw || 0) + (f2TotalKw || 0)).toFixed(1));
     }
     return null;
-  }, [incomingData.plnKw, f1TotalKw, f2TotalKw]);
+  }, [incomingData.plnStatus, incomingData.plnKw, f1TotalKw, f2TotalKw]);
 
   const activeLineColor = isDark ? "#06b6d4" : "#3b82f6";
 
@@ -3032,6 +3140,11 @@ export default function PowerDistribution() {
             <span className="text-[10px] font-extrabold uppercase text-slate-400">{t("electricity.totalLoad")}</span>
             {loadingSld ? (
               <span className="inline-block h-5 w-20 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />
+            ) : isSystemAllOff ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-extrabold font-mono text-rose-500">
+                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                OFF / MATI
+              </span>
             ) : systemTotalKw !== null ? (
               <span className="text-base font-extrabold font-mono text-slate-800 dark:text-white">
                 {systemTotalKw.toLocaleString("id-ID")} <span className="text-xs text-slate-400 font-bold">kW</span>
@@ -3268,7 +3381,9 @@ export default function PowerDistribution() {
           {/* Main PLN card at top left-center (Center X = 505) */}
           <div className="absolute z-30" style={{ left: 420, top: 14 }}>
             <div className={`text-center px-3 py-2 w-[170px] h-[96px] flex flex-col justify-center rounded-2xl border shadow-md transition duration-300 ${
-              isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
+              incomingData.plnStatus === false
+                ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-white" : "bg-rose-50/95 border-rose-300 text-slate-800")
+                : (isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800")
             }`}>
               <div className="text-xs leading-tight font-black text-blue-600 dark:text-blue-400 tracking-wide">PLN-21 kV</div>
               <div className="text-[11px] leading-tight font-extrabold text-blue-700 dark:text-blue-300">5,540 kVa</div>
@@ -3276,6 +3391,11 @@ export default function PowerDistribution() {
                 Active Power <br />
                 {loadingSld ? (
                   <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                ) : incomingData.plnStatus === false ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[9px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                    OFF / MATI
+                  </span>
                 ) : (
                   <span className={`font-extrabold ${incomingData.plnKw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
                     {incomingData.plnKw !== null ? `${incomingData.plnKw.toLocaleString("id-ID")} kW` : NO_REALTIME_API}
@@ -3285,6 +3405,8 @@ export default function PowerDistribution() {
               <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
                   <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                ) : incomingData.plnStatus === false ? (
+                  <span className="font-extrabold font-mono text-rose-500 dark:text-rose-400">OFF</span>
                 ) : (
                   <span className={`font-bold ${incomingData.plnPf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
                     {decodePf(incomingData.plnPf) !== null ? decodePf(incomingData.plnPf)!.toFixed(3) : NO_REALTIME_API}
@@ -3297,18 +3419,32 @@ export default function PowerDistribution() {
           {/* Total Solar PV card at top right-center (Center X = 695) */}
           <div className="absolute z-30" style={{ left: 610, top: 14 }}>
             <div className={`text-center px-3 py-2 w-[170px] h-[96px] flex flex-col justify-center rounded-2xl border shadow-md transition duration-300 ${
-              isDark ? "bg-orange-950/35 border-orange-500/40 text-orange-100" : "bg-orange-50/95 border-orange-300 text-slate-800"
+              isAllSolarOff
+                ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-orange-100" : "bg-rose-50/95 border-rose-300 text-slate-800")
+                : (isDark ? "bg-orange-950/35 border-orange-500/40 text-orange-100" : "bg-orange-50/95 border-orange-300 text-slate-800")
             }`}>
               <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400 tracking-wide">TOTAL SOLAR PV</div>
               <div className="text-[10px] leading-tight font-extrabold text-orange-700 dark:text-orange-300">POI-1 + POI-2</div>
-              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-1">
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 Active Power <br />
                 {loadingSld ? (
                   <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
-                ) : (
-                  <span className={`text-[11px] font-extrabold ${totalSolarKw !== null ? "font-mono text-slate-800 dark:text-slate-100" : "text-[7px] text-amber-500"}`}>
-                    {totalSolarKw !== null ? `${totalSolarKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
+                ) : isAllSolarOff ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[9px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                    OFF / MATI
                   </span>
+                ) : (
+                  <>
+                    <span className={`text-[11px] font-extrabold ${totalSolarKw !== null ? "font-mono text-slate-800 dark:text-slate-100" : "text-[7px] text-amber-500"}`}>
+                      {totalSolarKw !== null ? `${totalSolarKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
+                    </span>
+                    {(isPoi1Off || isPoi2Off) && (
+                      <div className="text-[7px] font-extrabold text-rose-500 dark:text-rose-400 leading-tight mt-0.5">
+                        {isPoi1Off ? "● POI-1 OFF / MATI" : "● POI-2 OFF / MATI"}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -3330,7 +3466,9 @@ export default function PowerDistribution() {
           {/* 2. Incoming Fact-1 (Center F1, Center = 275) */}
           <div className="absolute z-30" style={{ left: 205, top: 150 }}>
             <div className={`px-2.5 py-1.5 w-[140px] h-[96px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
+              incomingData.wf1Status === false
+                ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-white" : "bg-rose-50/95 border-rose-300 text-slate-800")
+                : (isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800")
             }`}>
               <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Incoming</div>
               <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Fact-1</div>
@@ -3338,6 +3476,11 @@ export default function PowerDistribution() {
                 Active Power <br />
                 {loadingSld ? (
                   <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                ) : incomingData.wf1Status === false ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[8.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                    OFF / MATI
+                  </span>
                 ) : (
                   <span className={`font-extrabold ${incomingData.wf1Kw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
                     {incomingData.wf1Kw !== null ? `${incomingData.wf1Kw.toLocaleString("id-ID")} kW` : NO_REALTIME_API}
@@ -3347,6 +3490,8 @@ export default function PowerDistribution() {
               <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
                   <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                ) : incomingData.wf1Status === false ? (
+                  <span className="font-extrabold font-mono text-rose-500 dark:text-rose-400">OFF</span>
                 ) : (
                   <span className={`font-bold ${incomingData.wf1Pf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
                     {incomingData.wf1Pf !== null ? incomingData.wf1Pf.toFixed(3) : NO_REALTIME_API}
@@ -3359,7 +3504,9 @@ export default function PowerDistribution() {
           {/* 3. Solar PV POI-1 (Inner Left, Center = 445) */}
           <div className="absolute z-30" style={{ left: 380, top: 152 }}>
             <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
+              isPoi1Off
+                ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-orange-200" : "bg-rose-50/95 border-rose-300 text-slate-800")
+                : (isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800")
             }`}>
               <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
               <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">POI-1</div>
@@ -3367,6 +3514,11 @@ export default function PowerDistribution() {
                 Active Power <br />
                 {loadingSld ? (
                   <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                ) : isPoi1Off ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[8.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                    OFF / MATI
+                  </span>
                 ) : (
                   <span className={`font-extrabold ${solarData.poi1Kw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
                     {solarData.poi1Kw !== null ? `${solarData.poi1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
@@ -3376,6 +3528,8 @@ export default function PowerDistribution() {
               <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
                   <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                ) : isPoi1Off ? (
+                  <span className="font-extrabold font-mono text-rose-500 dark:text-rose-400">OFF</span>
                 ) : (
                   <span className={`font-bold ${solarData.poi1Pf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
                     {solarData.poi1Pf !== null ? solarData.poi1Pf.toFixed(2) : NO_REALTIME_API}
@@ -3389,7 +3543,9 @@ export default function PowerDistribution() {
           {/* 1. Incoming Fact-2 (Left F2, Center = 760) */}
           <div className="absolute z-30" style={{ left: 690, top: 150 }}>
             <div className={`px-2.5 py-1.5 w-[140px] h-[96px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
+              incomingData.wf2Status === false
+                ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-white" : "bg-rose-50/95 border-rose-300 text-slate-800")
+                : (isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800")
             }`}>
               <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Incoming</div>
               <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Fact-2</div>
@@ -3397,6 +3553,11 @@ export default function PowerDistribution() {
                 Active Power <br />
                 {loadingSld ? (
                   <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                ) : incomingData.wf2Status === false ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[8.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                    OFF / MATI
+                  </span>
                 ) : (
                   <span className={`font-extrabold ${incomingData.wf2Kw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
                     {incomingData.wf2Kw !== null ? `${incomingData.wf2Kw.toLocaleString("id-ID")} kW` : NO_REALTIME_API}
@@ -3406,6 +3567,8 @@ export default function PowerDistribution() {
               <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
                   <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                ) : incomingData.wf2Status === false ? (
+                  <span className="font-extrabold font-mono text-rose-500 dark:text-rose-400">OFF</span>
                 ) : (
                   <span className={`font-bold ${incomingData.wf2Pf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
                     {incomingData.wf2Pf !== null ? incomingData.wf2Pf.toFixed(3) : NO_REALTIME_API}
@@ -3418,7 +3581,9 @@ export default function PowerDistribution() {
           {/* 2. Solar PV POI-2 (Center F2, Center = 930) */}
           <div className="absolute z-30" style={{ left: 865, top: 152 }}>
             <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
+              isPoi2Off
+                ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-orange-200" : "bg-rose-50/95 border-rose-300 text-slate-800")
+                : (isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800")
             }`}>
               <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
               <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">POI-2</div>
@@ -3426,6 +3591,11 @@ export default function PowerDistribution() {
                 Active Power <br />
                 {loadingSld ? (
                   <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+                ) : isPoi2Off ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[8.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                    OFF / MATI
+                  </span>
                 ) : (
                   <span className={`font-extrabold ${solarData.poi2Kw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
                     {solarData.poi2Kw !== null ? `${solarData.poi2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
@@ -3435,6 +3605,8 @@ export default function PowerDistribution() {
               <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
                 PF : {loadingSld ? (
                   <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+                ) : isPoi2Off ? (
+                  <span className="font-extrabold font-mono text-rose-500 dark:text-rose-400">OFF</span>
                 ) : (
                   <span className={`font-bold ${solarData.poi2Pf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
                     {solarData.poi2Pf !== null ? solarData.poi2Pf.toFixed(2) : NO_REALTIME_API}
@@ -3459,24 +3631,27 @@ export default function PowerDistribution() {
           {/* ═══════════ FACTORY 1 TRANSFORMER CARDS (4 Units: Centers 110, 220, 330, 440) ═══════════ */}
           {factory1.map((tx, idx) => {
             const cardLeft = 63 + idx * 110;
-            const hasData = tx.activePowerKw !== null;
+            const isPmOff = tx.pmStatus === false;
+            const hasData = !isPmOff && tx.activePowerKw !== null;
             return (
               <div key={tx.id} className="absolute z-30" style={{ left: cardLeft, top: 360, width: 94 }}>
                 <div
                   onClick={() => setSelectedTx(tx)}
                   className={`rounded-2xl border p-2.5 h-[118px] flex flex-col justify-between text-center cursor-pointer transition-all duration-300 hover:shadow-lg ${
-                    idx === 0
-                      ? "bg-slate-900 border-slate-700 text-white"
-                      : isDark
-                        ? "bg-slate-800/80 border-slate-700 text-slate-200"
-                        : "bg-slate-100/90 border-slate-300 text-slate-800"
+                    isPmOff
+                      ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-slate-200" : "bg-rose-50/90 border-rose-300 text-slate-800")
+                      : idx === 0
+                        ? "bg-slate-900 border-slate-700 text-white"
+                        : isDark
+                          ? "bg-slate-800/80 border-slate-700 text-slate-200"
+                          : "bg-slate-100/90 border-slate-300 text-slate-800"
                   }`}
                 >
                   <div>
-                    <div className={`text-[11px] font-black leading-tight ${idx === 0 ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
+                    <div className={`text-[11px] font-black leading-tight ${idx === 0 && !isPmOff ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
                       {tx.capacityKva} kVa
                     </div>
-                    <div className={`text-[9px] font-black tracking-wider uppercase leading-tight ${idx === 0 ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
+                    <div className={`text-[9px] font-black tracking-wider uppercase leading-tight ${idx === 0 && !isPmOff ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
                       {tx.name}
                     </div>
                   </div>
@@ -3487,6 +3662,18 @@ export default function PowerDistribution() {
                         <div className="h-3 w-14 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
                         <div className="h-2 w-10 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
                       </div>
+                    ) : isPmOff ? (
+                      <>
+                        <div className="my-0.5">
+                          <span className="inline-flex items-center gap-1 px-1 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[7.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 leading-none">
+                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                            OFF / MATI
+                          </span>
+                        </div>
+                        <div className="text-[8px] text-slate-400 leading-tight">
+                          PF: <span className="font-extrabold font-mono text-rose-500">OFF</span>
+                        </div>
+                      </>
                     ) : (
                       <>
                         <div className={`${hasData ? `text-[11px] font-mono ${idx === 0 ? "text-sky-400" : "text-slate-800 dark:text-slate-100"}` : "text-[7px] text-amber-500 leading-tight"} font-extrabold`}>
@@ -3501,16 +3688,18 @@ export default function PowerDistribution() {
                   
                   {/* Load indicator */}
                   {(() => {
-                    const txLoadPct = tx.apparentPowerKva && tx.capacityKva 
+                    const txLoadPct = !isPmOff && tx.apparentPowerKva && tx.capacityKva 
                       ? Math.round((tx.apparentPowerKva / tx.capacityKva) * 100) 
-                      : (tx.activePowerKw && tx.capacityKva ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null);
-                    const txLoadColor = txLoadPct !== null
-                      ? (txLoadPct <= loadConfig.safeMax ? "#10b981" : txLoadPct <= loadConfig.cautionMax ? "#eab308" : "#ef4444")
-                      : "#f59e0b";
+                      : (!isPmOff && tx.activePowerKw && tx.capacityKva ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null);
+                    const txLoadColor = isPmOff
+                      ? "#ef4444"
+                      : txLoadPct !== null
+                        ? (txLoadPct <= loadConfig.safeMax ? "#10b981" : txLoadPct <= loadConfig.cautionMax ? "#eab308" : "#ef4444")
+                        : "#f59e0b";
                     return (
                       <div className="pt-1 border-t border-slate-200 dark:border-slate-700/60">
                         <div className="text-[7px] font-extrabold text-center leading-tight" style={{ color: txLoadColor }}>
-                          {loadingSld ? "..." : (txLoadPct !== null ? `LOAD: ${txLoadPct}%` : `LOAD: ${NO_REALTIME_API}`)}
+                          {loadingSld ? "..." : isPmOff ? "LOAD: OFF" : (txLoadPct !== null ? `LOAD: ${txLoadPct}%` : `LOAD: ${NO_REALTIME_API}`)}
                         </div>
                       </div>
                     );
@@ -3536,24 +3725,27 @@ export default function PowerDistribution() {
           {/* ═══════════ FACTORY 2 TRANSFORMER CARDS (3 Units: Centers 800, 925, 1050) ═══════════ */}
           {factory2.map((tx, idx) => {
             const cardLeft = 750 + idx * 125;
-            const hasData = tx.activePowerKw !== null;
+            const isPmOff = tx.pmStatus === false;
+            const hasData = !isPmOff && tx.activePowerKw !== null;
             return (
               <div key={tx.id} className="absolute z-30" style={{ left: cardLeft, top: 360, width: 100 }}>
                 <div
                   onClick={() => setSelectedTx(tx)}
                   className={`rounded-2xl border p-2.5 h-[118px] flex flex-col justify-between text-center cursor-pointer transition-all duration-300 hover:shadow-lg ${
-                    idx === 0
-                      ? "bg-slate-900 border-slate-700 text-white"
-                      : isDark
-                        ? "bg-slate-800/80 border-slate-700 text-slate-200"
-                        : "bg-slate-100/90 border-slate-300 text-slate-800"
+                    isPmOff
+                      ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-slate-200" : "bg-rose-50/90 border-rose-300 text-slate-800")
+                      : idx === 0
+                        ? "bg-slate-900 border-slate-700 text-white"
+                        : isDark
+                          ? "bg-slate-800/80 border-slate-700 text-slate-200"
+                          : "bg-slate-100/90 border-slate-300 text-slate-800"
                   }`}
                 >
                   <div>
-                    <div className={`text-[11px] font-black leading-tight ${idx === 0 ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
+                    <div className={`text-[11px] font-black leading-tight ${idx === 0 && !isPmOff ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
                       {tx.capacityKva} kVa
                     </div>
-                    <div className={`text-[9px] font-black tracking-wider uppercase leading-tight ${idx === 0 ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
+                    <div className={`text-[9px] font-black tracking-wider uppercase leading-tight ${idx === 0 && !isPmOff ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
                       {tx.name}
                     </div>
                   </div>
@@ -3564,6 +3756,18 @@ export default function PowerDistribution() {
                         <div className="h-3 w-14 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
                         <div className="h-2 w-10 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
                       </div>
+                    ) : isPmOff ? (
+                      <>
+                        <div className="my-0.5">
+                          <span className="inline-flex items-center gap-1 px-1 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[7.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 leading-none">
+                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                            OFF / MATI
+                          </span>
+                        </div>
+                        <div className="text-[8px] text-slate-400 leading-tight">
+                          PF: <span className="font-extrabold font-mono text-rose-500">OFF</span>
+                        </div>
+                      </>
                     ) : (
                       <>
                         <div className={`${hasData ? `text-[11px] font-mono ${idx === 0 ? "text-emerald-400" : "text-slate-800 dark:text-slate-100"}` : "text-[7px] text-amber-500 leading-tight"} font-extrabold`}>
@@ -3578,16 +3782,18 @@ export default function PowerDistribution() {
 
                   {/* Load indicator */}
                   {(() => {
-                    const txLoadPct = tx.apparentPowerKva && tx.capacityKva 
+                    const txLoadPct = !isPmOff && tx.apparentPowerKva && tx.capacityKva 
                       ? Math.round((tx.apparentPowerKva / tx.capacityKva) * 100) 
-                      : (tx.activePowerKw && tx.capacityKva ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null);
-                    const txLoadColor = txLoadPct !== null
-                      ? (txLoadPct <= loadConfig.safeMax ? "#10b981" : txLoadPct <= loadConfig.cautionMax ? "#eab308" : "#ef4444")
-                      : "#f59e0b";
+                      : (!isPmOff && tx.activePowerKw && tx.capacityKva ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null);
+                    const txLoadColor = isPmOff
+                      ? "#ef4444"
+                      : txLoadPct !== null
+                        ? (txLoadPct <= loadConfig.safeMax ? "#10b981" : txLoadPct <= loadConfig.cautionMax ? "#eab308" : "#ef4444")
+                        : "#f59e0b";
                     return (
                       <div className="pt-1 border-t border-slate-200 dark:border-slate-700/60">
                         <div className="text-[7px] font-extrabold text-center leading-tight" style={{ color: txLoadColor }}>
-                          {loadingSld ? "..." : (txLoadPct !== null ? `LOAD: ${txLoadPct}%` : `LOAD: ${NO_REALTIME_API}`)}
+                          {loadingSld ? "..." : isPmOff ? "LOAD: OFF" : (txLoadPct !== null ? `LOAD: ${txLoadPct}%` : `LOAD: ${NO_REALTIME_API}`)}
                         </div>
                       </div>
                     );
@@ -3613,7 +3819,9 @@ export default function PowerDistribution() {
           {/* ═══════════ TOTAL MDP SUMMARY CARD (Factory 1: MDP-1.1, MDP-1.2, MDP-2, MDP-3) ═══════════ */}
           <div className="absolute z-30" style={{ left: 63, top: 560, width: 424 }}>
             <div className={`px-4 h-[52px] rounded-2xl border shadow-sm flex items-center justify-between transition duration-300 ${
-              isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800"
+              isAllF1Off
+                ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-white" : "bg-rose-50/90 border-rose-300 text-slate-800")
+                : (isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800")
             }`}>
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 whitespace-nowrap">
@@ -3634,6 +3842,11 @@ export default function PowerDistribution() {
                   <div className="text-[8px] font-bold uppercase text-slate-400 whitespace-nowrap">Total Active Power</div>
                   {loadingSld ? (
                     <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mt-0.5" />
+                  ) : isAllF1Off ? (
+                    <div className="inline-flex items-center gap-1 text-[10px] font-extrabold font-mono text-rose-500 whitespace-nowrap">
+                      <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                      OFF / MATI
+                    </div>
                   ) : (
                     <div className={`text-xs font-extrabold whitespace-nowrap ${f1TotalKw !== null ? "font-mono text-sky-600 dark:text-sky-400" : "text-[8px] text-amber-500"}`}>
                       {f1TotalKw !== null ? `${f1TotalKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
@@ -3647,7 +3860,9 @@ export default function PowerDistribution() {
           {/* ═══════════ TOTAL PUTR SUMMARY CARD (Factory 2: PUTR-1, PUTR-2, PUTR-NEW) ═══════════ */}
           <div className="absolute z-30" style={{ left: 750, top: 560, width: 350 }}>
             <div className={`px-3.5 h-[52px] rounded-2xl border shadow-sm flex items-center justify-between transition duration-300 ${
-              isDark ? "bg-emerald-950/35 border-emerald-500/40 text-white" : "bg-emerald-50/90 border-emerald-300 text-slate-800"
+              isAllF2Off
+                ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-white" : "bg-rose-50/90 border-rose-300 text-slate-800")
+                : (isDark ? "bg-emerald-950/35 border-emerald-500/40 text-white" : "bg-emerald-50/90 border-emerald-300 text-slate-800")
             }`}>
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
@@ -3668,6 +3883,11 @@ export default function PowerDistribution() {
                   <div className="text-[8px] font-bold uppercase text-slate-400 whitespace-nowrap">Total Active Power</div>
                   {loadingSld ? (
                     <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mt-0.5" />
+                  ) : isAllF2Off ? (
+                    <div className="inline-flex items-center gap-1 text-[10px] font-extrabold font-mono text-rose-500 whitespace-nowrap">
+                      <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                      OFF / MATI
+                    </div>
                   ) : (
                     <div className={`text-xs font-extrabold whitespace-nowrap ${f2TotalKw !== null ? "font-mono text-emerald-600 dark:text-emerald-400" : "text-[8px] text-amber-500"}`}>
                       {f2TotalKw !== null ? `${f2TotalKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
@@ -3679,8 +3899,9 @@ export default function PowerDistribution() {
           </div>
 
           {/* Legend */}
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-4 text-[9px] font-bold text-slate-400 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-1.5 rounded-full border border-slate-200/50 dark:border-slate-800/40">
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-4 text-[9px] font-bold text-slate-400 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-1.5 rounded-full border border-slate-200/50 dark:border-slate-800/40 whitespace-nowrap">
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Online</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500" /> PM Off / Mati</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> Warning</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-400" /> {NO_REALTIME_API}</span>
             <span className="text-[8px] text-slate-500 italic ml-2">Klik panel / Detail untuk info lengkap</span>

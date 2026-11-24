@@ -657,18 +657,18 @@ export const parsePltsApiRecords = (data: any, ts: Date): ElectricPltsRecord[] =
   const parsePoi = (poiObj: any, poiId: "POI_1" | "POI_2") => {
     if (!poiObj) return;
     const num = poiId === "POI_1" ? "1" : "2";
-    const status = poiObj[`Status_POI_${num}`] !== undefined ? Boolean(poiObj[`Status_POI_${num}`]) : true;
-    const volt_ab = poiObj[`Volt_AB_POI_${num}`] !== undefined && poiObj[`Volt_AB_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_AB_POI_${num}`])) ? Number(poiObj[`Volt_AB_POI_${num}`]) : null;
-    const volt_bc = poiObj[`Volt_BC_POI_${num}`] !== undefined && poiObj[`Volt_BC_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_BC_POI_${num}`])) ? Number(poiObj[`Volt_BC_POI_${num}`]) : null;
-    const volt_ca = poiObj[`Volt_CA_POI_${num}`] !== undefined && poiObj[`Volt_CA_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_CA_POI_${num}`])) ? Number(poiObj[`Volt_CA_POI_${num}`]) : null;
-    const volt_an = poiObj[`Volt_AN_POI_${num}`] !== undefined && poiObj[`Volt_AN_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_AN_POI_${num}`])) ? Number(poiObj[`Volt_AN_POI_${num}`]) : null;
-    const volt_bn = poiObj[`Volt_BN_POI_${num}`] !== undefined && poiObj[`Volt_BN_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_BN_POI_${num}`])) ? Number(poiObj[`Volt_BN_POI_${num}`]) : null;
-    const volt_cn = poiObj[`Volt_CN_POI_${num}`] !== undefined && poiObj[`Volt_CN_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_CN_POI_${num}`])) ? Number(poiObj[`Volt_CN_POI_${num}`]) : null;
-    const frequency = poiObj[`Frequency_POI_${num}`] !== undefined && poiObj[`Frequency_POI_${num}`] !== null && !isNaN(Number(poiObj[`Frequency_POI_${num}`])) ? Number(poiObj[`Frequency_POI_${num}`]) : null;
-    let active_power = poiObj[`Scale_Total_KW_POI_${num}`] !== undefined && poiObj[`Scale_Total_KW_POI_${num}`] !== null && !isNaN(Number(poiObj[`Scale_Total_KW_POI_${num}`])) ? Number(poiObj[`Scale_Total_KW_POI_${num}`]) : 0;
+    const status = parseStatusBool(poiObj[`Status_POI_${num}`]) ?? true;
+    const volt_ab = status && poiObj[`Volt_AB_POI_${num}`] !== undefined && poiObj[`Volt_AB_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_AB_POI_${num}`])) ? Number(poiObj[`Volt_AB_POI_${num}`]) : null;
+    const volt_bc = status && poiObj[`Volt_BC_POI_${num}`] !== undefined && poiObj[`Volt_BC_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_BC_POI_${num}`])) ? Number(poiObj[`Volt_BC_POI_${num}`]) : null;
+    const volt_ca = status && poiObj[`Volt_CA_POI_${num}`] !== undefined && poiObj[`Volt_CA_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_CA_POI_${num}`])) ? Number(poiObj[`Volt_CA_POI_${num}`]) : null;
+    const volt_an = status && poiObj[`Volt_AN_POI_${num}`] !== undefined && poiObj[`Volt_AN_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_AN_POI_${num}`])) ? Number(poiObj[`Volt_AN_POI_${num}`]) : null;
+    const volt_bn = status && poiObj[`Volt_BN_POI_${num}`] !== undefined && poiObj[`Volt_BN_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_BN_POI_${num}`])) ? Number(poiObj[`Volt_BN_POI_${num}`]) : null;
+    const volt_cn = status && poiObj[`Volt_CN_POI_${num}`] !== undefined && poiObj[`Volt_CN_POI_${num}`] !== null && !isNaN(Number(poiObj[`Volt_CN_POI_${num}`])) ? Number(poiObj[`Volt_CN_POI_${num}`]) : null;
+    const frequency = status && poiObj[`Frequency_POI_${num}`] !== undefined && poiObj[`Frequency_POI_${num}`] !== null && !isNaN(Number(poiObj[`Frequency_POI_${num}`])) ? Number(poiObj[`Frequency_POI_${num}`]) : null;
+    let active_power = status && poiObj[`Scale_Total_KW_POI_${num}`] !== undefined && poiObj[`Scale_Total_KW_POI_${num}`] !== null && !isNaN(Number(poiObj[`Scale_Total_KW_POI_${num}`])) ? Number(poiObj[`Scale_Total_KW_POI_${num}`]) : 0;
     if (active_power < 0.001 && active_power > 0) active_power = 0;
     const rawPeak = poiObj[`Peak_Demand_ScaleKw_POI_${num}`] ?? poiObj[`Peak_Demand_ScaleKW_POI_${num}`];
-    const peak_demand = rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)) ? Number(rawPeak) : 0;
+    const peak_demand = status && rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)) ? Number(rawPeak) : 0;
     const total_kwh = Number(poiObj[`Total_KWH_POI_${num}`]) || 0;
     const total_kvarh = Number(poiObj[`Total_KVARH_POI_${num}`]) || 0;
 
@@ -897,38 +897,40 @@ export const parseEwApi = (data: any, ts: Date, groupId: string): ElectricPmReco
       ae = null;
     }
 
+    const isOffline = pmStatus === false;
+
     return {
       t_stamp: ts,
       group_id: groupId,
       pm_id: pmId,
       status: pmStatus,
-      volt_ab: vAb,
-      volt_bc: vBc,
-      volt_ca: vCa,
-      volt_ll: vLl,
-      volt_an: getVal(["VoltAN", "Volt_AN"]),
-      volt_bn: getVal(["VoltBN", "Volt_BN"]),
-      volt_cn: getVal(["VoltCN", "Volt_CN"]),
-      volt_ln: getVal(["VoltLN", "Volt_LN"]),
-      current_a: getVal(["Current_A"]),
-      current_b: getVal(["Current_B"]),
-      current_c: getVal(["Current_C"]),
-      frequency: (() => {
+      volt_ab: isOffline ? null : vAb,
+      volt_bc: isOffline ? null : vBc,
+      volt_ca: isOffline ? null : vCa,
+      volt_ll: isOffline ? null : vLl,
+      volt_an: isOffline ? null : getVal(["VoltAN", "Volt_AN"]),
+      volt_bn: isOffline ? null : getVal(["VoltBN", "Volt_BN"]),
+      volt_cn: isOffline ? null : getVal(["VoltCN", "Volt_CN"]),
+      volt_ln: isOffline ? null : getVal(["VoltLN", "Volt_LN"]),
+      current_a: isOffline ? null : getVal(["Current_A"]),
+      current_b: isOffline ? null : getVal(["Current_B"]),
+      current_c: isOffline ? null : getVal(["Current_C"]),
+      frequency: isOffline ? null : (() => {
         const f = getVal(["Frequency"]);
         return (f !== null && f >= 40 && f <= 65) ? f : null;
       })(),
-      active_power_total: pTot,
-      reactive_power_total: qTot,
-      apparent_power_total: sTot,
-      power_factor: pf,
-      voltage_unbalance: getVal(["Volatage_Unbalance", "Voltage_Unbalance"]),
-      current_unbalance: getVal(["Current_Umbalance", "Current_Unbalance"]),
-      thd_volt_a: getVal(["THD_Volt_A"]),
-      thd_volt_b: getVal(["THD_Volt_B"]),
-      thd_volt_c: getVal(["THD_Volt_C"]),
-      thd_current_a: getVal(["THD_Current_A"]),
-      thd_current_b: getVal(["THD_Current_B"]),
-      thd_current_c: getVal(["THD_Current_C"]),
+      active_power_total: isOffline ? 0 : pTot,
+      reactive_power_total: isOffline ? 0 : qTot,
+      apparent_power_total: isOffline ? 0 : sTot,
+      power_factor: isOffline ? null : pf,
+      voltage_unbalance: isOffline ? null : getVal(["Volatage_Unbalance", "Voltage_Unbalance"]),
+      current_unbalance: isOffline ? null : getVal(["Current_Umbalance", "Current_Unbalance"]),
+      thd_volt_a: isOffline ? null : getVal(["THD_Volt_A"]),
+      thd_volt_b: isOffline ? null : getVal(["THD_Volt_B"]),
+      thd_volt_c: isOffline ? null : getVal(["THD_Volt_C"]),
+      thd_current_a: isOffline ? null : getVal(["THD_Current_A"]),
+      thd_current_b: isOffline ? null : getVal(["THD_Current_B"]),
+      thd_current_c: isOffline ? null : getVal(["THD_Current_C"]),
       active_energy: ae
     };
   };
@@ -1596,50 +1598,56 @@ let lastElectricityHour = -1;
 const parseSolarApi = (data: any, ts: Date): SolarLiveState => {
   const p1 = data?.POI_1 || {};
   const p2 = data?.POI_2 || {};
-  const poi1Status = Boolean(p1.Status_POI_1);
-  const poi2Status = Boolean(p2.Status_POI_2);
+  const poi1Status = parseStatusBool(p1.Status_POI_1) ?? false;
+  const poi2Status = parseStatusBool(p2.Status_POI_2) ?? false;
   const rawPeak1 = p1.Peak_Demand_ScaleKw_POI_1 ?? p1.Peak_Demand_ScaleKW_POI_1;
   const rawPeak2 = p2.Peak_Demand_ScaleKw_POI_2 ?? p2.Peak_Demand_ScaleKW_POI_2;
   const rawPf1 = p1.PFO_POI_1 ?? p1.PF0_POI_1 ?? p1.Power_Factor_POI_1 ?? p1.PF_POI_1 ?? p1.PowerFactor_POI_1 ?? p1.CosPhi_POI_1;
-  let pf1 = rawPf1 !== undefined && rawPf1 !== null && !isNaN(Number(rawPf1)) ? Number(rawPf1) : null;
-  const p1Kw = typeof p1.Scale_Total_KW_POI_1 === "number" ? p1.Scale_Total_KW_POI_1 : (Number(p1.Scale_Total_KW_POI_1) || 0);
+  const pf1 = poi1Status ? normalizePowerFactor(rawPf1) : null;
+  const p1Kw = poi1Status
+    ? (typeof p1.Scale_Total_KW_POI_1 === "number" ? p1.Scale_Total_KW_POI_1 : (Number(p1.Scale_Total_KW_POI_1) || 0))
+    : 0;
 
   const rawPf2 = p2.PFO_POI_2 ?? p2.PF0_POI_2 ?? p2.Power_Factor_POI_2 ?? p2.PF_POI_2 ?? p2.PowerFactor_POI_2 ?? p2.CosPhi_POI_2;
-  let pf2 = rawPf2 !== undefined && rawPf2 !== null && !isNaN(Number(rawPf2)) ? Number(rawPf2) : null;
-  const p2Kw = typeof p2.Scale_Total_KW_POI_2 === "number" ? p2.Scale_Total_KW_POI_2 : (Number(p2.Scale_Total_KW_POI_2) || 0);
+  const pf2 = poi2Status ? normalizePowerFactor(rawPf2) : null;
+  const p2Kw = poi2Status
+    ? (typeof p2.Scale_Total_KW_POI_2 === "number" ? p2.Scale_Total_KW_POI_2 : (Number(p2.Scale_Total_KW_POI_2) || 0))
+    : 0;
 
   const poi1 = {
     status: poi1Status,
     activePower: p1Kw,
-    peakDemand: rawPeak1 !== undefined && rawPeak1 !== null ? (Number(rawPeak1) || 0) : 0,
+    peakDemand: poi1Status && rawPeak1 !== undefined && rawPeak1 !== null ? (Number(rawPeak1) || 0) : 0,
     totalKwh: typeof p1.Total_KWH_POI_1 === "number" ? p1.Total_KWH_POI_1 : (Number(p1.Total_KWH_POI_1) || 0),
     totalKvarh: typeof p1.Total_KVARH_POI_1 === "number" ? p1.Total_KVARH_POI_1 : (Number(p1.Total_KVARH_POI_1) || 0),
-    frequency: p1.Frequency_POI_1 !== undefined && p1.Frequency_POI_1 !== null ? Number(p1.Frequency_POI_1) : null,
-    voltAb: p1.Volt_AB_POI_1 !== undefined && p1.Volt_AB_POI_1 !== null ? Number(p1.Volt_AB_POI_1) : null,
-    voltBc: p1.Volt_BC_POI_1 !== undefined && p1.Volt_BC_POI_1 !== null ? Number(p1.Volt_BC_POI_1) : null,
-    voltCa: p1.Volt_CA_POI_1 !== undefined && p1.Volt_CA_POI_1 !== null ? Number(p1.Volt_CA_POI_1) : null,
-    voltAn: p1.Volt_AN_POI_1 !== undefined && p1.Volt_AN_POI_1 !== null ? Number(p1.Volt_AN_POI_1) : null,
-    voltBn: p1.Volt_BN_POI_1 !== undefined && p1.Volt_BN_POI_1 !== null ? Number(p1.Volt_BN_POI_1) : null,
-    voltCn: p1.Volt_CN_POI_1 !== undefined && p1.Volt_CN_POI_1 !== null ? Number(p1.Volt_CN_POI_1) : null,
+    frequency: poi1Status && p1.Frequency_POI_1 !== undefined && p1.Frequency_POI_1 !== null ? Number(p1.Frequency_POI_1) : null,
+    voltAb: poi1Status && p1.Volt_AB_POI_1 !== undefined && p1.Volt_AB_POI_1 !== null ? Number(p1.Volt_AB_POI_1) : null,
+    voltBc: poi1Status && p1.Volt_BC_POI_1 !== undefined && p1.Volt_BC_POI_1 !== null ? Number(p1.Volt_BC_POI_1) : null,
+    voltCa: poi1Status && p1.Volt_CA_POI_1 !== undefined && p1.Volt_CA_POI_1 !== null ? Number(p1.Volt_CA_POI_1) : null,
+    voltAn: poi1Status && p1.Volt_AN_POI_1 !== undefined && p1.Volt_AN_POI_1 !== null ? Number(p1.Volt_AN_POI_1) : null,
+    voltBn: poi1Status && p1.Volt_BN_POI_1 !== undefined && p1.Volt_BN_POI_1 !== null ? Number(p1.Volt_BN_POI_1) : null,
+    voltCn: poi1Status && p1.Volt_CN_POI_1 !== undefined && p1.Volt_CN_POI_1 !== null ? Number(p1.Volt_CN_POI_1) : null,
     powerFactor: pf1,
   };
   const poi2 = {
     status: poi2Status,
     activePower: p2Kw,
-    peakDemand: rawPeak2 !== undefined && rawPeak2 !== null ? (Number(rawPeak2) || 0) : 0,
+    peakDemand: poi2Status && rawPeak2 !== undefined && rawPeak2 !== null ? (Number(rawPeak2) || 0) : 0,
     totalKwh: typeof p2.Total_KWH_POI_2 === "number" ? p2.Total_KWH_POI_2 : (Number(p2.Total_KWH_POI_2) || 0),
     totalKvarh: typeof p2.Total_KVARH_POI_2 === "number" ? p2.Total_KVARH_POI_2 : (Number(p2.Total_KVARH_POI_2) || 0),
-    frequency: p2.Frequency_POI_2 !== undefined && p2.Frequency_POI_2 !== null ? Number(p2.Frequency_POI_2) : null,
-    voltAb: p2.Volt_AB_POI_2 !== undefined && p2.Volt_AB_POI_2 !== null ? Number(p2.Volt_AB_POI_2) : null,
-    voltBc: p2.Volt_BC_POI_2 !== undefined && p2.Volt_BC_POI_2 !== null ? Number(p2.Volt_BC_POI_2) : null,
-    voltCa: p2.Volt_CA_POI_2 !== undefined && p2.Volt_CA_POI_2 !== null ? Number(p2.Volt_CA_POI_2) : null,
-    voltAn: p2.Volt_AN_POI_2 !== undefined && p2.Volt_AN_POI_2 !== null ? Number(p2.Volt_AN_POI_2) : null,
-    voltBn: p2.Volt_BN_POI_2 !== undefined && p2.Volt_BN_POI_2 !== null ? Number(p2.Volt_BN_POI_2) : null,
-    voltCn: p2.Volt_CN_POI_2 !== undefined && p2.Volt_CN_POI_2 !== null ? Number(p2.Volt_CN_POI_2) : null,
+    frequency: poi2Status && p2.Frequency_POI_2 !== undefined && p2.Frequency_POI_2 !== null ? Number(p2.Frequency_POI_2) : null,
+    voltAb: poi2Status && p2.Volt_AB_POI_2 !== undefined && p2.Volt_AB_POI_2 !== null ? Number(p2.Volt_AB_POI_2) : null,
+    voltBc: poi2Status && p2.Volt_BC_POI_2 !== undefined && p2.Volt_BC_POI_2 !== null ? Number(p2.Volt_BC_POI_2) : null,
+    voltCa: poi2Status && p2.Volt_CA_POI_2 !== undefined && p2.Volt_CA_POI_2 !== null ? Number(p2.Volt_CA_POI_2) : null,
+    voltAn: poi2Status && p2.Volt_AN_POI_2 !== undefined && p2.Volt_AN_POI_2 !== null ? Number(p2.Volt_AN_POI_2) : null,
+    voltBn: poi2Status && p2.Volt_BN_POI_2 !== undefined && p2.Volt_BN_POI_2 !== null ? Number(p2.Volt_BN_POI_2) : null,
+    voltCn: poi2Status && p2.Volt_CN_POI_2 !== undefined && p2.Volt_CN_POI_2 !== null ? Number(p2.Volt_CN_POI_2) : null,
     powerFactor: pf2,
   };
   return {
     t_stamp: ts,
+    online: poi1Status || poi2Status,
+    status: poi1Status || poi2Status,
     poi1,
     poi2,
     totalKwh: poi1.totalKwh + poi2.totalKwh

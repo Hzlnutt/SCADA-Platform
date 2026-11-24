@@ -231,23 +231,26 @@ export const getSolarLatestHandler = async (
     `);
     const p1 = dbRes.rows.find((r: any) => r.poi_id === "POI_1");
     const p2 = dbRes.rows.find((r: any) => r.poi_id === "POI_2");
+    const p1Online = Boolean(p1?.status);
+    const p2Online = Boolean(p2?.status);
     const fallbackLive = {
       t_stamp: dbRes.rows[0]?.t_stamp || new Date(),
       poi1: {
-        status: Boolean(p1?.status),
-        activePower: p1?.active_power !== null && p1?.active_power !== undefined ? Number(p1.active_power) : null,
-        powerFactor: p1?.power_factor !== null && p1?.power_factor !== undefined ? Number(p1.power_factor) : null,
-        voltAb: p1?.volt_ab !== null && p1?.volt_ab !== undefined ? Number(p1.volt_ab) : null,
+        status: p1Online,
+        activePower: p1Online && p1?.active_power !== null && p1?.active_power !== undefined ? Number(p1.active_power) : 0,
+        powerFactor: p1Online && p1?.power_factor !== null && p1?.power_factor !== undefined ? Number(p1.power_factor) : null,
+        voltAb: p1Online && p1?.volt_ab !== null && p1?.volt_ab !== undefined ? Number(p1.volt_ab) : null,
         totalKwh: p1?.total_kwh !== null && p1?.total_kwh !== undefined ? Number(p1.total_kwh) : null,
       },
       poi2: {
-        status: Boolean(p2?.status),
-        activePower: p2?.active_power !== null && p2?.active_power !== undefined ? Number(p2.active_power) : null,
-        powerFactor: p2?.power_factor !== null && p2?.power_factor !== undefined ? Number(p2.power_factor) : null,
-        voltAb: p2?.volt_ab !== null && p2?.volt_ab !== undefined ? Number(p2.volt_ab) : null,
+        status: p2Online,
+        activePower: p2Online && p2?.active_power !== null && p2?.active_power !== undefined ? Number(p2.active_power) : 0,
+        powerFactor: p2Online && p2?.power_factor !== null && p2?.power_factor !== undefined ? Number(p2.power_factor) : null,
+        voltAb: p2Online && p2?.volt_ab !== null && p2?.volt_ab !== undefined ? Number(p2.volt_ab) : null,
         totalKwh: p2?.total_kwh !== null && p2?.total_kwh !== undefined ? Number(p2.total_kwh) : null,
       },
-      online: Boolean(p1?.status || p2?.status)
+      online: p1Online || p2Online,
+      status: p1Online || p2Online
     };
     res.json({ data: fallbackLive });
   } catch (err) {

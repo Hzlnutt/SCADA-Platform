@@ -53,9 +53,12 @@ export function EwPowerMetersGrid({
   }, [powerMeters, searchTerm]);
 
   const onlineCount = powerMeters.filter((pm) => pm.status !== false).length;
+  const allOffline = powerMeters.length > 0 && onlineCount === 0;
 
   const totalKw = useMemo(() => {
-    const valid = powerMeters.filter((pm) => pm.active_power_total !== null && pm.active_power_total !== undefined && Number(pm.active_power_total) > 0);
+    const valid = powerMeters.filter(
+      (pm) => pm.status !== false && pm.active_power_total !== null && pm.active_power_total !== undefined && Number(pm.active_power_total) >= 0
+    );
     if (valid.length === 0) return null;
     return Number(valid.reduce((sum, pm) => sum + Number(pm.active_power_total), 0).toFixed(1));
   }, [powerMeters]);
@@ -87,7 +90,12 @@ export function EwPowerMetersGrid({
           {/* Quick Total Load Badge */}
           <div className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm flex items-center gap-2">
             <span className="text-[10px] font-extrabold uppercase text-slate-400">Total Beban:</span>
-            {totalKw !== null ? (
+            {allOffline ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono font-extrabold text-rose-500">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                OFF / MATI
+              </span>
+            ) : totalKw !== null ? (
               <span className="text-xs font-mono font-extrabold text-sky-600 dark:text-sky-400">
                 {totalKw.toLocaleString("id-ID")} kW
               </span>
@@ -165,16 +173,27 @@ export function EwPowerMetersGrid({
                             isOnline ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
                           }`}
                         />
-                        {isOnline ? "LIVE" : "OFF"}
+                        {isOnline ? "LIVE" : "OFF / MATI"}
                       </span>
                     </div>
 
                     {/* Main Metric: Active Power */}
-                    <div className="my-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-100 dark:border-slate-700/50">
+                    <div className={`my-2 p-2 rounded-xl border ${
+                      isOnline
+                        ? "bg-slate-50 dark:bg-slate-800/70 border-slate-100 dark:border-slate-700/50"
+                        : "bg-rose-500/5 dark:bg-rose-950/20 border-rose-500/25"
+                    }`}>
                       <span className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">
                         Active Power
                       </span>
-                      {hasActivePower ? (
+                      {!isOnline ? (
+                        <div className="flex items-center gap-1.5 py-0.5">
+                          <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                          <span className="text-sm font-black font-mono text-rose-500 dark:text-rose-400 tracking-tight">
+                            PM OFF / MATI
+                          </span>
+                        </div>
+                      ) : hasActivePower ? (
                         <div className="flex items-baseline gap-1">
                           <span className="text-lg font-black font-mono text-sky-500 tracking-tight">
                             {Number(pm.active_power_total).toFixed(1)}
@@ -192,7 +211,9 @@ export function EwPowerMetersGrid({
                     <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
                       <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
                         <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Tegangan</span>
-                        {hasVolt ? (
+                        {!isOnline ? (
+                          <span className="font-extrabold text-rose-500 dark:text-rose-400">OFF</span>
+                        ) : hasVolt ? (
                           <span className="font-extrabold text-slate-700 dark:text-slate-200">
                             {Number(displayVolt).toFixed(0)} V
                           </span>
@@ -204,7 +225,9 @@ export function EwPowerMetersGrid({
                       </div>
                       <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
                         <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Daya Semu</span>
-                        {hasApparent ? (
+                        {!isOnline ? (
+                          <span className="font-extrabold text-rose-500 dark:text-rose-400">OFF</span>
+                        ) : hasApparent ? (
                           <span className="font-extrabold text-amber-500">
                             {Number(pm.apparent_power_total).toFixed(1)} kVA
                           </span>
@@ -216,7 +239,9 @@ export function EwPowerMetersGrid({
                       </div>
                       <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
                         <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Power Factor</span>
-                        {hasPf ? (
+                        {!isOnline ? (
+                          <span className="font-extrabold text-rose-500 dark:text-rose-400">OFF</span>
+                        ) : hasPf ? (
                           <span className="font-extrabold text-emerald-500">
                             {decodedPf!.toFixed(2)}
                           </span>
