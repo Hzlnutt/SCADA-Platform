@@ -4180,6 +4180,14 @@ export const startScheduler = () => {
     logger.warn({ err }, "Failed to start Warehouse 7 polling");
   }
 
+  // Start PLTS Weather per-minute recorder (Sidomukti, Pandaan, Pasuruan -7.6447, 112.6939)
+  try {
+    const { startPltsWeatherPolling } = require("../services/plts-weather.service");
+    startPltsWeatherPolling();
+  } catch (err) {
+    logger.warn({ err }, "Failed to start PLTS weather polling");
+  }
+
   // Initial rollup and cleanup on start
   runElectricityRollupAndCleanup().catch((err) => {
     logger.error({ err }, "Initial electricity rollup/cleanup failed");

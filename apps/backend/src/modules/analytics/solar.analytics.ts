@@ -1,5 +1,9 @@
 import { getPostgresPool } from "../../database/postgres";
 import { getTariffForDate, ElectricityTariff } from "./electricity.analytics";
+import {
+  getPltsWeatherForAnalytics,
+  type PltsWeatherPayload
+} from "../../services/plts-weather.service";
 
 // Helper to format date string as YYYY-MM-DD for WIB
 function getWibDateString(date: Date): string {
@@ -106,6 +110,7 @@ export interface SolarAnalyticsResult {
     progressiveMinute?: number | null;
   };
   live: SolarLiveState | null;
+  weather?: PltsWeatherPayload;
 }
 
 export const getSolarAnalytics = async (
@@ -704,6 +709,15 @@ export const getSolarAnalytics = async (
   const todayCost = todayBiayaTerhindarPln;
   const todayPenghematan = Number(Math.max(0, todayBiayaTerhindarPln - todayBiayaPv).toFixed(2));
 
+  // Fetch factory weather aligned with selected date/range (non-fatal if weather service unavailable)
+  const weatherTargetDate = isSingleDay ? fromStr! : (isTodayInRange ? todayStr : targetDate);
+  const weather = await getPltsWeatherForAnalytics({
+    targetDate: weatherTargetDate,
+    fromDate: fromStr,
+    toDate: toStr,
+    year: selectedYear
+  }).catch(() => undefined);
+
   return {
     summary: {
       totalKwh: Number(totalKwh.toFixed(2)),
@@ -763,6 +777,7 @@ export const getSolarAnalytics = async (
       currentHour: currentWibHour,
       progressiveMinute: lastProgressiveMinute
     },
-    live
+    live,
+    weather
   };
 };

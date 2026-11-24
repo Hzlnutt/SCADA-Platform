@@ -4,6 +4,7 @@ import { getElectricityAnalytics } from "./electricity.analytics";
 import { getWaterAnalytics } from "./water.analytics";
 import { getGasAnalytics } from "./gas.analytics";
 import { getSolarAnalytics, getLatestSolarLiveState } from "./solar.analytics";
+import { getPltsWeatherForAnalytics } from "../../services/plts-weather.service";
 import { getMongoDb } from "../../database/mongo";
 import { GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
 import { getPostgresPool } from "../../database/postgres";
@@ -207,6 +208,25 @@ export const getSolarAnalyticsHandler = async (
 
     solarAnalyticsInflight.set(cacheKey, queryPromise);
     const data = await queryPromise;
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getSolarWeatherHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const todayStr = getWibDateTime(new Date()).dateStr;
+    const targetDate = (req.query.date as string | undefined) || (req.query.from as string | undefined) || todayStr;
+    const fromDate = req.query.from as string | undefined;
+    const toDate = req.query.to as string | undefined;
+    const year = req.query.year ? Number(req.query.year) : undefined;
+    const data = await getPltsWeatherForAnalytics({ targetDate, fromDate, toDate, year });
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.json({ data });
   } catch (err) {
     next(err);

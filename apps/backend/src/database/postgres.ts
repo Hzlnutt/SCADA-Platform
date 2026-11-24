@@ -935,6 +935,52 @@ export const ensurePostgresTables = async () => {
       DELETE FROM electric_plts_telemetry WHERE id IN (SELECT id FROM ranked WHERE rn > 1);
       CREATE UNIQUE INDEX IF NOT EXISTS uq_plts_hourly_tstamp_poi ON electric_plts_telemetry (t_stamp, poi_id);
 
+      -- PLTS Weather telemetry tables (Sidomukti, Pandaan, Pasuruan -7.6447, 112.6939)
+      CREATE TABLE IF NOT EXISTS plts_weather_minute (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        location_name VARCHAR(120) NOT NULL DEFAULT 'Sidomukti, Pandaan, Pasuruan',
+        latitude NUMERIC(9,5) NOT NULL DEFAULT -7.64470,
+        longitude NUMERIC(9,5) NOT NULL DEFAULT 112.69390,
+        weather_code INT NOT NULL,
+        weather_key VARCHAR(32) NOT NULL,
+        weather_label VARCHAR(64) NOT NULL,
+        temperature_c NUMERIC(5,2),
+        humidity_pct NUMERIC(5,2),
+        cloud_cover_pct NUMERIC(5,2),
+        effective_cloud_pct NUMERIC(5,2),
+        precipitation_mm NUMERIC(6,2),
+        solar_radiation_wm2 NUMERIC(7,2),
+        direct_radiation_wm2 NUMERIC(7,2),
+        wind_speed_kmh NUMERIC(6,2),
+        is_day BOOLEAN NOT NULL DEFAULT TRUE,
+        source VARCHAR(40) NOT NULL DEFAULT 'open-meteo',
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_plts_weather_minute_ts ON plts_weather_minute (t_stamp);
+      CREATE INDEX IF NOT EXISTS idx_plts_weather_minute_ts ON plts_weather_minute (t_stamp DESC);
+
+      CREATE TABLE IF NOT EXISTS plts_weather_hourly (
+        id SERIAL PRIMARY KEY,
+        t_stamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        location_name VARCHAR(120) NOT NULL DEFAULT 'Sidomukti, Pandaan, Pasuruan',
+        dominant_weather_code INT NOT NULL,
+        dominant_weather_key VARCHAR(32) NOT NULL,
+        dominant_weather_label VARCHAR(64) NOT NULL,
+        avg_temp_c NUMERIC(5,2),
+        avg_humidity_pct NUMERIC(5,2),
+        avg_cloud_pct NUMERIC(5,2),
+        total_precip_mm NUMERIC(6,2),
+        avg_radiation_wm2 NUMERIC(7,2),
+        is_day BOOLEAN NOT NULL DEFAULT TRUE,
+        sample_minutes INT NOT NULL DEFAULT 0,
+        segments JSONB NOT NULL DEFAULT '[]'::jsonb,
+        source VARCHAR(40) NOT NULL DEFAULT 'minute-rollup',
+        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_plts_weather_hourly_ts ON plts_weather_hourly (t_stamp);
+      CREATE INDEX IF NOT EXISTS idx_plts_weather_hourly_ts ON plts_weather_hourly (t_stamp DESC);
+
       -- HVAC Retained Sample telemetry tables
       CREATE TABLE IF NOT EXISTS hvac_telemetry_minute (
         id SERIAL PRIMARY KEY,

@@ -10,6 +10,7 @@ import {
   getPowerMeterHistoryHandler,
   getSolarAnalyticsHandler,
   getSolarLatestHandler,
+  getSolarWeatherHandler,
   getElectricityReportHandler,
   getElectricityExportDataHandler,
   getElectricityExportExcelHandler,
@@ -37,6 +38,7 @@ analyticsRouter.get("/analytics/electricity/power-meters-latest", getPowerMeters
 analyticsRouter.get("/analytics/electricity/power-meters/:pmId/history", getPowerMeterHistoryHandler);
 analyticsRouter.get("/analytics/solar", getSolarAnalyticsHandler);
 analyticsRouter.get("/analytics/solar/latest", getSolarLatestHandler);
+analyticsRouter.get("/analytics/solar/weather", getSolarWeatherHandler);
 analyticsRouter.get("/analytics/water", getWaterAnalyticsHandler);
 analyticsRouter.get("/analytics/gas", getGasAnalyticsHandler);
 analyticsRouter.get("/analytics/running-hours", getRunningHoursHandler);

@@ -16,6 +16,16 @@ import { canAccessConfigAndAudit, isSeniorUnitHeadOrAdmin } from "../../utils/ro
 import { ElectricityExportModal } from "../../components/electricity/ElectricityExportModal";
 import { SeniorUnitHeadConfigModal, type ConsumptionFactCategory } from "../../components/electricity/SeniorUnitHeadConfigModal";
 import { EquipmentConfigModal, type EquipmentDisplayItem } from "../../components/electricity/EquipmentConfigModal";
+import {
+  PltsWeatherSvgIcon,
+  buildPltsWeatherTooltipLines,
+  createPltsExternalTooltipHandler,
+  createPltsWeatherIconsPlugin,
+  destroyPltsExternalTooltip,
+  getPltsWeatherMeta,
+  type PltsBarWeatherSlot,
+  type PltsWeatherPayload
+} from "../../components/electricity/pltsWeatherChart";
 import { ErrorBoundary } from "../../components/ui/ErrorBoundary";
 import {
   getMachineSeries
@@ -452,6 +462,13 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
     };
   }, [dayLabels, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, showPrevious, isZoomed, daysInMonth, isDark]);
 
+  const innerIsDarkRef = useRef<boolean>(isDark);
+  innerIsDarkRef.current = isDark;
+  const innerExternalTooltipHandler = useMemo(
+    () => createPltsExternalTooltipHandler(innerIsDarkRef),
+    []
+  );
+
   const options: any = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -486,19 +503,14 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
         }
       },
       tooltip: {
+        enabled: false,
+        external: innerExternalTooltipHandler,
         animation: {
           duration: 180,
           easing: "easeOutQuad"
         },
-        backgroundColor: isDark ? "rgba(13, 21, 39, 0.98)" : "rgba(255, 255, 255, 1)",
-        titleColor: isDark ? "#38bdf8" : "#0284c7",
-        titleFont: { size: isZoomed ? 16 : 14, weight: "700" as const },
-        bodyColor: isDark ? "#f1f5f9" : "#0f172a",
-        borderColor: isDark ? "rgba(56, 189, 248, 0.4)" : "rgba(14, 165, 233, 0.4)",
-        borderWidth: 1.5,
-        padding: isZoomed ? 16 : 13,
-        boxPadding: 6,
-        bodyFont: { family: "IBM Plex Mono, monospace", size: isZoomed ? 14.5 : 13, weight: "500" as const },
+        filter: (tooltipItem: any) =>
+          tooltipItem.raw !== null && tooltipItem.raw !== undefined && Number(tooltipItem.raw) > 0,
         callbacks: {
           title: (items: any[]) => {
             if (!items || items.length === 0) return "";
@@ -507,6 +519,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           },
           label: (ctx: any) => {
             const val = Number(ctx.parsed.y || 0);
+            if (val <= 0) return null;
             const idx = ctx.dataIndex;
             const curVal = Number(paddedCurrentData[idx] || 0);
             const prevVal = Number(paddedPreviousData[idx] || 0);
@@ -528,6 +541,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
             const idx = items[0].dataIndex;
             const curVal = Number(paddedCurrentData[idx] || 0);
             const prevVal = Number(paddedPreviousData[idx] || 0);
+            if (curVal <= 0 && (!showPrevious || prevVal <= 0)) return [];
             const lines: string[] = [];
 
             if (selectorType === "all") {
@@ -2955,6 +2969,7 @@ export default function Electricity() {
   // Solar Panel (PLTS) states
   const [solarData, setSolarData] = useState<any>(null);
   const [solarLive, setSolarLive] = useState<any>(null);
+  const [pltsWeather, setPltsWeather] = useState<PltsWeatherPayload | null>(null);
 
   // Dedicated state for fixed monthly executive recap (Bulan Ini)
   const [fixedMonthlyPln, setFixedMonthlyPln] = useState<any>(null);
@@ -4853,6 +4868,14 @@ export default function Electricity() {
     ]
   }), [barLabels, barUnit, barLwbpValues, barWbpValues]);
 
+  const solarIsDarkRef = useRef<boolean>(isDark);
+  solarIsDarkRef.current = isDark;
+  const pltsExternalTooltipHandler = useMemo(
+    () => createPltsExternalTooltipHandler(solarIsDarkRef),
+    []
+  );
+  useEffect(() => () => destroyPltsExternalTooltip(), []);
+
   const stackedBarOptions: any = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -4875,23 +4898,14 @@ export default function Electricity() {
     plugins: {
       legend: { display: true, position: "top", align: "end", labels: { color: isDark ? "rgba(148,163,184,.9)" : "rgba(71,85,105,.9)", font: { size: 10, weight: "600" as const }, usePointStyle: true, pointStyle: "rectRounded", padding: 12 } },
       tooltip: {
+        enabled: false,
+        external: pltsExternalTooltipHandler,
         animation: {
           duration: 180,
           easing: "easeOutQuad"
         },
         mode: "index",
         intersect: false,
-        backgroundColor: isDark ? "rgba(15, 23, 42, 0.98)" : "rgba(255, 255, 255, 1)",
-        titleColor: isDark ? "#ffffff" : "#000000",
-        bodyColor: isDark ? "#f8fafc" : "#0f172a",
-        borderColor: isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(15, 23, 42, 0.15)",
-        borderWidth: 2,
-        padding: 16,
-        boxPadding: 8,
-        titleFont: { family: "IBM Plex Mono, monospace", size: 16, weight: "700" as const },
-        bodyFont: { family: "IBM Plex Mono, monospace", size: 14.5, weight: "bold" as const },
-        footerColor: isDark ? "#fbbf24" : "#b45309",
-        footerFont: { family: "IBM Plex Mono, monospace", size: 14, weight: "bold" as const },
         filter: (tooltipItem: any) => tooltipItem.raw !== null && tooltipItem.raw > 0,
         callbacks: {
           title: (tooltipItems: any[]) => {
@@ -4943,20 +4957,6 @@ export default function Electricity() {
             ];
             if (isHourlyView) {
               lines.push(`Zona Tarif: ${isWbpZone ? "WBP" : "LWBP"} (Rp ${activeRate.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/kWh)`);
-              const todayStr = getLocalTodayString();
-              const isToday = !chartStartDate || chartStartDate === todayStr;
-              const activeHour = typeof chartData?.charts?.currentHour === "number"
-                ? chartData.charts.currentHour
-                : liveClock.hour;
-              if (isToday && dataIndex === activeHour) {
-                const endM = typeof chartData?.charts?.progressiveMinute === "number"
-                  ? chartData.charts.progressiveMinute
-                  : liveClock.minute;
-                const padM = String(endM).padStart(2, "0");
-                lines.push(`Status: Progresif ${endM} menit (menit :00 s/d :${padM} real-time)`);
-              } else if (isToday && dataIndex < activeHour) {
-                lines.push(`Durasi: 60 Menit penuh`);
-              }
             }
             return lines;
           }
@@ -5175,6 +5175,262 @@ export default function Electricity() {
 
 
 
+  // Sync weather from solarData and refresh live minute-level weather every 60s
+  useEffect(() => {
+    if (solarData?.weather) {
+      setPltsWeather(solarData.weather as PltsWeatherPayload);
+    }
+  }, [solarData?.weather]);
+
+  useEffect(() => {
+    if (!isPageActive) return;
+    let active = true;
+
+    const loadWeather = async () => {
+      try {
+        const todayStr = getLocalTodayString();
+        const qs = new URLSearchParams();
+        if (solarRange === "hour") {
+          const d = solarStartDate || todayStr;
+          qs.set("date", d);
+          qs.set("from", d);
+          qs.set("to", d);
+        } else if (solarRange === "custom") {
+          qs.set("date", solarStartDate || todayStr);
+          qs.set("from", solarStartDate || todayStr);
+          qs.set("to", solarEndDate || solarStartDate || todayStr);
+        } else if (solarRange === "day") {
+          const mm = String(solarSelectedMonth + 1).padStart(2, "0");
+          const daysInMo = new Date(solarSelectedYear, solarSelectedMonth + 1, 0).getDate();
+          qs.set("date", todayStr);
+          qs.set("from", `${solarSelectedYear}-${mm}-01`);
+          qs.set("to", `${solarSelectedYear}-${mm}-${String(daysInMo).padStart(2, "0")}`);
+          qs.set("year", String(solarSelectedYear));
+        } else {
+          qs.set("date", todayStr);
+          qs.set("year", String(solarSelectedYear));
+        }
+        const res = await getJson<{ data?: PltsWeatherPayload }>(`/analytics/solar/weather?${qs.toString()}`);
+        if (active && res?.data) {
+          setPltsWeather(res.data);
+        }
+      } catch {
+        // Non-fatal weather refresh error
+      }
+    };
+
+    void loadWeather();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadWeather();
+      }
+    }, 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [isPageActive, solarRange, solarStartDate, solarEndDate, solarSelectedYear, solarSelectedMonth]);
+
+  const effectivePltsWeather: PltsWeatherPayload | null = pltsWeather || solarData?.weather || null;
+
+  const solarWeatherSlots = useMemo<(PltsBarWeatherSlot | null)[]>(() => {
+    const w = effectivePltsWeather;
+    if (!w) return solarBarLabels.map(() => null);
+
+    if (solarRange === "hour" || (solarRange === "custom" && solarStartDate === solarEndDate)) {
+      return Array.from({ length: 24 }, (_, h) => {
+        const pt = w.hourly?.[h];
+        if (!pt) return null;
+        return {
+          mode: "hourly",
+          weatherKey: pt.dominantWeatherKey,
+          label: pt.dominantLabel,
+          tempC: pt.avgTempC,
+          cloudPct: pt.avgCloudPct,
+          radiationWm2: pt.avgRadiationWm2,
+          precipMm: pt.totalPrecipMm,
+          transitionCount: Math.max(1, pt.segments?.length || 1),
+          hourlyPoint: pt
+        };
+      });
+    }
+
+    if (solarRange === "day") {
+      const targetMonthStr = `${solarSelectedYear}-${String(solarSelectedMonth + 1).padStart(2, "0")}`;
+      const daysCount = new Date(solarSelectedYear, solarSelectedMonth + 1, 0).getDate();
+      return Array.from({ length: daysCount }, (_, i) => {
+        const dStr = `${targetMonthStr}-${String(i + 1).padStart(2, "0")}`;
+        const dp = w.daily?.[dStr];
+        if (!dp) return null;
+        return {
+          mode: "daily",
+          weatherKey: dp.dominantWeatherKey,
+          label: dp.dominantLabel,
+          tempC: dp.avgTempC,
+          cloudPct: dp.avgCloudPct,
+          radiationWm2: dp.avgRadiationWm2,
+          precipMm: dp.totalPrecipMm,
+          transitionCount: Math.max(1, dp.segments?.length || 1),
+          dailyPoint: dp
+        };
+      });
+    }
+
+    if (solarRange === "custom") {
+      const customDaily = solarData?.charts?.daily || [];
+      return customDaily.map((d: any) => {
+        const dp = d?.day ? w.daily?.[d.day] : undefined;
+        if (!dp) return null;
+        return {
+          mode: "daily",
+          weatherKey: dp.dominantWeatherKey,
+          label: dp.dominantLabel,
+          tempC: dp.avgTempC,
+          cloudPct: dp.avgCloudPct,
+          radiationWm2: dp.avgRadiationWm2,
+          precipMm: dp.totalPrecipMm,
+          transitionCount: Math.max(1, dp.segments?.length || 1),
+          dailyPoint: dp
+        };
+      });
+    }
+
+    // Monthly / YTD
+    const monthlyList = solarData?.charts?.monthly || [];
+    if (monthlyList.length > 0) {
+      return monthlyList.map((m: any) => {
+        const mp = m?.month ? w.monthly?.[m.month] : undefined;
+        if (!mp) return null;
+        return {
+          mode: "monthly",
+          weatherKey: mp.dominantWeatherKey,
+          label: mp.dominantLabel,
+          tempC: mp.avgTempC,
+          cloudPct: null,
+          radiationWm2: mp.avgRadiationWm2,
+          precipMm: mp.totalPrecipMm,
+          transitionCount: 1,
+          monthlyPoint: mp
+        };
+      });
+    }
+
+    return Array.from({ length: 12 }, (_, idx) => {
+      const mStr = `${solarSelectedYear}-${String(idx + 1).padStart(2, "0")}`;
+      const mp = w.monthly?.[mStr];
+      if (!mp) return null;
+      return {
+        mode: "monthly",
+        weatherKey: mp.dominantWeatherKey,
+        label: mp.dominantLabel,
+        tempC: mp.avgTempC,
+        cloudPct: null,
+        radiationWm2: mp.avgRadiationWm2,
+        precipMm: mp.totalPrecipMm,
+        transitionCount: 1,
+        monthlyPoint: mp
+      };
+    });
+  }, [effectivePltsWeather, solarBarLabels, solarRange, solarStartDate, solarEndDate, solarSelectedYear, solarSelectedMonth, solarData]);
+
+  const solarHeaderWeatherBadge = useMemo(() => {
+    const w = effectivePltsWeather;
+    if (!w) return null;
+
+    const todayStr = getLocalTodayString();
+    const isHourlyView = solarRange === "hour" || (solarRange === "custom" && solarStartDate === solarEndDate);
+    const activeDate = solarStartDate || todayStr;
+
+    if (isHourlyView && activeDate === todayStr && w.current) {
+      return {
+        prefix: "Saat Ini",
+        weatherKey: w.current.weatherKey,
+        label: w.current.label,
+        temperatureC: w.current.temperatureC,
+        radiationWm2: w.current.radiationWm2,
+        tooltip: `${w.location.address} (${w.location.lat}, ${w.location.lon}) • Sumber: ${w.current.source.toUpperCase()} • Update: ${w.current.t_stamp.slice(11, 16)} WIB`
+      };
+    }
+
+    if (isHourlyView) {
+      const dp = w.daily?.[activeDate];
+      if (dp) {
+        const [, mm, dd] = activeDate.split("-");
+        const mShort = (MONTH_NAMES_ID[Math.max(0, Number(mm) - 1)] || mm).slice(0, 3);
+        return {
+          prefix: `${Number(dd)} ${mShort}`,
+          weatherKey: dp.dominantWeatherKey,
+          label: dp.dominantLabel,
+          temperatureC: dp.avgTempC,
+          radiationWm2: dp.avgRadiationWm2,
+          tooltip: `Rekap cuaca ${activeDate} • ${w.location.address}`
+        };
+      }
+    }
+
+    if (solarRange === "day") {
+      const mKey = `${solarSelectedYear}-${String(solarSelectedMonth + 1).padStart(2, "0")}`;
+      const mp = w.monthly?.[mKey];
+      if (mp) {
+        const mShort = (MONTH_NAMES_ID[solarSelectedMonth] || mKey).slice(0, 3);
+        return {
+          prefix: `${mShort} ${solarSelectedYear}`,
+          weatherKey: mp.dominantWeatherKey,
+          label: mp.dominantLabel,
+          temperatureC: mp.avgTempC,
+          radiationWm2: mp.avgRadiationWm2,
+          tooltip: `Rekap cuaca bulan ${MONTH_NAMES_ID[solarSelectedMonth]} ${solarSelectedYear} (${mp.recordedDays} hari tercatat) • ${w.location.address}`
+        };
+      }
+    }
+
+    // Aggregate across currently visible filtered slots (Per Bulan, YTD, Kustom multi-day, or fallback)
+    const validSlots = solarWeatherSlots.filter((s): s is PltsBarWeatherSlot => Boolean(s));
+    if (validSlots.length === 0) return null;
+
+    const freq = new Map<string, { count: number; slot: PltsBarWeatherSlot }>();
+    for (const s of validSlots) {
+      const prev = freq.get(s.weatherKey) || { count: 0, slot: s };
+      prev.count += 1;
+      freq.set(s.weatherKey, prev);
+    }
+    let dom = validSlots[0];
+    let bestCount = -1;
+    for (const entry of freq.values()) {
+      if (entry.count > bestCount) {
+        bestCount = entry.count;
+        dom = entry.slot;
+      }
+    }
+    const temps = validSlots.map((s) => s.tempC).filter((v): v is number => v !== null && Number.isFinite(v));
+    const rads = validSlots.map((s) => s.radiationWm2).filter((v): v is number => v !== null && Number.isFinite(v) && v > 0);
+    const avgTemp = temps.length > 0 ? Number((temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1)) : null;
+    const avgRad = rads.length > 0 ? Math.round(rads.reduce((a, b) => a + b, 0) / rads.length) : null;
+
+    const prefix =
+      solarRange === "custom"
+        ? `${solarStartDate} s/d ${solarEndDate}`
+        : solarRange === "ytd"
+          ? `YTD ${solarSelectedYear}`
+          : String(solarSelectedYear);
+
+    return {
+      prefix,
+      weatherKey: dom.weatherKey,
+      label: dom.label,
+      temperatureC: avgTemp,
+      radiationWm2: avgRad,
+      tooltip: `Rekap cuaca periode ${prefix} • ${w.location.address}`
+    };
+  }, [effectivePltsWeather, solarWeatherSlots, solarRange, solarStartDate, solarEndDate, solarSelectedYear, solarSelectedMonth]);
+
+  const solarWeatherSlotsRef = useRef<(PltsBarWeatherSlot | null)[]>(solarWeatherSlots);
+  solarWeatherSlotsRef.current = solarWeatherSlots;
+  const pltsWeatherIconsPlugin = useMemo(
+    () => createPltsWeatherIconsPlugin(solarWeatherSlotsRef, solarIsDarkRef),
+    []
+  );
+
   const solarBarData = useMemo(() => {
     const datasets: any[] = [];
     if (solarShowPoi1) {
@@ -5203,15 +5459,40 @@ export default function Electricity() {
         stack: "solar"
       });
     }
+    // Invisible zero-height hover anchor ONLY on already-recorded past slots that have weather data
+    // (future unrecorded hours stay null so hovering them never opens any tooltip)
+    if (solarWeatherSlots.some(Boolean)) {
+      datasets.push({
+        label: "__weather_anchor__",
+        _isWeatherAnchor: true,
+        data: solarBarLabels.map((_: string, idx: number) => {
+          const p1 = solarShowPoi1 ? Number(solarPoi1Values[idx]) || 0 : 0;
+          const p2 = solarShowPoi2 ? Number(solarPoi2Values[idx]) || 0 : 0;
+          return p1 + p2 === 0 && solarWeatherSlots[idx] ? 0 : null;
+        }),
+        backgroundColor: "transparent",
+        hoverBackgroundColor: "transparent",
+        borderColor: "transparent",
+        borderWidth: 0,
+        minBarLength: 0,
+        barPercentage: 0.65,
+        stack: "solar"
+      });
+    }
     return {
       labels: solarBarLabels,
       datasets
     };
-  }, [solarBarLabels, solarPoi1Values, solarPoi2Values, solarShowPoi1, solarShowPoi2]);
+  }, [solarBarLabels, solarPoi1Values, solarPoi2Values, solarShowPoi1, solarShowPoi2, solarWeatherSlots]);
 
   const solarBarOptions: any = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
+    layout: {
+      padding: {
+        top: 28
+      }
+    },
     animation: {
       duration: 350,
       easing: "easeOutQuart"
@@ -5238,10 +5519,13 @@ export default function Electricity() {
           font: { size: 10, weight: "600" as const },
           usePointStyle: true,
           pointStyle: "rectRounded",
-          padding: 12
+          padding: 12,
+          filter: (legendItem: any) => legendItem.text !== "__weather_anchor__"
         }
       },
       tooltip: {
+        enabled: false,
+        external: pltsExternalTooltipHandler,
         animation: {
           duration: 180,
           easing: "easeOutQuad"
@@ -5253,13 +5537,18 @@ export default function Electricity() {
         bodyColor: isDark ? "#f8fafc" : "#0f172a",
         borderColor: isDark ? "rgba(51, 65, 85, 0.8)" : "rgba(226, 232, 240, 1)",
         borderWidth: 2,
-        padding: 16,
-        boxPadding: 8,
-        titleFont: { family: "IBM Plex Mono, monospace", size: 16, weight: "700" as const },
-        bodyFont: { family: "IBM Plex Mono, monospace", size: 14.5, weight: "bold" as const },
+        padding: 14,
+        boxPadding: 6,
+        titleFont: { family: "IBM Plex Mono, monospace", size: 14, weight: "700" as const },
+        bodyFont: { family: "IBM Plex Mono, monospace", size: 12.5, weight: "600" as const },
         footerColor: isDark ? "#38bdf8" : "#0284c7",
-        footerFont: { family: "IBM Plex Mono, monospace", size: 14, weight: "bold" as const },
-        filter: (tooltipItem: any) => tooltipItem.raw !== null && tooltipItem.raw > 0,
+        footerFont: { family: "IBM Plex Mono, monospace", size: 12, weight: "bold" as const },
+        filter: (tooltipItem: any) => {
+          if (tooltipItem.dataset?._isWeatherAnchor) {
+            return tooltipItem.raw !== null && tooltipItem.raw !== undefined;
+          }
+          return tooltipItem.raw !== null && tooltipItem.raw > 0;
+        },
         callbacks: {
           title: (tooltipItems: any[]) => {
             if (!tooltipItems.length) return "";
@@ -5288,6 +5577,7 @@ export default function Electricity() {
             return `${padH}:00 - ${padH}:59`;
           },
           label: (ctx: any) => {
+            if (ctx.dataset?._isWeatherAnchor) return null;
             const val = ctx.raw;
             if (val === null || val === undefined || val === 0) return null;
             return `${ctx.dataset.label}: ${val.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`;
@@ -5298,7 +5588,19 @@ export default function Electricity() {
             const p1 = solarShowPoi1 ? (solarPoi1Values[idx] || 0) : 0;
             const p2 = solarShowPoi2 ? (solarPoi2Values[idx] || 0) : 0;
             const tot = p1 + p2;
-            if (tot === 0) return [];
+            const weatherSlot = solarWeatherSlots[idx] ?? null;
+            const weatherLines = buildPltsWeatherTooltipLines(weatherSlot);
+
+            if (tot <= 0) {
+              // No consumption and no recorded weather (e.g. future hours) -> keep tooltip completely hidden
+              if (weatherLines.length === 0) return [];
+              const zeroLines: string[] = [];
+              if (solarShowPoi1) zeroLines.push("POI-1 (kWh): 0 kWh");
+              if (solarShowPoi2) zeroLines.push("POI-2 (kWh): 0 kWh");
+              zeroLines.push("Total: 0 kWh");
+              return [...zeroLines, ...weatherLines];
+            }
+
             const isHourlyView = solarRange === "hour" || (solarRange === "custom" && solarStartDate === solarEndDate);
             const isWbpZone = isHourlyView && (idx >= 17 && idx <= 21);
             const plnRate = isWbpZone ? (wbpRate || 1553.67) : (lwbpRate || 1035.78);
@@ -5312,22 +5614,8 @@ export default function Electricity() {
             lines.push(`Estimasi Hemat: Rp ${savings.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
             if (isHourlyView) {
               lines.push(`Zona Tarif PLN: ${isWbpZone ? "WBP" : "LWBP"} (Rp ${plnRate.toLocaleString("id-ID", { minimumFractionDigits: 2 })}/kWh)`);
-              const todayStr = getLocalTodayString();
-              const isToday = !solarStartDate || solarStartDate === todayStr;
-              const activeHour = typeof solarData?.charts?.currentHour === "number"
-                ? solarData.charts.currentHour
-                : liveClock.hour;
-              if (isToday && idx === activeHour) {
-                const endM = typeof solarData?.charts?.progressiveMinute === "number"
-                  ? solarData.charts.progressiveMinute
-                  : liveClock.minute;
-                const padM = String(endM).padStart(2, "0");
-                lines.push(`Status: Progresif ${endM} menit (menit :00 s/d :${padM} real-time)`);
-              } else if (isToday && idx < activeHour) {
-                lines.push(`Durasi: 60 Menit penuh`);
-              }
             }
-            return lines;
+            return [...lines, ...weatherLines];
           }
         }
       }
@@ -5340,11 +5628,12 @@ export default function Electricity() {
       },
       y: {
         stacked: true,
+        grace: "18%",
         grid: { color: isDark ? "rgba(51,65,85,.4)" : "rgba(203,213,225,.6)" },
         ticks: { color: isDark ? "rgba(148,163,184,.8)" : "rgba(71,85,105,.8)", callback: (v: number) => `${v}` }
       }
     }
-  }), [isDark, solarPoi1Values, solarPoi2Values, solarShowPoi1, solarShowPoi2, lwbpRate, wbpRate, pvRate, solarData, liveClock, solarRange, solarStartDate, solarEndDate]);
+  }), [isDark, solarPoi1Values, solarPoi2Values, solarShowPoi1, solarShowPoi2, lwbpRate, wbpRate, pvRate, solarData, liveClock, solarRange, solarStartDate, solarEndDate, solarWeatherSlots]);
 
   /* ═══ COMBINED FACT TIMELINE CHART & DONUT STATE ═══ */
   const fact1Total = useMemo(() => {
@@ -5465,11 +5754,17 @@ export default function Electricity() {
     plugins: {
       legend: { display: false },
       tooltip: {
+        enabled: false,
+        external: pltsExternalTooltipHandler,
         animation: {
           duration: 180,
           easing: "easeOutQuad"
         },
-        callbacks: { label: (ctx: any) => `${formatNumber(Number(ctx.parsed.x))} kWh` }
+        filter: (tooltipItem: any) =>
+          tooltipItem.raw !== null && tooltipItem.raw !== undefined && Number(tooltipItem.raw) > 0,
+        callbacks: {
+          label: (ctx: any) => `Konsumsi: ${formatNumber(Number(ctx.parsed.x))} kWh`
+        }
       }
     },
     scales: {
@@ -6401,7 +6696,7 @@ export default function Electricity() {
           <div className="flex flex-col gap-3 mb-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Trend Produksi Solar Panel (PLTS)</h3>
                   {isSolarFilterPending && (
                     <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-lg animate-pulse">
@@ -6409,8 +6704,26 @@ export default function Electricity() {
                       Memuat...
                     </span>
                   )}
+                  {solarHeaderWeatherBadge && (() => {
+                    const meta = getPltsWeatherMeta(solarHeaderWeatherBadge.weatherKey);
+                    return (
+                      <span
+                        title={solarHeaderWeatherBadge.tooltip}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] font-bold ${meta.pillClass}`}
+                      >
+                        <PltsWeatherSvgIcon weatherKey={solarHeaderWeatherBadge.weatherKey} className="w-3.5 h-3.5 shrink-0" />
+                        <span className="opacity-75">{solarHeaderWeatherBadge.prefix}:</span>
+                        <span>{solarHeaderWeatherBadge.label}</span>
+                        {solarHeaderWeatherBadge.temperatureC !== null && (
+                          <span className="font-mono">{solarHeaderWeatherBadge.temperatureC.toLocaleString("id-ID", { maximumFractionDigits: 1 })}°C</span>
+                        )}
+                        {solarHeaderWeatherBadge.radiationWm2 !== null && solarHeaderWeatherBadge.radiationWm2 > 0 && (
+                          <span className="hidden sm:inline font-mono opacity-80">• {Math.round(solarHeaderWeatherBadge.radiationWm2)} W/m²</span>
+                        )}
+                      </span>
+                    );
+                  })()}
                 </div>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Produksi energi POI-1 & POI-2 — data historis per jam.</p>
               </div>
               {/* Checklist options: POI-1, POI-2 */}
               <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/60 p-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
@@ -6534,9 +6847,14 @@ export default function Electricity() {
               </div>
             </div>
           </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[260px] flex flex-col justify-center">
-            <div className="h-[260px] w-full">
-              <Bar data={solarBarData} options={solarBarOptions} />
+          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[290px] flex flex-col justify-between gap-2">
+            <div className="h-[290px] w-full">
+              <Bar data={solarBarData} options={solarBarOptions} plugins={[pltsWeatherIconsPlugin]} />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400 dark:text-slate-500 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
+              <span>
+                Lokasi Cuaca: <strong className="text-slate-600 dark:text-slate-300">Sidomukti, Kec. Pandaan, Pasuruan</strong> (Jl. Stadion / Jl. Sidomukti No. 1)
+              </span>
             </div>
           </div>
         </section>
@@ -7153,273 +7471,7 @@ export default function Electricity() {
         />
       </div>
 
-      {/* ═══════════ ROW 1: BIGGEST CONSUMPTION ═══════════ */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Biggest Consumption - Fact 1 */}
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 1</h3>
-                {fact1Total > 0 && (
-                  <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md">
-                    Total: {formatNumber(fact1Total)} kWh
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Fact-1 categories sorted by highest consumption.</p>
-            </div>
-            {isSeniorUnitHead && (
-              <button
-                type="button"
-                onClick={() => openSeniorConfigModal("consumption_fact_1", "all")}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 transition cursor-pointer"
-                title="Kelola Item Fact 1 (Senior Unit Head Only)"
-              >
-                <IconSettings />
-                <span>⚙️ Kelola Item</span>
-              </button>
-            )}
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
-            {factCategories1.filter(c => c.enabled).length > 0 ? (
-              <div className="overflow-y-auto max-h-[380px] pr-1.5">
-                <div style={{ height: Math.max(250, factCategories1.filter(c => c.enabled).length * 28) }}>
-                  <Bar data={makeHorizontalBarData(factCategories1, 1)} options={horizontalBarOptions} />
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-[250px] text-center">
-                <span className="text-2xl mb-1 opacity-40">📊</span>
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering Fact-1 belum terhubung</span>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Biggest Consumption - Fact 2 */}
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Biggest Consumption - Fact 2</h3>
-                {fact2Total > 0 && (
-                  <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md">
-                    Total: {formatNumber(fact2Total)} kWh
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Fact-2 categories sorted by highest consumption.</p>
-            </div>
-            {isSeniorUnitHead && (
-              <button
-                type="button"
-                onClick={() => openSeniorConfigModal("consumption_fact_2", "all")}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 transition cursor-pointer"
-                title="Kelola Item Fact 2 (Senior Unit Head Only)"
-              >
-                <IconSettings />
-                <span>⚙️ Kelola Item</span>
-              </button>
-            )}
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
-            {factCategories2.filter(c => c.enabled).length > 0 ? (
-              <div className="overflow-y-auto max-h-[380px] pr-1.5">
-                <div style={{ height: Math.max(250, factCategories2.filter(c => c.enabled).length * 28) }}>
-                  <Bar data={makeHorizontalBarData(factCategories2, 2)} options={horizontalBarOptions} />
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-[250px] text-center">
-                <span className="text-2xl mb-1 opacity-40">📊</span>
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering Fact-2 belum terhubung</span>
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-
-      {/* ═══════════ ROW 2: UTILITY DEPARTMENT ANALYSIS ═══════════ */}
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        {/* Utility Consumption - Horizontal Bar Chart Card */}
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Utility Consumption</h3>
-                {utilityData.totalKwh > 0 && (
-                  <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md">
-                    Total: {formatNumber(utilityData.totalKwh)} kWh
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Utility electricity consumption sorted by highest consumer.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={utilityFilter}
-                onChange={(e) => setUtilityFilter(e.target.value as any)}
-                className="px-2.5 py-1 text-xs rounded border border-slate-350 bg-slate-50 text-slate-800 dark:bg-slate-850 dark:text-slate-200 dark:border-slate-700 font-bold focus:outline-none cursor-pointer"
-              >
-                <option value="Fact 1">Fact 1 Only</option>
-                <option value="Fact 2">Fact 2 Only</option>
-              </select>
-              {isSeniorUnitHead && (
-                <button
-                  type="button"
-                  onClick={() => openSeniorConfigModal(utilityFilter === "Fact 1" ? "consumption_fact_1" : "consumption_fact_2", "Utility")}
-                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition cursor-pointer"
-                  title="Kelola Item Utility (Senior Unit Head Only)"
-                >
-                  <IconSettings />
-                  <span>⚙️ Kelola Item</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
-            {utilityData.items.length > 0 ? (
-              <div className="overflow-y-auto max-h-[380px] pr-1.5">
-                <div style={{ height: Math.max(250, utilityData.items.length * 28) }}>
-                  <Bar data={makeDeptHorizontalBarData(utilityData.items, "Utility")} options={horizontalBarOptions} />
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-[250px] text-center">
-                <span className="text-2xl mb-1 opacity-40">📊</span>
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering sistem utility belum terhubung</span>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Utility Distribution Share Card */}
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
-          <div>
-            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Utility Distribution Share</h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Distribution breakdown of utility systems.</p>
-          </div>
-          <div className="my-4 flex justify-center flex-shrink-0">
-            <DonutChart 
-              segments={utilityDonutSegments.length > 0 ? utilityDonutSegments : [{ label: "Belum Ada Data", value: 100, color: "#cbd5e1" }]} 
-              size={140} 
-              thickness={16} 
-              centerLabel={utilityData.totalKwh > 0 ? `${formatNumber(utilityData.totalKwh)} kWh` : "0 kWh"} 
-              centerLabelSize="text-[10px]"
-            />
-          </div>
-          <div className="space-y-1.5 flex-1 overflow-y-auto max-h-[140px] scrollbar-hide">
-            {utilityDonutSegments.length > 0 ? (
-              utilityDonutSegments.map((item) => (
-                <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="font-semibold text-slate-600 dark:text-slate-300">{item.label}</span>
-                  </div>
-                  <span className="font-mono font-bold text-slate-900 dark:text-white">{item.value}%</span>
-                </div>
-              ))
-            ) : (
-              <div className="text-xs text-slate-400 py-4 text-center">Belum ada data sub-metering utility.</div>
-            )}
-          </div>
-        </section>
-      </div>
-
-      {/* ═══════════ ROW 3: HVAC DEPARTMENT ANALYSIS ═══════════ */}
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        {/* HVAC Consumption - Horizontal Bar Chart Card */}
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#06b6d4] dark:text-cyan-400">HVAC Consumption</h3>
-                {hvacData.totalKwh > 0 && (
-                  <span className="text-xs font-extrabold font-mono text-[#06b6d4] dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-md">
-                    Total: {formatNumber(hvacData.totalKwh)} kWh
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">HVAC electricity consumption sorted by highest consumer.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={hvacFilter}
-                onChange={(e) => setHvacFilter(e.target.value as any)}
-                className="px-2.5 py-1 text-xs rounded border border-slate-350 bg-slate-50 text-slate-800 dark:bg-slate-850 dark:text-slate-200 dark:border-slate-700 font-bold focus:outline-none cursor-pointer"
-              >
-                <option value="Fact 1">Fact 1 Only</option>
-                <option value="Fact 2">Fact 2 Only</option>
-              </select>
-              {isSeniorUnitHead && (
-                <button
-                  type="button"
-                  onClick={() => openSeniorConfigModal(hvacFilter === "Fact 1" ? "consumption_fact_1" : "consumption_fact_2", "HVAC")}
-                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 transition cursor-pointer"
-                  title="Kelola Item HVAC (Senior Unit Head Only)"
-                >
-                  <IconSettings />
-                  <span>⚙️ Kelola Item</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[250px]">
-            {hvacData.items.length > 0 ? (
-              <div className="overflow-y-auto max-h-[380px] pr-1.5">
-                <div style={{ height: Math.max(250, hvacData.items.length * 28) }}>
-                  <Bar data={makeDeptHorizontalBarData(hvacData.items, "HVAC")} options={horizontalBarOptions} />
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-[250px] text-center">
-                <span className="text-2xl mb-1 opacity-40">📊</span>
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Data Belum Tersedia</span>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sub-metering sistem HVAC belum terhubung</span>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* HVAC Distribution Share Card */}
-        <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm flex flex-col justify-between">
-          <div>
-            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#06b6d4] dark:text-cyan-400">HVAC Distribution Share</h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Distribution breakdown of HVAC systems.</p>
-          </div>
-          <div className="my-4 flex justify-center flex-shrink-0">
-            <DonutChart 
-              segments={hvacDonutSegments.length > 0 ? hvacDonutSegments : [{ label: "Belum Ada Data", value: 100, color: "#cbd5e1" }]} 
-              size={140} 
-              thickness={16} 
-              centerLabel={hvacData.totalKwh > 0 ? `${formatNumber(hvacData.totalKwh)} kWh` : "0 kWh"} 
-              centerLabelSize="text-[10px]"
-            />
-          </div>
-          <div className="space-y-1.5 flex-1 overflow-y-auto max-h-[140px] scrollbar-hide">
-            {hvacDonutSegments.length > 0 ? (
-              hvacDonutSegments.map((item) => (
-                <div key={item.label} className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800/60 pb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="font-semibold text-slate-600 dark:text-slate-300">{item.label}</span>
-                  </div>
-                  <span className="font-mono font-bold text-slate-900 dark:text-white">{item.value}%</span>
-                </div>
-              ))
-            ) : (
-              <div className="text-xs text-slate-400 py-4 text-center">Belum ada data sub-metering HVAC.</div>
-            )}
-          </div>
-        </section>
-      </div>
-
+      {/* Biggest Consumption, Utility Consumption & HVAC Consumption horizontal charts removed from Overview (covered by Realtime Consumption) */}
 
       {/* ═══════════ SECTION H: EQUIPMENT MONTHLY CHARTS ═══════════ */}
       {(() => {
