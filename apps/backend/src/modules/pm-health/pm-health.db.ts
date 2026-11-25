@@ -195,3 +195,123 @@ export async function fetchLatestReadingPerPm(table: SourceTable): Promise<RawPm
   const rows = await queryReadOnly(sql);
   return rows.map((r) => mapRawRow(r, table));
 }
+
+const FULL_PARAM_COLUMNS = [
+  "volt_ab",
+  "volt_bc",
+  "volt_ca",
+  "volt_ll",
+  "volt_an",
+  "volt_bn",
+  "volt_cn",
+  "volt_ln",
+  "current_a",
+  "current_b",
+  "current_c",
+  "frequency",
+  "active_power_total",
+  "reactive_power_total",
+  "apparent_power_total",
+  "power_factor",
+  "voltage_unbalance",
+  "current_unbalance",
+  "thd_volt_a",
+  "thd_volt_b",
+  "thd_volt_c",
+  "thd_current_a",
+  "thd_current_b",
+  "thd_current_c",
+  "active_energy"
+] as const;
+
+const tableColumnCache = new Map<SourceTable, Set<string>>();
+
+async function getAvailableColumns(table: SourceTable): Promise<Set<string>> {
+  const cached = tableColumnCache.get(table);
+  if (cached) return cached;
+  const rows = await queryReadOnly<{ column_name: string }>(
+    `SELECT column_name FROM information_schema.columns WHERE table_name = $1`,
+    [table]
+  );
+  const cols = new Set(rows.map((r) => String(r.column_name).toLowerCase()));
+  tableColumnCache.set(table, cols);
+  return cols;
+}
+
+/**
+ * Strictly READ-ONLY lookup of the latest (or closest to a target WIB timestamp) full parameter row
+ * for a single PM, used by the Crosscheck module as an Endpoint reference snapshot.
+ */
+export async function fetchLatestFullPmParams(
+  pmId: string,
+  targetTimestamp?: string | null
+): Promise<{
+  tStamp: string | null;
+  sourceTable: SourceTable | null;
+  values: Record<string, number>;
+}> {
+  const normId = String(pmId || "").trim().toUpperCase();
+  if (!normId) return { tStamp: null, sourceTable: null, values: {} };
+
+  const cleanTarget =
+    typeof targetTimestamp === "string" && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?$/.test(targetTimestamp.trim())
+      ? targetTimestamp.trim().length === 16
+        ? `${targetTimestamp.trim()}:00`
+        : targetTimestamp.trim()
+      : null;
+
+  const tables: SourceTable[] = ["electric_pm_telemetry_minute", "electric_pm_telemetry"];
+  for (const table of tables) {
+    try {
+      const avail = await getAvailableColumns(table);
+      const selectable = FULL_PARAM_COLUMNS.filter((c) => avail.has(c));
+      if (selectable.length === 0) continue;
+
+      const sql = cleanTarget
+        ? `
+          SELECT
+            to_char(t_stamp, 'YYYY-MM-DD HH24:MI:SS') AS t_stamp,
+            ${selectable.join(", ")}
+          FROM ${table}
+          WHERE UPPER(pm_id) = $1
+            AND t_stamp BETWEEN ($2::timestamp - INTERVAL '15 minutes') AND ($2::timestamp + INTERVAL '15 minutes')
+          ORDER BY ABS(EXTRACT(EPOCH FROM (t_stamp - $2::timestamp))) ASC, id DESC
+          LIMIT 1
+        `
+        : `
+          SELECT
+            to_char(t_stamp, 'YYYY-MM-DD HH24:MI:SS') AS t_stamp,
+            ${selectable.join(", ")}
+          FROM ${table}
+          WHERE UPPER(pm_id) = $1
+          ORDER BY t_stamp DESC, id DESC
+          LIMIT 1
+        `;
+      const rows = await queryReadOnly<Record<string, any>>(
+        sql,
+        cleanTarget ? [normId, cleanTarget] : [normId]
+      );
+      if (rows.length === 0) continue;
+
+      const row = rows[0];
+      const values: Record<string, number> = {};
+      for (const col of selectable) {
+        const n = toNum(row[col]);
+        if (n !== null) {
+          values[col] = n;
+        }
+      }
+      if (Object.keys(values).length > 0) {
+        return {
+          tStamp: row.t_stamp ? String(row.t_stamp) : null,
+          sourceTable: table,
+          values
+        };
+      }
+    } catch {
+      // Fallback to next table if query fails
+    }
+  }
+
+  return { tStamp: null, sourceTable: null, values: {} };
+}

@@ -5,7 +5,9 @@ import { authenticate, authorize } from "../auth/auth.middleware";
 import { env } from "../../config/env.config";
 import { logger } from "../../config/logger.config";
 import { getPostgresPool } from "../../database/postgres";
+import { fetchLivePmEndpointSnapshot, type ElectricPmRecord } from "../../core/scheduler";
 import {
+  fetchLatestFullPmParams,
   fetchLatestReadingPerPm,
   fetchRawPmReadings,
   testPmHealthDbConnection
@@ -18,7 +20,23 @@ import {
 } from "./pm-health.analyzer";
 import { pmHealthStore } from "./pm-health.store";
 import { PM_CATALOG, resolvePmMeta } from "./pm-health.catalog";
-import type { AnomalyEvent, AnomalyType, PmChecklistPatch, SourceTable } from "./pm-health.types";
+import {
+  computeCrosscheckReport,
+  CROSSCHECK_PARAM_SPECS,
+  pmCrosscheckStore
+} from "./pm-health.crosscheck";
+import type {
+  AnomalyEvent,
+  AnomalyType,
+  CrosscheckLiveEndpointOrigin,
+  CrosscheckParamKey,
+  CrosscheckSource,
+  CrosscheckSourceTag,
+  CrosscheckToleranceMode,
+  PmChecklistPatch,
+  PmCrosscheckSummaryItem,
+  SourceTable
+} from "./pm-health.types";
 
 const POLL_INTERVAL_MS = 15_000;
 const DEFAULT_LOOKBACK_HOURS = 24;
@@ -709,6 +727,394 @@ pmHealthRouter.delete("/pm-health/checklist", ...adminOnly, requireChecklistUnlo
   const result = pmHealthStore.resetChecklist();
   broadcastSse("checklist_reset", { clearedCount: result.clearedCount });
   res.json({ ok: true, clearedCount: result.clearedCount });
+});
+
+// ─── Multi-Image PM Parameter Crosscheck (eWON / Endpoint / Panel LCD) ───
+function toCrosscheckSummary(
+  record: ReturnType<typeof pmCrosscheckStore.getRecord>,
+  report: ReturnType<typeof computeCrosscheckReport>
+): PmCrosscheckSummaryItem {
+  return {
+    pmId: record.pmId,
+    imageCount: record.images.length,
+    ewonImages: report.sourceCoverage.ewonImages,
+    endpointImages: report.sourceCoverage.endpointImages,
+    panelLcdImages: report.sourceCoverage.panelLcdImages,
+    hasLiveEndpoint: report.sourceCoverage.hasLiveEndpoint,
+    comparedParams: report.stats.comparedParams,
+    matchCount: report.stats.matchCount,
+    slightDiffCount: report.stats.slightDiffCount,
+    mismatchCount: report.stats.mismatchCount + report.stats.scaleMismatchCount,
+    overallStatus: report.overallStatus,
+    lastAnalyzedAt: record.lastAnalyzedAt
+  };
+}
+
+pmHealthRouter.get("/pm-health/crosscheck", ...adminOnly, (_req: Request, res: Response) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.json({
+    ok: true,
+    summaries: pmCrosscheckStore.listSummaries(),
+    paramSpecs: CROSSCHECK_PARAM_SPECS
+  });
+});
+
+pmHealthRouter.get("/pm-health/crosscheck/:pmId", ...adminOnly, (req: Request, res: Response) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
+  if (!pmId) {
+    res.status(400).json({ ok: false, error: "pmId wajib diisi." });
+    return;
+  }
+  const record = pmCrosscheckStore.getRecord(pmId);
+  const report = computeCrosscheckReport(record);
+  res.json({
+    ok: true,
+    pm: resolvePmMeta(pmId),
+    record,
+    report,
+    paramSpecs: CROSSCHECK_PARAM_SPECS
+  });
+});
+
+pmHealthRouter.post("/pm-health/crosscheck/:pmId/images", ...adminOnly, (req: Request, res: Response) => {
+  const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
+  if (!pmId) {
+    res.status(400).json({ ok: false, error: "pmId wajib diisi." });
+    return;
+  }
+  try {
+    const actor = req.user?.name || req.user?.id || "Admin";
+    const nowWib = formatWibNow();
+    const body = req.body || {};
+
+    const items: Array<{ dataUrl: string; fileName: string; source: CrosscheckSourceTag; caption?: string }> =
+      Array.isArray(body.images)
+        ? body.images
+        : [
+            {
+              dataUrl: String(body.dataUrl || ""),
+              fileName: String(body.fileName || "image.jpg"),
+              source: (body.source || "auto") as CrosscheckSourceTag,
+              caption: typeof body.caption === "string" ? body.caption : ""
+            }
+          ];
+
+    if (items.length === 0) {
+      res.status(400).json({ ok: false, error: "Minimal 1 gambar harus dikirim." });
+      return;
+    }
+
+    const added: ReturnType<typeof pmCrosscheckStore.addImage>["added"][] = [];
+    let latestRecord = pmCrosscheckStore.getRecord(pmId);
+    for (const imgInput of items) {
+      const result = pmCrosscheckStore.addImage(
+        pmId,
+        {
+          dataUrl: String(imgInput.dataUrl || ""),
+          fileName: String(imgInput.fileName || "image.jpg"),
+          source: (imgInput.source || "auto") as CrosscheckSourceTag,
+          caption: typeof imgInput.caption === "string" ? imgInput.caption : ""
+        },
+        actor,
+        nowWib
+      );
+      added.push(result.added);
+      latestRecord = result.record;
+    }
+
+    const report = computeCrosscheckReport(latestRecord);
+    const summary = toCrosscheckSummary(latestRecord, report);
+    broadcastSse("crosscheck_updated", { pmId: latestRecord.pmId, summary });
+
+    res.json({
+      ok: true,
+      added,
+      record: latestRecord,
+      report
+    });
+  } catch (err: any) {
+    res.status(400).json({ ok: false, error: err?.message || "Gagal mengunggah gambar crosscheck." });
+  }
+});
+
+pmHealthRouter.get(
+  "/pm-health/crosscheck/:pmId/images/:imageId",
+  attachQueryTokenToHeader,
+  ...adminOnly,
+  (req: Request, res: Response) => {
+    const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
+    const imageId = decodeURIComponent(String(req.params.imageId || "")).trim();
+    if (!pmId || !imageId) {
+      res.status(400).json({ ok: false, error: "Parameter tidak lengkap." });
+      return;
+    }
+    const file = pmCrosscheckStore.getImageFile(pmId, imageId);
+    if (!file) {
+      res.status(404).json({ ok: false, error: "Gambar tidak ditemukan." });
+      return;
+    }
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.setHeader("Content-Type", file.mimeType);
+    res.sendFile(file.filePath);
+  }
+);
+
+pmHealthRouter.patch("/pm-health/crosscheck/:pmId/images/:imageId", ...adminOnly, (req: Request, res: Response) => {
+  const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
+  const imageId = decodeURIComponent(String(req.params.imageId || "")).trim();
+  const body = req.body || {};
+  const record = pmCrosscheckStore.updateImageMeta(
+    pmId,
+    imageId,
+    {
+      source: body.source as CrosscheckSourceTag | undefined,
+      caption: typeof body.caption === "string" ? body.caption : undefined
+    },
+    formatWibNow()
+  );
+  if (!record) {
+    res.status(404).json({ ok: false, error: "Gambar crosscheck tidak ditemukan." });
+    return;
+  }
+  const report = computeCrosscheckReport(record);
+  broadcastSse("crosscheck_updated", { pmId: record.pmId, summary: toCrosscheckSummary(record, report) });
+  res.json({ ok: true, record, report });
+});
+
+pmHealthRouter.delete("/pm-health/crosscheck/:pmId/images/:imageId", ...adminOnly, (req: Request, res: Response) => {
+  const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
+  const imageId = decodeURIComponent(String(req.params.imageId || "")).trim();
+  const record = pmCrosscheckStore.deleteImage(pmId, imageId, formatWibNow());
+  if (!record) {
+    res.status(404).json({ ok: false, error: "Gambar crosscheck tidak ditemukan." });
+    return;
+  }
+  const report = computeCrosscheckReport(record);
+  broadcastSse("crosscheck_updated", { pmId: record.pmId, summary: toCrosscheckSummary(record, report) });
+  res.json({ ok: true, record, report });
+});
+
+function extractNumericParamsFromLiveRecord(rec: ElectricPmRecord): Record<string, number> {
+  const keys = [
+    "volt_ab",
+    "volt_bc",
+    "volt_ca",
+    "volt_ll",
+    "volt_an",
+    "volt_bn",
+    "volt_cn",
+    "volt_ln",
+    "current_a",
+    "current_b",
+    "current_c",
+    "frequency",
+    "active_power_total",
+    "reactive_power_total",
+    "apparent_power_total",
+    "power_factor",
+    "voltage_unbalance",
+    "current_unbalance",
+    "thd_volt_a",
+    "thd_volt_b",
+    "thd_volt_c",
+    "thd_current_a",
+    "thd_current_b",
+    "thd_current_c",
+    "active_energy"
+  ] as const;
+
+  const values: Record<string, number> = {};
+  for (const k of keys) {
+    const v = (rec as any)[k];
+    if (typeof v === "number" && Number.isFinite(v)) {
+      values[k] = v;
+    }
+  }
+  return values;
+}
+
+pmHealthRouter.post("/pm-health/crosscheck/:pmId/live-endpoint", ...adminOnly, async (req: Request, res: Response) => {
+  const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
+  if (!pmId) {
+    res.status(400).json({ ok: false, error: "pmId wajib diisi." });
+    return;
+  }
+  try {
+    const nowWib = formatWibNow();
+    const targetTimestamp =
+      typeof req.body?.targetTimestamp === "string" && req.body.targetTimestamp.trim()
+        ? req.body.targetTimestamp.trim()
+        : null;
+
+    let values: Record<string, number> = {};
+    let tStamp: string | null = null;
+    let sourceOrigin: CrosscheckLiveEndpointOrigin = "db_minute_latest";
+    let sourceLabel = "Database Telemetry Menit";
+
+    // If user explicitly requests historical timestamp matching the photo time, query DB minute table closest to that time
+    if (targetTimestamp) {
+      const hist = await fetchLatestFullPmParams(pmId, targetTimestamp);
+      values = hist.values;
+      tStamp = hist.tStamp;
+      sourceOrigin = "db_minute_at_time";
+      sourceLabel = `Endpoint Historis (~${targetTimestamp.slice(11, 16)} WIB)`;
+    } else {
+      // Priority 1 & 2: Pull TRUE real-time value directly from WebDev HTTP Endpoint right at this second (or 1s live cache)
+      const meta = resolvePmMeta(pmId);
+      const liveHttp = await fetchLivePmEndpointSnapshot(pmId, meta.groupId);
+      if (liveHttp) {
+        values = extractNumericParamsFromLiveRecord(liveHttp.record);
+        tStamp = nowWib;
+        sourceOrigin = liveHttp.origin;
+        sourceLabel =
+          liveHttp.origin === "live_endpoint_http"
+            ? `Endpoint Live (${liveHttp.endpointName})`
+            : `Endpoint Live Cache (${liveHttp.endpointName})`;
+      }
+
+      // Priority 3: Fallback to read-only PostgreSQL minute telemetry if direct HTTP endpoint is unreachable
+      if (Object.keys(values).length === 0) {
+        const fallback = await fetchLatestFullPmParams(pmId);
+        values = fallback.values;
+        tStamp = fallback.tStamp;
+        sourceOrigin = "db_minute_latest";
+        sourceLabel = "Database Telemetry Menit";
+      }
+    }
+
+    const capturedCount = Object.keys(values).length;
+    if (capturedCount === 0) {
+      res.status(404).json({
+        ok: false,
+        error: targetTimestamp
+          ? `Tidak ditemukan data Endpoint untuk ${pmId} di sekitar waktu ${targetTimestamp} WIB (±15 menit).`
+          : `Data Endpoint untuk ${pmId} belum tersedia baik dari Live Endpoint maupun database SCADA.`
+      });
+      return;
+    }
+
+    const record = pmCrosscheckStore.setLiveEndpointSnapshot(pmId, tStamp, values, nowWib, {
+      sourceOrigin,
+      sourceLabel
+    });
+    const report = computeCrosscheckReport(record);
+    broadcastSse("crosscheck_updated", { pmId: record.pmId, summary: toCrosscheckSummary(record, report) });
+    res.json({
+      ok: true,
+      capturedCount,
+      tStamp,
+      sourceOrigin,
+      sourceLabel,
+      record,
+      report
+    });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err?.message || "Gagal mengambil value dari Endpoint." });
+  }
+});
+
+pmHealthRouter.patch("/pm-health/crosscheck/:pmId/settings", ...adminOnly, (req: Request, res: Response) => {
+  const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
+  if (!pmId) {
+    res.status(400).json({ ok: false, error: "pmId wajib diisi." });
+    return;
+  }
+  const mode = req.body?.toleranceMode as CrosscheckToleranceMode;
+  if (mode !== "strict" && mode !== "normal" && mode !== "relaxed") {
+    res.status(400).json({ ok: false, error: "toleranceMode harus strict, normal, atau relaxed." });
+    return;
+  }
+  const record = pmCrosscheckStore.setToleranceMode(pmId, mode, formatWibNow());
+  const report = computeCrosscheckReport(record);
+  broadcastSse("crosscheck_updated", { pmId: record.pmId, summary: toCrosscheckSummary(record, report) });
+  res.json({ ok: true, record, report });
+});
+
+pmHealthRouter.delete("/pm-health/crosscheck/:pmId/live-endpoint", ...adminOnly, (req: Request, res: Response) => {
+  const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
+  if (!pmId) {
+    res.status(400).json({ ok: false, error: "pmId wajib diisi." });
+    return;
+  }
+  const record = pmCrosscheckStore.clearLiveEndpointSnapshot(pmId, formatWibNow());
+  const report = computeCrosscheckReport(record);
+  broadcastSse("crosscheck_updated", { pmId: record.pmId, summary: toCrosscheckSummary(record, report) });
+  res.json({ ok: true, record, report });
+});
+
+pmHealthRouter.post("/pm-health/crosscheck/:pmId/analyze", ...adminOnly, async (req: Request, res: Response) => {
+  const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
+  if (!pmId) {
+    res.status(400).json({ ok: false, error: "pmId wajib diisi." });
+    return;
+  }
+  try {
+    const actor = req.user?.name || req.user?.id || "Admin";
+    const forceReanalyze = Boolean(req.body?.forceReanalyze);
+    const result = await pmCrosscheckStore.analyzePmImages(pmId, {
+      forceReanalyze,
+      actor,
+      nowWib: formatWibNow()
+    });
+    broadcastSse("crosscheck_updated", {
+      pmId: result.record.pmId,
+      summary: toCrosscheckSummary(result.record, result.report)
+    });
+    res.json({
+      ok: true,
+      analyzedImageCount: result.analyzedImageCount,
+      record: result.record,
+      report: result.report
+    });
+  } catch (err: any) {
+    logger.warn(`[PM-Crosscheck] Analyze failed for ${pmId}: ${err?.message || err}`);
+    res.status(500).json({ ok: false, error: err?.message || "Gagal menganalisis gambar crosscheck." });
+  }
+});
+
+pmHealthRouter.patch("/pm-health/crosscheck/:pmId/override", ...adminOnly, (req: Request, res: Response) => {
+  const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
+  const body = req.body || {};
+  const source = body.source as CrosscheckSource;
+  const paramKey = body.key as CrosscheckParamKey;
+
+  if (source !== "ewon" && source !== "endpoint" && source !== "panel_lcd") {
+    res.status(400).json({ ok: false, error: "Sumber override harus ewon, endpoint, atau panel_lcd." });
+    return;
+  }
+  if (!paramKey || typeof paramKey !== "string") {
+    res.status(400).json({ ok: false, error: "Key parameter wajib diisi." });
+    return;
+  }
+
+  const rawVal = body.value;
+  const numericVal = rawVal === null || rawVal === "" || rawVal === undefined ? null : Number(rawVal);
+  if (numericVal !== null && !Number.isFinite(numericVal)) {
+    res.status(400).json({ ok: false, error: "Nilai parameter harus berupa angka valid." });
+    return;
+  }
+
+  try {
+    const record = pmCrosscheckStore.setManualOverride(pmId, source, paramKey, numericVal, formatWibNow());
+    const report = computeCrosscheckReport(record);
+    broadcastSse("crosscheck_updated", { pmId: record.pmId, summary: toCrosscheckSummary(record, report) });
+    res.json({ ok: true, record, report });
+  } catch (err: any) {
+    res.status(400).json({ ok: false, error: err?.message || "Gagal menyimpan koreksi manual." });
+  }
+});
+
+pmHealthRouter.delete("/pm-health/crosscheck/:pmId", ...adminOnly, (req: Request, res: Response) => {
+  const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
+  if (!pmId) {
+    res.status(400).json({ ok: false, error: "pmId wajib diisi." });
+    return;
+  }
+  pmCrosscheckStore.clearPm(pmId);
+  broadcastSse("crosscheck_updated", { pmId, cleared: true });
+  res.json({ ok: true });
 });
 
 pmHealthRouter.get(

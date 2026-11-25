@@ -4,6 +4,7 @@ import type {
   PmCatalogMeta,
   PmChecklistItem,
   PmChecklistPatch,
+  PmCrosscheckSummaryItem,
   PmHealthSummary
 } from "./pmHealth.types";
 import {
@@ -42,6 +43,7 @@ interface PmChecklistPanelProps {
   pms: PmHealthSummary[];
   catalog: PmCatalogMeta[];
   checklistMap: Record<string, PmChecklistItem>;
+  crosscheckSummaries?: Record<string, PmCrosscheckSummaryItem>;
   savingPmIds: Record<string, boolean>;
   loading: boolean;
   isUnlocked: boolean;
@@ -52,6 +54,7 @@ interface PmChecklistPanelProps {
   onResetSingle: (pmId: string) => Promise<void>;
   onResetAll: () => Promise<void>;
   onInspectPm: (pmId: string) => void;
+  onOpenCrosscheck?: (pmId: string) => void;
 }
 
 function CheckToggleButton({
@@ -196,6 +199,7 @@ export function PmChecklistPanel({
   pms,
   catalog,
   checklistMap,
+  crosscheckSummaries,
   savingPmIds,
   loading,
   isUnlocked,
@@ -205,7 +209,8 @@ export function PmChecklistPanel({
   onUpdateChecklist,
   onResetSingle,
   onResetAll,
-  onInspectPm
+  onInspectPm,
+  onOpenCrosscheck
 }: PmChecklistPanelProps) {
   const [search, setSearch] = useState("");
   const [factoryFilter, setFactoryFilter] = useState("all");
@@ -894,6 +899,28 @@ export function PmChecklistPanel({
                             {!isUnlocked ? "🔒 " : ""}Reset
                           </button>
                         )}
+                        {onOpenCrosscheck && (() => {
+                          const cc = crosscheckSummaries?.[row.pmId];
+                          const hasImgs = Boolean(cc && (cc.imageCount > 0 || cc.hasLiveEndpoint));
+                          const tone =
+                            cc?.overallStatus === "all_match"
+                              ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                              : cc?.overallStatus === "mismatch"
+                              ? "border-rose-500/35 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                              : cc?.overallStatus === "warning"
+                              ? "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                              : "border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300";
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => onOpenCrosscheck(row.pmId)}
+                              title={`Buka Crosscheck Multi-Gambar AI untuk ${row.pmId}`}
+                              className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition cursor-pointer hover:opacity-85 ${tone}`}
+                            >
+                              📷 {hasImgs && cc ? `Crosscheck (${cc.imageCount})` : "Crosscheck"}
+                            </button>
+                          );
+                        })()}
                         <button
                           type="button"
                           onClick={() => onInspectPm(row.pmId)}

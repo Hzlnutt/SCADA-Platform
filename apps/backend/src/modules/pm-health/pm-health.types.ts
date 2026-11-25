@@ -128,3 +128,171 @@ export interface PmChecklistPatch {
   panelLcdChecked?: boolean;
   notes?: string;
 }
+
+/* ═══════════ MULTI-IMAGE PM CROSSCHECK (eWON / ENDPOINT / PANEL LCD) ═══════════ */
+export type CrosscheckSource = "ewon" | "endpoint" | "panel_lcd";
+export type CrosscheckSourceTag = CrosscheckSource | "auto";
+export type CrosscheckConfidence = "high" | "medium" | "low";
+
+export type CrosscheckParamKey =
+  | "active_energy"
+  | "active_power_total"
+  | "reactive_power_total"
+  | "apparent_power_total"
+  | "power_factor"
+  | "volt_ab"
+  | "volt_bc"
+  | "volt_ca"
+  | "volt_ll"
+  | "volt_an"
+  | "volt_bn"
+  | "volt_cn"
+  | "volt_ln"
+  | "current_a"
+  | "current_b"
+  | "current_c"
+  | "frequency"
+  | "voltage_unbalance"
+  | "current_unbalance"
+  | "thd_volt_a"
+  | "thd_volt_b"
+  | "thd_volt_c"
+  | "thd_current_a"
+  | "thd_current_b"
+  | "thd_current_c";
+
+export interface CrosscheckExtractedValue {
+  key: CrosscheckParamKey;
+  value: number;
+  unit: string;
+  rawText: string;
+  confidence: CrosscheckConfidence;
+  imageId: string;
+  imageName: string;
+  manualOverride?: boolean;
+  isLiveEndpoint?: boolean;
+}
+
+export interface CrosscheckImageItem {
+  id: string;
+  pmId: string;
+  source: CrosscheckSourceTag;
+  detectedSource: CrosscheckSource | null;
+  fileName: string;
+  storedFileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  caption: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  extractedCount: number;
+  extractedParams: Record<string, CrosscheckExtractedValue>;
+  aiNotes?: string | null;
+  analyzedAt?: string | null;
+}
+
+export type CrosscheckRowStatus =
+  | "match"
+  | "slight_diff"
+  | "scale_mismatch"
+  | "mismatch"
+  | "single_source"
+  | "missing";
+
+export interface CrosscheckComparisonRow {
+  key: CrosscheckParamKey;
+  label: string;
+  group: string;
+  unit: string;
+  ewon: CrosscheckExtractedValue | null;
+  endpoint: CrosscheckExtractedValue | null;
+  panel_lcd: CrosscheckExtractedValue | null;
+  status: CrosscheckRowStatus;
+  maxAbsDiff: number | null;
+  maxPctDiff: number | null;
+  note: string;
+  scaleFactorDetected?: string | null;
+}
+
+export interface CrosscheckPairSummary {
+  comparedCount: number;
+  matchCount: number;
+  slightDiffCount: number;
+  mismatchCount: number;
+  status: "match" | "warning" | "mismatch" | "insufficient";
+}
+
+export type CrosscheckOverallStatus = "all_match" | "warning" | "mismatch" | "incomplete";
+export type CrosscheckToleranceMode = "strict" | "normal" | "relaxed";
+export type CrosscheckLiveEndpointOrigin =
+  | "live_endpoint_http"
+  | "live_endpoint_cache"
+  | "db_minute_latest"
+  | "db_minute_at_time";
+
+export interface PmCrosscheckRecord {
+  pmId: string;
+  toleranceMode?: CrosscheckToleranceMode;
+  images: CrosscheckImageItem[];
+  liveEndpointSnapshot: {
+    capturedAt: string;
+    tStamp: string | null;
+    sourceOrigin?: CrosscheckLiveEndpointOrigin;
+    sourceLabel?: string;
+    values: Record<string, CrosscheckExtractedValue>;
+  } | null;
+  manualOverrides: Partial<Record<CrosscheckSource, Record<string, CrosscheckExtractedValue>>>;
+  lastAnalyzedAt: string | null;
+  lastAnalyzedBy: string | null;
+  aiModel: string | null;
+  aiSummary: string | null;
+  updatedAt: string | null;
+}
+
+export interface PmCrosscheckReport {
+  pmId: string;
+  toleranceMode: CrosscheckToleranceMode;
+  overallStatus: CrosscheckOverallStatus;
+  verdictTitle: string;
+  verdictDetail: string;
+  sourceCoverage: {
+    ewonParams: number;
+    endpointParams: number;
+    panelLcdParams: number;
+    ewonImages: number;
+    endpointImages: number;
+    panelLcdImages: number;
+    autoImages: number;
+    hasLiveEndpoint: boolean;
+  };
+  stats: {
+    totalDetectedParams: number;
+    comparedParams: number;
+    matchCount: number;
+    slightDiffCount: number;
+    scaleMismatchCount: number;
+    mismatchCount: number;
+    singleSourceCount: number;
+  };
+  pairs: {
+    ewonVsEndpoint: CrosscheckPairSummary;
+    ewonVsLcd: CrosscheckPairSummary;
+    endpointVsLcd: CrosscheckPairSummary;
+  };
+  rows: CrosscheckComparisonRow[];
+}
+
+export interface PmCrosscheckSummaryItem {
+  pmId: string;
+  imageCount: number;
+  ewonImages: number;
+  endpointImages: number;
+  panelLcdImages: number;
+  hasLiveEndpoint: boolean;
+  comparedParams: number;
+  matchCount: number;
+  slightDiffCount: number;
+  mismatchCount: number;
+  overallStatus: CrosscheckOverallStatus;
+  lastAnalyzedAt: string | null;
+}

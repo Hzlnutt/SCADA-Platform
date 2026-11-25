@@ -8,12 +8,14 @@ import type {
   AnomalyEvent,
   AnomalyType,
   ChecklistResponse,
+  CrosscheckSummariesResponse,
   HealthResponse,
   HealthStatus,
   OverviewResponse,
   PmCatalogMeta,
   PmChecklistItem,
   PmChecklistPatch,
+  PmCrosscheckSummaryItem,
   SourceTable
 } from "../../components/pm-health/pmHealth.types";
 import {
@@ -33,8 +35,9 @@ import { PmHealthDetailModal } from "../../components/pm-health/PmHealthDetailMo
 import { PmAnomalyToastStack } from "../../components/pm-health/PmAnomalyToastStack";
 import { PmChecklistPanel } from "../../components/pm-health/PmChecklistPanel";
 import { PmChecklistUnlockModal } from "../../components/pm-health/PmChecklistUnlockModal";
+import { PmCrosscheckPanel } from "../../components/pm-health/PmCrosscheckPanel";
 
-type MainTab = "overview" | "checklist" | "logs" | "audit";
+type MainTab = "overview" | "checklist" | "crosscheck" | "logs" | "audit";
 
 const AUTO_REFRESH_MS = 15_000;
 
@@ -159,6 +162,32 @@ export default function PmHealthMonitor() {
   const [checklistLoading, setChecklistLoading] = useState(false);
   const [savingChecklistPmIds, setSavingChecklistPmIds] = useState<Record<string, boolean>>({});
   const [checklistError, setChecklistError] = useState<string | null>(null);
+
+  // Multi-Image AI Crosscheck state (per PM)
+  const [crosscheckSummaries, setCrosscheckSummaries] = useState<Record<string, PmCrosscheckSummaryItem>>({});
+  const [crosscheckPmId, setCrosscheckPmId] = useState<string>("PM132");
+
+  const handleOpenCrosscheckForPm = useCallback((pmId: string) => {
+    const norm = pmId.trim().toUpperCase();
+    if (norm) setCrosscheckPmId(norm);
+    setActiveTab("crosscheck");
+  }, []);
+
+  const handleCrosscheckSummaryUpdated = useCallback(
+    (pmId: string, summary: PmCrosscheckSummaryItem | null) => {
+      const key = pmId.trim().toUpperCase();
+      setCrosscheckSummaries((prev) => {
+        const next = { ...prev };
+        if (summary && (summary.imageCount > 0 || summary.hasLiveEndpoint || summary.comparedParams > 0)) {
+          next[key] = summary;
+        } else {
+          delete next[key];
+        }
+        return next;
+      });
+    },
+    []
+  );
 
   // Lock protection state for editing PM verification checklist (requires account password to unlock)
   const [checklistUnlockToken, setChecklistUnlockToken] = useState<string | null>(null);
@@ -365,10 +394,23 @@ export default function PmHealthMonitor() {
     void fetchLogs();
   }, [isAdmin, fetchLogs]);
 
+  const fetchCrosscheckSummaries = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const json = await getJson<CrosscheckSummariesResponse>("/pm-health/crosscheck");
+      if (json?.summaries) {
+        setCrosscheckSummaries(json.summaries);
+      }
+    } catch {
+      // ignore transient error
+    }
+  }, [isAdmin]);
+
   useEffect(() => {
     if (!isAdmin) return;
     void fetchChecklist();
-  }, [isAdmin, fetchChecklist]);
+    void fetchCrosscheckSummaries();
+  }, [isAdmin, fetchChecklist, fetchCrosscheckSummaries]);
 
   // Guaranteed real-time auto-refresh every 15s (works even behind buffering reverse proxies / Nginx)
   useEffect(() => {
@@ -492,17 +534,38 @@ export default function PmHealthMonitor() {
       setChecklistMap({});
     };
 
+    const onCrosscheckUpdated = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        const pmId = typeof data?.pmId === "string" ? data.pmId.toUpperCase() : "";
+        if (!pmId) return;
+        if (data?.cleared) {
+          setCrosscheckSummaries((prev) => {
+            const next = { ...prev };
+            delete next[pmId];
+            return next;
+          });
+        } else if (data?.summary) {
+          setCrosscheckSummaries((prev) => ({ ...prev, [pmId]: data.summary }));
+        }
+      } catch {
+        // ignore
+      }
+    };
+
     es.addEventListener("anomaly", onAnomaly);
     es.addEventListener("heartbeat_scan", onHeartbeat);
     es.addEventListener("baseline_reset", onBaselineReset);
     es.addEventListener("checklist_updated", onChecklistUpdated);
     es.addEventListener("checklist_reset", onChecklistReset);
+    es.addEventListener("crosscheck_updated", onCrosscheckUpdated);
     return () => {
       es.removeEventListener("anomaly", onAnomaly);
       es.removeEventListener("heartbeat_scan", onHeartbeat);
       es.removeEventListener("baseline_reset", onBaselineReset);
       es.removeEventListener("checklist_updated", onChecklistUpdated);
       es.removeEventListener("checklist_reset", onChecklistReset);
+      es.removeEventListener("crosscheck_updated", onCrosscheckUpdated);
       es.close();
     };
   }, [isAdmin]);
@@ -1333,6 +1396,29 @@ export default function PmHealthMonitor() {
 
         <button
           type="button"
+          onClick={() => setActiveTab("crosscheck")}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+            activeTab === "crosscheck"
+              ? "bg-indigo-600 dark:bg-indigo-500 text-white shadow-sm shadow-indigo-500/20"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:border-indigo-400"
+          }`}
+        >
+          <span>📷 Crosscheck Gambar (AI)</span>
+          {Object.keys(crosscheckSummaries).length > 0 && (
+            <span
+              className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                activeTab === "crosscheck"
+                  ? "bg-white/20 text-white"
+                  : "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300"
+              }`}
+            >
+              {Object.keys(crosscheckSummaries).length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab("logs")}
           className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
             activeTab === "logs"
@@ -1627,7 +1713,18 @@ export default function PmHealthMonitor() {
                           <div className="text-[10px] text-slate-400">{sourceTableShort(pm.latestSource)}</div>
                         </td>
 
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <td className="px-4 py-3 text-right whitespace-nowrap space-x-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenCrosscheckForPm(pm.pmId);
+                            }}
+                            title={`Crosscheck parameter ${pm.pmId} dengan foto LCD / eWON / Endpoint`}
+                            className="px-2.5 py-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold transition cursor-pointer"
+                          >
+                            📷{crosscheckSummaries[pm.pmId.toUpperCase()]?.imageCount ? ` ${crosscheckSummaries[pm.pmId.toUpperCase()].imageCount}` : ""}
+                          </button>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1655,6 +1752,7 @@ export default function PmHealthMonitor() {
           pms={overview?.pms || []}
           catalog={checklistCatalog}
           checklistMap={checklistMap}
+          crosscheckSummaries={crosscheckSummaries}
           savingPmIds={savingChecklistPmIds}
           loading={checklistLoading}
           isUnlocked={isChecklistUnlocked}
@@ -1664,6 +1762,25 @@ export default function PmHealthMonitor() {
           onUpdateChecklist={handleUpdateChecklist}
           onResetSingle={handleResetChecklistSingle}
           onResetAll={handleResetChecklistAll}
+          onInspectPm={(pmId) => setSelectedPmId(pmId)}
+          onOpenCrosscheck={handleOpenCrosscheckForPm}
+        />
+      )}
+
+      {/* ══════════════════ TAB 3: MULTI-IMAGE AI CROSSCHECK ══════════════════ */}
+      {activeTab === "crosscheck" && (
+        <PmCrosscheckPanel
+          pms={overview?.pms || []}
+          catalog={checklistCatalog}
+          selectedPmId={crosscheckPmId}
+          onSelectPmId={(pmId) => setCrosscheckPmId(pmId)}
+          summaries={crosscheckSummaries}
+          onSummaryUpdated={handleCrosscheckSummaryUpdated}
+          checklistMap={checklistMap}
+          isChecklistUnlocked={isChecklistUnlocked}
+          checklistRemainingLabel={checklistRemainingLabel}
+          onRequestUnlock={handleOpenUnlockModal}
+          onUpdateChecklist={handleUpdateChecklist}
           onInspectPm={(pmId) => setSelectedPmId(pmId)}
         />
       )}
@@ -2069,6 +2186,7 @@ export default function PmHealthMonitor() {
         onRequestChecklistUnlock={handleOpenUnlockModal}
         onLockChecklist={handleLockChecklist}
         onUpdateChecklist={handleUpdateChecklist}
+        onOpenCrosscheck={handleOpenCrosscheckForPm}
         onClose={() => setSelectedPmId(null)}
       />
 

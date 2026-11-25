@@ -1144,6 +1144,136 @@ export const getLatestEwLiveRecords = (group: string = "all"): ElectricPmRecord[
   return all.filter((r) => r.group_id?.toLowerCase() === g);
 };
 
+function hasAnyNumericPmReading(rec: ElectricPmRecord | undefined | null): boolean {
+  if (!rec) return false;
+  const fields: Array<number | null | undefined> = [
+    rec.active_energy,
+    rec.active_power_total,
+    rec.reactive_power_total,
+    rec.apparent_power_total,
+    rec.volt_ll,
+    rec.volt_ab,
+    rec.volt_bc,
+    rec.volt_ca,
+    rec.current_a,
+    rec.current_b,
+    rec.current_c,
+    rec.frequency,
+    rec.power_factor
+  ];
+  return fields.some((v) => typeof v === "number" && Number.isFinite(v));
+}
+
+/**
+ * On-demand live fetch of a single Power Meter directly from the real-time WebDev HTTP Endpoint
+ * at this exact second (used by PM Crosscheck "Tarik Value Endpoint Saat Ini"), falling back to
+ * the 1-second live in-memory scheduler cache if the direct request times out.
+ */
+export const fetchLivePmEndpointSnapshot = async (
+  pmId: string,
+  groupHint?: string
+): Promise<{
+  record: ElectricPmRecord;
+  origin: "live_endpoint_http" | "live_endpoint_cache";
+  endpointName: string;
+} | null> => {
+  const normId = String(pmId || "").trim().toUpperCase();
+  if (!normId) return null;
+
+  // Determine which WebDev group endpoint owns this PM
+  let resolvedGroup = (groupHint || "").trim().toLowerCase();
+  if (!resolvedGroup || !EW_GROUP_PMS[resolvedGroup]) {
+    for (const [grp, ids] of Object.entries(EW_GROUP_PMS)) {
+      if (ids.includes(normId)) {
+        resolvedGroup = grp;
+        break;
+      }
+    }
+  }
+
+  const ts = getSyncedNow();
+
+  // 1. Direct real-time HTTP fetch from Ignition WebDev endpoint right now
+  if (resolvedGroup === "ew21" || resolvedGroup === "ew22" || resolvedGroup === "ew23") {
+    const endpointName = `electric_${resolvedGroup}`;
+    try {
+      const raw = await fetchApiData(endpointName);
+      if (raw) {
+        const parsed = parseEwApi(raw, ts, resolvedGroup);
+        const found = parsed.find((r) => r.pm_id.toUpperCase() === normId);
+        if (found && hasAnyNumericPmReading(found)) {
+          return {
+            record: found,
+            origin: "live_endpoint_http",
+            endpointName
+          };
+        }
+      }
+    } catch {
+      // Fallback to incoming specific endpoints or live memory cache below
+    }
+  }
+
+  // 1b. Direct fetch for Incoming Cubicles (PM410 = PLN, PM411 = WF1, PM412 = WF2)
+  if (normId === "PM410" || normId === "PM411" || normId === "PM412") {
+    const incomingEp = normId === "PM410" ? "electric_pln" : normId === "PM411" ? "electric_wf1" : "electric_wf2";
+    try {
+      const raw = await fetchApiData(incomingEp);
+      if (raw) {
+        const p: any = normId === "PM410" ? parsePlnApi(raw, ts) : parseWfApi(raw, ts);
+        const rec: ElectricPmRecord = {
+          t_stamp: ts,
+          group_id: "ew23",
+          pm_id: normId,
+          status: normId === "PM410" ? p.status_pm8000 : p.status_pm5500,
+          volt_ab: p.volt_ab ?? null,
+          volt_bc: p.volt_bc ?? null,
+          volt_ca: p.volt_ca ?? null,
+          volt_ll: p.volt_ll ?? null,
+          current_a: p.current_a ?? null,
+          current_b: p.current_b ?? null,
+          current_c: p.current_c ?? null,
+          frequency: p.frequency ?? null,
+          active_power_total: (normId === "PM410" ? p.active_power : p.active_power_total) ?? null,
+          reactive_power_total: p.reactive_power_total ?? null,
+          apparent_power_total: p.apparent_power_total ?? null,
+          power_factor: p.power_factor ?? null,
+          voltage_unbalance: p.voltage_unbalance ?? null,
+          current_unbalance: p.current_unbalance ?? null,
+          thd_volt_a: p.thd_volt_a ?? null,
+          thd_volt_b: p.thd_volt_b ?? null,
+          thd_volt_c: p.thd_volt_c ?? null,
+          thd_current_a: p.thd_current_a ?? null,
+          thd_current_b: p.thd_current_b ?? null,
+          thd_current_c: p.thd_current_c ?? null,
+          active_energy: p.active_energy ?? null
+        };
+        if (hasAnyNumericPmReading(rec)) {
+          return {
+            record: rec,
+            origin: "live_endpoint_http",
+            endpointName: incomingEp
+          };
+        }
+      }
+    } catch {
+      // Fall through to live cache
+    }
+  }
+
+  // 2. Fallback: 1-second live in-memory cache populated by the scheduler
+  const cached = latestPmRecordsMap.get(normId);
+  if (cached && hasAnyNumericPmReading(cached)) {
+    return {
+      record: { ...cached },
+      origin: "live_endpoint_cache",
+      endpointName: cached.group_id ? `electric_${cached.group_id}` : "live_cache"
+    };
+  }
+
+  return null;
+};
+
 export const getLatestEwGroupTelemetry = (groupId: string): ElectricPmRecord[] => {
   const g = groupId.toLowerCase();
   const now = Date.now();
