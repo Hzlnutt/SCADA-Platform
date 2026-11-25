@@ -44,6 +44,10 @@ interface PmChecklistPanelProps {
   checklistMap: Record<string, PmChecklistItem>;
   savingPmIds: Record<string, boolean>;
   loading: boolean;
+  isUnlocked: boolean;
+  remainingLabel: string | null;
+  onRequestUnlock: () => void;
+  onLock: () => void;
   onUpdateChecklist: (pmId: string, patch: PmChecklistPatch) => Promise<void>;
   onResetSingle: (pmId: string) => Promise<void>;
   onResetAll: () => Promise<void>;
@@ -55,26 +59,42 @@ function CheckToggleButton({
   label,
   checkedAt,
   disabled,
-  onToggle
+  locked,
+  onToggle,
+  onLockedClick
 }: {
   checked: boolean;
   label: string;
   checkedAt: string | null;
   disabled?: boolean;
+  locked?: boolean;
   onToggle: () => void;
+  onLockedClick?: () => void;
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
-      onClick={onToggle}
+      onClick={() => {
+        if (locked) {
+          onLockedClick?.();
+          return;
+        }
+        onToggle();
+      }}
       title={
-        checked
+        locked
+          ? `${label}: ${checked ? "Sudah sesuai" : "Belum dicek"} (Terkunci — klik untuk buka kunci dengan password akun)`
+          : checked
           ? `${label}: Sudah sesuai${checkedAt ? ` (${checkedAt} WIB)` : ""} — klik untuk membatalkan`
           : `${label}: Belum dicek — klik untuk menandai sesuai`
       }
       className={`inline-flex items-center justify-center gap-1.5 min-w-[96px] px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition cursor-pointer select-none disabled:opacity-50 ${
-        checked
+        locked
+          ? checked
+            ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-700/80 dark:text-emerald-300/80 hover:border-amber-400"
+            : "bg-slate-50/70 dark:bg-slate-950/40 border-slate-200/80 dark:border-slate-800 text-slate-400 hover:border-amber-400 hover:text-amber-600 dark:hover:text-amber-400"
+          : checked
           ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 shadow-xs"
           : "bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-sky-400 hover:text-sky-600 dark:hover:text-sky-300"
       }`}
@@ -93,6 +113,11 @@ function CheckToggleButton({
         )}
       </span>
       <span>{checked ? "Sesuai" : "Belum"}</span>
+      {locked && (
+        <svg className="w-3 h-3 text-amber-500/80 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+        </svg>
+      )}
     </button>
   );
 }
@@ -101,11 +126,15 @@ function InlineNoteInput({
   pmId,
   value,
   disabled,
+  locked,
+  onLockedClick,
   onSave
 }: {
   pmId: string;
   value: string;
   disabled?: boolean;
+  locked?: boolean;
+  onLockedClick?: () => void;
   onSave: (pmId: string, notes: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
@@ -115,6 +144,7 @@ function InlineNoteInput({
 
   const commit = () => {
     setFocused(false);
+    if (locked) return;
     const trimmed = draft.trim();
     if (trimmed !== value.trim()) {
       onSave(pmId, trimmed);
@@ -126,15 +156,25 @@ function InlineNoteInput({
       type="text"
       value={displayValue}
       disabled={disabled}
-      placeholder="Tambah catatan..."
+      readOnly={locked}
+      placeholder={locked ? "Terkunci (buka kunci utk edit)" : "Tambah catatan..."}
+      title={locked ? "Terkunci — klik untuk buka kunci dengan password akun" : undefined}
       maxLength={500}
+      onClick={() => {
+        if (locked) onLockedClick?.();
+      }}
       onFocus={() => {
+        if (locked) return;
         setDraft(value);
         setFocused(true);
       }}
-      onChange={(e) => setDraft(e.target.value)}
+      onChange={(e) => {
+        if (locked) return;
+        setDraft(e.target.value);
+      }}
       onBlur={commit}
       onKeyDown={(e) => {
+        if (locked) return;
         if (e.key === "Enter") {
           (e.currentTarget as HTMLInputElement).blur();
         } else if (e.key === "Escape") {
@@ -143,7 +183,11 @@ function InlineNoteInput({
           (e.currentTarget as HTMLInputElement).blur();
         }
       }}
-      className="w-full min-w-[155px] px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-950/60 text-[11px] font-medium text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:bg-white dark:focus:bg-slate-900 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 transition"
+      className={`w-full min-w-[155px] px-2.5 py-1.5 rounded-lg border text-[11px] font-medium placeholder:text-slate-400 focus:outline-none transition ${
+        locked
+          ? "border-slate-200/70 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-950/40 text-slate-500 dark:text-slate-400 cursor-pointer hover:border-amber-400"
+          : "border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-950/60 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-900 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+      }`}
     />
   );
 }
@@ -154,6 +198,10 @@ export function PmChecklistPanel({
   checklistMap,
   savingPmIds,
   loading,
+  isUnlocked,
+  remainingLabel,
+  onRequestUnlock,
+  onLock,
   onUpdateChecklist,
   onResetSingle,
   onResetAll,
@@ -357,6 +405,10 @@ export function PmChecklistPanel({
   };
 
   const handleConfirmResetAll = async () => {
+    if (!isUnlocked) {
+      onRequestUnlock();
+      return;
+    }
     const ok = window.confirm(
       "Reset seluruh status checklist verifikasi PM (eWON, Endpoint, Panel LCD, dan Catatan)?\n\n" +
         "Gunakan ini hanya jika ingin memulai siklus pengecekan ulang dari awal. Database SCADA tidak berubah."
@@ -384,12 +436,58 @@ export function PmChecklistPanel({
               <strong>Panel LCD</strong> fisik. Tersimpan lokal di server (read-only terhadap database SCADA).
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {isUnlocked ? (
+              <button
+                type="button"
+                onClick={onLock}
+                title="Mode edit terbuka — klik untuk mengunci kembali proteksi verifikasi PM"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-700 dark:text-emerald-300 text-xs font-extrabold transition cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+                <span>Edit Terbuka{remainingLabel ? ` (${remainingLabel})` : ""} • Kunci</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onRequestUnlock}
+                title="Klik untuk membuka kunci edit dengan password akun Anda"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/35 text-amber-700 dark:text-amber-300 text-xs font-extrabold transition cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+                <span>Terkunci • Buka Kunci</span>
+              </button>
+            )}
             <span className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-300 font-mono text-xs font-extrabold">
               {stats.complete} / {stats.total} PM Sesuai ({stats.percentComplete}%)
             </span>
           </div>
         </div>
+
+        {!isUnlocked && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200 font-semibold">
+              <svg className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+              <span>
+                Proteksi kunci aktif — perubahan status <strong>eWON</strong>, <strong>Endpoint</strong>, dan{" "}
+                <strong>Panel LCD</strong> memerlukan verifikasi password akun Anda.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onRequestUnlock}
+              className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-extrabold transition cursor-pointer shrink-0"
+            >
+              Buka Kunci
+            </button>
+          </div>
+        )}
 
         {/* Visual Progress Bar */}
         <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
@@ -574,9 +672,10 @@ export function PmChecklistPanel({
               type="button"
               onClick={() => void handleConfirmResetAll()}
               disabled={resettingAll || (stats.complete === 0 && stats.partial === 0)}
+              title={!isUnlocked ? "Terkunci — klik untuk buka kunci dengan password akun" : "Reset seluruh checklist verifikasi PM"}
               className="px-3 py-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 disabled:opacity-40 text-xs font-bold cursor-pointer transition"
             >
-              Reset Checklist
+              {!isUnlocked ? "🔒 " : ""}Reset Checklist
             </button>
           </div>
         </div>
@@ -677,6 +776,8 @@ export function PmChecklistPanel({
                           label="Cek PM dengan eWON"
                           checkedAt={row.checklist.ewonCheckedAt}
                           disabled={saving}
+                          locked={!isUnlocked}
+                          onLockedClick={onRequestUnlock}
                           onToggle={() =>
                             void onUpdateChecklist(row.pmId, {
                               ewonChecked: !row.checklist.ewonChecked
@@ -691,6 +792,8 @@ export function PmChecklistPanel({
                           label="Cek PM dengan Endpoint"
                           checkedAt={row.checklist.endpointCheckedAt}
                           disabled={saving}
+                          locked={!isUnlocked}
+                          onLockedClick={onRequestUnlock}
                           onToggle={() =>
                             void onUpdateChecklist(row.pmId, {
                               endpointChecked: !row.checklist.endpointChecked
@@ -705,6 +808,8 @@ export function PmChecklistPanel({
                           label="Cek PM dengan Panel LCD"
                           checkedAt={row.checklist.panelLcdCheckedAt}
                           disabled={saving}
+                          locked={!isUnlocked}
+                          onLockedClick={onRequestUnlock}
                           onToggle={() =>
                             void onUpdateChecklist(row.pmId, {
                               panelLcdChecked: !row.checklist.panelLcdChecked
@@ -718,6 +823,8 @@ export function PmChecklistPanel({
                           pmId={row.pmId}
                           value={row.checklist.notes}
                           disabled={saving}
+                          locked={!isUnlocked}
+                          onLockedClick={onRequestUnlock}
                           onSave={(id, notes) => void onUpdateChecklist(id, { notes })}
                         />
                       </td>
@@ -742,27 +849,49 @@ export function PmChecklistPanel({
                           <button
                             type="button"
                             disabled={saving}
-                            onClick={() =>
+                            onClick={() => {
+                              if (!isUnlocked) {
+                                onRequestUnlock();
+                                return;
+                              }
                               void onUpdateChecklist(row.pmId, {
                                 ewonChecked: true,
                                 endpointChecked: true,
                                 panelLcdChecked: true
-                              })
+                              });
+                            }}
+                            title={
+                              !isUnlocked
+                                ? "Terkunci — klik untuk buka kunci dengan password akun"
+                                : "Centang ketiganya sekaligus (eWON + Endpoint + Panel LCD)"
                             }
-                            title="Centang ketiganya sekaligus (eWON + Endpoint + Panel LCD)"
-                            className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold transition cursor-pointer disabled:opacity-40"
+                            className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition cursor-pointer disabled:opacity-40 ${
+                              !isUnlocked
+                                ? "bg-slate-100 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-amber-400 hover:text-amber-600"
+                                : "bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                            }`}
                           >
-                            ✓ Semua
+                            {!isUnlocked ? "🔒 " : "✓ "}Semua
                           </button>
                         ) : (
                           <button
                             type="button"
                             disabled={saving}
-                            onClick={() => void onResetSingle(row.pmId)}
-                            title="Kosongkan checklist untuk PM ini"
+                            onClick={() => {
+                              if (!isUnlocked) {
+                                onRequestUnlock();
+                                return;
+                              }
+                              void onResetSingle(row.pmId);
+                            }}
+                            title={
+                              !isUnlocked
+                                ? "Terkunci — klik untuk buka kunci dengan password akun"
+                                : "Kosongkan checklist untuk PM ini"
+                            }
                             className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-rose-400 hover:text-rose-600 text-slate-500 dark:text-slate-300 text-[11px] font-bold transition cursor-pointer disabled:opacity-40"
                           >
-                            Reset
+                            {!isUnlocked ? "🔒 " : ""}Reset
                           </button>
                         )}
                         <button

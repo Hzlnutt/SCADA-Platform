@@ -32,13 +32,40 @@ import { PmMiniSparkline } from "../../components/pm-health/PmMiniSparkline";
 import { PmHealthDetailModal } from "../../components/pm-health/PmHealthDetailModal";
 import { PmAnomalyToastStack } from "../../components/pm-health/PmAnomalyToastStack";
 import { PmChecklistPanel } from "../../components/pm-health/PmChecklistPanel";
+import { PmChecklistUnlockModal } from "../../components/pm-health/PmChecklistUnlockModal";
 
 type MainTab = "overview" | "checklist" | "logs" | "audit";
 
 const AUTO_REFRESH_MS = 15_000;
 
+function formatUnlockCountdown(sec: number): string {
+  const safe = Math.max(0, Math.floor(sec));
+  const m = String(Math.floor(safe / 60)).padStart(2, "0");
+  const s = String(safe % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+function parseChecklistApiError(err: unknown): { message: string; isLocked: boolean } {
+  const raw = err instanceof Error ? err.message : String(err || "");
+  try {
+    const parsed = JSON.parse(raw);
+    const isLocked = parsed?.code === "CHECKLIST_LOCKED";
+    const message =
+      (typeof parsed?.error === "string" && parsed.error.trim()) ||
+      (typeof parsed?.message === "string" && parsed.message.trim()) ||
+      raw;
+    return { message, isLocked };
+  } catch {
+    return {
+      message: raw || "Permintaan gagal.",
+      isLocked: raw.includes("CHECKLIST_LOCKED") || raw.toLowerCase().includes("terkunci")
+    };
+  }
+}
+
 export default function PmHealthMonitor() {
-  const role = useAuthStore((s) => s.user?.role ?? "user");
+  const currentUser = useAuthStore((s) => s.user);
+  const role = currentUser?.role ?? "user";
   const isAdmin = isSeniorUnitHeadOrAdmin(role);
   const theme = useSystemStore((s) => s.theme);
   const isDark = theme === "dark";
@@ -132,6 +159,51 @@ export default function PmHealthMonitor() {
   const [checklistLoading, setChecklistLoading] = useState(false);
   const [savingChecklistPmIds, setSavingChecklistPmIds] = useState<Record<string, boolean>>({});
   const [checklistError, setChecklistError] = useState<string | null>(null);
+
+  // Lock protection state for editing PM verification checklist (requires account password to unlock)
+  const [checklistUnlockToken, setChecklistUnlockToken] = useState<string | null>(null);
+  const [checklistUnlockExpiresAt, setChecklistUnlockExpiresAt] = useState<number | null>(null);
+  const [unlockModalOpen, setUnlockModalOpen] = useState(false);
+  const [unlockRemainingSec, setUnlockRemainingSec] = useState(0);
+
+  const isChecklistUnlocked = Boolean(
+    checklistUnlockToken && checklistUnlockExpiresAt && unlockRemainingSec > 0
+  );
+  const checklistUnlockTokenRef = useRef<string | null>(checklistUnlockToken);
+  checklistUnlockTokenRef.current = isChecklistUnlocked ? checklistUnlockToken : null;
+
+  useEffect(() => {
+    if (!checklistUnlockToken || !checklistUnlockExpiresAt) {
+      setUnlockRemainingSec(0);
+      return;
+    }
+    const updateRemaining = () => {
+      const diff = Math.ceil((checklistUnlockExpiresAt - Date.now()) / 1000);
+      if (diff <= 0) {
+        setChecklistUnlockToken(null);
+        setChecklistUnlockExpiresAt(null);
+        setUnlockRemainingSec(0);
+      } else {
+        setUnlockRemainingSec(diff);
+      }
+    };
+    updateRemaining();
+    const timer = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(timer);
+  }, [checklistUnlockToken, checklistUnlockExpiresAt]);
+
+  const handleLockChecklist = useCallback(() => {
+    setChecklistUnlockToken(null);
+    setChecklistUnlockExpiresAt(null);
+    setUnlockRemainingSec(0);
+  }, []);
+
+  const handleOpenUnlockModal = useCallback(() => {
+    setChecklistError(null);
+    setUnlockModalOpen(true);
+  }, []);
+
+  const checklistRemainingLabel = isChecklistUnlocked ? formatUnlockCountdown(unlockRemainingSec) : null;
 
   // Live notifications & UI popovers
   const [toasts, setToasts] = useState<AnomalyEvent[]>([]);
@@ -538,6 +610,11 @@ export default function PmHealthMonitor() {
   checklistMapRef.current = checklistMap;
 
   const handleUpdateChecklist = useCallback(async (pmId: string, patch: PmChecklistPatch) => {
+    const token = checklistUnlockTokenRef.current;
+    if (!token) {
+      setUnlockModalOpen(true);
+      return;
+    }
     const key = pmId.trim().toUpperCase();
     const previous = checklistMapRef.current[key];
     const base = previous ?? getEmptyChecklistItem(key);
@@ -555,7 +632,8 @@ export default function PmHealthMonitor() {
     try {
       const json = await patchJson<{ ok: boolean; item: PmChecklistItem }>(
         `/pm-health/checklist/${encodeURIComponent(key)}`,
-        patch
+        patch,
+        { "X-Checklist-Unlock-Token": token }
       );
       if (json?.item) {
         setChecklistMap((prev) => ({ ...prev, [key]: json.item }));
@@ -568,7 +646,12 @@ export default function PmHealthMonitor() {
         else delete next[key];
         return next;
       });
-      setChecklistError(err?.message || `Gagal menyimpan checklist untuk ${key}`);
+      const parsed = parseChecklistApiError(err);
+      if (parsed.isLocked) {
+        handleLockChecklist();
+        setUnlockModalOpen(true);
+      }
+      setChecklistError(parsed.message || `Gagal menyimpan checklist untuk ${key}`);
     } finally {
       setSavingChecklistPmIds((prev) => {
         const next = { ...prev };
@@ -576,9 +659,14 @@ export default function PmHealthMonitor() {
         return next;
       });
     }
-  }, []);
+  }, [handleLockChecklist]);
 
   const handleResetChecklistSingle = useCallback(async (pmId: string) => {
+    const token = checklistUnlockTokenRef.current;
+    if (!token) {
+      setUnlockModalOpen(true);
+      return;
+    }
     const key = pmId.trim().toUpperCase();
     const previous = checklistMapRef.current[key];
     setChecklistError(null);
@@ -586,14 +674,20 @@ export default function PmHealthMonitor() {
     setSavingChecklistPmIds((prev) => ({ ...prev, [key]: true }));
     try {
       const json = await deleteJson<{ ok: boolean; item?: PmChecklistItem }>(
-        `/pm-health/checklist/${encodeURIComponent(key)}`
+        `/pm-health/checklist/${encodeURIComponent(key)}`,
+        { "X-Checklist-Unlock-Token": token }
       );
       setChecklistMap((prev) => ({ ...prev, [key]: json?.item ?? getEmptyChecklistItem(key) }));
     } catch (err: any) {
       if (previous) {
         setChecklistMap((prev) => ({ ...prev, [key]: previous }));
       }
-      setChecklistError(err?.message || `Gagal mereset checklist ${key}`);
+      const parsed = parseChecklistApiError(err);
+      if (parsed.isLocked) {
+        handleLockChecklist();
+        setUnlockModalOpen(true);
+      }
+      setChecklistError(parsed.message || `Gagal mereset checklist ${key}`);
     } finally {
       setSavingChecklistPmIds((prev) => {
         const next = { ...prev };
@@ -601,19 +695,29 @@ export default function PmHealthMonitor() {
         return next;
       });
     }
-  }, []);
+  }, [handleLockChecklist]);
 
   const handleResetChecklistAll = useCallback(async () => {
+    const token = checklistUnlockTokenRef.current;
+    if (!token) {
+      setUnlockModalOpen(true);
+      return;
+    }
     const previous = checklistMapRef.current;
     setChecklistError(null);
     setChecklistMap({});
     try {
-      await deleteJson("/pm-health/checklist");
+      await deleteJson("/pm-health/checklist", { "X-Checklist-Unlock-Token": token });
     } catch (err: any) {
       setChecklistMap(previous);
-      setChecklistError(err?.message || "Gagal mereset seluruh checklist");
+      const parsed = parseChecklistApiError(err);
+      if (parsed.isLocked) {
+        handleLockChecklist();
+        setUnlockModalOpen(true);
+      }
+      setChecklistError(parsed.message || "Gagal mereset seluruh checklist");
     }
-  }, []);
+  }, [handleLockChecklist]);
 
   const checklistSummary = useMemo(() => {
     const ids = new Set<string>();
@@ -796,6 +900,44 @@ export default function PmHealthMonitor() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             <span>Scan</span>
+          </button>
+
+          {/* Toggle Lock / Unlock Checklist Editing (Requires Account Password) */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isChecklistUnlocked) {
+                handleLockChecklist();
+              } else {
+                handleOpenUnlockModal();
+              }
+            }}
+            title={
+              isChecklistUnlocked
+                ? "Mode edit checklist (eWON, Endpoint, Panel LCD) terbuka — klik untuk mengunci kembali"
+                : "Edit checklist (eWON, Endpoint, Panel LCD) terkunci — klik dan masukkan password akun untuk membuka"
+            }
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition cursor-pointer ${
+              isChecklistUnlocked
+                ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25"
+                : "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20"
+            }`}
+          >
+            {isChecklistUnlocked ? (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+                <span className="font-mono">Edit: {checklistRemainingLabel}</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+                <span>Kunci Edit</span>
+              </>
+            )}
           </button>
 
           {/* Toggle Enable/Disable Live Popup Notifications */}
@@ -1316,7 +1458,24 @@ export default function PmHealthMonitor() {
                   <th className="px-4 py-3 text-right">Active Energy (kWh)</th>
                   <th className="px-4 py-3 text-right">Daya (kW)</th>
                   <th className="px-4 py-3">Deteksi Anomali</th>
-                  <th className="px-4 py-3">Verifikasi PM</th>
+                  <th className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1">
+                      <span>Verifikasi PM</span>
+                      {!isChecklistUnlocked && (
+                        <button
+                          type="button"
+                          onClick={handleOpenUnlockModal}
+                          title="Terkunci — klik untuk membuka kunci edit status eWON, Endpoint, dan Panel LCD"
+                          className="text-amber-500 hover:text-amber-600 cursor-pointer"
+                          aria-label="Buka kunci verifikasi PM"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                          </svg>
+                        </button>
+                      )}
+                    </span>
+                  </th>
                   <th className="px-4 py-3">Update Terakhir</th>
                   <th className="px-4 py-3 text-right">Aksi</th>
                 </tr>
@@ -1434,10 +1593,24 @@ export default function PmHealthMonitor() {
                                 key={chip.key}
                                 type="button"
                                 disabled={chkSaving}
-                                title={`${chip.full}: ${chip.val ? "Sudah sesuai" : "Belum dicek"} (klik untuk toggle)`}
-                                onClick={() => void handleUpdateChecklist(pm.pmId, { [chip.key]: !chip.val })}
+                                title={
+                                  !isChecklistUnlocked
+                                    ? `${chip.full}: ${chip.val ? "Sudah sesuai" : "Belum dicek"} (Terkunci — klik untuk buka kunci dengan password akun)`
+                                    : `${chip.full}: ${chip.val ? "Sudah sesuai" : "Belum dicek"} (klik untuk toggle)`
+                                }
+                                onClick={() => {
+                                  if (!isChecklistUnlocked) {
+                                    handleOpenUnlockModal();
+                                    return;
+                                  }
+                                  void handleUpdateChecklist(pm.pmId, { [chip.key]: !chip.val });
+                                }}
                                 className={`px-1.5 py-0.5 rounded-md border font-mono text-[10px] font-bold transition cursor-pointer disabled:opacity-50 ${
-                                  chip.val
+                                  !isChecklistUnlocked
+                                    ? chip.val
+                                      ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-700/80 dark:text-emerald-300/80 hover:border-amber-400"
+                                      : "bg-slate-100/70 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/80 text-slate-400 hover:border-amber-400 hover:text-amber-600 dark:hover:text-amber-400"
+                                    : chip.val
                                     ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25"
                                     : "bg-slate-100/80 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-sky-400 hover:text-sky-600 dark:hover:text-sky-300"
                                 }`}
@@ -1484,6 +1657,10 @@ export default function PmHealthMonitor() {
           checklistMap={checklistMap}
           savingPmIds={savingChecklistPmIds}
           loading={checklistLoading}
+          isUnlocked={isChecklistUnlocked}
+          remainingLabel={checklistRemainingLabel}
+          onRequestUnlock={handleOpenUnlockModal}
+          onLock={handleLockChecklist}
           onUpdateChecklist={handleUpdateChecklist}
           onResetSingle={handleResetChecklistSingle}
           onResetAll={handleResetChecklistAll}
@@ -1887,8 +2064,26 @@ export default function PmHealthMonitor() {
             : undefined
         }
         checklistSaving={selectedPmId ? Boolean(savingChecklistPmIds[selectedPmId.toUpperCase()]) : false}
+        checklistUnlocked={isChecklistUnlocked}
+        checklistRemainingLabel={checklistRemainingLabel}
+        onRequestChecklistUnlock={handleOpenUnlockModal}
+        onLockChecklist={handleLockChecklist}
         onUpdateChecklist={handleUpdateChecklist}
         onClose={() => setSelectedPmId(null)}
+      />
+
+      {/* Password Unlock Modal for PM Verification Checklist */}
+      <PmChecklistUnlockModal
+        open={unlockModalOpen}
+        userName={currentUser?.name || "Admin"}
+        userIdentifier={currentUser?.username || currentUser?.email || ""}
+        onUnlocked={({ unlockToken, expiresAt }) => {
+          setChecklistUnlockToken(unlockToken);
+          setChecklistUnlockExpiresAt(expiresAt);
+          setUnlockModalOpen(false);
+          setChecklistError(null);
+        }}
+        onClose={() => setUnlockModalOpen(false)}
       />
 
       {/* Live Anomaly Toasts */}

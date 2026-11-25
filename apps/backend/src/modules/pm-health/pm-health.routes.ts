@@ -1,6 +1,10 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import { authenticate, authorize } from "../auth/auth.middleware";
+import { env } from "../../config/env.config";
 import { logger } from "../../config/logger.config";
+import { getPostgresPool } from "../../database/postgres";
 import {
   fetchLatestReadingPerPm,
   fetchRawPmReadings,
@@ -542,6 +546,126 @@ pmHealthRouter.delete("/pm-health/logs", ...adminOnly, (_req: Request, res: Resp
 });
 
 // ─── PM Verification Checklist (eWON, Endpoint, Panel LCD) — Strictly Local JSON ───
+const CHECKLIST_UNLOCK_TTL_SECONDS = 15 * 60; // 15 minutes active edit session
+
+/**
+ * Middleware enforcing password-verified unlock token before mutating PM verification checklist.
+ * Returns HTTP 423 (Locked) — never 401 — so frontend does not terminate user session.
+ */
+function requireChecklistUnlock(req: Request, res: Response, next: NextFunction) {
+  const headerToken = req.headers["x-checklist-unlock-token"];
+  const rawToken =
+    typeof headerToken === "string"
+      ? headerToken.trim()
+      : Array.isArray(headerToken)
+      ? String(headerToken[0] || "").trim()
+      : typeof req.body?.unlockToken === "string"
+      ? req.body.unlockToken.trim()
+      : "";
+
+  if (!rawToken) {
+    res.status(423).json({
+      ok: false,
+      code: "CHECKLIST_LOCKED",
+      error: "Checklist terkunci. Buka kunci dengan password akun Anda terlebih dahulu."
+    });
+    return;
+  }
+
+  try {
+    const decoded = jwt.verify(rawToken, env.jwtSecret) as jwt.JwtPayload & {
+      type?: string;
+      sub?: string;
+    };
+    const currentUserId = String(req.user?.id || "");
+    if (decoded?.type !== "pm_checklist_unlock" || !currentUserId || String(decoded.sub || "") !== currentUserId) {
+      res.status(423).json({
+        ok: false,
+        code: "CHECKLIST_LOCKED",
+        error: "Sesi buka kunci tidak valid untuk akun ini. Silakan buka kunci ulang."
+      });
+      return;
+    }
+    next();
+  } catch {
+    res.status(423).json({
+      ok: false,
+      code: "CHECKLIST_LOCKED",
+      error: "Sesi buka kunci telah berakhir. Masukkan password akun Anda kembali untuk mengedit."
+    });
+  }
+}
+
+pmHealthRouter.post("/pm-health/checklist/unlock", ...adminOnly, async (req: Request, res: Response) => {
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  if (!password) {
+    res.status(400).json({ ok: false, error: "Password akun wajib diisi." });
+    return;
+  }
+
+  const userId = String(req.user?.id || "").trim();
+  if (!userId) {
+    res.status(403).json({ ok: false, error: "Identitas akun tidak ditemukan." });
+    return;
+  }
+
+  try {
+    const pool = getPostgresPool();
+    const pgRes = await pool.query(
+      `
+      SELECT id, username, name, email, password_hash, status
+      FROM users
+      WHERE id::text = $1 OR LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($1)
+      LIMIT 1
+      `,
+      [userId]
+    );
+
+    const user = pgRes.rows[0];
+    if (!user) {
+      res.status(403).json({ ok: false, error: "Akun tidak ditemukan di sistem." });
+      return;
+    }
+    if (user.status === "disabled") {
+      res.status(403).json({ ok: false, error: "Akun sedang dinonaktifkan." });
+      return;
+    }
+    if (!user.password_hash) {
+      res.status(403).json({ ok: false, error: "Akun ini belum memiliki password lokal." });
+      return;
+    }
+
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) {
+      // Return 403 (NOT 401) so frontend api.client does not clear auth session / redirect to /login
+      res.status(403).json({ ok: false, error: "Password akun salah. Silakan periksa kembali." });
+      return;
+    }
+
+    const unlockToken = jwt.sign(
+      {
+        sub: userId,
+        type: "pm_checklist_unlock",
+        name: user.name || req.user?.name || "Admin"
+      },
+      env.jwtSecret,
+      { expiresIn: CHECKLIST_UNLOCK_TTL_SECONDS }
+    );
+    const expiresAt = Date.now() + CHECKLIST_UNLOCK_TTL_SECONDS * 1000;
+
+    res.json({
+      ok: true,
+      unlockToken,
+      expiresAt,
+      expiresInSeconds: CHECKLIST_UNLOCK_TTL_SECONDS,
+      unlockedBy: user.name || req.user?.name || "Admin"
+    });
+  } catch (err: any) {
+    logger.warn(`[PM-Health] Checklist unlock verification error: ${err?.message || err}`);
+    res.status(500).json({ ok: false, error: "Gagal memverifikasi password akun." });
+  }
+});
+
 pmHealthRouter.get("/pm-health/checklist", ...adminOnly, (_req: Request, res: Response) => {
   res.json({
     ok: true,
@@ -550,7 +674,7 @@ pmHealthRouter.get("/pm-health/checklist", ...adminOnly, (_req: Request, res: Re
   });
 });
 
-pmHealthRouter.patch("/pm-health/checklist/:pmId", ...adminOnly, (req: Request, res: Response) => {
+pmHealthRouter.patch("/pm-health/checklist/:pmId", ...adminOnly, requireChecklistUnlock, (req: Request, res: Response) => {
   const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
   if (!pmId) {
     res.status(400).json({ error: "pmId wajib diisi" });
@@ -570,7 +694,7 @@ pmHealthRouter.patch("/pm-health/checklist/:pmId", ...adminOnly, (req: Request, 
   res.json({ ok: true, item });
 });
 
-pmHealthRouter.delete("/pm-health/checklist/:pmId", ...adminOnly, (req: Request, res: Response) => {
+pmHealthRouter.delete("/pm-health/checklist/:pmId", ...adminOnly, requireChecklistUnlock, (req: Request, res: Response) => {
   const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
   if (!pmId) {
     res.status(400).json({ error: "pmId wajib diisi" });
@@ -581,7 +705,7 @@ pmHealthRouter.delete("/pm-health/checklist/:pmId", ...adminOnly, (req: Request,
   res.json({ ok: true, clearedCount: result.clearedCount, item: result.item });
 });
 
-pmHealthRouter.delete("/pm-health/checklist", ...adminOnly, (_req: Request, res: Response) => {
+pmHealthRouter.delete("/pm-health/checklist", ...adminOnly, requireChecklistUnlock, (_req: Request, res: Response) => {
   const result = pmHealthStore.resetChecklist();
   broadcastSse("checklist_reset", { clearedCount: result.clearedCount });
   res.json({ ok: true, clearedCount: result.clearedCount });

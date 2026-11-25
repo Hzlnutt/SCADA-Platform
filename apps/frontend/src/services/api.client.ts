@@ -75,15 +75,17 @@ export const putJson = async <T>(path: string, body: unknown) => {
   }) as Promise<T>;
 };
 
-export const patchJson = async <T>(path: string, body: unknown) => {
+export const patchJson = async <T>(path: string, body: unknown, headers?: HeadersInit) => {
   return request(path, {
     method: "PATCH",
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    ...(headers ? { headers } : {})
   }) as Promise<T>;
 };
 
-export const deleteJson = async <T>(path: string) => {
+export const deleteJson = async <T>(path: string, headers?: HeadersInit) => {
   return request(path, {
-    method: "DELETE"
+    method: "DELETE",
+    ...(headers ? { headers } : {})
   }) as Promise<T>;
 };

@@ -27,6 +27,10 @@ interface PmHealthDetailModalProps {
   isDark: boolean;
   checklist?: PmChecklistItem;
   checklistSaving?: boolean;
+  checklistUnlocked?: boolean;
+  checklistRemainingLabel?: string | null;
+  onRequestChecklistUnlock?: () => void;
+  onLockChecklist?: () => void;
   onUpdateChecklist?: (pmId: string, patch: PmChecklistPatch) => Promise<void>;
   onClose: () => void;
 }
@@ -39,6 +43,10 @@ export function PmHealthDetailModal({
   isDark,
   checklist,
   checklistSaving = false,
+  checklistUnlocked = false,
+  checklistRemainingLabel = null,
+  onRequestChecklistUnlock,
+  onLockChecklist,
   onUpdateChecklist,
   onClose
 }: PmHealthDetailModalProps) {
@@ -436,11 +444,32 @@ export function PmHealthDetailModal({
                     );
                   })()}
                 </div>
-                {checklist.updatedAt && (
-                  <span className="text-[10px] font-mono text-slate-400">
-                    Update: {checklist.updatedBy || "Admin"} • {checklist.updatedAt.slice(5, 16)} WIB
-                  </span>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {checklistUnlocked ? (
+                    <button
+                      type="button"
+                      onClick={onLockChecklist}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-700 dark:text-emerald-300 text-[10px] font-extrabold transition cursor-pointer"
+                      title="Klik untuk mengunci kembali"
+                    >
+                      <span>🔓 Terbuka{checklistRemainingLabel ? ` (${checklistRemainingLabel})` : ""} • Kunci</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={onRequestChecklistUnlock}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/35 text-amber-700 dark:text-amber-300 text-[10px] font-extrabold transition cursor-pointer"
+                      title="Masukkan password akun untuk mengedit status checklist"
+                    >
+                      <span>🔒 Terkunci • Buka Kunci</span>
+                    </button>
+                  )}
+                  {checklist.updatedAt && (
+                    <span className="text-[10px] font-mono text-slate-400">
+                      Update: {checklist.updatedBy || "Admin"} • {checklist.updatedAt.slice(5, 16)} WIB
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -470,12 +499,26 @@ export function PmHealthDetailModal({
                     key={item.key}
                     type="button"
                     disabled={checklistSaving}
-                    title={item.checked && item.at ? `Dicek pada ${item.at} WIB` : undefined}
-                    onClick={() =>
-                      void onUpdateChecklist(pmId, { [item.key]: !item.checked })
+                    title={
+                      !checklistUnlocked
+                        ? "Terkunci — klik untuk buka kunci dengan password akun"
+                        : item.checked && item.at
+                        ? `Dicek pada ${item.at} WIB`
+                        : undefined
                     }
+                    onClick={() => {
+                      if (!checklistUnlocked) {
+                        onRequestChecklistUnlock?.();
+                        return;
+                      }
+                      void onUpdateChecklist(pmId, { [item.key]: !item.checked });
+                    }}
                     className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer disabled:opacity-50 ${
-                      item.checked
+                      !checklistUnlocked
+                        ? item.checked
+                          ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-700/80 dark:text-emerald-300/80 hover:border-amber-400"
+                          : "bg-slate-100/70 dark:bg-slate-900/70 border-slate-200 dark:border-slate-800 text-slate-400 hover:border-amber-400 hover:text-amber-600"
+                        : item.checked
                         ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25"
                         : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-sky-400"
                     }`}
@@ -494,6 +537,11 @@ export function PmHealthDetailModal({
                       )}
                     </span>
                     <span>{item.label}</span>
+                    {!checklistUnlocked && (
+                      <svg className="w-3 h-3 text-amber-500/80 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                      </svg>
+                    )}
                   </button>
                 ))}
 
@@ -501,24 +549,39 @@ export function PmHealthDetailModal({
                   type="text"
                   value={noteFocused ? noteDraft : checklist.notes}
                   disabled={checklistSaving}
-                  placeholder="Catatan pengecekan (opsional)..."
+                  readOnly={!checklistUnlocked}
+                  placeholder={!checklistUnlocked ? "Catatan terkunci (klik buka kunci)" : "Catatan pengecekan (opsional)..."}
+                  title={!checklistUnlocked ? "Terkunci — klik untuk buka kunci dengan password akun" : undefined}
                   maxLength={500}
+                  onClick={() => {
+                    if (!checklistUnlocked) onRequestChecklistUnlock?.();
+                  }}
                   onFocus={() => {
+                    if (!checklistUnlocked) return;
                     setNoteDraft(checklist.notes);
                     setNoteFocused(true);
                   }}
-                  onChange={(e) => setNoteDraft(e.target.value)}
+                  onChange={(e) => {
+                    if (!checklistUnlocked) return;
+                    setNoteDraft(e.target.value);
+                  }}
                   onBlur={() => {
                     setNoteFocused(false);
+                    if (!checklistUnlocked) return;
                     const trimmed = noteDraft.trim();
                     if (trimmed !== checklist.notes.trim()) {
                       void onUpdateChecklist(pmId, { notes: trimmed });
                     }
                   }}
                   onKeyDown={(e) => {
+                    if (!checklistUnlocked) return;
                     if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
                   }}
-                  className="flex-1 min-w-[200px] px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                  className={`flex-1 min-w-[200px] px-3 py-1.5 rounded-xl border text-xs font-medium placeholder:text-slate-400 focus:outline-none transition ${
+                    !checklistUnlocked
+                      ? "border-slate-200/80 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-950/40 text-slate-500 dark:text-slate-400 cursor-pointer hover:border-amber-400"
+                      : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                  }`}
                 />
               </div>
             </div>
