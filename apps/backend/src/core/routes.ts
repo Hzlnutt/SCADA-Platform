@@ -20,6 +20,12 @@ import { getPostgresPool } from "../database/postgres";
 export const registerRoutes = (app: Express) => {
   const router = Router();
 
+  // Ultra-lightweight zero-DB ping endpoint for real-time Topbar network signal & latency indicator
+  router.get("/ping", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.status(200).json({ ok: true, ts: Date.now() });
+  });
+
   router.get("/health", async (_req, res) => {
     const mongoStatus: Record<string, any> = { connected: false };
     const pgStatus: Record<string, any> = { connected: false };

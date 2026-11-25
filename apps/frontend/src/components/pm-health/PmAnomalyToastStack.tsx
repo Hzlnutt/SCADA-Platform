@@ -4,16 +4,48 @@ import { anomalyTypeMeta, fmtDelta, fmtNumber } from "./pmHealth.utils";
 export function PmAnomalyToastStack({
   toasts,
   onDismiss,
+  onDismissAll,
+  onDisableNotifications,
   onInspectPm
 }: {
   toasts: AnomalyEvent[];
   onDismiss: (id: string) => void;
+  onDismissAll?: () => void;
+  onDisableNotifications?: () => void;
   onInspectPm: (pmId: string) => void;
 }) {
   if (toasts.length === 0) return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2.5 w-[calc(100vw-2rem)] sm:w-[390px] pointer-events-none">
+      {/* Quick action bar: dismiss all or mute/disable popups in one click */}
+      {(onDismissAll || onDisableNotifications) && (
+        <div className="pointer-events-auto flex items-center justify-end gap-1.5">
+          {onDisableNotifications && (
+            <button
+              type="button"
+              onClick={onDisableNotifications}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/90 dark:bg-slate-800/95 hover:bg-slate-800 dark:hover:bg-slate-700 text-white text-[11px] font-bold shadow-lg border border-slate-700/80 transition cursor-pointer"
+              title="Nonaktifkan pop-up notifikasi anomali"
+            >
+              <svg className="w-3.5 h-3.5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.143 17.082a24.248 24.248 0 003.844.148m-3.844-.148a23.856 23.856 0 01-5.455-1.31 8.964 8.964 0 002.3-5.542m3.155 6.852a3 3 0 005.667 1.97m1.965-2.277L21 21m-4.225-4.225a23.81 23.81 0 003.536-1.003A8.967 8.967 0 0118 9.75V9A6 6 0 006.53 6.53m10.245 10.245L6.53 6.53M3 3l3.53 3.53" />
+              </svg>
+              <span>Nonaktifkan Notifikasi</span>
+            </button>
+          )}
+          {onDismissAll && toasts.length > 1 && (
+            <button
+              type="button"
+              onClick={onDismissAll}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/95 dark:bg-slate-900/95 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px] font-bold shadow-lg border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+            >
+              <span>Tutup Semua ({toasts.length})</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {toasts.slice(0, 4).map((ev) => {
         const meta = anomalyTypeMeta(ev.type);
         return (

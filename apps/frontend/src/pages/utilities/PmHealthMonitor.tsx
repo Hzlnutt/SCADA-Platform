@@ -43,6 +43,20 @@ export default function PmHealthMonitor() {
   const theme = useSystemStore((s) => s.theme);
   const isDark = theme === "dark";
 
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("scada_pm_health_popups") !== "off";
+  });
+  const notificationsEnabledRef = useRef(notificationsEnabled);
+  notificationsEnabledRef.current = notificationsEnabled;
+
+  useEffect(() => {
+    localStorage.setItem("scada_pm_health_popups", notificationsEnabled ? "on" : "off");
+    if (!notificationsEnabled) {
+      setToasts([]);
+    }
+  }, [notificationsEnabled]);
+
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
     return localStorage.getItem("scada_pm_health_sound") !== "off";
@@ -192,7 +206,7 @@ export default function PmHealthMonitor() {
         setResetAt(json.logStats.resetAt ?? null);
 
         // Surface live anomaly notifications even if reverse proxy buffers/drops SSE
-        if (silent && Array.isArray(json.newlyLogged) && json.newlyLogged.length > 0) {
+        if (silent && notificationsEnabledRef.current && Array.isArray(json.newlyLogged) && json.newlyLogged.length > 0) {
           const incoming = json.newlyLogged;
           setToasts((prev) => {
             const seen = new Set(prev.map((p) => p.id));
@@ -337,7 +351,7 @@ export default function PmHealthMonitor() {
       try {
         const data = JSON.parse(event.data);
         const incoming: AnomalyEvent[] = Array.isArray(data.anomalies) ? data.anomalies : [];
-        if (incoming.length > 0) {
+        if (incoming.length > 0 && notificationsEnabledRef.current) {
           setToasts((prev) => {
             const seen = new Set(prev.map((p) => p.id));
             const unique = incoming.filter((i) => !seen.has(i.id));
@@ -784,6 +798,33 @@ export default function PmHealthMonitor() {
             <span>Scan</span>
           </button>
 
+          {/* Toggle Enable/Disable Live Popup Notifications */}
+          <button
+            type="button"
+            onClick={() => setNotificationsEnabled((prev) => !prev)}
+            title={
+              notificationsEnabled
+                ? "Notifikasi pop-up aktif — klik untuk menonaktifkan agar tidak mengganggu"
+                : "Notifikasi pop-up dinonaktifkan — klik untuk mengaktifkan kembali"
+            }
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition cursor-pointer ${
+              notificationsEnabled
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20"
+                : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-400 hover:border-slate-300 dark:hover:border-slate-600"
+            }`}
+          >
+            {notificationsEnabled ? (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.1">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.1">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.143 17.082a24.248 24.248 0 003.844.148m-3.844-.148a23.856 23.856 0 01-5.455-1.31 8.964 8.964 0 002.3-5.542m3.155 6.852a3 3 0 005.667 1.97m1.965-2.277L21 21m-4.225-4.225a23.81 23.81 0 003.536-1.003A8.967 8.967 0 0118 9.75V9A6 6 0 006.53 6.53m10.245 10.245L6.53 6.53M3 3l3.53 3.53" />
+              </svg>
+            )}
+            <span>{notificationsEnabled ? "Notif: On" : "Notif: Off"}</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setSoundEnabled((prev) => !prev)}
@@ -844,6 +885,26 @@ export default function PmHealthMonitor() {
                     className="text-[11px] font-bold text-sky-600 dark:text-sky-400 hover:underline cursor-pointer"
                   >
                     Lihat Semua Log
+                  </button>
+                </div>
+                <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                    Pop-up Notifikasi Live
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={notificationsEnabled}
+                    onClick={() => setNotificationsEnabled((prev) => !prev)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors cursor-pointer ${
+                      notificationsEnabled ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                        notificationsEnabled ? "translate-x-[18px]" : "translate-x-[3px]"
+                      }`}
+                    />
                   </button>
                 </div>
                 <div className="max-h-80 overflow-y-auto scrollbar-thin divide-y divide-slate-100 dark:divide-slate-800">
@@ -1832,8 +1893,10 @@ export default function PmHealthMonitor() {
 
       {/* Live Anomaly Toasts */}
       <PmAnomalyToastStack
-        toasts={toasts}
+        toasts={notificationsEnabled ? toasts : []}
         onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))}
+        onDismissAll={() => setToasts([])}
+        onDisableNotifications={() => setNotificationsEnabled(false)}
         onInspectPm={(pmId) => setSelectedPmId(pmId)}
       />
     </div>

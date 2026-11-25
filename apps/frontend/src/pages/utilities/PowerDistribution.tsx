@@ -165,6 +165,15 @@ const TRAFO_PM_MAP: Record<string, { pmId: string; group: string; name: string; 
 
 const NO_REALTIME_API = "API Realtime Belum Tersedia";
 
+/** Smooth waving 3-dot loading indicator matching Overview SCADA cards */
+const WaveDots = ({ className = "ml-1" }: { className?: string }) => (
+  <span className={`scada-wave-dots ${className}`} aria-hidden="true">
+    <span />
+    <span />
+    <span />
+  </span>
+);
+
 const decodePf = (val: number | null | undefined): number | null => {
   if (val === null || val === undefined || isNaN(Number(val))) return null;
   let pf = Number(val);
@@ -1450,8 +1459,15 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
                   </p>
                 </div>
               ) : loadingModalHistory ? (
-                <div className="flex-1 flex items-center justify-center text-xs text-sky-500 font-bold gap-2">
-                  <span className="animate-spin">⏳</span> Memuat riwayat telemetri...
+                <div className="flex-1 flex flex-col justify-end gap-3 p-4 rounded-xl bg-slate-100/70 dark:bg-slate-800/40 animate-pulse">
+                  <div className="flex items-end justify-between gap-2 h-40 px-2">
+                    {[40, 62, 54, 78, 65, 84, 58, 72, 60, 88, 66, 52].map((pct, i) => (
+                      <div key={i} className="flex-1 rounded-t-md bg-sky-500/20 dark:bg-sky-400/20" style={{ height: `${pct}%` }} />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-center text-xs text-sky-600 dark:text-sky-400 font-bold">
+                    <span className="inline-flex items-center">Memuat riwayat telemetri<WaveDots /></span>
+                  </div>
                 </div>
               ) : modalPointCount > 0 ? (
                 <div className="w-full h-full min-h-[240px]">
@@ -1652,10 +1668,21 @@ function DetailRecordModal({ transformer, onClose, isDark, coverageList, onSaveS
   );
 }
 
-/* ═══════════ TRANSFORMER DETAIL CARD (Section B) ═══════════ */
-function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; factoryLabel: string; loadConfig: { safeMax: number; cautionMax: number } }) {
-  const isPmOff = tx.pmStatus === false;
-  const hasData = !isPmOff && tx.activePowerKw !== null && tx.activePowerKw !== undefined;
+/* ═══════════ TRANSFORMER DETAIL CARD (Section B — Main Distribution) ═══════════ */
+function TransformerDetailCard({
+  tx,
+  factoryLabel,
+  isLoading = false,
+  isIncomingLoading = false
+}: {
+  tx: TransformerData;
+  factoryLabel: string;
+  loadConfig: { safeMax: number; cautionMax: number };
+  isLoading?: boolean;
+  isIncomingLoading?: boolean;
+}) {
+  const isPmOff = !isLoading && tx.pmStatus === false;
+  const hasData = !isLoading && !isPmOff && tx.activePowerKw !== null && tx.activePowerKw !== undefined;
 
   const has400V =
     !isPmOff &&
@@ -1690,28 +1717,35 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
       isPmOff ? "border-rose-300 dark:border-rose-500/40" : "border-slate-200 dark:border-slate-800"
     }`}>
       {/* Card Header */}
-      <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
+      <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5 flex-wrap">
           <span
-            className="rounded-full"
+            className={`rounded-full ${isLoading ? "animate-pulse" : ""}`}
             style={{
-              width: 8, height: 8,
-              backgroundColor: isPmOff ? "#ef4444" : (hasData ? (tx.status === "online" ? "#10b981" : "#f59e0b") : "#94a3b8"),
-              boxShadow: isPmOff ? "0 0 6px #ef4444" : (hasData ? "0 0 6px #10b981" : "none"),
+              width: 9, height: 9,
+              backgroundColor: isLoading ? "#38bdf8" : isPmOff ? "#ef4444" : (hasData ? (tx.status === "online" ? "#10b981" : "#f59e0b") : "#94a3b8"),
+              boxShadow: isLoading ? "0 0 6px #38bdf8" : isPmOff ? "0 0 6px #ef4444" : (hasData ? "0 0 6px #10b981" : "none"),
             }}
           />
-          <span className="text-sm font-extrabold text-slate-800 dark:text-white">{tx.name}</span>
-          <span className="px-2 py-0.5 rounded text-[8px] font-extrabold bg-sky-500/10 text-sky-500 border border-sky-500/20 uppercase">
+          <span className="text-base font-extrabold text-slate-800 dark:text-white leading-snug">{tx.name}</span>
+          <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold font-mono bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 uppercase">
             {factoryLabel} — {tx.capacityKva} kVA
           </span>
           {isPmOff && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold bg-rose-500/10 text-rose-500 border border-rose-500/25 uppercase">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-extrabold font-mono bg-rose-500/10 text-rose-500 border border-rose-500/25 uppercase">
               <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
               PM OFF / MATI
             </span>
           )}
         </div>
         {(() => {
+          if (isLoading) {
+            return (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold font-mono bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 animate-pulse">
+                POLLING<WaveDots />
+              </span>
+            );
+          }
           const loadPct = !isPmOff && tx.apparentPowerKva && tx.capacityKva
             ? Math.round((tx.apparentPowerKva / tx.capacityKva) * 100)
             : (!isPmOff && tx.activePowerKw && tx.capacityKva ? Math.round((tx.activePowerKw / tx.capacityKva) * 100) : null);
@@ -1720,17 +1754,17 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
             : "#f59e0b";
           return (
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-slate-400">LOAD:</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">LOAD:</span>
               {isPmOff ? (
-                <span className="text-[10px] font-mono font-extrabold text-rose-500">
+                <span className="text-xs font-mono font-extrabold text-rose-500">
                   OFF / MATI
                 </span>
               ) : loadPct !== null ? (
-                <span className="text-[11px] font-mono font-extrabold" style={{ color: loadColor }}>
+                <span className="text-xs font-mono font-extrabold" style={{ color: loadColor }}>
                   {loadPct}%
                 </span>
               ) : (
-                <span className="text-[9px] font-extrabold text-amber-500">
+                <span className="text-[11px] font-bold text-amber-500">
                   {NO_REALTIME_API}
                 </span>
               )}
@@ -1739,33 +1773,100 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
         })()}
       </div>
 
-      {/* Parameters Grid */}
+      {/* Parameters Grid (Uniform enlarged Distribution typography) */}
       <div className="p-5">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 16px" }} className="text-xs">
-          <ParamCell label="Input Voltage" value={tx.voltageInKv !== null ? `${tx.voltageInKv.toFixed(2)} kV` : NO_REALTIME_API} warn={tx.voltageInKv === null} />
-          <ParamCell label="Output Volt 400V" value={isPmOff ? "PM OFF / MATI" : (has400V ? `R:${tx.voltAb!.toFixed(1)} S:${tx.voltBc!.toFixed(1)} T:${tx.voltCa!.toFixed(1)} V` : NO_REALTIME_API)} warn={!isPmOff && !has400V} offline={isPmOff} />
-          <ParamCell 
-            label="Output Volt 230V" 
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-4 gap-y-3.5">
+          <ParamCell
+            label="Input Voltage"
+            loading={isIncomingLoading && tx.voltageInKv === null}
+            value={tx.voltageInKv !== null ? `${tx.voltageInKv.toFixed(2)} kV` : NO_REALTIME_API}
+            warn={tx.voltageInKv === null}
+          />
+          <ParamCell
+            label="Output Volt 400V"
+            loading={isLoading}
             value={
-              isPmOff
-                ? "PM OFF / MATI"
-                : (tx.voltAn !== null && tx.voltAn !== undefined && tx.voltBn !== null && tx.voltBn !== undefined && tx.voltCn !== null && tx.voltCn !== undefined)
-                  ? `R:${tx.voltAn.toFixed(0)} S:${tx.voltBn.toFixed(0)} T:${tx.voltCn.toFixed(0)} V`
-                  : (tx.voltageOutL2N !== null && tx.voltageOutL2N !== undefined)
-                    ? `${tx.voltageOutL2N.toFixed(1)} V`
-                    : NO_REALTIME_API
-            } 
+              isPmOff ? (
+                "PM OFF / MATI"
+              ) : has400V ? (
+                <span className="inline-flex flex-wrap gap-x-2">
+                  <span>R:{tx.voltAb!.toFixed(1)}</span>
+                  <span>S:{tx.voltBc!.toFixed(1)}</span>
+                  <span>T:{tx.voltCa!.toFixed(1)} V</span>
+                </span>
+              ) : (
+                NO_REALTIME_API
+              )
+            }
+            warn={!isPmOff && !has400V}
+            offline={isPmOff}
+          />
+          <ParamCell
+            label="Output Volt 230V"
+            loading={isLoading}
+            value={
+              isPmOff ? (
+                "PM OFF / MATI"
+              ) : (tx.voltAn !== null && tx.voltAn !== undefined && tx.voltBn !== null && tx.voltBn !== undefined && tx.voltCn !== null && tx.voltCn !== undefined) ? (
+                <span className="inline-flex flex-wrap gap-x-2">
+                  <span>R:{tx.voltAn.toFixed(0)}</span>
+                  <span>S:{tx.voltBn.toFixed(0)}</span>
+                  <span>T:{tx.voltCn.toFixed(0)} V</span>
+                </span>
+              ) : (tx.voltageOutL2N !== null && tx.voltageOutL2N !== undefined) ? (
+                `${tx.voltageOutL2N.toFixed(1)} V`
+              ) : (
+                NO_REALTIME_API
+              )
+            }
             warn={!isPmOff && tx.voltAn === null && tx.voltageOutL2N === null}
             offline={isPmOff}
           />
-          
-          <ParamCell label="Active Power" value={isPmOff ? "PM OFF / MATI" : (tx.activePowerKw !== null ? `${tx.activePowerKw} kW` : NO_REALTIME_API)} accent={hasData} warn={!isPmOff && tx.activePowerKw === null} offline={isPmOff} />
-          <ParamCell label="Reactive Power" value={isPmOff ? "PM OFF / MATI" : (tx.reactivePowerKvar !== null ? `${tx.reactivePowerKvar} kVAR` : NO_REALTIME_API)} warn={!isPmOff && tx.reactivePowerKvar === null} offline={isPmOff} />
-          <ParamCell label="Apparent Power" value={isPmOff ? "PM OFF / MATI" : (tx.apparentPowerKva !== null ? `${tx.apparentPowerKva} kVA` : NO_REALTIME_API)} warn={!isPmOff && tx.apparentPowerKva === null} offline={isPmOff} />
-          
-          <ParamCell label="Power Factor" value={isPmOff ? "OFF" : (tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API)} warn={!isPmOff && tx.powerFactor === null} offline={isPmOff} />
-          <ParamCell label="Frequency" value={isPmOff ? "OFF" : (tx.frequencyHz !== null ? `${tx.frequencyHz.toFixed(2)} Hz` : NO_REALTIME_API)} warn={!isPmOff && tx.frequencyHz === null} offline={isPmOff} />
-          <ParamCell label="Temperature" value={tx.tempCc !== null ? `${tx.tempCc.toFixed(1)} °C` : NO_REALTIME_API} warn={tx.tempCc === null || tx.tempCc > 60} />
+
+          <ParamCell
+            label="Active Power"
+            loading={isLoading}
+            skeletonTone="emerald"
+            value={isPmOff ? "PM OFF / MATI" : (tx.activePowerKw !== null ? `${tx.activePowerKw} kW` : NO_REALTIME_API)}
+            accent={hasData}
+            warn={!isPmOff && tx.activePowerKw === null}
+            offline={isPmOff}
+          />
+          <ParamCell
+            label="Reactive Power"
+            loading={isLoading}
+            value={isPmOff ? "PM OFF / MATI" : (tx.reactivePowerKvar !== null ? `${tx.reactivePowerKvar} kVAR` : NO_REALTIME_API)}
+            warn={!isPmOff && tx.reactivePowerKvar === null}
+            offline={isPmOff}
+          />
+          <ParamCell
+            label="Apparent Power"
+            loading={isLoading}
+            value={isPmOff ? "PM OFF / MATI" : (tx.apparentPowerKva !== null ? `${tx.apparentPowerKva} kVA` : NO_REALTIME_API)}
+            warn={!isPmOff && tx.apparentPowerKva === null}
+            offline={isPmOff}
+          />
+
+          <ParamCell
+            label="Power Factor"
+            loading={isLoading}
+            value={isPmOff ? "OFF" : (tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API)}
+            warn={!isPmOff && tx.powerFactor === null}
+            offline={isPmOff}
+          />
+          <ParamCell
+            label="Frequency"
+            loading={isLoading}
+            value={isPmOff ? "OFF" : (tx.frequencyHz !== null ? `${tx.frequencyHz.toFixed(2)} Hz` : NO_REALTIME_API)}
+            warn={!isPmOff && tx.frequencyHz === null}
+            offline={isPmOff}
+          />
+          <ParamCell
+            label="Temperature"
+            loading={isLoading}
+            value={tx.tempCc !== null ? `${tx.tempCc.toFixed(1)} °C` : NO_REALTIME_API}
+            warn={tx.tempCc === null || tx.tempCc > 60}
+          />
 
           <ParamCell label="Impedance" value={`${tx.impedance ?? 4.5} %`} />
           <ParamCell label="Vector Group" value={tx.vectorGroup ?? "Dyn11"} />
@@ -1773,109 +1874,118 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
         </div>
 
         {/* Current & THD Section */}
-        <div
-          className="mt-4 p-3.5 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-slate-800/60 space-y-2.5"
-        >
-          <div className="flex justify-between items-center text-xs">
-            <span className="text-[9px] text-slate-400 uppercase font-extrabold tracking-wider">Arus Per Fasa (A)</span>
-            {isPmOff ? (
-              <span className="text-[9px] font-mono font-extrabold text-rose-500">PM OFF / MATI</span>
+        <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-slate-800/60 space-y-3">
+          <div className="flex flex-wrap justify-between items-center gap-2">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">Arus Per Fasa (A)</span>
+            {isLoading ? (
+              <div className="h-4 w-44 bg-slate-200 dark:bg-slate-700/70 rounded animate-pulse" />
+            ) : isPmOff ? (
+              <span className="text-[13px] font-mono font-extrabold text-rose-500">PM OFF / MATI</span>
             ) : hasCurrent ? (
-              <div className="font-mono font-bold text-slate-600 dark:text-slate-300">
-                R: <span className="mr-2">{tx.currentR!.toFixed(1)}</span>
-                S: <span className="mr-2">{tx.currentS!.toFixed(1)}</span>
-                T: <span>{tx.currentT!.toFixed(1)}</span>
+              <div className="text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 inline-flex flex-wrap gap-x-3">
+                <span>R: {tx.currentR!.toFixed(1)}</span>
+                <span>S: {tx.currentS!.toFixed(1)}</span>
+                <span>T: {tx.currentT!.toFixed(1)}</span>
               </div>
             ) : (
-              <span className="text-[9px] font-bold text-amber-500">{NO_REALTIME_API}</span>
+              <span className="text-[11px] font-bold text-amber-500">{NO_REALTIME_API}</span>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/40 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2.5 border-t border-slate-200/70 dark:border-slate-800/50">
             <div>
-              <span className="text-[9px] text-slate-400 uppercase block font-extrabold tracking-wider mb-0.5">THDV Per Fasa (%)</span>
-              {isPmOff ? (
-                <span className="text-[9px] font-mono font-extrabold text-rose-500">OFF</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase block font-bold tracking-wider mb-1">THDV Per Fasa (%)</span>
+              {isLoading ? (
+                <div className="h-4 w-40 bg-slate-200 dark:bg-slate-700/70 rounded animate-pulse" />
+              ) : isPmOff ? (
+                <span className="text-[13px] font-mono font-extrabold text-rose-500">OFF</span>
               ) : hasThdV ? (
-                <div className="font-mono font-bold text-slate-600 dark:text-slate-300">
-                  R:<span className="mr-1">{tx.thdVoltA!.toFixed(2)}</span>
-                  S:<span className="mr-1">{tx.thdVoltB!.toFixed(2)}</span>
-                  T:<span>{tx.thdVoltC!.toFixed(2)}</span>
+                <div className="text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 inline-flex flex-wrap gap-x-2.5">
+                  <span>R:{tx.thdVoltA!.toFixed(2)}</span>
+                  <span>S:{tx.thdVoltB!.toFixed(2)}</span>
+                  <span>T:{tx.thdVoltC!.toFixed(2)}</span>
                 </div>
               ) : (
-                <span className="text-[9px] font-bold text-amber-500">{NO_REALTIME_API}</span>
+                <span className="text-[11px] font-bold text-amber-500">{NO_REALTIME_API}</span>
               )}
             </div>
             <div>
-              <span className="text-[9px] text-slate-400 uppercase block font-extrabold tracking-wider mb-0.5">THDi Per Fasa (%)</span>
-              {isPmOff ? (
-                <span className="text-[9px] font-mono font-extrabold text-rose-500">OFF</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase block font-bold tracking-wider mb-1">THDi Per Fasa (%)</span>
+              {isLoading ? (
+                <div className="h-4 w-40 bg-slate-200 dark:bg-slate-700/70 rounded animate-pulse" />
+              ) : isPmOff ? (
+                <span className="text-[13px] font-mono font-extrabold text-rose-500">OFF</span>
               ) : hasThdI ? (
-                <div className="font-mono font-bold text-slate-600 dark:text-slate-300">
-                  R:<span className="mr-1">{tx.thdCurrentA!.toFixed(2)}</span>
-                  S:<span className="mr-1">{tx.thdCurrentB!.toFixed(2)}</span>
-                  T:<span>{tx.thdCurrentC!.toFixed(2)}</span>
+                <div className="text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 inline-flex flex-wrap gap-x-2.5">
+                  <span>R:{tx.thdCurrentA!.toFixed(2)}</span>
+                  <span>S:{tx.thdCurrentB!.toFixed(2)}</span>
+                  <span>T:{tx.thdCurrentC!.toFixed(2)}</span>
                 </div>
               ) : (
-                <span className="text-[9px] font-bold text-amber-500">{NO_REALTIME_API}</span>
+                <span className="text-[11px] font-bold text-amber-500">{NO_REALTIME_API}</span>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/40 text-[10px] font-bold text-slate-500">
-            <div>
-              <span>Voltage Unbalanced: </span>
-              {isPmOff ? (
-                <span className="text-[9px] font-mono font-extrabold text-rose-500">OFF</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2.5 border-t border-slate-200/70 dark:border-slate-800/50">
+            <div className="flex flex-wrap items-baseline gap-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Voltage Unbalanced:</span>
+              {isLoading ? (
+                <span className="inline-block h-4 w-16 bg-slate-200 dark:bg-slate-700/70 rounded animate-pulse align-middle" />
+              ) : isPmOff ? (
+                <span className="text-[13px] font-mono font-extrabold text-rose-500">OFF</span>
               ) : tx.voltageUnbalance !== null && tx.voltageUnbalance !== undefined ? (
-                <span className="text-slate-600 dark:text-slate-300 font-mono font-bold">
+                <span className="text-[13px] text-slate-800 dark:text-slate-200 font-mono font-bold">
                   {tx.voltageUnbalance.toFixed(2)} %
                 </span>
               ) : (
-                <span className="text-[9px] font-bold text-amber-500">{NO_REALTIME_API}</span>
+                <span className="text-[11px] font-bold text-amber-500">{NO_REALTIME_API}</span>
               )}
             </div>
-            <div>
-              <span>Current Unbalanced: </span>
-              {isPmOff ? (
-                <span className="text-[9px] font-mono font-extrabold text-rose-500">OFF</span>
+            <div className="flex flex-wrap items-baseline gap-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Current Unbalanced:</span>
+              {isLoading ? (
+                <span className="inline-block h-4 w-16 bg-slate-200 dark:bg-slate-700/70 rounded animate-pulse align-middle" />
+              ) : isPmOff ? (
+                <span className="text-[13px] font-mono font-extrabold text-rose-500">OFF</span>
               ) : tx.currentUnbalance !== null && tx.currentUnbalance !== undefined ? (
-                <span className="text-slate-600 dark:text-slate-300 font-mono font-bold">
+                <span className="text-[13px] text-slate-800 dark:text-slate-200 font-mono font-bold">
                   {tx.currentUnbalance.toFixed(2)} %
                 </span>
               ) : (
-                <span className="text-[9px] font-bold text-amber-500">{NO_REALTIME_API}</span>
+                <span className="text-[11px] font-bold text-amber-500">{NO_REALTIME_API}</span>
               )}
             </div>
           </div>
         </div>
 
         {/* Cost & kWh */}
-        <div
-          className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80"
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "center" }}
-        >
+        <div className="mt-4 pt-3.5 border-t border-slate-100 dark:border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
           <div>
-            <span className="text-[9px] text-slate-400 uppercase block font-bold">Total Konsumsi</span>
-            {tx.kwh !== null ? (
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-200 font-mono">
-                {tx.kwh.toLocaleString("id-ID")} <span className="text-[9px] text-slate-400 font-bold">kWh</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider block font-bold mb-0.5">Total Konsumsi</span>
+            {isLoading ? (
+              <div className="h-5 w-36 bg-slate-200 dark:bg-slate-700/70 rounded-md animate-pulse mt-1" />
+            ) : tx.kwh !== null ? (
+              <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100 font-mono">
+                {tx.kwh.toLocaleString("id-ID")} <span className="text-xs text-slate-500 dark:text-slate-400 font-bold font-sans">kWh</span>
               </span>
             ) : (
-              <span className="text-[9px] font-bold text-amber-500">{NO_REALTIME_API}</span>
+              <span className="text-[11px] font-bold text-amber-500">{NO_REALTIME_API}</span>
             )}
           </div>
           <div>
-            <span className="text-[9px] text-slate-400 uppercase block font-bold">Estimasi Cost</span>
-            {estimatedCost !== null ? (
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider block font-bold mb-0.5">Estimasi Cost</span>
+            {isLoading ? (
+              <div className="h-5 w-40 bg-emerald-500/20 dark:bg-emerald-400/20 rounded-md animate-pulse mt-1" />
+            ) : estimatedCost !== null ? (
               <span
-                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono"
+                className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 font-mono"
                 title={`Kalkulasi: ${tx.kwh?.toLocaleString("id-ID")} kWh × Rp ${effectiveRate.toLocaleString("id-ID")}/kWh (Tarif Industri)`}
               >
                 {formatCurrencyIDR(estimatedCost)}
               </span>
             ) : (
-              <span className="text-[9px] font-bold text-amber-500">
+              <span className="text-[11px] font-bold text-amber-500">
                 {NO_REALTIME_API}
               </span>
             )}
@@ -1886,18 +1996,49 @@ function TransformerDetailCard({ tx, factoryLabel }: { tx: TransformerData; fact
   );
 }
 
-function ParamCell({ label, value, accent, warn, offline }: { label: string; value: string; accent?: boolean; warn?: boolean; offline?: boolean }) {
+function ParamCell({
+  label,
+  value,
+  accent,
+  warn,
+  offline,
+  loading = false,
+  skeletonTone = "slate"
+}: {
+  label: string;
+  value: React.ReactNode;
+  accent?: boolean;
+  warn?: boolean;
+  offline?: boolean;
+  loading?: boolean;
+  skeletonTone?: "slate" | "emerald";
+}) {
   return (
-    <div>
-      <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-bold">{label}</span>
-      <span className={`font-bold font-mono text-[10px] ${
-        offline ? "text-rose-500 font-extrabold" :
-        accent ? "text-emerald-500 font-extrabold" :
-        warn ? "text-amber-500" :
-        "text-slate-800 dark:text-slate-200"
-      }`}>
-        {value}
-      </span>
+    <div className="min-w-0">
+      <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider block font-bold mb-0.5">{label}</span>
+      {loading ? (
+        <div
+          className={`h-4 w-24 rounded animate-pulse mt-1 ${
+            skeletonTone === "emerald"
+              ? "bg-emerald-500/20 dark:bg-emerald-400/20"
+              : "bg-slate-200 dark:bg-slate-700/70"
+          }`}
+        />
+      ) : (
+        <span
+          className={`block leading-snug ${
+            offline
+              ? "text-[13px] font-mono font-extrabold text-rose-500"
+              : accent
+              ? "text-[13px] font-mono font-extrabold text-emerald-600 dark:text-emerald-400"
+              : warn
+              ? "text-[11px] font-bold text-amber-500"
+              : "text-[13px] font-mono font-bold text-slate-800 dark:text-slate-200"
+          }`}
+        >
+          {value}
+        </span>
+      )}
     </div>
   );
 }
@@ -2024,7 +2165,7 @@ function SldMiniCard({ tx, onClick, loadConfig, isLoading = false }: { tx: Trans
         <div className="space-y-1">
           <div className="flex justify-between text-[7px] font-extrabold text-slate-400">
             <span>LOAD</span>
-            <span className="text-slate-400 font-mono animate-pulse">...</span>
+            <span className="text-slate-400 font-mono"><WaveDots className="ml-0" /></span>
           </div>
           <div className="w-full rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700/60" style={{ height: 4 }}>
             <div className="h-full bg-slate-300 dark:bg-slate-600 rounded-full animate-pulse w-1/3" />
@@ -2118,11 +2259,18 @@ export default function PowerDistribution() {
 
   const [telemetryTransformers, setTelemetryTransformers] = useState<TransformerData[]>(INITIAL_TRANSFORMERS);
   const [selectedTx, setSelectedTx] = useState<TransformerData | null>(null);
-  const [loadingSld, setLoadingSld] = useState<boolean>(true);
+  const [loadingIncoming, setLoadingIncoming] = useState<boolean>(true);
+  const [loadingSolar, setLoadingSolar] = useState<boolean>(true);
+  const [loadingTrafos, setLoadingTrafos] = useState<boolean>(true);
+  const loadingSld = loadingIncoming || loadingSolar || loadingTrafos;
 
-  // Safety timer so skeleton never gets stuck indefinitely
+  // Safety timer so skeletons never get stuck indefinitely if an endpoint is unreachable
   useEffect(() => {
-    const t = setTimeout(() => setLoadingSld(false), 2500);
+    const t = setTimeout(() => {
+      setLoadingIncoming(false);
+      setLoadingSolar(false);
+      setLoadingTrafos(false);
+    }, 2500);
     return () => clearTimeout(t);
   }, []);
 
@@ -2215,9 +2363,10 @@ export default function PowerDistribution() {
             wf2Volt: wf2Status === false ? null : (toKv(wf2Res?.data?.pqData?.vll1 ?? wf2Res?.data?.pqData?.voltage) ?? prev.wf2Volt),
           };
         });
-        setLoadingSld(false);
+        setLoadingIncoming(false);
       } catch (err) {
         console.error("Failed to load incoming telemetries for SLD:", err);
+        setLoadingIncoming(false);
       }
     };
 
@@ -2227,7 +2376,7 @@ export default function PowerDistribution() {
     const socket = getSocket();
     const handleIncomingLive = (payload: any) => {
       if (!payload || !payload.deviceId || !payload.pqData) return;
-      setLoadingSld(false);
+      setLoadingIncoming(false);
       setIncomingData(prev => {
         if (payload.deviceId === "Cubicle_PLN_PM8000") {
           const plnStatus = resolveDeviceStatus(payload, prev.plnStatus);
@@ -2311,8 +2460,12 @@ export default function PowerDistribution() {
               poi2Pf: p2Status === false ? null : decodePf(res.data.poi2?.powerFactor !== undefined ? res.data.poi2.powerFactor : null),
             });
           }
+          setLoadingSolar(false);
         })
-        .catch((err) => console.error("Failed to load solar telemetry for SLD:", err));
+        .catch((err) => {
+          console.error("Failed to load solar telemetry for SLD:", err);
+          setLoadingSolar(false);
+        });
     };
 
     fetchSolar();
@@ -2321,6 +2474,7 @@ export default function PowerDistribution() {
     const socket = getSocket();
     const handleSolarLive = (payload: any) => {
       if (!payload) return;
+      setLoadingSolar(false);
       setSolarData(prev => {
         const p1Status = parsePoiBool(payload.poi1?.status, payload.online === false ? false : prev.poi1Status);
         const p2Status = parsePoiBool(payload.poi2?.status, payload.online === false ? false : prev.poi2Status);
@@ -2340,6 +2494,7 @@ export default function PowerDistribution() {
       const p1Rec = payload.data.find((r: any) => r?.poi_id === "POI_1");
       const p2Rec = payload.data.find((r: any) => r?.poi_id === "POI_2");
       if (!p1Rec && !p2Rec) return;
+      setLoadingSolar(false);
       setSolarData(prev => {
         const p1Status = p1Rec ? parsePoiBool(p1Rec.status, prev.poi1Status) : prev.poi1Status;
         const p2Status = p2Rec ? parsePoiBool(p2Rec.status, prev.poi2Status) : prev.poi2Status;
@@ -2390,10 +2545,11 @@ export default function PowerDistribution() {
               return mapPmToTransformer(tx, pmRecord, incomingDataRef.current);
             })
           );
-          setLoadingSld(false);
         }
+        setLoadingTrafos(false);
       } catch (err) {
         console.error("Failed to load transformer telemetries:", err);
+        setLoadingTrafos(false);
       }
     };
 
@@ -2407,7 +2563,7 @@ export default function PowerDistribution() {
       if (now - lastLivePmUpdate < 800) return; // 1-second display polling cadence
       lastLivePmUpdate = now;
       if (!payload || !Array.isArray(payload.data)) return;
-      setLoadingSld(false);
+      setLoadingTrafos(false);
       const pmMap = new Map<string, ElectricPmItem>();
       payload.data.forEach((pm) => {
         if (pm.pm_id) {
@@ -2443,10 +2599,12 @@ export default function PowerDistribution() {
   // Sub-Distribution Power Meters (EW23, EW21, EW22)
   const [selectedEwGroup, setSelectedEwGroup] = useState<"ew23" | "ew21" | "ew22">("ew23");
   const [ewPowerMeters, setEwPowerMeters] = useState<ElectricPmItem[]>([]);
+  const [loadingEw, setLoadingEw] = useState<boolean>(true);
 
   // Fetch initial EW power meters and listen to live socket updates
   useEffect(() => {
     let active = true;
+    setLoadingEw(true);
     const fetchPmData = () => {
       if (!isPageActive) return;
       getJson<{ data: ElectricPmItem[] }>(`/analytics/electricity/power-meters?group=${selectedEwGroup}&_t=${Date.now()}`)
@@ -2469,8 +2627,12 @@ export default function PowerDistribution() {
               return Array.from(map.values()).sort((a, b) => getPmSortIndex(a.pm_id) - getPmSortIndex(b.pm_id));
             });
           }
+          if (active) setLoadingEw(false);
         })
-        .catch((err) => console.error("Failed to load EW power meters:", err));
+        .catch((err) => {
+          console.error("Failed to load EW power meters:", err);
+          if (active) setLoadingEw(false);
+        });
     };
 
     fetchPmData();
@@ -2482,6 +2644,7 @@ export default function PowerDistribution() {
       const targetGroup = payload.groupId?.toLowerCase();
       const isRelevant = targetGroup === selectedEwGroup || targetGroup === "custom_pm" || !targetGroup;
       if (!isRelevant) return;
+      if (active) setLoadingEw(false);
 
       setEwPowerMeters((prev) => {
         if (prev.length === 0) {
@@ -3137,9 +3300,9 @@ export default function PowerDistribution() {
             </button>
           )}
           <div className="px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm flex items-center gap-3">
-            <span className="text-[10px] font-extrabold uppercase text-slate-400">{t("electricity.totalLoad")}</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{t("electricity.totalLoad")}</span>
             {loadingSld ? (
-              <span className="inline-block h-5 w-20 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />
+              <span className="inline-block h-5 w-24 bg-sky-500/20 dark:bg-sky-400/20 rounded-lg animate-pulse" />
             ) : isSystemAllOff ? (
               <span className="inline-flex items-center gap-1.5 text-xs font-extrabold font-mono text-rose-500">
                 <span className="w-2 h-2 rounded-full bg-rose-500" />
@@ -3147,18 +3310,18 @@ export default function PowerDistribution() {
               </span>
             ) : systemTotalKw !== null ? (
               <span className="text-base font-extrabold font-mono text-slate-800 dark:text-white">
-                {systemTotalKw.toLocaleString("id-ID")} <span className="text-xs text-slate-400 font-bold">kW</span>
+                {systemTotalKw.toLocaleString("id-ID")} <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">kW</span>
               </span>
             ) : (
-              <span className="text-xs font-extrabold text-amber-500">
+              <span className="text-xs font-bold text-amber-500">
                 {NO_REALTIME_API}
               </span>
             )}
           </div>
           <div className="px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm flex items-center gap-3">
-            <span className="text-[10px] font-extrabold uppercase text-slate-400">{t("electricity.capacity")}</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{t("electricity.capacity")}</span>
             <span className="text-base font-extrabold font-mono text-slate-800 dark:text-white">
-              {totalCapacityKva.toLocaleString("id-ID")} <span className="text-xs text-slate-400 font-bold">kVA</span>
+              {totalCapacityKva.toLocaleString("id-ID")} <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">kVA</span>
             </span>
           </div>
         </div>
@@ -3167,7 +3330,7 @@ export default function PowerDistribution() {
       {/* ═══════════ SECTION A: SINGLE LINE DIAGRAM ═══════════ */}
       <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden w-full">
         {/* SLD Header Bar */}
-        <div className="px-6 py-3 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/20">
+        <div className="px-6 py-3 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between flex-wrap gap-2 bg-slate-50/50 dark:bg-slate-800/20">
           <div className="flex items-center gap-2">
             <svg style={{ width: 16, height: 16 }} className="text-sky-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -3176,17 +3339,17 @@ export default function PowerDistribution() {
           </div>
           <div className="flex items-center gap-2">
             {loadingSld ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-500/10 text-sky-500 border border-sky-500/20 animate-pulse">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold font-mono bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 animate-pulse">
                 <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-ping" />
-                Memuat SLD Real-Time...
+                <span className="inline-flex items-center">POLLING<WaveDots /></span>
               </span>
             ) : (
               <>
                 <span
                   className="rounded-full"
-                  style={{ width: 6, height: 6, backgroundColor: "#10b981", boxShadow: "0 0 6px #10b981" }}
+                  style={{ width: 7, height: 7, backgroundColor: "#10b981", boxShadow: "0 0 6px #10b981" }}
                 />
-                <span className="text-[10px] font-bold text-slate-400">Real-time</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Real-time</span>
               </>
             )}
           </div>
@@ -3377,38 +3540,38 @@ export default function PowerDistribution() {
             <circle cx="925" cy="549" r="2.5" fill="#10b981" />
           </svg>
 
-          {/* 2. ABSOLUTE CARDS LAYOUT */}
+          {/* 2. ABSOLUTE CARDS LAYOUT (Uniform SLD Typography System) */}
           {/* Main PLN card at top left-center (Center X = 505) */}
           <div className="absolute z-30" style={{ left: 420, top: 14 }}>
             <div className={`text-center px-3 py-2 w-[170px] h-[96px] flex flex-col justify-center rounded-2xl border shadow-md transition duration-300 ${
-              incomingData.plnStatus === false
+              !loadingIncoming && incomingData.plnStatus === false
                 ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-white" : "bg-rose-50/95 border-rose-300 text-slate-800")
                 : (isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800")
             }`}>
-              <div className="text-xs leading-tight font-black text-blue-600 dark:text-blue-400 tracking-wide">PLN-21 kV</div>
-              <div className="text-[11px] leading-tight font-extrabold text-blue-700 dark:text-blue-300">5,540 kVa</div>
-              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                Active Power <br />
-                {loadingSld ? (
-                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+              <div className="text-[11px] leading-tight font-black uppercase tracking-wide text-blue-600 dark:text-blue-400">PLN-21 kV</div>
+              <div className="text-[10px] leading-tight font-bold text-blue-700 dark:text-blue-300">5.540 kVA</div>
+              <div className="mt-1">
+                <div className="text-[8.5px] leading-tight font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Active Power</div>
+                {loadingIncoming ? (
+                  <div className="h-3.5 w-20 bg-blue-500/20 dark:bg-blue-400/20 rounded animate-pulse mx-auto my-0.5" />
                 ) : incomingData.plnStatus === false ? (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[9px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[8.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                     OFF / MATI
                   </span>
                 ) : (
-                  <span className={`font-extrabold ${incomingData.plnKw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
-                    {incomingData.plnKw !== null ? `${incomingData.plnKw.toLocaleString("id-ID")} kW` : NO_REALTIME_API}
-                  </span>
+                  <div className={`leading-tight ${incomingData.plnKw !== null ? "text-[12px] font-extrabold font-mono text-slate-900 dark:text-white" : "text-[8px] font-bold text-amber-500"}`}>
+                    {incomingData.plnKw !== null ? `${incomingData.plnKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
+                  </div>
                 )}
               </div>
-              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                PF : {loadingSld ? (
-                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                PF: {loadingIncoming ? (
+                  <span className="inline-block h-2.5 w-9 bg-blue-500/20 dark:bg-blue-400/20 rounded animate-pulse align-middle" />
                 ) : incomingData.plnStatus === false ? (
                   <span className="font-extrabold font-mono text-rose-500 dark:text-rose-400">OFF</span>
                 ) : (
-                  <span className={`font-bold ${incomingData.plnPf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
+                  <span className={`${incomingData.plnPf !== null ? "font-bold font-mono text-slate-700 dark:text-slate-200" : "text-[8px] font-bold text-amber-500"}`}>
                     {decodePf(incomingData.plnPf) !== null ? decodePf(incomingData.plnPf)!.toFixed(3) : NO_REALTIME_API}
                   </span>
                 )}
@@ -3419,28 +3582,28 @@ export default function PowerDistribution() {
           {/* Total Solar PV card at top right-center (Center X = 695) */}
           <div className="absolute z-30" style={{ left: 610, top: 14 }}>
             <div className={`text-center px-3 py-2 w-[170px] h-[96px] flex flex-col justify-center rounded-2xl border shadow-md transition duration-300 ${
-              isAllSolarOff
+              !loadingSolar && isAllSolarOff
                 ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-orange-100" : "bg-rose-50/95 border-rose-300 text-slate-800")
                 : (isDark ? "bg-orange-950/35 border-orange-500/40 text-orange-100" : "bg-orange-50/95 border-orange-300 text-slate-800")
             }`}>
-              <div className="text-xs leading-tight font-black text-orange-600 dark:text-orange-400 tracking-wide">TOTAL SOLAR PV</div>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-700 dark:text-orange-300">POI-1 + POI-2</div>
-              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                Active Power <br />
-                {loadingSld ? (
-                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+              <div className="text-[11px] leading-tight font-black uppercase tracking-wide text-orange-600 dark:text-orange-400">TOTAL SOLAR PV</div>
+              <div className="text-[10px] leading-tight font-bold text-orange-700 dark:text-orange-300">POI-1 + POI-2</div>
+              <div className="mt-1">
+                <div className="text-[8.5px] leading-tight font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Active Power</div>
+                {loadingSolar ? (
+                  <div className="h-3.5 w-20 bg-orange-500/20 dark:bg-orange-400/20 rounded animate-pulse mx-auto my-0.5" />
                 ) : isAllSolarOff ? (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[9px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[8.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                     OFF / MATI
                   </span>
                 ) : (
                   <>
-                    <span className={`text-[11px] font-extrabold ${totalSolarKw !== null ? "font-mono text-slate-800 dark:text-slate-100" : "text-[7px] text-amber-500"}`}>
+                    <div className={`leading-tight ${totalSolarKw !== null ? "text-[12px] font-extrabold font-mono text-slate-900 dark:text-white" : "text-[8px] font-bold text-amber-500"}`}>
                       {totalSolarKw !== null ? `${totalSolarKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
-                    </span>
+                    </div>
                     {(isPoi1Off || isPoi2Off) && (
-                      <div className="text-[7px] font-extrabold text-rose-500 dark:text-rose-400 leading-tight mt-0.5">
+                      <div className="text-[8px] font-extrabold text-rose-500 dark:text-rose-400 leading-tight mt-0.5">
                         {isPoi1Off ? "● POI-1 OFF / MATI" : "● POI-2 OFF / MATI"}
                       </div>
                     )}
@@ -3456,44 +3619,44 @@ export default function PowerDistribution() {
             <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
             }`}>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Genset</div>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Natural Gas</div>
-              <div className="text-[10px] leading-tight font-bold text-slate-600 dark:text-slate-300 mt-0.5">1350 kVa</div>
-              <div className="text-[7.5px] leading-tight text-amber-500 mt-1 font-bold">{NO_REALTIME_API}</div>
+              <div className="text-[11px] leading-tight font-black uppercase tracking-wide text-orange-600 dark:text-orange-400">Genset</div>
+              <div className="text-[10px] leading-tight font-bold text-orange-700 dark:text-orange-300">Natural Gas</div>
+              <div className="text-[10px] leading-tight font-bold font-mono text-slate-700 dark:text-slate-300 mt-0.5">1.350 kVA</div>
+              <div className="text-[8px] leading-tight text-amber-500 mt-1 font-bold">{NO_REALTIME_API}</div>
             </div>
           </div>
 
           {/* 2. Incoming Fact-1 (Center F1, Center = 275) */}
           <div className="absolute z-30" style={{ left: 205, top: 150 }}>
             <div className={`px-2.5 py-1.5 w-[140px] h-[96px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              incomingData.wf1Status === false
+              !loadingIncoming && incomingData.wf1Status === false
                 ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-white" : "bg-rose-50/95 border-rose-300 text-slate-800")
                 : (isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800")
             }`}>
-              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Incoming</div>
-              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Fact-1</div>
-              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                Active Power <br />
-                {loadingSld ? (
-                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+              <div className="text-[11px] leading-tight font-black uppercase tracking-wide text-blue-600 dark:text-blue-400">Incoming</div>
+              <div className="text-[10px] leading-tight font-bold text-blue-700 dark:text-blue-300">Fact-1</div>
+              <div className="mt-1">
+                <div className="text-[8.5px] leading-tight font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Active Power</div>
+                {loadingIncoming ? (
+                  <div className="h-3.5 w-16 bg-blue-500/20 dark:bg-blue-400/20 rounded animate-pulse mx-auto my-0.5" />
                 ) : incomingData.wf1Status === false ? (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[8.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                     OFF / MATI
                   </span>
                 ) : (
-                  <span className={`font-extrabold ${incomingData.wf1Kw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
-                    {incomingData.wf1Kw !== null ? `${incomingData.wf1Kw.toLocaleString("id-ID")} kW` : NO_REALTIME_API}
-                  </span>
+                  <div className={`leading-tight ${incomingData.wf1Kw !== null ? "text-[12px] font-extrabold font-mono text-slate-900 dark:text-white" : "text-[8px] font-bold text-amber-500"}`}>
+                    {incomingData.wf1Kw !== null ? `${incomingData.wf1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
+                  </div>
                 )}
               </div>
-              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                PF : {loadingSld ? (
-                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                PF: {loadingIncoming ? (
+                  <span className="inline-block h-2.5 w-9 bg-blue-500/20 dark:bg-blue-400/20 rounded animate-pulse align-middle" />
                 ) : incomingData.wf1Status === false ? (
                   <span className="font-extrabold font-mono text-rose-500 dark:text-rose-400">OFF</span>
                 ) : (
-                  <span className={`font-bold ${incomingData.wf1Pf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
+                  <span className={`${incomingData.wf1Pf !== null ? "font-bold font-mono text-slate-700 dark:text-slate-200" : "text-[8px] font-bold text-amber-500"}`}>
                     {incomingData.wf1Pf !== null ? incomingData.wf1Pf.toFixed(3) : NO_REALTIME_API}
                   </span>
                 )}
@@ -3504,35 +3667,35 @@ export default function PowerDistribution() {
           {/* 3. Solar PV POI-1 (Inner Left, Center = 445) */}
           <div className="absolute z-30" style={{ left: 380, top: 152 }}>
             <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isPoi1Off
+              !loadingSolar && isPoi1Off
                 ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-orange-200" : "bg-rose-50/95 border-rose-300 text-slate-800")
                 : (isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800")
             }`}>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">POI-1</div>
-              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                Active Power <br />
-                {loadingSld ? (
-                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+              <div className="text-[11px] leading-tight font-black uppercase tracking-wide text-orange-600 dark:text-orange-400">Solar PV</div>
+              <div className="text-[10px] leading-tight font-bold text-orange-700 dark:text-orange-300">POI-1</div>
+              <div className="mt-1">
+                <div className="text-[8.5px] leading-tight font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Active Power</div>
+                {loadingSolar ? (
+                  <div className="h-3.5 w-16 bg-orange-500/20 dark:bg-orange-400/20 rounded animate-pulse mx-auto my-0.5" />
                 ) : isPoi1Off ? (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[8.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                     OFF / MATI
                   </span>
                 ) : (
-                  <span className={`font-extrabold ${solarData.poi1Kw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
+                  <div className={`leading-tight ${solarData.poi1Kw !== null ? "text-[12px] font-extrabold font-mono text-slate-900 dark:text-white" : "text-[8px] font-bold text-amber-500"}`}>
                     {solarData.poi1Kw !== null ? `${solarData.poi1Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
-                  </span>
+                  </div>
                 )}
               </div>
-              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                PF : {loadingSld ? (
-                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                PF: {loadingSolar ? (
+                  <span className="inline-block h-2.5 w-9 bg-orange-500/20 dark:bg-orange-400/20 rounded animate-pulse align-middle" />
                 ) : isPoi1Off ? (
                   <span className="font-extrabold font-mono text-rose-500 dark:text-rose-400">OFF</span>
                 ) : (
-                  <span className={`font-bold ${solarData.poi1Pf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
-                    {solarData.poi1Pf !== null ? solarData.poi1Pf.toFixed(2) : NO_REALTIME_API}
+                  <span className={`${solarData.poi1Pf !== null ? "font-bold font-mono text-slate-700 dark:text-slate-200" : "text-[8px] font-bold text-amber-500"}`}>
+                    {solarData.poi1Pf !== null ? solarData.poi1Pf.toFixed(3) : NO_REALTIME_API}
                   </span>
                 )}
               </div>
@@ -3543,34 +3706,34 @@ export default function PowerDistribution() {
           {/* 1. Incoming Fact-2 (Left F2, Center = 760) */}
           <div className="absolute z-30" style={{ left: 690, top: 150 }}>
             <div className={`px-2.5 py-1.5 w-[140px] h-[96px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              incomingData.wf2Status === false
+              !loadingIncoming && incomingData.wf2Status === false
                 ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-white" : "bg-rose-50/95 border-rose-300 text-slate-800")
                 : (isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800")
             }`}>
-              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Incoming</div>
-              <div className="text-[11px] leading-tight font-black text-blue-600 dark:text-blue-400">Fact-2</div>
-              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                Active Power <br />
-                {loadingSld ? (
-                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+              <div className="text-[11px] leading-tight font-black uppercase tracking-wide text-blue-600 dark:text-blue-400">Incoming</div>
+              <div className="text-[10px] leading-tight font-bold text-blue-700 dark:text-blue-300">Fact-2</div>
+              <div className="mt-1">
+                <div className="text-[8.5px] leading-tight font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Active Power</div>
+                {loadingIncoming ? (
+                  <div className="h-3.5 w-16 bg-blue-500/20 dark:bg-blue-400/20 rounded animate-pulse mx-auto my-0.5" />
                 ) : incomingData.wf2Status === false ? (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[8.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                     OFF / MATI
                   </span>
                 ) : (
-                  <span className={`font-extrabold ${incomingData.wf2Kw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
-                    {incomingData.wf2Kw !== null ? `${incomingData.wf2Kw.toLocaleString("id-ID")} kW` : NO_REALTIME_API}
-                  </span>
+                  <div className={`leading-tight ${incomingData.wf2Kw !== null ? "text-[12px] font-extrabold font-mono text-slate-900 dark:text-white" : "text-[8px] font-bold text-amber-500"}`}>
+                    {incomingData.wf2Kw !== null ? `${incomingData.wf2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
+                  </div>
                 )}
               </div>
-              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                PF : {loadingSld ? (
-                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                PF: {loadingIncoming ? (
+                  <span className="inline-block h-2.5 w-9 bg-blue-500/20 dark:bg-blue-400/20 rounded animate-pulse align-middle" />
                 ) : incomingData.wf2Status === false ? (
                   <span className="font-extrabold font-mono text-rose-500 dark:text-rose-400">OFF</span>
                 ) : (
-                  <span className={`font-bold ${incomingData.wf2Pf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
+                  <span className={`${incomingData.wf2Pf !== null ? "font-bold font-mono text-slate-700 dark:text-slate-200" : "text-[8px] font-bold text-amber-500"}`}>
                     {incomingData.wf2Pf !== null ? incomingData.wf2Pf.toFixed(3) : NO_REALTIME_API}
                   </span>
                 )}
@@ -3581,35 +3744,35 @@ export default function PowerDistribution() {
           {/* 2. Solar PV POI-2 (Center F2, Center = 930) */}
           <div className="absolute z-30" style={{ left: 865, top: 152 }}>
             <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
-              isPoi2Off
+              !loadingSolar && isPoi2Off
                 ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-orange-200" : "bg-rose-50/95 border-rose-300 text-slate-800")
                 : (isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800")
             }`}>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Solar PV</div>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">POI-2</div>
-              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                Active Power <br />
-                {loadingSld ? (
-                  <span className="inline-block h-3 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse my-0.5" />
+              <div className="text-[11px] leading-tight font-black uppercase tracking-wide text-orange-600 dark:text-orange-400">Solar PV</div>
+              <div className="text-[10px] leading-tight font-bold text-orange-700 dark:text-orange-300">POI-2</div>
+              <div className="mt-1">
+                <div className="text-[8.5px] leading-tight font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Active Power</div>
+                {loadingSolar ? (
+                  <div className="h-3.5 w-16 bg-orange-500/20 dark:bg-orange-400/20 rounded animate-pulse mx-auto my-0.5" />
                 ) : isPoi2Off ? (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[8.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 my-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                     OFF / MATI
                   </span>
                 ) : (
-                  <span className={`font-extrabold ${solarData.poi2Kw !== null ? "font-mono text-slate-800 dark:text-slate-200" : "text-[7px] text-amber-500"}`}>
+                  <div className={`leading-tight ${solarData.poi2Kw !== null ? "text-[12px] font-extrabold font-mono text-slate-900 dark:text-white" : "text-[8px] font-bold text-amber-500"}`}>
                     {solarData.poi2Kw !== null ? `${solarData.poi2Kw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
-                  </span>
+                  </div>
                 )}
               </div>
-              <div className="text-[8px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                PF : {loadingSld ? (
-                  <span className="inline-block h-2.5 w-8 bg-slate-300 dark:bg-slate-700 rounded animate-pulse align-middle" />
+              <div className="text-[9px] leading-tight font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                PF: {loadingSolar ? (
+                  <span className="inline-block h-2.5 w-9 bg-orange-500/20 dark:bg-orange-400/20 rounded animate-pulse align-middle" />
                 ) : isPoi2Off ? (
                   <span className="font-extrabold font-mono text-rose-500 dark:text-rose-400">OFF</span>
                 ) : (
-                  <span className={`font-bold ${solarData.poi2Pf !== null ? "font-mono" : "text-[7px] text-amber-500"}`}>
-                    {solarData.poi2Pf !== null ? solarData.poi2Pf.toFixed(2) : NO_REALTIME_API}
+                  <span className={`${solarData.poi2Pf !== null ? "font-bold font-mono text-slate-700 dark:text-slate-200" : "text-[8px] font-bold text-amber-500"}`}>
+                    {solarData.poi2Pf !== null ? solarData.poi2Pf.toFixed(3) : NO_REALTIME_API}
                   </span>
                 )}
               </div>
@@ -3621,66 +3784,62 @@ export default function PowerDistribution() {
             <div className={`px-2.5 py-1.5 w-[130px] h-[90px] flex flex-col justify-center text-center rounded-2xl border shadow-sm transition duration-300 ${
               isDark ? "bg-orange-950/30 border-orange-500/30 text-orange-200" : "bg-orange-50/90 border-orange-200 text-slate-800"
             }`}>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Genset</div>
-              <div className="text-[10px] leading-tight font-extrabold text-orange-600 dark:text-orange-400">Diesel Fuel</div>
-              <div className="text-[10px] leading-tight font-bold text-slate-600 dark:text-slate-300 mt-0.5">1000 kVa</div>
-              <div className="text-[7.5px] leading-tight text-amber-500 mt-1 font-bold">{NO_REALTIME_API}</div>
+              <div className="text-[11px] leading-tight font-black uppercase tracking-wide text-orange-600 dark:text-orange-400">Genset</div>
+              <div className="text-[10px] leading-tight font-bold text-orange-700 dark:text-orange-300">Diesel Fuel</div>
+              <div className="text-[10px] leading-tight font-bold font-mono text-slate-700 dark:text-slate-300 mt-0.5">1.000 kVA</div>
+              <div className="text-[8px] leading-tight text-amber-500 mt-1 font-bold">{NO_REALTIME_API}</div>
             </div>
           </div>
 
           {/* ═══════════ FACTORY 1 TRANSFORMER CARDS (4 Units: Centers 110, 220, 330, 440) ═══════════ */}
           {factory1.map((tx, idx) => {
             const cardLeft = 63 + idx * 110;
-            const isPmOff = tx.pmStatus === false;
-            const hasData = !isPmOff && tx.activePowerKw !== null;
+            const isPmOff = !loadingTrafos && tx.pmStatus === false;
+            const hasData = !loadingTrafos && !isPmOff && tx.activePowerKw !== null;
             return (
               <div key={tx.id} className="absolute z-30" style={{ left: cardLeft, top: 360, width: 94 }}>
                 <div
                   onClick={() => setSelectedTx(tx)}
-                  className={`rounded-2xl border p-2.5 h-[118px] flex flex-col justify-between text-center cursor-pointer transition-all duration-300 hover:shadow-lg ${
+                  className={`rounded-2xl border p-2.5 h-[118px] flex flex-col justify-between text-center cursor-pointer transition-all duration-300 hover:shadow-lg hover:border-sky-400 ${
                     isPmOff
                       ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-slate-200" : "bg-rose-50/90 border-rose-300 text-slate-800")
-                      : idx === 0
-                        ? "bg-slate-900 border-slate-700 text-white"
-                        : isDark
-                          ? "bg-slate-800/80 border-slate-700 text-slate-200"
-                          : "bg-slate-100/90 border-slate-300 text-slate-800"
+                      : (isDark ? "bg-slate-800/85 border-slate-700 text-slate-200" : "bg-slate-50/95 border-slate-300 text-slate-800")
                   }`}
                 >
                   <div>
-                    <div className={`text-[11px] font-black leading-tight ${idx === 0 && !isPmOff ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
-                      {tx.capacityKva} kVa
+                    <div className="text-[11px] font-black leading-tight text-slate-800 dark:text-white">
+                      {tx.capacityKva.toLocaleString("id-ID")} kVA
                     </div>
-                    <div className={`text-[9px] font-black tracking-wider uppercase leading-tight ${idx === 0 && !isPmOff ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
+                    <div className="text-[10px] font-bold tracking-wide uppercase leading-tight text-blue-600 dark:text-sky-400">
                       {tx.name}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[8px] text-slate-400 font-semibold leading-tight">Active Power</div>
-                    {loadingSld ? (
+                    <div className="text-[8.5px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wide leading-tight">Active Power</div>
+                    {loadingTrafos ? (
                       <div className="my-0.5 space-y-1">
-                        <div className="h-3 w-14 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
-                        <div className="h-2 w-10 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                        <div className="h-3.5 w-14 bg-blue-500/20 dark:bg-blue-400/20 rounded animate-pulse mx-auto" />
+                        <div className="h-2.5 w-11 bg-slate-300/70 dark:bg-slate-700 rounded animate-pulse mx-auto" />
                       </div>
                     ) : isPmOff ? (
                       <>
                         <div className="my-0.5">
-                          <span className="inline-flex items-center gap-1 px-1 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[7.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 leading-none">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[8px] font-extrabold font-mono text-rose-600 dark:text-rose-400 leading-none">
                             <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                             OFF / MATI
                           </span>
                         </div>
-                        <div className="text-[8px] text-slate-400 leading-tight">
+                        <div className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold leading-tight">
                           PF: <span className="font-extrabold font-mono text-rose-500">OFF</span>
                         </div>
                       </>
                     ) : (
                       <>
-                        <div className={`${hasData ? `text-[11px] font-mono ${idx === 0 ? "text-sky-400" : "text-slate-800 dark:text-slate-100"}` : "text-[7px] text-amber-500 leading-tight"} font-extrabold`}>
-                          {hasData ? `${tx.activePowerKw} kW` : NO_REALTIME_API}
+                        <div className={`leading-tight ${hasData ? "text-[12px] font-extrabold font-mono text-slate-900 dark:text-white" : "text-[8px] font-bold text-amber-500"}`}>
+                          {hasData ? `${tx.activePowerKw!.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
                         </div>
-                        <div className="text-[8px] text-slate-400 leading-tight">
-                          PF: <span className={`font-bold ${tx.powerFactor === null ? "text-[6.5px] text-amber-500" : ""}`}>{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API}</span>
+                        <div className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold leading-tight mt-0.5">
+                          PF: <span className={`${tx.powerFactor !== null ? "font-bold font-mono text-slate-700 dark:text-slate-200" : "text-[8px] font-bold text-amber-500"}`}>{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API}</span>
                         </div>
                       </>
                     )}
@@ -3698,23 +3857,27 @@ export default function PowerDistribution() {
                         : "#f59e0b";
                     return (
                       <div className="pt-1 border-t border-slate-200 dark:border-slate-700/60">
-                        <div className="text-[7px] font-extrabold text-center leading-tight" style={{ color: txLoadColor }}>
-                          {loadingSld ? "..." : isPmOff ? "LOAD: OFF" : (txLoadPct !== null ? `LOAD: ${txLoadPct}%` : `LOAD: ${NO_REALTIME_API}`)}
-                        </div>
+                        {loadingTrafos ? (
+                          <div className="h-2.5 w-12 bg-slate-300/70 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                        ) : (
+                          <div className="text-[8.5px] font-extrabold font-mono uppercase tracking-wide text-center leading-tight" style={{ color: txLoadColor }}>
+                            {isPmOff ? "LOAD: OFF" : (txLoadPct !== null ? `LOAD: ${txLoadPct}%` : `LOAD: ${NO_REALTIME_API}`)}
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
                 </div>
 
                 {/* 400V/230V Label Box */}
-                <div className="mt-1.5 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-700 dark:text-slate-300 tracking-wider">
+                <div className="mt-1.5 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/80 dark:bg-slate-800 text-[8.5px] font-bold font-mono text-slate-700 dark:text-slate-300 tracking-wider">
                   400V/230V
                 </div>
 
                 {/* Detail Button */}
                 <button
                   onClick={() => setSelectedTx(tx)}
-                  className="w-full mt-1.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-300/80 hover:bg-sky-500 hover:text-white dark:bg-slate-700 dark:hover:bg-sky-600 text-[9px] font-extrabold text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
+                  className="w-full mt-1.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-300/80 hover:bg-sky-500 hover:text-white dark:bg-slate-700 dark:hover:bg-sky-600 text-[9.5px] font-extrabold text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
                 >
                   Detail
                 </button>
@@ -3725,56 +3888,52 @@ export default function PowerDistribution() {
           {/* ═══════════ FACTORY 2 TRANSFORMER CARDS (3 Units: Centers 800, 925, 1050) ═══════════ */}
           {factory2.map((tx, idx) => {
             const cardLeft = 750 + idx * 125;
-            const isPmOff = tx.pmStatus === false;
-            const hasData = !isPmOff && tx.activePowerKw !== null;
+            const isPmOff = !loadingTrafos && tx.pmStatus === false;
+            const hasData = !loadingTrafos && !isPmOff && tx.activePowerKw !== null;
             return (
               <div key={tx.id} className="absolute z-30" style={{ left: cardLeft, top: 360, width: 100 }}>
                 <div
                   onClick={() => setSelectedTx(tx)}
-                  className={`rounded-2xl border p-2.5 h-[118px] flex flex-col justify-between text-center cursor-pointer transition-all duration-300 hover:shadow-lg ${
+                  className={`rounded-2xl border p-2.5 h-[118px] flex flex-col justify-between text-center cursor-pointer transition-all duration-300 hover:shadow-lg hover:border-emerald-400 ${
                     isPmOff
                       ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-slate-200" : "bg-rose-50/90 border-rose-300 text-slate-800")
-                      : idx === 0
-                        ? "bg-slate-900 border-slate-700 text-white"
-                        : isDark
-                          ? "bg-slate-800/80 border-slate-700 text-slate-200"
-                          : "bg-slate-100/90 border-slate-300 text-slate-800"
+                      : (isDark ? "bg-slate-800/85 border-slate-700 text-slate-200" : "bg-slate-50/95 border-slate-300 text-slate-800")
                   }`}
                 >
                   <div>
-                    <div className={`text-[11px] font-black leading-tight ${idx === 0 && !isPmOff ? "text-slate-200" : "text-slate-800 dark:text-white"}`}>
-                      {tx.capacityKva} kVa
+                    <div className="text-[11px] font-black leading-tight text-slate-800 dark:text-white">
+                      {tx.capacityKva.toLocaleString("id-ID")} kVA
                     </div>
-                    <div className={`text-[9px] font-black tracking-wider uppercase leading-tight ${idx === 0 && !isPmOff ? "text-slate-300" : "text-slate-600 dark:text-slate-400"}`}>
+                    <div className="text-[10px] font-bold tracking-wide uppercase leading-tight text-emerald-600 dark:text-emerald-400">
                       {tx.name}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[8px] text-slate-400 font-semibold leading-tight">Active Power</div>
-                    {loadingSld ? (
+                    <div className="text-[8.5px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wide leading-tight">Active Power</div>
+                    {loadingTrafos ? (
                       <div className="my-0.5 space-y-1">
-                        <div className="h-3 w-14 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
-                        <div className="h-2 w-10 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                        <div className="h-3.5 w-14 bg-emerald-500/20 dark:bg-emerald-400/20 rounded animate-pulse mx-auto" />
+                        <div className="h-2.5 w-11 bg-slate-300/70 dark:bg-slate-700 rounded animate-pulse mx-auto" />
                       </div>
                     ) : isPmOff ? (
                       <>
                         <div className="my-0.5">
-                          <span className="inline-flex items-center gap-1 px-1 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[7.5px] font-extrabold font-mono text-rose-600 dark:text-rose-400 leading-none">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-[8px] font-extrabold font-mono text-rose-600 dark:text-rose-400 leading-none">
                             <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                             OFF / MATI
                           </span>
                         </div>
-                        <div className="text-[8px] text-slate-400 leading-tight">
+                        <div className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold leading-tight">
                           PF: <span className="font-extrabold font-mono text-rose-500">OFF</span>
                         </div>
                       </>
                     ) : (
                       <>
-                        <div className={`${hasData ? `text-[11px] font-mono ${idx === 0 ? "text-emerald-400" : "text-slate-800 dark:text-slate-100"}` : "text-[7px] text-amber-500 leading-tight"} font-extrabold`}>
-                          {hasData ? `${tx.activePowerKw} kW` : NO_REALTIME_API}
+                        <div className={`leading-tight ${hasData ? "text-[12px] font-extrabold font-mono text-slate-900 dark:text-white" : "text-[8px] font-bold text-amber-500"}`}>
+                          {hasData ? `${tx.activePowerKw!.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
                         </div>
-                        <div className="text-[8px] text-slate-400 leading-tight">
-                          PF: <span className={`font-bold ${tx.powerFactor === null ? "text-[6.5px] text-amber-500" : ""}`}>{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API}</span>
+                        <div className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold leading-tight mt-0.5">
+                          PF: <span className={`${tx.powerFactor !== null ? "font-bold font-mono text-slate-700 dark:text-slate-200" : "text-[8px] font-bold text-amber-500"}`}>{tx.powerFactor !== null ? Math.abs(tx.powerFactor).toFixed(3) : NO_REALTIME_API}</span>
                         </div>
                       </>
                     )}
@@ -3792,23 +3951,27 @@ export default function PowerDistribution() {
                         : "#f59e0b";
                     return (
                       <div className="pt-1 border-t border-slate-200 dark:border-slate-700/60">
-                        <div className="text-[7px] font-extrabold text-center leading-tight" style={{ color: txLoadColor }}>
-                          {loadingSld ? "..." : isPmOff ? "LOAD: OFF" : (txLoadPct !== null ? `LOAD: ${txLoadPct}%` : `LOAD: ${NO_REALTIME_API}`)}
-                        </div>
+                        {loadingTrafos ? (
+                          <div className="h-2.5 w-12 bg-slate-300/70 dark:bg-slate-700 rounded animate-pulse mx-auto" />
+                        ) : (
+                          <div className="text-[8.5px] font-extrabold font-mono uppercase tracking-wide text-center leading-tight" style={{ color: txLoadColor }}>
+                            {isPmOff ? "LOAD: OFF" : (txLoadPct !== null ? `LOAD: ${txLoadPct}%` : `LOAD: ${NO_REALTIME_API}`)}
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
                 </div>
 
                 {/* 400V/230V Label Box */}
-                <div className="mt-1.5 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-700 dark:text-slate-300 tracking-wider">
+                <div className="mt-1.5 text-center py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200/80 dark:bg-slate-800 text-[8.5px] font-bold font-mono text-slate-700 dark:text-slate-300 tracking-wider">
                   400V/230V
                 </div>
 
                 {/* Detail Button */}
                 <button
                   onClick={() => setSelectedTx(tx)}
-                  className="w-full mt-1.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-300/80 hover:bg-sky-500 hover:text-white dark:bg-slate-700 dark:hover:bg-sky-600 text-[9px] font-extrabold text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
+                  className="w-full mt-1.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-300/80 hover:bg-sky-500 hover:text-white dark:bg-slate-700 dark:hover:bg-sky-600 text-[9.5px] font-extrabold text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
                 >
                   Detail
                 </button>
@@ -3819,36 +3982,36 @@ export default function PowerDistribution() {
           {/* ═══════════ TOTAL MDP SUMMARY CARD (Factory 1: MDP-1.1, MDP-1.2, MDP-2, MDP-3) ═══════════ */}
           <div className="absolute z-30" style={{ left: 63, top: 560, width: 424 }}>
             <div className={`px-4 h-[52px] rounded-2xl border shadow-sm flex items-center justify-between transition duration-300 ${
-              isAllF1Off
+              !loadingTrafos && isAllF1Off
                 ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-white" : "bg-rose-50/90 border-rose-300 text-slate-800")
                 : (isDark ? "bg-blue-950/40 border-blue-500/40 text-white" : "bg-blue-50/90 border-blue-300 text-slate-800")
             }`}>
               <div className="min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                <div className="text-[11px] font-black uppercase tracking-wide text-blue-600 dark:text-blue-400 whitespace-nowrap">
                   TOTAL MDP (Factory 1)
                 </div>
-                <div className="text-[8.5px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                   MDP-1.1 • MDP-1.2 • MDP-2 • MDP-3
                 </div>
               </div>
               <div className="flex items-center gap-4 text-right shrink-0">
                 <div>
-                  <div className="text-[8px] font-bold uppercase text-slate-400 whitespace-nowrap">Total Kapasitas</div>
-                  <div className="text-xs font-black font-mono text-blue-700 dark:text-blue-300 whitespace-nowrap">
+                  <div className="text-[8.5px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 whitespace-nowrap">Total Kapasitas</div>
+                  <div className="text-[12px] font-black font-mono text-blue-700 dark:text-blue-300 whitespace-nowrap">
                     {f1TotalCapacityKva.toLocaleString("id-ID")} kVA
                   </div>
                 </div>
                 <div className="pl-3 border-l border-blue-200 dark:border-blue-800/60">
-                  <div className="text-[8px] font-bold uppercase text-slate-400 whitespace-nowrap">Total Active Power</div>
-                  {loadingSld ? (
-                    <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mt-0.5" />
+                  <div className="text-[8.5px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 whitespace-nowrap">Total Active Power</div>
+                  {loadingTrafos ? (
+                    <span className="inline-block h-3.5 w-16 bg-blue-500/20 dark:bg-blue-400/20 rounded animate-pulse mt-0.5" />
                   ) : isAllF1Off ? (
                     <div className="inline-flex items-center gap-1 text-[10px] font-extrabold font-mono text-rose-500 whitespace-nowrap">
                       <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                       OFF / MATI
                     </div>
                   ) : (
-                    <div className={`text-xs font-extrabold whitespace-nowrap ${f1TotalKw !== null ? "font-mono text-sky-600 dark:text-sky-400" : "text-[8px] text-amber-500"}`}>
+                    <div className={`whitespace-nowrap ${f1TotalKw !== null ? "text-[12px] font-black font-mono text-blue-700 dark:text-sky-400" : "text-[8px] font-bold text-amber-500"}`}>
                       {f1TotalKw !== null ? `${f1TotalKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
                     </div>
                   )}
@@ -3860,36 +4023,36 @@ export default function PowerDistribution() {
           {/* ═══════════ TOTAL PUTR SUMMARY CARD (Factory 2: PUTR-1, PUTR-2, PUTR-NEW) ═══════════ */}
           <div className="absolute z-30" style={{ left: 750, top: 560, width: 350 }}>
             <div className={`px-3.5 h-[52px] rounded-2xl border shadow-sm flex items-center justify-between transition duration-300 ${
-              isAllF2Off
+              !loadingTrafos && isAllF2Off
                 ? (isDark ? "bg-rose-950/35 border-rose-500/50 text-white" : "bg-rose-50/90 border-rose-300 text-slate-800")
                 : (isDark ? "bg-emerald-950/35 border-emerald-500/40 text-white" : "bg-emerald-50/90 border-emerald-300 text-slate-800")
             }`}>
               <div className="min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                <div className="text-[11px] font-black uppercase tracking-wide text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                   TOTAL PUTR (Factory 2)
                 </div>
-                <div className="text-[8.5px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                   PUTR-1 • PUTR-2 • PUTR-NEW
                 </div>
               </div>
               <div className="flex items-center gap-3 text-right shrink-0">
                 <div>
-                  <div className="text-[8px] font-bold uppercase text-slate-400 whitespace-nowrap">Total Kapasitas</div>
-                  <div className="text-xs font-black font-mono text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                  <div className="text-[8.5px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 whitespace-nowrap">Total Kapasitas</div>
+                  <div className="text-[12px] font-black font-mono text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
                     {f2TotalCapacityKva.toLocaleString("id-ID")} kVA
                   </div>
                 </div>
                 <div className="pl-3 border-l border-emerald-200 dark:border-emerald-800/60">
-                  <div className="text-[8px] font-bold uppercase text-slate-400 whitespace-nowrap">Total Active Power</div>
-                  {loadingSld ? (
-                    <span className="inline-block h-3.5 w-16 bg-slate-300 dark:bg-slate-700 rounded animate-pulse mt-0.5" />
+                  <div className="text-[8.5px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 whitespace-nowrap">Total Active Power</div>
+                  {loadingTrafos ? (
+                    <span className="inline-block h-3.5 w-16 bg-emerald-500/20 dark:bg-emerald-400/20 rounded animate-pulse mt-0.5" />
                   ) : isAllF2Off ? (
                     <div className="inline-flex items-center gap-1 text-[10px] font-extrabold font-mono text-rose-500 whitespace-nowrap">
                       <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                       OFF / MATI
                     </div>
                   ) : (
-                    <div className={`text-xs font-extrabold whitespace-nowrap ${f2TotalKw !== null ? "font-mono text-emerald-600 dark:text-emerald-400" : "text-[8px] text-amber-500"}`}>
+                    <div className={`whitespace-nowrap ${f2TotalKw !== null ? "text-[12px] font-black font-mono text-emerald-700 dark:text-emerald-400" : "text-[8px] font-bold text-amber-500"}`}>
                       {f2TotalKw !== null ? `${f2TotalKw.toLocaleString("id-ID", { maximumFractionDigits: 1 })} kW` : NO_REALTIME_API}
                     </div>
                   )}
@@ -3899,47 +4062,69 @@ export default function PowerDistribution() {
           </div>
 
           {/* Legend */}
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-4 text-[9px] font-bold text-slate-400 bg-slate-100/50 dark:bg-slate-900/50 px-4 py-1.5 rounded-full border border-slate-200/50 dark:border-slate-800/40 whitespace-nowrap">
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-4 text-[9px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100/70 dark:bg-slate-900/60 px-4 py-1.5 rounded-full border border-slate-200/60 dark:border-slate-800/50 whitespace-nowrap">
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Online</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500" /> PM Off / Mati</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> Warning</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-400" /> {NO_REALTIME_API}</span>
-            <span className="text-[8px] text-slate-500 italic ml-2">Klik panel / Detail untuk info lengkap</span>
+            <span className="text-[8.5px] text-slate-500 italic ml-2">Klik panel / Detail untuk info lengkap</span>
           </div>
         </SldScaledCanvas>
       </section>
 
-      {/* ═══════════ SECTION B: DETAIL TRANSFORMATOR CARDS (MDP) ═══════════ */}
+      {/* ═══════════ SECTION B: DETAIL TRANSFORMATOR CARDS (MAIN DISTRIBUTION) ═══════════ */}
       <section className="space-y-6">
-        <div className="flex items-center gap-2.5">
-          <svg style={{ width: 18, height: 18 }} className="text-sky-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-          <h3 className="text-sm font-extrabold text-slate-800 dark:text-white">
-            Detail Transformator — Parameter Lengkap
-          </h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <svg style={{ width: 18, height: 18 }} className="text-sky-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+            <h3 className="text-base font-extrabold tracking-tight text-slate-800 dark:text-white">
+              Detail Transformator — Parameter Lengkap
+            </h3>
+          </div>
+          {loadingTrafos && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold font-mono bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-ping" />
+              <span className="inline-flex items-center">POLLING<WaveDots /></span>
+            </span>
+          )}
         </div>
 
         {/* Factory 1 */}
         <div className="space-y-3">
-          <h4 className="text-xs font-extrabold text-[#47729f] dark:text-sky-400 uppercase tracking-widest pl-2">
+          <h4 className="text-xs font-extrabold text-[#47729f] dark:text-sky-400 uppercase tracking-wider pl-1">
             ● Factory 1 — {factory1.length} Transformator
           </h4>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {factory1.map((tx) => (
-              <TransformerDetailCard key={tx.id} tx={tx} factoryLabel="F1" loadConfig={loadConfig} />
+              <TransformerDetailCard
+                key={tx.id}
+                tx={tx}
+                factoryLabel="F1"
+                loadConfig={loadConfig}
+                isLoading={loadingTrafos}
+                isIncomingLoading={loadingIncoming}
+              />
             ))}
           </div>
         </div>
 
         {/* Factory 2 */}
         <div className="space-y-3">
-          <h4 className="text-xs font-extrabold text-[#47729f] dark:text-sky-400 uppercase tracking-widest pl-2">
+          <h4 className="text-xs font-extrabold text-[#47729f] dark:text-sky-400 uppercase tracking-wider pl-1">
             ● Factory 2 — {factory2.length} Transformator
           </h4>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {factory2.map((tx) => (
-              <TransformerDetailCard key={tx.id} tx={tx} factoryLabel="F2" loadConfig={loadConfig} />
+              <TransformerDetailCard
+                key={tx.id}
+                tx={tx}
+                factoryLabel="F2"
+                loadConfig={loadConfig}
+                isLoading={loadingTrafos}
+                isIncomingLoading={loadingIncoming}
+              />
             ))}
           </div>
         </div>
@@ -3950,7 +4135,7 @@ export default function PowerDistribution() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="text-base font-extrabold text-sky-500">⚡</span>
-            <h3 className="text-sm font-extrabold text-slate-800 dark:text-white">
+            <h3 className="text-base font-extrabold tracking-tight text-slate-800 dark:text-white">
               Sub-Distribution Power Meters Telemetry
             </h3>
           </div>
@@ -3959,10 +4144,15 @@ export default function PowerDistribution() {
             {(["ew23", "ew21", "ew22"] as const).map((grp) => (
               <button
                 key={grp}
-                onClick={() => { setSelectedEwGroup(grp); setEwPowerMeters([]); }}
-                className={`px-3 py-1 rounded-lg text-xs font-extrabold uppercase transition-all ${
+                onClick={() => {
+                  if (selectedEwGroup === grp) return;
+                  setSelectedEwGroup(grp);
+                  setEwPowerMeters([]);
+                  setLoadingEw(true);
+                }}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold uppercase transition-all cursor-pointer ${
                   selectedEwGroup === grp
-                    ? "bg-white dark:bg-slate-900 text-sky-500 shadow-sm"
+                    ? "bg-white dark:bg-slate-900 text-sky-600 dark:text-sky-400 shadow-sm"
                     : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
                 }`}
               >
@@ -3977,6 +4167,7 @@ export default function PowerDistribution() {
           isDark={isDark}
           groupId={selectedEwGroup}
           title={`Sub-Distribution ${selectedEwGroup.toUpperCase()}`}
+          isLoading={loadingEw}
         />
       </div>
 
@@ -4002,12 +4193,20 @@ export default function PowerDistribution() {
                 <option key={t.id} value={t.id}>{t.factory === 1 ? "F1" : "F2"} {t.name}</option>
               ))}
             </select>
-            <span className={`w-20 inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border transition-colors ${
-              bottomTx?.status === "online"
+            <span className={`min-w-[84px] inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold font-mono uppercase tracking-wider border transition-colors ${
+              loadingTrafos
+                ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20 animate-pulse"
+                : bottomTx?.status === "online"
                 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
                 : "bg-slate-500/10 text-slate-400 border-slate-500/20"
             }`}>
-              {bottomTx?.status === "online" ? "● ONLINE" : "OFFLINE"}
+              {loadingTrafos ? (
+                <span className="inline-flex items-center">POLLING<WaveDots /></span>
+              ) : bottomTx?.status === "online" ? (
+                "● ONLINE"
+              ) : (
+                "OFFLINE"
+              )}
             </span>
           </div>
         </div>
@@ -4016,19 +4215,24 @@ export default function PowerDistribution() {
         <div className="grid gap-6 grid-cols-1">
           {/* Voltage */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
-                <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   {t("electricity.voltageRecord")} {bottomVoltageMode === "380v" ? t("electricity.voltage380Label") : t("electricity.voltage230Label")}
                 </h4>
-                {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
+                {loadingBottomHistory && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-sky-600 dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md font-bold animate-pulse">
+                    <span className="h-1.5 w-1.5 rounded-full bg-sky-500 animate-ping" />
+                    <span className="inline-flex items-center">Memuat<WaveDots /></span>
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
                   <button
                     type="button"
                     onClick={() => setBottomVoltageMode("380v")}
-                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                    className={`px-2 py-0.5 text-[11px] font-bold rounded transition-all ${
                       bottomVoltageMode === "380v"
                         ? "bg-white dark:bg-slate-700 text-amber-500 shadow-sm"
                         : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -4039,7 +4243,7 @@ export default function PowerDistribution() {
                   <button
                     type="button"
                     onClick={() => setBottomVoltageMode("230v")}
-                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                    className={`px-2 py-0.5 text-[11px] font-bold rounded transition-all ${
                       bottomVoltageMode === "230v"
                         ? "bg-white dark:bg-slate-700 text-cyan-500 shadow-sm"
                         : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -4051,10 +4255,10 @@ export default function PowerDistribution() {
                 <button
                   type="button"
                   onClick={() => setBottomZoomChart("voltage")}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 transition cursor-pointer"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 transition cursor-pointer"
                   title={t("electricity.zoomVoltageChart")}
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
                   </svg>
                   <span>Perbesar</span>
@@ -4062,10 +4266,21 @@ export default function PowerDistribution() {
               </div>
             </div>
             <div className="h-[175px] w-full">
-              {bottomVoltageMode === "230v" && (bottomSeriesRef.current.vRn.length === 0 && bottomSeriesRef.current.vSn.length === 0) ? (
+              {loadingBottomHistory && bottomPointCount === 0 ? (
+                <div className="h-full w-full rounded-xl bg-white/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/70 p-4 flex flex-col justify-end gap-2.5 animate-pulse">
+                  <div className="flex items-end justify-between gap-2 h-24 px-2">
+                    {[48, 66, 58, 72, 64, 78, 60, 74, 68, 80, 62, 70, 56, 75].map((pct, i) => (
+                      <div key={i} className="flex-1 rounded-t-md bg-amber-500/15 dark:bg-amber-400/15" style={{ height: `${pct}%` }} />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-center text-xs font-bold text-amber-600/80 dark:text-amber-400/80">
+                    <span className="inline-flex items-center">Memuat riwayat tegangan<WaveDots /></span>
+                  </div>
+                </div>
+              ) : bottomVoltageMode === "230v" && (bottomSeriesRef.current.vRn.length === 0 && bottomSeriesRef.current.vSn.length === 0) ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-amber-500/30 bg-amber-500/5 rounded-xl">
                   <span className="text-xs font-extrabold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                     Tag tegangan 230V (L-N) belum tersedia dari API Power Meter ({bottomTx?.name}).
                   </p>
                 </div>
@@ -4080,7 +4295,7 @@ export default function PowerDistribution() {
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
                   <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Belum ada riwayat tegangan tersimpan hari ini.</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Belum ada riwayat tegangan tersimpan hari ini.</p>
                 </div>
               )}
             </div>
@@ -4088,17 +4303,24 @@ export default function PowerDistribution() {
 
           {/* Daya Aktif */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">{t("electricity.activePowerRecord")}</h4>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
-                {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
+                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("electricity.activePowerRecord")}</h4>
+                {loadingBottomHistory && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-sky-600 dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md font-bold animate-pulse">
+                    <span className="h-1.5 w-1.5 rounded-full bg-sky-500 animate-ping" />
+                    <span className="inline-flex items-center">Memuat<WaveDots /></span>
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setBottomZoomChart("power")}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold text-sky-600 dark:text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 transition cursor-pointer"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold text-sky-600 dark:text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 transition cursor-pointer"
                   title={t("electricity.zoomPowerChart")}
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
                   </svg>
                   <span>Perbesar</span>
@@ -4106,7 +4328,18 @@ export default function PowerDistribution() {
               </div>
             </div>
             <div className="h-[175px] w-full">
-              {bottomPointCount > 0 ? (
+              {loadingBottomHistory && bottomPointCount === 0 ? (
+                <div className="h-full w-full rounded-xl bg-white/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/70 p-4 flex flex-col justify-end gap-2.5 animate-pulse">
+                  <div className="flex items-end justify-between gap-2 h-24 px-2">
+                    {[38, 62, 54, 82, 68, 76, 48, 86, 72, 60, 78, 52, 66, 70].map((pct, i) => (
+                      <div key={i} className="flex-1 rounded-t-md bg-sky-500/15 dark:bg-sky-400/15" style={{ height: `${pct}%` }} />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-center text-xs font-bold text-sky-600/80 dark:text-sky-400/80">
+                    <span className="inline-flex items-center">Memuat riwayat daya aktif<WaveDots /></span>
+                  </div>
+                </div>
+              ) : bottomPointCount > 0 ? (
                 <TradingViewChart
                   data={powerTrendChart}
                   options={lineChartOptions}
@@ -4117,7 +4350,7 @@ export default function PowerDistribution() {
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
                   <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Belum ada riwayat daya aktif tersimpan hari ini.</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Belum ada riwayat daya aktif tersimpan hari ini.</p>
                 </div>
               )}
             </div>
@@ -4127,18 +4360,22 @@ export default function PowerDistribution() {
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
             <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="text-[11px] font-bold text-slate-600 dark:text-slate-400">{t("electricity.ampereRecord")}</h4>
-
+                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">{t("electricity.ampereRecord")}</h4>
+                {loadingBottomHistory && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-sky-600 dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-md font-bold animate-pulse">
+                    <span className="h-1.5 w-1.5 rounded-full bg-sky-500 animate-ping" />
+                    <span className="inline-flex items-center">Memuat<WaveDots /></span>
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2">
-                {loadingBottomHistory && <span className="text-[10px] text-sky-500 font-bold animate-pulse">Memuat...</span>}
                 <button
                   type="button"
                   onClick={() => setBottomZoomChart("current")}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 transition cursor-pointer"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 transition cursor-pointer"
                   title={t("electricity.zoomAmpereChart")}
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
                   </svg>
                   <span>Perbesar</span>
@@ -4146,7 +4383,18 @@ export default function PowerDistribution() {
               </div>
             </div>
             <div className="h-[180px] w-full">
-              {bottomPointCount > 0 ? (
+              {loadingBottomHistory && bottomPointCount === 0 ? (
+                <div className="h-full w-full rounded-xl bg-white/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/70 p-4 flex flex-col justify-end gap-2.5 animate-pulse">
+                  <div className="flex items-end justify-between gap-2 h-24 px-2">
+                    {[44, 60, 50, 74, 62, 82, 56, 70, 64, 78, 58, 68, 52, 72].map((pct, i) => (
+                      <div key={i} className="flex-1 rounded-t-md bg-purple-500/15 dark:bg-purple-400/15" style={{ height: `${pct}%` }} />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-center text-xs font-bold text-purple-600/80 dark:text-purple-400/80">
+                    <span className="inline-flex items-center">Memuat riwayat arus<WaveDots /></span>
+                  </div>
+                </div>
+              ) : bottomPointCount > 0 ? (
                 <TradingViewChart
                   data={currentTrendChart}
                   options={currentChartOptions}
@@ -4157,7 +4405,7 @@ export default function PowerDistribution() {
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
                   <span className="text-xs font-bold text-amber-500 dark:text-amber-400 font-mono tracking-wider">{NO_REALTIME_API}</span>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Belum ada riwayat arus tersimpan hari ini.</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Belum ada riwayat arus tersimpan hari ini.</p>
                 </div>
               )}
             </div>
@@ -4356,7 +4604,7 @@ export default function PowerDistribution() {
                 disabled={savingConfig}
                 className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold transition-colors shadow-md shadow-sky-500/20"
               >
-                {savingConfig ? "Saving..." : "💾 Simpan Config"}
+                {savingConfig ? <span className="inline-flex items-center">Menyimpan<WaveDots /></span> : "💾 Simpan Config"}
               </button>
             </div>
           </div>

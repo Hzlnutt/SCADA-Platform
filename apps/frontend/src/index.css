@@ -279,3 +279,41 @@ html.dark .scada-content {
 .scada-content .text-teal-200 {
   color: var(--scada-blue);
 }
+
+/* Smooth waving 3-dot loading animation for SCADA cards & badges */
+@keyframes scada-dot-wave {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.scada-wave-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.5px;
+  vertical-align: middle;
+}
+
+.scada-wave-dots > span {
+  display: inline-block;
+  width: 0.28em;
+  height: 0.28em;
+  min-width: 3px;
+  min-height: 3px;
+  border-radius: 9999px;
+  background-color: currentColor;
+  animation: scada-dot-wave 1.15s ease-in-out infinite;
+}
+
+.scada-wave-dots > span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.scada-wave-dots > span:nth-child(3) {
+  animation-delay: 0.32s;
+}

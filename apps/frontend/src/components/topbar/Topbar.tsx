@@ -4,6 +4,7 @@ import { useSystemStore } from "../../store/system.store";
 import { useAuthStore } from "../../store/auth.store";
 import { useTranslation } from "../../i18n/useTranslation";
 import { UserMenu } from "./UserMenu";
+import { NetworkSignalIndicator } from "./NetworkSignalIndicator";
 
 export const Topbar = () => {
   const { t, language, setLanguage } = useTranslation();
@@ -81,9 +82,10 @@ export const Topbar = () => {
           </div>
         </div>
 
-        {/* Small Screen User Avatar Quick Link */}
-        <div className="lg:hidden shrink-0">
+        {/* Small Screen User Avatar Quick Link + Network Signal (Far Right) */}
+        <div className="lg:hidden shrink-0 flex items-center gap-2">
           <UserMenu />
+          <NetworkSignalIndicator />
         </div>
       </div>
 
@@ -181,6 +183,11 @@ export const Topbar = () => {
         {/* Large screen User Menu */}
         <div className="hidden lg:block">
           <UserMenu />
+        </div>
+
+        {/* Internet / Network Signal Quality Indicator (Far Right on Desktop) */}
+        <div className="hidden lg:flex items-center">
+          <NetworkSignalIndicator />
         </div>
       </div>
     </div>

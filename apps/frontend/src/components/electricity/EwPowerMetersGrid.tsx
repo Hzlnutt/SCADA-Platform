@@ -8,9 +8,19 @@ type Props = {
   isDark: boolean;
   groupId?: string;
   title?: string;
+  isLoading?: boolean;
 };
 
 const NO_REALTIME_API = "API Realtime Belum Tersedia";
+
+/** Smooth waving 3-dot loading indicator matching Overview SCADA cards */
+const WaveDots = ({ className = "ml-1" }: { className?: string }) => (
+  <span className={`scada-wave-dots ${className}`} aria-hidden="true">
+    <span />
+    <span />
+    <span />
+  </span>
+);
 
 const decodePf = (val: number | null | undefined): number | null => {
   if (val === null || val === undefined || isNaN(Number(val))) return null;
@@ -23,12 +33,12 @@ const decodePf = (val: number | null | undefined): number | null => {
   return Number(pf.toFixed(3));
 };
 
-
 export function EwPowerMetersGrid({
   powerMeters,
   isDark,
   groupId = "EW23",
-  title = "Sub-Distribution Machine Telemetry"
+  title = "Sub-Distribution Machine Telemetry",
+  isLoading = false
 }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPmId, setSelectedPmId] = useState<string | null>(null);
@@ -54,6 +64,7 @@ export function EwPowerMetersGrid({
 
   const onlineCount = powerMeters.filter((pm) => pm.status !== false).length;
   const allOffline = powerMeters.length > 0 && onlineCount === 0;
+  const showSkeleton = isLoading && powerMeters.length === 0;
 
   const totalKw = useMemo(() => {
     const valid = powerMeters.filter(
@@ -66,41 +77,49 @@ export function EwPowerMetersGrid({
   return (
     <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
       {/* Header Bar */}
-      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/20">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-500 text-sm">
+      <div className="px-5 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/20">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-500 text-base shrink-0">
             ⚡
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 dark:text-white">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-800 dark:text-white">
                 {title} ({groupId.toUpperCase()})
               </h3>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 text-sky-500 border border-sky-500/20">
-                {onlineCount}/{powerMeters.length} Online
-              </span>
+              {showSkeleton ? (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold font-mono bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 animate-pulse">
+                  POLLING<WaveDots />
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold font-mono bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+                  {onlineCount}/{powerMeters.length} Online
+                </span>
+              )}
             </div>
-            <p className="text-[10px] text-slate-400 font-medium">
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
               Monitoring beban daya dan kualitas listrik per unit mesin/panel sub-distribusi
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Quick Total Load Badge */}
-          <div className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm flex items-center gap-2">
-            <span className="text-[10px] font-extrabold uppercase text-slate-400">Total Beban:</span>
-            {allOffline ? (
-              <span className="inline-flex items-center gap-1 text-[10px] font-mono font-extrabold text-rose-500">
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+          <div className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm flex items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Beban:</span>
+            {showSkeleton ? (
+              <span className="inline-block h-4 w-20 bg-sky-500/20 dark:bg-sky-400/20 rounded animate-pulse" />
+            ) : allOffline ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-mono font-extrabold text-rose-500">
+                <span className="w-2 h-2 rounded-full bg-rose-500" />
                 OFF / MATI
               </span>
             ) : totalKw !== null ? (
-              <span className="text-xs font-mono font-extrabold text-sky-600 dark:text-sky-400">
+              <span className="text-sm font-mono font-extrabold text-sky-600 dark:text-sky-400">
                 {totalKw.toLocaleString("id-ID")} kW
               </span>
             ) : (
-              <span className="text-[10px] font-extrabold text-amber-500">
+              <span className="text-[11px] font-bold text-amber-500">
                 {NO_REALTIME_API}
               </span>
             )}
@@ -113,21 +132,57 @@ export function EwPowerMetersGrid({
               placeholder="Cari Mesin / PM (cth: Chiller, AHU)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="px-3 py-1.5 pl-8 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500 w-60"
+              className="px-3.5 py-2 pl-9 text-xs font-medium rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500 w-64 max-w-full"
             />
-            <span className="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
+            <span className="absolute left-3 top-2 text-slate-400 text-xs">🔍</span>
           </div>
         </div>
       </div>
 
       {/* Grid of Power Meters */}
-      <div className="p-6">
-        {filtered.length === 0 ? (
-          <div className="text-center py-10 text-slate-400 text-xs">
+      <div className="p-5 sm:p-6">
+        {showSkeleton ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {Array.from({ length: 8 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-800/40 flex flex-col justify-between space-y-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="h-4 w-36 bg-slate-200 dark:bg-slate-700/70 rounded animate-pulse" />
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-3.5 w-14 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />
+                      <div className="h-3.5 w-14 bg-slate-100 dark:bg-slate-700/40 rounded animate-pulse" />
+                    </div>
+                  </div>
+                  <div className="h-5 w-16 bg-sky-500/15 dark:bg-sky-400/20 rounded-md animate-pulse" />
+                </div>
+
+                <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/70 space-y-1.5">
+                  <div className="h-3 w-20 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />
+                  <div className="h-7 w-28 bg-sky-500/20 dark:bg-sky-400/20 rounded-lg animate-pulse" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {[0, 1, 2, 3].map((m) => (
+                    <div key={m} className="p-2 rounded-lg bg-slate-50/70 dark:bg-slate-800/40 space-y-1.5">
+                      <div className="h-2.5 w-14 bg-slate-200 dark:bg-slate-700/60 rounded animate-pulse" />
+                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-700/70 rounded animate-pulse" />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="h-7 w-full bg-slate-100 dark:bg-slate-800/70 rounded-lg animate-pulse" />
+              </div>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-10 text-slate-400 text-sm font-medium">
             Tidak ada mesin/Power Meter yang sesuai dengan kata kunci pencarian.
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filtered.map((pm) => {
               const info = getPmInfo(pm.pm_id);
               const isOnline = pm.status !== false;
@@ -143,33 +198,33 @@ export function EwPowerMetersGrid({
                 <div
                   key={pm.pm_id}
                   onClick={() => setSelectedPmId(pm.pm_id)}
-                  className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-800/40 hover:border-sky-500/40 hover:shadow-lg hover:shadow-sky-500/5 transition-all cursor-pointer group flex flex-col justify-between"
+                  className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-800/40 hover:border-sky-500/40 hover:shadow-lg hover:shadow-sky-500/5 transition-all cursor-pointer group flex flex-col justify-between"
                 >
                   {/* Card Header */}
                   <div>
-                    <div className="flex items-start justify-between gap-1 mb-1.5">
+                    <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="min-w-0">
-                        <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 group-hover:text-sky-500 transition-colors leading-snug line-clamp-2">
+                        <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 group-hover:text-sky-500 transition-colors leading-snug line-clamp-2">
                           {info.name}
                         </h4>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-[10px] font-bold font-mono text-slate-400">
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          <span className="text-[11px] font-bold font-mono text-slate-500 dark:text-slate-400">
                             {pm.pm_id}
                           </span>
-                          <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300">
+                          <span className="text-[11px] font-bold font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
                             {info.model}
                           </span>
                         </div>
                       </div>
                       <span
-                        className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+                        className={`shrink-0 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-extrabold font-mono uppercase ${
                           isOnline
-                            ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
                             : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
                         }`}
                       >
                         <span
-                          className={`w-1 h-1 rounded-full ${
+                          className={`w-1.5 h-1.5 rounded-full ${
                             isOnline ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
                           }`}
                         />
@@ -178,87 +233,87 @@ export function EwPowerMetersGrid({
                     </div>
 
                     {/* Main Metric: Active Power */}
-                    <div className={`my-2 p-2 rounded-xl border ${
+                    <div className={`my-2.5 p-3 rounded-xl border ${
                       isOnline
                         ? "bg-slate-50 dark:bg-slate-800/70 border-slate-100 dark:border-slate-700/50"
                         : "bg-rose-500/5 dark:bg-rose-950/20 border-rose-500/25"
                     }`}>
-                      <span className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-0.5">
                         Active Power
                       </span>
                       {!isOnline ? (
                         <div className="flex items-center gap-1.5 py-0.5">
                           <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
-                          <span className="text-sm font-black font-mono text-rose-500 dark:text-rose-400 tracking-tight">
+                          <span className="text-base font-extrabold font-mono text-rose-500 dark:text-rose-400 tracking-tight">
                             PM OFF / MATI
                           </span>
                         </div>
                       ) : hasActivePower ? (
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-lg font-black font-mono text-sky-500 tracking-tight">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-2xl font-extrabold font-mono text-sky-600 dark:text-sky-400 tracking-tight">
                             {Number(pm.active_power_total).toFixed(1)}
                           </span>
-                          <span className="text-[10px] font-bold text-slate-400">kW</span>
+                          <span className="text-xs font-bold text-slate-500 dark:text-slate-400">kW</span>
                         </div>
                       ) : (
-                        <span className="text-[9px] font-bold text-amber-500 leading-tight block">
+                        <span className="text-[11px] font-bold text-amber-500 leading-snug block">
                           {NO_REALTIME_API}
                         </span>
                       )}
                     </div>
 
-                    {/* Secondary Metrics */}
-                    <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
-                      <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
-                        <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Tegangan</span>
+                    {/* Secondary Metrics (Uniform enlarged Distribution typography) */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/40">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Tegangan</span>
                         {!isOnline ? (
-                          <span className="font-extrabold text-rose-500 dark:text-rose-400">OFF</span>
+                          <span className="text-[13px] font-mono font-bold text-rose-500 dark:text-rose-400 mt-0.5">OFF</span>
                         ) : hasVolt ? (
-                          <span className="font-extrabold text-slate-700 dark:text-slate-200">
+                          <span className="text-[13px] font-mono font-bold text-slate-800 dark:text-slate-200 mt-0.5">
                             {Number(displayVolt).toFixed(0)} V
                           </span>
                         ) : (
-                          <span className="font-sans text-[8px] font-bold text-amber-500 leading-tight">
+                          <span className="text-[11px] font-bold text-amber-500 leading-snug mt-0.5">
                             {NO_REALTIME_API}
                           </span>
                         )}
                       </div>
-                      <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
-                        <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Daya Semu</span>
+                      <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/40">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Daya Semu</span>
                         {!isOnline ? (
-                          <span className="font-extrabold text-rose-500 dark:text-rose-400">OFF</span>
+                          <span className="text-[13px] font-mono font-bold text-rose-500 dark:text-rose-400 mt-0.5">OFF</span>
                         ) : hasApparent ? (
-                          <span className="font-extrabold text-amber-500">
+                          <span className="text-[13px] font-mono font-bold text-amber-600 dark:text-amber-400 mt-0.5">
                             {Number(pm.apparent_power_total).toFixed(1)} kVA
                           </span>
                         ) : (
-                          <span className="font-sans text-[8px] font-bold text-amber-500 leading-tight">
+                          <span className="text-[11px] font-bold text-amber-500 leading-snug mt-0.5">
                             {NO_REALTIME_API}
                           </span>
                         )}
                       </div>
-                      <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
-                        <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Power Factor</span>
+                      <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/40">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Power Factor</span>
                         {!isOnline ? (
-                          <span className="font-extrabold text-rose-500 dark:text-rose-400">OFF</span>
+                          <span className="text-[13px] font-mono font-bold text-rose-500 dark:text-rose-400 mt-0.5">OFF</span>
                         ) : hasPf ? (
-                          <span className="font-extrabold text-emerald-500">
+                          <span className="text-[13px] font-mono font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                             {decodedPf!.toFixed(2)}
                           </span>
                         ) : (
-                          <span className="font-sans text-[8px] font-bold text-amber-500 leading-tight">
+                          <span className="text-[11px] font-bold text-amber-500 leading-snug mt-0.5">
                             {NO_REALTIME_API}
                           </span>
                         )}
                       </div>
-                      <div className="flex flex-col p-1.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40">
-                        <span className="text-[8px] text-slate-400 font-sans font-bold uppercase">Energi</span>
+                      <div className="flex flex-col p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/40">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Energi</span>
                         {hasEnergy ? (
-                          <span className="font-extrabold text-purple-400">
+                          <span className="text-[13px] font-mono font-bold text-purple-600 dark:text-purple-400 mt-0.5 truncate" title={`${Math.round(Number(pm.active_energy)).toLocaleString("id-ID")} kWh`}>
                             {Math.round(Number(pm.active_energy)).toLocaleString("id-ID")}
                           </span>
                         ) : (
-                          <span className="font-sans text-[8px] font-bold text-amber-500 leading-tight">
+                          <span className="text-[11px] font-bold text-amber-500 leading-snug mt-0.5">
                             {NO_REALTIME_API}
                           </span>
                         )}
@@ -272,7 +327,7 @@ export function EwPowerMetersGrid({
                       e.stopPropagation();
                       setSelectedPmId(pm.pm_id);
                     }}
-                    className="w-full mt-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 group-hover:border-sky-500/40 text-[9px] font-bold text-slate-400 group-hover:text-sky-500 dark:group-hover:text-sky-400 bg-slate-50/50 dark:bg-slate-800/30 group-hover:bg-sky-500/5 transition-all text-center"
+                    className="w-full mt-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 group-hover:border-sky-500/40 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 group-hover:text-sky-600 dark:group-hover:text-sky-400 bg-slate-50/60 dark:bg-slate-800/30 group-hover:bg-sky-500/5 transition-all text-center"
                   >
                     DETAIL PARAMETER ▾
                   </button>

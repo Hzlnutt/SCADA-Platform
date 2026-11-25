@@ -33,6 +33,15 @@ import {
 
 
 /* ═══════════ CONSTANTS ═══════════ */
+/** Smooth waving 3-dot loading animation for SCADA badges & status labels */
+const WaveDots = ({ className = "ml-1" }: { className?: string }) => (
+  <span className={`scada-wave-dots ${className}`} aria-hidden="true">
+    <span />
+    <span />
+    <span />
+  </span>
+);
+
 const dailyEnergyTotal = machineGroups.reduce((sum, group) => {
   const energy = group.summaryCards.find((card) => card.label === "Total Energy")?.value ?? 0;
   return sum + energy;
@@ -667,7 +676,8 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   solarRate,
   pvRate,
   showPreviousControlled,
-  onToggleShowPrevious
+  onToggleShowPrevious,
+  isLoading = false
 }: {
   title: string;
   currentData: number[];
@@ -682,6 +692,7 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
   pvRate?: number;
   showPreviousControlled?: boolean;
   onToggleShowPrevious?: (val: boolean) => void;
+  isLoading?: boolean;
 }) {
   const isControlled = typeof showPreviousControlled === "boolean";
   const [internalShowPrevious, setInternalShowPrevious] = useState(true);
@@ -741,17 +752,26 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
         <div className="flex flex-col min-h-[46px] justify-between">
           <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 line-clamp-2" title={title}>{title}</h4>
           <div className="flex flex-wrap items-center gap-2 mt-1">
-            <span className="text-base font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400">
-              {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 font-sans">kWh</span>
-            </span>
-            {showPrevious && diffPct !== null && (
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                Number(diffPct) > 0
-                  ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
-                  : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-              }`}>
-                {Number(diffPct) > 0 ? `+${diffPct}%` : `${diffPct}%`} vs {prevMonthName ? prevMonthName.split(" ")[0] : "pembanding"}
-              </span>
+            {isLoading ? (
+              <>
+                <div className="h-6 w-28 bg-sky-500/20 dark:bg-sky-400/20 rounded-lg animate-pulse" />
+                <div className="h-4 w-20 bg-slate-200 dark:bg-slate-700/70 rounded-full animate-pulse" />
+              </>
+            ) : (
+              <>
+                <span className="text-base font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400">
+                  {formatNumber(currTotalKwh)} <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 font-sans">kWh</span>
+                </span>
+                {showPrevious && diffPct !== null && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                    Number(diffPct) > 0
+                      ? "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                      : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                  }`}>
+                    {Number(diffPct) > 0 ? `+${diffPct}%` : `${diffPct}%`} vs {prevMonthName ? prevMonthName.split(" ")[0] : "pembanding"}
+                  </span>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -759,9 +779,13 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
         {/* Top-Right: Month badge & Zoom Button */}
         <div className="flex flex-wrap items-center gap-2">
           {showPrevious && (
-            <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-              {prevMonthName || "Pembanding"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
-            </span>
+            isLoading ? (
+              <div className="h-6 w-36 bg-amber-500/15 dark:bg-amber-400/15 rounded-lg animate-pulse" />
+            ) : (
+              <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                {prevMonthName || "Pembanding"}: <strong>{formatNumber(prevTotalKwh)}</strong> kWh
+              </span>
+            )
           )}
           <button
             type="button"
@@ -777,19 +801,36 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
         </div>
       </div>
       <div style={{ height: 280 }}>
-        <MonthlyComparisonBarChart
-          currentData={currentData}
-          previousData={previousData}
-          isDark={isDark}
-          currMonthName={currMonthName}
-          prevMonthName={prevMonthName}
-          selectorType={selectorType}
-          currentBreakdown={currentBreakdown}
-          previousBreakdown={previousBreakdown}
-          solarRate={solarRate}
-          pvRate={pvRate}
-          showPrevious={showPrevious}
-        />
+        {isLoading ? (
+          <div className="h-full w-full rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/70 p-4 flex flex-col justify-end gap-3 animate-pulse">
+            <div className="flex items-end justify-between gap-1.5 h-48 px-2">
+              {[42, 68, 55, 82, 64, 76, 48, 90, 72, 60, 84, 52].map((pct, idx) => (
+                <div
+                  key={idx}
+                  className="flex-1 rounded-t-md bg-sky-500/15 dark:bg-sky-400/15"
+                  style={{ height: `${pct}%` }}
+                />
+              ))}
+            </div>
+            <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-sky-600/80 dark:text-sky-400/80">
+              <span className="inline-flex items-center">Memuat data<WaveDots /></span>
+            </div>
+          </div>
+        ) : (
+          <MonthlyComparisonBarChart
+            currentData={currentData}
+            previousData={previousData}
+            isDark={isDark}
+            currMonthName={currMonthName}
+            prevMonthName={prevMonthName}
+            selectorType={selectorType}
+            currentBreakdown={currentBreakdown}
+            previousBreakdown={previousBreakdown}
+            solarRate={solarRate}
+            pvRate={pvRate}
+            showPrevious={showPrevious}
+          />
+        )}
       </div>
 
       {/* Zoom Popup Modal - Balanced Large Modal */}
@@ -2269,7 +2310,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
     prevTotalKwh: number;
     hasData: boolean;
   }>>({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const fetchEquipmentBatch = useCallback((force = false) => {
     if (!force) setLoading(true);
@@ -2288,8 +2329,8 @@ const SectionHEquipment = memo(function SectionHEquipment({
         if (res?.data) {
           setBatchData(res.data);
           onBatchDataLoaded?.(res.data);
-          setLoading(false);
         }
+        setLoading(false);
       })
       .catch((err) => {
         console.error("Failed to load equipment monthly batch data:", err);
@@ -2433,6 +2474,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
           isDark={isDark}
           currMonthName={currMonthLabel}
           prevMonthName={compMonthLabel}
+          isLoading={loading && Object.keys(batchData).length === 0}
         />
 
         {/* In-Card Layout Controls: ONLY rendered when Edit Position Mode is active AND only 1 card is in this row */}
@@ -2554,7 +2596,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
                       disabled={isSavingPosition}
                       className="flex items-center gap-1.5 px-3 py-1 text-xs font-extrabold rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/25 transition cursor-pointer active:scale-95 disabled:opacity-50"
                     >
-                      {isSavingPosition ? "Menyimpan..." : "💾 Simpan Posisi"}
+                      {isSavingPosition ? <span className="inline-flex items-center">Menyimpan<WaveDots /></span> : "💾 Simpan Posisi"}
                     </button>
                   </div>
                 )}
@@ -2625,7 +2667,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
 
           <span className="text-[11px] font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full ${loading ? "bg-amber-500 animate-ping" : "bg-emerald-500 animate-pulse"}`} />
-            {loading ? "Memuat Data Database..." : `${totalActiveCount} Unit Sub-Metering Terhubung (API Aktif)`}
+            {loading ? <span className="inline-flex items-center">Memuat Data Database<WaveDots /></span> : `${totalActiveCount} Unit Sub-Metering Terhubung (API Aktif)`}
           </span>
         </div>
       </div>
@@ -2670,7 +2712,7 @@ const SectionHEquipment = memo(function SectionHEquipment({
               {isSavingPosition ? (
                 <>
                   <span className="w-3.5 h-3.5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
-                  <span>Menyimpan...</span>
+                  <span className="inline-flex items-center">Menyimpan<WaveDots /></span>
                 </>
               ) : (
                 <>
@@ -2968,12 +3010,14 @@ export default function Electricity() {
 
   // Solar Panel (PLTS) states
   const [solarData, setSolarData] = useState<any>(null);
+  const [solarLoading, setSolarLoading] = useState<boolean>(true);
   const [solarLive, setSolarLive] = useState<any>(null);
   const [pltsWeather, setPltsWeather] = useState<PltsWeatherPayload | null>(null);
 
   // Dedicated state for fixed monthly executive recap (Bulan Ini)
   const [fixedMonthlyPln, setFixedMonthlyPln] = useState<any>(null);
   const [fixedMonthlySolar, setFixedMonthlySolar] = useState<any>(null);
+  const [fixedMonthlyLoading, setFixedMonthlyLoading] = useState<boolean>(true);
   const [solarRange, setSolarRange] = useState<"hour" | "day" | "month" | "ytd" | "custom">("ytd");
   const [solarStartDate, setSolarStartDate] = useState(getLocalTodayString);
   const [solarEndDate, setSolarEndDate] = useState(getLocalTodayString);
@@ -3022,6 +3066,7 @@ export default function Electricity() {
   const [cubicleSelector, setCubicleSelector] = useState<"all" | "pln" | "wf1" | "wf2" | "poi1" | "poi2">("all");
   const [cubiclePoiView, setCubiclePoiView] = useState(false);
   const [cubicleAnalytics, setCubicleAnalytics] = useState<any>(null);
+  const [cubicleLoading, setCubicleLoading] = useState<boolean>(true);
 
   // Section F: Monthly Consumption Filter States (Bulan Utama & Bulan Pembanding)
   const [monthlyPrimaryYear, setMonthlyPrimaryYear] = useState<number>(() => new Date().getFullYear());
@@ -3038,6 +3083,7 @@ export default function Electricity() {
 
   // Fetch device-specific analytics when cubicle selector or selected month/year changes
   const fetchCubicleAnalytics = useCallback((force = false) => {
+    if (!force) setCubicleLoading(true);
     let devId = "all";
     if (cubicleSelector === "pln") devId = "Cubicle_PLN_PM8000";
     if (cubicleSelector === "wf1") devId = "Feeder_WF1_PM5560";
@@ -3077,6 +3123,9 @@ export default function Electricity() {
           setCubicleAnalytics(primaryRes);
         }
       }
+      setCubicleLoading(false);
+    }).catch(() => {
+      setCubicleLoading(false);
     });
   }, [cubicleSelector, monthlyPrimaryYear, monthlyCompareYear, monthlyCompareEnabled]);
 
@@ -4312,6 +4361,7 @@ export default function Electricity() {
       if (cached.data.live && isTodayQuery) {
         setSolarLive(cached.data.live);
       }
+      setSolarLoading(false);
       setIsSolarFilterPending(false);
       if (isFresh) return; // 0ms instant display!
     } else if (showLoading) {
@@ -4328,11 +4378,13 @@ export default function Electricity() {
             setSolarLive(res.data.live);
           }
         }
+        setSolarLoading(false);
         setIsSolarFilterPending(false);
       })
       .catch((err) => {
         if (currentReqId !== solarReqIdRef.current) return;
         console.warn("Failed to load solar data", err);
+        setSolarLoading(false);
         setIsSolarFilterPending(false);
       });
   }, [solarRange, solarSelectedYear, solarSelectedMonth, solarStartDate, solarEndDate]);
@@ -4347,8 +4399,10 @@ export default function Electricity() {
     ]).then(([resPln, resSolar]) => {
       if (resPln?.data) setFixedMonthlyPln(resPln.data);
       if (resSolar?.data) setFixedMonthlySolar(resSolar.data);
+      setFixedMonthlyLoading(false);
     }).catch((err) => {
       console.warn("Failed to load fixed monthly executive data:", err);
+      setFixedMonthlyLoading(false);
     });
   }, []);
 
@@ -5828,6 +5882,14 @@ export default function Electricity() {
   const fact1Pct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && !isFact1Offline && fact1Kw !== null ? (fact1Kw / totalPlantLoadKw) * 100 : 0;
   const fact2Pct = totalPlantLoadKw !== null && totalPlantLoadKw > 0 && !isFact2Offline && fact2Kw !== null ? (fact2Kw / totalPlantLoadKw) * 100 : 0;
 
+  // Unified initial skeleton loading flags across all Overview sections (matching Top 4 Live Cards)
+  const isPlnSummaryInitialLoading = summaryLoading && !summaryData;
+  const isSolarInitialLoading = solarLoading && !solarData;
+  const isExecPlnLoading = (fixedMonthlyLoading || summaryLoading) && !fixedMonthlyPln && !summaryData;
+  const isExecPvLoading = (fixedMonthlyLoading || solarLoading) && !fixedMonthlySolar && !solarData;
+  const isExecBothLoading = isExecPlnLoading || isExecPvLoading;
+  const isMonthlyCardLoading = cubicleLoading && !cubicleAnalytics && !(cubicleSelector === "pln" && summaryData);
+
   /* ═══ RENDER ═══ */
   return (
     <div className="space-y-6">
@@ -5879,7 +5941,7 @@ export default function Electricity() {
                     ? isDark ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-500/15 text-rose-700 border-rose-500/30'
                     : isDark ? 'bg-blue-400/20 text-blue-200 border-blue-400/30' : 'bg-blue-600/10 text-blue-700 border-blue-600/20'
                 }`}>
-                  {isLiveLoading ? "POLLING..." : isGatewayOffline ? "GATEWAY OFFLINE" : isPlnOffline ? "OFF" : `${gridPct.toFixed(1)}% Load`}
+                  {isLiveLoading ? <span className="inline-flex items-center">POLLING<WaveDots /></span> : isGatewayOffline ? "GATEWAY OFFLINE" : isPlnOffline ? "OFF" : `${gridPct.toFixed(1)}% Load`}
                 </span>
                 <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-blue-600/10 text-blue-700'} flex items-center justify-center`}><IconGrid /></div>
               </div>
@@ -5947,7 +6009,7 @@ export default function Electricity() {
                     ? isDark ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-500/15 text-rose-700 border-rose-500/30'
                     : isDark ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/30' : 'bg-emerald-600/10 text-emerald-700 border-emerald-600/20'
                 }`}>
-                  {isLiveLoading ? "POLLING..." : isGatewayOffline ? "GATEWAY OFFLINE" : isSolarOffline ? "OFF" : `${solarPct.toFixed(1)}% Load`}
+                  {isLiveLoading ? <span className="inline-flex items-center">POLLING<WaveDots /></span> : isGatewayOffline ? "GATEWAY OFFLINE" : isSolarOffline ? "OFF" : `${solarPct.toFixed(1)}% Load`}
                 </span>
                 <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-emerald-600/10 text-emerald-700'} flex items-center justify-center`}><IconSolar /></div>
               </div>
@@ -6004,7 +6066,16 @@ export default function Electricity() {
           <div className="relative z-10 flex flex-col h-full justify-between">
             <div className="flex items-center justify-between mb-2">
               <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>Genset Backup</span>
-              <div className={`h-6 w-6 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-amber-600/10 text-amber-700'} flex items-center justify-center`}><IconGenset /></div>
+              <div className="flex items-center gap-1.5">
+                {isLiveLoading && (
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold font-mono border animate-pulse ${
+                    isDark ? 'bg-amber-400/15 text-amber-200 border-amber-400/30' : 'bg-amber-600/10 text-amber-700 border-amber-600/20'
+                  }`}>
+                    <span className="inline-flex items-center">POLLING<WaveDots /></span>
+                  </span>
+                )}
+                <div className={`h-6 w-6 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-amber-600/10 text-amber-700'} flex items-center justify-center`}><IconGenset /></div>
+              </div>
             </div>
             
             {/* 2 Inner Sub-Cards */}
@@ -6015,15 +6086,24 @@ export default function Electricity() {
               } flex flex-col justify-between`}>
                 <div className="flex items-center justify-between">
                   <span className="text-[8px] font-extrabold uppercase text-slate-400">Caterpillar</span>
-                  <span className={`h-1.5 w-1.5 rounded-full ${Number(getApiVal("electricity/genset_running")) > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${isLiveLoading ? "bg-amber-400 animate-pulse" : Number(getApiVal("electricity/genset_running")) > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
                 </div>
                 <div className="mt-1">
-                  <div className={`text-sm font-extrabold font-mono ${isDark ? 'text-white' : 'text-amber-950'}`}>
-                    {Number(getApiVal("electricity/genset_running")) > 0 ? "850" : "0"} <span className="text-[8px] font-bold text-slate-400">kW</span>
-                  </div>
-                  <span className={`text-[8px] font-extrabold ${Number(getApiVal("electricity/genset_running")) > 0 ? "text-emerald-500" : "text-slate-400"}`}>
-                    {Number(getApiVal("electricity/genset_running")) > 0 ? "ON (Gas)" : "OFF"}
-                  </span>
+                  {isLiveLoading ? (
+                    <>
+                      <div className="h-4 w-12 bg-amber-400/25 dark:bg-amber-300/20 rounded animate-pulse mt-0.5" />
+                      <div className="h-2.5 w-8 bg-amber-400/20 dark:bg-amber-300/15 rounded animate-pulse mt-1" />
+                    </>
+                  ) : (
+                    <>
+                      <div className={`text-sm font-extrabold font-mono ${isDark ? 'text-white' : 'text-amber-950'}`}>
+                        {Number(getApiVal("electricity/genset_running")) > 0 ? "850" : "0"} <span className="text-[8px] font-bold text-slate-400">kW</span>
+                      </div>
+                      <span className={`text-[8px] font-extrabold ${Number(getApiVal("electricity/genset_running")) > 0 ? "text-emerald-500" : "text-slate-400"}`}>
+                        {Number(getApiVal("electricity/genset_running")) > 0 ? "ON (Gas)" : "OFF"}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -6033,15 +6113,24 @@ export default function Electricity() {
               } flex flex-col justify-between`}>
                 <div className="flex items-center justify-between">
                   <span className="text-[8px] font-extrabold uppercase text-slate-400">Perkins</span>
-                  <span className={`h-1.5 w-1.5 rounded-full ${Number(getApiVal("electricity/genset_running")) > 1 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${isLiveLoading ? "bg-amber-400 animate-pulse" : Number(getApiVal("electricity/genset_running")) > 1 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
                 </div>
                 <div className="mt-1">
-                  <div className={`text-sm font-extrabold font-mono ${isDark ? 'text-white' : 'text-amber-950'}`}>
-                    {Number(getApiVal("electricity/genset_running")) > 1 ? "1000" : "0"} <span className="text-[8px] font-bold text-slate-400">kW</span>
-                  </div>
-                  <span className={`text-[8px] font-extrabold ${Number(getApiVal("electricity/genset_running")) > 1 ? "text-emerald-500" : "text-slate-400"}`}>
-                    {Number(getApiVal("electricity/genset_running")) > 1 ? "ON (Diesel)" : "OFF"}
-                  </span>
+                  {isLiveLoading ? (
+                    <>
+                      <div className="h-4 w-12 bg-amber-400/25 dark:bg-amber-300/20 rounded animate-pulse mt-0.5" />
+                      <div className="h-2.5 w-8 bg-amber-400/20 dark:bg-amber-300/15 rounded animate-pulse mt-1" />
+                    </>
+                  ) : (
+                    <>
+                      <div className={`text-sm font-extrabold font-mono ${isDark ? 'text-white' : 'text-amber-950'}`}>
+                        {Number(getApiVal("electricity/genset_running")) > 1 ? "1000" : "0"} <span className="text-[8px] font-bold text-slate-400">kW</span>
+                      </div>
+                      <span className={`text-[8px] font-extrabold ${Number(getApiVal("electricity/genset_running")) > 1 ? "text-emerald-500" : "text-slate-400"}`}>
+                        {Number(getApiVal("electricity/genset_running")) > 1 ? "ON (Diesel)" : "OFF"}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -6060,7 +6149,16 @@ export default function Electricity() {
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
               <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-cyan-200' : 'text-cyan-800'}`}>Total Plant Load</span>
-              <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-cyan-600/10 text-cyan-700'} flex items-center justify-center`}><IconPlant /></div>
+              <div className="flex items-center gap-1.5">
+                {isLiveLoading && (
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold font-mono border animate-pulse ${
+                    isDark ? 'bg-cyan-400/10 text-cyan-200 border-cyan-400/25' : 'bg-cyan-600/10 text-cyan-700 border-cyan-600/20'
+                  }`}>
+                    <span className="inline-flex items-center">POLLING<WaveDots /></span>
+                  </span>
+                )}
+                <div className={`h-8 w-8 rounded-lg ${isDark ? 'bg-white/10 text-white' : 'bg-cyan-600/10 text-cyan-700'} flex items-center justify-center`}><IconPlant /></div>
+              </div>
             </div>
             <div className={`text-3xl font-extrabold font-mono ${isDark ? 'text-white' : 'text-cyan-950'}`}>
               {isLiveLoading ? (
@@ -6107,7 +6205,7 @@ export default function Electricity() {
       {/* ═══════════ SECTION: TOTAL REKAPITULASI BIAYA & ENERGI (PLN + PV) ═══════════ */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
             <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400">
               Total Rekapitulasi Biaya & Konsumsi Listrik
@@ -6116,7 +6214,12 @@ export default function Electricity() {
               PLN + Solar PV
             </span>
           </div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+            {isExecBothLoading && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold font-mono border bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 animate-pulse">
+                <span className="inline-flex items-center">POLLING<WaveDots /></span>
+              </span>
+            )}
             <span>Periode: <strong className="text-slate-700 dark:text-slate-200">{executivePeriodLabel}</strong></span>
           </div>
         </div>
@@ -6134,30 +6237,50 @@ export default function Electricity() {
                 </div>
               </div>
               <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                {!fixedMonthlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.plnCost)}
+                {isExecPlnLoading ? (
+                  <div className="h-7 w-40 bg-blue-500/20 dark:bg-blue-400/20 rounded-lg animate-pulse" />
+                ) : (
+                  formatCurrency(executiveSummary.plnCost)
+                )}
               </div>
               <div className="mt-1 flex items-center gap-1.5 text-xs font-bold font-mono text-blue-600 dark:text-blue-400">
                 <span className="text-[10px] font-semibold text-slate-400 uppercase">Konsumsi:</span>
-                <span>{formatNumber(executiveSummary.plnKwh)} kWh</span>
+                {isExecPlnLoading ? (
+                  <span className="inline-block h-3.5 w-24 bg-blue-500/15 dark:bg-blue-400/20 rounded animate-pulse align-middle" />
+                ) : (
+                  <span>{formatNumber(executiveSummary.plnKwh)} kWh</span>
+                )}
               </div>
             </div>
 
             <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60">
               {/* Ratio bar */}
               <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
-                <div 
-                  className="bg-blue-500 transition-all duration-500" 
-                  style={{ width: `${executiveSummary.pctKwhPln}%` }} 
-                  title={`PLN: ${executiveSummary.pctKwhPln.toFixed(1)}%`}
-                />
-                <div 
-                  className="bg-slate-300 dark:bg-slate-700 transition-all duration-500" 
-                  style={{ width: `${executiveSummary.pctKwhPv}%` }} 
-                  title={`PV: ${executiveSummary.pctKwhPv.toFixed(1)}%`}
-                />
+                {isExecBothLoading ? (
+                  <div className="w-full bg-blue-500/25 dark:bg-blue-400/25 animate-pulse" />
+                ) : (
+                  <>
+                    <div 
+                      className="bg-blue-500 transition-all duration-500" 
+                      style={{ width: `${executiveSummary.pctKwhPln}%` }} 
+                      title={`PLN: ${executiveSummary.pctKwhPln.toFixed(1)}%`}
+                    />
+                    <div 
+                      className="bg-slate-300 dark:bg-slate-700 transition-all duration-500" 
+                      style={{ width: `${executiveSummary.pctKwhPv}%` }} 
+                      title={`PV: ${executiveSummary.pctKwhPv.toFixed(1)}%`}
+                    />
+                  </>
+                )}
               </div>
               <div className="text-center text-xs font-semibold text-slate-600 dark:text-slate-300">
-                <strong className="text-blue-600 dark:text-blue-400 font-mono text-xs">{executiveSummary.pctKwhPln.toFixed(1)}%</strong> porsi energi <span className="text-slate-400 dark:text-slate-500 font-mono text-[11px]">(vs PV {executiveSummary.pctKwhPv.toFixed(1)}%)</span>
+                {isExecBothLoading ? (
+                  <div className="h-3.5 w-40 mx-auto bg-blue-500/15 dark:bg-blue-400/15 rounded animate-pulse" />
+                ) : (
+                  <>
+                    <strong className="text-blue-600 dark:text-blue-400 font-mono text-xs">{executiveSummary.pctKwhPln.toFixed(1)}%</strong> porsi energi <span className="text-slate-400 dark:text-slate-500 font-mono text-[11px]">(vs PV {executiveSummary.pctKwhPv.toFixed(1)}%)</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -6174,30 +6297,50 @@ export default function Electricity() {
                 </div>
               </div>
               <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                {!fixedMonthlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.pvCost)}
+                {isExecPvLoading ? (
+                  <div className="h-7 w-36 bg-amber-500/20 dark:bg-amber-400/20 rounded-lg animate-pulse" />
+                ) : (
+                  formatCurrency(executiveSummary.pvCost)
+                )}
               </div>
               <div className="mt-1 flex items-center gap-1.5 text-xs font-bold font-mono text-amber-600 dark:text-amber-400">
                 <span className="text-[10px] font-semibold text-slate-400 uppercase">Produksi:</span>
-                <span>{formatNumber(executiveSummary.totalPvKwh)} kWh</span>
+                {isExecPvLoading ? (
+                  <span className="inline-block h-3.5 w-24 bg-amber-500/15 dark:bg-amber-400/20 rounded animate-pulse align-middle" />
+                ) : (
+                  <span>{formatNumber(executiveSummary.totalPvKwh)} kWh</span>
+                )}
               </div>
             </div>
 
             <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60">
               {/* Ratio bar */}
               <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
-                <div 
-                  className="bg-amber-500 transition-all duration-500" 
-                  style={{ width: `${executiveSummary.pctKwhPv}%` }} 
-                  title={`PV: ${executiveSummary.pctKwhPv.toFixed(1)}%`}
-                />
-                <div 
-                  className="bg-slate-300 dark:bg-slate-700 transition-all duration-500" 
-                  style={{ width: `${executiveSummary.pctKwhPln}%` }} 
-                  title={`PLN: ${executiveSummary.pctKwhPln.toFixed(1)}%`}
-                />
+                {isExecBothLoading ? (
+                  <div className="w-full bg-amber-500/25 dark:bg-amber-400/25 animate-pulse" />
+                ) : (
+                  <>
+                    <div 
+                      className="bg-amber-500 transition-all duration-500" 
+                      style={{ width: `${executiveSummary.pctKwhPv}%` }} 
+                      title={`PV: ${executiveSummary.pctKwhPv.toFixed(1)}%`}
+                    />
+                    <div 
+                      className="bg-slate-300 dark:bg-slate-700 transition-all duration-500" 
+                      style={{ width: `${executiveSummary.pctKwhPln}%` }} 
+                      title={`PLN: ${executiveSummary.pctKwhPln.toFixed(1)}%`}
+                    />
+                  </>
+                )}
               </div>
               <div className="text-center text-xs font-semibold text-slate-600 dark:text-slate-300">
-                <strong className="text-amber-600 dark:text-amber-400 font-mono text-xs">{executiveSummary.pctKwhPv.toFixed(1)}%</strong> porsi energi <span className="text-slate-400 dark:text-slate-500 font-mono text-[11px]">(vs PLN {executiveSummary.pctKwhPln.toFixed(1)}%)</span>
+                {isExecBothLoading ? (
+                  <div className="h-3.5 w-40 mx-auto bg-amber-500/15 dark:bg-amber-400/15 rounded animate-pulse" />
+                ) : (
+                  <>
+                    <strong className="text-amber-600 dark:text-amber-400 font-mono text-xs">{executiveSummary.pctKwhPv.toFixed(1)}%</strong> porsi energi <span className="text-slate-400 dark:text-slate-500 font-mono text-[11px]">(vs PLN {executiveSummary.pctKwhPln.toFixed(1)}%)</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -6214,38 +6357,58 @@ export default function Electricity() {
                 </div>
               </div>
               <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                {!fixedMonthlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.totalCost)}
+                {isExecBothLoading ? (
+                  <div className="h-7 w-40 bg-indigo-500/20 dark:bg-indigo-400/20 rounded-lg animate-pulse" />
+                ) : (
+                  formatCurrency(executiveSummary.totalCost)
+                )}
               </div>
               <div className="mt-1 flex items-center gap-1.5 text-xs font-bold font-mono text-indigo-600 dark:text-indigo-400">
                 <span className="text-[10px] font-semibold text-slate-400 uppercase">Total Konsumsi:</span>
-                <span>{formatNumber(executiveSummary.totalKwh)} kWh</span>
+                {isExecBothLoading ? (
+                  <span className="inline-block h-3.5 w-24 bg-indigo-500/15 dark:bg-indigo-400/20 rounded animate-pulse align-middle" />
+                ) : (
+                  <span>{formatNumber(executiveSummary.totalKwh)} kWh</span>
+                )}
               </div>
             </div>
 
             <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60">
               {/* Ratio bar */}
               <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
-                <div 
-                  className="bg-blue-500 transition-all duration-500" 
-                  style={{ width: `${executiveSummary.pctKwhPln}%` }} 
-                  title={`PLN: ${executiveSummary.pctKwhPln.toFixed(1)}%`}
-                />
-                <div 
-                  className="bg-amber-500 transition-all duration-500" 
-                  style={{ width: `${executiveSummary.pctKwhPv}%` }} 
-                  title={`PV: ${executiveSummary.pctKwhPv.toFixed(1)}%`}
-                />
+                {isExecBothLoading ? (
+                  <div className="w-full bg-indigo-500/25 dark:bg-indigo-400/25 animate-pulse" />
+                ) : (
+                  <>
+                    <div 
+                      className="bg-blue-500 transition-all duration-500" 
+                      style={{ width: `${executiveSummary.pctKwhPln}%` }} 
+                      title={`PLN: ${executiveSummary.pctKwhPln.toFixed(1)}%`}
+                    />
+                    <div 
+                      className="bg-amber-500 transition-all duration-500" 
+                      style={{ width: `${executiveSummary.pctKwhPv}%` }} 
+                      title={`PV: ${executiveSummary.pctKwhPv.toFixed(1)}%`}
+                    />
+                  </>
+                )}
               </div>
               <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                <span className="flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                  <strong className="text-blue-600 dark:text-blue-400 font-mono">PLN {executiveSummary.pctKwhPln.toFixed(1)}%</strong>
-                </span>
-                <span className="text-slate-300 dark:text-slate-600">•</span>
-                <span className="flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                  <strong className="text-amber-600 dark:text-amber-400 font-mono">PV {executiveSummary.pctKwhPv.toFixed(1)}%</strong>
-                </span>
+                {isExecBothLoading ? (
+                  <div className="h-3.5 w-36 bg-indigo-500/15 dark:bg-indigo-400/15 rounded animate-pulse" />
+                ) : (
+                  <>
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                      <strong className="text-blue-600 dark:text-blue-400 font-mono">PLN {executiveSummary.pctKwhPln.toFixed(1)}%</strong>
+                    </span>
+                    <span className="text-slate-300 dark:text-slate-600">•</span>
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      <strong className="text-amber-600 dark:text-amber-400 font-mono">PV {executiveSummary.pctKwhPv.toFixed(1)}%</strong>
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -6262,31 +6425,51 @@ export default function Electricity() {
                 </div>
               </div>
               <div className="mt-2 text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-tight">
-                {!fixedMonthlyPln && !summaryData ? "..." : formatCurrency(executiveSummary.savingsCost)}
+                {isExecBothLoading ? (
+                  <div className="h-7 w-36 bg-emerald-500/20 dark:bg-emerald-400/20 rounded-lg animate-pulse" />
+                ) : (
+                  formatCurrency(executiveSummary.savingsCost)
+                )}
               </div>
               <div className="mt-1 flex items-center gap-1.5 text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400">
                 <span className="text-[10px] font-semibold text-slate-400 uppercase">Total PV:</span>
-                <span>{formatNumber(executiveSummary.totalPvKwh)} kWh</span>
+                {isExecPvLoading ? (
+                  <span className="inline-block h-3.5 w-24 bg-emerald-500/15 dark:bg-emerald-400/20 rounded animate-pulse align-middle" />
+                ) : (
+                  <span>{formatNumber(executiveSummary.totalPvKwh)} kWh</span>
+                )}
               </div>
             </div>
 
             <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/60">
               {/* Savings bar */}
               <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex mb-2">
-                <div 
-                  className="bg-emerald-500 transition-all duration-500" 
-                  style={{ width: `${executiveSummary.totalCost > 0 ? ((executiveSummary.savingsCost / executiveSummary.totalCost) * 100).toFixed(1) : 0}%` }} 
-                  title={`Terhemat: ${executiveSummary.totalCost > 0 ? ((executiveSummary.savingsCost / executiveSummary.totalCost) * 100).toFixed(1) : 0}%`}
-                />
-                <div 
-                  className="bg-slate-300 dark:bg-slate-700 transition-all duration-500" 
-                  style={{ width: `${executiveSummary.totalCost > 0 ? (100 - (executiveSummary.savingsCost / executiveSummary.totalCost) * 100).toFixed(1) : 100}%` }} 
-                />
+                {isExecBothLoading ? (
+                  <div className="w-full bg-emerald-500/25 dark:bg-emerald-400/25 animate-pulse" />
+                ) : (
+                  <>
+                    <div 
+                      className="bg-emerald-500 transition-all duration-500" 
+                      style={{ width: `${executiveSummary.totalCost > 0 ? ((executiveSummary.savingsCost / executiveSummary.totalCost) * 100).toFixed(1) : 0}%` }} 
+                      title={`Terhemat: ${executiveSummary.totalCost > 0 ? ((executiveSummary.savingsCost / executiveSummary.totalCost) * 100).toFixed(1) : 0}%`}
+                    />
+                    <div 
+                      className="bg-slate-300 dark:bg-slate-700 transition-all duration-500" 
+                      style={{ width: `${executiveSummary.totalCost > 0 ? (100 - (executiveSummary.savingsCost / executiveSummary.totalCost) * 100).toFixed(1) : 100}%` }} 
+                    />
+                  </>
+                )}
               </div>
               <div className="text-center text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                Selisih Tarif: <strong className="font-mono font-bold text-emerald-600 dark:text-emerald-300">
-                  Rp {(executiveSummary.effectiveLwbpRate - executiveSummary.effectivePvRate).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/kWh
-                </strong>
+                {isExecBothLoading ? (
+                  <div className="h-3.5 w-40 mx-auto bg-emerald-500/15 dark:bg-emerald-400/15 rounded animate-pulse" />
+                ) : (
+                  <>
+                    Selisih Tarif: <strong className="font-mono font-bold text-emerald-600 dark:text-emerald-300">
+                      Rp {(executiveSummary.effectiveLwbpRate - executiveSummary.effectivePvRate).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/kWh
+                    </strong>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -6295,9 +6478,16 @@ export default function Electricity() {
 
       {/* ═══════════ SECTION B: PLN DETAIL ═══════════ */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-blue-500">PLN — Incoming Grid</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-blue-500">PLN — Incoming Grid</h3>
+          </div>
+          {(isPlnSummaryInitialLoading || isLiveLoading) && (
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold font-mono uppercase bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 animate-pulse">
+              <span className="inline-flex items-center">POLLING<WaveDots /></span>
+            </span>
+          )}
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 items-stretch">
           {/* Estimasi Biaya */}
@@ -6307,10 +6497,18 @@ export default function Electricity() {
               <div className="h-6 w-6 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-500"><IconMoney /></div>
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-              {summaryLoading && !summaryData ? "..." : formatCurrency(cardSummary.totalCost)}
+              {isPlnSummaryInitialLoading ? (
+                <div className="h-6 w-36 bg-emerald-500/20 dark:bg-emerald-400/20 rounded-lg animate-pulse" />
+              ) : (
+                formatCurrency(cardSummary.totalCost)
+              )}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 truncate">
-              {summaryLoading && !summaryData ? "" : `${formatNumber(cardSummary.totalKwh)} kWh`}
+              {isPlnSummaryInitialLoading ? (
+                <div className="h-3 w-24 bg-emerald-500/15 dark:bg-emerald-400/20 rounded animate-pulse" />
+              ) : (
+                `${formatNumber(cardSummary.totalKwh)} kWh`
+              )}
             </div>
           </div>
 
@@ -6320,9 +6518,19 @@ export default function Electricity() {
               <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">Beban LWBP</span>
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {summaryLoading && !summaryData ? "..." : `${formatNumber(cardSummary.lwbpKwh)} kWh`}
+              {isPlnSummaryInitialLoading ? (
+                <div className="h-6 w-32 bg-blue-500/20 dark:bg-blue-400/20 rounded-lg animate-pulse" />
+              ) : (
+                `${formatNumber(cardSummary.lwbpKwh)} kWh`
+              )}
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-blue-500 truncate">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.lwbpCost)}</div>
+            <div className="mt-1 text-[10px] font-semibold text-blue-500 truncate">
+              {isPlnSummaryInitialLoading ? (
+                <div className="h-3 w-28 bg-blue-500/15 dark:bg-blue-400/20 rounded animate-pulse" />
+              ) : (
+                formatCurrency(cardSummary.lwbpCost)
+              )}
+            </div>
           </div>
 
           {/* Beban WBP */}
@@ -6331,9 +6539,19 @@ export default function Electricity() {
               <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">Beban WBP</span>
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono">
-              {summaryLoading && !summaryData ? "..." : `${formatNumber(cardSummary.wbpKwh)} kWh`}
+              {isPlnSummaryInitialLoading ? (
+                <div className="h-6 w-32 bg-rose-500/20 dark:bg-rose-400/20 rounded-lg animate-pulse" />
+              ) : (
+                `${formatNumber(cardSummary.wbpKwh)} kWh`
+              )}
             </div>
-            <div className="mt-1 text-[10px] font-semibold text-rose-500 truncate">{summaryLoading && !summaryData ? "" : formatCurrency(cardSummary.wbpCost)}</div>
+            <div className="mt-1 text-[10px] font-semibold text-rose-500 truncate">
+              {isPlnSummaryInitialLoading ? (
+                <div className="h-3 w-28 bg-rose-500/15 dark:bg-rose-400/20 rounded animate-pulse" />
+              ) : (
+                formatCurrency(cardSummary.wbpCost)
+              )}
+            </div>
           </div>
 
           {/* PF / Power Factor */}
@@ -6341,12 +6559,20 @@ export default function Electricity() {
             <div className="flex items-center justify-between min-h-[24px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">PF</span>
               <span 
-                className={`h-2 w-2 rounded-full ${pfStatus === "connected" && livePlnStatus !== false && (livePf !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== null)) ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} 
-                title={pfStatus === "connected" && livePlnStatus !== false ? "Status: ONLINE" : "Status: OFF"} 
+                className={`h-2 w-2 rounded-full ${
+                  isLiveLoading
+                    ? "bg-purple-400 animate-pulse"
+                    : pfStatus === "connected" && livePlnStatus !== false && (livePf !== null || (apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== undefined && apiLiveData[DEFAULT_PLN_API_URL]?.Power_Factor !== null))
+                    ? "bg-emerald-500 animate-pulse"
+                    : "bg-rose-500"
+                }`} 
+                title={isLiveLoading ? "Status: POLLING" : pfStatus === "connected" && livePlnStatus !== false ? "Status: ONLINE" : "Status: OFF"} 
               />
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-              {(() => {
+              {isLiveLoading ? (
+                <div className="h-6 w-16 bg-purple-500/20 dark:bg-purple-400/20 rounded-lg animate-pulse" />
+              ) : (() => {
                 const isOnline = pfStatus === "connected" && livePlnStatus !== false;
                 if (!isOnline) {
                   return <span className="text-rose-500 font-extrabold">OFF</span>;
@@ -6364,7 +6590,7 @@ export default function Electricity() {
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
               <span className="truncate">Stabilitas beban listrik</span>
-              {pfStatus !== "connected" || livePlnStatus === false ? (
+              {!isLiveLoading && (pfStatus !== "connected" || livePlnStatus === false) ? (
                 <span className="text-[9px] font-bold text-rose-500 font-mono shrink-0 uppercase">OFF</span>
               ) : null}
             </div>
@@ -6383,6 +6609,9 @@ export default function Electricity() {
                 const livePeak = (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)))
                   ? (Number(rawPeak) > 10000 ? Number(rawPeak) / 1000.0 : Number(rawPeak))
                   : (livePeakDemandKw !== null && !isNaN(Number(livePeakDemandKw)) ? Number(livePeakDemandKw) : (cardSummary?.peakDemand ? Number(cardSummary.peakDemand) : null));
+                if (livePeak === null && (isLiveLoading || isPlnSummaryInitialLoading)) {
+                  return <div className="h-6 w-24 bg-amber-500/20 dark:bg-amber-400/20 rounded-lg animate-pulse" />;
+                }
                 return renderMetricVal(livePeak, (v) => `${v.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kW`);
               })()}
             </div>
@@ -6401,15 +6630,17 @@ export default function Electricity() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-3">
                 <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Trend Panel Distribusi</h3>
-                {cardSummary.totalKwh > 0 && (
+                {isPlnSummaryInitialLoading ? (
+                  <div className="h-5 w-32 bg-sky-500/15 dark:bg-sky-400/15 rounded-lg animate-pulse" />
+                ) : cardSummary.totalKwh > 0 && (
                   <span className="text-xs font-extrabold font-mono text-[#1f6fb5] dark:text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 rounded-lg">
                     Total: {formatNumber(cardSummary.totalKwh)} kWh
                   </span>
                 )}
-                {isFilterPending && (
+                {(isFilterPending || isPlnSummaryInitialLoading) && (
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-lg animate-pulse">
                     <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-ping" />
-                    Memuat...
+                    <span className="inline-flex items-center">Memuat<WaveDots /></span>
                   </span>
                 )}
               </div>
@@ -6508,12 +6739,18 @@ export default function Electricity() {
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Perbandingan konsumsi WBP vs LWBP.</p>
           </div>
           <div className="my-auto py-4 flex justify-center">
-            <DonutChart 
-              segments={donutSegments} 
-              size={150} 
-              thickness={18} 
-              centerLabel={donutSegments[0]?.value > 0 ? `WBP ${donutSegments[0].value}%` : `LWBP 100%`} 
-            />
+            {isPlnSummaryInitialLoading ? (
+              <div className="h-[150px] w-[150px] rounded-full border-[18px] border-blue-500/20 dark:border-blue-400/20 animate-pulse flex items-center justify-center">
+                <div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+              </div>
+            ) : (
+              <DonutChart 
+                segments={donutSegments} 
+                size={150} 
+                thickness={18} 
+                centerLabel={donutSegments[0]?.value > 0 ? `WBP ${donutSegments[0].value}%` : `LWBP 100%`} 
+              />
+            )}
           </div>
           <div className="space-y-2 mt-auto">
             {donutSegments.map((item) => (
@@ -6522,7 +6759,11 @@ export default function Electricity() {
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
                   {item.label}
                 </span>
-                <span className="font-bold text-slate-800 dark:text-white font-mono">{item.value}%</span>
+                {isPlnSummaryInitialLoading ? (
+                  <span className="inline-block h-3.5 w-10 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+                ) : (
+                  <span className="font-bold text-slate-800 dark:text-white font-mono">{item.value}%</span>
+                )}
               </div>
             ))}
           </div>
@@ -6531,16 +6772,24 @@ export default function Electricity() {
 
       {/* ═══════════ SECTION D: SOLAR PANEL ═══════════ */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <div className="flex items-center gap-2">
             <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500">Solar Panel (PLTS)</h3>
           </div>
-          <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${
-            isSolarOffline
+          <span className={`text-[10px] font-extrabold font-mono uppercase px-2.5 py-0.5 rounded-full ${
+            isLiveLoading || isSolarInitialLoading
+              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 animate-pulse"
+              : isSolarOffline
               ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
               : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
           }`}>
-            {isSolarOffline ? "GAGAL POLLING API" : "ONLINE"}
+            {isLiveLoading || isSolarInitialLoading ? (
+              <span className="inline-flex items-center">POLLING<WaveDots /></span>
+            ) : isSolarOffline ? (
+              "GAGAL POLLING API"
+            ) : (
+              "ONLINE"
+            )}
           </span>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 items-stretch">
@@ -6551,16 +6800,26 @@ export default function Electricity() {
               <div className="h-6 w-6 rounded bg-amber-500/10 flex items-center justify-center text-amber-500"><IconMoney /></div>
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-              {formatCurrency(solarFilteredMetrics.pvCost)}
+              {isSolarInitialLoading ? (
+                <div className="h-6 w-36 bg-amber-500/20 dark:bg-amber-400/20 rounded-lg animate-pulse" />
+              ) : (
+                formatCurrency(solarFilteredMetrics.pvCost)
+              )}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 truncate" title={`${formatNumber(solarFilteredMetrics.totalKwh)} kWh (${solarFilteredMetrics.periodLabel})`}>
-              {formatNumber(solarFilteredMetrics.totalKwh)} kWh ({solarFilteredMetrics.periodLabel})
+              {isSolarInitialLoading ? (
+                <div className="h-3 w-28 bg-amber-500/15 dark:bg-amber-400/20 rounded animate-pulse" />
+              ) : (
+                `${formatNumber(solarFilteredMetrics.totalKwh)} kWh (${solarFilteredMetrics.periodLabel})`
+              )}
             </div>
           </div>
 
           {/* POI-1 */}
           <div className={`rounded-xl border p-4 hover:border-blue-400 transition h-full flex flex-col justify-between min-h-[116px] ${
-            isPoi1Offline
+            isLiveLoading
+              ? "border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/30"
+              : isPoi1Offline
               ? "border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30"
               : solarLive?.poi1?.status === false
               ? "border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30"
@@ -6568,16 +6827,20 @@ export default function Electricity() {
           }`}>
             <div className="flex items-center justify-between min-h-[24px]">
               <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
-                isPoi1Offline
+                isLiveLoading
+                  ? "text-blue-500 bg-blue-500/10 border-blue-500/20"
+                  : isPoi1Offline
                   ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
                   : solarLive?.poi1?.status === false
                   ? "text-rose-500 bg-rose-500/10 border-rose-500/20"
                   : "text-blue-500 bg-blue-500/10 border-blue-500/20"
               }`}>
-                {isPoi1Offline ? "POI-1 (GAGAL POLLING API)" : solarLive?.poi1?.status === false ? "POI-1 (TIDAK AKTIF)" : "POI-1"}
+                {isLiveLoading ? "POI-1" : isPoi1Offline ? "POI-1 (GAGAL POLLING API)" : solarLive?.poi1?.status === false ? "POI-1 (TIDAK AKTIF)" : "POI-1"}
               </span>
               <span className={`h-2 w-2 rounded-full ${
-                isPoi1Offline
+                isLiveLoading
+                  ? "bg-blue-400 animate-pulse"
+                  : isPoi1Offline
                   ? "bg-amber-500"
                   : solarLive?.poi1?.status === false
                   ? "bg-rose-500"
@@ -6585,16 +6848,24 @@ export default function Electricity() {
               }`} />
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-              {formatNumber(solarFilteredMetrics.poi1Kwh)} kWh
+              {isSolarInitialLoading ? (
+                <div className="h-6 w-32 bg-blue-500/20 dark:bg-blue-400/20 rounded-lg animate-pulse" />
+              ) : (
+                `${formatNumber(solarFilteredMetrics.poi1Kwh)} kWh`
+              )}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 truncate" title={
-              isPoi1Offline
+              isLiveLoading || isSolarInitialLoading
+                ? "Memuat data POI-1"
+                : isPoi1Offline
                 ? "Status: GAGAL POLLING API"
                 : solarLive?.poi1?.status === false
                 ? "Status: TIDAK AKTIF"
                 : `${solarFilteredMetrics.periodLabel}${solarLive?.poi1?.voltAb ? ` • ${solarLive.poi1.voltAb.toFixed(1)} V` : ""}`
             }>
-              {isPoi1Offline
+              {isLiveLoading || isSolarInitialLoading ? (
+                <div className="h-3 w-28 bg-blue-500/15 dark:bg-blue-400/20 rounded animate-pulse" />
+              ) : isPoi1Offline
                 ? "Status: GAGAL POLLING API"
                 : solarLive?.poi1?.status === false
                 ? "Status: TIDAK AKTIF"
@@ -6612,6 +6883,10 @@ export default function Electricity() {
               {(() => {
                 const pltsRaw = apiLiveData["electric_plts"] || apiLiveData[DEFAULT_PLTS_API_URL] || apiLiveData["http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_plts"] || apiLiveData["http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_plts"];
                 const rawPeak = pltsRaw?.POI_1?.Peak_Demand_ScaleKw_POI_1 ?? pltsRaw?.POI_1?.Peak_Demand_ScaleKW_POI_1 ?? pltsLive?.poi1?.peak_demand;
+                const hasLiveRaw = rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)) && Number(rawPeak) > 0;
+                if (!hasLiveRaw && (isLiveLoading || isSolarInitialLoading)) {
+                  return <div className="h-6 w-24 bg-amber-500/20 dark:bg-amber-400/20 rounded-lg animate-pulse" />;
+                }
                 const val = (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)))
                   ? Number(rawPeak)
                   : (solarLive?.poi1?.peakDemand ?? solarFilteredMetrics.poi1PeakDemand ?? 0);
@@ -6625,7 +6900,9 @@ export default function Electricity() {
 
           {/* POI-2 */}
           <div className={`rounded-xl border p-4 hover:border-cyan-400 transition h-full flex flex-col justify-between min-h-[116px] ${
-            isPoi2Offline
+            isLiveLoading
+              ? "border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-950/30"
+              : isPoi2Offline
               ? "border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/30"
               : solarLive?.poi2?.status === false
               ? "border-rose-500/20 bg-rose-500/5 dark:bg-rose-950/30"
@@ -6633,16 +6910,20 @@ export default function Electricity() {
           }`}>
             <div className="flex items-center justify-between min-h-[24px]">
               <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
-                isPoi2Offline
+                isLiveLoading
+                  ? "text-cyan-500 bg-cyan-500/10 border-cyan-500/20"
+                  : isPoi2Offline
                   ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
                   : solarLive?.poi2?.status === false
                   ? "text-rose-500 bg-rose-500/10 border-rose-500/20"
                   : "text-cyan-500 bg-cyan-500/10 border-cyan-500/20"
               }`}>
-                {isPoi2Offline ? "POI-2 (GAGAL POLLING API)" : solarLive?.poi2?.status === false ? "POI-2 (TIDAK AKTIF)" : "POI-2"}
+                {isLiveLoading ? "POI-2" : isPoi2Offline ? "POI-2 (GAGAL POLLING API)" : solarLive?.poi2?.status === false ? "POI-2 (TIDAK AKTIF)" : "POI-2"}
               </span>
               <span className={`h-2 w-2 rounded-full ${
-                isPoi2Offline
+                isLiveLoading
+                  ? "bg-cyan-400 animate-pulse"
+                  : isPoi2Offline
                   ? "bg-amber-500"
                   : solarLive?.poi2?.status === false
                   ? "bg-rose-500"
@@ -6650,16 +6931,24 @@ export default function Electricity() {
               }`} />
             </div>
             <div className="mt-2 text-lg font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-              {formatNumber(solarFilteredMetrics.poi2Kwh)} kWh
+              {isSolarInitialLoading ? (
+                <div className="h-6 w-32 bg-cyan-500/20 dark:bg-cyan-400/20 rounded-lg animate-pulse" />
+              ) : (
+                `${formatNumber(solarFilteredMetrics.poi2Kwh)} kWh`
+              )}
             </div>
             <div className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 truncate" title={
-              isPoi2Offline
+              isLiveLoading || isSolarInitialLoading
+                ? "Memuat data POI-2"
+                : isPoi2Offline
                 ? "Status: GAGAL POLLING API"
                 : solarLive?.poi2?.status === false
                 ? "Status: TIDAK AKTIF"
                 : `${solarFilteredMetrics.periodLabel}${solarLive?.poi2?.voltAb ? ` • ${solarLive.poi2.voltAb.toFixed(1)} V` : ""}`
             }>
-              {isPoi2Offline
+              {isLiveLoading || isSolarInitialLoading ? (
+                <div className="h-3 w-28 bg-cyan-500/15 dark:bg-cyan-400/20 rounded animate-pulse" />
+              ) : isPoi2Offline
                 ? "Status: GAGAL POLLING API"
                 : solarLive?.poi2?.status === false
                 ? "Status: TIDAK AKTIF"
@@ -6677,6 +6966,10 @@ export default function Electricity() {
               {(() => {
                 const pltsRaw = apiLiveData["electric_plts"] || apiLiveData[DEFAULT_PLTS_API_URL] || apiLiveData["http://10.3.164.3:8088/system/webdev/Utility_Dashboard/electric_plts"] || apiLiveData["http://10.3.161.3:8088/system/webdev/Utility_Dashboard/electric_plts"];
                 const rawPeak = pltsRaw?.POI_2?.Peak_Demand_ScaleKw_POI_2 ?? pltsRaw?.POI_2?.Peak_Demand_ScaleKW_POI_2 ?? pltsLive?.poi2?.peak_demand;
+                const hasLiveRaw = rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)) && Number(rawPeak) > 0;
+                if (!hasLiveRaw && (isLiveLoading || isSolarInitialLoading)) {
+                  return <div className="h-6 w-24 bg-amber-500/20 dark:bg-amber-400/20 rounded-lg animate-pulse" />;
+                }
                 const val = (rawPeak !== undefined && rawPeak !== null && !isNaN(Number(rawPeak)))
                   ? Number(rawPeak)
                   : (solarLive?.poi2?.peakDemand ?? solarFilteredMetrics.poi2PeakDemand ?? 0);
@@ -6698,10 +6991,10 @@ export default function Electricity() {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[#1f6fb5] dark:text-sky-400">Trend Produksi Solar Panel (PLTS)</h3>
-                  {isSolarFilterPending && (
+                  {(isSolarFilterPending || isSolarInitialLoading) && (
                     <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-lg animate-pulse">
                       <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-ping" />
-                      Memuat...
+                      <span className="inline-flex items-center">Memuat<WaveDots /></span>
                     </span>
                   )}
                   {solarHeaderWeatherBadge && (() => {
@@ -6891,13 +7184,19 @@ export default function Electricity() {
             return (
               <>
                 <div className="my-auto py-4 flex justify-center">
-                  <DonutChart 
-                    segments={segments} 
-                    size={150} 
-                    thickness={18} 
-                    centerLabel={centerLabel} 
-                    centerLabelSize="text-[11px]" 
-                  />
+                  {isSolarInitialLoading ? (
+                    <div className="h-[150px] w-[150px] rounded-full border-[18px] border-cyan-500/20 dark:border-cyan-400/20 animate-pulse flex items-center justify-center">
+                      <div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+                    </div>
+                  ) : (
+                    <DonutChart 
+                      segments={segments} 
+                      size={150} 
+                      thickness={18} 
+                      centerLabel={centerLabel} 
+                      centerLabelSize="text-[11px]" 
+                    />
+                  )}
                 </div>
                 <div className="space-y-2 mt-auto">
                   {solarShowPoi1 && (
@@ -6906,7 +7205,9 @@ export default function Electricity() {
                         <span className="h-2 w-2 rounded-full bg-blue-500" />POI-1
                       </span>
                       <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
-                        {isPoi1Offline ? (
+                        {isLiveLoading || isSolarInitialLoading ? (
+                          <span className="inline-block h-3.5 w-24 bg-blue-500/20 dark:bg-blue-400/20 rounded animate-pulse align-middle" />
+                        ) : isPoi1Offline ? (
                           <span className="text-amber-500">Gagal Polling API</span>
                         ) : solarLive?.poi1?.status === false ? (
                           <span className="text-rose-500">TIDAK AKTIF</span>
@@ -6922,7 +7223,9 @@ export default function Electricity() {
                         <span className="h-2 w-2 rounded-full bg-cyan-500" />POI-2
                       </span>
                       <span className="font-bold text-slate-800 dark:text-white font-mono text-[11px]">
-                        {isPoi2Offline ? (
+                        {isLiveLoading || isSolarInitialLoading ? (
+                          <span className="inline-block h-3.5 w-24 bg-cyan-500/20 dark:bg-cyan-400/20 rounded animate-pulse align-middle" />
+                        ) : isPoi2Offline ? (
                           <span className="text-amber-500">Gagal Polling API</span>
                         ) : solarLive?.poi2?.status === false ? (
                           <span className="text-rose-500">TIDAK AKTIF</span>
@@ -6947,8 +7250,21 @@ export default function Electricity() {
               Dashboard <span className="text-slate-400 dark:text-slate-500">|</span> <span className="text-blue-500">Home</span> <span className="text-slate-400 dark:text-slate-500">›</span> Monthly Consumption
             </h3>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {cubicleLoading && !isLiveLoading && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 animate-pulse">
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-500 animate-ping" />
+                <span className="inline-flex items-center">Memuat<WaveDots /></span>
+              </span>
+            )}
             {(() => {
+              if (isLiveLoading) {
+                return (
+                  <span className="px-2.5 py-1 rounded-md text-[11px] font-extrabold font-mono uppercase border bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20 animate-pulse">
+                    <span className="inline-flex items-center">POLLING<WaveDots /></span>
+                  </span>
+                );
+              }
               let isOnline = true;
               let isGagalPolling = false;
               if (cubicleSelector === "pln") {
@@ -7121,12 +7437,22 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatNumber(monthlySelectedMetrics.totalKwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-36 bg-indigo-500/20 dark:bg-indigo-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          <>
+                            {formatNumber(monthlySelectedMetrics.totalKwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                      <span>PLN: <strong className="text-slate-700 dark:text-slate-200 font-mono font-bold">{formatNumber(monthlySelectedMetrics.plnKwh)}</strong></span>
-                      <span>PV: <strong className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">{formatNumber(monthlySelectedMetrics.totalPvKwh)}</strong></span>
+                      <span>PLN: <strong className="text-slate-700 dark:text-slate-200 font-mono font-bold">
+                        {isMonthlyCardLoading ? <span className="inline-block h-3 w-14 bg-indigo-500/15 dark:bg-indigo-400/20 rounded animate-pulse align-middle" /> : formatNumber(monthlySelectedMetrics.plnKwh)}
+                      </strong></span>
+                      <span>PV: <strong className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+                        {isMonthlyCardLoading ? <span className="inline-block h-3 w-14 bg-emerald-500/15 dark:bg-emerald-400/20 rounded animate-pulse align-middle" /> : formatNumber(monthlySelectedMetrics.totalPvKwh)}
+                      </strong></span>
                     </div>
                   </div>
 
@@ -7141,7 +7467,11 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatCurrency(monthlySelectedMetrics.plnCost)}
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-40 bg-blue-500/20 dark:bg-blue-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          formatCurrency(monthlySelectedMetrics.plnCost)
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7160,7 +7490,11 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatCurrency(monthlySelectedMetrics.pvCost)}
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-36 bg-amber-500/20 dark:bg-amber-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          formatCurrency(monthlySelectedMetrics.pvCost)
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7179,7 +7513,11 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-tight">
-                        {formatCurrency(monthlySelectedMetrics.savingsCost)}
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-36 bg-emerald-500/20 dark:bg-emerald-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          formatCurrency(monthlySelectedMetrics.savingsCost)
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7203,7 +7541,13 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatNumber(monthlySelectedMetrics.totalKwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-36 bg-indigo-500/20 dark:bg-indigo-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          <>
+                            {formatNumber(monthlySelectedMetrics.totalKwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7222,7 +7566,11 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatCurrency(monthlySelectedMetrics.plnCost)}
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-40 bg-blue-500/20 dark:bg-blue-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          formatCurrency(monthlySelectedMetrics.plnCost)
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7246,7 +7594,13 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatNumber(wf1Kwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-36 bg-indigo-500/20 dark:bg-indigo-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          <>
+                            {formatNumber(wf1Kwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7265,7 +7619,11 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatCurrency(wf1Cost)}
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-40 bg-blue-500/20 dark:bg-blue-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          formatCurrency(wf1Cost)
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7289,7 +7647,13 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatNumber(wf2Kwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-36 bg-indigo-500/20 dark:bg-indigo-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          <>
+                            {formatNumber(wf2Kwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7308,7 +7672,11 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatCurrency(wf2Cost)}
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-40 bg-blue-500/20 dark:bg-blue-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          formatCurrency(wf2Cost)
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7332,7 +7700,13 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatNumber(poi1Kwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-36 bg-amber-500/20 dark:bg-amber-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          <>
+                            {formatNumber(poi1Kwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7351,7 +7725,11 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatCurrency(poi1Cost)}
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-36 bg-amber-500/20 dark:bg-amber-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          formatCurrency(poi1Cost)
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7370,7 +7748,11 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-tight">
-                        {formatCurrency(poi1Savings)}
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-36 bg-emerald-500/20 dark:bg-emerald-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          formatCurrency(poi1Savings)
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7394,7 +7776,13 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatNumber(poi2Kwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-36 bg-amber-500/20 dark:bg-amber-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          <>
+                            {formatNumber(poi2Kwh)} <span className="text-xs text-slate-400 font-sans font-semibold">kWh</span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7413,7 +7801,11 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-slate-800 dark:text-white font-mono leading-tight">
-                        {formatCurrency(poi2Cost)}
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-36 bg-amber-500/20 dark:bg-amber-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          formatCurrency(poi2Cost)
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7432,7 +7824,11 @@ export default function Electricity() {
                         </div>
                       </div>
                       <div className="mt-2 text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-tight">
-                        {formatCurrency(poi2Savings)}
+                        {isMonthlyCardLoading ? (
+                          <div className="h-7 w-36 bg-emerald-500/20 dark:bg-emerald-400/20 rounded-lg animate-pulse" />
+                        ) : (
+                          formatCurrency(poi2Savings)
+                        )}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400">
@@ -7468,6 +7864,7 @@ export default function Electricity() {
           pvRate={pvRate}
           showPreviousControlled={monthlyCompareEnabled}
           onToggleShowPrevious={setMonthlyCompareEnabled}
+          isLoading={isMonthlyCardLoading}
         />
       </div>
 
