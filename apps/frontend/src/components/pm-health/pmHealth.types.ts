@@ -393,10 +393,20 @@ export interface PmCrosscheckSummaryItem {
   lastAnalyzedAt: string | null;
 }
 
+export interface CrosscheckAiConfigStatus {
+  configured: boolean;
+  source: "ui_saved" | "env" | "none";
+  maskedKey: string;
+  model: string;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
 export interface CrosscheckSummariesResponse {
   ok: boolean;
   summaries: Record<string, PmCrosscheckSummaryItem>;
   paramSpecs: CrosscheckParamSpec[];
+  aiConfig?: CrosscheckAiConfigStatus;
 }
 
 export interface CrosscheckDetailResponse {
@@ -405,4 +415,5 @@ export interface CrosscheckDetailResponse {
   record: PmCrosscheckRecord;
   report: PmCrosscheckReport;
   paramSpecs: CrosscheckParamSpec[];
+  aiConfig?: CrosscheckAiConfigStatus;
 }

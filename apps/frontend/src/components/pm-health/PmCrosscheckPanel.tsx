@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildApiUrl, deleteJson, getJson, patchJson, postJson } from "../../services/api.client";
+import { buildApiUrl, deleteJson, getJson, patchJson, postJson, putJson } from "../../services/api.client";
 import { getAccessToken } from "../../store/auth.store";
 import type {
+  CrosscheckAiConfigStatus,
   CrosscheckComparisonRow,
   CrosscheckDetailResponse,
   CrosscheckExtractedValue,
@@ -546,6 +547,14 @@ export function PmCrosscheckPanel({
   const [savingCellKey, setSavingCellKey] = useState<string | null>(null);
   const [applyingChecklist, setApplyingChecklist] = useState(false);
 
+  // Runtime Gemini API Key configuration state (no SSH / restart needed on production server)
+  const [aiConfig, setAiConfig] = useState<CrosscheckAiConfigStatus | null>(null);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const [showApiKeyPlain, setShowApiKeyPlain] = useState(false);
+  const [savingApiKey, setSavingApiKey] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+
   // Table filter & lightbox states
   const [rowFilter, setRowFilter] = useState<"all" | "issues" | "match" | "single">("all");
   const [showAll25Params, setShowAll25Params] = useState(false);
@@ -632,6 +641,9 @@ export function PmCrosscheckPanel({
         setReport(json.report);
         if (Array.isArray(json.paramSpecs) && json.paramSpecs.length > 0) {
           setParamSpecs(json.paramSpecs);
+        }
+        if (json.aiConfig) {
+          setAiConfig(json.aiConfig);
         }
         onSummaryUpdated(pmId, buildSummaryFromRecordReport(json.record, json.report));
       } catch (err) {
@@ -812,6 +824,36 @@ export function PmCrosscheckPanel({
       setError(parseApiError(err));
     } finally {
       setSavingTolerance(false);
+    }
+  };
+
+  const handleSaveAiApiKey = async (rawKey: string | null) => {
+    setSavingApiKey(true);
+    setApiKeyError(null);
+    try {
+      const json = await putJson<{ ok: boolean } & CrosscheckAiConfigStatus>("/pm-health/crosscheck/ai-config", {
+        geminiApiKey: rawKey
+      });
+      setAiConfig({
+        configured: json.configured,
+        source: json.source,
+        maskedKey: json.maskedKey,
+        model: json.model,
+        updatedAt: json.updatedAt,
+        updatedBy: json.updatedBy
+      });
+      setApiKeyDraft("");
+      setAiModalOpen(false);
+      setError(null);
+      setNotice(
+        json.configured
+          ? `Gemini API Key berhasil disimpan & langsung aktif (${json.maskedKey}). Sekarang Anda bisa klik "Analisis & Crosscheck"!`
+          : "API Key kustom telah dihapus (kembali ke .env server)."
+      );
+    } catch (err) {
+      setApiKeyError(parseApiError(err));
+    } finally {
+      setSavingApiKey(false);
     }
   };
 
@@ -1084,9 +1126,34 @@ export function PmCrosscheckPanel({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
-            <span className="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-mono">
-              {totalWithCrosscheck} / {pmList.length} PM memiliki data crosscheck
+            <span
+              title="Foto, tarikan Endpoint, dan hasil analisis AI disimpan permanen di server (disk + MongoDB) sehingga aman walau browser ditutup atau dibuka kembali nanti."
+              className="px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-300"
+            >
+              💾 Tersimpan Permanen
             </span>
+            <span className="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-mono">
+              {totalWithCrosscheck} / {pmList.length} PM memiliki data
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setApiKeyError(null);
+                setAiModalOpen(true);
+              }}
+              title={
+                aiConfig?.configured
+                  ? `Gemini AI aktif (${aiConfig.maskedKey} via ${aiConfig.source === "ui_saved" ? "Pengaturan UI" : ".env Server"}) — klik untuk mengganti`
+                  : "Gemini API Key belum diatur di server — klik untuk memasukkan API Key langsung dari sini"
+              }
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border transition cursor-pointer ${
+                aiConfig?.configured
+                  ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20"
+                  : "border-amber-500/50 bg-amber-500/15 text-amber-800 dark:text-amber-300 hover:bg-amber-500/25"
+              }`}
+            >
+              <span>{aiConfig?.configured ? "✓ Gemini AI Aktif" : "⚠ Atur API Key AI"}</span>
+            </button>
           </div>
         </div>
 
@@ -1409,9 +1476,23 @@ export function PmCrosscheckPanel({
           {error && (
             <div className="rounded-xl border border-rose-500/35 bg-rose-500/10 px-4 py-3 text-xs font-semibold text-rose-700 dark:text-rose-300 flex flex-wrap items-center justify-between gap-2">
               <span>{error}</span>
-              <button type="button" onClick={() => setError(null)} className="underline text-[11px] font-bold cursor-pointer">
-                Tutup
-              </button>
+              <div className="flex items-center gap-2">
+                {error.toUpperCase().includes("GEMINI_API_KEY") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setApiKeyError(null);
+                      setAiModalOpen(true);
+                    }}
+                    className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-extrabold cursor-pointer transition"
+                  >
+                    ⚙ Atur API Key AI Sekarang
+                  </button>
+                )}
+                <button type="button" onClick={() => setError(null)} className="underline text-[11px] font-bold cursor-pointer">
+                  Tutup
+                </button>
+              </div>
             </div>
           )}
 
@@ -2053,6 +2134,145 @@ export function PmCrosscheckPanel({
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* GEMINI AI API KEY SETTINGS MODAL */}
+      {aiModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 backdrop-blur-sm p-3 sm:p-6"
+          onClick={() => setAiModalOpen(false)}
+        >
+          <div
+            className="relative w-[480px] max-w-full max-h-[90vh] overflow-y-auto scrollbar-thin rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                  Pengaturan Gemini API Key (AI Vision)
+                </h3>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Diperlukan agar AI dapat membaca angka parameter otomatis dari foto Panel LCD &amp; screenshot eWON.
+                  Tersimpan aman di server (langsung aktif tanpa restart).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAiModalOpen(false)}
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                aria-label="Tutup modal pengaturan AI"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 p-3 text-xs space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 dark:text-slate-400 font-semibold">Status Saat Ini:</span>
+                {aiConfig?.configured ? (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-emerald-700 dark:text-emerald-300 text-[10px] font-extrabold">
+                    ✓ Aktif ({aiConfig.source === "ui_saved" ? "Tersimpan dari UI" : ".env Server"})
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/35 text-amber-700 dark:text-amber-300 text-[10px] font-extrabold">
+                    Belum Dikonfigurasi
+                  </span>
+                )}
+              </div>
+              {aiConfig?.configured && (
+                <div className="flex items-center justify-between gap-2 font-mono text-[11px]">
+                  <span className="text-slate-500">Key Terpasang:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100">{aiConfig.maskedKey}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2 font-mono text-[11px]">
+                <span className="text-slate-500">Model Vision:</span>
+                <span className="font-bold text-indigo-600 dark:text-indigo-400">{aiConfig?.model || "gemini-2.5-flash"}</span>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!apiKeyDraft.trim()) {
+                  setApiKeyError("Masukkan Gemini API Key terlebih dahulu.");
+                  return;
+                }
+                void handleSaveAiApiKey(apiKeyDraft.trim());
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
+                  Gemini API Key (dari Google AI Studio)
+                </label>
+                <div className="relative">
+                  <input
+                    type={showApiKeyPlain ? "text" : "password"}
+                    value={apiKeyDraft}
+                    onChange={(e) => {
+                      setApiKeyDraft(e.target.value);
+                      setApiKeyError(null);
+                    }}
+                    placeholder="AIzaSy..."
+                    autoComplete="off"
+                    className="w-full pr-16 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 font-mono text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKeyPlain((v) => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    {showApiKeyPlain ? "Sembunyi" : "Lihat"}
+                  </button>
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-400">
+                  Key disimpan di MongoDB &amp; disk lokal server — tidak pernah diekspos kembali ke browser.
+                </p>
+              </div>
+
+              {apiKeyError && (
+                <div className="rounded-xl border border-rose-500/35 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                  {apiKeyError}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                {aiConfig?.source === "ui_saved" ? (
+                  <button
+                    type="button"
+                    disabled={savingApiKey}
+                    onClick={() => void handleSaveAiApiKey(null)}
+                    className="px-3 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold cursor-pointer disabled:opacity-50"
+                  >
+                    Hapus Key Kustom
+                  </button>
+                ) : (
+                  <span />
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAiModalOpen(false)}
+                    className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingApiKey || !apiKeyDraft.trim()}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-45 text-white text-xs font-extrabold shadow-sm cursor-pointer transition"
+                  >
+                    {savingApiKey ? "Menyimpan..." : "Simpan & Aktifkan"}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

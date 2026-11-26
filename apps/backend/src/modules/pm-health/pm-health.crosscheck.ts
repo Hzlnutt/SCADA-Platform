@@ -3,6 +3,8 @@ import fs from "fs";
 import path from "path";
 import { env } from "../../config/env.config";
 import { logger } from "../../config/logger.config";
+import { getMongoDb } from "../../database/mongo";
+import { GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
 import { resolvePmMeta } from "./pm-health.catalog";
 import type {
   CrosscheckComparisonRow,
@@ -24,9 +26,171 @@ import type {
 
 const DATA_DIR = path.resolve(__dirname, "..", "..", "..", "data", "pm-health");
 const CROSSCHECK_FILE = path.join(DATA_DIR, "pm-crosscheck.json");
+const AI_CONFIG_FILE = path.join(DATA_DIR, "ai-config.json");
 const IMAGES_ROOT_DIR = path.join(DATA_DIR, "crosscheck-images");
+const MONGO_RECORDS_COLLECTION = "pm_crosscheck_records";
+const MONGO_IMAGES_COLLECTION = "pm_crosscheck_images";
+const MONGO_AI_CONFIG_KEY = "pm_crosscheck_ai";
 const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_BATCH_SIZE = 5;
+
+function getSafeMongoDb() {
+  try {
+    const db = getMongoDb();
+    if (db && typeof (db as any).collection === "function") return db;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function maskApiKey(key: string): string {
+  const trimmed = key.trim();
+  if (!trimmed) return "";
+  if (trimmed.length <= 10) return `${trimmed.slice(0, 3)}***`;
+  return `${trimmed.slice(0, 6)}••••••${trimmed.slice(-4)}`;
+}
+
+interface StoredAiConfig {
+  geminiApiKey: string;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+let cachedCustomAiConfig: StoredAiConfig | null = null;
+let aiConfigHydrated = false;
+
+function readLocalAiConfig(): StoredAiConfig | null {
+  try {
+    if (fs.existsSync(AI_CONFIG_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(AI_CONFIG_FILE, "utf-8"));
+      if (parsed && typeof parsed.geminiApiKey === "string" && parsed.geminiApiKey.trim()) {
+        return {
+          geminiApiKey: parsed.geminiApiKey.trim(),
+          updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : null,
+          updatedBy: typeof parsed.updatedBy === "string" ? parsed.updatedBy : null
+        };
+      }
+    }
+  } catch {
+    // ignore corrupt local file
+  }
+  return null;
+}
+
+function writeLocalAiConfig(cfg: StoredAiConfig | null) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!cfg || !cfg.geminiApiKey) {
+      if (fs.existsSync(AI_CONFIG_FILE)) fs.unlinkSync(AI_CONFIG_FILE);
+      return;
+    }
+    const tmp = `${AI_CONFIG_FILE}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2), "utf-8");
+    fs.renameSync(tmp, AI_CONFIG_FILE);
+  } catch (err: any) {
+    logger.warn(`[PM-Crosscheck] Failed writing local ai-config.json: ${err?.message || err}`);
+  }
+}
+
+export async function ensureAiConfigHydrated(): Promise<void> {
+  if (aiConfigHydrated) return;
+  const local = readLocalAiConfig();
+  if (local) {
+    cachedCustomAiConfig = local;
+  }
+  const db = getSafeMongoDb();
+  if (db) {
+    try {
+      const doc = await db.collection(GLOBAL_CONFIG_COLLECTION).findOne({ key: MONGO_AI_CONFIG_KEY });
+      if (doc && typeof doc.geminiApiKey === "string" && doc.geminiApiKey.trim()) {
+        cachedCustomAiConfig = {
+          geminiApiKey: doc.geminiApiKey.trim(),
+          updatedAt: typeof doc.updatedAt === "string" ? doc.updatedAt : null,
+          updatedBy: typeof doc.updatedBy === "string" ? doc.updatedBy : null
+        };
+        writeLocalAiConfig(cachedCustomAiConfig);
+      }
+      aiConfigHydrated = true;
+    } catch {
+      // retry next time if mongo temporarily unavailable
+    }
+  } else if (local) {
+    aiConfigHydrated = true;
+  }
+}
+
+export async function resolveGeminiApiKey(): Promise<{
+  apiKey: string;
+  source: "ui_saved" | "env" | "none";
+}> {
+  await ensureAiConfigHydrated();
+  if (cachedCustomAiConfig?.geminiApiKey) {
+    return { apiKey: cachedCustomAiConfig.geminiApiKey, source: "ui_saved" };
+  }
+  const envKey = String(process.env.GEMINI_API_KEY || env.geminiApiKey || "").trim();
+  if (envKey) {
+    return { apiKey: envKey, source: "env" };
+  }
+  return { apiKey: "", source: "none" };
+}
+
+export async function getCrosscheckAiConfigStatus(): Promise<{
+  configured: boolean;
+  source: "ui_saved" | "env" | "none";
+  maskedKey: string;
+  model: string;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}> {
+  const { apiKey, source } = await resolveGeminiApiKey();
+  return {
+    configured: Boolean(apiKey),
+    source,
+    maskedKey: apiKey ? maskApiKey(apiKey) : "",
+    model: GEMINI_MODEL,
+    updatedAt: source === "ui_saved" ? cachedCustomAiConfig?.updatedAt || null : null,
+    updatedBy: source === "ui_saved" ? cachedCustomAiConfig?.updatedBy || null : null
+  };
+}
+
+export async function saveCrosscheckAiApiKey(
+  rawKey: string | null,
+  actor: string,
+  nowWib: string
+): Promise<ReturnType<typeof getCrosscheckAiConfigStatus>> {
+  const cleaned = typeof rawKey === "string" ? rawKey.trim() : "";
+  if (cleaned && cleaned.length < 20) {
+    throw new Error("Format Gemini API Key tidak valid (terlalu pendek).");
+  }
+
+  const nextCfg: StoredAiConfig | null = cleaned
+    ? { geminiApiKey: cleaned, updatedAt: nowWib, updatedBy: actor || "Admin" }
+    : null;
+
+  cachedCustomAiConfig = nextCfg;
+  aiConfigHydrated = true;
+  writeLocalAiConfig(nextCfg);
+
+  const db = getSafeMongoDb();
+  if (db) {
+    try {
+      if (nextCfg) {
+        await db.collection(GLOBAL_CONFIG_COLLECTION).updateOne(
+          { key: MONGO_AI_CONFIG_KEY },
+          { $set: { key: MONGO_AI_CONFIG_KEY, ...nextCfg } },
+          { upsert: true }
+        );
+      } else {
+        await db.collection(GLOBAL_CONFIG_COLLECTION).deleteOne({ key: MONGO_AI_CONFIG_KEY });
+      }
+    } catch (err: any) {
+      logger.warn(`[PM-Crosscheck] Mongo ai-config sync skipped: ${err?.message || err}`);
+    }
+  }
+
+  return getCrosscheckAiConfigStatus();
+}
 
 export interface CrosscheckParamSpec {
   key: CrosscheckParamKey;
@@ -597,9 +761,11 @@ async function callGeminiVisionBatch(
   pmName: string,
   batch: Array<{ img: CrosscheckImageItem; base64: string }>
 ): Promise<GeminiBatchExtractResult> {
-  const apiKey = env.geminiApiKey;
+  const { apiKey } = await resolveGeminiApiKey();
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY belum dikonfigurasi di server backend (.env).");
+    throw new Error(
+      "GEMINI_API_KEY belum dikonfigurasi di server backend. Klik tombol 'Atur API Key AI' di kanan atas untuk memasukkan Gemini API Key secara langsung (tanpa restart server)."
+    );
   }
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
@@ -724,6 +890,7 @@ Kembalikan HANYA objek JSON valid dengan skema berikut:
 class PmCrosscheckLocalStore {
   private records: Map<string, PmCrosscheckRecord> = new Map();
   private loaded = false;
+  private mongoHydrated = false;
 
   private ensureLoaded() {
     if (this.loaded) return;
@@ -760,7 +927,67 @@ class PmCrosscheckLocalStore {
     }
   }
 
-  private persist() {
+  /**
+   * Hydrates crosscheck records from SCADA's persistent MongoDB volume (never touching read-only PostgreSQL)
+   * so records and uploaded photos survive browser closes, server restarts, and Docker container rebuilds.
+   */
+  public async ensureHydratedFromMongo(): Promise<void> {
+    this.ensureLoaded();
+    if (this.mongoHydrated) return;
+    const db = getSafeMongoDb();
+    if (!db) return;
+    try {
+      const docs = await db.collection(MONGO_RECORDS_COLLECTION).find({}).toArray();
+      let mergedAny = false;
+      const mongoIds = new Set<string>();
+      for (const doc of docs) {
+        const rec = doc?.record as PmCrosscheckRecord | undefined;
+        if (!rec || !rec.pmId) continue;
+        const normId = sanitizePmId(rec.pmId);
+        if (!normId) continue;
+        mongoIds.add(normId);
+        const local = this.records.get(normId);
+        const localUpdated = local?.updatedAt || "";
+        const remoteUpdated = rec.updatedAt || "";
+        if (!local || remoteUpdated > localUpdated) {
+          this.records.set(normId, {
+            ...rec,
+            pmId: normId,
+            toleranceMode:
+              rec.toleranceMode === "normal" || rec.toleranceMode === "relaxed" ? rec.toleranceMode : "strict",
+            images: Array.isArray(rec.images) ? rec.images : [],
+            manualOverrides: rec.manualOverrides && typeof rec.manualOverrides === "object" ? rec.manualOverrides : {}
+          });
+          mergedAny = true;
+        }
+      }
+      if (mergedAny) {
+        this.persistDiskOnly();
+      }
+      // Also back up any pre-existing local records into MongoDB if absent there
+      for (const [pmId, rec] of this.records.entries()) {
+        if (!mongoIds.has(pmId)) {
+          void this.syncRecordToMongo(rec);
+          for (const img of rec.images) {
+            const p = path.join(IMAGES_ROOT_DIR, pmId, path.basename(img.storedFileName));
+            if (fs.existsSync(p)) {
+              try {
+                const buf = fs.readFileSync(p);
+                void this.syncImageToMongo(pmId, img, buf);
+              } catch {
+                // ignore
+              }
+            }
+          }
+        }
+      }
+      this.mongoHydrated = true;
+    } catch (err: any) {
+      logger.warn(`[PM-Crosscheck] Mongo hydration skipped: ${err?.message || err}`);
+    }
+  }
+
+  private persistDiskOnly() {
     try {
       if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
       const obj: Record<string, PmCrosscheckRecord> = {};
@@ -772,6 +999,76 @@ class PmCrosscheckLocalStore {
       fs.renameSync(tmpPath, CROSSCHECK_FILE);
     } catch (err: any) {
       logger.warn(`[PM-Crosscheck] Persist failed: ${err?.message || err}`);
+    }
+  }
+
+  private async syncRecordToMongo(rec: PmCrosscheckRecord): Promise<void> {
+    const db = getSafeMongoDb();
+    if (!db) return;
+    try {
+      await db.collection(MONGO_RECORDS_COLLECTION).updateOne(
+        { _id: rec.pmId as any },
+        { $set: { pmId: rec.pmId, record: rec, updatedAt: rec.updatedAt || new Date().toISOString() } },
+        { upsert: true }
+      );
+    } catch (err: any) {
+      logger.warn(`[PM-Crosscheck] Mongo record sync skipped for ${rec.pmId}: ${err?.message || err}`);
+    }
+  }
+
+  private async syncImageToMongo(pmId: string, img: CrosscheckImageItem, buffer: Buffer): Promise<void> {
+    const db = getSafeMongoDb();
+    if (!db) return;
+    try {
+      await db.collection(MONGO_IMAGES_COLLECTION).updateOne(
+        { _id: img.id as any },
+        {
+          $set: {
+            pmId,
+            imageId: img.id,
+            storedFileName: img.storedFileName,
+            mimeType: img.mimeType,
+            dataBase64: buffer.toString("base64"),
+            uploadedAt: img.uploadedAt
+          }
+        },
+        { upsert: true }
+      );
+    } catch (err: any) {
+      logger.warn(`[PM-Crosscheck] Mongo image sync skipped for ${img.id}: ${err?.message || err}`);
+    }
+  }
+
+  private async deleteImageFromMongo(imageId: string): Promise<void> {
+    const db = getSafeMongoDb();
+    if (!db) return;
+    try {
+      await db.collection(MONGO_IMAGES_COLLECTION).deleteOne({ _id: imageId as any });
+    } catch {
+      // ignore
+    }
+  }
+
+  private async deletePmFromMongo(pmId: string): Promise<void> {
+    const db = getSafeMongoDb();
+    if (!db) return;
+    try {
+      await Promise.all([
+        db.collection(MONGO_RECORDS_COLLECTION).deleteOne({ _id: pmId as any }),
+        db.collection(MONGO_IMAGES_COLLECTION).deleteMany({ pmId })
+      ]);
+    } catch {
+      // ignore
+    }
+  }
+
+  private persist(changedPmId?: string) {
+    this.persistDiskOnly();
+    if (changedPmId) {
+      const rec = this.records.get(changedPmId);
+      if (rec) {
+        void this.syncRecordToMongo(rec);
+      }
     }
   }
 
@@ -854,7 +1151,8 @@ class PmCrosscheckLocalStore {
     rec.images.push(item);
     rec.updatedAt = nowWib;
     this.records.set(key, rec);
-    this.persist();
+    this.persist(key);
+    void this.syncImageToMongo(key, item, buffer);
 
     return { record: JSON.parse(JSON.stringify(rec)), added: item };
   }
@@ -887,7 +1185,7 @@ class PmCrosscheckLocalStore {
       img.caption = patch.caption.trim().slice(0, 180);
     }
     rec.updatedAt = nowWib;
-    this.persist();
+    this.persist(key);
     return JSON.parse(JSON.stringify(rec));
   }
 
@@ -908,7 +1206,8 @@ class PmCrosscheckLocalStore {
     }
 
     rec.updatedAt = nowWib;
-    this.persist();
+    this.persist(key);
+    void this.deleteImageFromMongo(removed.id);
     return JSON.parse(JSON.stringify(rec));
   }
 
@@ -922,6 +1221,33 @@ class PmCrosscheckLocalStore {
     const filePath = path.join(IMAGES_ROOT_DIR, key, path.basename(img.storedFileName));
     if (!fs.existsSync(filePath)) return null;
     return { filePath, mimeType: img.mimeType };
+  }
+
+  public async getImageFileAsync(pmId: string, imageId: string): Promise<{ filePath: string; mimeType: string } | null> {
+    await this.ensureHydratedFromMongo();
+    const local = this.getImageFile(pmId, imageId);
+    if (local) return local;
+
+    const key = sanitizePmId(pmId);
+    const rec = this.records.get(key);
+    const img = rec?.images.find((i) => i.id === imageId);
+    if (!img) return null;
+
+    const db = getSafeMongoDb();
+    if (!db) return null;
+    try {
+      const doc = await db.collection(MONGO_IMAGES_COLLECTION).findOne({ _id: imageId as any });
+      if (doc && typeof doc.dataBase64 === "string" && doc.dataBase64.length > 0) {
+        const pmDir = path.join(IMAGES_ROOT_DIR, key);
+        if (!fs.existsSync(pmDir)) fs.mkdirSync(pmDir, { recursive: true });
+        const filePath = path.join(pmDir, path.basename(img.storedFileName));
+        fs.writeFileSync(filePath, Buffer.from(doc.dataBase64, "base64"));
+        return { filePath, mimeType: String(doc.mimeType || img.mimeType || "image/jpeg") };
+      }
+    } catch {
+      // ignore
+    }
+    return null;
   }
 
   public setLiveEndpointSnapshot(
@@ -965,7 +1291,7 @@ class PmCrosscheckLocalStore {
     };
     rec.updatedAt = nowWib;
     this.records.set(key, rec);
-    this.persist();
+    this.persist(key);
     return JSON.parse(JSON.stringify(rec));
   }
 
@@ -980,7 +1306,7 @@ class PmCrosscheckLocalStore {
     rec.toleranceMode = mode === "normal" || mode === "relaxed" ? mode : "strict";
     rec.updatedAt = nowWib;
     this.records.set(key, rec);
-    this.persist();
+    this.persist(key);
     return JSON.parse(JSON.stringify(rec));
   }
 
@@ -991,7 +1317,7 @@ class PmCrosscheckLocalStore {
     rec.liveEndpointSnapshot = null;
     rec.updatedAt = nowWib;
     this.records.set(key, rec);
-    this.persist();
+    this.persist(key);
     return JSON.parse(JSON.stringify(rec));
   }
 
@@ -1030,7 +1356,7 @@ class PmCrosscheckLocalStore {
 
     rec.updatedAt = nowWib;
     this.records.set(key, rec);
-    this.persist();
+    this.persist(key);
     return JSON.parse(JSON.stringify(rec));
   }
 
@@ -1050,6 +1376,7 @@ class PmCrosscheckLocalStore {
       this.records.delete(key);
       this.persist();
     }
+    void this.deletePmFromMongo(key);
   }
 
   /**
@@ -1061,7 +1388,7 @@ class PmCrosscheckLocalStore {
     pmId: string,
     options: { forceReanalyze?: boolean; actor: string; nowWib: string }
   ): Promise<{ record: PmCrosscheckRecord; report: PmCrosscheckReport; analyzedImageCount: number }> {
-    this.ensureLoaded();
+    await this.ensureHydratedFromMongo();
     const key = sanitizePmId(pmId);
     const rec = this.records.get(key) ?? createEmptyRecord(key);
 
@@ -1077,9 +1404,9 @@ class PmCrosscheckLocalStore {
     const meta = resolvePmMeta(key);
     const prepared: Array<{ img: CrosscheckImageItem; base64: string }> = [];
     for (const img of targets) {
-      const filePath = path.join(IMAGES_ROOT_DIR, key, path.basename(img.storedFileName));
-      if (!fs.existsSync(filePath)) continue;
-      const buf = fs.readFileSync(filePath);
+      const resolvedFile = await this.getImageFileAsync(key, img.id);
+      if (!resolvedFile || !fs.existsSync(resolvedFile.filePath)) continue;
+      const buf = fs.readFileSync(resolvedFile.filePath);
       prepared.push({ img, base64: buf.toString("base64") });
     }
 
@@ -1141,7 +1468,7 @@ class PmCrosscheckLocalStore {
     }
     rec.updatedAt = options.nowWib;
     this.records.set(key, rec);
-    this.persist();
+    this.persist(key);
 
     const report = computeCrosscheckReport(rec);
     return {

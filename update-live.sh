@@ -17,6 +17,9 @@ fi
 echo "[1/3] Copying updated backend source and compiling TypeScript inside container..."
 sudo docker cp apps/backend/package.json "${BACKEND_CID}:/repo/apps/backend/package.json"
 sudo docker cp apps/backend/src/. "${BACKEND_CID}:/repo/apps/backend/src/"
+if [ -f apps/backend/.env ]; then
+  sudo docker cp apps/backend/.env "${BACKEND_CID}:/repo/apps/backend/.env"
+fi
 sudo docker compose exec -T backend pnpm --filter @scada/backend add exceljs xlsx jszip
 sudo docker compose exec -T backend pnpm build
 

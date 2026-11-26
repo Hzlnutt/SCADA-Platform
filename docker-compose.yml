@@ -50,6 +50,9 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-test_user}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-Pandaan1}
       - POSTGRES_DB=${POSTGRES_DB:-scada_test}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    volumes:
+      - scada_backend_data:/repo/apps/backend/data
     depends_on:
       - mongo
       - redis
@@ -89,6 +92,7 @@ services:
 volumes:
   scada_mongo:
   scada_redis:
+  scada_backend_data:
 
 networks:
   scada_net:

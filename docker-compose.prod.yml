@@ -21,6 +21,8 @@ services:
       - DUMMY_MODE=false
       - REDIS_URL=redis://redis:6379
       - PYTHON_BIOMETRICS_URL=http://python-biometrics:5001
+    volumes:
+      - scada_backend_data:/repo/apps/backend/data
 
   mongo:
     restart: unless-stopped
@@ -45,3 +47,4 @@ volumes:
   scada_mongo:
   scada_mongo_config:
   scada_redis:
+  scada_backend_data:

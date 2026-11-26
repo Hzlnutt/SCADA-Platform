@@ -23,7 +23,9 @@ import { PM_CATALOG, resolvePmMeta } from "./pm-health.catalog";
 import {
   computeCrosscheckReport,
   CROSSCHECK_PARAM_SPECS,
-  pmCrosscheckStore
+  getCrosscheckAiConfigStatus,
+  pmCrosscheckStore,
+  saveCrosscheckAiApiKey
 } from "./pm-health.crosscheck";
 import type {
   AnomalyEvent,
@@ -750,22 +752,44 @@ function toCrosscheckSummary(
   };
 }
 
-pmHealthRouter.get("/pm-health/crosscheck", ...adminOnly, (_req: Request, res: Response) => {
+pmHealthRouter.get("/pm-health/crosscheck", ...adminOnly, async (_req: Request, res: Response) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  await pmCrosscheckStore.ensureHydratedFromMongo();
   res.json({
     ok: true,
     summaries: pmCrosscheckStore.listSummaries(),
-    paramSpecs: CROSSCHECK_PARAM_SPECS
+    paramSpecs: CROSSCHECK_PARAM_SPECS,
+    aiConfig: await getCrosscheckAiConfigStatus()
   });
 });
 
-pmHealthRouter.get("/pm-health/crosscheck/:pmId", ...adminOnly, (req: Request, res: Response) => {
+pmHealthRouter.get("/pm-health/crosscheck/ai-config", ...adminOnly, async (_req: Request, res: Response) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.json({
+    ok: true,
+    ...(await getCrosscheckAiConfigStatus())
+  });
+});
+
+pmHealthRouter.put("/pm-health/crosscheck/ai-config", ...adminOnly, async (req: Request, res: Response) => {
+  try {
+    const actor = req.user?.name || req.user?.id || "Admin";
+    const rawKey = typeof req.body?.geminiApiKey === "string" ? req.body.geminiApiKey : null;
+    const status = await saveCrosscheckAiApiKey(rawKey, actor, formatWibNow());
+    res.json({ ok: true, ...status });
+  } catch (err: any) {
+    res.status(400).json({ ok: false, error: err?.message || "Gagal menyimpan Gemini API Key." });
+  }
+});
+
+pmHealthRouter.get("/pm-health/crosscheck/:pmId", ...adminOnly, async (req: Request, res: Response) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
   if (!pmId) {
     res.status(400).json({ ok: false, error: "pmId wajib diisi." });
     return;
   }
+  await pmCrosscheckStore.ensureHydratedFromMongo();
   const record = pmCrosscheckStore.getRecord(pmId);
   const report = computeCrosscheckReport(record);
   res.json({
@@ -773,7 +797,8 @@ pmHealthRouter.get("/pm-health/crosscheck/:pmId", ...adminOnly, (req: Request, r
     pm: resolvePmMeta(pmId),
     record,
     report,
-    paramSpecs: CROSSCHECK_PARAM_SPECS
+    paramSpecs: CROSSCHECK_PARAM_SPECS,
+    aiConfig: await getCrosscheckAiConfigStatus()
   });
 });
 
@@ -842,14 +867,14 @@ pmHealthRouter.get(
   "/pm-health/crosscheck/:pmId/images/:imageId",
   attachQueryTokenToHeader,
   ...adminOnly,
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     const pmId = decodeURIComponent(String(req.params.pmId || "")).trim().toUpperCase();
     const imageId = decodeURIComponent(String(req.params.imageId || "")).trim();
     if (!pmId || !imageId) {
       res.status(400).json({ ok: false, error: "Parameter tidak lengkap." });
       return;
     }
-    const file = pmCrosscheckStore.getImageFile(pmId, imageId);
+    const file = await pmCrosscheckStore.getImageFileAsync(pmId, imageId);
     if (!file) {
       res.status(404).json({ ok: false, error: "Gambar tidak ditemukan." });
       return;
