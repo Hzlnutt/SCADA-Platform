@@ -104,13 +104,316 @@ export interface SolarAnalyticsResult {
     hourly: number[];
     hourlyPoi1: number[];
     hourlyPoi2: number[];
-    daily: { day: string; poi1: number; poi2: number; total: number; wbp?: number; lwbp?: number; avoidedCost?: number; savings?: number }[];
+    daily: {
+      day: string;
+      poi1: number;
+      poi2: number;
+      total: number;
+      wbp?: number;
+      lwbp?: number;
+      avoidedCost?: number;
+      savings?: number;
+      isDistributed?: boolean;
+      distributedNote?: string;
+    }[];
     monthly: { month: string; poi1: number; poi2: number; total: number; wbp?: number; lwbp?: number; avoidedCost?: number; savings?: number }[];
     currentHour?: number;
     progressiveMinute?: number | null;
   };
   live: SolarLiveState | null;
   weather?: PltsWeatherPayload;
+}
+
+const MONTH_SHORT_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+
+// Normalized daylight production weights (06:00 - 17:00 WIB) summing to 1.0
+const SOLAR_DAYLIGHT_HOUR_WEIGHTS: Record<number, number> = {
+  6: 0.025,
+  7: 0.065,
+  8: 0.110,
+  9: 0.140,
+  10: 0.160,
+  11: 0.160,
+  12: 0.135,
+  13: 0.095,
+  14: 0.060,
+  15: 0.032,
+  16: 0.015,
+  17: 0.003
+};
+
+function enumerateCalendarDates(startDateStr: string, endDateStr: string): string[] {
+  const out: string[] = [];
+  if (!startDateStr || !endDateStr || startDateStr > endDateStr) return out;
+  const [sy, sm, sd] = startDateStr.split("-").map(Number);
+  const [ey, em, ed] = endDateStr.split("-").map(Number);
+  const cur = new Date(Date.UTC(sy, sm - 1, sd));
+  const end = new Date(Date.UTC(ey, em - 1, ed));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  let guard = 0;
+  while (cur <= end && guard < 800) {
+    out.push(`${cur.getUTCFullYear()}-${pad(cur.getUTCMonth() + 1)}-${pad(cur.getUTCDate())}`);
+    cur.setUTCDate(cur.getUTCDate() + 1);
+    guard++;
+  }
+  return out;
+}
+
+function formatDistributedSpanNote(fromDay: string, toDay: string, spanDays: number): string {
+  const [, fm, fd] = fromDay.split("-").map(Number);
+  const [, tm, td] = toDay.split("-").map(Number);
+  const fMon = MONTH_SHORT_ID[Math.max(0, (fm || 1) - 1)] || "";
+  const tMon = MONTH_SHORT_ID[Math.max(0, (tm || 1) - 1)] || "";
+  const rangeLabel = fm === tm ? `${fd}–${td} ${tMon}` : `${fd} ${fMon}–${td} ${tMon}`;
+  return `Distribusi rata ${spanDays} hari (${rangeLabel}, pasca-disconnect)`;
+}
+
+function computeMedian(nums: number[], fallback: number): number {
+  if (nums.length === 0) return fallback;
+  const sorted = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+function buildWeightedDaylightHours(dayTotal: number): number[] {
+  const arr = Array.from({ length: 24 }, () => 0);
+  if (dayTotal <= 0) return arr;
+  let assigned = 0;
+  const hours = Object.keys(SOLAR_DAYLIGHT_HOUR_WEIGHTS).map(Number);
+  for (let idx = 0; idx < hours.length; idx++) {
+    const h = hours[idx];
+    const w = SOLAR_DAYLIGHT_HOUR_WEIGHTS[h];
+    if (idx === hours.length - 1) {
+      arr[h] = Math.max(0, Number((dayTotal - assigned).toFixed(4)));
+    } else {
+      const v = Number((dayTotal * w).toFixed(4));
+      arr[h] = v;
+      assigned += v;
+    }
+  }
+  return arr;
+}
+
+/**
+ * Redistributes cumulative PLTS reconnect catch-up spikes evenly across immediately preceding
+ * disconnected (0 kWh) calendar days so total energy is 100% conserved without artificial spikes.
+ */
+function redistributeSinglePoiSpikes(params: {
+  poi: "poi1" | "poi2";
+  allDays: string[];
+  dailyMap: Map<string, number>;
+  dailyMaxHour: Map<string, number>;
+  dailySpikeHour: Map<string, number>;
+  hourlyMap: Map<string, number[]>;
+  distributedNotes: Map<string, string>;
+}): Set<string> {
+  const { poi, allDays, dailyMap, dailyMaxHour, dailySpikeHour, hourlyMap, distributedNotes } = params;
+  const modifiedDays = new Set<string>();
+  if (allDays.length < 2) return modifiedDays;
+
+  // Physical impossibility thresholds: POI-1 peak ~530 kW (max ~5,200 kWh/day), POI-2 peak ~1,185 kW (max ~9,500 kWh/day).
+  // Requiring a physical catch-up jump (>1h capacity) or physical daily cap breach guarantees ZERO false positives
+  // on normal sunny days after genuine plant/inverter shutdowns (e.g., Nov 03 or Sept 14).
+  const hourlyCatchupThreshold = poi === "poi1" ? 1000 : 2000;
+  const dailyPhysicalCap = poi === "poi1" ? 6200 : 12000;
+  const fallbackMedian = poi === "poi1" ? 3000 : 6500;
+  const maxGapDays = 14;
+
+  // Compute baseline median from normal active days (excluding clear catch-up spikes)
+  const normalActiveTotals: number[] = [];
+  for (const d of allDays) {
+    const tot = dailyMap.get(d) || 0;
+    const maxH = dailyMaxHour.get(d) || 0;
+    if (tot > 100 && maxH < hourlyCatchupThreshold) {
+      normalActiveTotals.push(tot);
+    }
+  }
+  const medianActive = computeMedian(normalActiveTotals, fallbackMedian);
+
+  for (let i = 1; i < allDays.length; i++) {
+    const day = allDays[i];
+    const dayTotal = dailyMap.get(day) || 0;
+    if (dayTotal <= 0.01) continue;
+
+    // Count consecutive immediately preceding days with 0 recorded kWh
+    let emptyCount = 0;
+    while (
+      emptyCount < maxGapDays &&
+      i - 1 - emptyCount >= 0 &&
+      (dailyMap.get(allDays[i - 1 - emptyCount]) || 0) <= 0.01
+    ) {
+      emptyCount++;
+    }
+    if (emptyCount === 0) continue;
+
+    // Require either an active day prior to the gap OR a physically impossible single-hour catch-up jump
+    const hasPriorActiveDay = allDays
+      .slice(0, i - emptyCount)
+      .some((d) => (dailyMap.get(d) || 0) > 10);
+    const maxH = dailyMaxHour.get(day) || 0;
+    const hasCatchupJump = maxH >= hourlyCatchupThreshold;
+    if (!hasPriorActiveDay && !hasCatchupJump) continue;
+
+    const isReconnectSpike =
+      (hasCatchupJump && dayTotal > medianActive * 1.1) ||
+      (dayTotal >= dailyPhysicalCap && dayTotal >= medianActive * 1.55);
+    if (!isReconnectSpike) continue;
+
+    const spanDays = emptyCount + 1;
+    const targetDays = allDays.slice(i - emptyCount, i + 1);
+    const baseShare = Math.floor((dayTotal / spanDays) * 100) / 100;
+    const remainder = Number((dayTotal - baseShare * spanDays).toFixed(2));
+    const note = formatDistributedSpanNote(targetDays[0], targetDays[targetDays.length - 1], spanDays);
+
+    for (let idx = 0; idx < targetDays.length; idx++) {
+      const targetDay = targetDays[idx];
+      const share = idx === targetDays.length - 1
+        ? Number((baseShare + remainder).toFixed(2))
+        : baseShare;
+
+      dailyMap.set(targetDay, share);
+      modifiedDays.add(targetDay);
+      if (!distributedNotes.has(targetDay)) {
+        distributedNotes.set(targetDay, note);
+      }
+
+      if (idx < targetDays.length - 1) {
+        // Previously disconnected day: populate smooth daylight hourly profile summing to `share`
+        hourlyMap.set(targetDay, buildWeightedDaylightHours(share));
+      } else {
+        // Reconnect day: preserve real post-reconnect hourly readings if they fit within `share`,
+        // and spread the remaining morning share cleanly across morning daylight hours up to spikeHour
+        const existingHours = hourlyMap.get(targetDay) || Array.from({ length: 24 }, () => 0);
+        const spikeHour = dailySpikeHour.get(targetDay) ?? -1;
+        if (spikeHour >= 6 && spikeHour <= 17) {
+          let postSpikeSum = 0;
+          for (let h = spikeHour + 1; h < 24; h++) {
+            postSpikeSum += existingHours[h] || 0;
+          }
+          if (postSpikeSum > 0 && postSpikeSum < share) {
+            const nextHours = Array.from({ length: 24 }, () => 0);
+            for (let h = spikeHour + 1; h < 24; h++) {
+              nextHours[h] = existingHours[h] || 0;
+            }
+            const morningShare = Number((share - postSpikeSum).toFixed(4));
+            const morningHours: number[] = [];
+            let weightSum = 0;
+            for (let h = 6; h <= spikeHour; h++) {
+              const w = SOLAR_DAYLIGHT_HOUR_WEIGHTS[h] || 0.05;
+              morningHours.push(h);
+              weightSum += w;
+            }
+            let assignedMorning = 0;
+            morningHours.forEach((h, mIdx) => {
+              const w = (SOLAR_DAYLIGHT_HOUR_WEIGHTS[h] || 0.05) / (weightSum || 1);
+              if (mIdx === morningHours.length - 1) {
+                nextHours[h] = Math.max(0, Number((morningShare - assignedMorning).toFixed(4)));
+              } else {
+                const v = Number((morningShare * w).toFixed(4));
+                nextHours[h] = v;
+                assignedMorning += v;
+              }
+            });
+            hourlyMap.set(targetDay, nextHours);
+          } else {
+            hourlyMap.set(targetDay, buildWeightedDaylightHours(share));
+          }
+        } else {
+          hourlyMap.set(targetDay, buildWeightedDaylightHours(share));
+        }
+      }
+    }
+  }
+
+  return modifiedDays;
+}
+
+export interface PltsExportHourlyPoint {
+  timeStr: string;
+  t_stamp: Date;
+  lwbp: number;
+  wbp: number;
+  pf: number | null;
+}
+
+/**
+ * Reusable redistribution helper for Electricity Report / Excel Export (`electricity.export.ts`)
+ * so exported daily/hourly PLTS reports match the dashboard 100% with zero reconnect spikes.
+ */
+export function redistributePltsExportPoints(
+  points: PltsExportHourlyPoint[],
+  poi: "poi1" | "poi2",
+  maxDateStr?: string
+): PltsExportHourlyPoint[] {
+  if (points.length === 0) return points;
+
+  const dailyMap = new Map<string, number>();
+  const dailyMaxHour = new Map<string, number>();
+  const dailySpikeHour = new Map<string, number>();
+  const hourlyMap = new Map<string, number[]>();
+  const dailyPf = new Map<string, number>();
+
+  for (const p of points) {
+    const dStr = p.timeStr.substring(0, 10);
+    const hr = parseInt(p.timeStr.substring(11, 13), 10) || 0;
+    const kwh = Math.max(0, (p.lwbp || 0) + (p.wbp || 0));
+    dailyMap.set(dStr, (dailyMap.get(dStr) || 0) + kwh);
+    if (kwh > (dailyMaxHour.get(dStr) || 0)) {
+      dailyMaxHour.set(dStr, kwh);
+      dailySpikeHour.set(dStr, hr);
+    }
+    if (!hourlyMap.has(dStr)) hourlyMap.set(dStr, Array.from({ length: 24 }, () => 0));
+    if (hr >= 0 && hr < 24) {
+      hourlyMap.get(dStr)![hr] += kwh;
+    }
+    if (p.pf !== null && p.pf !== undefined) {
+      dailyPf.set(dStr, p.pf);
+    }
+  }
+
+  const sortedDates = Array.from(dailyMap.keys()).sort();
+  if (sortedDates.length < 2) return points;
+  const endDate = maxDateStr && maxDateStr < sortedDates[sortedDates.length - 1]
+    ? maxDateStr
+    : sortedDates[sortedDates.length - 1];
+  const allDays = enumerateCalendarDates(sortedDates[0], endDate);
+  const notes = new Map<string, string>();
+
+  const modifiedDays = redistributeSinglePoiSpikes({
+    poi,
+    allDays,
+    dailyMap,
+    dailyMaxHour,
+    dailySpikeHour,
+    hourlyMap,
+    distributedNotes: notes
+  });
+
+  if (modifiedDays.size === 0) return points;
+
+  const keptPoints = points.filter((p) => !modifiedDays.has(p.timeStr.substring(0, 10)));
+  const fallbackPf = poi === "poi1" ? 0.98 : 0.99;
+
+  for (const dayStr of Array.from(modifiedDays).sort()) {
+    const hrs = hourlyMap.get(dayStr) || [];
+    const pfVal = dailyPf.get(dayStr) ?? fallbackPf;
+    for (let h = 0; h < 24; h++) {
+      const kwh = hrs[h] || 0;
+      if (kwh <= 0) continue;
+      const hPad = String(h).padStart(2, "0");
+      const timeStr = `${dayStr} ${hPad}:00:00`;
+      const isWbp = h >= 17 && h <= 21;
+      keptPoints.push({
+        timeStr,
+        t_stamp: new Date(`${dayStr}T${hPad}:00:00+07:00`),
+        lwbp: isWbp ? 0 : kwh,
+        wbp: isWbp ? kwh : 0,
+        pf: pfVal
+      });
+    }
+  }
+
+  return keptPoints.sort((a, b) => a.timeStr.localeCompare(b.timeStr));
 }
 
 export const getSolarAnalytics = async (
@@ -124,14 +427,22 @@ export const getSolarAnalytics = async (
   const todayStr = getWibDateString(new Date());
   const currentMonthStr = todayStr.substring(0, 7);
 
-  // Format local WIB timestamps for PostgreSQL timestamp without time zone
+  // Format local WIB timestamps for PostgreSQL timestamp without time zone.
+  // Widen buffer by ±10 days (clamped to today) so reconnect catch-up spikes spanning multiple
+  // disconnected days are detected and evenly redistributed consistently across all date filters.
   const pad = (n: number) => String(n).padStart(2, "0");
   const fromDate = new Date(`${fromStr || `${selectedYear}-01-01`}T00:00:00`);
-  const baselineDate = new Date(fromDate.getTime() - 2 * 60 * 60 * 1000);
+  const LOOKBACK_BUFFER_DAYS = 10;
+  const baselineDate = new Date(fromDate.getTime() - LOOKBACK_BUFFER_DAYS * 24 * 60 * 60 * 1000 - 2 * 60 * 60 * 1000);
   const fromQueryVal = `${baselineDate.getFullYear()}-${pad(baselineDate.getMonth() + 1)}-${pad(baselineDate.getDate())} ${pad(baselineDate.getHours())}:${pad(baselineDate.getMinutes())}:${pad(baselineDate.getSeconds())}`;
 
   const toDate = new Date(`${toStr || `${selectedYear}-12-31`}T23:59:59`);
-  const toPlusDate = new Date(toDate.getTime() + 2 * 60 * 60 * 1000);
+  const todayEndDate = new Date(`${todayStr}T23:59:59`);
+  const bufferedToMs = Math.min(
+    todayEndDate.getTime() + 2 * 60 * 60 * 1000,
+    toDate.getTime() + LOOKBACK_BUFFER_DAYS * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000
+  );
+  const toPlusDate = new Date(Math.max(toDate.getTime() + 2 * 60 * 60 * 1000, bufferedToMs));
   const toQueryVal = `${toPlusDate.getFullYear()}-${pad(toPlusDate.getMonth() + 1)}-${pad(toPlusDate.getDate())} ${pad(toPlusDate.getHours())}:${pad(toPlusDate.getMinutes())}:${pad(toPlusDate.getSeconds())}`;
 
   // Strict query boundaries for peak demand and metrics to prevent leaking into adjacent days
@@ -175,12 +486,21 @@ export const getSolarAnalytics = async (
   // Live state is retrieved for real-time summary indicators and latest delta
   const live = getLatestSolarLiveState();
 
-  // Hourly maps: DateStr -> Array(24)
+  // Hourly maps: DateStr -> Array(24) (populated across full buffered window before redistribution)
   const hourlyMapPoi1 = new Map<string, number[]>();
   const hourlyMapPoi2 = new Map<string, number[]>();
   const hourlyMapTotal = new Map<string, number[]>();
 
-  // Daily maps: DateStr -> number
+  // Raw full-window daily maps for disconnect-spike detection & equal redistribution
+  const rawDailyPoi1 = new Map<string, number>();
+  const rawDailyPoi2 = new Map<string, number>();
+  const rawDailyMaxHourPoi1 = new Map<string, number>();
+  const rawDailyMaxHourPoi2 = new Map<string, number>();
+  const rawDailySpikeHourPoi1 = new Map<string, number>();
+  const rawDailySpikeHourPoi2 = new Map<string, number>();
+  const distributedNotesMap = new Map<string, string>();
+
+  // Final in-range Daily maps: DateStr -> number
   const dailyMapPoi1 = new Map<string, number>();
   const dailyMapPoi2 = new Map<string, number>();
   const dailyMapTotal = new Map<string, number>();
@@ -226,7 +546,6 @@ export const getSolarAnalytics = async (
     const prevDateObj = new Date(prev.ts_text);
     const currDateObj = new Date(curr.ts_text);
     const timeDiffMs = currDateObj.getTime() - prevDateObj.getTime();
-    const timeDiffHours = Math.max(1, Math.round(timeDiffMs / (3600 * 1000)));
 
     let diffPoi1 = 0;
     if (curr.poi_1 !== null && prev.poi_1 !== null && curr.poi_1 > 0 && prev.poi_1 > 0 && timeDiffMs <= 24 * 60 * 60 * 1000) {
@@ -243,60 +562,21 @@ export const getSolarAnalytics = async (
     // Sesuai kaidah metering SCADA: energi selisih (curr - prev) terjadi selama interval [prev, curr]
     // dan dicatat pada jam awal interval (prevHour & prevDateStr), misal: kWh jam 10:00 - kWh jam 09:00 = konsumsi jam 09:00
     const prevTs = prev.ts_text.split(".")[0];
-    const currTs = curr.ts_text.split(".")[0];
     const [prevDateStr, prevTimeStr = "00:00:00"] = prevTs.split(" ");
-    const [currDateStr, currTimeStr = "00:00:00"] = currTs.split(" ");
     const prevHour = parseInt(prevTimeStr.split(":")[0], 10);
 
     const dateStr = prevDateStr;
     const targetHour = prevHour;
-    const monthStr = dateStr.substring(0, 7);
-    const isToday = dateStr === todayStr;
-    const isCurrentMonth = monthStr === currentMonthStr;
 
-    const inRange = (!fromStr || dateStr >= fromStr) && (!toStr || dateStr <= toStr);
-    const recordTariff = getTariffForDate(dateStr, tariffs);
-    const isWbp = targetHour >= 17 && targetHour <= 21; // 17:00 - 22:00 WIB
-    const hourAvoidedRate = isWbp ? recordTariff.wbpRate : recordTariff.lwbpRate;
-    const hourAvoidedCost = diffTot * hourAvoidedRate;
-
-    if (inRange) {
-      dailyMapPoi1.set(dateStr, (dailyMapPoi1.get(dateStr) || 0) + diffPoi1);
-      dailyMapPoi2.set(dateStr, (dailyMapPoi2.get(dateStr) || 0) + diffPoi2);
-      dailyMapTotal.set(dateStr, (dailyMapTotal.get(dateStr) || 0) + diffTot);
-
-      monthlyMapPoi1.set(monthStr, (monthlyMapPoi1.get(monthStr) || 0) + diffPoi1);
-      monthlyMapPoi2.set(monthStr, (monthlyMapPoi2.get(monthStr) || 0) + diffPoi2);
-      monthlyMapTotal.set(monthStr, (monthlyMapTotal.get(monthStr) || 0) + diffTot);
-
-      if (isWbp) {
-        totalWbpKwh += diffTot;
-        dailyMapWbp.set(dateStr, (dailyMapWbp.get(dateStr) || 0) + diffTot);
-        monthlyMapWbp.set(monthStr, (monthlyMapWbp.get(monthStr) || 0) + diffTot);
-        if (isToday) todayWbpKwh += diffTot;
-        if (isCurrentMonth) monthlyWbpKwh += diffTot;
-      } else {
-        totalLwbpKwh += diffTot;
-        dailyMapLwbp.set(dateStr, (dailyMapLwbp.get(dateStr) || 0) + diffTot);
-        monthlyMapLwbp.set(monthStr, (monthlyMapLwbp.get(monthStr) || 0) + diffTot);
-        if (isToday) todayLwbpKwh += diffTot;
-        if (isCurrentMonth) monthlyLwbpKwh += diffTot;
-      }
-
-      totalAvoidedCost += hourAvoidedCost;
-      if (isToday) todayAvoidedCost += hourAvoidedCost;
-      if (isCurrentMonth) monthlyAvoidedCost += hourAvoidedCost;
-
-      totalKwh += diffTot;
-      yearlyKwh += diffTot;
-      if (isToday) {
-        todayKwh += diffTot;
-        poi1TodayKwh += diffPoi1;
-        poi2TodayKwh += diffPoi2;
-      }
-      if (isCurrentMonth) {
-        monthlyKwh += diffTot;
-      }
+    rawDailyPoi1.set(dateStr, (rawDailyPoi1.get(dateStr) || 0) + diffPoi1);
+    rawDailyPoi2.set(dateStr, (rawDailyPoi2.get(dateStr) || 0) + diffPoi2);
+    if (diffPoi1 > (rawDailyMaxHourPoi1.get(dateStr) || 0)) {
+      rawDailyMaxHourPoi1.set(dateStr, diffPoi1);
+      rawDailySpikeHourPoi1.set(dateStr, targetHour);
+    }
+    if (diffPoi2 > (rawDailyMaxHourPoi2.get(dateStr) || 0)) {
+      rawDailyMaxHourPoi2.set(dateStr, diffPoi2);
+      rawDailySpikeHourPoi2.set(dateStr, targetHour);
     }
 
     if (!hourlyMapPoi1.has(dateStr)) hourlyMapPoi1.set(dateStr, Array.from({ length: 24 }, () => 0));
@@ -307,6 +587,107 @@ export const getSolarAnalytics = async (
       hourlyMapPoi1.get(dateStr)![targetHour] += diffPoi1;
       hourlyMapPoi2.get(dateStr)![targetHour] += diffPoi2;
       hourlyMapTotal.get(dateStr)![targetHour] += diffTot;
+    }
+  }
+
+  // Redistribute cumulative reconnect spikes evenly into immediately preceding empty (disconnected) days
+  const observedDates = Array.from(new Set([...rawDailyPoi1.keys(), ...rawDailyPoi2.keys()])).sort();
+  if (observedDates.length >= 2) {
+    const spanStart = observedDates[0];
+    const spanEnd = observedDates[observedDates.length - 1] > todayStr
+      ? todayStr
+      : observedDates[observedDates.length - 1];
+    const allBufferedDays = enumerateCalendarDates(spanStart, spanEnd);
+
+    const mod1 = redistributeSinglePoiSpikes({
+      poi: "poi1",
+      allDays: allBufferedDays,
+      dailyMap: rawDailyPoi1,
+      dailyMaxHour: rawDailyMaxHourPoi1,
+      dailySpikeHour: rawDailySpikeHourPoi1,
+      hourlyMap: hourlyMapPoi1,
+      distributedNotes: distributedNotesMap
+    });
+    const mod2 = redistributeSinglePoiSpikes({
+      poi: "poi2",
+      allDays: allBufferedDays,
+      dailyMap: rawDailyPoi2,
+      dailyMaxHour: rawDailyMaxHourPoi2,
+      dailySpikeHour: rawDailySpikeHourPoi2,
+      hourlyMap: hourlyMapPoi2,
+      distributedNotes: distributedNotesMap
+    });
+
+    // Synchronize hourlyMapTotal for every redistributed day
+    const allModDays = new Set<string>([...mod1, ...mod2]);
+    for (const dStr of allModDays) {
+      const h1 = hourlyMapPoi1.get(dStr) || Array.from({ length: 24 }, () => 0);
+      const h2 = hourlyMapPoi2.get(dStr) || Array.from({ length: 24 }, () => 0);
+      hourlyMapTotal.set(dStr, Array.from({ length: 24 }, (_, h) => Number(((h1[h] || 0) + (h2[h] || 0)).toFixed(4))));
+    }
+  }
+
+  // Aggregate final in-range daily, monthly, WBP/LWBP, and cost metrics from the normalized hourly & daily maps
+  const allNormalizedDates = Array.from(new Set([...rawDailyPoi1.keys(), ...rawDailyPoi2.keys()])).sort();
+  for (const dateStr of allNormalizedDates) {
+    const inRange = (!fromStr || dateStr >= fromStr) && (!toStr || dateStr <= toStr);
+    if (!inRange) continue;
+
+    const p1 = rawDailyPoi1.get(dateStr) || 0;
+    const p2 = rawDailyPoi2.get(dateStr) || 0;
+    const dayTot = p1 + p2;
+    const monthStr = dateStr.substring(0, 7);
+    const isToday = dateStr === todayStr;
+    const isCurrentMonth = monthStr === currentMonthStr;
+    const recordTariff = getTariffForDate(dateStr, tariffs);
+
+    const dayHours = hourlyMapTotal.get(dateStr) || Array.from({ length: 24 }, () => 0);
+    let dayWbp = 0;
+    let dayLwbp = 0;
+    for (let h = 0; h < 24; h++) {
+      const hv = dayHours[h] || 0;
+      if (h >= 17 && h <= 21) dayWbp += hv;
+      else dayLwbp += hv;
+    }
+    // Guarantee exact reconciliation between daily total and WBP+LWBP
+    const hourSum = dayWbp + dayLwbp;
+    if (Math.abs(dayTot - hourSum) > 0.0001) {
+      dayLwbp = Math.max(0, dayTot - dayWbp);
+    }
+
+    const dayAvoidedCost = (dayWbp * recordTariff.wbpRate) + (dayLwbp * recordTariff.lwbpRate);
+
+    dailyMapPoi1.set(dateStr, p1);
+    dailyMapPoi2.set(dateStr, p2);
+    dailyMapTotal.set(dateStr, dayTot);
+    dailyMapWbp.set(dateStr, dayWbp);
+    dailyMapLwbp.set(dateStr, dayLwbp);
+
+    monthlyMapPoi1.set(monthStr, (monthlyMapPoi1.get(monthStr) || 0) + p1);
+    monthlyMapPoi2.set(monthStr, (monthlyMapPoi2.get(monthStr) || 0) + p2);
+    monthlyMapTotal.set(monthStr, (monthlyMapTotal.get(monthStr) || 0) + dayTot);
+    monthlyMapWbp.set(monthStr, (monthlyMapWbp.get(monthStr) || 0) + dayWbp);
+    monthlyMapLwbp.set(monthStr, (monthlyMapLwbp.get(monthStr) || 0) + dayLwbp);
+
+    totalWbpKwh += dayWbp;
+    totalLwbpKwh += dayLwbp;
+    totalAvoidedCost += dayAvoidedCost;
+    totalKwh += dayTot;
+    yearlyKwh += dayTot;
+
+    if (isToday) {
+      todayWbpKwh += dayWbp;
+      todayLwbpKwh += dayLwbp;
+      todayAvoidedCost += dayAvoidedCost;
+      todayKwh += dayTot;
+      poi1TodayKwh += p1;
+      poi2TodayKwh += p2;
+    }
+    if (isCurrentMonth) {
+      monthlyWbpKwh += dayWbp;
+      monthlyLwbpKwh += dayLwbp;
+      monthlyAvoidedCost += dayAvoidedCost;
+      monthlyKwh += dayTot;
     }
   }
 
@@ -506,7 +887,18 @@ export const getSolarAnalytics = async (
   }
 
   // Daily records
-  const daily: { day: string; poi1: number; poi2: number; total: number; wbp: number; lwbp: number; avoidedCost: number; savings: number }[] = [];
+  const daily: {
+    day: string;
+    poi1: number;
+    poi2: number;
+    total: number;
+    wbp: number;
+    lwbp: number;
+    avoidedCost: number;
+    savings: number;
+    isDistributed?: boolean;
+    distributedNote?: string;
+  }[] = [];
   if (fromStr && toStr) {
     const cur = new Date(fromDate);
     while (cur <= toDate) {
@@ -540,6 +932,7 @@ export const getSolarAnalytics = async (
       const dPoi1 = Number(p1.toFixed(2));
       const dPoi2 = Number(p2.toFixed(2));
       const dTot = Number((dPoi1 + dPoi2).toFixed(2));
+      const distNote = distributedNotesMap.get(dStr);
       daily.push({ 
         day: dStr, 
         poi1: dPoi1, 
@@ -548,7 +941,8 @@ export const getSolarAnalytics = async (
         wbp: Number(dWbp.toFixed(2)),
         lwbp: Number(dLwbp.toFixed(2)),
         avoidedCost: Number(dAvoided.toFixed(2)),
-        savings: Number(Math.max(0, dAvoided - dPvCost).toFixed(2))
+        savings: Number(Math.max(0, dAvoided - dPvCost).toFixed(2)),
+        ...(distNote ? { isDistributed: true, distributedNote: distNote } : {})
       });
       cur.setDate(cur.getDate() + 1);
     }
@@ -584,6 +978,7 @@ export const getSolarAnalytics = async (
       const dPoi1 = Number(p1.toFixed(2));
       const dPoi2 = Number(p2.toFixed(2));
       const dTot = Number((dPoi1 + dPoi2).toFixed(2));
+      const distNote = distributedNotesMap.get(day);
       daily.push({ 
         day, 
         poi1: dPoi1, 
@@ -592,7 +987,8 @@ export const getSolarAnalytics = async (
         wbp: Number(dWbp.toFixed(2)),
         lwbp: Number(dLwbp.toFixed(2)),
         avoidedCost: Number(dAvoided.toFixed(2)),
-        savings: Number(Math.max(0, dAvoided - dPvCost).toFixed(2))
+        savings: Number(Math.max(0, dAvoided - dPvCost).toFixed(2)),
+        ...(distNote ? { isDistributed: true, distributedNote: distNote } : {})
       });
     });
   }

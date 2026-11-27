@@ -2,6 +2,7 @@ import { getPostgresPool } from "../../database/postgres";
 import { getMongoDb } from "../../database/mongo";
 import { GLOBAL_CONFIG_COLLECTION } from "../../database/collections";
 import ExcelJS from "exceljs";
+import { redistributePltsExportPoints } from "./solar.analytics";
 
 export interface ElectricityExportParams {
   from: string; // YYYY-MM-DD
@@ -144,7 +145,8 @@ export async function getElectricityExportData(params: ElectricityExportParams):
       SELECT to_char(t_stamp, 'YYYY-MM-DD HH24:MI:SS') as t_stamp_str,
              t_stamp, poi_id, active_power, power_factor, total_kwh as active_energy
       FROM electric_plts_telemetry
-      WHERE t_stamp >= $1::timestamp - INTERVAL '1 hour' AND t_stamp <= $2::timestamp
+      WHERE t_stamp >= $1::timestamp - INTERVAL '10 days 1 hour'
+        AND t_stamp <= LEAST(NOW() AT TIME ZONE 'Asia/Jakarta' + INTERVAL '2 hours', $2::timestamp + INTERVAL '10 days')
       ORDER BY t_stamp ASC, poi_id ASC
     `, [fromStr, toStr])
   ]);
@@ -211,7 +213,8 @@ export async function getElectricityExportData(params: ElectricityExportParams):
   const computeHourlyPoints = (
     rows: any[],
     defaultPf: number,
-    isSolar: boolean = false
+    isSolar: boolean = false,
+    applyDateFilter: boolean = true
   ): HourlyPoint[] => {
     const sorted = [...rows].sort((a, b) => (a.t_stamp_str || "").localeCompare(b.t_stamp_str || ""));
     const points: HourlyPoint[] = [];
@@ -219,17 +222,25 @@ export async function getElectricityExportData(params: ElectricityExportParams):
     for (let i = 1; i < sorted.length; i++) {
       const curr = sorted[i];
       const prev = sorted[i - 1];
-      const timeStr = curr.t_stamp_str || "";
+      const timeStr = isSolar ? (prev.t_stamp_str || "") : (curr.t_stamp_str || "");
       if (!timeStr) continue;
 
-      const currDateStr = timeStr.substring(0, 10);
-      if (currDateStr < from || currDateStr > to) continue;
+      const dateStr = timeStr.substring(0, 10);
+      if (applyDateFilter && (dateStr < from || dateStr > to)) continue;
 
       const currE = curr.active_energy !== null && curr.active_energy !== undefined ? Number(curr.active_energy) : null;
       const prevE = prev.active_energy !== null && prev.active_energy !== undefined ? Number(prev.active_energy) : null;
+      const dtMs = new Date(curr.t_stamp).getTime() - new Date(prev.t_stamp).getTime();
 
       let deltaKwh = 0;
-      if (currE !== null && prevE !== null && currE >= prevE && currE > 0 && prevE > 0) {
+      if (
+        currE !== null &&
+        prevE !== null &&
+        currE >= prevE &&
+        currE > 0 &&
+        prevE > 0 &&
+        (!isSolar || dtMs <= 24 * 60 * 60 * 1000)
+      ) {
         deltaKwh = currE - prevE;
       } else if (!isSolar) {
         deltaKwh = Number(curr.active_power) || 0;
@@ -253,7 +264,7 @@ export async function getElectricityExportData(params: ElectricityExportParams):
 
       points.push({
         timeStr,
-        t_stamp: new Date(curr.t_stamp),
+        t_stamp: new Date(isSolar ? prev.t_stamp : curr.t_stamp),
         lwbp: isWbp ? 0 : deltaKwh,
         wbp: isWbp ? deltaKwh : 0,
         pf
@@ -266,8 +277,16 @@ export async function getElectricityExportData(params: ElectricityExportParams):
   const plnPoints = computeHourlyPoints(plnRes.rows, 0.95);
   const wf1Points = computeHourlyPoints(wf1Res.rows, 0.93);
   const wf2Points = computeHourlyPoints(wf2Res.rows, 0.94);
-  const poi1Points = computeHourlyPoints(poi1Rows, 0.98, true);
-  const poi2Points = computeHourlyPoints(poi2Rows, 0.99, true);
+  const rawPoi1Points = computeHourlyPoints(poi1Rows, 0.98, true, false);
+  const rawPoi2Points = computeHourlyPoints(poi2Rows, 0.99, true, false);
+  const poi1Points = redistributePltsExportPoints(rawPoi1Points, "poi1").filter((p) => {
+    const d = p.timeStr.substring(0, 10);
+    return d >= from && d <= to;
+  });
+  const poi2Points = redistributePltsExportPoints(rawPoi2Points, "poi2").filter((p) => {
+    const d = p.timeStr.substring(0, 10);
+    return d >= from && d <= to;
+  });
 
   const formatBucketKey = (timeStr: string, res: ElectricityExportParams["resolution"]): string => {
     const dateStr = timeStr.substring(0, 10);

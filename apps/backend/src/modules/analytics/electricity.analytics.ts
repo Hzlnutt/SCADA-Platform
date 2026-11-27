@@ -344,7 +344,7 @@ export const getElectricityAnalytics = async (
     ]);
 
     // Merge daily records directly using synchronized solar analytics
-    const dailyMap = new Map<string, { day: string; value: number; wbp: number; lwbp: number; pln: number; plnWbp: number; plnLwbp: number; poi1: number; poi2: number; pvWbp: number; pvLwbp: number }>();
+    const dailyMap = new Map<string, { day: string; value: number; wbp: number; lwbp: number; pln: number; plnWbp: number; plnLwbp: number; poi1: number; poi2: number; pvWbp: number; pvLwbp: number; isDistributed?: boolean; distributedNote?: string }>();
     (pln.charts?.daily || []).forEach(d => {
       dailyMap.set(d.day, {
         day: d.day,
@@ -381,6 +381,7 @@ export const getElectricityAnalytics = async (
       existing.lwbp += (d.lwbp || 0);
       existing.wbp += (d.wbp || 0);
       existing.value += (d.total || (existing.poi1 + existing.poi2));
+      if (d.isDistributed) { existing.isDistributed = true; existing.distributedNote = d.distributedNote; }
       dailyMap.set(d.day, existing);
     });
     const mergedDaily = Array.from(dailyMap.values()).sort((a, b) => a.day.localeCompare(b.day));
@@ -530,7 +531,8 @@ export const getElectricityAnalytics = async (
       poi1: d.poi1 || 0,
       poi2: 0,
       pvWbp: 0,
-      pvLwbp: d.poi1 || 0
+      pvLwbp: d.poi1 || 0,
+      ...(d.isDistributed ? { isDistributed: true, distributedNote: d.distributedNote } : {})
     }));
     const monthly = (solar.charts?.monthly || []).map(m => ({
       month: m.month,
@@ -646,7 +648,8 @@ export const getElectricityAnalytics = async (
       poi1: 0,
       poi2: d.poi2 || 0,
       pvWbp: 0,
-      pvLwbp: d.poi2 || 0
+      pvLwbp: d.poi2 || 0,
+      ...(d.isDistributed ? { isDistributed: true, distributedNote: d.distributedNote } : {})
     }));
     const monthly = (solar.charts?.monthly || []).map(m => ({
       month: m.month,

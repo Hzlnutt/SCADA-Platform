@@ -19,6 +19,7 @@ import { EquipmentConfigModal, type EquipmentDisplayItem } from "../../component
 import {
   PltsWeatherSvgIcon,
   buildPltsWeatherTooltipLines,
+  createPltsDistributedBarsPlugin,
   createPltsExternalTooltipHandler,
   createPltsWeatherIconsPlugin,
   destroyPltsExternalTooltip,
@@ -260,6 +261,7 @@ interface MonthlyBreakdownItem {
   poi2: number;
   wbp: number;
   lwbp: number;
+  distributedNote?: string;
 }
 
 const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
@@ -427,6 +429,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
           },
           {
             label: "Solar PLTS",
+            _isPltsDistributedTarget: true,
             data: solarData,
             backgroundColor: "rgba(16, 185, 129, 0.85)",
             hoverBackgroundColor: "rgba(5, 150, 105, 1)",
@@ -447,6 +450,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
       datasets: [
         {
           label: currMonthName ? `Bulan Ini (${currMonthName})` : "Bulan Ini",
+          ...(isPvSelector ? { _isPltsDistributedTarget: true } : {}),
           data: paddedCurrentData,
           backgroundColor: "rgba(59, 130, 246, 0.85)",
           hoverBackgroundColor: "rgba(37, 99, 235, 1)",
@@ -473,6 +477,23 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
 
   const innerIsDarkRef = useRef<boolean>(isDark);
   innerIsDarkRef.current = isDark;
+  const monthlyDistributedFlags = useMemo(
+    () =>
+      Array.from({ length: daysInMonth }, (_, i) =>
+        Boolean(currentBreakdown?.[i]?.distributedNote)
+      ),
+    [currentBreakdown, daysInMonth]
+  );
+  const monthlyDistributedFlagsRef = useRef<boolean[]>(monthlyDistributedFlags);
+  monthlyDistributedFlagsRef.current = monthlyDistributedFlags;
+  const monthlyDistributedPlugin = useMemo(
+    () =>
+      createPltsDistributedBarsPlugin(monthlyDistributedFlagsRef, innerIsDarkRef, {
+        badgePlacement: "above",
+        accentColor: "#059669"
+      }),
+    []
+  );
   const innerExternalTooltipHandler = useMemo(
     () => createPltsExternalTooltipHandler(innerIsDarkRef),
     []
@@ -557,6 +578,9 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
               const b = currentBreakdown?.[idx];
               if (b && (b.poi1 > 0 || b.poi2 > 0)) {
                 lines.push(`• Rincian PLTS ${currMonthName || "Bulan Ini"}: POI-1 ${b.poi1.toLocaleString("id-ID", { maximumFractionDigits: 2 })} | POI-2 ${b.poi2.toLocaleString("id-ID", { maximumFractionDigits: 2 })} kWh`);
+                if (b.distributedNote) {
+                  lines.push(`ℹ PLTS: ${b.distributedNote}`);
+                }
               }
               const pb = previousBreakdown?.[idx];
               if (showPrevious && pb && (pb.poi1 > 0 || pb.poi2 > 0)) {
@@ -591,6 +615,9 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
                 lines.push(`• Biaya PV: Rp ${pvCost.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
               }
               lines.push(`• Estimasi Hemat: Rp ${savings.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+              if (b.distributedNote) {
+                lines.push(`ℹ ${b.distributedNote}`);
+              }
             }
 
             return lines;
@@ -660,7 +687,7 @@ const MonthlyComparisonBarChart = memo(function MonthlyComparisonBarChart({
     }
   }), [isDark, paddedCurrentData, paddedPreviousData, currMonthName, prevMonthName, selectorType, currentBreakdown, previousBreakdown, solarRate, pvRate, isZoomed, dayLabels, dynamicMax]);
 
-  return <Bar data={data} options={options} />;
+  return <Bar data={data} options={options} plugins={[monthlyDistributedPlugin]} />;
 });
 
 const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
@@ -778,6 +805,22 @@ const MonthlyComparisonChart = memo(function MonthlyComparisonChart({
 
         {/* Top-Right: Month badge & Zoom Button */}
         <div className="flex flex-wrap items-center gap-2">
+          {(selectorType === "all" || selectorType === "poi1" || selectorType === "poi2") &&
+            currentBreakdown?.some((b) => Boolean(b.distributedNote)) && (
+              <span
+                title="Bar berpola garis diagonal menandakan produksi PLTS yang dibagi rata dari akumulasi lonjakan setelah koneksi terputus"
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10.5px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25"
+              >
+                <span
+                  className="inline-block w-3.5 h-2.5 rounded-[3px] border border-emerald-500/60 shrink-0"
+                  style={{
+                    background:
+                      "repeating-linear-gradient(-45deg, rgba(16,185,129,0.85) 0 2px, rgba(255,255,255,0.85) 2px 4px)"
+                  }}
+                />
+                <span><strong>≈ Rata PLTS</strong> = bagi rata pasca-disconnect</span>
+              </span>
+            )}
           {showPrevious && (
             isLoading ? (
               <div className="h-6 w-36 bg-amber-500/15 dark:bg-amber-400/15 rounded-lg animate-pulse" />
@@ -3199,12 +3242,12 @@ export default function Electricity() {
     const daysCount = Math.max(daysInCurrMonth, daysInPrevMonth, 28);
 
     // Build solar daily lookup from solarData if needed as fallback
-    const solarDailyMap: Record<string, { poi1: number; poi2: number; wbp: number; lwbp: number }> = {};
+    const solarDailyMap: Record<string, { poi1: number; poi2: number; wbp: number; lwbp: number; distributedNote?: string }> = {};
     (solarData?.charts?.daily || []).forEach((d: any) => {
       if (d.day) {
         const p1 = (typeof d.poi1 === "number" && d.poi1 > 0) ? d.poi1 : 0;
         const p2 = (typeof d.poi2 === "number" && d.poi2 > 0) ? d.poi2 : 0;
-        solarDailyMap[d.day] = { poi1: p1, poi2: p2, wbp: d.wbp || 0, lwbp: d.lwbp || 0 };
+        solarDailyMap[d.day] = { poi1: p1, poi2: p2, wbp: d.wbp || 0, lwbp: d.lwbp || 0, distributedNote: d.distributedNote };
       }
     });
 
@@ -3227,6 +3270,7 @@ export default function Electricity() {
       plnLwbp: number;
       pvWbp: number;
       pvLwbp: number;
+      distributedNote?: string;
     }
 
     const currMap: Record<number, DayDetail> = {};
@@ -3268,7 +3312,8 @@ export default function Electricity() {
         plnWbp: plnWbpVal,
         plnLwbp: plnLwbpVal,
         pvWbp: pvWbpVal,
-        pvLwbp: pvLwbpVal
+        pvLwbp: pvLwbpVal,
+        distributedNote: d.distributedNote || solarDailyMap[d.day]?.distributedNote
       };
 
       if (isCurr) currMap[dayNum] = entry;
@@ -3299,7 +3344,8 @@ export default function Electricity() {
             plnWbp: pwbp,
             plnLwbp: plwbp,
             pvWbp: swbp,
-            pvLwbp: slwbp
+            pvLwbp: slwbp,
+            distributedNote: solarDailyMap[curDayStr]?.distributedNote
           };
         }
 
@@ -3321,7 +3367,8 @@ export default function Electricity() {
             plnWbp: pwbp,
             plnLwbp: plwbp,
             pvWbp: swbp,
-            pvLwbp: slwbp
+            pvLwbp: slwbp,
+            distributedNote: solarDailyMap[prevDayStr]?.distributedNote
           };
         }
       }
@@ -3329,8 +3376,8 @@ export default function Electricity() {
 
     const currentData: number[] = [];
     const previousData: number[] = [];
-    const currentBreakdown: { day: number; pln: number; poi1: number; poi2: number; wbp: number; lwbp: number; plnWbp?: number; plnLwbp?: number; pvWbp: number; pvLwbp: number }[] = [];
-    const previousBreakdown: { day: number; pln: number; poi1: number; poi2: number; wbp: number; lwbp: number; plnWbp?: number; plnLwbp?: number; pvWbp: number; pvLwbp: number }[] = [];
+    const currentBreakdown: { day: number; pln: number; poi1: number; poi2: number; wbp: number; lwbp: number; plnWbp?: number; plnLwbp?: number; pvWbp: number; pvLwbp: number; distributedNote?: string }[] = [];
+    const previousBreakdown: { day: number; pln: number; poi1: number; poi2: number; wbp: number; lwbp: number; plnWbp?: number; plnLwbp?: number; pvWbp: number; pvLwbp: number; distributedNote?: string }[] = [];
 
     for (let i = 1; i <= daysCount; i++) {
       const cur = currMap[i] || { val: 0, pln: 0, poi1: 0, poi2: 0, wbp: 0, lwbp: 0, plnWbp: 0, plnLwbp: 0, pvWbp: 0, pvLwbp: 0 };
@@ -3349,7 +3396,8 @@ export default function Electricity() {
         plnWbp: cur.plnWbp,
         plnLwbp: cur.plnLwbp,
         pvWbp: cur.pvWbp,
-        pvLwbp: cur.pvLwbp
+        pvLwbp: cur.pvLwbp,
+        ...(cur.distributedNote ? { distributedNote: cur.distributedNote } : {})
       });
 
       if (monthlyCompareEnabled) {
@@ -3363,7 +3411,8 @@ export default function Electricity() {
           plnWbp: prev.plnWbp,
           plnLwbp: prev.plnLwbp,
           pvWbp: prev.pvWbp,
-          pvLwbp: prev.pvLwbp
+          pvLwbp: prev.pvLwbp,
+          ...(prev.distributedNote ? { distributedNote: prev.distributedNote } : {})
         });
       }
     }
@@ -5485,11 +5534,45 @@ export default function Electricity() {
     []
   );
 
+  const solarDistributedFlags = useMemo<boolean[]>(() => {
+    if (solarRange === "day") {
+      const targetMonthStr = `${solarSelectedYear}-${String(solarSelectedMonth + 1).padStart(2, "0")}`;
+      const daysCount = new Date(solarSelectedYear, solarSelectedMonth + 1, 0).getDate();
+      const lookup: Record<string, boolean> = {};
+      (solarData?.charts?.daily || []).forEach((d: any) => {
+        if (d.day && d.day.startsWith(targetMonthStr) && d.isDistributed) {
+          lookup[d.day] = true;
+        }
+      });
+      return Array.from({ length: daysCount }, (_, i) => {
+        const dStr = `${targetMonthStr}-${String(i + 1).padStart(2, "0")}`;
+        return Boolean(lookup[dStr]);
+      });
+    }
+    if (solarRange === "custom" && solarStartDate !== solarEndDate) {
+      return (solarData?.charts?.daily || []).map((d: any) => Boolean(d?.isDistributed));
+    }
+    return [];
+  }, [solarRange, solarStartDate, solarEndDate, solarSelectedYear, solarSelectedMonth, solarData]);
+
+  const solarDistributedFlagsRef = useRef<boolean[]>(solarDistributedFlags);
+  solarDistributedFlagsRef.current = solarDistributedFlags;
+  const pltsDistributedBarsPlugin = useMemo(
+    () =>
+      createPltsDistributedBarsPlugin(solarDistributedFlagsRef, solarIsDarkRef, {
+        badgePlacement: "inside",
+        accentColor: "#0284c7"
+      }),
+    []
+  );
+  const hasSolarDistributedDays = solarDistributedFlags.some(Boolean);
+
   const solarBarData = useMemo(() => {
     const datasets: any[] = [];
     if (solarShowPoi1) {
       datasets.push({
         label: "POI-1 (kWh)",
+        _isPltsDistributedTarget: true,
         data: solarPoi1Values.map((v: number) => (v > 0 ? v : null)),
         backgroundColor: "rgba(59, 130, 246, 0.85)",
         borderColor: "rgba(37, 99, 235, 1)",
@@ -5503,6 +5586,7 @@ export default function Electricity() {
     if (solarShowPoi2) {
       datasets.push({
         label: "POI-2 (kWh)",
+        _isPltsDistributedTarget: true,
         data: solarPoi2Values.map((v: number) => (v > 0 ? v : null)),
         backgroundColor: "rgba(6, 182, 212, 0.85)",
         borderColor: "rgba(8, 145, 178, 1)",
@@ -5666,6 +5750,15 @@ export default function Electricity() {
               lines.push(`Biaya PV: Rp ${pvCost.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
             }
             lines.push(`Estimasi Hemat: Rp ${savings.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+            if (!isHourlyView && (solarRange === "day" || solarRange === "custom")) {
+              const targetMonthStr = `${solarSelectedYear}-${String(solarSelectedMonth + 1).padStart(2, "0")}`;
+              const dayObj = solarRange === "day"
+                ? (solarData?.charts?.daily || []).find((d: any) => d.day === `${targetMonthStr}-${String(idx + 1).padStart(2, "0")}`)
+                : (solarData?.charts?.daily || [])[idx];
+              if (dayObj?.distributedNote) {
+                lines.push(`ℹ ${dayObj.distributedNote}`);
+              }
+            }
             if (isHourlyView) {
               lines.push(`Zona Tarif PLN: ${isWbpZone ? "WBP" : "LWBP"} (Rp ${plnRate.toLocaleString("id-ID", { minimumFractionDigits: 2 })}/kWh)`);
             }
@@ -7142,12 +7235,27 @@ export default function Electricity() {
           </div>
           <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-4 border border-slate-100 dark:border-slate-800/80 flex-1 min-h-[290px] flex flex-col justify-between gap-2">
             <div className="h-[290px] w-full">
-              <Bar data={solarBarData} options={solarBarOptions} plugins={[pltsWeatherIconsPlugin]} />
+              <Bar data={solarBarData} options={solarBarOptions} plugins={[pltsDistributedBarsPlugin, pltsWeatherIconsPlugin]} />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400 dark:text-slate-500 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
               <span>
                 Lokasi Cuaca: <strong className="text-slate-600 dark:text-slate-300">Sidomukti, Kec. Pandaan, Pasuruan</strong> (Jl. Stadion / Jl. Sidomukti No. 1)
               </span>
+              {hasSolarDistributedDays && (
+                <span
+                  title="Bar berpola garis diagonal menandakan hasil bagi rata dari akumulasi lonjakan setelah koneksi pembacaan sempat terputus"
+                  className="inline-flex items-center gap-1.5 text-sky-700 dark:text-sky-300 font-semibold"
+                >
+                  <span
+                    className="inline-block w-3.5 h-2.5 rounded-[3px] border border-sky-500/60 shrink-0"
+                    style={{
+                      background:
+                        "repeating-linear-gradient(-45deg, rgba(6,182,212,0.85) 0 2px, rgba(255,255,255,0.85) 2px 4px)"
+                    }}
+                  />
+                  <span><strong>≈ Rata</strong> = dibagi rata dari lonjakan pasca-disconnect</span>
+                </span>
+              )}
             </div>
           </div>
         </section>

@@ -783,6 +783,12 @@ export function createPltsExternalTooltipHandler(isDarkRef: MutableRefObject<boo
             );
           }
         }
+      } else if (rawLine.startsWith("ℹ ")) {
+        const badgeBg = isDark ? "rgba(14, 165, 233, 0.16)" : "rgba(14, 165, 233, 0.10)";
+        const badgeBorder = isDark ? "rgba(56, 189, 248, 0.35)" : "rgba(2, 132, 199, 0.30)";
+        parts.push(
+          `<div style="margin-top:5px;padding:4px 7px;border-radius:6px;background:${badgeBg};border:1px solid ${badgeBorder};font-size:11px;font-weight:700;color:${accentSky};">${escapeHtml(rawLine)}</div>`
+        );
       } else if (rawLine.includes("Cuaca Sidomukti")) {
         parts.push(
           `<div style="font-size:12.5px;font-weight:700;color:${accentSky};margin-bottom:3px;">${escapeHtml(rawLine)}</div>`
@@ -851,5 +857,208 @@ export function createPltsExternalTooltipHandler(isDarkRef: MutableRefObject<boo
 
     tooltipEl.style.left = `${Math.round(left)}px`;
     tooltipEl.style.top = `${Math.round(top)}px`;
+  };
+}
+
+/**
+ * Minimalist Chart.js plugin that visually marks equalized PLTS bars (redistributed after a
+ * metering disconnect catch-up spike) with subtle diagonal stripes + one compact "≈ Rata" pill
+ * directly on the equalized span — clear at a glance with minimal text and zero icon overlap.
+ */
+export function createPltsDistributedBarsPlugin(
+  flagsRef: MutableRefObject<boolean[]>,
+  isDarkRef: MutableRefObject<boolean>,
+  options: {
+    badgePlacement?: "inside" | "above";
+    accentColor?: string;
+  } = {}
+): Plugin<"bar"> {
+  const placement = options.badgePlacement ?? "inside";
+  const accent = options.accentColor ?? "#0284c7";
+
+  const drawRoundedPill = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    r: number
+  ) => {
+    const rad = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rad, y);
+    ctx.lineTo(x + w - rad, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+    ctx.lineTo(x + w, y + h - rad);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+    ctx.lineTo(x + rad, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+    ctx.lineTo(x, y + rad);
+    ctx.quadraticCurveTo(x, y, x + rad, y);
+    ctx.closePath();
+  };
+
+  return {
+    id: "pltsDistributedBarsIndicator",
+    afterDatasetsDraw(chart) {
+      const flags = flagsRef.current;
+      if (!flags || !flags.some(Boolean)) return;
+
+      const { ctx, chartArea } = chart;
+      if (!chartArea) return;
+      const isDark = isDarkRef.current;
+
+      // Track vertical & horizontal bounds per bar index across all target PLTS datasets
+      const barBounds = new Map<number, { left: number; right: number; top: number; bottom: number }>();
+
+      chart.data.datasets.forEach((ds: any, dsIdx: number) => {
+        if (!ds?._isPltsDistributedTarget) return;
+        const meta = chart.getDatasetMeta(dsIdx);
+        if (!meta || meta.hidden) return;
+
+        meta.data.forEach((el: any, idx: number) => {
+          if (!flags[idx] || !el) return;
+          const x = el.x;
+          const y = el.y;
+          const base = el.base;
+          const width = el.width;
+          if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(base) || !Number.isFinite(width)) return;
+
+          const top = Math.min(y, base);
+          const bottom = Math.max(y, base);
+          const height = bottom - top;
+          if (height < 2 || width < 2) return;
+
+          const left = x - width / 2;
+          const right = x + width / 2;
+
+          // Subtle diagonal hatch overlay directly on the bar segment
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(left, top, width, height);
+          ctx.clip();
+
+          ctx.strokeStyle = isDark ? "rgba(255, 255, 255, 0.34)" : "rgba(255, 255, 255, 0.45)";
+          ctx.lineWidth = 1.6;
+          const step = 6;
+          for (let d = -height; d < width + height; d += step) {
+            ctx.beginPath();
+            ctx.moveTo(left + d, bottom);
+            ctx.lineTo(left + d + height, top);
+            ctx.stroke();
+          }
+
+          // Crisp subtle dashed inner border so equalized bars clearly differ from solid live bars
+          ctx.setLineDash([3, 2]);
+          ctx.strokeStyle = isDark ? "rgba(224, 242, 254, 0.55)" : "rgba(15, 23, 42, 0.22)";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(left + 0.5, top + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
+          ctx.restore();
+
+          const prev = barBounds.get(idx);
+          if (!prev) {
+            barBounds.set(idx, { left, right, top, bottom });
+          } else {
+            prev.left = Math.min(prev.left, left);
+            prev.right = Math.max(prev.right, right);
+            prev.top = Math.min(prev.top, top);
+            prev.bottom = Math.max(prev.bottom, bottom);
+          }
+        });
+      });
+
+      if (barBounds.size === 0) return;
+
+      // Group consecutive equalized indices into spans (e.g. Nov 21-24 => 1 clean pill "≈ Rata 4 hr")
+      const runs: Array<{ start: number; end: number }> = [];
+      let runStart = -1;
+      for (let i = 0; i < flags.length; i++) {
+        if (flags[i] && barBounds.has(i)) {
+          if (runStart === -1) runStart = i;
+        } else if (runStart !== -1) {
+          runs.push({ start: runStart, end: i - 1 });
+          runStart = -1;
+        }
+      }
+      if (runStart !== -1) {
+        runs.push({ start: runStart, end: flags.length - 1 });
+      }
+
+      for (const run of runs) {
+        let gLeft = Infinity;
+        let gRight = -Infinity;
+        let gTop = Infinity;
+        let gBottom = -Infinity;
+        for (let i = run.start; i <= run.end; i++) {
+          const b = barBounds.get(i);
+          if (!b) continue;
+          gLeft = Math.min(gLeft, b.left);
+          gRight = Math.max(gRight, b.right);
+          gTop = Math.min(gTop, b.top);
+          gBottom = Math.max(gBottom, b.bottom);
+        }
+        if (!Number.isFinite(gLeft) || !Number.isFinite(gRight)) continue;
+
+        const spanDays = run.end - run.start + 1;
+        const spanW = gRight - gLeft;
+        const segH = gBottom - gTop;
+        const midX = (gLeft + gRight) / 2;
+
+        const label = spanW >= 68 ? `≈ Rata ${spanDays} hr` : "≈ Rata";
+
+        ctx.save();
+        ctx.font = "700 9.5px 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace";
+        const textW = ctx.measureText(label).width;
+        const padX = 6;
+        const pillW = textW + padX * 2;
+        const pillH = 16;
+
+        // Clamp horizontal position cleanly inside chartArea
+        const pillX = Math.max(
+          chartArea.left + 2,
+          Math.min(midX - pillW / 2, chartArea.right - pillW - 2)
+        );
+
+        let pillY: number;
+        if (placement === "above") {
+          const candidateAbove = gTop - pillH - 4;
+          pillY = candidateAbove >= chartArea.top + 2 ? candidateAbove : gTop + Math.max(4, (segH - pillH) / 2);
+        } else {
+          // "inside": safely inside upper band of the equalized bar block, clear of floating weather icons above
+          pillY = segH >= pillH + 10
+            ? gTop + Math.min(10, (segH - pillH) / 2)
+            : Math.max(chartArea.top + 2, gTop + (segH - pillH) / 2);
+        }
+
+        // Subtle dashed span bracket along top of the equalized group
+        if (spanDays >= 2) {
+          ctx.beginPath();
+          ctx.setLineDash([3, 2]);
+          ctx.strokeStyle = isDark ? "rgba(56, 189, 248, 0.75)" : accent;
+          ctx.lineWidth = 1.25;
+          const bracketY = Math.max(chartArea.top + 1, gTop - 1.5);
+          ctx.moveTo(gLeft, bracketY + 3);
+          ctx.lineTo(gLeft, bracketY);
+          ctx.lineTo(gRight, bracketY);
+          ctx.lineTo(gRight, bracketY + 3);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Compact high-contrast pill
+        drawRoundedPill(ctx, pillX, pillY, pillW, pillH, 5);
+        ctx.fillStyle = isDark ? "rgba(15, 23, 42, 0.90)" : "rgba(255, 255, 255, 0.95)";
+        ctx.fill();
+        ctx.strokeStyle = isDark ? "rgba(56, 189, 248, 0.7)" : accent;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = isDark ? "#7dd3fc" : accent;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, pillX + pillW / 2, pillY + pillH / 2 + 0.5);
+        ctx.restore();
+      }
+    }
   };
 }
